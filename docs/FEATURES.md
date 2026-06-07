@@ -1,4 +1,4 @@
-# Run&Net Features
+# RunNet Features
 
 ## Core Running Features
 

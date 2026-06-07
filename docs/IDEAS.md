@@ -1,4 +1,4 @@
-# Run&Net Ideas
+# RunNet Ideas
 
 ## Run Tracking
 
