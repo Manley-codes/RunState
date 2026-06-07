@@ -17,6 +17,8 @@
 - Event announcements
 - Club event planning
 - Improved profile customization
+- Personal record tracking
+- Split tracking
 
 ## Version 3
 

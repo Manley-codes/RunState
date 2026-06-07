@@ -73,3 +73,29 @@
     - Humidity
     - Heat warnings
     - Unsafe running conditions
+
+## Personal New Records
+
+- The app should recognize when a runner sets a new personal record.
+- Possible personal records include:
+  - Longest distance completed
+  - Fastest average pace overall
+  - Fastest average pace for a specific distance
+  - Fastest time for a specific distance
+
+Pace note:
+
+- A lower pace number is better.
+- Example: 8.0 minutes per mile is faster than 10.0 minutes per mile.
+
+## Future Effort Analysis
+
+- The app could eventually analyze how hard a runner pushed during a run.
+- This would require more detailed run data, such as mile or kilometer splits.
+- Possible effort indicators include:
+  - Fastest split
+  - Strong finish
+  - Negative split
+  - Pace surge
+  - Inconsistent pacing
+  - Estimated max effort
