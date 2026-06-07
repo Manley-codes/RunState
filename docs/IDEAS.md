@@ -5,6 +5,45 @@
 - Users can log and track their runs.
 - Runs can include distance, time, pace, route, location, and whether it was a solo or club run.
 
+## User Experience Ideas
+
+- The app should avoid clutter and make important features easy to find.
+- Common runner actions should be visible without digging through too many menus.
+- After completing a run, the app should show useful next actions such as:
+  - Add photo
+  - Add notes
+  - Share with club
+  - View run details
+- Users may eventually be able to pin their most-used features to the main screen.
+- The app should use clear defaults first, then add customization later.
+- Customization should start simple, such as pinned shortcuts, instead of a fully customizable layout.
+
+## Context-Aware Suggestions
+
+- The app should suggest useful actions based on what the runner is doing.
+- Instead of making users search through menus, the app should bring important next steps forward at the right moment.
+
+Examples:
+
+- After completing a run, suggest adding a photo, adding notes, sharing with a club, or viewing run details.
+- After setting a new personal record, suggest saving or sharing the achievement.
+- Before a scheduled club run, suggest viewing the route, checking weather, or messaging the club.
+- If weather conditions are poor, suggest safer alternatives or warnings.
+- After a hard effort, suggest recovery actions or reflection notes.
+
+Example post-run prompt:
+
+```text
+Great job, Jay.
+
+You completed 5.0 miles in 50 minutes.
+Average pace: 10:00 per mile.
+
+Would you like to add a photo to this run?
+[Add Photo] [Skip]
+```
+
+
 ## Run Club Communication
 
 - Combine run tracking with group communication, similar to how apps like GroupMe support group chat.

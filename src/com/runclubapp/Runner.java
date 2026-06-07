@@ -93,14 +93,11 @@ public class Runner {
         // Print a heading before showing the runs.
         System.out.println("Run History for " + username + ":");
 
-        // Loop through every Run object stored in runHistory.
-        for (Run run : runHistory) {
+// Start at the last index because the newest run is added to the end of the list.
+        for (int i = runHistory.size() - 1; i >= 0; i--) {
 
-            // Display the details for the current run.
-            //run.displayRunInfo();
-
-            // Print a blank line between runs so the output is easier to read.
-            //System.out.println();
+            // Get the run stored at the current index.
+            Run run = runHistory.get(i);
 
             // Display a short summary of the current run.
             System.out.println(
