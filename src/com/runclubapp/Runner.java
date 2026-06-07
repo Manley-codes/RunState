@@ -1,4 +1,86 @@
 package com.runclubapp;
 
+/*
+ * The Runner class represents a person using the app.
+ *
+ * A runner can log runs, join run clubs,
+ * and eventually communicate with other runners.
+ */
 public class Runner {
+
+    // Unique identifier for each runner
+    private int runnerId;
+
+    // Name shown to other users in the app
+    private String username;
+
+    // Runner's real first name
+    private String firstName;
+
+    // Runner's real last name
+    private String lastName;
+
+    // City where the runner is located
+    private String city;
+
+    // State where the runner is located
+    private String state;
+
+    // Email used for account/login purposes
+    private String email;
+
+
+
+
+    /*
+     * Constructor
+     *
+     * Used to create a new Runner object.
+     */
+    public Runner(int runnerId, String username, String firstName,
+                  String lastName, String city, String state,
+                  String email) {
+
+        this.runnerId = runnerId;
+        this.username = username;
+        this.firstName = firstName;
+        this.lastName = lastName;
+        this.city = city;
+        this.state = state;
+        this.email = email;
+
+    }
+    // This method lets other classes read the runner's ID.
+    // The variable runnerId is private, so outside classes cannot access it directly
+    public int getRunnerId() {
+        return runnerId;
+    }
+    // This method lets other classes read the runner's username.
+    // We use a getter instead of making username public
+    public String getUsername() {
+        return username;
+    }
+
+    // This method returns the name that should be shown publicly in the app.
+// For now, we are using username as the runner's display name.
+    public String getDisplayName() {
+        return username;
+    }
+
+    /*
+     * Displays public/basic runner information.
+     *
+     * For now, we are including email and phone number
+     * because we are just testing in the console.
+     *
+     * Later, we may decide not to show private contact information.
+     */
+    public void displayRunnerInfo() {
+        System.out.println("Runner ID: " + runnerId);
+        System.out.println("Username: " + username);
+        System.out.println("Name: " + firstName + " " + lastName);
+        System.out.println("Location: " + city + ", " + state);
+        System.out.println("Email: " + email);
+
+    }
 }
