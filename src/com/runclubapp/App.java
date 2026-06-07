@@ -6,7 +6,7 @@ public class App {
 
         Runner runner1 = new Runner(
                 100,
-                "runnerJay",
+                "runnerMan",
                 "Jay",
                 "Smith",
                 "Houston",
@@ -29,6 +29,31 @@ public class App {
                 "Houston Run Club"
         );
 
-        run1.displayRunInfo();
+// Create a second completed run with different details.
+        Run run2 = new Run(
+                2,
+                runner1,
+                "06/06/2026",
+                "7:00 AM",
+                "7:36 AM",
+                3.0,
+                "miles",
+                36,
+                "Buffalo Bayou Trail",
+                "Houston, TX",
+                false,
+                "None"
+        );
+
+
+        // Store this completed run in runner1's run history.
+        runner1.addRun(run1);
+
+        runner1.addRun(run2);
+
+        // Display all runs stored for this runner.
+        runner1.displayRunHistory();
+
+
     }
 }

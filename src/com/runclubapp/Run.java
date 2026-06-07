@@ -1,5 +1,6 @@
 package com.runclubapp;
 
+
 /*
  * The Run class represents a single running activity.
  *
@@ -94,6 +95,26 @@ public class Run {
         }
 
         return distanceUnit;
+    }
+
+    // This method lets other classes read the run date.
+    public String getDate() {
+        return date;
+    }
+
+    // This method lets other classes read the run distance.
+    public double getDistance() {
+        return distance;
+    }
+
+    // This method lets other classes read the distance unit.
+    public String getDistanceUnit() {
+        return distanceUnit;
+    }
+
+    // This method lets other classes read the run duration.
+    public double getDuration() {
+        return duration;
     }
 
     /*
