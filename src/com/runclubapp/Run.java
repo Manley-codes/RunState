@@ -35,6 +35,9 @@ public class Run {
     // Name of the club associated with the run
     private String associatedClub;
 
+    // Tracks whether this run was the runner's longest distance personal record.
+    private boolean longestDistanceRecord;
+
     /*
      * Constructor
      *
@@ -65,6 +68,8 @@ public class Run {
         this.routeLocation = routeLocation;
         this.clubRun = clubRun;
         this.associatedClub = associatedClub;
+        // A run starts with no PR label until the Runner checks the run history.
+        this.longestDistanceRecord = false;
     }
 
     /*
@@ -115,6 +120,42 @@ public class Run {
     // This method lets other classes read the run duration.
     public double getDuration() {
         return duration;
+    }
+
+    // Marks this run as the runner's longest distance personal record.
+    public void markLongestDistanceRecord() {
+        longestDistanceRecord = true;
+    }
+
+    // This method tells other classes whether this run was a longest distance PR.
+    public boolean isLongestDistanceRecord() {
+        return longestDistanceRecord;
+    }
+
+    // This method returns text for any personal records earned by this run.
+    public String getPersonalRecordSummary() {
+        if (longestDistanceRecord) {
+            return "New longest distance PR";
+        }
+
+        return "";
+    }
+
+    // This method returns a short summary of the run.
+    public String getRunSummary() {
+
+        // Store the main run summary first.
+        String summary = date + " - " +
+                distance + " " + distanceUnit + " - " +
+                getPace() + " min/" + getPaceUnit() + " - " +
+                duration + " minutes";
+
+        // If this run has a PR, add the PR text to the end of the summary.
+        if (!getPersonalRecordSummary().equals("")) {
+            summary = summary + " - " + getPersonalRecordSummary();
+        }
+
+        return summary;
     }
 
     /*

@@ -138,3 +138,37 @@ Pace note:
   - Pace surge
   - Inconsistent pacing
   - Estimated max effort
+
+## Post-Run Feeling And Performance Patterns
+
+- After a run, the app can ask how the runner felt using a simple 3-level choice.
+- The first version can use:
+  - Hard
+  - Normal
+  - Great
+
+The goal is to collect simple feedback without making the app feel cluttered or overwhelming.
+
+Over time, the app could compare how the runner felt with other run details, such as:
+
+- Weather conditions
+- Trail or route location
+- Whether the runner ran alone or with others
+- Recent running consistency
+- Distance
+- Average pace
+- Time of day
+
+Future goal:
+
+- Help runners understand when and why they perform their best.
+- Suggest useful patterns, such as whether the runner performs better on certain routes, in certain weather, or after consistent training.
+- Later, the app could use voice prompts or voice announcements after a run.
+
+Example post-run prompt:
+
+```text
+How did this run feel?
+
+[Difficult] [Normal] [Great]
+```

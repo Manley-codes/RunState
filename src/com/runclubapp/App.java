@@ -45,11 +45,27 @@ public class App {
                 "None"
         );
 
+        // Create a third completed run with different details.
+        Run run3 = new Run(
+                3,
+                runner1,
+                "06/06/2026",
+                "7:00 AM",
+                "7:36 AM",
+                6.0,
+                "miles",
+                36,
+                "Buffalo Bayou Trail",
+                "Houston, TX",
+                false,
+                "None"
+        );
+
 
         // Store this completed run in runner1's run history.
         runner1.addRun(run1);
-
         runner1.addRun(run2);
+        runner1.addRun(run3);
 
         // Display all runs stored for this runner.
         runner1.displayRunHistory();

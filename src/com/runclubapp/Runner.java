@@ -77,8 +77,42 @@ public class Runner {
     }
 
     // Adds one completed run to this runner's run history.
+// Adds one completed run to this runner's run history.
     public void addRun(Run run) {
+
+        // Check whether this run is the runner's longest distance so far.
+        if (isLongestDistanceRecord(run)) {
+
+            // Mark the run so its summary can show the PR later.
+            run.markLongestDistanceRecord();
+
+            // Immediately tell the user they set a new longest distance PR.
+            System.out.println("New longest distance PR!");
+        }
+
+        // Store the completed run after checking it against previous runs.
         runHistory.add(run);
+    }
+
+    // Checks whether the new run is longer than every previous run in the history.
+    private boolean isLongestDistanceRecord(Run newRun) {
+
+        // If there are no previous runs, there is nothing to beat yet.
+        if (runHistory.size() == 0) {
+            return false;
+        }
+
+        // Loop through each previous run.
+        for (Run previousRun : runHistory) {
+
+            // If a previous run has the same or longer distance, the new run is not a PR.
+            if (previousRun.getDistance() >= newRun.getDistance()) {
+                return false;
+            }
+        }
+
+        // If no previous run was as long, this run is a new longest distance PR.
+        return true;
     }
 
     // Displays every run stored in this runner's run history.
@@ -93,19 +127,14 @@ public class Runner {
         // Print a heading before showing the runs.
         System.out.println("Run History for " + username + ":");
 
-// Start at the last index because the newest run is added to the end of the list.
+       // Start at the last index because the newest run is added to the end of the list.
         for (int i = runHistory.size() - 1; i >= 0; i--) {
 
             // Get the run stored at the current index.
             Run run = runHistory.get(i);
 
             // Display a short summary of the current run.
-            System.out.println(
-                    run.getDate() + " - " +
-                            run.getDistance() + " " + run.getDistanceUnit() + " - " +
-                            run.getPace() + " min/" + run.getPaceUnit() + " - " +
-                            run.getDuration() + " minutes"
-            );
+            System.out.println(run.getRunSummary());
         }
     }
 
