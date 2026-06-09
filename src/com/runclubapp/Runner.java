@@ -77,7 +77,7 @@ public class Runner {
     }
 
     // Adds one completed run to this runner's run history.
-// Adds one completed run to this runner's run history.
+   // Adds one completed run to this runner's run history.
     public void addRun(Run run) {
 
         // Check whether this run is the runner's longest distance so far.
@@ -88,6 +88,16 @@ public class Runner {
 
             // Immediately tell the user they set a new longest distance PR.
             System.out.println("New longest distance PR!");
+        }
+
+        // Check whether this run is the runner's fastest average pace so far.
+        if (isFastestAveragePaceRecord(run)) {
+
+            // Mark the run so its summary can show the PR later.
+            run.markFastestAveragePaceRecord();
+
+            // Immediately tell the user they set a new fastest average pace PR.
+            System.out.println("New fastest average pace PR!");
         }
 
         // Store the completed run after checking it against previous runs.
@@ -112,6 +122,27 @@ public class Runner {
         }
 
         // If no previous run was as long, this run is a new longest distance PR.
+        return true;
+    }
+
+    // Checks whether the new run has a faster average pace than every previous run.
+    private boolean isFastestAveragePaceRecord(Run newRun) {
+
+        // If there are no previous runs, there is nothing to beat yet.
+        if (runHistory.size() == 0) {
+            return false;
+        }
+
+        // Loop through each previous run.
+        for (Run previousRun : runHistory) {
+
+            // A lower pace number is faster, so same or lower means the new run is not a PR.
+            if (previousRun.getPace() <= newRun.getPace()) {
+                return false;
+            }
+        }
+
+        // If no previous run was as fast, this run is a new fastest average pace PR.
         return true;
     }
 

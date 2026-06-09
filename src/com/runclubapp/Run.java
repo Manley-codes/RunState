@@ -38,6 +38,9 @@ public class Run {
     // Tracks whether this run was the runner's longest distance personal record.
     private boolean longestDistanceRecord;
 
+    // Tracks whether this run was the runner's fastest average pace personal record.
+    private boolean fastestAveragePaceRecord;
+
     /*
      * Constructor
      *
@@ -70,6 +73,8 @@ public class Run {
         this.associatedClub = associatedClub;
         // A run starts with no PR label until the Runner checks the run history.
         this.longestDistanceRecord = false;
+        // A run starts with no fastest pace PR label until the Runner checks the run history.
+        this.fastestAveragePaceRecord = false;
     }
 
     /*
@@ -132,13 +137,39 @@ public class Run {
         return longestDistanceRecord;
     }
 
+    // Marks this run as the runner's fastest average pace personal record.
+    public void markFastestAveragePaceRecord() {
+        fastestAveragePaceRecord = true;
+    }
+
+    // This method tells other classes whether this run was a fastest average pace PR.
+    public boolean isFastestAveragePaceRecord() {
+        return fastestAveragePaceRecord;
+    }
+
     // This method returns text for any personal records earned by this run.
     public String getPersonalRecordSummary() {
+
+        // Start with no PR message.
+        String personalRecordSummary = "";
+
+        // Add longest distance PR text if this run earned it.
         if (longestDistanceRecord) {
-            return "New longest distance PR";
+            personalRecordSummary = "New longest distance PR";
         }
 
-        return "";
+        // Add fastest average pace PR text if this run earned it.
+        if (fastestAveragePaceRecord) {
+
+            // If another PR message already exists, separate the messages with a comma.
+            if (!personalRecordSummary.equals("")) {
+                personalRecordSummary = personalRecordSummary + ", ";
+            }
+
+            personalRecordSummary = personalRecordSummary + "New fastest average pace PR";
+        }
+
+        return personalRecordSummary;
     }
 
     // This method returns a short summary of the run.
