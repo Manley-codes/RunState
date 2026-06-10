@@ -1,37 +1,59 @@
 # RunNet Ideas
 
-## Run Tracking
+This file is for the strongest ideas worth remembering. The goal is to keep RunNet simple right now while saving the ideas that could make the app stand out later.
 
-- Users can log and track their runs.
-- Runs can include distance, time, pace, route, location, and whether it was a solo or club run.
+## Core Direction
 
-## User Experience Ideas
+RunNet is currently a simple run tracker that records completed runs, shows personal progress, and leaves room for helpful context around each run.
 
-- The app should avoid clutter and make important features easy to find.
-- Common runner actions should be visible without digging through too many menus.
-- After completing a run, the app should show useful next actions such as:
-  - Add photo
-  - Add notes
-  - Share with club
-  - View run details
-- Users may eventually be able to pin their most-used features to the main screen.
-- The app should use clear defaults first, then add customization later.
-- Customization should start simple, such as pinned shortcuts, instead of a fully customizable layout.
+The app should stay easy to understand:
 
-## Context-Aware Suggestions
+- Log a run.
+- View run history.
+- See pace and personal records.
+- Capture how the run felt.
+- Add more context over time without overwhelming the runner.
 
-- The app should suggest useful actions based on what the runner is doing.
-- Instead of making users search through menus, the app should bring important next steps forward at the right moment.
+## Post-Run Feeling And Performance Context
 
-Examples:
+After a runner completes a run, the app can ask one simple question:
 
-- After completing a run, suggest adding a photo, adding notes, sharing with a club, or viewing run details.
-- After setting a new personal record, suggest saving or sharing the achievement.
-- Before a scheduled club run, suggest viewing the route, checking weather, or messaging the club.
-- If weather conditions are poor, suggest safer alternatives or warnings.
-- After a hard effort, suggest recovery actions or reflection notes.
+```text
+How did this run feel?
 
-Example post-run prompt:
+[Difficult] [Normal] [Great]
+```
+
+The goal is to collect useful feedback without making the runner fill out a long survey after every run.
+
+Over time, RunNet could compare the feeling choice with run details such as:
+
+- Distance
+- Duration
+- Average pace
+- Route or trail
+- Weather and temperature
+- Solo or group run
+- Shoes used
+- Time of day
+
+Future insight example:
+
+```text
+Your best-feeling runs often happen on cooler days and familiar routes.
+```
+
+Pitch:
+
+```text
+RunNet is a run tracker that records performance and how each run felt, so runners can eventually learn what conditions help them perform their best.
+```
+
+## Context-Aware Post-Run Prompts
+
+RunNet should bring useful next actions forward at the right moment instead of making the runner search through menus.
+
+Example after a run:
 
 ```text
 Great job, Jay.
@@ -39,136 +61,133 @@ Great job, Jay.
 You completed 5.0 miles in 50 minutes.
 Average pace: 10:00 per mile.
 
-Would you like to add a photo to this run?
-[Add Photo] [Skip]
+How did this run feel?
+[Difficult] [Normal] [Great]
 ```
 
+Possible later prompts:
 
-## Run Club Communication
+- Add a photo to this run.
+- Save a note about how the run felt.
+- Share the run with a club.
+- View a new personal record.
 
-- Combine run tracking with group communication, similar to how apps like GroupMe support group chat.
-- Clubs can use the app to communicate before and after runs.
+## Personal Records
 
-## Support Message Feature
+The app should recognize meaningful progress without over-celebrating everything.
 
-- When a runner completes a run or race, friends or club members can send supportive messages.
-- Future versions could support voice messages or text messages converted into voice encouragement.
+Current and future personal record ideas:
 
-## Auto-Stop Runs
-
-- Users can set a goal before starting a run, such as a target distance or target time.
-- The app can automatically stop the run when the goal is reached.
-- Possible extra feature: if the runner continues past the goal, the app can remind them again after a short extra distance or time.
-
-## AI-Assisted Workout Creation
-
-- Users can describe the workout they want in normal language.
-- Example: "Create a beginner 30-minute interval run."
-- The app turns that request into a structured workout plan.
-
-## Event Announcements
-
-- Run clubs can post announcements for upcoming group runs, races, meetups, or special events.
-
-## Shared Run History
-
-- Club members can view shared run history, such as group runs, completed club events, or personal runs shared with the club.
-
-## Run Club Platform
-
-- Users can create and manage run clubs.
-- The app should work for both organized run clubs and individual runners who are not part of a club.
-
-## Trail And Route Information
-
-- Users can browse trails or routes with images and descriptions.
-- Route details could include:
-    - Surface type
-    - Elevation
-    - Difficulty
-    - Shade
-    - Restrooms
-    - Water fountains
-    - Parking
-    - Safety notes
-
-## Route Intelligence
-
-- Future feature that gives runners useful route updates.
-- Could include:
-    - Route crowding
-    - Nearby events
-    - Construction
-    - Local activity
-    - Other conditions that may affect the run
-
-## Weather Conditions
-
-- Show weather information that may affect a run.
-- Could include:
-    - Temperature
-    - Rain
-    - Wind
-    - Humidity
-    - Heat warnings
-    - Unsafe running conditions
-
-## Personal New Records
-
-- The app should recognize when a runner sets a new personal record.
-- Possible personal records include:
-  - Longest distance completed
-  - Fastest average pace overall
-  - Fastest average pace for a specific distance
-  - Fastest time for a specific distance
+- Longest distance completed
+- Fastest average pace overall
+- Fastest average pace for a specific distance
+- Fastest time for a specific distance
 
 Pace note:
 
 - A lower pace number is better.
 - Example: 8.0 minutes per mile is faster than 10.0 minutes per mile.
 
-## Future Effort Analysis
+Motivation principle:
 
-- The app could eventually analyze how hard a runner pushed during a run.
-- This would require more detailed run data, such as mile or kilometer splits.
-- Possible effort indicators include:
-  - Fastest split
-  - Strong finish
-  - Negative split
-  - Pace surge
-  - Inconsistent pacing
-  - Estimated max effort
+- Celebrate real progress, not noise.
+- The first logged run should create a baseline, but PR messages should appear when a runner beats a previous result.
 
-## Post-Run Feeling And Performance Patterns
+## Weather, Route, And Shoe Context
 
-- After a run, the app can ask how the runner felt using a simple 3-level choice.
-- The first version can use:
-  - Hard
-  - Normal
-  - Great
+RunNet could eventually connect run performance and run feeling with context around the run.
 
-The goal is to collect simple feedback without making the app feel cluttered or overwhelming.
+Useful context ideas:
 
-Over time, the app could compare how the runner felt with other run details, such as:
+- Weather and temperature
+- Route or trail
+- Whether the run was solo or with others
+- Shoes used
+- Club run status
 
-- Weather conditions
-- Trail or route location
-- Whether the runner ran alone or with others
-- Recent running consistency
-- Distance
-- Average pace
-- Time of day
+The app should collect as much context as possible before the run or automatically later. The post-run experience should stay simple.
 
-Future goal:
-
-- Help runners understand when and why they perform their best.
-- Suggest useful patterns, such as whether the runner performs better on certain routes, in certain weather, or after consistent training.
-- Later, the app could use voice prompts or voice announcements after a run.
-
-Example post-run prompt:
+Example before-run choices:
 
 ```text
-How did this run feel?
-
-[Difficult] [Normal] [Great]
+Route: Buffalo Bayou Trail
+Shoes: Daily Trainers
+Run Type: Solo
 ```
+
+## Run Club Communication
+
+RunNet may eventually support run clubs, but this should stay focused and not become a messy group chat clone.
+
+Useful club ideas:
+
+- Club announcements
+- Event reminders
+- Shared run updates
+- Encouragement after runs
+- Simple communication before and after group runs
+
+Potential message categories:
+
+- Announcements
+- Events
+- Run Updates
+- Questions
+- General
+
+The goal is to help important club information stay easy to find.
+
+## Support Messages And Future Voice Encouragement
+
+Support messages are a strong future idea because they connect running progress with encouragement from other people.
+
+Early version:
+
+- Friends or club members can send supportive text messages after a run or race.
+- Support messages can be connected to a completed run.
+
+Far future version:
+
+- Voice support messages can play after a run or during a training moment.
+- Example: a runner finishes a race and hears a short encouraging message from a friend or club member.
+
+This should be saved for much later, but it could become one of RunNet's more unique emotional features.
+
+## Future Body Feedback And Effort Patterns
+
+RunNet could eventually help runners notice patterns around effort, discomfort, and performance.
+
+This should be handled carefully. The app should notice patterns, not make medical claims.
+
+Possible data:
+
+- Run feeling
+- Pace
+- Distance
+- Route
+- Weather
+- Step count or cadence
+- Knee, hip, foot, or other discomfort
+
+Example safe insight:
+
+```text
+You often report knee discomfort after faster runs over 4 miles.
+```
+
+The app should avoid saying that one factor caused an injury. Persistent pain should be handled by a qualified professional.
+
+## Later Effort Analysis
+
+Later versions could use split data to understand how a runner performed inside a run.
+
+Possible effort indicators:
+
+- Fastest split
+- Strong finish
+- Negative split
+- Pace surge
+- Inconsistent pacing
+- Estimated hard effort
+
+This depends on adding more detailed run data, such as mile or kilometer splits.

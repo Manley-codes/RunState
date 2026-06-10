@@ -1,29 +1,50 @@
 # RunNet Roadmap
 
-## Version 1
+This roadmap keeps the project focused while leaving room for future ideas.
 
-- Runner profiles
-- Run tracking
-- Run clubs
-- Run club communication
-- Support messages
-- Trail and route information
-- Shared run history
+## Present Focus
 
-## Version 2
+- Keep the app as a simple Java console run tracker.
+- Continue improving `Runner`, `Run`, and `App`.
+- Strengthen run history.
+- Keep personal record tracking clear and beginner-friendly.
+- Add small features slowly and commit after stable steps.
 
-- Auto-stop run goals
-- Better workout setup
-- Event announcements
-- Club event planning
-- Improved profile customization
-- Personal record tracking
-- Split tracking
+## Near Future
 
-## Version 3
+- Add post-run feeling:
+  - Difficult
+  - Normal
+  - Great
+- Show feeling in each run summary.
+- Add a simple personal record summary for the runner.
+- Improve test runs in `App` so they clearly demonstrate each feature.
+- Start thinking about a small demo UI after the console logic feels stable.
 
+## High-Priority Later Ideas
+
+- Weather and temperature context for runs.
+- Route or trail context, such as Buffalo Bayou or Memorial Park.
+- Shoe selection before a run.
+- Basic run club communication.
+- Event reminders or announcements for clubs.
+
+These ideas connect strongly with the post-run feeling concept because they can help explain when a runner performs or feels their best.
+
+## Far Future
+
+- Support messages from friends or club members.
+- Voice encouragement after runs or races.
+- Shared run history with club members.
+- Split tracking and deeper effort analysis.
+- Body feedback and discomfort pattern tracking, handled carefully.
+
+## Parking Lot
+
+These ideas are not priorities right now:
+
+- Full social/community profile system
 - AI-assisted workout creation
-- Voice support messages
-- Weather conditions
-- Route intelligence
-- Crowding and nearby event data
+- Auto-stop run goals
+- Full home screen customization
+- Complex route crowding or local activity intelligence

@@ -1,32 +1,49 @@
 # RunNet Features
 
-## Core Running Features
+This file describes the main features RunNet has now or is clearly moving toward soon.
+
+## Current Core Features
 
 - Create a runner profile.
-- Log a completed run.
-- Track distance, time, pace, and route.
-- View personal run history.
+- Log completed runs.
+- Store multiple runs in a runner's run history.
+- Display run history newest first.
+- Track distance, duration, average pace, route, and club run status.
+- Show pace with the correct unit, such as minutes per mile or minutes per kilometer.
+- Detect personal records:
+  - Longest distance
+  - Fastest average pace
 
-## Run Club Communication
+## Next Core Features
 
-- Create a run club.
-- Join a run club.
-- Send messages within a run club.
-- Communicate before and after group runs.
+- Add a post-run feeling choice:
+  - Difficult
+  - Normal
+  - Great
+- Show run feeling in the run summary.
+- Keep personal record messages visible in run history.
+- Add a cleaner personal record summary for the runner.
 
-## Support Message Feature
+## Future Feature Areas
 
-- Send supportive messages to runners after a run or race.
-- Allow club members or friends to encourage a runner.
-- Store support messages connected to a completed run.
+These are not current build targets, but they are strong directions for the app.
 
-## Trail And Route Information
+### Run Context
 
-- View available trails or routes.
-- Store route details such as name, distance, location, and difficulty.
-- Include route notes such as safety, shade, parking, restrooms, and water fountains.
+- Route or trail used
+- Weather and temperature
+- Solo or group run
+- Shoes used
+- Time of day
 
-## Shared Run History
+### Run Club Support
 
-- Share completed runs with a club.
-- View club members' shared runs.
+- Club announcements
+- Event reminders
+- Shared run updates
+- Encouragement after runs
+
+### Support Messages
+
+- Store support messages connected to completed runs.
+- Later, support voice messages after runs or races.
