@@ -220,7 +220,7 @@ public class Run {
         System.out.println("Duration: " + duration + " minutes");
         System.out.println("Pace: " + getPace() + " minutes per " + getPaceUnit());
         // Display how the runner felt about this run.
-        System.out.println("Run Feeling " + getRunFeeling());
+        System.out.println("Run Feeling: " + getRunFeeling());
         System.out.println("Route Name: " + routeName);
         System.out.println("Route Location: " + routeLocation);
         System.out.println("Club Run: " + clubRun);

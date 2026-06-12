@@ -76,7 +76,7 @@ public class Runner {
         return username;
     }
 
-    // Adds one completed run to this runner's run history.
+
    // Adds one completed run to this runner's run history.
     public void addRun(Run run) {
 
