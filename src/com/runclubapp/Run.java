@@ -29,8 +29,8 @@ public class Run {
     private String routeName;
     private String routeLocation;
 
-    // Describes how the runner felt about this run.
-    private String runFeeling;
+    // Describes how the runner felt about this run using a fixed set of choices.
+    private RunFeeling runFeeling;
 
     // Indicates whether this run was part of a club event
     private boolean clubRun;
@@ -58,7 +58,7 @@ public class Run {
      */
     public Run(int runId, Runner runner, String date, String startTime, String endTime,
                double distance, String distanceUnit, double duration,
-               String routeName, String routeLocation, String runFeeling,
+               String routeName, String routeLocation, RunFeeling runFeeling,
                boolean clubRun, String associatedClub) {
 
         // "this" refers to the current object's variables
@@ -178,7 +178,7 @@ public class Run {
     }
 
     // This method lets other classes read how the run felt.
-    public String getRunFeeling() {
+    public RunFeeling getRunFeeling() {
         return runFeeling;
     }
 
