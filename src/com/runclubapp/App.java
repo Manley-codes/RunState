@@ -25,6 +25,7 @@ public class App {
                 50,
                 "Memorial Park Loop",
                 "Houston, TX",
+                "Normal",
                 true,
                 "Houston Run Club"
         );
@@ -41,6 +42,7 @@ public class App {
                 36,
                 "Buffalo Bayou Trail",
                 "Houston, TX",
+                "Difficult",
                 false,
                 "None"
         );
@@ -57,6 +59,7 @@ public class App {
                 36,
                 "Buffalo Bayou Trail",
                 "Houston, TX",
+                "Great",
                 false,
                 "None"
         );

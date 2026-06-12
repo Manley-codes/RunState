@@ -29,6 +29,9 @@ public class Run {
     private String routeName;
     private String routeLocation;
 
+    // Describes how the runner felt about this run.
+    private String runFeeling;
+
     // Indicates whether this run was part of a club event
     private boolean clubRun;
 
@@ -55,7 +58,7 @@ public class Run {
      */
     public Run(int runId, Runner runner, String date, String startTime, String endTime,
                double distance, String distanceUnit, double duration,
-               String routeName, String routeLocation,
+               String routeName, String routeLocation, String runFeeling,
                boolean clubRun, String associatedClub) {
 
         // "this" refers to the current object's variables
@@ -69,6 +72,8 @@ public class Run {
         this.duration = duration;
         this.routeName = routeName;
         this.routeLocation = routeLocation;
+        // Store how the runner felt about this run.
+        this.runFeeling = runFeeling;
         this.clubRun = clubRun;
         this.associatedClub = associatedClub;
         // A run starts with no PR label until the Runner checks the run history.
@@ -172,22 +177,31 @@ public class Run {
         return personalRecordSummary;
     }
 
+    // This method lets other classes read how the run felt.
+    public String getRunFeeling() {
+        return runFeeling;
+    }
+
     // This method returns a short summary of the run.
     public String getRunSummary() {
 
-        // Store the main run summary first.
-        String summary = date + " - " +
-                distance + " " + distanceUnit + " - " +
-                getPace() + " min/" + getPaceUnit() + " - " +
-                duration + " minutes";
+        // This method returns a readable summary of the run.
+        String summary = "\nDate: " + date +
+                "\nDistance: " + distance + " " + distanceUnit +
+                "\nPace: " + getPace() + " min/" + getPaceUnit()  +
+                "\nDuration: " + duration + " minutes"  +
+                "\nFeeling: " + runFeeling;
+
 
         // If this run has a PR, add the PR text to the end of the summary.
         if (!getPersonalRecordSummary().equals("")) {
-            summary = summary + " - " + getPersonalRecordSummary();
+            summary = summary + "\nPR: " + getPersonalRecordSummary();
         }
 
         return summary;
     }
+
+
 
     /*
      * Displays all information about the run.
@@ -205,6 +219,8 @@ public class Run {
         System.out.println("Distance: " + distance + " " + distanceUnit);
         System.out.println("Duration: " + duration + " minutes");
         System.out.println("Pace: " + getPace() + " minutes per " + getPaceUnit());
+        // Display how the runner felt about this run.
+        System.out.println("Run Feeling " + getRunFeeling());
         System.out.println("Route Name: " + routeName);
         System.out.println("Route Location: " + routeLocation);
         System.out.println("Club Run: " + clubRun);
