@@ -78,6 +78,11 @@ public class App {
         // Display the runner's current personal records.
         runner1.displayPersonalRecords();
 
+        System.out.println();
+
+       // Display a summary of how the runner felt across all runs.
+        runner1.displayRunFeelingSummary();
+
 
     }
 }

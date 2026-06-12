@@ -204,6 +204,40 @@ public class Runner {
         System.out.println("Fastest Average Pace: " + fastestPaceRun.getPace() + " min/" + fastestPaceRun.getPaceUnit());
     }
 
+    // Displays how many runs were marked with each feeling.
+    public void displayRunFeelingSummary() {
+
+        // Start each feeling count at zero.
+        int difficultCount = 0;
+        int normalCount = 0;
+        int greatCount = 0;
+
+        // Loop through each run in the history.
+        for (Run run : runHistory) {
+
+            // Increase the difficult count when the run feeling is DIFFICULT.
+            if (run.getRunFeeling() == RunFeeling.DIFFICULT) {
+                difficultCount++;
+            }
+
+            // Increase the normal count when the run feeling is NORMAL.
+            if (run.getRunFeeling() == RunFeeling.NORMAL) {
+                normalCount++;
+            }
+
+            // Increase the great count when the run feeling is GREAT.
+            if (run.getRunFeeling() == RunFeeling.GREAT) {
+                greatCount++;
+            }
+        }
+
+        // Display the final counts.
+        System.out.println("Run Feeling Summary for " + username + ":");
+        System.out.println("Difficult: " + difficultCount);
+        System.out.println("Normal: " + normalCount);
+        System.out.println("Great: " + greatCount);
+    }
+
     /*
      * Displays public/basic runner information.
      *
