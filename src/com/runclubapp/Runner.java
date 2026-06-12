@@ -169,6 +169,41 @@ public class Runner {
         }
     }
 
+    // Displays the runner's current personal records.
+    public void displayPersonalRecords() {
+
+        // If there are no runs, there are no personal records to show.
+        if (runHistory.size() == 0) {
+            System.out.println(username + " has no personal records yet.");
+            return;
+        }
+
+        // Start by assuming the first run is the longest.
+        Run longestRun = runHistory.get(0);
+        // Start by assuming the first run has the fastest average pace.
+        Run fastestPaceRun = runHistory.get(0);
+
+        // Loop through every run in the history.
+        for (Run run : runHistory) {
+
+            // If this run is longer than the current longest run, update longestRun.
+            if (run.getDistance() > longestRun.getDistance()) {
+                longestRun = run;
+            }
+
+            // If this run has a lower pace than the current fastest pace run, update fastestPaceRun.
+            if (run.getPace() < fastestPaceRun.getPace()) {
+                fastestPaceRun = run;
+            }
+        }
+
+        // Display the longest distance record.
+        System.out.println("Current Personal Records for " + username + ":");
+        System.out.println("Longest Distance: " + longestRun.getDistance() + " " + longestRun.getDistanceUnit());
+        // Display the fastest average pace record.
+        System.out.println("Fastest Average Pace: " + fastestPaceRun.getPace() + " min/" + fastestPaceRun.getPaceUnit());
+    }
+
     /*
      * Displays public/basic runner information.
      *

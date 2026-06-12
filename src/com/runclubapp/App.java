@@ -34,7 +34,7 @@ public class App {
         Run run2 = new Run(
                 2,
                 runner1,
-                "06/06/2026",
+                "06/03/2026",
                 "7:00 AM",
                 "7:36 AM",
                 3.0,
@@ -72,6 +72,11 @@ public class App {
 
         // Display all runs stored for this runner.
         runner1.displayRunHistory();
+
+        System.out.println();
+
+        // Display the runner's current personal records.
+        runner1.displayPersonalRecords();
 
 
     }
