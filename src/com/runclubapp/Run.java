@@ -190,7 +190,7 @@ public class Run {
                 "\nDistance: " + distance + " " + distanceUnit +
                 "\nPace: " + getPace() + " min/" + getPaceUnit()  +
                 "\nDuration: " + duration + " minutes"  +
-                "\nFeeling: " + runFeeling;
+                "\nFeeling: " + runFeeling.getDisplayName();
 
 
         // If this run has a PR, add the PR text to the end of the summary.
@@ -220,7 +220,7 @@ public class Run {
         System.out.println("Duration: " + duration + " minutes");
         System.out.println("Pace: " + getPace() + " minutes per " + getPaceUnit());
         // Display how the runner felt about this run.
-        System.out.println("Run Feeling: " + getRunFeeling());
+        System.out.println("Run Feeling: " + getRunFeeling().getDisplayName());
         System.out.println("Route Name: " + routeName);
         System.out.println("Route Location: " + routeLocation);
         System.out.println("Club Run: " + clubRun);
