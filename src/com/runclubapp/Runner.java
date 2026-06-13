@@ -164,6 +164,33 @@ public class Runner {
         return count;
     }
 
+    // Calculates the average pace for runs that match the selected feeling.
+    private double getAveragePaceByFeeling(RunFeeling feeling) {
+
+        // Store the total pace for matching runs.
+        double paceTotal = 0;
+
+        // Store how many runs match the selected feeling.
+        int count = 0;
+
+        // Loop through each run in the history.
+        for (Run run : runHistory) {
+
+            // Only use runs that match the selected feeling.
+            if (run.getRunFeeling() == feeling) {
+                paceTotal = paceTotal + run.getPace();
+                count++;
+            }
+        }
+
+        // If no runs match this feeling, return 0 to avoid division by zero.
+        if (count == 0) {
+            return 0;
+        }
+
+        return paceTotal / count;
+    }
+
     // Displays every run stored in this runner's run history.
     public void displayRunHistory() {
 
@@ -241,53 +268,26 @@ public class Runner {
     // Displays the average pace for runs in each feeling category.
     public void displayAveragePaceByFeeling() {
 
-        // Store total pace for each feeling.
-        double difficultPaceTotal = 0;
-        double normalPaceTotal = 0;
-        double greatPaceTotal = 0;
-
-        // Store how many runs belong to each feeling.
-        int difficultCount = 0;
-        int normalCount = 0;
-        int greatCount = 0;
-
-        // Loop through each run in the history.
-        for (Run run : runHistory) {
-
-            // Add this run's pace to the Difficult group.
-            if (run.getRunFeeling() == RunFeeling.DIFFICULT) {
-                difficultPaceTotal = difficultPaceTotal + run.getPace();
-                difficultCount++;
-            }
-
-            // Add this run's pace to the Normal group.
-            if (run.getRunFeeling() == RunFeeling.NORMAL) {
-                normalPaceTotal = normalPaceTotal + run.getPace();
-                normalCount++;
-            }
-
-            // Add this run's pace to the Great group.
-            if (run.getRunFeeling() == RunFeeling.GREAT) {
-                greatPaceTotal = greatPaceTotal + run.getPace();
-                greatCount++;
-            }
-        }
+        // Calculate the average pace for each feeling.
+        double difficultAverage = getAveragePaceByFeeling(RunFeeling.DIFFICULT);
+        double normalAverage = getAveragePaceByFeeling(RunFeeling.NORMAL);
+        double greatAverage = getAveragePaceByFeeling(RunFeeling.GREAT);
 
         System.out.println("Average Pace By Feeling:");
 
-        // Only calculate Difficult average if at least one run was Difficult.
-        if (difficultCount > 0) {
-            System.out.println("Difficult: " + (difficultPaceTotal / difficultCount) + " min/mile");
+        // Only display Difficult average if at least one run was Difficult.
+        if (countRunsByFeeling(RunFeeling.DIFFICULT) > 0) {
+            System.out.println("Difficult: " + difficultAverage + " min/mile");
         }
 
-        // Only calculate Normal average if at least one run was Normal.
-        if (normalCount > 0) {
-            System.out.println("Normal: " + (normalPaceTotal / normalCount) + " min/mile");
+        // Only display Normal average if at least one run was Normal.
+        if (countRunsByFeeling(RunFeeling.NORMAL) > 0) {
+            System.out.println("Normal: " + normalAverage + " min/mile");
         }
 
-        // Only calculate Great average if at least one run was Great.
-        if (greatCount > 0) {
-            System.out.println("Great: " + (greatPaceTotal / greatCount) + " min/mile");
+        // Only display Great average if at least one run was Great.
+        if (countRunsByFeeling(RunFeeling.GREAT) > 0) {
+            System.out.println("Great: " + greatAverage + " min/mile");
         }
     }
 
