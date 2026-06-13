@@ -238,6 +238,59 @@ public class Runner {
         System.out.println("Great: " + greatCount);
     }
 
+    // Displays the average pace for runs in each feeling category.
+    public void displayAveragePaceByFeeling() {
+
+        // Store total pace for each feeling.
+        double difficultPaceTotal = 0;
+        double normalPaceTotal = 0;
+        double greatPaceTotal = 0;
+
+        // Store how many runs belong to each feeling.
+        int difficultCount = 0;
+        int normalCount = 0;
+        int greatCount = 0;
+
+        // Loop through each run in the history.
+        for (Run run : runHistory) {
+
+            // Add this run's pace to the Difficult group.
+            if (run.getRunFeeling() == RunFeeling.DIFFICULT) {
+                difficultPaceTotal = difficultPaceTotal + run.getPace();
+                difficultCount++;
+            }
+
+            // Add this run's pace to the Normal group.
+            if (run.getRunFeeling() == RunFeeling.NORMAL) {
+                normalPaceTotal = normalPaceTotal + run.getPace();
+                normalCount++;
+            }
+
+            // Add this run's pace to the Great group.
+            if (run.getRunFeeling() == RunFeeling.GREAT) {
+                greatPaceTotal = greatPaceTotal + run.getPace();
+                greatCount++;
+            }
+        }
+
+        System.out.println("Average Pace By Feeling:");
+
+        // Only calculate Difficult average if at least one run was Difficult.
+        if (difficultCount > 0) {
+            System.out.println("Difficult: " + (difficultPaceTotal / difficultCount) + " min/mile");
+        }
+
+        // Only calculate Normal average if at least one run was Normal.
+        if (normalCount > 0) {
+            System.out.println("Normal: " + (normalPaceTotal / normalCount) + " min/mile");
+        }
+
+        // Only calculate Great average if at least one run was Great.
+        if (greatCount > 0) {
+            System.out.println("Great: " + (greatPaceTotal / greatCount) + " min/mile");
+        }
+    }
+
     /*
      * Displays public/basic runner information.
      *

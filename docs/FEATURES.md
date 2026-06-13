@@ -10,19 +10,22 @@ This file describes the main features RunNet has now or is clearly moving toward
 - Display run history newest first.
 - Track distance, duration, average pace, route, and club run status.
 - Show pace with the correct unit, such as minutes per mile or minutes per kilometer.
-- Detect personal records:
-  - Longest distance
-  - Fastest average pace
-
-## Next Core Features
-
-- Add a post-run feeling choice:
+- Track post-run feeling:
   - Difficult
   - Normal
   - Great
-- Show run feeling in the run summary.
-- Keep personal record messages visible in run history.
-- Add a cleaner personal record summary for the runner.
+- Display run feeling in each run summary.
+- Display a run feeling summary by counting how many runs were Difficult, Normal, or Great.
+- Detect personal records:
+  - Longest distance
+  - Fastest average pace
+- Display the runner's current personal record summary.
+
+## Next Core Features
+
+- Improve the console display so run history, personal records, and feeling summaries are easier to scan.
+- Begin simple post-run feeling insights, such as comparing Great runs with pace, distance, or route.
+- Keep personal record messages visible and easy to understand in run history.
 
 ## Future Feature Areas
 

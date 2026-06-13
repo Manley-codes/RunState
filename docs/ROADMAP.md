@@ -12,12 +12,9 @@ This roadmap keeps the project focused while leaving room for future ideas.
 
 ## Near Future
 
-- Add post-run feeling:
-  - Difficult
-  - Normal
-  - Great
-- Show feeling in each run summary.
-- Add a simple personal record summary for the runner.
+- Improve the console output layout for run history, personal records, and feeling summaries.
+- Use post-run feelings for simple pattern summaries.
+- Compare Great, Normal, and Difficult runs with basic run details such as pace and distance.
 - Improve test runs in `App` so they clearly demonstrate each feature.
 - Start thinking about a small demo UI after the console logic feels stable.
 

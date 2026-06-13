@@ -83,6 +83,11 @@ public class App {
        // Display a summary of how the runner felt across all runs.
         runner1.displayRunFeelingSummary();
 
+        System.out.println();
+
+        // Display the average pace for each run feeling.
+        runner1.displayAveragePaceByFeeling();
+
 
     }
 }
