@@ -146,6 +146,24 @@ public class Runner {
         return true;
     }
 
+    // Counts how many runs match the selected feeling.
+    private int countRunsByFeeling(RunFeeling feeling) {
+
+        // Start the count at zero.
+        int count = 0;
+
+        // Loop through each run in the history.
+        for (Run run : runHistory) {
+
+            // If this run matches the selected feeling, increase the count.
+            if (run.getRunFeeling() == feeling) {
+                count++;
+            }
+        }
+
+        return count;
+    }
+
     // Displays every run stored in this runner's run history.
     public void displayRunHistory() {
 
@@ -207,29 +225,11 @@ public class Runner {
     // Displays how many runs were marked with each feeling.
     public void displayRunFeelingSummary() {
 
-        // Start each feeling count at zero.
-        int difficultCount = 0;
-        int normalCount = 0;
-        int greatCount = 0;
+        // Count how many runs match each feeling.
+        int difficultCount = countRunsByFeeling(RunFeeling.DIFFICULT);
+        int normalCount = countRunsByFeeling(RunFeeling.NORMAL);
+        int greatCount = countRunsByFeeling(RunFeeling.GREAT);
 
-        // Loop through each run in the history.
-        for (Run run : runHistory) {
-
-            // Increase the difficult count when the run feeling is DIFFICULT.
-            if (run.getRunFeeling() == RunFeeling.DIFFICULT) {
-                difficultCount++;
-            }
-
-            // Increase the normal count when the run feeling is NORMAL.
-            if (run.getRunFeeling() == RunFeeling.NORMAL) {
-                normalCount++;
-            }
-
-            // Increase the great count when the run feeling is GREAT.
-            if (run.getRunFeeling() == RunFeeling.GREAT) {
-                greatCount++;
-            }
-        }
 
         // Display the final counts.
         System.out.println("Run Feeling Summary for " + username + ":");
