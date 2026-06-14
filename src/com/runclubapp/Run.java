@@ -24,7 +24,7 @@ public class Run {
     private double distance;
 
     // Unit of distance: "miles" or "kilometers"
-    private String distanceUnit;
+    private DistanceUnit distanceUnit;
     private double duration;
     private String routeName;
     private String routeLocation;
@@ -57,7 +57,7 @@ public class Run {
      * when creating the object.
      */
     public Run(int runId, Runner runner, String date, String startTime, String endTime,
-               double distance, String distanceUnit, double duration,
+               double distance, DistanceUnit distanceUnit, double duration,
                String routeName, String routeLocation, RunFeeling runFeeling,
                boolean clubRun, String associatedClub) {
 
@@ -98,18 +98,9 @@ public class Run {
         return duration / distance;
     }
 
-    // This method returns the singular version of the distance unit.
-   // Pace is usually written as "minutes per mile" or "minutes per kilometer".
+    // This method returns the unit used for pace, such as mile or kilometer.
     public String getPaceUnit() {
-        if (distanceUnit.equals("miles")) {
-            return "mile";
-        }
-
-        if (distanceUnit.equals("kilometers")) {
-            return "kilometer";
-        }
-
-        return distanceUnit;
+        return distanceUnit.getPaceName();
     }
 
     // This method lets other classes read the run date.
@@ -122,9 +113,9 @@ public class Run {
         return distance;
     }
 
-    // This method lets other classes read the distance unit.
+    // This method lets other classes read the distance unit display text.
     public String getDistanceUnit() {
-        return distanceUnit;
+        return distanceUnit.getDisplayName();
     }
 
     // This method lets other classes read the run duration.
@@ -187,7 +178,7 @@ public class Run {
 
         // This method returns a readable summary of the run.
         String summary = "\nDate: " + date +
-                "\nDistance: " + distance + " " + distanceUnit +
+                "\nDistance: " + distance + " " + distanceUnit.getDisplayName() +
                 "\nPace: " + getPace() + " min/" + getPaceUnit()  +
                 "\nDuration: " + duration + " minutes"  +
                 "\nFeeling: " + runFeeling.getDisplayName();
@@ -216,7 +207,7 @@ public class Run {
         System.out.println("Date: " + date);
         System.out.println("Start Time: " + startTime);
         System.out.println("End Time: " + endTime);
-        System.out.println("Distance: " + distance + " " + distanceUnit);
+        System.out.println("Distance: " + distance + " " + distanceUnit.getDisplayName());
         System.out.println("Duration: " + duration + " minutes");
         System.out.println("Pace: " + getPace() + " minutes per " + getPaceUnit());
         // Display how the runner felt about this run.
