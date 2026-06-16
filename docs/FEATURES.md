@@ -9,6 +9,7 @@ This file describes the main features RunNet has now or is clearly moving toward
 - Store multiple runs in a runner's run history.
 - Display run history newest first.
 - Track distance, duration, average pace, route, and club run status.
+- Use fixed distance unit choices for miles and kilometers.
 - Show pace with the correct unit, such as minutes per mile or minutes per kilometer.
 - Track post-run feeling:
   - Difficult
