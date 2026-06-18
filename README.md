@@ -15,13 +15,11 @@ The project focuses on a small, polished run tracker that logs run details, calc
 - Track distance, duration, average pace, route, and club run status.
 - Use fixed distance unit choices for miles and kilometers.
 - Show pace with the correct unit, such as minutes per mile or minutes per kilometer.
-- Track post-run feeling:
-  - Difficult
-  - Normal
-  - Great
-- Display run feeling in each run summary.
-- Count how many runs were Difficult, Normal, or Great.
-- Calculate average pace by run feeling.
+- Optionally record energy before and after a run.
+- Use playful labels backed by a shared low-to-high energy scale:
+  - Pre-run: I'm Here, Ready-ish, Let's Go!
+  - Post-run: Spent, Feeling Good, Powered Up
+- Display recorded pre-run and post-run energy in each run summary.
 - Detect personal records:
   - Longest distance
   - Fastest average pace
@@ -35,7 +33,7 @@ Larger ideas such as weather context, route context, shoe tracking, support mess
 
 ## Next Improvements
 
-- Add average distance by run feeling.
+- Design how energy, run metrics, and personal history should connect before adding energy-based analysis.
 - Improve console output formatting.
 - Clean up repeated summary logic where it makes sense.
 - Update unit handling later so mixed miles and kilometers are handled more carefully across summaries and averages.

@@ -25,7 +25,8 @@ public class App {
                 50,
                 "Memorial Park Loop",
                 "Houston, TX",
-                RunFeeling.NORMAL,
+                EnergyLevel.LOW,
+                EnergyLevel.LOW,
                 true,
                 "Houston Run Club"
         );
@@ -42,7 +43,8 @@ public class App {
                 36,
                 "Buffalo Bayou Trail",
                 "Houston, TX",
-                RunFeeling.DIFFICULT,
+                EnergyLevel.MODERATE,
+                null,
                 false,
                 "None"
         );
@@ -59,16 +61,54 @@ public class App {
                 36,
                 "Buffalo Bayou Trail",
                 "Houston, TX",
-                RunFeeling.GREAT,
+                EnergyLevel.HIGH,
+                EnergyLevel.HIGH,
                 false,
                 "None"
         );
 
+        // Create a fourth run with only a post-run energy answer.
+        Run run4 = new Run(
+                4,
+                runner1,
+                "06/08/2026",
+                "6:30 AM",
+                "7:10 AM",
+                4.0,
+                DistanceUnit.MILES,
+                40,
+                "White Oak Bayou Trail",
+                "Houston, TX",
+                null,
+                EnergyLevel.MODERATE,
+                false,
+                "None"
+        );
+
+        // Create a fifth run with both optional energy answers skipped.
+        Run run5 = new Run(
+                5,
+                runner1,
+                "06/10/2026",
+                "6:15 AM",
+                "6:45 AM",
+                2.5,
+                DistanceUnit.MILES,
+                30,
+                "Neighborhood Route",
+                "Houston, TX",
+                null,
+                null,
+                false,
+                "None"
+        );
 
         // Store this completed run in runner1's run history.
         runner1.addRun(run1);
         runner1.addRun(run2);
         runner1.addRun(run3);
+        runner1.addRun(run4);
+        runner1.addRun(run5);
 
         // Display all runs stored for this runner.
         runner1.displayRunHistory();
@@ -77,17 +117,6 @@ public class App {
 
         // Display the runner's current personal records.
         runner1.displayPersonalRecords();
-
-        System.out.println();
-
-       // Display a summary of how the runner felt across all runs.
-        runner1.displayRunFeelingSummary();
-
-        System.out.println();
-
-        // Display the average pace for each run feeling.
-        runner1.displayAveragePaceByFeeling();
-
 
     }
 }

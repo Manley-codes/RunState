@@ -25,8 +25,9 @@ For the current pre-run and post-run energy design discussion, see `docs/ENERGY_
 
 - Rename remaining RunNet references when ready.
 - Remove remaining run club references from docs and code.
-- Finalize the pre-run and post-run energy model before adding more feeling-based calculations.
-- Redesign the current single post-run feeling model after the questions and labels are confirmed.
+- Test the implemented pre-run and post-run energy capture foundation.
+- Design how pre-run energy, run data, post-run energy, and personal history connect.
+- Decide how observations should be presented before adding interpretation.
 - Keep Average Distance by Feeling paused until the new energy model is stable.
 - Improve the console output layout for run history, personal records, and feeling summaries.
 - Collect pre-run and post-run energy as observations before making strong interpretations. `[Unique]`

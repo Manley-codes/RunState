@@ -29,8 +29,11 @@ public class Run {
     private String routeName;
     private String routeLocation;
 
-    // Describes how the runner felt about this run using a fixed set of choices.
-    private RunFeeling runFeeling;
+    // Describes the runner's optional energy level before the run.
+    private EnergyLevel preRunEnergy;
+
+    // Describes the runner's optional energy level after the run.
+    private EnergyLevel postRunEnergy;
 
     // Indicates whether this run was part of a club event
     private boolean clubRun;
@@ -58,7 +61,8 @@ public class Run {
      */
     public Run(int runId, Runner runner, String date, String startTime, String endTime,
                double distance, DistanceUnit distanceUnit, double duration,
-               String routeName, String routeLocation, RunFeeling runFeeling,
+               String routeName, String routeLocation, EnergyLevel preRunEnergy,
+               EnergyLevel postRunEnergy,
                boolean clubRun, String associatedClub) {
 
         // "this" refers to the current object's variables
@@ -72,8 +76,8 @@ public class Run {
         this.duration = duration;
         this.routeName = routeName;
         this.routeLocation = routeLocation;
-        // Store how the runner felt about this run.
-        this.runFeeling = runFeeling;
+        this.preRunEnergy = preRunEnergy;
+        this.postRunEnergy = postRunEnergy;
         this.clubRun = clubRun;
         this.associatedClub = associatedClub;
         // A run starts with no PR label until the Runner checks the run history.
@@ -168,9 +172,14 @@ public class Run {
         return personalRecordSummary;
     }
 
-    // This method lets other classes read how the run felt.
-    public RunFeeling getRunFeeling() {
-        return runFeeling;
+    // Returns the runner's energy level before the run, or null if it was skipped.
+    public EnergyLevel getPreRunEnergy() {
+        return preRunEnergy;
+    }
+
+    // Returns the runner's energy level after the run, or null if it was skipped.
+    public EnergyLevel getPostRunEnergy() {
+        return postRunEnergy;
     }
 
     // This method returns a short summary of the run.
@@ -180,9 +189,15 @@ public class Run {
         String summary = "\nDate: " + date +
                 "\nDistance: " + distance + " " + distanceUnit.getDisplayName() +
                 "\nPace: " + getPace() + " min/" + getPaceUnit()  +
-                "\nDuration: " + duration + " minutes"  +
-                "\nFeeling: " + runFeeling.getDisplayName();
+                "\nDuration: " + duration + " minutes";
 
+        if (preRunEnergy != null) {
+            summary = summary + "\nPre-run energy: " + preRunEnergy.getPreRunLabel();
+        }
+
+        if (postRunEnergy != null) {
+            summary = summary + "\nPost-run energy: " + postRunEnergy.getPostRunLabel();
+        }
 
         // If this run has a PR, add the PR text to the end of the summary.
         if (!getPersonalRecordSummary().equals("")) {
@@ -210,8 +225,15 @@ public class Run {
         System.out.println("Distance: " + distance + " " + distanceUnit.getDisplayName());
         System.out.println("Duration: " + duration + " minutes");
         System.out.println("Pace: " + getPace() + " minutes per " + getPaceUnit());
-        // Display how the runner felt about this run.
-        System.out.println("Run Feeling: " + getRunFeeling().getDisplayName());
+
+        if (preRunEnergy != null) {
+            System.out.println("Pre-run energy: " + preRunEnergy.getPreRunLabel());
+        }
+
+        if (postRunEnergy != null) {
+            System.out.println("Post-run energy: " + postRunEnergy.getPostRunLabel());
+        }
+
         System.out.println("Route Name: " + routeName);
         System.out.println("Route Location: " + routeLocation);
         System.out.println("Club Run: " + clubRun);

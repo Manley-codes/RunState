@@ -29,24 +29,27 @@ Product guardrails:
 
 An idea should not be postponed only because it is technically complex. Music integration, for example, may deserve earlier consideration because music is naturally connected to running and could give the app a fun identity. Trail analysis may be useful, but it can wait if it adds complexity without creating the same immediate enjoyment.
 
-## Post-Run Feeling And Performance Context `[Unique]`
+## Pre-Run And Post-Run Energy Context `[Unique]`
 
-After a runner completes a run, the app can ask one simple question:
+The app can ask one quick energy question before a run and another after it:
 
 ```text
-How did this run feel?
+How's your energy going into this run?
+[I'm Here] [Ready-ish] [Let's Go!]
 
-[Difficult] [Normal] [Great]
+How's your energy now?
+[Spent] [Feeling Good] [Powered Up]
 ```
 
-The goal is to collect useful feedback without making the runner fill out a long survey after every run.
+The goal is to collect useful observations without making the runner fill out a long survey. Either question can be skipped.
 
 Key characteristics:
 
-- Simple input after each run.
+- Simple input before and after each run.
 - Connects performance numbers with how the runner actually felt.
 - Gives RunNet a more personal angle than a basic run log.
-- Should stay lightweight so the runner is not forced into a long survey.
+- Uses one shared low-to-high scale behind different pre-run and post-run labels.
+- Stores and displays observations without judging the run.
 
 Over time, RunNet could compare the feeling choice with run details such as:
 
@@ -90,8 +93,8 @@ Great job, Jay.
 You completed 5.0 miles in 50 minutes.
 Average pace: 10:00 per mile.
 
-How did this run feel?
-[Difficult] [Normal] [Great]
+How's your energy now?
+[Spent] [Feeling Good] [Powered Up]
 ```
 
 Possible later prompts:

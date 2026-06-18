@@ -13,12 +13,11 @@ This file describes the main features RunNet has now or is clearly moving toward
 - Track distance, duration, average pace, route, and club run status.
 - Use fixed distance unit choices for miles and kilometers.
 - Show pace with the correct unit, such as minutes per mile or minutes per kilometer.
-- Track post-run feeling. `[Unique]`
-  - Difficult
-  - Normal
-  - Great
-- Display run feeling in each run summary. `[Unique]`
-- Display a run feeling summary by counting how many runs were Difficult, Normal, or Great. `[Unique]`
+- Optionally track energy before and after a run. `[Unique]`
+  - Pre-run: I'm Here, Ready-ish, Let's Go!
+  - Post-run: Spent, Feeling Good, Powered Up
+- Store both stages on one shared low-to-high energy scale.
+- Display only the energy answers the runner recorded. `[Unique]`
 - Detect personal records:
   - Longest distance
   - Fastest average pace
@@ -26,8 +25,9 @@ This file describes the main features RunNet has now or is clearly moving toward
 
 ## Next Core Features
 
-- Improve the console display so run history, personal records, and feeling summaries are easier to scan.
-- Begin simple post-run feeling insights, such as comparing Great runs with pace, distance, or route. `[Unique]`
+- Improve the console display so run history, personal records, and energy observations are easier to scan.
+- Design how pre-run energy, post-run energy, run metrics, and personal history should connect. `[Unique]`
+- Add interpretation only after the comparison and presentation rules are trustworthy.
 - Keep personal record messages visible and easy to understand in run history.
 
 ## Future Feature Areas
