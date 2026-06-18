@@ -1,6 +1,8 @@
-# RunNet
+# RunState
 
-RunNet is a beginner-friendly Java console app for tracking completed runs and personal progress.
+RunState is the new working name for this project, formerly called RunNet.
+
+RunState is a beginner-friendly Java console app for tracking completed runs and personal progress.
 
 The project focuses on a small, polished run tracker that logs run details, calculates pace, detects personal records, and tracks how each run felt. The goal is to keep the app understandable while practicing core Java and object-oriented programming concepts.
 
@@ -27,9 +29,9 @@ The project focuses on a small, polished run tracker that logs run details, calc
 
 ## Project Direction
 
-RunNet is currently staying focused on run tracking, personal records, post-run feeling, simple feeling-based insights, and clean console output.
+RunState is currently staying focused on run tracking, personal records, post-run feeling, simple feeling-based insights, and clean console output.
 
-Larger ideas such as weather context, route context, shoe tracking, run club communication, support messages, voice encouragement, AI coaching, GPS, and database integration are parked for later. They may become future features, but they are not the current build target.
+Larger ideas such as weather context, route context, shoe tracking, support messages, voice encouragement, AI coaching, GPS, and database integration are parked for later. They may become future features, but they are not the current build target.
 
 ## Next Improvements
 
@@ -66,7 +68,7 @@ Larger ideas such as weather context, route context, shoe tracking, run club com
 
 ## Project Status
 
-RunNet is in active development as a Java learning and portfolio project.
+RunState is in active development as a Java learning and portfolio project.
 
 ## Author
 

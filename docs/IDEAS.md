@@ -1,10 +1,14 @@
-# RunNet Ideas
+# RunState Ideas
 
 This file is for the strongest ideas worth remembering. The goal is to keep RunNet simple right now while saving the ideas that could make the app stand out later.
+
+RunState is the selected working name for the app. See `docs/BRANDING.md` for the naming notes.
 
 ## Core Direction
 
 RunNet is currently a simple run tracker that records completed runs, shows personal progress, and leaves room for helpful context around each run.
+
+The early app should feel fun, attractive, unique, and easy to use. It can include a few standout features with more complex logic, but the overall experience should not feel complicated.
 
 The app should stay easy to understand:
 
@@ -14,7 +18,18 @@ The app should stay easy to understand:
 - Capture how the run felt.
 - Add more context over time without overwhelming the runner.
 
-## Post-Run Feeling And Performance Context
+Product guardrails:
+
+- Keep common actions quick and obvious.
+- Use feeling-based insights and a small number of playful highlights to create personality.
+- Judge complex ideas by whether they make the app fun, easy to experience, and meaningfully different.
+- Allow a small number of technically complex signature features when their user experience remains simple.
+- Avoid filling the first version with every possible context field or analysis.
+- Let real use and feedback guide which advanced features are built later.
+
+An idea should not be postponed only because it is technically complex. Music integration, for example, may deserve earlier consideration because music is naturally connected to running and could give the app a fun identity. Trail analysis may be useful, but it can wait if it adds complexity without creating the same immediate enjoyment.
+
+## Post-Run Feeling And Performance Context `[Unique]`
 
 After a runner completes a run, the app can ask one simple question:
 
@@ -25,6 +40,13 @@ How did this run feel?
 ```
 
 The goal is to collect useful feedback without making the runner fill out a long survey after every run.
+
+Key characteristics:
+
+- Simple input after each run.
+- Connects performance numbers with how the runner actually felt.
+- Gives RunNet a more personal angle than a basic run log.
+- Should stay lightweight so the runner is not forced into a long survey.
 
 Over time, RunNet could compare the feeling choice with run details such as:
 
@@ -49,9 +71,16 @@ Pitch:
 RunNet is a run tracker that records performance and how each run felt, so runners can eventually learn what conditions help them perform their best.
 ```
 
-## Context-Aware Post-Run Prompts
+## Context-Aware Post-Run Prompts `[Unique]`
 
 RunNet should bring useful next actions forward at the right moment instead of making the runner search through menus.
+
+Key characteristics:
+
+- Shows helpful actions after a run, when they are most relevant.
+- Keeps the post-run experience simple and focused.
+- Can support personal records, feelings, notes, photos, or sharing later.
+- Should avoid becoming a cluttered menu.
 
 Example after a run:
 
@@ -71,6 +100,29 @@ Possible later prompts:
 - Save a note about how the run felt.
 - Share the run with a club.
 - View a new personal record.
+
+## Future Run Suggestions `[Unique]`
+
+RunNet could eventually suggest a general type of run before the runner starts, based on patterns from past runs.
+
+Key characteristics:
+
+- Uses past run history to suggest a general direction, such as easy, moderate, or faster.
+- Could include a loose distance range instead of a strict command.
+- Works best after the app has enough completed runs to notice real patterns.
+- Should sound like a helpful option, not professional coaching or medical advice.
+
+Possible suggestion examples:
+
+```text
+Your best-feeling runs are usually 3-5 miles at an easy pace.
+```
+
+```text
+Consider a slower recovery run today.
+```
+
+This should stay parked for later because it needs enough run history to be useful. The app should avoid sounding like medical or professional coaching advice. A safer version would describe patterns and gentle options instead of telling the runner exactly what they should do.
 
 ## Personal Records
 
@@ -93,9 +145,47 @@ Motivation principle:
 - Celebrate real progress, not noise.
 - The first logged run should create a baseline, but PR messages should appear when a runner beats a previous result.
 
-## Weather, Route, And Shoe Context
+## Top Run Highlights `[Unique]`
+
+RunNet could eventually show a small set of highlighted runs that feel more like badges or rewards than normal log entries.
+
+Key characteristics:
+
+- Shows only a few standout runs, such as the top three.
+- Feels more fun and rewarding than a normal run-history list.
+- Highlights all-around quality, not just one stat.
+- Could eventually use a larger card or badge-style design in a future UI.
+- Should wait until the app has enough context to make the highlights meaningful.
+
+The strongest version is not just:
+
+- Fastest run
+- Longest run
+- Best-feeling run
+
+The stronger idea is an all-around best run that balances distance, pace, post-run feeling, and useful context.
+
+Possible context for highlighted runs:
+
+- Route or trail
+- Weather or temperature
+- Shoes worn
+- Solo or group run
+- Club run status
+- Post-run feeling
+
+This idea fits RunNet well because it supports the main theme: progress is more than one number. It should wait until the app has more context data, but it is worth saving as a future feature.
+
+## Weather, Route, And Shoe Context `[Unique]`
 
 RunNet could eventually connect run performance and run feeling with context around the run.
+
+Key characteristics:
+
+- Helps explain why some runs feel or perform better than others.
+- Connects run feeling with real-world details like route, weather, and shoes.
+- Can feed future insights without making the current app too complex.
+- Should be added gradually so the runner is not overloaded with questions.
 
 Useful context ideas:
 
@@ -114,6 +204,17 @@ Route: Buffalo Bayou Trail
 Shoes: Daily Trainers
 Run Type: Solo
 ```
+
+### Simple Trail Gallery Concept
+
+A lightweight early visual feature could show an attractive gallery of selected trail or route photos without trying to provide full nearby-trail discovery or detailed trail analysis.
+
+Key characteristics:
+
+- Adds color and personality to the app.
+- Is easier to understand than a dense trail-information tool.
+- Could inspire runners without becoming a major navigation feature.
+- Remains an idea, not a committed first-version requirement.
 
 ## Run Club Communication
 
@@ -137,9 +238,16 @@ Potential message categories:
 
 The goal is to help important club information stay easy to find.
 
-## Support Messages And Future Voice Encouragement
+## Support Messages And Future Voice Encouragement `[Unique]`
 
 Support messages are a strong future idea because they connect running progress with encouragement from other people.
+
+Key characteristics:
+
+- Adds an emotional support layer without needing a full social network.
+- Can be tied to specific runs or races.
+- Text support messages are a simpler early version.
+- Voice encouragement is a far-future version and should wait until the core app is stronger.
 
 Early version:
 
@@ -153,9 +261,16 @@ Far future version:
 
 This should be saved for much later, but it could become one of RunNet's more unique emotional features.
 
-## Future Body Feedback And Effort Patterns
+## Future Body Feedback And Effort Patterns `[Unique]`
 
 RunNet could eventually help runners notice patterns around effort, discomfort, and performance.
+
+Key characteristics:
+
+- Connects run feeling with effort, discomfort, pace, distance, and context.
+- Could help runners notice patterns over time.
+- Must avoid medical claims or pretending to diagnose injury causes.
+- Should use careful wording and stay focused on pattern awareness.
 
 This should be handled carefully. The app should notice patterns, not make medical claims.
 
