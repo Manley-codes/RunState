@@ -1,5 +1,8 @@
 package com.runclubapp;
 
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
+import java.util.Locale;
 
 /*
  * The Run class represents a single running activity.
@@ -10,6 +13,8 @@ package com.runclubapp;
 
 public class Run {
 
+    private static final DateTimeFormatter SUMMARY_DATE_FORMAT =
+            DateTimeFormatter.ofPattern("MMMM d", Locale.ENGLISH);
 
     // Unique identifier for this run
     private int runId;
@@ -18,7 +23,7 @@ public class Run {
 // This is more object-oriented than storing only the runner's ID number.
     private Runner runner;
 
-    private String date;
+    private LocalDate date;
     private String startTime;
     private String endTime;
     private double distance;
@@ -34,12 +39,6 @@ public class Run {
 
     // Describes the runner's optional energy level after the run.
     private EnergyLevel postRunEnergy;
-
-    // Indicates whether this run was part of a club event
-    private boolean clubRun;
-
-    // Name of the club associated with the run
-    private String associatedClub;
 
     // Tracks whether this run was the runner's longest distance personal record.
     private boolean longestDistanceRecord;
@@ -59,11 +58,10 @@ public class Run {
      * Everything inside the parentheses below must be provided
      * when creating the object.
      */
-    public Run(int runId, Runner runner, String date, String startTime, String endTime,
+    public Run(int runId, Runner runner, LocalDate date, String startTime, String endTime,
                double distance, DistanceUnit distanceUnit, double duration,
                String routeName, String routeLocation, EnergyLevel preRunEnergy,
-               EnergyLevel postRunEnergy,
-               boolean clubRun, String associatedClub) {
+               EnergyLevel postRunEnergy) {
 
         // "this" refers to the current object's variables
         this.runId = runId;
@@ -78,8 +76,6 @@ public class Run {
         this.routeLocation = routeLocation;
         this.preRunEnergy = preRunEnergy;
         this.postRunEnergy = postRunEnergy;
-        this.clubRun = clubRun;
-        this.associatedClub = associatedClub;
         // A run starts with no PR label until the Runner checks the run history.
         this.longestDistanceRecord = false;
         // A run starts with no fastest pace PR label until the Runner checks the run history.
@@ -108,8 +104,13 @@ public class Run {
     }
 
     // This method lets other classes read the run date.
-    public String getDate() {
+    public LocalDate getDate() {
         return date;
+    }
+
+    // This method lets other classes read the route name.
+    public String getRouteName() {
+        return routeName;
     }
 
     // This method lets other classes read the run distance.
@@ -185,23 +186,71 @@ public class Run {
     // This method returns a short summary of the run.
     public String getRunSummary() {
 
-        // This method returns a readable summary of the run.
-        String summary = "\nDate: " + date +
-                "\nDistance: " + distance + " " + distanceUnit.getDisplayName() +
-                "\nPace: " + getPace() + " min/" + getPaceUnit()  +
-                "\nDuration: " + duration + " minutes";
+        String summary = "\n" + getSummaryHeader() +
+                "\n" + formatPace() + " min/" + getPaceUnit() +
+                " | " + formatNumber(duration) + " min";
 
-        if (preRunEnergy != null) {
+        if (preRunEnergy != null && postRunEnergy != null) {
+            summary = summary + "\nEnergy: " + preRunEnergy.getPreRunLabel() +
+                    " -> " + postRunEnergy.getPostRunLabel();
+        } else if (preRunEnergy != null) {
             summary = summary + "\nPre-run energy: " + preRunEnergy.getPreRunLabel();
-        }
-
-        if (postRunEnergy != null) {
+        } else if (postRunEnergy != null) {
             summary = summary + "\nPost-run energy: " + postRunEnergy.getPostRunLabel();
         }
 
-        // If this run has a PR, add the PR text to the end of the summary.
-        if (!getPersonalRecordSummary().equals("")) {
-            summary = summary + "\nPR: " + getPersonalRecordSummary();
+        String compactPersonalRecords = getCompactPersonalRecordSummary();
+        if (!compactPersonalRecords.equals("")) {
+            summary = summary + "\nPR: " + compactPersonalRecords;
+        }
+
+        return summary;
+    }
+
+    // Builds the first summary line and omits the route when it is missing.
+    private String getSummaryHeader() {
+        String header = date.format(SUMMARY_DATE_FORMAT);
+
+        if (routeName != null && !routeName.isBlank()) {
+            header = header + " | " + routeName;
+        }
+
+        return header + " | " + formatNumber(distance) + " " +
+                distanceUnit.getDisplayName();
+    }
+
+    // Converts decimal pace into the minutes:seconds format runners commonly use.
+    private String formatPace() {
+        long totalSeconds = Math.round(getPace() * 60);
+        long minutes = totalSeconds / 60;
+        long seconds = totalSeconds % 60;
+
+        return String.format(Locale.ENGLISH, "%d:%02d", minutes, seconds);
+    }
+
+    // Removes unnecessary .0 endings while preserving meaningful decimal values.
+    private String formatNumber(double value) {
+        if (value == Math.rint(value)) {
+            return String.format(Locale.ENGLISH, "%.0f", value);
+        }
+
+        return String.format(Locale.ENGLISH, "%s", value);
+    }
+
+    // Returns shorter PR labels for the compact run-history card.
+    private String getCompactPersonalRecordSummary() {
+        String summary = "";
+
+        if (longestDistanceRecord) {
+            summary = "Longest distance";
+        }
+
+        if (fastestAveragePaceRecord) {
+            if (!summary.equals("")) {
+                summary = summary + " | ";
+            }
+
+            summary = summary + "Fastest pace";
         }
 
         return summary;
@@ -236,7 +285,5 @@ public class Run {
 
         System.out.println("Route Name: " + routeName);
         System.out.println("Route Location: " + routeLocation);
-        System.out.println("Club Run: " + clubRun);
-        System.out.println("Associated Club: " + associatedClub);
     }
 }

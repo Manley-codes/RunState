@@ -12,7 +12,7 @@ The project focuses on a small, polished run tracker that logs run details, calc
 - Log completed runs.
 - Store multiple runs in a runner's run history.
 - Display run history newest first.
-- Track distance, duration, average pace, route, and club run status.
+- Track distance, duration, average pace, and route.
 - Use fixed distance unit choices for miles and kilometers.
 - Show pace with the correct unit, such as minutes per mile or minutes per kilometer.
 - Optionally record energy before and after a run.
@@ -20,6 +20,7 @@ The project focuses on a small, polished run tracker that logs run details, calc
   - Pre-run: I'm Here, Ready-ish, Let's Go!
   - Post-run: Spent, Feeling Good, Powered Up
 - Display recorded pre-run and post-run energy in each run summary.
+- Display run history as compact, runner-friendly cards with clock-style pace.
 - Detect personal records:
   - Longest distance
   - Fastest average pace
@@ -33,8 +34,8 @@ Larger ideas such as weather context, route context, shoe tracking, support mess
 
 ## Next Improvements
 
-- Design how energy, run metrics, and personal history should connect before adding energy-based analysis.
-- Improve console output formatting.
+- Prototype a transparent route-and-distance observation for the future `Your Run Style` section.
+- Continue designing how energy, run metrics, and personal history should connect before adding energy-based interpretation.
 - Clean up repeated summary logic where it makes sense.
 - Update unit handling later so mixed miles and kilometers are handled more carefully across summaries and averages.
 - Improve this README as the project becomes more polished.

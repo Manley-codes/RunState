@@ -17,6 +17,18 @@ The Java code now stores two optional `EnergyLevel` values:
 
 The current implementation captures and displays observations only. It does not calculate energy change, averages, scores, conclusions, or run-quality judgments.
 
+When both values are recorded, the compact run-history card displays them together:
+
+```text
+Energy: Let's Go! -> Powered Up
+```
+
+When only one answer is recorded, the card shows only that stage. No conclusion is
+attached to the arrow; it represents the two recorded observations.
+
+Run dates now use Java `LocalDate`, providing a stronger foundation for friendly date
+formatting and future date-based pattern comparisons.
+
 The planned Average Distance by Feeling feature remains paused because the new interpretation rules are not settled.
 
 ## Agreed Direction

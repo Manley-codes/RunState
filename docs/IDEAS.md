@@ -58,7 +58,7 @@ Over time, RunNet could compare the feeling choice with run details such as:
 - Average pace
 - Route or trail
 - Weather and temperature
-- Solo or group run
+- Solo, partner, or group run
 - Shoes used
 - Time of day
 
@@ -101,7 +101,6 @@ Possible later prompts:
 
 - Add a photo to this run.
 - Save a note about how the run felt.
-- Share the run with a club.
 - View a new personal record.
 
 ## Future Run Suggestions `[Unique]`
@@ -173,8 +172,7 @@ Possible context for highlighted runs:
 - Route or trail
 - Weather or temperature
 - Shoes worn
-- Solo or group run
-- Club run status
+- Solo, partner, or group run
 - Post-run feeling
 
 This idea fits RunNet well because it supports the main theme: progress is more than one number. It should wait until the app has more context data, but it is worth saving as a future feature.
@@ -194,9 +192,8 @@ Useful context ideas:
 
 - Weather and temperature
 - Route or trail
-- Whether the run was solo or with others
+- Whether the run was solo, with a partner, or with a group
 - Shoes used
-- Club run status
 
 The app should collect as much context as possible before the run or automatically later. The post-run experience should stay simple.
 
@@ -219,48 +216,78 @@ Key characteristics:
 - Could inspire runners without becoming a major navigation feature.
 - Remains an idea, not a committed first-version requirement.
 
-## Run Club Communication
+## Your Run Style `[Unique]`
 
-RunNet may eventually support run clubs, but this should stay focused and not become a messy group chat clone.
+`Your Run Style` is a future curated discovery section for interesting habits and
+patterns from the runner's completed runs.
 
-Useful club ideas:
+Subtitle:
 
-- Club announcements
-- Event reminders
-- Shared run updates
-- Encouragement after runs
-- Simple communication before and after group runs
+```text
+Interesting habits and patterns from your runs.
+```
 
-Potential message categories:
+This should not become another general statistics dashboard. Normal run details belong
+in run history and personal-record views. `Your Run Style` should surface only a small
+number of patterns that are supported by enough relevant evidence and may help the
+runner notice something they would otherwise miss.
 
-- Announcements
-- Events
-- Run Updates
-- Questions
-- General
+Possible categories:
 
-The goal is to help important club information stay easy to find.
+- Performance patterns
+- Energy patterns
+- Route and environment patterns
+- Shoe and gear context
+- Music-linked patterns
+- Solo, partner, or group context
+
+Example future card:
+
+```text
+Longer at Memorial Park
+
+Your last 4 Memorial Park runs averaged 5.2 miles,
+compared with 3.8 miles on other routes.
+
+Based on 9 recent runs
+```
+
+The first prototype should use route and distance because both values already exist and
+the evidence is easy to explain. Energy-based pattern cards should wait until the
+comparison and interpretation rules are more mature.
+
+The section should feel earned. When evidence is weak, the app should stay quiet or say
+it is still learning rather than manufacture an insight.
+
+Confidence language may progress from:
+
+- "I'm starting to notice..."
+- "Your recent runs suggest..."
+- "Over your last 12 runs..."
+
+Confidence must be based on the number of relevant observations for that specific
+pattern, not merely the runner's total number of runs.
 
 ## Support Messages And Future Voice Encouragement `[Unique]`
 
-Support messages are a strong future idea because they connect running progress with encouragement from other people.
+Support messages are a strong future idea because they connect running progress with encouragement from selected people.
 
 Key characteristics:
 
-- Adds an emotional support layer without needing a full social network.
+- Adds an emotional support layer without becoming a social network.
 - Can be tied to specific runs or races.
 - Text support messages are a simpler early version.
 - Voice encouragement is a far-future version and should wait until the core app is stronger.
 
 Early version:
 
-- Friends or club members can send supportive text messages after a run or race.
+- Selected friends or supporters can send supportive text messages after a run or race.
 - Support messages can be connected to a completed run.
 
 Far future version:
 
 - Voice support messages can play after a run or during a training moment.
-- Example: a runner finishes a race and hears a short encouraging message from a friend or club member.
+- Example: a runner finishes a race and hears a short encouraging message from a selected supporter.
 
 This should be saved for much later, but it could become one of RunNet's more unique emotional features.
 

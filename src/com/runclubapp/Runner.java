@@ -5,8 +5,7 @@ import java.util.ArrayList;
 /*
  * The Runner class represents a person using the app.
  *
- * A runner can log runs, join run clubs,
- * and eventually communicate with other runners.
+ * A runner can log completed runs and review personal progress.
  */
 public class Runner {
 

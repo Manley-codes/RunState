@@ -10,7 +10,7 @@ This file describes the main features RunNet has now or is clearly moving toward
 - Log completed runs.
 - Store multiple runs in a runner's run history.
 - Display run history newest first.
-- Track distance, duration, average pace, route, and club run status.
+- Track distance, duration, average pace, and route.
 - Use fixed distance unit choices for miles and kilometers.
 - Show pace with the correct unit, such as minutes per mile or minutes per kilometer.
 - Optionally track energy before and after a run. `[Unique]`
@@ -18,6 +18,7 @@ This file describes the main features RunNet has now or is clearly moving toward
   - Post-run: Spent, Feeling Good, Powered Up
 - Store both stages on one shared low-to-high energy scale.
 - Display only the energy answers the runner recorded. `[Unique]`
+- Display compact run-history cards with friendly dates and clock-style pace.
 - Detect personal records:
   - Longest distance
   - Fastest average pace
@@ -25,7 +26,7 @@ This file describes the main features RunNet has now or is clearly moving toward
 
 ## Next Core Features
 
-- Improve the console display so run history, personal records, and energy observations are easier to scan.
+- Prototype the first transparent route-and-distance observation for `Your Run Style`. `[Unique]`
 - Design how pre-run energy, post-run energy, run metrics, and personal history should connect. `[Unique]`
 - Add interpretation only after the comparison and presentation rules are trustworthy.
 - Keep personal record messages visible and easy to understand in run history.
@@ -38,18 +39,17 @@ These are not current build targets, but they are strong directions for the app.
 
 - Route or trail used
 - Weather and temperature. `[Unique]`
-- Solo or group run
+- Solo, partner, or group run
 - Shoes used. `[Unique]`
 - Time of day
 
-### Run Club Support
+### Your Run Style
 
-- Club announcements
-- Event reminders
-- Shared run updates
-- Encouragement after runs
+- Curated cards showing interesting habits and patterns from completed runs. `[Unique]`
+- Evidence explaining why each pattern was shown.
+- Performance, energy, environment, gear, and music patterns added gradually.
 
 ### Support Messages
 
-- Store support messages connected to completed runs. `[Unique]`
+- Store optional support messages from selected friends or supporters. `[Unique]`
 - Later, support voice messages after runs or races. `[Unique]`

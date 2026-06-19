@@ -1,5 +1,7 @@
 package com.runclubapp;
 
+import java.time.LocalDate;
+
 public class App {
 
     public static void main(String[] args) {
@@ -17,7 +19,7 @@ public class App {
         Run run1 = new Run(
                 1,
                 runner1,
-                "06/05/2026",
+                LocalDate.of(2026, 6, 5),
                 "6:00 PM",
                 "6:50 PM",
                 5.0,
@@ -26,16 +28,14 @@ public class App {
                 "Memorial Park Loop",
                 "Houston, TX",
                 EnergyLevel.LOW,
-                EnergyLevel.LOW,
-                true,
-                "Houston Run Club"
+                EnergyLevel.LOW
         );
 
        // Create a second completed run with different details.
         Run run2 = new Run(
                 2,
                 runner1,
-                "06/03/2026",
+                LocalDate.of(2026, 6, 3),
                 "7:00 AM",
                 "7:36 AM",
                 3.0,
@@ -44,16 +44,14 @@ public class App {
                 "Buffalo Bayou Trail",
                 "Houston, TX",
                 EnergyLevel.MODERATE,
-                null,
-                false,
-                "None"
+                null
         );
 
         // Create a third completed run with different details.
         Run run3 = new Run(
                 3,
                 runner1,
-                "06/06/2026",
+                LocalDate.of(2026, 6, 6),
                 "7:00 AM",
                 "7:36 AM",
                 6.0,
@@ -62,16 +60,14 @@ public class App {
                 "Buffalo Bayou Trail",
                 "Houston, TX",
                 EnergyLevel.HIGH,
-                EnergyLevel.HIGH,
-                false,
-                "None"
+                EnergyLevel.HIGH
         );
 
         // Create a fourth run with only a post-run energy answer.
         Run run4 = new Run(
                 4,
                 runner1,
-                "06/08/2026",
+                LocalDate.of(2026, 6, 8),
                 "6:30 AM",
                 "7:10 AM",
                 4.0,
@@ -80,16 +76,14 @@ public class App {
                 "White Oak Bayou Trail",
                 "Houston, TX",
                 null,
-                EnergyLevel.MODERATE,
-                false,
-                "None"
+                EnergyLevel.MODERATE
         );
 
         // Create a fifth run with both optional energy answers skipped.
         Run run5 = new Run(
                 5,
                 runner1,
-                "06/10/2026",
+                LocalDate.of(2026, 6, 10),
                 "6:15 AM",
                 "6:45 AM",
                 2.5,
@@ -98,9 +92,7 @@ public class App {
                 "Neighborhood Route",
                 "Houston, TX",
                 null,
-                null,
-                false,
-                "None"
+                null
         );
 
         // Store this completed run in runner1's run history.

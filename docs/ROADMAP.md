@@ -24,8 +24,9 @@ For the current pre-run and post-run energy design discussion, see `docs/ENERGY_
 ## Near Future
 
 - Rename remaining RunNet references when ready.
-- Remove remaining run club references from docs and code.
 - Test the implemented pre-run and post-run energy capture foundation.
+- Review the new compact run-history cards with realistic data.
+- Prototype one route-and-distance observation for `Your Run Style`.
 - Design how pre-run energy, run data, post-run energy, and personal history connect.
 - Decide how observations should be presented before adding interpretation.
 - Keep Average Distance by Feeling paused until the new energy model is stable.
@@ -41,8 +42,6 @@ For the current pre-run and post-run energy design discussion, see `docs/ENERGY_
 - Weather and temperature context for runs. `[Unique]`
 - Route or trail context, such as Buffalo Bayou or Memorial Park. `[Unique]`
 - Shoe selection before a run. `[Unique]`
-- Basic run club communication.
-- Event reminders or announcements for clubs.
 
 These ideas connect strongly with the post-run feeling concept because they can help explain when a runner performs or feels their best.
 
@@ -50,9 +49,8 @@ These ideas connect strongly with the post-run feeling concept because they can 
 
 - Pattern-based run suggestions after enough run history exists. `[Unique]`
 - Top run highlights that show the best all-around runs as special badge-style entries. `[Unique]`
-- Support messages from friends or club members. `[Unique]`
+- Support messages from selected friends or supporters. `[Unique]`
 - Voice encouragement after runs or races. `[Unique]`
-- Shared run history with club members.
 - Split tracking and deeper effort analysis.
 - Body feedback and discomfort pattern tracking, handled carefully. `[Unique]`
 
@@ -61,7 +59,6 @@ These ideas connect strongly with the post-run feeling concept because they can 
 These ideas are not priorities right now:
 
 - Nearby-trail discovery and detailed trail insights
-- Full social/community profile system
 - AI-assisted workout creation
 - Auto-stop run goals
 - Full home screen customization

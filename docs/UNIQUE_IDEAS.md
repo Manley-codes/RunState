@@ -79,7 +79,7 @@ Key characteristics:
 
 - Shows only a few standout runs, such as the top three.
 - Focuses on all-around quality instead of only fastest pace or longest distance.
-- Could combine distance, pace, post-run feeling, route, weather, shoes, and club status.
+- Could combine distance, pace, post-run energy, route, weather, shoes, music, and other available context.
 - Should feel more fun than a normal run-history log.
 
 Why it matters:
@@ -111,7 +111,7 @@ Status: future idea
 
 Core idea:
 
-RunNet could connect run results and feelings with context like route, weather, shoes, time of day, and solo or group runs.
+RunNet could connect run results and energy with context like route, weather, shoes, time of day, and solo, partner, or group runs.
 
 Key characteristics:
 
@@ -123,6 +123,40 @@ Key characteristics:
 Why it matters:
 
 This gives RunNet a stronger identity: it helps runners understand what conditions support their best runs.
+
+## Your Run Style
+
+Status: approved future identity; first transparent pattern is the likely next prototype
+
+Core idea:
+
+`Your Run Style` is a curated section for interesting habits and patterns from completed
+runs. It should help the runner discover what tends to appear around stronger
+performance or energy responses without turning into a generic analytics dashboard.
+
+Key characteristics:
+
+- Shows a few high-value cards instead of every possible correlation.
+- Explains the evidence behind each observation.
+- Uses cautious language when a pattern is still developing.
+- Bases confidence on relevant observations for the specific comparison.
+- Starts with existing reliable data before adding external context.
+- Reports associations and does not claim that shoes, weather, routes, or music caused a result.
+
+Recommended first prototype:
+
+```text
+Longer at Memorial Park
+Your last 4 Memorial Park runs averaged 5.2 miles,
+compared with 3.8 miles on other routes.
+Based on 9 recent runs
+```
+
+The working subtitle is:
+
+```text
+Interesting habits and patterns from your runs.
+```
 
 ## Music And Run Performance Context
 
@@ -169,7 +203,7 @@ Status: far future
 
 Core idea:
 
-RunNet could connect completed runs with encouragement from friends, club members, or supporters.
+RunNet could connect completed runs with encouragement from selected friends or supporters.
 
 Key characteristics:
 
