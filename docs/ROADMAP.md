@@ -17,6 +17,8 @@ For the current pre-run and post-run energy design discussion, see `docs/ENERGY_
 - Limit early complexity to a few features that make the app meaningfully different.
 - Evaluate music as a possible signature feature rather than postponing it only because it is complex.
 - Continue improving `Runner`, `Run`, and `App`.
+- Use the interactive menu to log completed runs and review results.
+- Keep manual logging as a useful workflow without treating it as a replacement for future automatic tracking.
 - Strengthen run history.
 - Keep personal record tracking clear and beginner-friendly.
 - Add small features slowly and commit after stable steps.
@@ -24,9 +26,11 @@ For the current pre-run and post-run energy design discussion, see `docs/ENERGY_
 ## Near Future
 
 - Rename remaining RunNet references when ready.
+- Decide how manually logged runs should be saved between sessions.
+- Review the input prompts and validation in the new Log Run flow.
 - Test the implemented pre-run and post-run energy capture foundation.
 - Review the new compact run-history cards with realistic data.
-- Prototype one route-and-distance observation for `Your Run Style`.
+- Return to the carefully paused `Your Run Style` design and prototype when ready.
 - Design how pre-run energy, run data, post-run energy, and personal history connect.
 - Decide how observations should be presented before adding interpretation.
 - Keep Average Distance by Feeling paused until the new energy model is stable.

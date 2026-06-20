@@ -9,11 +9,14 @@ The project focuses on a small, polished run tracker that logs run details, calc
 ## Current Features
 
 - Create a runner profile.
-- Log completed runs.
+- Log completed runs through an interactive console menu.
+- Validate dates, menu choices, distance, and duration without ending the program.
+- Allow the route and either energy answer to be skipped.
 - Store multiple runs in a runner's run history.
 - Display run history newest first.
 - Track distance, duration, average pace, and route.
 - Use fixed distance unit choices for miles and kilometers.
+- Normalize miles and kilometers internally when comparing personal records.
 - Show pace with the correct unit, such as minutes per mile or minutes per kilometer.
 - Optionally record energy before and after a run.
 - Use playful labels backed by a shared low-to-high energy scale:
@@ -34,10 +37,12 @@ Larger ideas such as weather context, route context, shoe tracking, support mess
 
 ## Next Improvements
 
-- Prototype a transparent route-and-distance observation for the future `Your Run Style` section.
+- Decide how logged runs should be saved between program sessions.
+- Review and refine the interactive Log Run experience.
+- Return to the `Your Run Style` concept after the current workflow foundation is stronger.
 - Continue designing how energy, run metrics, and personal history should connect before adding energy-based interpretation.
 - Clean up repeated summary logic where it makes sense.
-- Update unit handling later so mixed miles and kilometers are handled more carefully across summaries and averages.
+- Continue improving mixed-unit handling in future summaries and averages.
 - Improve this README as the project becomes more polished.
 
 ## Concepts Practiced
@@ -48,6 +53,9 @@ Larger ideas such as weather context, route context, shoe tracking, support mess
 - Encapsulation
 - Composition
 - Enums with fields and methods
+- Scanner input
+- Input validation and exception handling
+- Switch statements
 - ArrayList
 - Loops
 - Helper methods

@@ -75,32 +75,48 @@ public class Runner {
         return username;
     }
 
+    // Returns the current history size so RunConsole can form a temporary next ID.
+    public int getRunCount() {
+        return runHistory.size();
+    }
 
-   // Adds one completed run to this runner's run history.
+    // Stores a newly logged run and requests that any new PRs be announced.
     public void addRun(Run run) {
+        // true tells storeRun this run is new and its PR messages should be printed.
+        storeRun(run, true);
+    }
 
+    // Stores existing sample/history data without announcing its old PRs again.
+    public void loadRun(Run run) {
+        // false keeps PR flags accurate but prevents old announcements at startup.
+        storeRun(run, false);
+    }
+
+    // Shares PR and storage logic between a newly logged run and a loaded run.
+    private void storeRun(Run run, boolean announcePersonalRecords) {
         // Check whether this run is the runner's longest distance so far.
         if (isLongestDistanceRecord(run)) {
-
             // Mark the run so its summary can show the PR later.
             run.markLongestDistanceRecord();
-
-            // Immediately tell the user they set a new longest distance PR.
-            System.out.println("New longest distance PR!");
+            // Only a newly logged run should announce the PR in the console.
+            if (announcePersonalRecords) {
+                System.out.println("New longest distance PR!");
+            }
         }
-
         // Check whether this run is the runner's fastest average pace so far.
         if (isFastestAveragePaceRecord(run)) {
-
             // Mark the run so its summary can show the PR later.
             run.markFastestAveragePaceRecord();
-
-            // Immediately tell the user they set a new fastest average pace PR.
-            System.out.println("New fastest average pace PR!");
+            // Loaded history keeps its PR flag without replaying the announcement.
+            if (announcePersonalRecords) {
+                System.out.println("New fastest average pace PR!");
+            }
         }
-
         // Store the completed run after checking it against previous runs.
         runHistory.add(run);
+        // sort compares two Run dates at a time and places earlier dates first.
+        runHistory.sort((firstRun, secondRun) ->
+                firstRun.getDate().compareTo(secondRun.getDate()));
     }
 
     // Checks whether the new run is longer than every previous run in the history.
@@ -114,8 +130,8 @@ public class Runner {
         // Loop through each previous run.
         for (Run previousRun : runHistory) {
 
-            // If a previous run has the same or longer distance, the new run is not a PR.
-            if (previousRun.getDistance() >= newRun.getDistance()) {
+            // Both distances are converted to miles before this PR comparison.
+            if (previousRun.getDistanceInMiles() >= newRun.getDistanceInMiles()) {
                 return false;
             }
         }
@@ -135,8 +151,9 @@ public class Runner {
         // Loop through each previous run.
         for (Run previousRun : runHistory) {
 
-            // A lower pace number is faster, so same or lower means the new run is not a PR.
-            if (previousRun.getPace() <= newRun.getPace()) {
+            // Both paces use minutes per mile; a lower number is faster.
+            if (previousRun.getPaceInMinutesPerMile() <=
+                    newRun.getPaceInMinutesPerMile()) {
                 return false;
             }
         }
@@ -185,13 +202,14 @@ public class Runner {
         // Loop through every run in the history.
         for (Run run : runHistory) {
 
-            // If this run is longer than the current longest run, update longestRun.
-            if (run.getDistance() > longestRun.getDistance()) {
+            // Normalized mile values allow either original unit to win correctly.
+            if (run.getDistanceInMiles() > longestRun.getDistanceInMiles()) {
                 longestRun = run;
             }
 
-            // If this run has a lower pace than the current fastest pace run, update fastestPaceRun.
-            if (run.getPace() < fastestPaceRun.getPace()) {
+            // Normalized pace prevents kilometer values from creating a false PR.
+            if (run.getPaceInMinutesPerMile() <
+                    fastestPaceRun.getPaceInMinutesPerMile()) {
                 fastestPaceRun = run;
             }
         }

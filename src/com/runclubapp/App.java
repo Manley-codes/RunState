@@ -95,20 +95,17 @@ public class App {
                 null
         );
 
-        // Store this completed run in runner1's run history.
-        runner1.addRun(run1);
-        runner1.addRun(run2);
-        runner1.addRun(run3);
-        runner1.addRun(run4);
-        runner1.addRun(run5);
+        // Loads sample runs as existing history without replaying PR announcements.
+        runner1.loadRun(run1);
+        runner1.loadRun(run2);
+        runner1.loadRun(run3);
+        runner1.loadRun(run4);
+        runner1.loadRun(run5);
 
-        // Display all runs stored for this runner.
-        runner1.displayRunHistory();
-
-        System.out.println();
-
-        // Display the runner's current personal records.
-        runner1.displayPersonalRecords();
+        // Gives runner1 to RunConsole so its menu can manage this runner's data.
+        RunConsole runConsole = new RunConsole(runner1);
+        // Starts the menu and keeps main active until the runner selects Exit.
+        runConsole.start();
 
     }
 }

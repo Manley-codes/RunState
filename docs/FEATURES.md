@@ -7,11 +7,14 @@ This file describes the main features RunNet has now or is clearly moving toward
 ## Current Core Features
 
 - Create a runner profile.
-- Log completed runs.
+- Log completed runs through an interactive console menu.
+- Re-prompt after invalid menu, date, distance, or duration input.
+- Skip optional route, pre-run energy, or post-run energy answers.
 - Store multiple runs in a runner's run history.
 - Display run history newest first.
 - Track distance, duration, average pace, and route.
 - Use fixed distance unit choices for miles and kilometers.
+- Compare mixed-unit personal records using normalized distances and paces.
 - Show pace with the correct unit, such as minutes per mile or minutes per kilometer.
 - Optionally track energy before and after a run. `[Unique]`
   - Pre-run: I'm Here, Ready-ish, Let's Go!
@@ -26,7 +29,9 @@ This file describes the main features RunNet has now or is clearly moving toward
 
 ## Next Core Features
 
-- Prototype the first transparent route-and-distance observation for `Your Run Style`. `[Unique]`
+- Decide how runs should persist after the console program closes.
+- Review and refine the completed-run logging workflow.
+- Return to the first `Your Run Style` prototype after the workflow foundation is reviewed. `[Unique]`
 - Design how pre-run energy, post-run energy, run metrics, and personal history should connect. `[Unique]`
 - Add interpretation only after the comparison and presentation rules are trustworthy.
 - Keep personal record messages visible and easy to understand in run history.

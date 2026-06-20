@@ -118,6 +118,11 @@ public class Run {
         return distance;
     }
 
+    // Sends this run's distance to its DistanceUnit and returns the value in miles.
+    public double getDistanceInMiles() {
+        return distanceUnit.convertToMiles(distance);
+    }
+
     // This method lets other classes read the distance unit display text.
     public String getDistanceUnit() {
         return distanceUnit.getDisplayName();
@@ -126,6 +131,18 @@ public class Run {
     // This method lets other classes read the run duration.
     public double getDuration() {
         return duration;
+    }
+
+    // Returns minutes per mile so pace PRs can compare mile and kilometer runs fairly.
+    public double getPaceInMinutesPerMile() {
+        // Calls the conversion helper and stores this run's distance in miles.
+        double distanceInMiles = getDistanceInMiles();
+        // Protects the division below if a zero-distance Run ever reaches this method.
+        if (distanceInMiles == 0) {
+            return 0;
+        }
+        // Divides this run's duration by its normalized mile distance.
+        return duration / distanceInMiles;
     }
 
     // Marks this run as the runner's longest distance personal record.
