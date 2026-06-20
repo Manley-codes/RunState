@@ -200,6 +200,11 @@ public class Run {
         return postRunEnergy;
     }
 
+    // Allows post-run energy to be recorded after the run summary is displayed.
+    public void setPostRunEnergy(EnergyLevel energy) {
+        this.postRunEnergy = energy;
+    }
+
     // This method returns a short summary of the run.
     public String getRunSummary() {
 
