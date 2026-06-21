@@ -80,6 +80,42 @@ public class Runner {
         return runHistory.size();
     }
 
+    // Returns the average pace in minutes per mile over the last window runs.
+    public double getRollingAveragePace(int window) {
+        if (runHistory.isEmpty()) {
+            return 0.0;
+        }
+        // The first index to include — skips older runs if the history is larger than window.
+        int start = Math.max(0, runHistory.size() - window);
+        // Accumulates the total pace across every run in the window.
+        double total = 0.0;
+        // Walks from the start index to the end, covering only the most recent runs.
+        for (int i = start; i < runHistory.size(); i++) {
+            // Adds this run's normalized pace so miles and kilometers compare fairly.
+            total += runHistory.get(i).getPaceInMinutesPerMile();
+        }
+        // Divides by the actual number of runs summed, not the requested window size.
+        return total / (runHistory.size() - start);
+    }
+
+    // Returns the average distance in miles over the last window runs.
+    public double getRollingAverageDistance(int window) {
+        if (runHistory.isEmpty()) {
+            return 0.0;
+        }
+        // The first index to include — skips older runs if the history is larger than window.
+        int start = Math.max(0, runHistory.size() - window);
+        // Accumulates the total distance across every run in the window.
+        double total = 0.0;
+        // Walks from the start index to the end, covering only the most recent runs.
+        for (int i = start; i < runHistory.size(); i++) {
+            // Adds this run's distance converted to miles for a consistent unit.
+            total += runHistory.get(i).getDistanceInMiles();
+        }
+        // Divides by the actual number of runs summed, not the requested window size.
+        return total / (runHistory.size() - start);
+    }
+
     // Stores a newly logged run and requests that any new PRs be announced.
     public void addRun(Run run) {
         // true tells storeRun this run is new and its PR messages should be printed.

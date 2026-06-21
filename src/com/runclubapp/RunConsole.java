@@ -106,6 +106,10 @@ public class RunConsole {
                 null
         );
 
+        // Snapshot history averages before this run enters the list. So it doesnt compare against itself
+        double avgPace = runner.getRollingAveragePace(20);
+        double avgDistance = runner.getRollingAverageDistance(20);
+
         // Adding the run now sets PR flags before we display the summary.
         runner.addRun(run);
 
@@ -122,7 +126,7 @@ public class RunConsole {
         run.setPostRunEnergy(postRunEnergy);
 
         System.out.println();
-        System.out.println(buildRunResponse(run));
+        System.out.println(buildRunResponse(run, avgPace, avgDistance));
     }
 
     // Greets the runner and captures pre-run energy before the main menu appears.
@@ -145,16 +149,17 @@ public class RunConsole {
     }
 
 
-    // Builds a short personal response based on what happened in this run.
-    private String buildRunResponse(Run run) {
+    private String buildRunResponse(Run run, double avgPace, double avgDistance) {
         EnergyLevel pre = run.getPreRunEnergy();
         EnergyLevel post = run.getPostRunEnergy();
         boolean hasPR = run.isLongestDistanceRecord() || run.isFastestAveragePaceRecord();
+        boolean hasHistory = avgPace > 0.0 && avgDistance > 0.0;
+        boolean aboveAvgPace = hasHistory && run.getPaceInMinutesPerMile() < avgPace;
+        boolean aboveAvgDistance = hasHistory && run.getDistanceInMiles() > avgDistance;
 
         String mainMessage;
 
         if (hasPR) {
-            // PR runs — tone is shaped by how the runner finished.
             if (post == EnergyLevel.LOW) {
                 mainMessage = "You really pushed yourself — and it showed. "
                         + getPRLabel(run) + ". Feeling spent after that makes sense.";
@@ -163,7 +168,6 @@ public class RunConsole {
             } else if (post == EnergyLevel.HIGH) {
                 mainMessage = getPRLabel(run) + " and you finished strong. That's a great day.";
             } else {
-                // Post-run energy was skipped.
                 mainMessage = getPRLabel(run) + ". Strong effort.";
             }
         } else if (post == EnergyLevel.HIGH) {
@@ -173,17 +177,27 @@ public class RunConsole {
         } else if (post == EnergyLevel.LOW) {
             mainMessage = "You gave everything today. Good job getting it done.";
         } else {
-            // No PR, no post-run energy recorded.
             mainMessage = "Good job getting a run in today. Every run counts.";
         }
 
-        // LOW -> HIGH energy lift always adds a second line on top of the main message.
+        // ← performanceNote goes HERE, after mainMessage is fully assigned
+        String performanceNote = "";
+        if (!hasPR) {
+            if (aboveAvgPace && aboveAvgDistance) {
+                performanceNote = "\nYou ran farther and faster than usual.";
+            } else if (aboveAvgPace) {
+                performanceNote = "\nYour pace was better than usual.";
+            } else if (aboveAvgDistance) {
+                performanceNote = "\nYou went farther than usual.";
+            }
+        }
+
         if (pre == EnergyLevel.LOW && post == EnergyLevel.HIGH) {
-            return mainMessage + "\nSee what getting active can do. "
+            return mainMessage + performanceNote + "\nSee what getting active can do. "
                     + "You started rough and finished feeling great.";
         }
 
-        return mainMessage;
+        return mainMessage + performanceNote;
     }
 
     // Returns a readable description of whichever PRs this run earned.
