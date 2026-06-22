@@ -28,3 +28,10 @@ bin/
 
 ### Mac OS ###
 .DS_Store
+
+### Maven's build output folder ###
+target/
+
+CLAUDE.md
+RunState_intro.html
+docs/LEARNING_AND_COLLABORATION.md
