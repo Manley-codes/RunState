@@ -125,6 +125,8 @@ public class RunConsole {
         // Store the answer directly on the run object using the setter we just added.
         run.setPostRunEnergy(postRunEnergy);
 
+        RunStorage.saveRun(run);
+
         System.out.println();
         System.out.println(buildRunResponse(run, avgPace, avgDistance));
     }

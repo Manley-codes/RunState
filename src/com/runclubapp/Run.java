@@ -128,6 +128,11 @@ public class Run {
         return distanceUnit.getDisplayName();
     }
 
+    // Returns the raw distance unit enum so it can be stored and reconstructed later.
+    public DistanceUnit getDistanceUnitEnum() {
+        return distanceUnit;
+    }
+
     // This method lets other classes read the run duration.
     public double getDuration() {
         return duration;
