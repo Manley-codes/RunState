@@ -1,7 +1,5 @@
 # RunState
 
-RunState is the new working name for this project, formerly called RunNet.
-
 RunState is a beginner-friendly Java console app for tracking completed runs and personal progress.
 
 The project focuses on a small, polished run tracker that logs run details, calculates pace, detects personal records, and tracks how each run felt. The goal is to keep the app understandable while practicing core Java and object-oriented programming concepts.

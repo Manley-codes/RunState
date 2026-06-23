@@ -4,9 +4,9 @@ This roadmap keeps the project focused while leaving room for future ideas.
 
 RunState is the current working name, and MoodPace is a strong alternate name. See `docs/BRANDING.md`.
 
-For the ideas that make RunNet feel more distinct, see `docs/UNIQUE_IDEAS.md`.
+For the ideas that make RunState feel more distinct, see `docs/UNIQUE_IDEAS.md`.
 
-`[Unique]` marks future directions that help RunNet stand out from a basic run log.
+`[Unique]` marks future directions that help RunState stand out from a basic run log.
 
 For the current pre-run and post-run energy design discussion, see `docs/ENERGY_STATE_DESIGN.md`.
 
@@ -25,7 +25,7 @@ For the current pre-run and post-run energy design discussion, see `docs/ENERGY_
 
 ## Near Future
 
-- Rename remaining RunNet references when ready.
+- Update CLAUDE.md main class path after Java package rename.
 - Decide how manually logged runs should be saved between sessions.
 - Review the input prompts and validation in the new Log Run flow.
 - Test the implemented pre-run and post-run energy capture foundation.

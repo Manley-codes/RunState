@@ -1,4 +1,4 @@
-package com.runclubapp;
+package com.runstate;
 
 // Represents the allowed distance units for a run.
 public enum DistanceUnit {

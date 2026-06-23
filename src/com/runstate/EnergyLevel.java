@@ -1,4 +1,4 @@
-package com.runclubapp;
+package com.runstate;
 
 // Represents the shared low-to-high scale used before and after a run.
 public enum EnergyLevel {

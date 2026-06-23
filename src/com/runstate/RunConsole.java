@@ -1,4 +1,4 @@
-package com.runclubapp;
+package com.runstate;
 
 // Represents a date without a time, such as 2026-06-19.
 import java.time.LocalDate;

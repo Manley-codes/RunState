@@ -1,4 +1,4 @@
-package com.runclubapp;
+package com.runstate;
 
 import java.util.ArrayList;
 

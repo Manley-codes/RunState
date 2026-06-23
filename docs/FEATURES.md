@@ -1,8 +1,8 @@
-# RunNet Features
+# RunState Features
 
-This file describes the main features RunNet has now or is clearly moving toward soon.
+This file describes the main features RunState has now or is clearly moving toward soon.
 
-`[Unique]` marks features or ideas that help RunNet feel more distinct from a basic run log.
+`[Unique]` marks features or ideas that help RunState feel more distinct from a basic run log.
 
 ## Current Core Features
 

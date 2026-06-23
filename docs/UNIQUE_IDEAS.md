@@ -1,12 +1,12 @@
-# RunNet Unique Ideas
+# RunState Unique Ideas
 
-This file gathers the ideas that could make RunNet feel different from a basic run tracker.
+This file gathers the ideas that could make RunState feel different from a basic run tracker.
 
 These are not all current build targets. Some are active or near-future ideas, while others are parked for later so they are not forgotten.
 
 ## Unique Idea Marker
 
-In the other docs, `[Unique]` means the feature or idea helps RunNet stand out.
+In the other docs, `[Unique]` means the feature or idea helps RunState stand out.
 
 ## Pre-Run And Post-Run Energy
 
@@ -73,7 +73,7 @@ Status: future idea
 
 Core idea:
 
-RunNet could show a small set of top runs as special highlights, badges, or large reward-style cards.
+RunState could show a small set of top runs as special highlights, badges, or large reward-style cards.
 
 Key characteristics:
 
@@ -92,7 +92,7 @@ Status: parked for later
 
 Core idea:
 
-RunNet could suggest a general type of run before the runner starts, based on patterns from past runs.
+RunState could suggest a general type of run before the runner starts, based on patterns from past runs.
 
 Key characteristics:
 
@@ -103,7 +103,7 @@ Key characteristics:
 
 Why it matters:
 
-This could make RunNet feel helpful and personal, but it should wait. It needs careful wording so it does not sound like professional coaching or medical advice.
+This could make RunState feel helpful and personal, but it should wait. It needs careful wording so it does not sound like professional coaching or medical advice.
 
 ## Context-Aware Run Patterns
 
@@ -111,7 +111,7 @@ Status: future idea
 
 Core idea:
 
-RunNet could connect run results and energy with context like route, weather, shoes, time of day, and solo, partner, or group runs.
+RunState could connect run results and energy with context like route, weather, shoes, time of day, and solo, partner, or group runs.
 
 Key characteristics:
 
@@ -122,7 +122,7 @@ Key characteristics:
 
 Why it matters:
 
-This gives RunNet a stronger identity: it helps runners understand what conditions support their best runs.
+This gives RunState a stronger identity: it helps runners understand what conditions support their best runs.
 
 ## Your Run Style
 
@@ -203,7 +203,7 @@ Status: far future
 
 Core idea:
 
-RunNet could connect completed runs with encouragement from selected friends or supporters.
+RunState could connect completed runs with encouragement from selected friends or supporters.
 
 Key characteristics:
 
@@ -214,7 +214,7 @@ Key characteristics:
 
 Why it matters:
 
-This gives RunNet an emotional feature that could feel meaningful without requiring a huge social platform.
+This gives RunState an emotional feature that could feel meaningful without requiring a huge social platform.
 
 ## Body Feedback And Effort Patterns
 
@@ -222,7 +222,7 @@ Status: far future
 
 Core idea:
 
-RunNet could help runners notice patterns between effort, discomfort, pace, distance, and context.
+RunState could help runners notice patterns between effort, discomfort, pace, distance, and context.
 
 Key characteristics:
 

@@ -1,12 +1,12 @@
 # RunState Ideas
 
-This file is for the strongest ideas worth remembering. The goal is to keep RunNet simple right now while saving the ideas that could make the app stand out later.
+This file is for the strongest ideas worth remembering. The goal is to keep RunState simple right now while saving the ideas that could make the app stand out later.
 
 RunState is the selected working name for the app. See `docs/BRANDING.md` for the naming notes.
 
 ## Core Direction
 
-RunNet is currently a simple run tracker that records completed runs, shows personal progress, and leaves room for helpful context around each run.
+RunState is currently a simple run tracker that records completed runs, shows personal progress, and leaves room for helpful context around each run.
 
 The early app should feel fun, attractive, unique, and easy to use. It can include a few standout features with more complex logic, but the overall experience should not feel complicated.
 
@@ -47,11 +47,11 @@ Key characteristics:
 
 - Simple input before and after each run.
 - Connects performance numbers with how the runner actually felt.
-- Gives RunNet a more personal angle than a basic run log.
+- Gives RunState a more personal angle than a basic run log.
 - Uses one shared low-to-high scale behind different pre-run and post-run labels.
 - Stores and displays observations without judging the run.
 
-Over time, RunNet could compare the feeling choice with run details such as:
+Over time, RunState could compare the feeling choice with run details such as:
 
 - Distance
 - Duration
@@ -71,12 +71,12 @@ Your best-feeling runs often happen on cooler days and familiar routes.
 Pitch:
 
 ```text
-RunNet is a run tracker that records performance and how each run felt, so runners can eventually learn what conditions help them perform their best.
+RunState is a run tracker that records performance and how each run felt, so runners can eventually learn what conditions help them perform their best.
 ```
 
 ## Context-Aware Post-Run Prompts `[Unique]`
 
-RunNet should bring useful next actions forward at the right moment instead of making the runner search through menus.
+RunState should bring useful next actions forward at the right moment instead of making the runner search through menus.
 
 Key characteristics:
 
@@ -105,7 +105,7 @@ Possible later prompts:
 
 ## Future Run Suggestions `[Unique]`
 
-RunNet could eventually suggest a general type of run before the runner starts, based on patterns from past runs.
+RunState could eventually suggest a general type of run before the runner starts, based on patterns from past runs.
 
 Key characteristics:
 
@@ -149,7 +149,7 @@ Motivation principle:
 
 ## Top Run Highlights `[Unique]`
 
-RunNet could eventually show a small set of highlighted runs that feel more like badges or rewards than normal log entries.
+RunState could eventually show a small set of highlighted runs that feel more like badges or rewards than normal log entries.
 
 Key characteristics:
 
@@ -175,11 +175,11 @@ Possible context for highlighted runs:
 - Solo, partner, or group run
 - Post-run feeling
 
-This idea fits RunNet well because it supports the main theme: progress is more than one number. It should wait until the app has more context data, but it is worth saving as a future feature.
+This idea fits RunState well because it supports the main theme: progress is more than one number. It should wait until the app has more context data, but it is worth saving as a future feature.
 
 ## Weather, Route, And Shoe Context `[Unique]`
 
-RunNet could eventually connect run performance and run feeling with context around the run.
+RunState could eventually connect run performance and run feeling with context around the run.
 
 Key characteristics:
 
@@ -289,11 +289,11 @@ Far future version:
 - Voice support messages can play after a run or during a training moment.
 - Example: a runner finishes a race and hears a short encouraging message from a selected supporter.
 
-This should be saved for much later, but it could become one of RunNet's more unique emotional features.
+This should be saved for much later, but it could become one of RunState's more unique emotional features.
 
 ## Future Body Feedback And Effort Patterns `[Unique]`
 
-RunNet could eventually help runners notice patterns around effort, discomfort, and performance.
+RunState could eventually help runners notice patterns around effort, discomfort, and performance.
 
 Key characteristics:
 

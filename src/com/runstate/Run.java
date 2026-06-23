@@ -1,4 +1,4 @@
-package com.runclubapp;
+package com.runstate;
 
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
