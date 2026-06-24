@@ -129,6 +129,12 @@ public class RunConsole {
 
         System.out.println();
         System.out.println(buildRunResponse(run, avgPace, avgDistance));
+
+        String runStyleAlert = runner.detectRunStyle(run, avgPace, avgDistance);
+        if (runStyleAlert != null) {
+            System.out.println();
+            System.out.println(runStyleAlert);
+        }
     }
 
     // Greets the runner and captures pre-run energy before the main menu appears.
