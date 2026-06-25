@@ -10,6 +10,23 @@ For the ideas that make RunState feel more distinct, see `docs/UNIQUE_IDEAS.md`.
 
 For the current pre-run and post-run energy design discussion, see `docs/ENERGY_STATE_DESIGN.md`.
 
+## Phase Status
+
+| Phase | Description | Status |
+|---|---|---|
+| 1 | Console app and energy system | Done |
+| 2 | MySQL persistence | Done |
+| 3 | Your Run Style detection | Done |
+| 4 | AI agent — replace buildRunResponse() with Anthropic API | Next |
+| 5 | AI agent context expansion — weather, music, trail, lyric-aware responses | Planned |
+| 6 | Mobile UI and GPS | Later |
+
+> **Phase 5 is a must-return-to priority.**
+> Phase 4 builds the AI agent using data already in the app: distance, pace, energy, PRs, season, and route name.
+> Phase 5 is what unlocks the agent's most personal and specific responses — weather conditions, music context, and trail awareness added to the Run model and fed directly to the agent.
+> This is the feature that makes responses feel like they could only have been written about this exact run.
+> Do not let Phase 5 get buried under other work. See `docs/AI_AGENT.md` for the full plan.
+
 ## Present Focus
 
 - Keep the app as a simple Java console run tracker.
