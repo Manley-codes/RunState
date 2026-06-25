@@ -210,6 +210,9 @@ public class Run {
         this.postRunEnergy = energy;
     }
 
+    // Returns the runner who completed this run, so other classes can read their profile data.
+    public Runner getRunner() { return runner; }
+
     // This method returns a short summary of the run.
     public String getRunSummary() {
 

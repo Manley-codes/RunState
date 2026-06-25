@@ -128,7 +128,7 @@ public class RunConsole {
         RunStorage.saveRun(run);
 
         System.out.println();
-        System.out.println(buildRunResponse(run, avgPace, avgDistance));
+        System.out.println(RunAgent.buildRunResponse(run, avgPace, avgDistance));
 
         String runStyleAlert = runner.detectRunStyle(run, avgPace, avgDistance);
         if (runStyleAlert != null) {
@@ -157,56 +157,7 @@ public class RunConsole {
     }
 
 
-    private String buildRunResponse(Run run, double avgPace, double avgDistance) {
-        EnergyLevel pre = run.getPreRunEnergy();
-        EnergyLevel post = run.getPostRunEnergy();
-        boolean hasPR = run.isLongestDistanceRecord() || run.isFastestAveragePaceRecord();
-        boolean hasHistory = avgPace > 0.0 && avgDistance > 0.0;
-        boolean aboveAvgPace = hasHistory && run.getPaceInMinutesPerMile() < avgPace;
-        boolean aboveAvgDistance = hasHistory && run.getDistanceInMiles() > avgDistance;
 
-        String mainMessage;
-
-        if (hasPR) {
-            if (post == EnergyLevel.LOW) {
-                mainMessage = "You really pushed yourself — and it showed. "
-                        + getPRLabel(run) + ". Feeling spent after that makes sense.";
-            } else if (post == EnergyLevel.MODERATE) {
-                mainMessage = "Strong run. " + getPRLabel(run) + " and you're still feeling good.";
-            } else if (post == EnergyLevel.HIGH) {
-                mainMessage = getPRLabel(run) + " and you finished strong. That's a great day.";
-            } else {
-                mainMessage = getPRLabel(run) + ". Strong effort.";
-            }
-        } else if (post == EnergyLevel.HIGH) {
-            mainMessage = "Strong all-around run. You finished feeling great.";
-        } else if (post == EnergyLevel.MODERATE) {
-            mainMessage = "Solid run. Good effort today.";
-        } else if (post == EnergyLevel.LOW) {
-            mainMessage = "You gave everything today. Good job getting it done.";
-        } else {
-            mainMessage = "Good job getting a run in today. Every run counts.";
-        }
-
-        // ← performanceNote goes HERE, after mainMessage is fully assigned
-        String performanceNote = "";
-        if (!hasPR) {
-            if (aboveAvgPace && aboveAvgDistance) {
-                performanceNote = "\nYou ran farther and faster than usual.";
-            } else if (aboveAvgPace) {
-                performanceNote = "\nYour pace was better than usual.";
-            } else if (aboveAvgDistance) {
-                performanceNote = "\nYou went farther than usual.";
-            }
-        }
-
-        if (pre == EnergyLevel.LOW && post == EnergyLevel.HIGH) {
-            return mainMessage + performanceNote + "\nSee what getting active can do. "
-                    + "You started rough and finished feeling great.";
-        }
-
-        return mainMessage + performanceNote;
-    }
 
     // Returns a readable description of whichever PRs this run earned.
     private String getPRLabel(Run run) {
