@@ -34,17 +34,28 @@ As of June 25, 2026, the app is a working Java console app named **RunState**.
 Both features follow the same four-file pattern:
   Run.java -> add field | RunStorage.java -> add DB column | RunConsole.java -> add optional prompt | RunAgent.java -> add to user message
 
-Step 1 — Music (manual input now, Spotify integration in mobile phase):
-- Add musicContext String field to Run.java
-- Add music_context column to DB in RunStorage.java
-- Add optional "What were you listening to?" prompt in RunConsole.java
-- Add music line to user message in RunAgent.java
+Step 1 — Music (manual input now, Spotify integration in mobile phase): **BUILT June 26, 2026**
+- `musicContext` String field on Run.java (constructor param, last position; getter `getMusicContext()`; no setter — collected at log time like routeName)
+- `music_context` column in RunStorage.java INSERT (11th `?`) and read in loadRuns via `rs.getString("music_context")`
+- Optional "What were you listening to? (optional):" prompt in RunConsole.logRun(), stored null if skipped
+- "Music:" line added to RunAgent.buildUserMessage(); music rule added to SYSTEM_PROMPT (reference artist/song only when it genuinely fits — never force)
+- AI_AGENT.md data contract updated with the Music line
+- DB MIGRATION REQUIRED on the user's MySQL: `ALTER TABLE runs ADD COLUMN music_context VARCHAR(255) NULL;` (run manually — saveRun will fail until this exists)
 
-Step 2 — Weather (automatic via Open-Meteo — free, no API key, supports historical dates):
-- Add temperature (double) and weatherCondition (String) fields to Run.java
-- Add columns to DB in RunStorage.java
-- Fetch from Open-Meteo in RunAgent.java using Runner city/state + run date (no RunConsole prompt needed)
-- Add weather line to user message in RunAgent.java
+**Future refinement — music reference variety (user note, June 26, 2026):**
+When automation arrives (Spotify) and a runner plays the same song often, the agent must NOT keep
+referencing that same song every run. Need variety logic — e.g. vary which track/artist gets called out,
+or weight toward less-recently-mentioned songs — so references stay fresh. Belongs in Phase 5 advanced /
+Phase 6 lyric-aware work, where the agent gains cross-run awareness. Not needed for manual Step 1.
+
+Step 2 — Weather (automatic via Open-Meteo): **DESIGNED June 26, 2026 — see design_weather_context.md for the full spec.**
+Summary of locked decisions (full detail + open decisions in design_weather_context.md):
+- Fetch ONCE at log time and STORE on the Run (NOT live in RunAgent — supersedes the earlier note here).
+- New isolated `WeatherService` class owns geocoding + the Open-Meteo call (SRP, like RunAgent).
+- Three fields: temperature, apparentTemperature ("feels like" — captures humidity, the #2 factor), weatherCondition.
+- Forecast API for recent runs (today + ~92 days); archive endpoint deferred. Failure never blocks logging.
+- Open decisions before build: (1) append 3 params vs. a `WeatherData` value object [recommended]; (2) daily mean vs max reading.
+- Competitive/RPE/privacy considerations captured in research_app_landscape.md.
 
 **Visual prototype:**
 RunState_intro.html and RunState Promo.html exist in project root — both gitignored (local only).
@@ -73,3 +84,8 @@ Start here when picking up: Phase 5, Step 1 (music field). Everything below is w
 **Workflow:**
 Cowork designs the plan → user brings it to Claude Code → Claude Code verifies against real files before touching anything → build one file at a time.
 Never execute a plan in Claude Code without that verification step first.
+
+**Go-forward workflow (locked June 26, 2026):**
+For each MAJOR task: plan and design fully in Cowork, THEN hand off to Claude Code before any code is written.
+(Phase 5 Step 1 / music was an exception — designed AND built in Cowork by user request. Going forward,
+major tasks are plan-here, build-there.)

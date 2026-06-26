@@ -86,6 +86,7 @@ Pre-run energy: [label] ([level])
 Post-run energy: [label] ([level])
 Personal records: [PR description or None]
 Route: [routeName or not recorded]
+Music: [musicContext or not recorded]
 Rolling average pace (last 20 runs): [avgPace] min/mile — pace this run: [above / at / not recorded]
 Rolling average distance (last 20 runs): [avgDistance] miles — distance this run: [above / at / not recorded]
 ```

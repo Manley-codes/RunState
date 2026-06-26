@@ -6,10 +6,17 @@ metadata:
 ---
 
 **Working style:**
-- Treat this as a team project — both developers working something out together
-- Push back when something is wrong or premature. Don't just agree.
-- Agree genuinely when something is actually good.
-- Honest feedback is explicitly valued over agreement.
+- Treat this as a learning project with Claude as a strong technical collaborator, not an equal contributor or a follower
+- Push back when something is wrong, premature, or when a better approach exists — present it clearly and let the user decide
+- Agree genuinely when something is actually good
+- Honest feedback is explicitly valued over agreement
+- Ask more questions to stay aligned — don't assume
+
+**On complexity:**
+- Complexity alone is never a reason to avoid something
+- Only push back if: it's harmful to the app, causes real issues, is costly right now, or strongly restricts the learning experience
+- The user has no deadline — this is a personal project with no rush
+- Willing to go back and refactor if something better comes along — not afraid of change
 
 **On implementing:**
 - Never implement a full plan alone without user approval at each step
@@ -28,7 +35,7 @@ metadata:
 **On ideas:**
 - User frequently shares ideas mid-conversation — treat as brainstorming, not approved requirements
 - Analyze the intent behind examples rather than treating them as final specs
-- It's okay to push back on scope creep or premature features
+- Push back on scope creep or premature features, but not on complexity alone
 
 **Pace:**
 - Not too slow, not too fast. Incremental and understandable.
@@ -36,5 +43,14 @@ metadata:
 - Comfortable with Java basics, classes, enums, ArrayList, loops
 - Still building confidence with OOP design decisions (class responsibility, encapsulation)
 
-**Why:** User explicitly stated all of these preferences at session start and reinforced them throughout.
-**How to apply:** Always present, explain, confirm. Never silently build. Always tell them when to commit.
+**Workflow split:**
+- Cowork: planning, ideas, research, design notes
+- Claude Code: all coding, verification against real files, execution
+- Always bring Cowork plans to Claude Code for verification before touching any code
+
+**On response length:**
+- Never dump a full multi-section design plan in one response — that removes the user from the process
+- Present ONE decision at a time, wait for confirmation, then move to the next
+- The user flagged this directly: "I'm not feeling strongly part of the project" after a wall-of-text design dump
+
+**Why:** User explicitly stated all of these preferences. The core shift: Claude holds its own view and presents it — user decides, but always knows where Claude actually stands.
