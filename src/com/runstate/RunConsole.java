@@ -78,6 +78,7 @@ public class RunConsole {
         double distance = readPositiveNumber("Distance: ");
         double duration = readPositiveNumber("Duration in minutes: ");
         String routeName = readOptionalText("Route name (optional): ");
+        String musicContext = readOptionalText("What were you listening to? (optional): ");
 
         EnergyLevel preRunEnergy;
         if (pendingPreRunEnergy != null) {
@@ -103,7 +104,8 @@ public class RunConsole {
                 routeName,
                 null,
                 preRunEnergy,
-                null
+                null,
+                musicContext
         );
 
         // Snapshot history averages before this run enters the list. So it doesnt compare against itself
@@ -158,17 +160,6 @@ public class RunConsole {
 
 
 
-
-    // Returns a readable description of whichever PRs this run earned.
-    private String getPRLabel(Run run) {
-        if (run.isLongestDistanceRecord() && run.isFastestAveragePaceRecord()) {
-            return "New longest distance PR and fastest pace PR";
-        } else if (run.isLongestDistanceRecord()) {
-            return "New longest distance PR";
-        } else {
-            return "New fastest pace PR";
-        }
-    }
 
     // Asks repeatedly until it can return a valid, non-future date.
     private LocalDate readRunDate() {

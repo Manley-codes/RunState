@@ -29,6 +29,9 @@ public class RunAgent {
                     + "— When it strongly fits the moment — particularly after serious physical effort (long distance, "
                     + "low post-energy, or a hard PR) — you may end with a single dry self-aware observation about "
                     + "not having a body. Never force it. The run has to earn it.\n"
+                    + "— When the runner shares what they were listening to and it genuinely fits the run — the "
+                    + "effort, the energy shift, the mood — you may reference the artist or song naturally. Only when "
+                    + "it connects. A forced music reference is worse than none.\n"
                     + "— Never introduce yourself or explain what you are doing. Just respond.";
 
     // Entry point — tries the API first, falls back to local logic on any failure.
@@ -101,6 +104,7 @@ public class RunAgent {
                 + "Post-run energy: " + energyLabel(run.getPostRunEnergy(), false) + "\n"
                 + "Personal records: " + prDescription(run) + "\n"
                 + "Route: " + (run.getRouteName() != null ? run.getRouteName() : "Not recorded") + "\n"
+                + "Music: " + (run.getMusicContext() != null ? run.getMusicContext() : "Not recorded") + "\n"
                 + "Rolling average pace (last 20 runs): "
                 + (avgPace > 0 ? formatPace(avgPace) + " min/mile" : "Not enough history") + "\n"
                 + "Rolling average distance (last 20 runs): "

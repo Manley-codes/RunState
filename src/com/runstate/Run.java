@@ -40,6 +40,9 @@ public class Run {
     // Describes the runner's optional energy level after the run.
     private EnergyLevel postRunEnergy;
 
+    // What the runner listened to during the run, or null if skipped.
+    private String musicContext;
+
     // Tracks whether this run was the runner's longest distance personal record.
     private boolean longestDistanceRecord;
 
@@ -61,7 +64,7 @@ public class Run {
     public Run(int runId, Runner runner, LocalDate date, String startTime, String endTime,
                double distance, DistanceUnit distanceUnit, double duration,
                String routeName, String routeLocation, EnergyLevel preRunEnergy,
-               EnergyLevel postRunEnergy) {
+               EnergyLevel postRunEnergy, String musicContext) {
 
         // "this" refers to the current object's variables
         this.runId = runId;
@@ -76,6 +79,7 @@ public class Run {
         this.routeLocation = routeLocation;
         this.preRunEnergy = preRunEnergy;
         this.postRunEnergy = postRunEnergy;
+        this.musicContext = musicContext;
         // A run starts with no PR label until the Runner checks the run history.
         this.longestDistanceRecord = false;
         // A run starts with no fastest pace PR label until the Runner checks the run history.
@@ -101,6 +105,11 @@ public class Run {
     // This method returns the unit used for pace, such as mile or kilometer.
     public String getPaceUnit() {
         return distanceUnit.getPaceName();
+    }
+
+    // Returns what the runner listened to, or null if it was skipped.
+    public String getMusicContext() {
+        return musicContext;
     }
 
     // This method lets other classes read the run date.
