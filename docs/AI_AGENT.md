@@ -2,7 +2,8 @@
 
 This document captures the design decisions, system prompt, and architecture for the RunState AI agent.
 
-The agent replaces `buildRunResponse()` in `RunConsole.java` with an Anthropic API call.
+The agent lives in `RunAgent.java` and is called from `RunConsole.logRun()`.
+`buildRunResponse()` was moved out of `RunConsole` into `RunAgent` — Single Responsibility.
 See `CLAUDE.md` for the architecture rule: keep `buildRunResponse()` isolated and clean.
 
 ---
@@ -93,14 +94,17 @@ Rolling average distance (last 20 runs): [avgDistance] miles — distance this r
 
 ## Phase 5: AI Agent Context Expansion
 
-> **This is a must-return-to priority. Do not let it get buried.**
+> **Music first, then weather. This is the next phase.**
 
-Phase 4 builds the agent with existing data. Phase 5 is what makes responses feel like
+Phase 4 built the agent with existing data. Phase 5 is what makes responses feel like
 they could only have been written about this exact run.
 
 The agent becomes meaningfully more personal when it knows:
 
-### Weather and temperature
+### Music context (Step 1 — priority)
+- See music section below — this is the signature feature
+
+### Weather and temperature (Step 2 — automatic via Open-Meteo)
 - Hot, cold, rain, wind, humidity
 - Example response shift: "Five miles in that heat is a different kind of effort."
 - Implementation: new optional field on Run, asked during log flow or pulled from a weather API
