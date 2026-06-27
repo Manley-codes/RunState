@@ -37,7 +37,8 @@ public class RunStorage {
      */
     public static void saveRun(Run run) {
         String sql = "INSERT INTO runs (run_date, start_time, end_time, distance, distance_unit, " +
-                     "duration, route_name, route_location, pre_run_energy, post_run_energy, music_context) " +
+                     "duration, route_name, route_location, pre_run_energy, post_run_energy, music_context, " +
+                     "temperature, weather_condition) " +
                      "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
 
         // try-with-resources automatically closes the connection and statement
