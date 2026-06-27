@@ -43,6 +43,12 @@ public class Run {
     // What the runner listened to during the run, or null if skipped.
     private String musicContext;
 
+    // Temperature in Fahrenheit at the time of the run, or 0.0 if unavailable.
+    private double temperature;
+
+    // Short weather description at the time of the run, or null if unavailable.
+    private String weatherCondition;
+
     // Tracks whether this run was the runner's longest distance personal record.
     private boolean longestDistanceRecord;
 
@@ -64,7 +70,7 @@ public class Run {
     public Run(int runId, Runner runner, LocalDate date, String startTime, String endTime,
                double distance, DistanceUnit distanceUnit, double duration,
                String routeName, String routeLocation, EnergyLevel preRunEnergy,
-               EnergyLevel postRunEnergy, String musicContext) {
+               EnergyLevel postRunEnergy, String musicContext,double temperature, String weatherCondition) {
 
         // "this" refers to the current object's variables
         this.runId = runId;
@@ -84,6 +90,8 @@ public class Run {
         this.longestDistanceRecord = false;
         // A run starts with no fastest pace PR label until the Runner checks the run history.
         this.fastestAveragePaceRecord = false;
+        this.temperature = temperature;
+        this.weatherCondition = weatherCondition;
     }
 
     /*
@@ -145,6 +153,16 @@ public class Run {
     // This method lets other classes read the run duration.
     public double getDuration() {
         return duration;
+    }
+
+    // Returns the temperature in Fahrenheit at the time of the run.
+    public double getTemperature() {
+        return temperature;
+    }
+
+    // Returns the weather condition description, or null if unavailable.
+    public String getWeatherCondition() {
+        return weatherCondition;
     }
 
     // Returns minutes per mile so pace PRs can compare mile and kilometer runs fairly.

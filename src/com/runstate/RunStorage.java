@@ -104,7 +104,7 @@ public class RunStorage {
 
                 Run run = new Run(runId, runner, date, startTime, endTime,
                         distance, distanceUnit, duration, routeName, routeLocation,
-                        preRunEnergy, postRunEnergy, musicContext);
+                        preRunEnergy, postRunEnergy, musicContext,0.0, null);
 
                 runs.add(run);
             }

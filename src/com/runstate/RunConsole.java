@@ -105,7 +105,9 @@ public class RunConsole {
                 null,
                 preRunEnergy,
                 null,
-                musicContext
+                musicContext,
+                0.0,
+                null
         );
 
         // Snapshot history averages before this run enters the list. So it doesnt compare against itself
