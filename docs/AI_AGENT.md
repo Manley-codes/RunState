@@ -73,10 +73,10 @@ logic-based response. The app never breaks because the network is down.
 
 ## Data Contract
 
-What gets sent to the API as the user message per run:
+What gets sent to the Anthropic API as the user message per run:
 
 ```
-Runner: [firstName]
+Runner: [username]
 Date: [run date]
 Season: [derived from run date]
 Distance: [distance] [unit]
@@ -87,9 +87,14 @@ Post-run energy: [label] ([level])
 Personal records: [PR description or None]
 Route: [routeName or not recorded]
 Music: [musicContext or not recorded]
-Rolling average pace (last 20 runs): [avgPace] min/mile — pace this run: [above / at / not recorded]
-Rolling average distance (last 20 runs): [avgDistance] miles — distance this run: [above / at / not recorded]
+Weather: [temperature°F, feels-like°F, condition or not recorded]   ← Phase 5 Step 2
+Rolling average pace (last 20 runs): [avgPace] min/mile
+Rolling average distance (last 20 runs): [avgDistance] miles
+Pace this run vs average: [above / below / no history]
+Distance this run vs average: [above / below / no history]
 ```
+
+See `docs/DATA_PRIVACY.md` for a full breakdown of what data leaves the app and to whom.
 
 ---
 
