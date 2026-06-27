@@ -49,13 +49,20 @@ or weight toward less-recently-mentioned songs — so references stay fresh. Bel
 Phase 6 lyric-aware work, where the agent gains cross-run awareness. Not needed for manual Step 1.
 
 Step 2 — Weather (automatic via Open-Meteo): **DESIGNED June 26, 2026 — see design_weather_context.md for the full spec.**
-Summary of locked decisions (full detail + open decisions in design_weather_context.md):
-- Fetch ONCE at log time and STORE on the Run (NOT live in RunAgent — supersedes the earlier note here).
+Summary of locked decisions (full detail in design_weather_context.md):
+- Fetch ONCE at log time and STORE on the Run (not live in RunAgent).
 - New isolated `WeatherService` class owns geocoding + the Open-Meteo call (SRP, like RunAgent).
-- Three fields: temperature, apparentTemperature ("feels like" — captures humidity, the #2 factor), weatherCondition.
-- Forecast API for recent runs (today + ~92 days); archive endpoint deferred. Failure never blocks logging.
-- Open decisions before build: (1) append 3 params vs. a `WeatherData` value object [recommended]; (2) daily mean vs max reading.
-- Competitive/RPE/privacy considerations captured in research_app_landscape.md.
+- Three fields: `temperature`, `apparentTemperature` ("feels-like" — folds in humidity), `weatherCondition`.
+- Forecast API for recent runs (today + ~92 days); archive endpoint deferred.
+- HttpClient timeout required — a slow API must never hang the console.
+- Failure never blocks logging — all three fields stay null, agent omits the weather line.
+- Privacy doc written: `docs/DATA_PRIVACY.md`. AI_AGENT.md data contract updated.
+
+**One open decision remaining before writing any code:**
+Constructor design — after music, Run has 13 params. Adding 3 weather fields makes 16.
+  - Option A: append 3 raw params (simple, consistent)
+  - Option B (recommended): group into a `WeatherData` value object — one param, cleaner, good OOP lesson
+  Resolve this FIRST in the next session. Present to user and get their call before touching any file.
 
 **Visual prototype:**
 RunState_intro.html and RunState Promo.html exist in project root — both gitignored (local only).
@@ -64,28 +71,35 @@ Colors, branding, and button hierarchy are strong. Runner animation unfinished.
 
 ---
 
-**Handoff notes for Cowork — Phase 5**
+## Handoff — next session entry point (June 26, 2026)
 
-Start here when picking up: Phase 5, Step 1 (music field). Everything below is what you need to design against.
+**Where we are:** Phase 5 Step 1 (music) is built and committed. Phase 5 Step 2 (weather) is fully
+designed and ready to build. Privacy doc is done. One open decision remains before writing any code.
 
-**Key files to read before designing:**
-- `src/com/runstate/Run.java` — data model, constructor signature, existing fields
-- `src/com/runstate/RunStorage.java` — DB save/load pattern, existing SQL columns
-- `src/com/runstate/RunConsole.java` — where the optional prompt goes (inside logRun())
-- `src/com/runstate/RunAgent.java` — buildUserMessage() is where new fields get added to the API context
-- `docs/AI_AGENT.md` — the data contract section shows the current user message format
+**First thing to do in the next session:**
+Present open decision #1 from `design_weather_context.md` — WeatherData value object vs. raw params.
+Give the recommendation (value object), explain the OOP concept, get the user's call. Then start building.
 
-**Things Cowork can't know without reading the files:**
-- Run constructor takes 12 parameters in a specific order — new fields must go at the end
-- RunStorage uses a specific INSERT/SELECT column order — new columns must be added consistently
-- Runner already has city and state fields (needed for weather geocoding in Step 2)
-- RunAgent.buildUserMessage() builds the user message as a String concat — new lines append to the end
+**Build order after the decision is made:**
+1. MySQL ALTER TABLE (run manually before any Java — 3 new columns)
+2. Runner.java — add `getCity()` and `getState()` getters (fields exist, getters are missing)
+3. WeatherData.java (new) — only if value object option is chosen
+4. WeatherService.java (new) — geocoding + forecast call + WMO mapping, HttpClient timeout, all failures return null
+5. Run.java — add weather field(s), constructor param(s), getters
+6. RunStorage.java — extend INSERT and loadRuns() for the 3 new columns
+7. RunConsole.java — call WeatherService.fetch() after date is read, pass result to Run constructor
+8. RunAgent.java — add Weather line to buildUserMessage(), add weather rule to SYSTEM_PROMPT
 
-**Workflow:**
-Cowork designs the plan → user brings it to Claude Code → Claude Code verifies against real files before touching anything → build one file at a time.
-Never execute a plan in Claude Code without that verification step first.
+**Key files to read before touching any code:**
+- `src/com/runstate/Run.java` — current constructor is 13 params
+- `src/com/runstate/Runner.java` — has city/state fields, no getters yet
+- `src/com/runstate/RunStorage.java` — INSERT has 11 columns currently
+- `src/com/runstate/RunConsole.java` — logRun() is where the fetch call goes, after readRunDate()
+- `src/com/runstate/RunAgent.java` — buildUserMessage() and SYSTEM_PROMPT both need a weather addition
+- `docs/claude-memory/design_weather_context.md` — full spec, locked decisions, WMO mapping, API URLs
 
-**Go-forward workflow (locked June 26, 2026):**
-For each MAJOR task: plan and design fully in Cowork, THEN hand off to Claude Code before any code is written.
-(Phase 5 Step 1 / music was an exception — designed AND built in Cowork by user request. Going forward,
-major tasks are plan-here, build-there.)
+**Collab rules to follow:**
+- One decision or one file at a time — never dump a full plan in one response
+- Explain Java/OOP concepts as you build (value object, nullable Double, setObject vs setDouble, etc.)
+- Present options with a recommendation; user decides before code is written
+- Flag when it's a good time to commit

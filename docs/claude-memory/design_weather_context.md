@@ -170,10 +170,18 @@ ALTER TABLE runs
 
 ---
 
-## Privacy note (recommended, pending user decision)
+## Privacy note — DONE (June 26, 2026)
 
-Weather introduces LOCATION leaving the app: the runner's city/state goes to Open-Meteo, and the city
-may enter the agent prompt sent to Anthropic. City-level is coarse/low-risk, but it means two external
-services now receive run data. Recommended: add a short "Data & Privacy" note to README/docs stating
-what data leaves the app (Anthropic for the agent; Open-Meteo for weather) and why. Cheap, and a
-maturity signal for a portfolio piece. Not yet done — user to decide whether to add before or after build.
+`docs/DATA_PRIVACY.md` created. Covers what data leaves the app, to whom (Anthropic API, Open-Meteo),
+and why. `docs/AI_AGENT.md` data contract section updated to reference it and show the Weather line.
+Both committed. No further action needed before building.
+
+---
+
+## RPE / effort-load insight (filed for future — do NOT build now)
+
+The user's energy 1–3 scale is a friendlier version of RPE (Rate of Perceived Exertion). Research
+finding: `effort × duration` is a recognized session-RPE training-load metric. Using existing data
+(energy level + duration), this could become a simple "effort load" number — a meaningful analytic
+squarely in the "learn something from your run" mission. Worth revisiting in a later phase once the
+weather and current backlog features are shipped. Not scope for now.
