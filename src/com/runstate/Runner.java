@@ -75,6 +75,16 @@ public class Runner {
         return username;
     }
 
+    // Returns the city where the runner is located.
+    public String getCity() {
+        return city;
+    }
+
+    // Returns the state where the runner is located.
+    public String getState() {
+        return state;
+    }
+
     // Returns the current history size so RunConsole can form a temporary next ID.
     public int getRunCount() {
         return runHistory.size();

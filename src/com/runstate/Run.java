@@ -237,6 +237,16 @@ public class Run {
         this.postRunEnergy = energy;
     }
 
+    // Stores the temperature fetched from Open-Meteo after the run is created.
+    public void setTemperature(double temperature) {
+        this.temperature = temperature;
+    }
+
+    // Stores the weather condition fetched from Open-Meteo after the run is created.
+    public void setWeatherCondition(String weatherCondition) {
+        this.weatherCondition = weatherCondition;
+    }
+
     // Returns the runner who completed this run, so other classes can read their profile data.
     public Runner getRunner() { return runner; }
 

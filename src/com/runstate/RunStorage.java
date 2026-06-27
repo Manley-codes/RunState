@@ -38,7 +38,7 @@ public class RunStorage {
     public static void saveRun(Run run) {
         String sql = "INSERT INTO runs (run_date, start_time, end_time, distance, distance_unit, " +
                      "duration, route_name, route_location, pre_run_energy, post_run_energy, music_context) " +
-                     "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+                     "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
 
         // try-with-resources automatically closes the connection and statement
         // when the block ends, even if an error occurs.
@@ -58,6 +58,8 @@ public class RunStorage {
             stmt.setString(10, run.getPostRunEnergy() != null ? run.getPostRunEnergy().name() : null);
             // Free-text music note, or null if the runner skipped the prompt.
             stmt.setString(11, run.getMusicContext());
+            stmt.setDouble(12, run.getTemperature());
+            stmt.setString(13, run.getWeatherCondition());
 
             stmt.executeUpdate();
 
@@ -99,12 +101,18 @@ public class RunStorage {
                 String postStr = rs.getString("post_run_energy");
                 EnergyLevel postRunEnergy = postStr != null ? EnergyLevel.valueOf(postStr) : null;
 
+                // Temperature in Fahrenheit fetched from Open-Meteo at the time of the run.
+                double temperature = rs.getDouble("temperature");
+
+                // Short weather description fetched from Open-Meteo, or null if unavailable.
+                String weatherCondition = rs.getString("weather_condition");
+
                 // Optional free-text music note; getString returns null if the column is empty.
                 String musicContext = rs.getString("music_context");
 
                 Run run = new Run(runId, runner, date, startTime, endTime,
                         distance, distanceUnit, duration, routeName, routeLocation,
-                        preRunEnergy, postRunEnergy, musicContext,0.0, null);
+                        preRunEnergy, postRunEnergy, musicContext,temperature, weatherCondition);
 
                 runs.add(run);
             }
