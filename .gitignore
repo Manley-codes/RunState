@@ -41,3 +41,10 @@ RunState Promo2.html
 
 ### Claude Code ###
 .claude/
+### IntelliJ project files ###
+.idea/
+
+### Codex ###
+.agents/
+.codex/
+AGENTS.md
