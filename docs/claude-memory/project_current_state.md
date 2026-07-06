@@ -48,7 +48,11 @@ referencing that same song every run. Need variety logic — e.g. vary which tra
 or weight toward less-recently-mentioned songs — so references stay fresh. Belongs in Phase 5 advanced /
 Phase 6 lyric-aware work, where the agent gains cross-run awareness. Not needed for manual Step 1.
 
-Step 2 — Weather (automatic via Open-Meteo): **DESIGNED June 26, 2026 — see design_weather_context.md for the full spec.**
+Step 2 — Weather (automatic via Open-Meteo): **BUILT June 26, 2026 — but with deviations from spec.**
+Two bugs (weather never persisted to DB; archive API instead of forecast, so fresh runs get nothing)
+plus design drift (no WeatherService, no apparentTemperature, primitive double, setters, no timeout).
+**See design_weather_cleanup.md for the reconciliation plan, locked July 6, 2026.**
+Original spec: design_weather_context.md.
 Summary of locked decisions (full detail in design_weather_context.md):
 - Fetch ONCE at log time and STORE on the Run (not live in RunAgent).
 - New isolated `WeatherService` class owns geocoding + the Open-Meteo call (SRP, like RunAgent).
@@ -77,8 +81,18 @@ Colors, branding, and button hierarchy are strong. Runner animation unfinished.
 designed and ready to build. Privacy doc is done. One open decision remains before writing any code.
 
 **First thing to do in the next session:**
-Present open decision #1 from `design_weather_context.md` — WeatherData value object vs. raw params.
-Give the recommendation (value object), explain the OOP concept, get the user's call. Then start building.
+WeatherData value object decision RESOLVED (July 6, 2026 — value object chosen). Next backend
+session: follow `design_weather_cleanup.md` — verify git status and DB columns FIRST, then build
+one file at a time with Manley's approval at each step.
+
+**July 6, 2026 — UI phase paused; back to backend.**
+UI/creative-direction exploration is paused (see creative_direction_ui.md v0.2 — §0 has the
+locked July decisions reconciled from the prompt-iteration sessions). Moodboard images being
+moved out of the repo by Manley; the doc is the surviving text record. Current focus: the
+weather cleanup above.
+NOTE FOR LATER (not a current focus): the UI "State Scan" concept implies FOUR pre-run energy
+states, but the backend energy system is THREE levels. Open question — resolve when UI work
+resumes, before Phase 6. Do not change the backend enum for it now.
 
 **Build order after the decision is made:**
 1. MySQL ALTER TABLE (run manually before any Java — 3 new columns)
