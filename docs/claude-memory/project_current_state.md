@@ -75,10 +75,10 @@ Colors, branding, and button hierarchy are strong. Runner animation unfinished.
 
 ---
 
-## Handoff — next session entry point (June 26, 2026)
+## Handoff — next session entry point (July 6, 2026)
 
-**Where we are:** Phase 5 Step 1 (music) is built and committed. Phase 5 Step 2 (weather) is fully
-designed and ready to build. Privacy doc is done. One open decision remains before writing any code.
+**Where we are:** Phase 5 Step 1 (music) is built and committed. Phase 5 Step 2 (weather) is BUILT
+but deviates from spec — see design_weather_cleanup.md. Privacy doc is done. No open decisions remain.
 
 **First thing to do in the next session:**
 WeatherData value object decision RESOLVED (July 6, 2026 — value object chosen). Next backend
@@ -87,30 +87,24 @@ one file at a time with Manley's approval at each step.
 
 **July 6, 2026 — UI phase paused; back to backend.**
 UI/creative-direction exploration is paused (see creative_direction_ui.md v0.2 — §0 has the
-locked July decisions reconciled from the prompt-iteration sessions). Moodboard images being
-moved out of the repo by Manley; the doc is the surviving text record. Current focus: the
-weather cleanup above.
+locked July decisions reconciled from the prompt-iteration sessions). Moodboard is gitignored
+(local only, like the HTML prototypes); creative_direction_ui.md is the surviving text record.
+Current focus: the weather cleanup above.
 NOTE FOR LATER (not a current focus): the UI "State Scan" concept implies FOUR pre-run energy
 states, but the backend energy system is THREE levels. Open question — resolve when UI work
 resumes, before Phase 6. Do not change the backend enum for it now.
 
-**Build order after the decision is made:**
-1. MySQL ALTER TABLE (run manually before any Java — 3 new columns)
-2. Runner.java — add `getCity()` and `getState()` getters (fields exist, getters are missing)
-3. WeatherData.java (new) — only if value object option is chosen
-4. WeatherService.java (new) — geocoding + forecast call + WMO mapping, HttpClient timeout, all failures return null
-5. Run.java — add weather field(s), constructor param(s), getters
-6. RunStorage.java — extend INSERT and loadRuns() for the 3 new columns
-7. RunConsole.java — call WeatherService.fetch() after date is read, pass result to Run constructor
-8. RunAgent.java — add Weather line to buildUserMessage(), add weather rule to SYSTEM_PROMPT
+**Build order:** superseded — follow the build order in `design_weather_cleanup.md` (8 steps,
+WeatherData.java first, commit points marked). The list that used to live here described the
+original from-scratch build and no longer matches the code.
+Note: Runner.getCity()/getState() already exist (added June 26) — no Runner.java step needed.
 
-**Key files to read before touching any code:**
-- `src/com/runstate/Run.java` — current constructor is 13 params
-- `src/com/runstate/Runner.java` — has city/state fields, no getters yet
-- `src/com/runstate/RunStorage.java` — INSERT has 11 columns currently
-- `src/com/runstate/RunConsole.java` — logRun() is where the fetch call goes, after readRunDate()
-- `src/com/runstate/RunAgent.java` — buildUserMessage() and SYSTEM_PROMPT both need a weather addition
-- `docs/claude-memory/design_weather_context.md` — full spec, locked decisions, WMO mapping, API URLs
+**Key files to read before touching any code:** the 5 source files listed in
+`design_weather_cleanup.md`, plus that doc itself and `design_weather_context.md` (original spec —
+WMO mapping and API URLs still live there). Facts that changed since the old list was written:
+Run's constructor is now 15 params (music + temperature + weatherCondition), RunStorage INSERT
+has 13 columns, and RunAgent already has a Weather line + ~90 lines of weather fetch code that
+the cleanup will remove.
 
 **Collab rules to follow:**
 - One decision or one file at a time — never dump a full plan in one response

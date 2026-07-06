@@ -48,3 +48,6 @@ RunState Promo2.html
 .agents/
 .codex/
 AGENTS.md
+
+### Local-only design assets ###
+docs/claude-memory/moodboard/
