@@ -90,6 +90,13 @@ public class RunConsole {
             preRunEnergy = readEnergyLevel(true);
         }
 
+        // Fetch weather for this run's date and the runner's location BEFORE the
+        // Run is created and saved. THIS is the persistence fix: weather becomes
+        // part of the run from birth, instead of being bolted on after saveRun.
+        // WeatherService returns an all-null WeatherData on any failure, so a slow
+        // or down API never blocks logging a run. No prompt — this is silent.
+        WeatherData weather = WeatherService.fetch(runner.getCity(), runner.getState(), date);
+
         // Post-run energy is null here because the runner hasn't finished yet.
         // The constructor accepts null for optional fields, so this is valid.
         Run run = new Run(
@@ -106,8 +113,7 @@ public class RunConsole {
                 preRunEnergy,
                 null,
                 musicContext,
-                0.0,
-                null
+                weather
         );
 
         // Snapshot history averages before this run enters the list. So it doesnt compare against itself

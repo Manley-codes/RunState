@@ -43,11 +43,9 @@ public class Run {
     // What the runner listened to during the run, or null if skipped.
     private String musicContext;
 
-    // Temperature in Fahrenheit at the time of the run, or 0.0 if unavailable.
-    private double temperature;
-
-    // Short weather description at the time of the run, or null if unavailable.
-    private String weatherCondition;
+    // Weather at the time of the run, bundled into one immutable object (composition).
+    // The bundle may be null, and its fields may be null, when weather wasn't recorded.
+    private final WeatherData weather;
 
     // Tracks whether this run was the runner's longest distance personal record.
     private boolean longestDistanceRecord;
@@ -70,7 +68,7 @@ public class Run {
     public Run(int runId, Runner runner, LocalDate date, String startTime, String endTime,
                double distance, DistanceUnit distanceUnit, double duration,
                String routeName, String routeLocation, EnergyLevel preRunEnergy,
-               EnergyLevel postRunEnergy, String musicContext,double temperature, String weatherCondition) {
+               EnergyLevel postRunEnergy, String musicContext, WeatherData weather) {
 
         // "this" refers to the current object's variables
         this.runId = runId;
@@ -90,8 +88,7 @@ public class Run {
         this.longestDistanceRecord = false;
         // A run starts with no fastest pace PR label until the Runner checks the run history.
         this.fastestAveragePaceRecord = false;
-        this.temperature = temperature;
-        this.weatherCondition = weatherCondition;
+        this.weather = weather;
     }
 
     /*
@@ -155,14 +152,20 @@ public class Run {
         return duration;
     }
 
-    // Returns the temperature in Fahrenheit at the time of the run.
-    public double getTemperature() {
-        return temperature;
+    // Returns the air temperature in Fahrenheit, or null if weather wasn't recorded.
+    // Delegates to the WeatherData bundle, guarding against a null bundle first.
+    public Double getTemperature() {
+        return weather != null ? weather.getTemperature() : null;
     }
 
-    // Returns the weather condition description, or null if unavailable.
+    // Returns the feels-like temperature in Fahrenheit, or null if not recorded.
+    public Double getApparentTemperature() {
+        return weather != null ? weather.getApparentTemperature() : null;
+    }
+
+    // Returns the weather condition description, or null if not recorded.
     public String getWeatherCondition() {
-        return weatherCondition;
+        return weather != null ? weather.getWeatherCondition() : null;
     }
 
     // Returns minutes per mile so pace PRs can compare mile and kilometer runs fairly.
@@ -237,15 +240,6 @@ public class Run {
         this.postRunEnergy = energy;
     }
 
-    // Stores the temperature fetched from Open-Meteo after the run is created.
-    public void setTemperature(double temperature) {
-        this.temperature = temperature;
-    }
-
-    // Stores the weather condition fetched from Open-Meteo after the run is created.
-    public void setWeatherCondition(String weatherCondition) {
-        this.weatherCondition = weatherCondition;
-    }
 
     // Returns the runner who completed this run, so other classes can read their profile data.
     public Runner getRunner() { return runner; }

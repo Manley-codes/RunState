@@ -36,10 +36,10 @@ public class RunStorage {
      * directly into the SQL string. This is safer and prevents SQL injection.
      */
     public static void saveRun(Run run) {
-        String sql = "INSERT INTO runs (run_date, start_time, end_time, distance, distance_unit, " +
-                     "duration, route_name, route_location, pre_run_energy, post_run_energy, music_context, " +
-                     "temperature, weather_condition) " +
-                     "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+        String sql =  "INSERT INTO runs (run_date, start_time, end_time, distance, distance_unit, " +
+                "duration, route_name, route_location, pre_run_energy, post_run_energy, music_context, " +
+                "temperature, apparent_temperature, weather_condition) " +
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
 
         // try-with-resources automatically closes the connection and statement
         // when the block ends, even if an error occurs.
@@ -59,8 +59,9 @@ public class RunStorage {
             stmt.setString(10, run.getPostRunEnergy() != null ? run.getPostRunEnergy().name() : null);
             // Free-text music note, or null if the runner skipped the prompt.
             stmt.setString(11, run.getMusicContext());
-            stmt.setDouble(12, run.getTemperature());
-            stmt.setString(13, run.getWeatherCondition());
+            stmt.setObject(12, run.getTemperature());
+            stmt.setObject(13, run.getApparentTemperature());
+            stmt.setString(14, run.getWeatherCondition());
 
             stmt.executeUpdate();
 
@@ -102,19 +103,22 @@ public class RunStorage {
                 String postStr = rs.getString("post_run_energy");
                 EnergyLevel postRunEnergy = postStr != null ? EnergyLevel.valueOf(postStr) : null;
 
-                // Temperature in Fahrenheit fetched from Open-Meteo at the time of the run.
-                double temperature = rs.getDouble("temperature");
-
-                // Short weather description fetched from Open-Meteo, or null if unavailable.
+                // Weather columns are nullable. getObject(..., Double.class) returns a real
+                // Double or null — unlike getDouble, which turns a SQL NULL into 0.0 and would
+                // reintroduce the "0.0 means missing" ambiguity we just designed away.
+                Double temperature = rs.getObject("temperature", Double.class);
+                Double apparentTemperature = rs.getObject("apparent_temperature", Double.class);
                 String weatherCondition = rs.getString("weather_condition");
+
+                // Rebuild the weather bundle from its three columns (composition again).
+                WeatherData weather = new WeatherData(temperature, apparentTemperature, weatherCondition);
 
                 // Optional free-text music note; getString returns null if the column is empty.
                 String musicContext = rs.getString("music_context");
 
                 Run run = new Run(runId, runner, date, startTime, endTime,
                         distance, distanceUnit, duration, routeName, routeLocation,
-                        preRunEnergy, postRunEnergy, musicContext,temperature, weatherCondition);
-
+                        preRunEnergy, postRunEnergy, musicContext, weather);
                 runs.add(run);
             }
 

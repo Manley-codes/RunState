@@ -36,8 +36,7 @@ public class RunAgent {
 
     // Entry point — tries the API first, falls back to local logic on any failure.
     public static String buildRunResponse(Run run, double avgPace, double avgDistance) {
-        // Fetch weather before the API call so the user message includes conditions.
-        fetchWeather(run);
+        // Weather is already stored on the run at log time — nothing to fetch here.
         try {
             return callApi(run, avgPace, avgDistance);
         } catch (Exception e) {
@@ -107,7 +106,7 @@ public class RunAgent {
                 + "Personal records: " + prDescription(run) + "\n"
                 + "Route: " + (run.getRouteName() != null ? run.getRouteName() : "Not recorded") + "\n"
                 + "Music: " + (run.getMusicContext() != null ? run.getMusicContext() : "Not recorded") + "\n"
-                + "Weather: " + (run.getWeatherCondition() != null ? run.getWeatherCondition() + ", " + (int) run.getTemperature() + "F" : "Not available") + "\n"
+                + "Weather: " + describeWeather(run) + "\n"
                 + "Rolling average pace (last 20 runs): "
                 + (avgPace > 0 ? formatPace(avgPace) + " min/mile" : "Not enough history") + "\n"
                 + "Rolling average distance (last 20 runs): "
@@ -148,6 +147,30 @@ public class RunAgent {
         }
         return "None";
     }
+
+        // Formats the weather line for the API prompt, including feels-like when we have it,
+        // or a plain "Not available" when weather wasn't recorded for this run.
+        private static String describeWeather (Run run){
+            String condition = run.getWeatherCondition();
+            Double temp = run.getTemperature();
+
+            // No condition or no temperature means we never got weather for this run.
+            if (condition == null || temp == null) {
+                return "Not available";
+            }
+
+            // Math.round unboxes the Double to a double and rounds to a whole degree.
+            String line = condition + ", " + Math.round(temp) + "F";
+
+            // Feels-like is the point of the feature — append it whenever it exists.
+            Double feelsLike = run.getApparentTemperature();
+            if (feelsLike != null) {
+                line += " (feels like " + Math.round(feelsLike) + "F)";
+            }
+
+            return line;
+        }
+
 
     // Wraps a Java string in JSON quotes and escapes special characters.
     private static String toJsonString(String s) {
@@ -216,93 +239,5 @@ public class RunAgent {
         } else {
             return "New fastest pace PR";
         }
-    }
-
-    // Fetches weather for the run's date and city and sets it directly on the run.
-    // Silently skips if city is missing or any API call fails — weather is optional context.
-    private static void fetchWeather(Run run) {
-        try {
-            Runner runner = run.getRunner();
-            if (runner == null || runner.getCity() == null) return;
-
-            double[] coords = geocodeCity(runner.getCity());
-            if (coords == null) return;
-
-            fetchWeatherForDate(run, coords[0], coords[1], run.getDate().toString());
-
-        } catch (Exception e) {
-            // Weather is optional — any failure is silent
-        }
-    }
-
-    // Calls Open-Meteo's geocoding API to convert a city name into latitude and longitude.
-    // Returns a double array [latitude, longitude], or null if no results are found.
-    private static double[] geocodeCity(String city) throws Exception {
-        String url = "https://geocoding-api.open-meteo.com/v1/search?name="
-                + city.replace(" ", "%20") + "&count=1";
-
-        HttpClient client = HttpClient.newHttpClient();
-        HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create(url))
-                .GET()
-                .build();
-
-        HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
-
-        var results = JsonParser.parseString(response.body())
-                .getAsJsonObject()
-                .getAsJsonArray("results");
-        if (results == null || results.size() == 0) return null;
-
-        var first = results.get(0).getAsJsonObject();
-        double lat = first.get("latitude").getAsDouble();
-        double lon = first.get("longitude").getAsDouble();
-        return new double[]{lat, lon};
-    }
-
-    // Calls Open-Meteo's historical archive API and sets temperature and weather condition on the run.
-    private static void fetchWeatherForDate(Run run, double lat, double lon, String date) throws Exception {
-        String url = "https://archive-api.open-meteo.com/v1/archive?"
-                + "latitude=" + lat
-                + "&longitude=" + lon
-                + "&start_date=" + date
-                + "&end_date=" + date
-                + "&daily=temperature_2m_max,weathercode"
-                + "&temperature_unit=fahrenheit"
-                + "&timezone=auto";
-
-        HttpClient client = HttpClient.newHttpClient();
-        HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create(url))
-                .GET()
-                .build();
-
-        HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
-
-        var daily = JsonParser.parseString(response.body())
-                .getAsJsonObject()
-                .getAsJsonObject("daily");
-
-        double temp = daily.getAsJsonArray("temperature_2m_max").get(0).getAsDouble();
-        int code = daily.getAsJsonArray("weathercode").get(0).getAsInt();
-
-        run.setTemperature(temp);
-        run.setWeatherCondition(decodeWeatherCode(code));
-    }
-
-    // Converts a WMO weather code returned by Open-Meteo into a readable description.
-    private static String decodeWeatherCode(int code) {
-        if (code == 0) return "Clear sky";
-        if (code == 1) return "Mainly clear";
-        if (code == 2) return "Partly cloudy";
-        if (code == 3) return "Overcast";
-        if (code == 45 || code == 48) return "Foggy";
-        if (code >= 51 && code <= 55) return "Drizzle";
-        if (code >= 61 && code <= 65) return "Rain";
-        if (code >= 71 && code <= 75) return "Snow";
-        if (code >= 80 && code <= 82) return "Rain showers";
-        if (code == 95) return "Thunderstorm";
-        if (code == 96 || code == 99) return "Thunderstorm with hail";
-        return "Unknown";
     }
 }
