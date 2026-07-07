@@ -62,5 +62,17 @@ collaborative filtering with a performance twist. Parked, not rejected:
 The single-user Phase 5 data model (songs↔runs↔energy) is exactly what collaborative
 filtering would consume later, so building N=1 first keeps the door open at no cost.
 
+## FILED for Phase 6 — reflective-song selection from full run listening history (July 6, 2026)
+
+Future versions: the agent looks across ALL songs played during a run and picks the
+REFLECTIVE one to build the reply around. Key spec nuance decided now so future-us
+builds the right thing: "reflective" is NOT "most played" — it is *what was playing
+during the moment that defined the run* (the hard mile, the energy flip, the finish).
+Requires: run start-time capture + per-track play timestamps relative to the run
+timeline. Both are existing Phase 6 deferrals (see design_weather_context.md deferrals
+and the mobile phase). How the reply should USE the chosen song is governed by
+design_music_reply_style.md.
+
 **How to apply:** steer music work toward the pre-run playlist brain first; live adaptation
-only at Phase 6; if discovery or cross-user ideas resurface, point back here.
+only at Phase 6; if discovery or cross-user ideas resurface, point back here. Reply craft
+rules live in design_music_reply_style.md.
