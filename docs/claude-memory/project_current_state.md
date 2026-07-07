@@ -30,6 +30,15 @@ As of June 25, 2026, the app is a working Java console app named **RunState**.
 1. Phase 5: AI agent context expansion — music first, then weather (locked in June 25, 2026)
 2. Mobile UI — futuristic/warm transition concept, GPS tracking
 
+**Standing milestone — privacy / security / legal pass (added July 6, 2026):**
+Before RunState is released, shared publicly, or gains multi-user/all-day-listening features,
+a dedicated pass is REQUIRED covering: data privacy (what leaves the app, to whom, why —
+extend docs/DATA_PRIVACY.md), consent tiers (run music vs all-day listening vs any cross-user
+data), security (API keys out of source, DB credentials, dedicated DB user not root), and
+legal basics (third-party API terms of service — Anthropic, Open-Meteo, Spotify, Last.fm/
+ListenBrainz; health-adjacent data handling). Grows in weight with each phase — mobile + GPS
+location data raises the bar again. Not a current blocker; IS a release blocker.
+
 **Phase 5 plan (locked in, ready to build):**
 Both features follow the same four-file pattern:
   Run.java -> add field | RunStorage.java -> add DB column | RunConsole.java -> add optional prompt | RunAgent.java -> add to user message

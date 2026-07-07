@@ -73,6 +73,26 @@ timeline. Both are existing Phase 6 deferrals (see design_weather_context.md def
 and the mobile phase). How the reply should USE the chosen song is governed by
 design_music_reply_style.md.
 
+## FILED for Phase 6+ — all-day taste profiling + experimental discovery playlists (July 6, 2026)
+
+With explicit consent, observe listening OUTSIDE runs via Spotify recently-played polling
+(still available), bucketed by time-of-day + weekday/weekend — do NOT infer activities
+(commute/studying): creepy, low value. Agent builds a taste profile from song *combinations*,
+not just tracks — LLM strength, on-identity. Profile powers:
+- (a) smarter pre-run brain (morning-you vs night-you)
+- (b) NEW-song discovery via open similarity sources (Last.fm track/artist getSimilar,
+  ListenBrainz — alive but thinner quality than Spotify; the deep profile is what makes them
+  usable — the two halves need each other; this partially unlocks the PARKED discovery idea above)
+- (c) the surprise moment: "I built you a playlist for this morning's run — want to try it?" —
+  opt-in, agent voice.
+Skip data returns in Phase 6 as first-party data (RunState controls the queue, sees its own
+skips — no API needed). Feedback loop: correlate experimental playlists with post-run energy;
+never frame a down run as the playlist's fault (stay-positive rule). PRIVACY: all-day listening
+is a major consent expansion beyond run music — separate explicit opt-in tier + DATA_PRIVACY.md
+update when built. Sequencing: layers ON TOP of the pre-run playlist brain; do not start before
+it exists.
+APIs: https://www.last.fm/api/show/track.getSimilar · https://listenbrainz.readthedocs.io/en/latest/users/api-compat.html
+
 **How to apply:** steer music work toward the pre-run playlist brain first; live adaptation
 only at Phase 6; if discovery or cross-user ideas resurface, point back here. Reply craft
 rules live in design_music_reply_style.md.
