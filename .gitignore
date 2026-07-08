@@ -49,5 +49,8 @@ RunState Promo2.html
 .codex/
 AGENTS.md
 
+### Personal research notes (local only) ###
+docs/research-notes.md
+
 ### Local-only design assets ###
 docs/claude-memory/moodboard/

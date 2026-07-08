@@ -63,6 +63,34 @@ finishing step.
 - Collapsible block → frosted sphere docking: personalization (permanent layout) vs focus mode
   (temporary)? Worth pursuing either way; discoverability needs an affordance.
 
+**Community clarification (July 6, 2026) — refines §2's social-comparison line:** the ban
+is on direct social-network mechanics (profiles, followers, feeds-as-graph, head-to-head),
+NOT on community presence. Anonymous, aggregate culture content — community shoe-mileage
+norms, playlists other runners ran well to — is welcome and on-identity: "culture-community,
+not network-community." Full detail in user_goals.md.
+
+**Cold-start principle (July 6, 2026):** RunState's best features (Run Style, taste-aware
+playlists, shoe analytics, comparisons) only turn on after user data accumulates — but
+day one must still feel intelligent for an app whose identity is "the app that knows you"
+(retention is decided in that window). Until personal data matures, offer REAL substitute
+information: published reference knowledge (shoe retirement norms, RPE science,
+weather-pace effects), honest progress framing ("3 runs in — your Run Style starts
+revealing around run 11"), previews of what's coming. HARD RULE: never fabricate personal
+insight — the agent must not pretend to know the runner before it does; honesty about
+newness is on-brand and protects the reply card's credibility. (Same move as the shoe
+screen's published-mileage fallback.)
+
+**Culture details as designed moments (July 6, 2026):** culture details get real visual
+presence — designed screens, not buried settings-text. First two elevated screens:
+- **Shoes** — the runner's rotation shown visually: per-pair mileage, PRs carried, a
+  retirement arc as a pair approaches end-of-life (published 300–500 mi reference data per
+  shoe category — no user base needed).
+- **Music** — "your best-run soundtracks," built from the runner's own run/music/energy history.
+Anti-sprawl guard (user's own restraint rule): elevate these two FIRST and make them
+unforgettable — do not systematize "every detail gets a screen." Community versions (crowd
+shoe stats, browsable community playlists) are filed in parked_music_recommendation.md,
+Phase 7.
+
 ---
 
 ## 1. Positioning

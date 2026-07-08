@@ -44,4 +44,14 @@ No new large outside-of-scope ideas. The core is:
 log a run → track how you felt → learn something meaningful from it.
 Everything else is a layer on top of that core.
 
+**Community — clarified July 6, 2026 ("culture-community YES, network-community NO"):**
+RunState is not a community-purpose app, but running culture includes community, and the
+user is NOT restricting features that reflect it. The only hard line: direct social-media
+mechanics — profiles with followers, following pages, feeds-as-social-graph, DMs,
+head-to-head comparison. Welcome: indirect/ambient community — anonymous, AGGREGATE culture
+content (e.g., the mileage the community typically retires a shoe at; playlists other
+runners ran well to, no identities attached). Nobody is ranked, nobody is watched.
+Sequencing unchanged: any community content still requires the multi-user platform
+(Phase 7 horizon, see parked_music_recommendation.md); single-user versions come first.
+
 **Why:** User acknowledged tendency to expand scope. Agreed to stay disciplined. This boundary protects the learning experience and keeps the project finishable.

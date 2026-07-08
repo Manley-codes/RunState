@@ -62,6 +62,14 @@ collaborative filtering with a performance twist. Parked, not rejected:
 The single-user Phase 5 data model (songs↔runs↔energy) is exactly what collaborative
 filtering would consume later, so building N=1 first keeps the door open at no cost.
 
+**Extended July 6, 2026 — reclassified ON-VISION, waiting only on the platform:** per the
+culture-community clarification in user_goals.md, these join the same Phase 7 pile as
+anonymous/aggregate culture content (no profiles, no ranking):
+- Community shoe stats — real retirement mileage across RunState runners per shoe model
+- Browsable community playlists with run context ("what other runners ran well to")
+Single-user versions ship first (see creative_direction_ui.md §0 "Culture details as
+designed moments"); these are the community layers on top.
+
 ## FILED for Phase 6 — reflective-song selection from full run listening history (July 6, 2026)
 
 Future versions: the agent looks across ALL songs played during a run and picks the
