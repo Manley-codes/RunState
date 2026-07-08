@@ -12,6 +12,7 @@ As of June 25, 2026, the app is a working Java console app named **RunState**.
 - Phase 2: MySQL persistence — runs save and load between sessions (`RunStorage.java`, `runstate` DB schema)
 - Phase 3: Your Run Style — pattern detection (`detectRunStyle()` in Runner.java, wired into RunConsole.logRun())
 - Phase 4: AI agent — `RunAgent.java` replaces `buildRunResponse()` with Anthropic API call (claude-haiku-4-5-20251001). Fallback to hardcoded logic on any failure. Gson added for JSON parsing. `Run.java` has `getRunner()` getter added.
+- Phase 5 (Steps 1–2): AI context expansion — music context (manual input) + weather (Open-Meteo, `WeatherData` value object, persisted at log time). Built June 26; weather cleanup + TX→Texas fix shipped July 6–7, 2026.
 
 **Rename completed June 22, 2026:**
 - Package renamed from `com.runclubapp` to `com.runstate` — all 7 source files updated
@@ -27,8 +28,10 @@ As of June 25, 2026, the app is a working Java console app named **RunState**.
 - Named styles (Morning Charger etc.) deferred to mobile phase — no time-of-day data yet
 
 **Next steps (in order):**
-1. Phase 5: AI agent context expansion — music first, then weather (locked in June 25, 2026)
-2. Mobile UI — futuristic/warm transition concept, GPS tracking
+1. Phase 5 — DONE (music + weather shipped June 26–July 7, 2026)
+2. Phase 6: lyric-aware music responses (Genius/Musixmatch) — scoped in AI_AGENT.md + design_music_reply_style.md
+3. Phase 5.5 (parked, not blocking): comparison-logic fix — see design_comparison_logic_fix.md
+4. Mobile UI — futuristic/warm transition concept, GPS tracking
 
 **Standing milestone — privacy / security / legal pass (added July 6, 2026):**
 Before RunState is released, shared publicly, or gains multi-user/all-day-listening features,
@@ -57,25 +60,24 @@ referencing that same song every run. Need variety logic — e.g. vary which tra
 or weight toward less-recently-mentioned songs — so references stay fresh. Belongs in Phase 5 advanced /
 Phase 6 lyric-aware work, where the agent gains cross-run awareness. Not needed for manual Step 1.
 
-Step 2 — Weather (automatic via Open-Meteo): **BUILT June 26, 2026 — but with deviations from spec.**
-Two bugs (weather never persisted to DB; archive API instead of forecast, so fresh runs get nothing)
-plus design drift (no WeatherService, no apparentTemperature, primitive double, setters, no timeout).
-**See design_weather_cleanup.md for the reconciliation plan, locked July 6, 2026.**
-Original spec: design_weather_context.md.
-Summary of locked decisions (full detail in design_weather_context.md):
-- Fetch ONCE at log time and STORE on the Run (not live in RunAgent).
-- New isolated `WeatherService` class owns geocoding + the Open-Meteo call (SRP, like RunAgent).
-- Three fields: `temperature`, `apparentTemperature` ("feels-like" — folds in humidity), `weatherCondition`.
-- Forecast API for recent runs (today + ~92 days); archive endpoint deferred.
-- HttpClient timeout required — a slow API must never hang the console.
-- Failure never blocks logging — all three fields stay null, agent omits the weather line.
+Step 2 — Weather (automatic via Open-Meteo): **✅ SHIPPED. Cleanup completed July 6–7, 2026.**
+Built June 26, 2026, then reconciled to full spec in the Step 2.5 cleanup (commits 8fa05c9 + 9ad3376),
+with the TX→Texas geocoding fix following July 7. `design_weather_cleanup.md` is now the historical
+build record; original spec is `design_weather_context.md`. What shipped:
+- Fetch happens ONCE at log time and is STORED on the Run (persistence bug fixed — weather was lost before).
+- Isolated `WeatherService` class owns geocoding + the Open-Meteo call (SRP, like RunAgent).
+- `WeatherData` value object holds three fields: `temperature`, `apparentTemperature` ("feels-like"),
+  `weatherCondition` — nullable `Double`, so 0.0 is a real temperature and null means "not recorded."
+- Forecast API (today + ~92 days) instead of the archive API, so fresh runs get data.
+- HttpClient connect + request timeout (5s) so a slow API never hangs the console.
+- Failure never blocks logging — WeatherData stays all-null, the agent shows "Not available."
+- State-based geocoding disambiguation now works: WeatherService canonicalizes abbreviations
+  (`STATE_NAMES` map + `normalizeState`) so "TX" matches Open-Meteo's "Texas".
 - Privacy doc written: `docs/DATA_PRIVACY.md`. AI_AGENT.md data contract updated.
 
-**One open decision remaining before writing any code:**
-Constructor design — after music, Run has 13 params. Adding 3 weather fields makes 16.
-  - Option A: append 3 raw params (simple, consistent)
-  - Option B (recommended): group into a `WeatherData` value object — one param, cleaner, good OOP lesson
-  Resolve this FIRST in the next session. Present to user and get their call before touching any file.
+**Constructor design decision — RESOLVED & BUILT (July 6, 2026):**
+Chose Option B — a `WeatherData` value object groups temperature/apparentTemperature/weatherCondition
+into one constructor param (composition) instead of appending 3 raw params. Shipped as `WeatherData.java`.
 
 **Visual prototype:**
 RunState_intro.html and RunState Promo.html exist in project root — both gitignored (local only).
@@ -84,15 +86,17 @@ Colors, branding, and button hierarchy are strong. Runner animation unfinished.
 
 ---
 
-## Handoff — next session entry point (July 6, 2026)
+## Handoff — next session entry point (July 7, 2026)
 
-**Where we are:** Phase 5 Step 1 (music) is built and committed. Phase 5 Step 2 (weather) is BUILT
-but deviates from spec — see design_weather_cleanup.md. Privacy doc is done. No open decisions remain.
+**Where we are:** Phase 5 is functionally complete. Step 1 (music) and Step 2 (weather) are both
+built, committed, and pushed. The weather cleanup (Step 2.5) and the TX→Texas geocoding fix shipped
+July 6–7, 2026 and are verified end-to-end. Privacy doc is done. No open weather work remains.
+Manley is taking a break here to review the whole app before building deeper.
 
 **First thing to do in the next session:**
-WeatherData value object decision RESOLVED (July 6, 2026 — value object chosen). Next backend
-session: follow `design_weather_cleanup.md` — verify git status and DB columns FIRST, then build
-one file at a time with Manley's approval at each step.
+Nothing weather-related is pending. The next backend thread is Phase 6 — lyric-aware music responses
+(Genius/Musixmatch), scoped in `AI_AGENT.md` and `design_music_reply_style.md`. Also parked, not
+blocking: the Phase 5.5 comparison-logic fix (`design_comparison_logic_fix.md`).
 
 **July 6, 2026 — UI phase paused; back to backend.**
 UI/creative-direction exploration is paused (see creative_direction_ui.md v0.2 — §0 has the
@@ -103,17 +107,18 @@ NOTE FOR LATER (not a current focus): the UI "State Scan" concept implies FOUR p
 states, but the backend energy system is THREE levels. Open question — resolve when UI work
 resumes, before Phase 6. Do not change the backend enum for it now.
 
-**Build order:** superseded — follow the build order in `design_weather_cleanup.md` (8 steps,
-WeatherData.java first, commit points marked). The list that used to live here described the
-original from-scratch build and no longer matches the code.
-Note: Runner.getCity()/getState() already exist (added June 26) — no Runner.java step needed.
-
-**Key files to read before touching any code:** the 5 source files listed in
-`design_weather_cleanup.md`, plus that doc itself and `design_weather_context.md` (original spec —
-WMO mapping and API URLs still live there). Facts that changed since the old list was written:
-Run's constructor is now 15 params (music + temperature + weatherCondition), RunStorage INSERT
-has 13 columns, and RunAgent already has a Weather line + ~90 lines of weather fetch code that
-the cleanup will remove.
+**Current weather architecture (post-cleanup, for reference):**
+- `WeatherData.java` — immutable value object (nullable `Double` temperature/apparentTemperature,
+  String weatherCondition; final fields, no setters).
+- `WeatherService.java` — `static WeatherData fetch(city, state, date)`; owns geocoding (forecast API),
+  WMO code decoding, timeouts, and TX→Texas state canonicalization (`STATE_NAMES` + `normalizeState`).
+- `Run.java` — one `WeatherData` constructor param (last position); null-safe delegating getters.
+- `RunConsole.logRun()` — fetches weather BEFORE saveRun so it persists.
+- `RunStorage.java` — INSERT has 14 columns incl. `apparent_temperature` (setObject for nullable
+  Doubles); loadRuns reads the three weather columns via `rs.getObject` into a `WeatherData`.
+- `RunAgent.java` — no longer fetches weather; `describeWeather(run)` formats the stored values.
+`design_weather_context.md` still holds the original spec (WMO mapping, API URLs) for reference.
+Note: `Runner.getCity()/getState()` exist (added June 26).
 
 **Collab rules to follow:**
 - One decision or one file at a time — never dump a full plan in one response

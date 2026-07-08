@@ -137,11 +137,13 @@ The agent becomes meaningfully more personal when it knows:
 - Future: route-specific patterns ("You always go longer at Memorial Park")
 - Implementation: already partially available via routeName
 
-### Data model changes needed for Phase 5
-- `Run.java`: add `weatherCondition` (String or enum), `temperature` (double), `musicContext` (String)
-- `RunConsole.java`: add optional log prompts for weather and music
-- `RunStorage.java`: add new columns to the runs table
-- `AI_AGENT.md`: update the data contract section above
+### Data model changes for Phase 5 — ✅ BUILT (June 26 – July 7, 2026)
+- `Run.java`: `musicContext` (String) + a `WeatherData` value object param (temperature,
+  apparentTemperature, weatherCondition — nullable `Double`, not primitive `double`)
+- `RunConsole.java`: optional music log prompt; weather fetched automatically at log time
+- `RunStorage.java`: `music_context`, `temperature`, `apparent_temperature`, `weather_condition` columns
+- `AI_AGENT.md`: data contract section above updated (Music + Weather lines)
+- `WeatherService.java`: new class owning geocoding + the Open-Meteo forecast call
 
 ---
 
