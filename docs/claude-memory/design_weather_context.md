@@ -5,7 +5,12 @@ metadata:
   type: project
 ---
 
-# Phase 5, Step 2 — Weather context (DESIGNED, NOT YET BUILT)
+# Phase 5, Step 2 — Weather context (✅ SHIPPED July 6–7, 2026 — kept as reference spec)
+
+> As-built reality: see `design_weather_cleanup.md` (STATUS: BUILT & VERIFIED) and the
+> "Current weather architecture" section of `project_current_state.md`. This file remains
+> useful for the WMO code mapping, API URLs, and original decision reasoning.
+> The RPE note at the bottom has since become a real design: `design_effort_cost.md`.
 
 Goal: give the AI agent (`RunAgent`) weather context for each run so post-run responses can
 reference real conditions ("five miles in that humidity is a different kind of effort").

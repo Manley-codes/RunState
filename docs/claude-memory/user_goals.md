@@ -53,6 +53,9 @@ creative_direction_ui §1) — all three agree, so this is final:
   respecting that is part of the culture.
 Positioning line: "RunState is built from running culture outward. It helps runners understand
 the state they brought into a run, what the run demanded, and what they carried out of it."
+North-star sentence (Manley-endorsed, July 7, 2026): **"A runner alone at 5am with no followers
+and no feed still feels like they belong to something."** Culture lives in the product's voice
+and values, not in a crowd — personal in value, cultural in voice, communal only ever in texture.
 
 **Runner-native test (adopted July 6, 2026) — apply to every future differentiating feature:**
 "Would this still make sense if the user did not run?" If yes, be suspicious — it may be

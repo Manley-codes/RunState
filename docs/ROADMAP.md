@@ -2,13 +2,13 @@
 
 This roadmap keeps the project focused while leaving room for future ideas.
 
-RunState is the current working name, and MoodPace is a strong alternate name. See `docs/BRANDING.md`.
+RunState is the current working name, and MoodPace is a strong alternate name. See `docs/archive/BRANDING.md`.
 
-For the ideas that make RunState feel more distinct, see `docs/UNIQUE_IDEAS.md`.
+For the ideas that make RunState feel more distinct, see `docs/archive/UNIQUE_IDEAS.md`.
 
 `[Unique]` marks future directions that help RunState stand out from a basic run log.
 
-For the current pre-run and post-run energy design discussion, see `docs/ENERGY_STATE_DESIGN.md`.
+For the current pre-run and post-run energy design discussion, see `docs/archive/ENERGY_STATE_DESIGN.md`.
 
 ## Phase Status
 
@@ -18,14 +18,13 @@ For the current pre-run and post-run energy design discussion, see `docs/ENERGY_
 | 2 | MySQL persistence | Done |
 | 3 | Your Run Style detection | Done |
 | 4 | AI agent — replace buildRunResponse() with Anthropic API | Done |
-| 5 | AI agent context expansion — music first, then weather (automatic via Open-Meteo) | Next |
+| 5 | AI agent context expansion — music first, then weather (automatic via Open-Meteo) | Done (music June 26; weather + cleanup July 6–7, 2026) |
 | 6 | Mobile UI and GPS | Later |
 
-> **Phase 5 is next — music first, then weather.**
-> Music is the signature feature. Go deep on one thing rather than shipping many features halfway.
-> Weather (automatic via Open-Meteo, no API key needed) comes second.
-> Both feed the AI agent for more personal, specific post-run responses.
-> See `docs/AI_AGENT.md` for the full plan and `docs/claude-memory/project_current_state.md` for the build steps.
+> **Phase 5 has shipped.** Music and weather context are built, committed, and verified.
+> ⚠ This file is largely a June 2026 snapshot — for live status, next-task candidates, and
+> current decisions, `docs/claude-memory/MEMORY.md` and `project_current_state.md` are the
+> source of truth.
 
 ## Present Focus
 

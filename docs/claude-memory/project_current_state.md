@@ -107,12 +107,19 @@ July 6–7, 2026 and are verified end-to-end. Privacy doc is done. No open weath
 Manley is taking a break here to review the whole app before building deeper.
 
 **First thing to do in the next session:**
-Nothing weather-related is pending. Two candidate backend threads — Manley picks:
-(a) Effort input + comparison fix (`design_effort_cost.md` + `design_comparison_logic_fix.md`) —
-    core-strengthening, all-local, no new APIs; effort data is what the comparison fix needs.
-(b) Phase 6 lyric-aware music responses (Genius/Musixmatch), scoped in `AI_AGENT.md` and
-    `design_music_reply_style.md` — NOTE: gated by the lyrics-licensing legal flag (Musixmatch
-    is paid; Genius scraping violates ToS — see the legal milestone above before building).
+Nothing weather-related is pending. Backend queue (order clarified July 7, 2026 after a
+mislabel — reply-style is prompt-only and is NOT the lyric-API feature):
+1. Music reply-style craft rules (`design_music_reply_style.md`) — the decided next task
+   from the July 6 backend session. Prompt-only (SYSTEM_PROMPT + buildUserMessage), no
+   schema changes, no new APIs. Smallest step, immediately improves the signature moment.
+2. Effort input + comparison fix (`design_effort_cost.md` + `design_comparison_logic_fix.md`) —
+   core-strengthening, all-local; effort data is what the comparison fix needs.
+3. LATER, Phase 6: lyric-aware replies via a lyrics API — gated by the lyrics-licensing
+   legal flag (Musixmatch paid; Genius scraping violates ToS). Lyric references follow the
+   spectrum in design_music_reply_style.md rule 5 (creative theme-fit default; selective
+   exact/near-exact quotes allowed; distinctive-line quoting = deferred legal-pass item,
+   NOT banned — Manley decides).
+Order of 1 vs 2 is Manley's call; both are ready.
 
 **July 6, 2026 — UI phase paused; back to backend.**
 UI/creative-direction exploration is paused (see creative_direction_ui.md v0.2 — §0 has the

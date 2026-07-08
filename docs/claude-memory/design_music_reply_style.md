@@ -42,8 +42,15 @@ The STYLE rules below are fully portable to today's manual feature.
    The anti-pattern inverts this (style first, substance never).
 4. **Clarity over cleverness.** The connection must land for someone who only
    half-knows the song. No deep-cut logic puzzles.
-5. **Themes/titles/persona only — never quote lyric lines.** Reproducing lyrics is
-   copyright territory the app stays out of. Brief title/artist mentions are fine.
+5. **Reference spectrum (corrected July 7, 2026 — Manley's ruling).** Default: creative,
+   theme-fitting references a listener instantly recognizes as the song (the north star
+   above) — but recognition beats wordplay; if a reference drifts too far from the song,
+   it loses the idea entirely, and special wordplay should never be forced when the run
+   details don't earn it. Exact or NEAR-exact lines ARE allowed selectively — strongest
+   when the line is proverb-grade / common speech ("what doesn't kill you makes you
+   stronger") or when paraphrase would break recognition. LEGAL NOTE (deferred — Manley
+   decides later, see the legal milestone): verbatim quoting of DISTINCTIVE signature
+   lines carries copyright risk; proverb-grade phrases don't. This is a flag, not a ban.
 6. **Artist reference can beat song reference.** When persona fits better than the
    track (the Larry June case), reference the artist, not the song.
 

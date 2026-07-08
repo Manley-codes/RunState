@@ -7,6 +7,13 @@ metadata:
 
 > UPDATE July 7, 2026: the effort measure this fix has been waiting for now has a design —
 > see design_effort_cost.md ("How did that run land?"). Build them together or effort-first.
+>
+> HARVESTED July 7, 2026 (from archived ENERGY_STATE_DESIGN.md): **Run Type**
+> (Easy / Steady / Speed / Long Run / Race — optional, selected pre-run from a secondary
+> area, never asked after completion, never auto-inferred) is the third leg of fair
+> comparison alongside effort data. Comparing a sprint day against a long-run day is the
+> exact blended-average flaw this fix exists for. Consider capturing run type with or
+> after the effort input.
 
 ## What's wrong
 

@@ -1,5 +1,9 @@
 # App Naming Notes
 
+> ⚠ ARCHIVED July 7, 2026 — historical June doc. Naming is settled (RunState); MoodPace is
+> dead. Identity now lives in docs/claude-memory/user_goals.md (locked positioning).
+> Nothing harvested. Kept for history; safe to move to docs/archive/.
+
 RunState is the current working name for the app.
 
 MoodPace is a strong alternate name to keep under consideration.

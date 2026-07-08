@@ -119,13 +119,20 @@ The agent becomes meaningfully more personal when it knows:
 - Artist, song, or playlist the runner listened to
 - Base level: agent references the artist or song naturally when it fits the run
   - Example: "Must have been that Kanye you were listening to."
-- Advanced level: agent pulls lyrics via a lyrics API (Genius, Musixmatch) and finds a line
-  with genuine emotional resonance to the run, then works it in
-  - Example: "What don't kill us only makes us stronger — Kanye wasn't lying."
-- The rule: only use a lyric when it actually connects to the run — the effort, the energy shift,
-  the distance, the mood. A forced lyric reference is worse than none. When the match is real,
-  it becomes the kind of response the runner screenshots.
-- This is a signature feature candidate — see `docs/UNIQUE_IDEAS.md` for the full music vision
+- Advanced level (lyric-aware): the agent understands what the song is about and references
+  it on a spectrum — creative theme-fit by default (instantly recognizable as the song),
+  exact or near-exact lines selectively when paraphrase would break recognition or the line
+  is proverb-grade ("what doesn't kill you makes you stronger").
+  - Governed by rule 5 in `docs/claude-memory/design_music_reply_style.md` (the reference
+    spectrum, corrected July 7, 2026).
+  - Legal is deferred, not ignored: distinctive-line quoting is a flagged item in the legal
+    milestone; lyrics-API access is licensing-gated (Musixmatch paid; Genius scraping
+    violates ToS) — see `docs/claude-memory/project_current_state.md`.
+- The rule: only reference a song when it actually connects to the run — the effort, the
+  energy shift, the distance, the mood. A forced reference is worse than none. When the
+  match is real, it becomes the kind of response the runner screenshots.
+- This is a signature feature candidate — the full music vision lives in
+  `docs/claude-memory/parked_music_recommendation.md` (UNIQUE_IDEAS.md is archived)
 - Implementation path:
   1. Phase 5: add optional music field to Run (artist + song text input during log flow)
   2. Phase 5: agent uses artist/song name in response when available

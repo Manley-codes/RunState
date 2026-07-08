@@ -1,5 +1,11 @@
 # RunState Unique Ideas
 
+> ⚠ ARCHIVED July 7, 2026 — June doc, superseded by docs/claude-memory/. Harvested:
+> Top Run Highlights, Future Run Suggestions (with scope-watch tension), Support Messages
+> (text kept, voice scrapped), Body Feedback (low priority) → parked_feature_ideas.md.
+> Music vision superseded by parked_music_recommendation.md + design_music_reply_style.md.
+> Kept for history; safe to move to docs/archive/.
+
 This file gathers the ideas that could make RunState feel different from a basic run tracker.
 
 These are not all current build targets. Some are active or near-future ideas, while others are parked for later so they are not forgotten.

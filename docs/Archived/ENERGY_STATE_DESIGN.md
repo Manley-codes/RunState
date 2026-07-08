@@ -1,5 +1,10 @@
 # Pre-Run And Post-Run Energy Design
 
+> ⚠ ARCHIVED July 7, 2026 — June doc. Foundation shipped; the interpretation problems here
+> are now addressed by design_comparison_logic_fix.md + design_effort_cost.md. Harvested:
+> canonical energy-label table + "energy ≠ run quality" principle (→ design_run_response_system.md),
+> Run Type (→ design_comparison_logic_fix.md). Kept for history; safe to move to docs/archive/.
+
 This document preserves the completed foundation, agreed direction, open problems, and implementation concerns for the app's pre-run and post-run energy feature.
 
 The capture-and-display foundation is implemented. Interpretation and analysis should not begin until the remaining design questions are reviewed and approved.

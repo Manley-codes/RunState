@@ -1,5 +1,9 @@
 # RunState Ideas
 
+> ⚠ ARCHIVED July 7, 2026 — June doc, superseded by docs/claude-memory/. Harvested:
+> solo/partner/group context + trail gallery (→ parked_feature_ideas.md). Everything else
+> is built or captured deeper in the memory docs. Kept for history; safe to move to docs/archive/.
+
 This file is for the strongest ideas worth remembering. The goal is to keep RunState simple right now while saving the ideas that could make the app stand out later.
 
 RunState is the selected working name for the app. See `docs/BRANDING.md` for the naming notes.

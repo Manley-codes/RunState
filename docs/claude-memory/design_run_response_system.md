@@ -7,6 +7,21 @@ metadata:
 
 Every completed run gets a contextual response. No exceptions.
 
+**Canonical energy labels (harvested July 7, 2026 from archived ENERGY_STATE_DESIGN.md):**
+
+| Internal level | Pre-run label | Post-run label |
+|---|---|---|
+| Low | I'm Here | Spent |
+| Moderate | Ready-ish | Feeling Good |
+| High | Let's Go! | Powered Up |
+
+One shared internal scale, different labels per moment; skipped answers stored null and
+omitted from output. Labels are working wording, not final. Founding principle: **energy is
+an observation, never a run-quality grade** — Spent after a marathon is an achievement, and
+"energy decreased → bad run" must never appear (this principle later grew into the
+energy-vs-effort split in design_effort_cost.md). NOTE: the UI State Scan concept proposes
+different pre-run labels and FOUR states — open question, see creative_direction_ui §0.
+
 **Core principles:**
 - Never imply a run was bad — the runner showed up, that counts
 - PRs are still celebrated separately from Your Run Style
