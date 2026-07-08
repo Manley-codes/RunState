@@ -5,6 +5,9 @@ metadata:
   type: project
 ---
 
+> UPDATE July 7, 2026: the effort measure this fix has been waiting for now has a design —
+> see design_effort_cost.md ("How did that run land?"). Build them together or effort-first.
+
 ## What's wrong
 
 The current comparison passes a pre-labeled fact to the AI and uses it mechanically in fallback logic:

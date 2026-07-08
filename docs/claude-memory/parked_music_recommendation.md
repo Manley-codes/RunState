@@ -35,6 +35,58 @@ evidence-based, see RPE notes in [[research-app-landscape]].
 **UX rule:** never interrupt the current song — queue the NEXT track instead. A wrong
 cut mid-run is worse than no adaptation.
 
+## LOCKED design rules — pre-run playlist brain (July 6, 2026, from Codex brainstorm)
+
+- **Risk-managed placement:** new/unfamiliar songs go MID-RUN only — trusted, proven tracks
+  open the run and close it. Never make the first song or the final-push song experimental.
+  Root insight: "new music before a run feels risky" — a bad song at mile 3 can kill the
+  rhythm; the app reduces risk by controlling WHERE new songs appear. Principle name:
+  **music confidence**.
+- **Agent music personality — picky gatekeeper:** RunState doesn't recommend music, it
+  *clears music for the run*. It filters hard; restraint is the premium feel.
+- **Internal gates, not user-facing bins:** selection categories (own-history-proven,
+  same-DNA new, deep cuts, last-mile-intensity, low-risk-new) are agent-internal logic.
+  Do NOT expose them as named user-facing playlist categories — six labeled bins is a
+  dashboard; the brand is restraint.
+
+## CANDIDATE — Deep Run Crate / deep playlist mode (July 6, 2026; working name)
+
+User-invoked deeper playlist-generation mode, built ON TOP of the pre-run brain (comes after
+the basic playlist agent exists, not before):
+- **Two tiers:** Quick Run Mix = fast, low-friction, mostly trusted. Deep Run Crate = slower,
+  intentional pre-run analysis for meaningful runs (long runs, comeback runs, race prep,
+  low-energy starts, early mornings, music-central days).
+- **User-chosen timing:** generate an hour before or the NIGHT BEFORE — anticipation is part
+  of the product. (Realistic, scoped version of the original "agent preps a playlist ahead
+  of your run" instinct.)
+- **Earned, not default (cold-start principle applied):** the mode only appears once adequate
+  run+music data exists. Unlocking it is a milestone moment, like Run Style at run 11.
+  Before unlock: honest progress framing, never faked depth.
+- **Inputs:** everything the pre-run brain already uses (run/energy/music history, energy
+  flips, trusted artists, skips [Phase 6], time/weather/route/expected length when available)
+  — analyzed harder, plus same-running-DNA new songs *within the documented data-source
+  limits* (Last.fm/ListenBrainz similarity is thin; "running DNA beyond genre" is aspiration,
+  not yet a data source). Lyric-theme signals only later, under the lyric-trigger rules.
+- **User-facing output = summary, not bins** (consistent with internal-gates rule):
+  "Cleared for today's run: 42 minutes. Mostly trusted. 4 new tracks. Final push protected."
+- All LOCKED rules above apply: music confidence over discovery, risk-managed placement,
+  overclaim guard (pattern language, never "this will make you faster").
+- **Naming note:** "crate" collides with the possible Phase 7 community "running crates"
+  concept — if both ship, one needs a different name. Working name only.
+
+## FILED for Phase 6 — lyric-trigger "push vocabulary" (July 6, 2026)
+
+Certain words/lyrical themes trigger the runner to push harder. The agent learns a personal
+"push vocabulary" (defiance, winning, proving-people-wrong, calm focus...) from which lyric
+themes recur around strong efforts. Highly original — no app maps lyric language to effort.
+- Same Phase 6 dependency as reflective-song selection above: timestamped in-run music +
+  splits. File and build them together.
+- **Overclaim guard:** pattern language only — "this kind of lyric keeps showing up around
+  your strongest finishes" — NEVER causal claims ("this lyric made you faster").
+- **LEGAL FLAG:** lyrics text is licensed content (Musixmatch = paid API; scraping Genius
+  violates ToS). Gates this feature; see the privacy/security/legal milestone in
+  project_current_state.md.
+
 ## Spotify API facts (verified July 2026)
 
 - DEAD for new apps: Recommendations, Audio Features, Related Artists (deprecated

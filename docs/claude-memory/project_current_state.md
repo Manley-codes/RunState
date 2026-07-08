@@ -42,6 +42,19 @@ legal basics (third-party API terms of service — Anthropic, Open-Meteo, Spotif
 ListenBrainz; health-adjacent data handling). Grows in weight with each phase — mobile + GPS
 location data raises the bar again. Not a current blocker; IS a release blocker.
 
+Feature map (July 6, 2026) — which features strongly trigger which concern:
+- PRIVACY: all-day listening profiling (heaviest — needs its own opt-in tier); GPS routes +
+  live location (Phase 6); run/energy data → Anthropic API (live now, covered in
+  DATA_PRIVACY.md); city/state → Open-Meteo (live now); cross-user aggregate content
+  (Phase 7); run photos (share card/gallery).
+- SECURITY: Anthropic API key out of source code; MySQL dedicated user, no root (existing
+  rule); Spotify/Last.fm OAuth token storage; server + user accounts if Phase 7 happens.
+- LEGAL: lyrics text licensing (Musixmatch paid, Genius scraping = ToS violation) — gates
+  the lyric-trigger and lyric-aware reply features; third-party API terms (Spotify's
+  data-use rules especially; Open-Meteo attribution); health-adjacent data (HR/effort —
+  weight jumps at multi-user); user-generated content moderation if community playlists
+  ship (Phase 7).
+
 **Phase 5 plan (locked in, ready to build):**
 Both features follow the same four-file pattern:
   Run.java -> add field | RunStorage.java -> add DB column | RunConsole.java -> add optional prompt | RunAgent.java -> add to user message
@@ -94,9 +107,12 @@ July 6–7, 2026 and are verified end-to-end. Privacy doc is done. No open weath
 Manley is taking a break here to review the whole app before building deeper.
 
 **First thing to do in the next session:**
-Nothing weather-related is pending. The next backend thread is Phase 6 — lyric-aware music responses
-(Genius/Musixmatch), scoped in `AI_AGENT.md` and `design_music_reply_style.md`. Also parked, not
-blocking: the Phase 5.5 comparison-logic fix (`design_comparison_logic_fix.md`).
+Nothing weather-related is pending. Two candidate backend threads — Manley picks:
+(a) Effort input + comparison fix (`design_effort_cost.md` + `design_comparison_logic_fix.md`) —
+    core-strengthening, all-local, no new APIs; effort data is what the comparison fix needs.
+(b) Phase 6 lyric-aware music responses (Genius/Musixmatch), scoped in `AI_AGENT.md` and
+    `design_music_reply_style.md` — NOTE: gated by the lyrics-licensing legal flag (Musixmatch
+    is paid; Genius scraping violates ToS — see the legal milestone above before building).
 
 **July 6, 2026 — UI phase paused; back to backend.**
 UI/creative-direction exploration is paused (see creative_direction_ui.md v0.2 — §0 has the

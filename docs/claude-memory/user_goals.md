@@ -34,10 +34,33 @@ Everything else is automatic: distance/pace/duration via GPS, weather via API, m
 Manual logging in the console app is development scaffolding only — not the final UX.
 The console app is a build-and-test tool, not the finished product.
 
-**Signature feature direction (locked in June 2026):**
-Music is the primary identity feature — go deep on one thing rather than shipping many features halfway.
+**Signature feature direction (locked in June 2026; refined July 6, 2026):**
+Music is the signature feature — go deep on one thing rather than shipping many features halfway.
 Weather included but secondary to music.
 Both feed the AI agent for more personal, specific post-run responses.
+Refinement (July 6): music is the signature EXPRESSION of the reflection core, not the core
+itself — music features must always serve state-aware reflection (see positioning below).
+
+**Product positioning — LOCKED July 6, 2026 (do not re-litigate; point identity questions here):**
+Third articulation of RunState's identity (after research_app_landscape's strategic read and
+creative_direction_ui §1) — all three agree, so this is final:
+- Foundation/world: RUN CULTURE — the world the app lives inside (rituals, objects like shoes,
+  language, values, environment, culture-community). Not vibes — built into how the app thinks.
+- Core intelligence / the job: STATE-AWARE REFLECTION — "RunState helps you understand what
+  your run meant, not just what you recorded."
+- Signature expression: MUSIC IDENTITY — the most memorable flavor inside that job.
+- Trust contract: PRIVACY-FIRST PERSONAL INSIGHT — routes, bodies, habits, taste are personal;
+  respecting that is part of the culture.
+Positioning line: "RunState is built from running culture outward. It helps runners understand
+the state they brought into a run, what the run demanded, and what they carried out of it."
+
+**Runner-native test (adopted July 6, 2026) — apply to every future differentiating feature:**
+"Would this still make sense if the user did not run?" If yes, be suspicious — it may be
+generic wellness/fitness/social. ("How do you feel today?" = generic; "How are we starting
+this run?" = runner-native. "Mood trend" = generic; "You keep turning rough starts into
+strong finishes" = runner-native.)
+CAVEAT: the test filters DIFFERENTIATING features, not fundamentals — pace/distance would
+make sense for a cyclist and are still mandatory. Suspicion, not automatic rejection.
 
 **Scope discipline (explicitly agreed):**
 No new large outside-of-scope ideas. The core is:
