@@ -5,7 +5,14 @@ metadata:
   type: project
 ---
 
-# Phase 5, Step 2.5 — Weather cleanup (PLANNED, NOT BUILT)
+# Phase 5, Step 2.5 — Weather cleanup (✅ SHIPPED July 6, 2026)
+
+**STATUS: BUILT & VERIFIED.** Implemented and tested end-to-end on July 6, 2026 —
+commits 8fa05c9 (WeatherData + WeatherService) and 9ad3376 (persist at log time,
+extract fetching out of RunAgent). A today-dated run persisted real temperature,
+apparent_temperature, and weather_condition and survived reload. The plan below is
+kept as the historical build record. Known follow-up: the TX→Texas state
+disambiguation gap (see below / memory) is still open.
 
 The weather feature was built June 26, 2026 (commits f283791, 18bac99, 6033913) but drifted
 from the locked design in design_weather_context.md. This doc is the reconciliation plan.

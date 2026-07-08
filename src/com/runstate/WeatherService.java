@@ -6,6 +6,7 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.time.LocalDate;
+import java.util.Map;
 import com.google.gson.JsonParser;
 
 /*
@@ -24,6 +25,38 @@ public class WeatherService {
     // The single "we got nothing" result. Returned on any failure so callers
     // never deal with nulls-of-nulls or exceptions — always a real WeatherData.
     private static final WeatherData UNAVAILABLE = new WeatherData(null, null, null);
+
+    // U.S. state abbreviations → full names. Runners store the abbreviation ("TX"),
+    // but Open-Meteo's admin1 field returns the full name ("Texas"). This table lets
+    // normalizeState() reconcile the two so state-based disambiguation actually matches.
+    private static final Map<String, String> STATE_NAMES = Map.ofEntries(
+            Map.entry("AL", "Alabama"), Map.entry("AK", "Alaska"),
+            Map.entry("AZ", "Arizona"), Map.entry("AR", "Arkansas"),
+            Map.entry("CA", "California"), Map.entry("CO", "Colorado"),
+            Map.entry("CT", "Connecticut"), Map.entry("DE", "Delaware"),
+            Map.entry("FL", "Florida"), Map.entry("GA", "Georgia"),
+            Map.entry("HI", "Hawaii"), Map.entry("ID", "Idaho"),
+            Map.entry("IL", "Illinois"), Map.entry("IN", "Indiana"),
+            Map.entry("IA", "Iowa"), Map.entry("KS", "Kansas"),
+            Map.entry("KY", "Kentucky"), Map.entry("LA", "Louisiana"),
+            Map.entry("ME", "Maine"), Map.entry("MD", "Maryland"),
+            Map.entry("MA", "Massachusetts"), Map.entry("MI", "Michigan"),
+            Map.entry("MN", "Minnesota"), Map.entry("MS", "Mississippi"),
+            Map.entry("MO", "Missouri"), Map.entry("MT", "Montana"),
+            Map.entry("NE", "Nebraska"), Map.entry("NV", "Nevada"),
+            Map.entry("NH", "New Hampshire"), Map.entry("NJ", "New Jersey"),
+            Map.entry("NM", "New Mexico"), Map.entry("NY", "New York"),
+            Map.entry("NC", "North Carolina"), Map.entry("ND", "North Dakota"),
+            Map.entry("OH", "Ohio"), Map.entry("OK", "Oklahoma"),
+            Map.entry("OR", "Oregon"), Map.entry("PA", "Pennsylvania"),
+            Map.entry("RI", "Rhode Island"), Map.entry("SC", "South Carolina"),
+            Map.entry("SD", "South Dakota"), Map.entry("TN", "Tennessee"),
+            Map.entry("TX", "Texas"), Map.entry("UT", "Utah"),
+            Map.entry("VT", "Vermont"), Map.entry("VA", "Virginia"),
+            Map.entry("WA", "Washington"), Map.entry("WV", "West Virginia"),
+            Map.entry("WI", "Wisconsin"), Map.entry("WY", "Wyoming"),
+            Map.entry("DC", "District of Columbia")
+    );
 
     // The one public method: given where and when, return that day's weather.
     // Weather is optional context, so ANY problem yields UNAVAILABLE, never a crash.
@@ -66,10 +99,13 @@ public class WeatherService {
         // Fall back to the first (best-ranked) result unless a state match beats it.
         var chosen = results.get(0).getAsJsonObject();
         if (state != null && !state.isBlank()) {
+            // Canonicalize the runner's state once, then canonicalize each candidate's
+            // admin1 the same way, so "TX" and "Texas" compare as equal.
+            String normalizedState = normalizeState(state);
             for (int i = 0; i < results.size(); i++) {
                 var candidate = results.get(i).getAsJsonObject();
                 if (candidate.has("admin1")
-                        && candidate.get("admin1").getAsString().equalsIgnoreCase(state)) {
+                        && normalizeState(candidate.get("admin1").getAsString()).equalsIgnoreCase(normalizedState)) {
                     chosen = candidate;
                     break;
                 }
@@ -79,6 +115,18 @@ public class WeatherService {
         double lat = chosen.get("latitude").getAsDouble();
         double lon = chosen.get("longitude").getAsDouble();
         return new double[]{lat, lon};
+    }
+
+    // Reduces a state value to a single canonical form so the two sides of the
+    // geocoding comparison can meet. A recognized 2-letter code expands to its full
+    // name; anything else (already a full name, or a non-U.S. region) is returned
+    // trimmed and otherwise unchanged. Never throws on null.
+    private static String normalizeState(String state) {
+        if (state == null) {
+            return null;
+        }
+        String key = state.trim().toUpperCase();
+        return STATE_NAMES.getOrDefault(key, state.trim());
     }
 
 
