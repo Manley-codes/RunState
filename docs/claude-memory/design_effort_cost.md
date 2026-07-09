@@ -46,11 +46,55 @@ improve before their numbers do), embodies never-shame-a-down-day, passes the ru
 test. RATION IT — celebrated sparingly or it becomes noise. Also a cold-start asset: early
 progress signals for brand-new users.
 
-## Build shape (the established four-file pattern + one enum)
+## V1 build handoff (reviewed July 7, 2026 — Codex draft + Cowork review, approved by Manley)
 
-`EffortLevel` enum (new) → `Run.java` field → `RunStorage` column (`effort_level`) →
-`RunConsole` optional prompt → `RunAgent` user-message line + system-prompt rule.
-OOP lesson: enum carrying an internal numeric range, kept invisible to the user.
+Collector only — capture, persist, display, feed the agent. Comparison repair is the NEXT
+handoff and depends on this data existing.
+
+**Verify first (before any code):** `git status` clean; `SHOW COLUMNS FROM runs;` to
+confirm actual energy column names before writing the migration.
+
+**Key changes**
+- New `EffortLevel` enum in `com.runstate` — constants `LOW_COST / MODERATE_COST /
+  HIGH_COST / MAX_COST`; display labels `Smooth / Working / Heavy / Empty tank` (working
+  copy, replaceable without touching stored values); internal RPE ranges as fields on each
+  constant (1–3 / 4–5 / 6–7 / 8–10), invisible to the user. OOP lesson: enum carrying data.
+- `Run.java`: nullable `EffortLevel effortLevel` — constructor param (LAST position) +
+  getter, **NO setter** (log-time data is immutable: musicContext precedent; weather
+  cleanup removed setters for exactly this reason).
+- MySQL (manual, before Java): `ALTER TABLE runs ADD COLUMN effort_level VARCHAR(30) NULL
+  AFTER <verified post-run energy column>;`
+- `RunStorage.java`: save/load enum name exactly like energy values; legacy NULL rows load safely.
+
+**Behavior**
+- `RunConsole.logRun()`: ask immediately after post-run energy, before `saveRun(run)`.
+  Do NOT disturb the rolling-average-snapshot-before-addRun order.
+  Prompt: "How did that run land?" / 0. Skip / 1. Smooth / 2. Working / 3. Heavy / 4. Empty tank
+- History: `Effort: Smooth` only when recorded (parallels the "Energy:" line).
+- `RunAgent.buildUserMessage()`: `Effort: Smooth (LOW_COST)` or `Not recorded` — matches
+  the energy `label (LEVEL)` convention.
+- SYSTEM_PROMPT: energy = how the runner finished, effort = what the run demanded;
+  reference effort only when it genuinely fits the run's story — never force it (same rule
+  as music/weather); pattern language only; high effort must never imply a bad run.
+- Fallback: ONE optional effort-aware line — LOW_COST "That landed controlled." /
+  MODERATE_COST none / HIGH_COST "That was heavier than the numbers alone show." /
+  MAX_COST "That took a lot out of you, and getting it done matters." Skip the line when
+  it duplicates the energy-based sentiment (e.g. Spent + MAX_COST).
+
+**Docs (part of done):** AI_AGENT.md data contract gains the Effort line; this file gets
+marked V1 BUILT with date; project_current_state.md status line + queue pointer moves to
+the comparison fix.
+
+**Out of scope:** no comparison rebuild, no detectRunStyle() changes, no Run Type, no
+final label wording, no "RPE" anywhere in the console UI.
+
+**Test plan:** each choice saves/reloads/shows; skip → NULL, loads, hidden in history;
+legacy NULL rows load; agent message correct both ways; fallback works with
+ANTHROPIC_API_KEY unset; loadRuns() passes the new last constructor param; app compiles,
+log flow intact.
+
+**Collab rules apply:** one file at a time, approval each step, explain the OOP (enum with
+fields, nullable reference, constructor evolution), flag commit points.
 
 ## Tie-ins
 
