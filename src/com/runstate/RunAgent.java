@@ -32,6 +32,10 @@ public class RunAgent {
                     + "— When the runner shares what they were listening to and it genuinely fits the run — the "
                     + "effort, the energy shift, the mood — you may reference the artist or song naturally. Only when "
                     + "it connects. A forced music reference is worse than none.\n"
+                    + "— Energy is how the runner finished; effort is what the run demanded of them. When effort "
+                    + "is recorded and it genuinely adds to the story — a hard effort behind modest numbers, an easy "
+                    + "effort on a strong run — you may name it in pattern language. Only when it fits; never force "
+                    + "it. High effort is never a bad run.\n"
                     + "— Never introduce yourself or explain what you are doing. Just respond.";
 
     // Entry point — tries the API first, falls back to local logic on any failure.
@@ -103,6 +107,7 @@ public class RunAgent {
                 + "Pace: " + formatPace(run.getPaceInMinutesPerMile()) + " min/mile\n"
                 + "Pre-run energy: " + energyLabel(run.getPreRunEnergy(), true) + "\n"
                 + "Post-run energy: " + energyLabel(run.getPostRunEnergy(), false) + "\n"
+                + "Effort: " + describeEffort(run) + "\n"
                 + "Personal records: " + prDescription(run) + "\n"
                 + "Route: " + (run.getRouteName() != null ? run.getRouteName() : "Not recorded") + "\n"
                 + "Music: " + (run.getMusicContext() != null ? run.getMusicContext() : "Not recorded") + "\n"
@@ -135,6 +140,14 @@ public class RunAgent {
         if (level == null) return "Not recorded";
         String label = preRun ? level.getPreRunLabel() : level.getPostRunLabel();
         return label + " (" + level.name() + ")";
+    }
+
+    // Formats the effort line for the prompt as "Smooth (LOW_COST)", or "Not recorded"
+    // when the runner skipped it — same label (LEVEL) convention as energyLabel above.
+    private static String describeEffort(Run run) {
+        EffortLevel effort = run.getEffortLevel();
+        if (effort == null) return "Not recorded";
+        return effort.getLabel() + " (" + effort.name() + ")";
     }
 
     private static String prDescription(Run run) {
@@ -223,12 +236,39 @@ public class RunAgent {
             }
         }
 
+        // One optional effort-aware line, added to whichever ending we return.
+        String effortLine = effortFallbackLine(run);
+
         if (pre == EnergyLevel.LOW && post == EnergyLevel.HIGH) {
             return mainMessage + performanceNote + "\nSee what getting active can do. "
-                    + "You started rough and finished feeling great.";
+                    + "You started rough and finished feeling great." + effortLine;
         }
 
-        return mainMessage + performanceNote;
+        return mainMessage + performanceNote + effortLine;
+    }
+
+    // Returns one optional effort-aware line for the offline fallback, or "" when effort
+    // wasn't recorded or would just echo the energy sentiment (Spent + MAX_COST).
+    private static String effortFallbackLine(Run run) {
+        EffortLevel effort = run.getEffortLevel();
+        if (effort == null) {
+            return "";
+        }
+        switch (effort) {
+            case LOW_COST:
+                return "\nThat landed controlled.";
+            case HIGH_COST:
+                return "\nThat was heavier than the numbers alone show.";
+            case MAX_COST:
+                // Skip when the run already read as "Spent" — don't say the same thing twice.
+                if (run.getPostRunEnergy() == EnergyLevel.LOW) {
+                    return "";
+                }
+                return "\nThat took a lot out of you, and getting it done matters.";
+            default:
+                // MODERATE_COST (Working) intentionally gets no extra line.
+                return "";
+        }
     }
 
     private static String getPRLabel(Run run) {

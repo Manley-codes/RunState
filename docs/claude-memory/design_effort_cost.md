@@ -1,13 +1,20 @@
 ---
 name: design-effort-cost
-description: "CANDIDATE next backend build — post-run effort input ('How did that run land?'): energy vs effort axes, runner-native RPE mapping, Quiet Gains concept, question-budget rules"
+description: "✅ V1 BUILT July 8–9 2026 — post-run effort input ('How did that run land?'): energy vs effort axes, runner-native RPE mapping, Quiet Gains concept, question-budget rules"
 metadata:
   type: project
 ---
 
-# Effort Cost — "How did that run land?" (CANDIDATE, July 7, 2026)
+# Effort Cost — "How did that run land?" (✅ V1 BUILT July 8–9, 2026)
 
-From the Codex RPE session. Status: approved direction, not yet committed to build.
+**STATUS: V1 BUILT & COMMITTED.** Collector shipped in commit 8981b48 (EffortLevel enum,
+Run field/setter, RunConsole prompt, RunStorage persistence); display + agent wiring
+(getRunSummary Effort line, RunAgent prompt line + SYSTEM_PROMPT rule + fallback line) and
+docs completed July 9, 2026. The plan below is kept as the build record. Next handoff:
+design_comparison_logic_fix.md, which consumes this effort data.
+
+From the Codex RPE session. Direction approved, built as specified (with the Option A setter
+correction noted under Key changes).
 
 ## The gap
 
@@ -59,9 +66,13 @@ confirm actual energy column names before writing the migration.
   HIGH_COST / MAX_COST`; display labels `Smooth / Working / Heavy / Empty tank` (working
   copy, replaceable without touching stored values); internal RPE ranges as fields on each
   constant (1–3 / 4–5 / 6–7 / 8–10), invisible to the user. OOP lesson: enum carrying data.
-- `Run.java`: nullable `EffortLevel effortLevel` — constructor param (LAST position) +
-  getter, **NO setter** (log-time data is immutable: musicContext precedent; weather
-  cleanup removed setters for exactly this reason).
+- `Run.java`: nullable `EffortLevel effortLevel` — getter + `setEffortLevel(...)` setter,
+  **mirroring `postRunEnergy`** (CORRECTED mid-build July 7, 2026; the original "no setter"
+  instruction was wrong). The codebase's real convention: data known BEFORE construction
+  (route, music, weather) is immutable; data collected in the post-run reflection AFTER the
+  summary (post-run energy, effort) uses a setter because the Run already exists. The
+  construct-early/learn-later shape is a known wart — refactor candidate for the Spring
+  Boot era (build the Run after the reflection questions, or use a builder). NOT V1 scope.
 - MySQL (manual, before Java): `ALTER TABLE runs ADD COLUMN effort_level VARCHAR(30) NULL
   AFTER <verified post-run energy column>;`
 - `RunStorage.java`: save/load enum name exactly like energy values; legacy NULL rows load safely.

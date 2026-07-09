@@ -84,6 +84,7 @@ Duration: [duration] min
 Pace: [formatted pace] min/[unit]
 Pre-run energy: [label] ([level])
 Post-run energy: [label] ([level])
+Effort: [label] ([level]) or Not recorded   ← Effort Cost V1
 Personal records: [PR description or None]
 Route: [routeName or not recorded]
 Music: [musicContext or not recorded]

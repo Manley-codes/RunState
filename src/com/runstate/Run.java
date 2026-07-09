@@ -279,6 +279,11 @@ public class Run {
             summary = summary + "\nPost-run energy: " + postRunEnergy.getPostRunLabel();
         }
 
+        // Effort appears only when recorded, mirroring the Energy line above.
+        if (effortLevel != null) {
+            summary = summary + "\nEffort: " + effortLevel.getLabel();
+        }
+
         String compactPersonalRecords = getCompactPersonalRecordSummary();
         if (!compactPersonalRecords.equals("")) {
             summary = summary + "\nPR: " + compactPersonalRecords;

@@ -13,6 +13,7 @@ As of June 25, 2026, the app is a working Java console app named **RunState**.
 - Phase 3: Your Run Style — pattern detection (`detectRunStyle()` in Runner.java, wired into RunConsole.logRun())
 - Phase 4: AI agent — `RunAgent.java` replaces `buildRunResponse()` with Anthropic API call (claude-haiku-4-5-20251001). Fallback to hardcoded logic on any failure. Gson added for JSON parsing. `Run.java` has `getRunner()` getter added.
 - Phase 5 (Steps 1–2): AI context expansion — music context (manual input) + weather (Open-Meteo, `WeatherData` value object, persisted at log time). Built June 26; weather cleanup + TX→Texas fix shipped July 6–7, 2026.
+- Effort Cost V1: post-run "How did that run land?" input — `EffortLevel` enum (Smooth/Working/Heavy/Empty tank + internal RPE ranges), persisted at log time, shown in run history and fed to the agent (prompt line + SYSTEM_PROMPT rule + offline fallback). Built July 8–9, 2026 (collector commit 8981b48 + display/agent follow-up).
 
 **Rename completed June 22, 2026:**
 - Package renamed from `com.runclubapp` to `com.runstate` — all 7 source files updated
@@ -29,9 +30,10 @@ As of June 25, 2026, the app is a working Java console app named **RunState**.
 
 **Next steps (in order):**
 1. Phase 5 — DONE (music + weather shipped June 26–July 7, 2026)
-2. Phase 6: lyric-aware music responses (Genius/Musixmatch) — scoped in AI_AGENT.md + design_music_reply_style.md
-3. Phase 5.5 (parked, not blocking): comparison-logic fix — see design_comparison_logic_fix.md
-4. Mobile UI — futuristic/warm transition concept, GPS tracking
+2. Effort Cost V1 — DONE (July 8–9, 2026); effort data now exists for the comparison fix to use
+3. Comparison Repair V1 — NEXT: consumes the effort measure; see design_comparison_logic_fix.md
+4. Phase 6: lyric-aware music responses (Genius/Musixmatch) — scoped in AI_AGENT.md + design_music_reply_style.md
+5. Mobile UI — futuristic/warm transition concept, GPS tracking
 
 **Standing milestone — privacy / security / legal pass (added July 6, 2026):**
 Before RunState is released, shared publicly, or gains multi-user/all-day-listening features,
