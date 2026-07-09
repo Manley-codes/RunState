@@ -1,6 +1,7 @@
 package com.runstate;
 
 import java.util.ArrayList;
+import java.util.List;
 
 /*
  * The Runner class represents a person using the app.
@@ -88,6 +89,12 @@ public class Runner {
     // Returns the current history size so RunConsole can form a temporary next ID.
     public int getRunCount() {
         return runHistory.size();
+    }
+
+    // Returns this runner's completed runs as an unmodifiable snapshot, so other
+    // classes (like ComparisonService) can read history without touching the real list.
+    public List<Run> getRunHistory() {
+        return List.copyOf(runHistory);
     }
 
     // Returns the average pace in minutes per mile over the last window runs.

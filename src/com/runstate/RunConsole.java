@@ -144,7 +144,7 @@ public class RunConsole {
         RunStorage.saveRun(run);
 
         System.out.println();
-        System.out.println(RunAgent.buildRunResponse(run, avgPace, avgDistance));
+        System.out.println(RunAgent.buildRunResponse(run));
 
         String runStyleAlert = runner.detectRunStyle(run, avgPace, avgDistance);
         if (runStyleAlert != null) {

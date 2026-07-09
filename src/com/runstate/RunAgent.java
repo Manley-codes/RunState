@@ -18,8 +18,11 @@ public class RunAgent {
                     + "The runner should feel that what you say carries weight.\n\n"
                     + "On top performances (PRs, exceptional effort): Be genuinely proud. "
                     + "Not hype — weight. These moments deserve to feel like what they are.\n\n"
-                    + "Using history: Reference rolling averages or trends only when the contrast is meaningful "
-                    + "enough to be a story. When there is no notable data story, anchor on this run alone and make it count.\n\n"
+                    + "Using history: When a comparison section is present, it lists only genuinely positive "
+                    + "or explanatory signals about comparable past runs, with a confidence level — reference it "
+                    + "only when it makes a real story. Match the confidence: at 'last comparable run' speak of that "
+                    + "single run, never a 'pattern'; save pattern language for higher confidence. When no comparison "
+                    + "section is present, anchor on this run alone and make it count.\n\n"
                     + "Rules:\n"
                     + "— Always leave the runner feeling productive. Even on an ordinary day, name what the run moved forward.\n"
                     + "— Never mention below-average performance. If numbers are down, stay quiet about it.\n"
@@ -39,23 +42,23 @@ public class RunAgent {
                     + "— Never introduce yourself or explain what you are doing. Just respond.";
 
     // Entry point — tries the API first, falls back to local logic on any failure.
-    public static String buildRunResponse(Run run, double avgPace, double avgDistance) {
+    public static String buildRunResponse(Run run) {
         // Weather is already stored on the run at log time — nothing to fetch here.
         try {
-            return callApi(run, avgPace, avgDistance);
+            return callApi(run);
         } catch (Exception e) {
-            return buildFallbackResponse(run, avgPace, avgDistance);
+            return buildFallbackResponse(run);
         }
     }
 
     // Makes the HTTP request to the Anthropic API and returns the response text.
-    private static String callApi(Run run, double avgPace, double avgDistance) throws Exception {
+    private static String callApi(Run run) throws Exception {
         String apiKey = System.getenv("ANTHROPIC_API_KEY");
         if (apiKey == null || apiKey.isBlank()) {
             throw new Exception("ANTHROPIC_API_KEY not set");
         }
 
-        String userMessage = buildUserMessage(run, avgPace, avgDistance);
+        String userMessage = buildUserMessage(run);
 
         String requestBody = "{"
                 + "\"model\":\"claude-haiku-4-5-20251001\","
@@ -90,16 +93,12 @@ public class RunAgent {
     }
 
     // Builds the user message string sent to the API with all run data.
-    private static String buildUserMessage(Run run, double avgPace, double avgDistance) {
+    private static String buildUserMessage(Run run) {
         Runner runner = run.getRunner();
         String runnerName = runner != null ? runner.getUsername() : "Runner";
-
         LocalDate date = run.getDate();
-        boolean hasHistory = avgPace > 0.0 && avgDistance > 0.0;
-        boolean aboveAvgPace = hasHistory && run.getPaceInMinutesPerMile() < avgPace;
-        boolean aboveAvgDistance = hasHistory && run.getDistanceInMiles() > avgDistance;
 
-        return "Runner: " + runnerName + "\n"
+        String message = "Runner: " + runnerName + "\n"
                 + "Date: " + date + "\n"
                 + "Season: " + getSeason(date) + "\n"
                 + "Distance: " + run.getDistance() + " " + run.getDistanceUnit() + "\n"
@@ -111,15 +110,43 @@ public class RunAgent {
                 + "Personal records: " + prDescription(run) + "\n"
                 + "Route: " + (run.getRouteName() != null ? run.getRouteName() : "Not recorded") + "\n"
                 + "Music: " + (run.getMusicContext() != null ? run.getMusicContext() : "Not recorded") + "\n"
-                + "Weather: " + describeWeather(run) + "\n"
-                + "Rolling average pace (last 20 runs): "
-                + (avgPace > 0 ? formatPace(avgPace) + " min/mile" : "Not enough history") + "\n"
-                + "Rolling average distance (last 20 runs): "
-                + (avgDistance > 0 ? String.format("%.2f miles", avgDistance) : "Not enough history") + "\n"
-                + "Pace this run vs average: "
-                + (hasHistory ? (aboveAvgPace ? "Above average" : "Below average") : "No history") + "\n"
-                + "Distance this run vs average: "
-                + (hasHistory ? (aboveAvgDistance ? "Above average" : "Below average") : "No history");
+                + "Weather: " + describeWeather(run);
+
+        // Candidate-based comparison replaces the old rolling-average lines entirely.
+        String comparison = describeComparison(run);
+        if (!comparison.isEmpty()) {
+            message = message + "\n" + comparison;
+        }
+        return message;
+    }
+
+    // Runs the comparison for this run, or NONE when there's no runner to pull history from.
+    private static ComparisonInsight comparisonFor(Run run) {
+        Runner runner = run.getRunner();
+        if (runner == null) {
+            return ComparisonInsight.NONE;
+        }
+        return ComparisonService.analyze(run, runner.getRunHistory());
+    }
+
+    // Formats the comparison evidence block for the prompt, or "" when there is no
+    // insight. Everything here already passed the negative pre-filter in the service.
+    private static String describeComparison(Run run) {
+        ComparisonInsight insight = comparisonFor(run);
+        if (!insight.hasInsight()) {
+            return "";
+        }
+        StringBuilder block = new StringBuilder();
+        block.append("Comparable run basis: ").append(insight.getBasis()).append("\n");
+        block.append("Comparable runs found: ").append(insight.getComparableCount()).append("\n");
+        block.append("Confidence: ").append(insight.getConfidence());
+        for (String line : insight.getOutcomeLines()) {
+            block.append("\n").append(line);
+        }
+        if (insight.getContextNote() != null) {
+            block.append("\n").append(insight.getContextNote());
+        }
+        return block.toString();
     }
 
     private static String getSeason(LocalDate date) {
@@ -194,13 +221,10 @@ public class RunAgent {
                 .replace("\r", "\\r") + "\"";
     }
 
-    private static String buildFallbackResponse(Run run, double avgPace, double avgDistance) {
+    private static String buildFallbackResponse(Run run) {
         EnergyLevel pre = run.getPreRunEnergy();
         EnergyLevel post = run.getPostRunEnergy();
         boolean hasPR = run.isLongestDistanceRecord() || run.isFastestAveragePaceRecord();
-        boolean hasHistory = avgPace > 0.0 && avgDistance > 0.0;
-        boolean aboveAvgPace = hasHistory && run.getPaceInMinutesPerMile() < avgPace;
-        boolean aboveAvgDistance = hasHistory && run.getDistanceInMiles() > avgDistance;
 
         String mainMessage;
 
@@ -225,26 +249,19 @@ public class RunAgent {
             mainMessage = "Good job getting a run in today. Every run counts.";
         }
 
-        String performanceNote = "";
-        if (!hasPR) {
-            if (aboveAvgPace && aboveAvgDistance) {
-                performanceNote = "\nYou ran farther and faster than usual.";
-            } else if (aboveAvgPace) {
-                performanceNote = "\nYour pace was better than usual.";
-            } else if (aboveAvgDistance) {
-                performanceNote = "\nYou went farther than usual.";
-            }
-        }
-
-        // One optional effort-aware line, added to whichever ending we return.
+        // One optional effort-aware line (what it cost), then one comparison note
+        // (what it revealed). The old mechanical "farther and faster" note is gone —
+        // the comparison line is candidate-based and already filtered to positives.
         String effortLine = effortFallbackLine(run);
+        ComparisonInsight insight = comparisonFor(run);
+        String comparisonNote = insight.hasInsight() ? "\n" + insight.getOutcomeLines().get(0) : "";
 
         if (pre == EnergyLevel.LOW && post == EnergyLevel.HIGH) {
-            return mainMessage + performanceNote + "\nSee what getting active can do. "
-                    + "You started rough and finished feeling great." + effortLine;
+            return mainMessage + "\nSee what getting active can do. "
+                    + "You started rough and finished feeling great." + effortLine + comparisonNote;
         }
 
-        return mainMessage + performanceNote + effortLine;
+        return mainMessage + effortLine + comparisonNote;
     }
 
     // Returns one optional effort-aware line for the offline fallback, or "" when effort

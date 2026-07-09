@@ -89,11 +89,21 @@ Personal records: [PR description or None]
 Route: [routeName or not recorded]
 Music: [musicContext or not recorded]
 Weather: [temperature°F, feels-like°F, condition or not recorded]   ← Phase 5 Step 2
-Rolling average pace (last 20 runs): [avgPace] min/mile
-Rolling average distance (last 20 runs): [avgDistance] miles
-Pace this run vs average: [above / below / no history]
-Distance this run vs average: [above / below / no history]
+
+# Comparison Repair V1 — the block below REPLACES the old rolling-average lines and
+# both above/below flags. It appears ONLY when comparable past runs exist AND at least
+# one positive/explanatory signal survives the negative pre-filter (else nothing is sent).
+Comparable run basis: [same route | similar distance]
+Comparable runs found: [N]
+Confidence: [last comparable run | early signal | recent pattern | strong personal pattern]
+[one or more positive outcome lines — state lift / quiet gain / same-cost-faster / demand explained]
+[optional hedged weather context note]
 ```
+
+The comparison lines are produced by `ComparisonService` (candidate selection → median
+aggregation → confidence tier → positive-signal derivation with a negative pre-filter);
+`RunAgent` only formats what survives. The old blended 20-run rolling average was removed
+because it mixed easy/long/tempo/sprint runs and manufactured misleading "above average" labels.
 
 See `docs/DATA_PRIVACY.md` for a full breakdown of what data leaves the app and to whom.
 

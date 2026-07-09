@@ -1,9 +1,18 @@
 ---
 name: design-comparison-logic-fix
-description: Phase 5.5 planned fix — the run comparison logic is flawed in all three code paths, deferred until after UI phase
+description: "✅ V1 BUILT July 9 2026 — candidate-based comparison (ComparisonService/ComparisonInsight) replaces the blended-average flaw in the AI prompt + fallback; detectRunStyle untouched"
 metadata:
   type: project
 ---
+
+**STATUS: V1 BUILT July 9, 2026 (paths 1 & 2 only; commit pending — Manley commits).**
+Shipped as a new `ComparisonService` + `ComparisonInsight` pair: 180-day / cap-10 candidate
+selection (route-first, distance-fallback), median aggregation, confidence tiers, and four
+positive signals (State Lift as start-to-finish energy lift; Quiet Gain; Same-Cost/Better;
+Demand Explained) behind a negative pre-filter. `RunAgent.buildUserMessage` + the fallback now
+consume it; the rolling-average lines/flags are removed and the SYSTEM_PROMPT "Using history"
+rule updated. **Path #3, `detectRunStyle()`, was intentionally NOT touched** — deferred to the
+later identity redesign. The plan below is kept as the build record.
 
 > UPDATE July 7, 2026: the effort measure this fix has been waiting for now has a design —
 > see design_effort_cost.md ("How did that run land?"). Build them together or effort-first.

@@ -1,0 +1,341 @@
+package com.runstate;
+
+import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Locale;
+
+/*
+ * ComparisonService turns a run plus the runner's history into a ComparisonInsight.
+ * It is the isolated home for ALL candidate selection and aggregation (SRP, like
+ * WeatherService) — RunAgent never does this work itself. Everything here is static:
+ * the service holds no state, it just computes an answer from its inputs.
+ *
+ * Build status: Chunk A — candidate selection only. analyze() returns NONE until
+ * Chunks B (medians) and C (signals + negative pre-filter) are added.
+ */
+public class ComparisonService {
+
+    // Only compare against runs from the last 180 days (Manley, July 7 2026).
+    private static final int RECENCY_DAYS = 180;
+
+    // At most the 10 most recent matches feed a comparison — keeps it "recent you".
+    private static final int MAX_CANDIDATES = 10;
+
+    // Similar-distance band: whichever is larger of half a mile or 20% of distance.
+    private static final double MIN_DISTANCE_BAND = 0.5;
+    private static final double DISTANCE_BAND_FRACTION = 0.20;
+
+    // Entry point: summarize how THIS run compares to comparable past runs.
+    public static ComparisonInsight analyze(Run current, List<Run> history) {
+        if (current == null || history == null) {
+            return ComparisonInsight.NONE;
+        }
+        List<Run> candidates = selectCandidates(current, history);
+        if (candidates.isEmpty()) {
+            return ComparisonInsight.NONE;
+        }
+
+        int count = candidates.size();
+        double medPace = medianPace(candidates);
+        double medLift = medianEnergyLift(candidates);
+        double medEffort = medianEffort(candidates);
+
+        // Derive signals in priority order. Each returns null unless its delta is
+        // positive or explanatory — THAT is the negative pre-filter: nothing negative
+        // (slower, weaker, unexplained higher effort) is ever turned into a line.
+        List<String> outcomeLines = new ArrayList<>();
+        addIfPresent(outcomeLines, stateLiftLine(current, medLift, count));
+        addIfPresent(outcomeLines, quietGainLine(current, medEffort, medPace, count));
+        addIfPresent(outcomeLines, sameCostBetterLine(current, medEffort, medPace, count));
+        addIfPresent(outcomeLines, demandExplainedLine(current, candidates, medEffort, count));
+
+        // If nothing productive survived the filter, there is no comparison to make.
+        if (outcomeLines.isEmpty()) {
+            return ComparisonInsight.NONE;
+        }
+
+        String basis = describeBasis(matchedByRoute(current, candidates));
+        String confidence = confidencePhrase(count);
+        // A weather hedge only rides along when effort was actually recorded.
+        String contextNote =
+                Double.isNaN(effortValue(current)) ? null : weatherContextNote(current);
+
+        return new ComparisonInsight(basis, count, confidence, outcomeLines, contextNote);
+    }
+
+    // Picks the previous runs worth comparing against: recent, and matched by route
+    // first (route implicitly controls terrain, which we have no elevation data for),
+    // falling back to similar distance when the current run has no shared route.
+    private static List<Run> selectCandidates(Run current, List<Run> history) {
+        // First narrow to previous runs inside the recency window.
+        List<Run> recentPrevious = new ArrayList<>();
+        for (Run past : history) {
+            if (past != current && withinRecency(current, past)) {
+                recentPrevious.add(past);
+            }
+        }
+
+        List<Run> matches = new ArrayList<>();
+
+        // Preferred: same route as the current run.
+        String currentRoute = normalizeRoute(current.getRouteName());
+        if (currentRoute != null) {
+            for (Run past : recentPrevious) {
+                if (currentRoute.equals(normalizeRoute(past.getRouteName()))) {
+                    matches.add(past);
+                }
+            }
+        }
+
+        // Fallback: similar distance, used when there's no route or no route match.
+        if (matches.isEmpty()) {
+            for (Run past : recentPrevious) {
+                if (similarDistance(current, past)) {
+                    matches.add(past);
+                }
+            }
+        }
+
+        // Most recent first, then cap at the 10 nearest in time.
+        matches.sort((a, b) -> b.getDate().compareTo(a.getDate()));
+        if (matches.size() > MAX_CANDIDATES) {
+            return new ArrayList<>(matches.subList(0, MAX_CANDIDATES));
+        }
+        return matches;
+    }
+
+    // A candidate counts as recent if it falls within RECENCY_DAYS before the current
+    // run and not after it (we compare against earlier runs, never later ones).
+    private static boolean withinRecency(Run current, Run candidate) {
+        LocalDate currentDate = current.getDate();
+        LocalDate cutoff = currentDate.minusDays(RECENCY_DAYS);
+        LocalDate candidateDate = candidate.getDate();
+        return !candidateDate.isBefore(cutoff) && !candidateDate.isAfter(currentDate);
+    }
+
+    // Canonical route key: trimmed and lower-cased so "Cedar Trail " and "cedar trail"
+    // match. Returns null for a missing or blank route (which then can't route-match).
+    private static String normalizeRoute(String route) {
+        if (route == null) {
+            return null;
+        }
+        String trimmed = route.trim();
+        if (trimmed.isEmpty()) {
+            return null;
+        }
+        return trimmed.toLowerCase(Locale.ROOT);
+    }
+
+    // True when the candidate's distance is within max(0.5 mi, 20%) of the current run.
+    // Both distances are normalized to miles so mile and kilometer runs compare fairly.
+    private static boolean similarDistance(Run current, Run candidate) {
+        double currentMiles = current.getDistanceInMiles();
+        double band = Math.max(MIN_DISTANCE_BAND, currentMiles * DISTANCE_BAND_FRACTION);
+        return Math.abs(candidate.getDistanceInMiles() - currentMiles) <= band;
+    }
+
+    // Turns the number of comparable runs into the runner-facing confidence phrase.
+    // Tiers (handoff): 1 single · 2–4 early · 5–7 recent pattern · 8+ strong.
+    private static String confidencePhrase(int count) {
+        if (count <= 0) return null;
+        if (count == 1) return "last comparable run";
+        if (count <= 4) return "early signal";
+        if (count <= 7) return "recent pattern";
+        return "strong personal pattern";
+    }
+
+    // Describes how candidates were matched, for the "Comparable run basis" line.
+    private static String describeBasis(boolean matchedByRoute) {
+        return matchedByRoute ? "same route" : "similar distance";
+    }
+
+    // --- Aggregation helpers (Chunk B) — the toolkit Chunk C uses to compare the
+    // current run against the median of its comparables. Median (not mean) is the
+    // handoff's choice: robust to one weird run when the sample is small. Each
+    // "median..." helper returns NaN when no candidate carries that data, so the
+    // caller can cleanly skip a signal it can't support.
+
+    // Median of a list of values. Sorts a COPY so the caller's list order is left
+    // intact. Assumes a non-empty list. Even count → average of the two middle values.
+    private static double median(List<Double> values) {
+        List<Double> sorted = new ArrayList<>(values);
+        sorted.sort(Double::compareTo);
+        int size = sorted.size();
+        int mid = size / 2;
+        if (size % 2 == 1) {
+            return sorted.get(mid);
+        }
+        return (sorted.get(mid - 1) + sorted.get(mid)) / 2.0;
+    }
+
+    // The single representative RPE number for an effort level — the midpoint of its
+    // range (HIGH_COST 6–7 → 6.5). Turns an enum into one comparable number.
+    private static double effortMidpoint(EffortLevel effort) {
+        return (effort.getMinRpe() + effort.getMaxRpe()) / 2.0;
+    }
+
+    // A run's representative effort, or NaN when effort wasn't recorded. The NaN is
+    // how legacy NULL-effort rows stay out of effort signals while still counting
+    // for route/distance/state ones.
+    private static double effortValue(Run run) {
+        EffortLevel effort = run.getEffortLevel();
+        return effort == null ? Double.NaN : effortMidpoint(effort);
+    }
+
+    // Median pace (min/mile) across the candidates. Every run has a pace, so this is
+    // defined whenever there is at least one candidate.
+    private static double medianPace(List<Run> runs) {
+        List<Double> paces = new ArrayList<>();
+        for (Run run : runs) {
+            paces.add(run.getPaceInMinutesPerMile());
+        }
+        return paces.isEmpty() ? Double.NaN : median(paces);
+    }
+
+    // Median start-to-finish energy change (post - pre) across candidates that recorded
+    // both, or NaN when none did. Controls for starting point without shrinking the pool.
+    private static double medianEnergyLift(List<Run> runs) {
+        List<Double> lifts = new ArrayList<>();
+        for (Run run : runs) {
+            EnergyLevel pre = run.getPreRunEnergy();
+            EnergyLevel post = run.getPostRunEnergy();
+            if (pre != null && post != null) {
+                lifts.add((double) (post.getValue() - pre.getValue()));
+            }
+        }
+        return lifts.isEmpty() ? Double.NaN : median(lifts);
+    }
+
+    // Median effort cost (RPE midpoint) across candidates that recorded effort, or
+    // NaN when none did (so effort signals simply don't fire on legacy-only data).
+    private static double medianEffort(List<Run> runs) {
+        List<Double> values = new ArrayList<>();
+        for (Run run : runs) {
+            double value = effortValue(run);
+            if (!Double.isNaN(value)) {
+                values.add(value);
+            }
+        }
+        return values.isEmpty() ? Double.NaN : median(values);
+    }
+
+    // --- Signal derivation + negative pre-filter (Chunk C) ---
+
+    // Half an RPE point — the "close enough" band that splits effort into clearly
+    // lower / about the same / clearly higher, so at most one effort signal fires.
+    private static final double EFFORT_EPSILON = 0.5;
+
+    // Adds a line only when its signal fired (non-null). Null = didn't apply or the
+    // delta was negative — the pre-filter, expressed as one guard.
+    private static void addIfPresent(List<String> lines, String line) {
+        if (line != null) {
+            lines.add(line);
+        }
+    }
+
+    // Was selection route-based? True only when the current run has a route and the
+    // chosen candidates share it (distance-fallback candidates do not).
+    private static boolean matchedByRoute(Run current, List<Run> candidates) {
+        String route = normalizeRoute(current.getRouteName());
+        if (route == null || candidates.isEmpty()) {
+            return false;
+        }
+        return route.equals(normalizeRoute(candidates.get(0).getRouteName()));
+    }
+
+    // Median distance (miles) across candidates — used to judge "went farther today".
+    private static double medianDistance(List<Run> runs) {
+        List<Double> distances = new ArrayList<>();
+        for (Run run : runs) {
+            distances.add(run.getDistanceInMiles());
+        }
+        return distances.isEmpty() ? Double.NaN : median(distances);
+    }
+
+    // Single-run language at tier 1, per the confidence tiers.
+    private static String comparableNoun(int count) {
+        return count == 1 ? "last comparable run" : "comparable runs";
+    }
+
+    // Signal 1 — State Lift: bigger start-to-finish energy climb than usual. Energy-
+    // based, so it works even when only legacy NULL-effort rows exist. Comparing the
+    // lift (post - pre) controls for the starting point without shrinking the pool.
+    private static String stateLiftLine(Run current, double medLift, int count) {
+        EnergyLevel pre = current.getPreRunEnergy();
+        EnergyLevel post = current.getPostRunEnergy();
+        if (pre == null || post == null || Double.isNaN(medLift)) {
+            return null;
+        }
+        int lift = post.getValue() - pre.getValue();
+        if (lift > medLift) {
+            return "Bigger start-to-finish energy lift than your " + comparableNoun(count) + ".";
+        }
+        return null;
+    }
+
+    // Signal 2 — Quiet Gain: same output, clearly lower effort than usual. The
+    // beginner's progress signal — improvement the pace hasn't caught up to yet.
+    private static String quietGainLine(Run current, double medEffort, double medPace, int count) {
+        double effort = effortValue(current);
+        if (Double.isNaN(effort) || Double.isNaN(medEffort)) {
+            return null;  // no effort data on either side → effort signals stay silent
+        }
+        double pace = current.getPaceInMinutesPerMile();
+        boolean lowerEffort = effort < medEffort - EFFORT_EPSILON;
+        boolean paceHeld = Double.isNaN(medPace) || pace <= medPace * 1.05;
+        if (lowerEffort && paceHeld) {
+            return "Same output, lower effort than your " + comparableNoun(count)
+                    + " — that's progress your pace won't show yet.";
+        }
+        return null;
+    }
+
+    // Signal 3 — Same cost, better output: about the same effort, but faster.
+    private static String sameCostBetterLine(Run current, double medEffort, double medPace, int count) {
+        double effort = effortValue(current);
+        if (Double.isNaN(effort) || Double.isNaN(medEffort) || Double.isNaN(medPace)) {
+            return null;
+        }
+        double pace = current.getPaceInMinutesPerMile();
+        boolean sameCost = Math.abs(effort - medEffort) <= EFFORT_EPSILON;
+        boolean faster = pace < medPace;
+        if (sameCost && faster) {
+            return "Same effort as your " + comparableNoun(count) + ", but faster.";
+        }
+        return null;
+    }
+
+    // Signal 4 — Demand explained: today cost clearly MORE, but for a good reason
+    // (PR or longer distance). Reframes high effort so it never reads as a bad run.
+    private static String demandExplainedLine(Run current, List<Run> candidates,
+                                              double medEffort, int count) {
+        double effort = effortValue(current);
+        if (Double.isNaN(effort) || Double.isNaN(medEffort)
+                || effort <= medEffort + EFFORT_EPSILON) {
+            return null;  // not clearly higher-than-usual effort → nothing to explain
+        }
+        if (current.isLongestDistanceRecord() || current.isFastestAveragePaceRecord()) {
+            return "Higher effort today — but you set a PR, so that's what it cost.";
+        }
+        double medDistance = medianDistance(candidates);
+        if (!Double.isNaN(medDistance) && current.getDistanceInMiles() > medDistance) {
+            return "Higher effort today — but you went farther than your " + comparableNoun(count) + ".";
+        }
+        return null;  // unexplained higher effort stays filtered out (never a bad run)
+    }
+
+    // Optional hedged weather note to accompany an effort line — explanation, never
+    // causation. Only fires in genuinely hot or freezing conditions.
+    private static String weatherContextNote(Run current) {
+        Double apparent = current.getApparentTemperature();
+        if (apparent != null && apparent >= 80) {
+            return "Warm conditions may explain some of the effort.";
+        }
+        Double temp = current.getTemperature();
+        if (temp != null && temp <= 32) {
+            return "Cold conditions may explain some of the effort.";
+        }
+        return null;
+    }
+}
