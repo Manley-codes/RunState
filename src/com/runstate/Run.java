@@ -47,6 +47,12 @@ public class Run {
     // The bundle may be null, and its fields may be null, when weather wasn't recorded.
     private final WeatherData weather;
 
+    // How much the run COST — the effort axis, separate from energy (how you finished).
+    // Null when the runner skipped, or until it's recorded just after post-run energy.
+    // Non-final with a setter, mirroring postRunEnergy: the run is constructed before the
+    // runner answers, so this is set a moment later (see the construct-early refactor note).
+    private EffortLevel effortLevel;
+
     // Tracks whether this run was the runner's longest distance personal record.
     private boolean longestDistanceRecord;
 
@@ -68,7 +74,8 @@ public class Run {
     public Run(int runId, Runner runner, LocalDate date, String startTime, String endTime,
                double distance, DistanceUnit distanceUnit, double duration,
                String routeName, String routeLocation, EnergyLevel preRunEnergy,
-               EnergyLevel postRunEnergy, String musicContext, WeatherData weather) {
+               EnergyLevel postRunEnergy, String musicContext, WeatherData weather,
+               EffortLevel effortLevel) {
 
         // "this" refers to the current object's variables
         this.runId = runId;
@@ -89,6 +96,7 @@ public class Run {
         // A run starts with no fastest pace PR label until the Runner checks the run history.
         this.fastestAveragePaceRecord = false;
         this.weather = weather;
+        this.effortLevel = effortLevel;
     }
 
     /*
@@ -235,9 +243,20 @@ public class Run {
         return postRunEnergy;
     }
 
+    // Returns how much the run cost (the effort level), or null if the runner skipped it.
+    public EffortLevel getEffortLevel() {
+        return effortLevel;
+    }
+
     // Allows post-run energy to be recorded after the run summary is displayed.
     public void setPostRunEnergy(EnergyLevel energy) {
         this.postRunEnergy = energy;
+    }
+
+    // Allows effort to be recorded just after post-run energy, once the run exists.
+    // Mirrors setPostRunEnergy — same construct-early reason (Spring-Boot-era refactor note).
+    public void setEffortLevel(EffortLevel effortLevel) {
+        this.effortLevel = effortLevel;
     }
 
 

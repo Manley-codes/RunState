@@ -38,8 +38,8 @@ public class RunStorage {
     public static void saveRun(Run run) {
         String sql =  "INSERT INTO runs (run_date, start_time, end_time, distance, distance_unit, " +
                 "duration, route_name, route_location, pre_run_energy, post_run_energy, music_context, " +
-                "temperature, apparent_temperature, weather_condition) " +
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+                "temperature, apparent_temperature, weather_condition, effort_level) " +
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
 
         // try-with-resources automatically closes the connection and statement
         // when the block ends, even if an error occurs.
@@ -62,6 +62,8 @@ public class RunStorage {
             stmt.setObject(12, run.getTemperature());
             stmt.setObject(13, run.getApparentTemperature());
             stmt.setString(14, run.getWeatherCondition());
+            // Store the effort enum constant name ("LOW_COST", "MAX_COST", ...), or null if skipped.
+            stmt.setString(15, run.getEffortLevel() != null ? run.getEffortLevel().name() : null);
 
             stmt.executeUpdate();
 
@@ -116,9 +118,13 @@ public class RunStorage {
                 // Optional free-text music note; getString returns null if the column is empty.
                 String musicContext = rs.getString("music_context");
 
+                // Optional effort level; valueOf() rebuilds the enum, null when skipped or a legacy row.
+                String effortStr = rs.getString("effort_level");
+                EffortLevel effortLevel = effortStr != null ? EffortLevel.valueOf(effortStr) : null;
+
                 Run run = new Run(runId, runner, date, startTime, endTime,
                         distance, distanceUnit, duration, routeName, routeLocation,
-                        preRunEnergy, postRunEnergy, musicContext, weather);
+                        preRunEnergy, postRunEnergy, musicContext, weather, effortLevel);
                 runs.add(run);
             }
 

@@ -97,8 +97,8 @@ public class RunConsole {
         // or down API never blocks logging a run. No prompt — this is silent.
         WeatherData weather = WeatherService.fetch(runner.getCity(), runner.getState(), date);
 
-        // Post-run energy is null here because the runner hasn't finished yet.
-        // The constructor accepts null for optional fields, so this is valid.
+        // Post-run energy and effort are null here because the runner hasn't finished yet.
+        // The constructor accepts null for optional fields; both are set just below via setters.
         Run run = new Run(
                 runner.getRunCount() + 1,
                 runner,
@@ -113,7 +113,8 @@ public class RunConsole {
                 preRunEnergy,
                 null,
                 musicContext,
-                weather
+                weather,
+                null
         );
 
         // Snapshot history averages before this run enters the list. So it doesnt compare against itself
@@ -134,6 +135,11 @@ public class RunConsole {
 
         // Store the answer directly on the run object using the setter we just added.
         run.setPostRunEnergy(postRunEnergy);
+
+        // Immediately after energy, ask what the run COST — the effort axis. Same
+        // construct-early reason as post-run energy, so it's attached via a setter too.
+        EffortLevel effortLevel = readEffortLevel();
+        run.setEffortLevel(effortLevel);
 
         RunStorage.saveRun(run);
 
@@ -258,6 +264,26 @@ public class RunConsole {
         }
         // false retrieves labels such as "Spent" from the same enum value.
         return energyLevel.getPostRunLabel();
+    }
+
+    // Asks how the run landed (the effort axis) and returns the EffortLevel, or null if skipped.
+    private EffortLevel readEffortLevel() {
+        System.out.println("How did that run land?");
+        System.out.println("0. Skip");
+        // Labels live on the enum (Smooth/Working/Heavy/Empty tank) — single source of truth.
+        System.out.println("1. " + EffortLevel.LOW_COST.getLabel());
+        System.out.println("2. " + EffortLevel.MODERATE_COST.getLabel());
+        System.out.println("3. " + EffortLevel.HIGH_COST.getLabel());
+        System.out.println("4. " + EffortLevel.MAX_COST.getLabel());
+        // Validates 0 through 4 and stores the returned whole-number choice.
+        int choice = readWholeNumber("Choose how it landed: ", 0, 4);
+        switch (choice) {
+            case 1: return EffortLevel.LOW_COST;
+            case 2: return EffortLevel.MODERATE_COST;
+            case 3: return EffortLevel.HIGH_COST;
+            case 4: return EffortLevel.MAX_COST;
+            default: return null;  // 0 = Skip
+        }
     }
 
     // Repeats until the entered text becomes an int inside the required range.
