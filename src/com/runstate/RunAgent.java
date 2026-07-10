@@ -94,8 +94,9 @@ public class RunAgent {
 
     // Builds the user message string sent to the API with all run data.
     private static String buildUserMessage(Run run) {
-        Runner runner = run.getRunner();
-        String runnerName = runner != null ? runner.getUsername() : "Runner";
+        // Privacy: the runner's real username is never sent to the API — see
+        // docs/DATA_PRIVACY.md. A constant label stands in; the AI never uses a name.
+        String runnerName = "Runner";
         LocalDate date = run.getDate();
 
         String message = "Runner: " + runnerName + "\n"

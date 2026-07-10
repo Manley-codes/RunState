@@ -18,7 +18,8 @@ post-run response. The data included in that request:
 - Personal record status
 - Route name (if entered)
 - Music context (if entered)
-- Rolling average pace and distance from recent history
+- A short comparison summary derived from your recent runs (e.g. how this run's pace or
+  energy compares to similar past runs) — computed on your machine; only the summary is sent
 - Weather conditions for the run date (once the weather feature is enabled)
 
 No name, email, or account information is included in the request. All requests are sent
