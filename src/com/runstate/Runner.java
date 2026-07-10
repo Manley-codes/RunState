@@ -335,9 +335,9 @@ public class Runner {
 
         // Display the longest distance record.
         System.out.println("Current Personal Records for " + username + ":");
-        System.out.println("Longest Distance: " + longestRun.getDistance() + " " + longestRun.getDistanceUnit());
+        System.out.println("Longest Distance: " + longestRun.getFormattedDistance() + " " + longestRun.getDistanceUnit());
         // Display the fastest average pace record.
-        System.out.println("Fastest Average Pace: " + fastestPaceRun.getPace() + " min/" + fastestPaceRun.getPaceUnit());
+        System.out.println("Fastest Average Pace: " + fastestPaceRun.getFormattedPace() + " min/" + fastestPaceRun.getPaceUnit());
     }
 
     /*

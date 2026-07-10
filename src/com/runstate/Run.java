@@ -304,6 +304,21 @@ public class Run {
                 distanceUnit.getDisplayName();
     }
 
+    // Public display accessors used by the personal-records view (and anywhere else
+    // that shows a run's pace or distance to the user). They delegate to the private
+    // formatters below, so pace/distance formatting has a single home in Run.
+
+    // Returns this run's pace in the runner-friendly minutes:seconds form (e.g. 7:26),
+    // rather than the raw decimal getPace() returns.
+    public String getFormattedPace() {
+        return formatPace();
+    }
+
+    // Returns this run's distance with any trailing ".0" trimmed (5.0 -> "5").
+    public String getFormattedDistance() {
+        return formatNumber(distance);
+    }
+
     // Converts decimal pace into the minutes:seconds format runners commonly use.
     private String formatPace() {
         long totalSeconds = Math.round(getPace() * 60);
