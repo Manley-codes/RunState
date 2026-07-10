@@ -92,11 +92,16 @@ themes recur around strong efforts. Highly original — no app maps lyric langua
 - DEAD for new apps: Recommendations, Audio Features, Related Artists (deprecated
   Nov 2024, still unavailable). Skip events not exposed either.
   https://developer.spotify.com/blog/2024-11-27-changes-to-the-web-api
-- STILL AVAILABLE: playback control + Add Item to Playback Queue (Premium required;
-  no queue read/remove; ordering not guaranteed with other Player calls).
-  https://developer.spotify.com/documentation/web-api/reference/add-to-queue
+- STILL AVAILABLE: playback control, Add Item to Playback Queue, AND Get the User's Queue
+  (queue read was added — earlier note here said it didn't exist; corrected July 10, 2026).
+  Premium required for queue writes; ordering not guaranteed with other Player calls.
+  https://developer.spotify.com/documentation/web-api/reference/add-to-queue ·
+  https://developer.spotify.com/documentation/web-api/reference/get-queue
 - OPEN QUESTION: per-track BPM/energy data must come from elsewhere (e.g. GetSongBPM
   or light user tagging) since Audio Features is gone. Unsolved design question.
+- POLICY FLAG: Spotify's developer policy restricts feeding Spotify-derived data into AI
+  and building profiles from their content. Formal review item before any deep integration —
+  belongs to the standing privacy/security/legal milestone in project_current_state.md.
 
 ## PARKED — discovery of new songs
 

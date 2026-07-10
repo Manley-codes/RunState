@@ -9,6 +9,12 @@ metadata:
 
 Reference only. Do not implement from this file directly.
 
+Status: PARKED during core stabilization and Run Style work. However — on any music-related
+task, review this file first and flag anything that would be cheaper to include during that
+task than to retrofit later ("this fits this task, waiting complicates things" — Manley
+decides). When core tasks are complete, this file gets a full consideration/analysis pass —
+it is a holding file, not an archive.
+
 Use this file when current work touches music, privacy, comparison data, Spotify/device
 integration, AI-agent behavior, or run-culture positioning. Its job is to preserve the
 best music ideas without pulling the project away from the core build.
@@ -53,6 +59,22 @@ the runner's state, and make the runner feel like the product was built for runn
   meaning should be validated after the run.
 - **No-music runs still matter:** support non-music runs with mental anchors or
   self-suggestions when appropriate.
+- **Meaning-sync, not beat-sync:** Weav Run and RockMyRun already own tempo-matching, and it
+  needs data RunState can't get. RunState's lane is syncing music to the runner's state,
+  intent, and history — not their steps per minute. BPM matching is permanently out, not
+  deferred.
+- **Settle / Hold / Build:** the only music question a runner should ever face — "What should
+  the music do for you today?" Three answers. Ideally the agent proposes one from pre-run
+  energy and history ("Sounds like a settle morning?") and the runner confirms with one tap.
+- **Trust ledger:** songs earn roles over runs. A track that carried strong finishes gets
+  quietly cleared for the final mile; new tracks audition mid-run first. History tags the
+  library, not the user. Extends music confidence from a rule into a system.
+- **Audible restraint:** the DJ's do-nothing decisions can surface in the post-run reflection
+  ("I left the music alone through the middle — you didn't need me"). Restraint becomes
+  visible personality, not just absence.
+- **A DJ who reads a crowd of one:** the run-culture anchor is the race-course DJ at mile 20.
+  RunState's version has only ever played for you. Candidate north-star line for the live
+  feature.
 
 ## What the relationship web may connect
 
@@ -93,6 +115,10 @@ causal certainty.
 - A generic AI chat room.
 - A stack of default fitness playlists.
 - A feature-dense product where the core running purpose gets buried.
+- Tempo/BPM matching in any form (wrong lane — see meaning-sync).
+- Automatic mid-song interruption, even as an opt-in aggressive mode. LEAVE and QUEUE_NEXT
+  are the only automatic actions; immediate skips are runner-initiated only.
+- Mid-run prompts or dialogs. Revisit only if a watch UI ever exists.
 
 Avoid exposing too many names too early. Possible terms like Deep Run Crate, Push Songs,
 Rescue, Power Songs, Run Soundtracks, DJ Mode, or Playlist Lab may survive later, but too
@@ -123,6 +149,13 @@ Examples:
   known push pattern."
 
 Use pattern language. Do not claim that music caused the result.
+
+## Build-order rule
+
+When music work resumes, features are prioritized by what can be executed with data and
+APIs that exist today. Nothing is dropped for being far off — it just waits its turn. Any
+significant new music idea gets a full analysis pass (fit, cost, conflicts with locked
+rules) before it's filed, same as the DJ document.
 
 ## Recommended order
 
