@@ -26,10 +26,21 @@
             <artifactId>gson</artifactId>
             <version>2.10.1</version>
         </dependency>
+        <!-- JUnit 5 (Jupiter) — the test framework. scope=test means it is on the
+             classpath only while compiling/running tests, never bundled with the app. -->
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <version>5.10.2</version>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
     <build>
         <sourceDirectory>src</sourceDirectory>
+        <!-- Tests live in a top-level test/ dir, deliberately OUTSIDE src/ so the main
+             compiler (which compiles everything under src) never sees test-only code. -->
+        <testSourceDirectory>test</testSourceDirectory>
     </build>
 
 </project>

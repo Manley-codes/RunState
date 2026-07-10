@@ -33,8 +33,10 @@ As of June 25, 2026, the app is a working Java console app named **RunState**.
 1. Phase 5 — DONE (music + weather shipped June 26–July 7, 2026)
 2. Effort Cost V1 — DONE (July 8–9, 2026)
 3. Comparison Repair V1 — DONE (July 9, 2026); candidate-based comparison replaces the blended-average flaw (AI prompt + fallback; `detectRunStyle()` deferred)
-4. Phase 6: lyric-aware music responses (Genius/Musixmatch) — scoped in AI_AGENT.md + design_music_reply_style.md
-5. Mobile UI — futuristic/warm transition concept, GPS tracking
+4. Stabilization sprint — DONE (July 10, 2026); privacy/code alignment, RunAgent HTTP timeouts, DB password moved to env var, and the project's first unit tests (see handoff below)
+5. **Run Style redesign — NEXT.** Rebase `detectRunStyle()` off the faster-AND-farther rolling-average rule onto an identity-aligned signal (consistency / LOW→HIGH lift habit / effort efficiency). This is comparison path #3, deferred from Comparison Repair V1. See design_comparison_logic_fix.md.
+6. Phase 6: lyric-aware music responses (Genius/Musixmatch) — scoped in AI_AGENT.md + design_music_reply_style.md
+7. Mobile UI — futuristic/warm transition concept, GPS tracking
 
 **Standing milestone — privacy / security / legal pass (added July 6, 2026):**
 Before RunState is released, shared publicly, or gains multi-user/all-day-listening features,
@@ -99,6 +101,39 @@ into one constructor param (composition) instead of appending 3 raw params. Ship
 RunState_intro.html and RunState Promo.html exist in project root — both gitignored (local only).
 Do NOT use as final look yet — intentionally unfinished.
 Colors, branding, and button hierarchy are strong. Runner animation unfinished.
+
+---
+
+## Handoff — stabilization sprint complete (July 10, 2026)
+
+**Where we are:** A four-task stabilization sprint shipped, each as its own commit, before
+starting the Run Style redesign. All four are done and verified:
+
+1. **Privacy doc ↔ code alignment.** `RunAgent.buildUserMessage()` no longer sends the runner's
+   real username (a constant `"Runner"` label stands in); `DATA_PRIVACY.md` updated to match and
+   its stale "rolling average pace/distance" bullet replaced with the candidate-based comparison
+   summary that actually gets sent.
+2. **RunAgent HTTP timeouts.** Added a reusable static `CLIENT` with a 5s connect timeout plus a
+   5s per-request timeout (mirrors WeatherService). Verified a timeout throws an `Exception`
+   subclass that the existing `catch` already handles → falls back instead of hanging.
+3. **DB password out of source.** `RunStorage` reads `RUNSTATE_DB_PASSWORD` from the environment
+   (same pattern as `ANTHROPIC_API_KEY`); throws a clear `SQLException` if unset. Still uses the
+   dedicated `runstate_user`, never root. **Run-environment note:** the IntelliJ run config (and
+   any shell that runs the app) must define `RUNSTATE_DB_PASSWORD` or the DB connection fails.
+4. **First unit tests.** JUnit 5 (Jupiter) added, `test` scope. Tests live in a top-level `test/`
+   dir (kept out of `src/` because the pom points `sourceDirectory` at `src`; set via
+   `<testSourceDirectory>test</testSourceDirectory>`). `ComparisonServiceTest` has 9 tests
+   covering candidate selection (recency window, cap-10, route-first, distance fallback), median
+   aggregation (odd/even, outlier resistance vs mean), and the negative pre-filter (lower lift and
+   unexplained higher effort filtered; explained PR effort allowed). Run with `mvn test` or the
+   IntelliJ ▶ gutter arrows. Tested through the public `analyze(...)` only — internals stay private.
+
+**First thing to do next session: the Run Style redesign** (step 5 in the roadmap above) —
+rebase `detectRunStyle()` off the faster-AND-farther rolling-average rule. Handoff detail lives in
+`design_comparison_logic_fix.md` (path #3) and the Run Style design notes.
+
+**Security-milestone reminder (unchanged):** rotating the DB password to a strong, unique value
+belongs in the pre-release security pass — not the local-dev "basic" password used now.
 
 ---
 
