@@ -21,12 +21,18 @@ public class RunStorage {
     // and which schema to connect to.
     private static final String URL = "jdbc:mysql://localhost:3306/runstate";
     private static final String USER = "runstate_user";
-    private static final String PASSWORD = "runstate";
 
     // Opens and returns a live connection to the database.
     // Marked private because only this class needs to call it.
     private static Connection getConnection() throws SQLException {
-        return DriverManager.getConnection(URL, USER, PASSWORD);
+        // The password is read from the environment, never hardcoded in source — the same
+        // approach RunAgent uses for ANTHROPIC_API_KEY. Set RUNSTATE_DB_PASSWORD in the run
+        // environment (IntelliJ run config or the shell). See docs/DATA_PRIVACY.md / CLAUDE.md.
+        String password = System.getenv("RUNSTATE_DB_PASSWORD");
+        if (password == null || password.isBlank()) {
+            throw new SQLException("RUNSTATE_DB_PASSWORD environment variable not set");
+        }
+        return DriverManager.getConnection(URL, USER, password);
     }
 
     /*
