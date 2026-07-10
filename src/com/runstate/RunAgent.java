@@ -4,10 +4,17 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.time.Duration;
 import java.time.LocalDate;
 import com.google.gson.JsonParser;
 
 public class RunAgent {
+
+    // One reusable client for the whole app, with a connect timeout so a slow or
+    // unreachable API can never hang the console waiting to connect (mirrors WeatherService).
+    private static final HttpClient CLIENT = HttpClient.newBuilder()
+            .connectTimeout(Duration.ofSeconds(5))
+            .build();
 
     private static final String SYSTEM_PROMPT =
             "You are RunState — a supportive running mentor. You respond after every logged run.\n\n"
@@ -67,16 +74,16 @@ public class RunAgent {
                 + "\"messages\":[{\"role\":\"user\",\"content\":" + toJsonString(userMessage) + "}]"
                 + "}";
 
-        HttpClient client = HttpClient.newHttpClient();
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create("https://api.anthropic.com/v1/messages"))
+                .timeout(Duration.ofSeconds(5))
                 .header("Content-Type", "application/json")
                 .header("x-api-key", apiKey)
                 .header("anthropic-version", "2023-06-01")
                 .POST(HttpRequest.BodyPublishers.ofString(requestBody))
                 .build();
 
-        HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+        HttpResponse<String> response = CLIENT.send(request, HttpResponse.BodyHandlers.ofString());
 
         if (response.statusCode() != 200) {
             throw new Exception("API error: " + response.statusCode());
