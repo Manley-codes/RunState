@@ -2,8 +2,10 @@ package com.runstate;
 
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 
 /*
  * ComparisonService turns a run plus the runner's history into a ComparisonInsight.
@@ -337,5 +339,166 @@ public class ComparisonService {
             return "Cold conditions may explain some of the effort.";
         }
         return null;
+    }
+
+    // =====================================================================
+    // Strict RunStyle evidence path (RunStyle V1, Step 2).
+    //
+    // Completely separate from analyze() above — it never calls this and this
+    // never calls it, so analyze() and its 9 tests stay byte-for-byte identical.
+    // RunStyleService (Step 3) consumes the typed evidence produced here.
+    //
+    // How "strict" differs from analyze()'s selection:
+    //   - similar distance is ALWAYS required (analyze() lets a pure route match
+    //     through at any distance);
+    //   - there is an extra same-surface tier between route and bare distance.
+    // The private helpers above (withinRecency, normalizeRoute, similarDistance,
+    // the median* family, effortValue, EFFORT_EPSILON) are reused as-is.
+    // =====================================================================
+
+    // Bundles the chosen strict candidates with how they were matched, so the
+    // evaluator can report the basis without recomputing it.
+    private static final class StrictSelection {
+        final List<Run> candidates;
+        final String basis;
+
+        StrictSelection(List<Run> candidates, String basis) {
+            this.candidates = candidates;
+            this.basis = basis;
+        }
+    }
+
+    // Picks strict candidates in preference order, distance required at every tier:
+    //   1. same route + similar distance
+    //   2. same surface + similar distance
+    //   3. similar distance alone
+    // The first tier that yields any match wins (no blending across tiers).
+    private static StrictSelection selectStrict(Run current, List<Run> history) {
+        List<Run> recentPrevious = new ArrayList<>();
+        for (Run past : history) {
+            if (past != current && withinRecency(current, past)) {
+                recentPrevious.add(past);
+            }
+        }
+
+        // Tier 1 — same route AND similar distance.
+        String route = normalizeRoute(current.getRouteName());
+        if (route != null) {
+            List<Run> tier = new ArrayList<>();
+            for (Run past : recentPrevious) {
+                if (route.equals(normalizeRoute(past.getRouteName()))
+                        && similarDistance(current, past)) {
+                    tier.add(past);
+                }
+            }
+            if (!tier.isEmpty()) {
+                return new StrictSelection(cap(tier), "same route");
+            }
+        }
+
+        // Tier 2 — same surface AND similar distance.
+        SurfaceType surface = current.getSurface();
+        if (surface != null) {
+            List<Run> tier = new ArrayList<>();
+            for (Run past : recentPrevious) {
+                if (surface == past.getSurface() && similarDistance(current, past)) {
+                    tier.add(past);
+                }
+            }
+            if (!tier.isEmpty()) {
+                return new StrictSelection(cap(tier), "same surface");
+            }
+        }
+
+        // Tier 3 — similar distance only.
+        List<Run> tier = new ArrayList<>();
+        for (Run past : recentPrevious) {
+            if (similarDistance(current, past)) {
+                tier.add(past);
+            }
+        }
+        return new StrictSelection(cap(tier), "similar distance");
+    }
+
+    // Most-recent-first, then capped at MAX_CANDIDATES — same rule analyze() uses.
+    private static List<Run> cap(List<Run> runs) {
+        runs.sort((a, b) -> b.getDate().compareTo(a.getDate()));
+        if (runs.size() > MAX_CANDIDATES) {
+            return new ArrayList<>(runs.subList(0, MAX_CANDIDATES));
+        }
+        return runs;
+    }
+
+    // Evaluates the four typed signals for the current run against its strict
+    // candidates, recording which were MEASURABLE (enough data to judge) and which
+    // were SUPPORTED (fired positive). The thresholds mirror the string signals
+    // above so the two paths agree; they stay separate so analyze() is never touched.
+    static StrictEvidence evaluateStrict(Run current, List<Run> history) {
+        if (current == null || history == null) {
+            return StrictEvidence.NONE;
+        }
+        StrictSelection selection = selectStrict(current, history);
+        List<Run> candidates = selection.candidates;
+        if (candidates.isEmpty()) {
+            return StrictEvidence.NONE;
+        }
+
+        Set<RunStyleSignal> measurable = EnumSet.noneOf(RunStyleSignal.class);
+        Set<RunStyleSignal> supported = EnumSet.noneOf(RunStyleSignal.class);
+
+        double medPace = medianPace(candidates);
+        double medLift = medianEnergyLift(candidates);
+        double medEffort = medianEffort(candidates);
+        double medDistance = medianDistance(candidates);
+
+        // STATE_LIFT — bigger start-to-finish lift than the median candidate. Needs
+        // both energy readings here and lift data among the candidates.
+        EnergyLevel pre = current.getPreRunEnergy();
+        EnergyLevel post = current.getPostRunEnergy();
+        if (pre != null && post != null && !Double.isNaN(medLift)) {
+            measurable.add(RunStyleSignal.STATE_LIFT);
+            if (post.getValue() - pre.getValue() > medLift) {
+                supported.add(RunStyleSignal.STATE_LIFT);
+            }
+        }
+
+        // The three effort signals share one precondition: effort recorded on this run
+        // AND on at least one candidate. Legacy null-effort data simply stays unjudged.
+        double effort = effortValue(current);
+        boolean effortComparable = !Double.isNaN(effort) && !Double.isNaN(medEffort);
+        double pace = current.getPaceInMinutesPerMile();
+
+        // QUIET_GAIN — same output, clearly lower effort.
+        if (effortComparable) {
+            measurable.add(RunStyleSignal.QUIET_GAIN);
+            boolean lowerEffort = effort < medEffort - EFFORT_EPSILON;
+            boolean paceHeld = Double.isNaN(medPace) || pace <= medPace * 1.05;
+            if (lowerEffort && paceHeld) {
+                supported.add(RunStyleSignal.QUIET_GAIN);
+            }
+        }
+
+        // SAME_COST_BETTER — about the same effort, but faster.
+        if (effortComparable && !Double.isNaN(medPace)) {
+            measurable.add(RunStyleSignal.SAME_COST_BETTER);
+            boolean sameCost = Math.abs(effort - medEffort) <= EFFORT_EPSILON;
+            if (sameCost && pace < medPace) {
+                supported.add(RunStyleSignal.SAME_COST_BETTER);
+            }
+        }
+
+        // DEMAND_EXPLAINED — clearly higher effort, justified by a PR or more distance.
+        if (effortComparable) {
+            measurable.add(RunStyleSignal.DEMAND_EXPLAINED);
+            boolean higher = effort > medEffort + EFFORT_EPSILON;
+            boolean explained = current.isLongestDistanceRecord()
+                    || current.isFastestAveragePaceRecord()
+                    || (!Double.isNaN(medDistance) && current.getDistanceInMiles() > medDistance);
+            if (higher && explained) {
+                supported.add(RunStyleSignal.DEMAND_EXPLAINED);
+            }
+        }
+
+        return new StrictEvidence(candidates.size(), selection.basis, measurable, supported);
     }
 }

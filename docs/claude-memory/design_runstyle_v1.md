@@ -5,9 +5,25 @@ metadata:
   type: project
 ---
 
-**STATUS: LOCKED design, reviewed & agreed July 10, 2026. Build not started
-(this file is Step 0). Do not re-litigate the decisions below; flag anything
-that contradicts the actual code when reached.** Supersedes the old "Your Run
+**STATUS: LOCKED design, reviewed & agreed July 10, 2026.**
+Build progress (July 10, 2026):
+- Step 0 — design doc: DONE.
+- Step 1 — context enums (SurfaceType/RunCompany/MusicMode) + RunContext value
+  object + persistence (4 new columns, legacy music inference) + console Run-context
+  section + AI lines + privacy/AI docs + tests: CODE-COMPLETE, verified via javac +
+  a JUnit-platform launcher (no Maven locally). PENDING: the manual MySQL migration
+  and a live end-to-end log-run (needs DB access Manley has), and Manley's commit.
+- Step 2 — typed evidence (RunStyleSignal) + StrictEvidence value object +
+  ComparisonService.evaluateStrict strict candidate path (route+distance →
+  surface+distance → distance tiers, distance always required, cap 10) + tests:
+  CODE-COMPLETE. analyze() untouched; its 9 tests still green. PENDING: commit.
+- Step 3 — RunStyleService/RunStyleInsight, three families, stages, facets/habit,
+  announcements: NOT STARTED (next).
+- Step 4 — swap detectRunStyle wiring, delete rolling-average snapshot, reconcile
+  CLAUDE.md + design docs, full mvn test, end-to-end: NOT STARTED.
+
+Do not re-litigate the decisions below; flag anything that contradicts the actual
+code when reached. Supersedes the old "Your Run
 Style" faster-AND-farther rule in [[design-run-response-system]] and closes
 path #3 (`detectRunStyle`) deferred from [[design-comparison-logic-fix]].
 
