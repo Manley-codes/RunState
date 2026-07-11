@@ -29,10 +29,11 @@ Build progress (July 10, 2026):
   CLAUDE.md rolling-average rule replaced with a RunStyle/SRP note; the old Run Style
   sections in design_run_response_system.md and project_current_state.md replaced with
   RunStyle V1. 36 tests green; the real wired path was exercised in-process (State Lift
-  EARLY announcement prints; too-little-data returns null). getRollingAveragePace/Distance
-  remain in Runner but are now unused. PENDING (Manley, needs DB): the MySQL migration and
-  a live end-to-end log-run; and commit. Tests ran via a JUnit-platform launcher (no local
-  Maven), so `mvn test` still wants a confirming run on Manley's machine.
+  EARLY announcement prints; too-little-data returns null). DONE + verified on Manley's
+  machine July 10, 2026: MySQL migration applied, `mvn test` green, end-to-end log-run OK.
+  Follow-up cleanup (same day): removed the now-dead getRollingAveragePace/Distance from
+  Runner, and synced AI_AGENT.md's system-prompt block to the real prompt (no more
+  rolling-average references).
 
 Do not re-litigate the decisions below; flag anything that contradicts the actual
 code when reached. Supersedes the old "Your Run
