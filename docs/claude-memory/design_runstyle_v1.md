@@ -17,10 +17,15 @@ Build progress (July 10, 2026):
   ComparisonService.evaluateStrict strict candidate path (route+distance →
   surface+distance → distance tiers, distance always required, cap 10) + tests:
   CODE-COMPLETE. analyze() untouched; its 9 tests still green. PENDING: commit.
-- Step 3 — RunStyleService/RunStyleInsight, three families, stages, facets/habit,
-  announcements: NOT STARTED (next).
-- Step 4 — swap detectRunStyle wiring, delete rolling-average snapshot, reconcile
-  CLAUDE.md + design docs, full mvn test, end-to-end: NOT STARTED.
+- Step 3 — RunStyleService + RunStyleInsight + RunStyleFamily/RunStyleStage +
+  three families (point-in-time) + stages (3/4, 4/5, 6/7) + primary selection +
+  announcement transitions (evaluate full vs before-current, diff) + facets
+  (descriptive >=3, comparative 5/5/80%/30pp, one condition + one personal) +
+  habit line (>=5 of last 10, >=70%) + tests: CODE-COMPLETE, 13 new tests, 36 total
+  green via the launcher. NOT yet wired into Runner/RunConsole (that is Step 4), so
+  app behavior is unchanged until then. PENDING: commit.
+- Step 4 — swap detectRunStyle wiring to RunStyleService, delete rolling-average
+  snapshot, reconcile CLAUDE.md + design docs, full mvn test, end-to-end: NOT STARTED.
 
 Do not re-litigate the decisions below; flag anything that contradicts the actual
 code when reached. Supersedes the old "Your Run
