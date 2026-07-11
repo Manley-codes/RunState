@@ -34,7 +34,7 @@ As of June 25, 2026, the app is a working Java console app named **RunState**.
 2. Effort Cost V1 — DONE (July 8–9, 2026)
 3. Comparison Repair V1 — DONE (July 9, 2026); candidate-based comparison replaces the blended-average flaw (AI prompt + fallback; `detectRunStyle()` deferred)
 4. Stabilization sprint — DONE (July 10, 2026); privacy/code alignment, RunAgent HTTP timeouts, DB password moved to env var, and the project's first unit tests (see handoff below)
-5. **Run Style redesign — NEXT.** Rebase `detectRunStyle()` off the faster-AND-farther rolling-average rule onto an identity-aligned signal (consistency / LOW→HIGH lift habit / effort efficiency). This is comparison path #3, deferred from Comparison Repair V1. See design_comparison_logic_fix.md.
+5. **Run Style redesign — NEXT (now scoped as RunStyle V1).** Rebase `detectRunStyle()` off the faster-AND-farther rolling-average rule onto an identity-aligned profile. LOCKED design is `design_runstyle_v1.md` (reviewed July 10, 2026): three primary patterns (State Lift / Efficiency Gain / Controlled Finish), secondary context facets + habit identity, `RunStyleService`/`RunStyleInsight`, `RunContext` value object + four new context columns, point-in-time evaluation, 4-commit build order. This is comparison path #3, deferred from Comparison Repair V1. Step 0 (design doc) done July 10, 2026; Step 1 (context enums + RunContext + migration + persistence + console + AI + docs) is the next build move.
 6. Phase 6: lyric-aware music responses (Genius/Musixmatch) — scoped in AI_AGENT.md + design_music_reply_style.md
 7. Mobile UI — futuristic/warm transition concept, GPS tracking
 

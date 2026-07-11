@@ -52,7 +52,7 @@ public class ComparisonServiceTest {
                 route,
                 null,                           // routeLocation — unused
                 pre, post,
-                null,                           // musicContext — unused
+                null,                           // RunContext — unused here (coerced to EMPTY)
                 null,                           // weather — set per-test when needed
                 effort
         );

@@ -78,7 +78,10 @@ public class RunConsole {
         double distance = readPositiveNumber("Distance: ");
         double duration = readPositiveNumber("Duration in minutes: ");
         String routeName = readOptionalText("Route name (optional): ");
-        String musicContext = readOptionalText("What were you listening to? (optional): ");
+
+        // Optional pre-run context section (surface, shoes, company, sound). Returns an
+        // all-null RunContext.EMPTY if the runner skips the whole section.
+        RunContext context = readRunContext();
 
         EnergyLevel preRunEnergy;
         if (pendingPreRunEnergy != null) {
@@ -112,7 +115,7 @@ public class RunConsole {
                 null,
                 preRunEnergy,
                 null,
-                musicContext,
+                context,
                 weather,
                 null
         );
@@ -282,6 +285,83 @@ public class RunConsole {
             case 2: return EffortLevel.MODERATE_COST;
             case 3: return EffortLevel.HIGH_COST;
             case 4: return EffortLevel.MAX_COST;
+            default: return null;  // 0 = Skip
+        }
+    }
+
+    // Collects the optional pre-run context section. One "skip all" gate opens it; once
+    // open, every individual answer is still skippable. Returns RunContext.EMPTY when the
+    // runner declines the whole section, so a run with no context is still valid.
+    private RunContext readRunContext() {
+        System.out.println();
+        System.out.print("Add run context — surface, shoes, company, sound? (y/N): ");
+        String answer = scanner.nextLine().trim().toLowerCase();
+        // Anything other than an explicit yes skips the entire section (the single skip-all).
+        if (!answer.equals("y") && !answer.equals("yes")) {
+            return RunContext.EMPTY;
+        }
+
+        // Each reader below returns null when its own item is skipped.
+        SurfaceType surface = readSurface();
+        String shoeLabel = readOptionalText("Shoes (e.g. Pegasus 41) (optional): ");
+        RunCompany company = readCompany();
+        MusicMode musicMode = readMusicMode();
+
+        // The free-text music note is only worth asking when the runner actually had music.
+        String musicNote = null;
+        if (musicMode == MusicMode.MUSIC) {
+            musicNote = readOptionalText("What were you listening to? (optional): ");
+        }
+
+        return new RunContext(surface, company, shoeLabel, musicMode, musicNote);
+    }
+
+    // Asks what surface the run was on, or returns null if skipped. Menu labels come
+    // straight from the enum so the wording lives in exactly one place.
+    private SurfaceType readSurface() {
+        System.out.println("Surface (optional):");
+        System.out.println("0. Skip");
+        System.out.println("1. " + SurfaceType.ROAD.getLabel());
+        System.out.println("2. " + SurfaceType.TRAIL.getLabel());
+        System.out.println("3. " + SurfaceType.TRACK.getLabel());
+        System.out.println("4. " + SurfaceType.TREADMILL.getLabel());
+        System.out.println("5. " + SurfaceType.MIXED.getLabel());
+        int choice = readWholeNumber("Choose a surface: ", 0, 5);
+        switch (choice) {
+            case 1: return SurfaceType.ROAD;
+            case 2: return SurfaceType.TRAIL;
+            case 3: return SurfaceType.TRACK;
+            case 4: return SurfaceType.TREADMILL;
+            case 5: return SurfaceType.MIXED;
+            default: return null;  // 0 = Skip
+        }
+    }
+
+    // Asks whether the runner was solo or with others, or returns null if skipped.
+    private RunCompany readCompany() {
+        System.out.println("Company (optional):");
+        System.out.println("0. Skip");
+        System.out.println("1. " + RunCompany.SOLO.getLabel());
+        System.out.println("2. " + RunCompany.WITH_OTHERS.getLabel());
+        int choice = readWholeNumber("Choose company: ", 0, 2);
+        switch (choice) {
+            case 1: return RunCompany.SOLO;
+            case 2: return RunCompany.WITH_OTHERS;
+            default: return null;  // 0 = Skip
+        }
+    }
+
+    // Asks whether the runner had music at all (the "Sound" question), or returns null
+    // if skipped. NO_MUSIC is a real recorded answer, distinct from a skip (null).
+    private MusicMode readMusicMode() {
+        System.out.println("Sound (optional):");
+        System.out.println("0. Skip");
+        System.out.println("1. " + MusicMode.MUSIC.getLabel());
+        System.out.println("2. " + MusicMode.NO_MUSIC.getLabel());
+        int choice = readWholeNumber("Did you run with sound? ", 0, 2);
+        switch (choice) {
+            case 1: return MusicMode.MUSIC;
+            case 2: return MusicMode.NO_MUSIC;
             default: return null;  // 0 = Skip
         }
     }

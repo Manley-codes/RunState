@@ -46,6 +46,10 @@ public class RunAgent {
                     + "is recorded and it genuinely adds to the story — a hard effort behind modest numbers, an easy "
                     + "effort on a strong run — you may name it in pattern language. Only when it fits; never force "
                     + "it. High effort is never a bad run.\n"
+                    + "— Surface, run company, and shoes are context, not achievements. Mention one only when it "
+                    + "genuinely shapes this run's story, and only as neutral association ('your trail runs tend to "
+                    + "land easy') — never as praise, and never as cause. Gear, company, or terrain did not 'make' "
+                    + "the run good; do not imply they did.\n"
                     + "— Never introduce yourself or explain what you are doing. Just respond.";
 
     // Entry point — tries the API first, falls back to local logic on any failure.
@@ -117,7 +121,10 @@ public class RunAgent {
                 + "Effort: " + describeEffort(run) + "\n"
                 + "Personal records: " + prDescription(run) + "\n"
                 + "Route: " + (run.getRouteName() != null ? run.getRouteName() : "Not recorded") + "\n"
-                + "Music: " + (run.getMusicContext() != null ? run.getMusicContext() : "Not recorded") + "\n"
+                + "Surface: " + (run.getSurface() != null ? run.getSurface().getLabel() : "Not recorded") + "\n"
+                + "Run company: " + (run.getRunCompany() != null ? run.getRunCompany().getLabel() : "Not recorded") + "\n"
+                + "Shoes: " + (run.getShoeLabel() != null ? run.getShoeLabel() : "Not recorded") + "\n"
+                + "Music: " + describeMusic(run) + "\n"
                 + "Weather: " + describeWeather(run);
 
         // Candidate-based comparison replaces the old rolling-average lines entirely.
@@ -183,6 +190,22 @@ public class RunAgent {
         EffortLevel effort = run.getEffortLevel();
         if (effort == null) return "Not recorded";
         return effort.getLabel() + " (" + effort.name() + ")";
+    }
+
+    // Formats an UNAMBIGUOUS music line for the prompt. The three states must stay
+    // distinct so the AI never guesses: "No music" is a deliberate silent run, "Not
+    // recorded" means we never asked, and anything else names the track when we have it.
+    private static String describeMusic(Run run) {
+        MusicMode mode = run.getMusicMode();
+        String note = run.getMusicContext();
+        if (mode == MusicMode.NO_MUSIC) {
+            return "No music (ran in silence)";
+        }
+        // MUSIC, or a legacy note without a stored mode — either way the runner had music.
+        if (mode == MusicMode.MUSIC || note != null) {
+            return note != null ? note + " (had music)" : "Had music (track not noted)";
+        }
+        return "Not recorded";
     }
 
     private static String prDescription(Run run) {

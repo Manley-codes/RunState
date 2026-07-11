@@ -44,8 +44,9 @@ public class RunStorage {
     public static void saveRun(Run run) {
         String sql =  "INSERT INTO runs (run_date, start_time, end_time, distance, distance_unit, " +
                 "duration, route_name, route_location, pre_run_energy, post_run_energy, music_context, " +
+                "music_mode, surface_type, shoe_label, run_company, " +
                 "temperature, apparent_temperature, weather_condition, effort_level) " +
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
 
         // try-with-resources automatically closes the connection and statement
         // when the block ends, even if an error occurs.
@@ -65,11 +66,19 @@ public class RunStorage {
             stmt.setString(10, run.getPostRunEnergy() != null ? run.getPostRunEnergy().name() : null);
             // Free-text music note, or null if the runner skipped the prompt.
             stmt.setString(11, run.getMusicContext());
-            stmt.setObject(12, run.getTemperature());
-            stmt.setObject(13, run.getApparentTemperature());
-            stmt.setString(14, run.getWeatherCondition());
+            // Secondary context (RunStyle V1). Enums store their constant name ("TRAIL",
+            // "SOLO", "NO_MUSIC"), or null when the runner skipped that answer. Shoe label
+            // is free text. music_mode is separate from the music note above on purpose:
+            // NO_MUSIC (deliberately silent) must stay distinct from null (never recorded).
+            stmt.setString(12, run.getMusicMode() != null ? run.getMusicMode().name() : null);
+            stmt.setString(13, run.getSurface() != null ? run.getSurface().name() : null);
+            stmt.setString(14, run.getShoeLabel());
+            stmt.setString(15, run.getRunCompany() != null ? run.getRunCompany().name() : null);
+            stmt.setObject(16, run.getTemperature());
+            stmt.setObject(17, run.getApparentTemperature());
+            stmt.setString(18, run.getWeatherCondition());
             // Store the effort enum constant name ("LOW_COST", "MAX_COST", ...), or null if skipped.
-            stmt.setString(15, run.getEffortLevel() != null ? run.getEffortLevel().name() : null);
+            stmt.setString(19, run.getEffortLevel() != null ? run.getEffortLevel().name() : null);
 
             stmt.executeUpdate();
 
@@ -86,7 +95,9 @@ public class RunStorage {
      */
     public static List<Run> loadRuns(Runner runner) {
         List<Run> runs = new ArrayList<>();
-        String sql = "SELECT * FROM runs ORDER BY run_date ASC";
+        // run_id is the tiebreak so same-day runs load in a deterministic order — the
+        // point-in-time RunStyle logic depends on "which run came first" being stable.
+        String sql = "SELECT * FROM runs ORDER BY run_date, run_id";
 
         try (Connection conn = getConnection();
              PreparedStatement stmt = conn.prepareStatement(sql);
@@ -124,13 +135,31 @@ public class RunStorage {
                 // Optional free-text music note; getString returns null if the column is empty.
                 String musicContext = rs.getString("music_context");
 
+                // Secondary context columns (RunStyle V1). Each enum rebuilds via valueOf(),
+                // staying null when the column is null (skipped, or a legacy row from before
+                // these columns existed). Shoe label is plain text.
+                String surfaceStr = rs.getString("surface_type");
+                SurfaceType surface = surfaceStr != null ? SurfaceType.valueOf(surfaceStr) : null;
+
+                String companyStr = rs.getString("run_company");
+                RunCompany company = companyStr != null ? RunCompany.valueOf(companyStr) : null;
+
+                String shoeLabel = rs.getString("shoe_label");
+
+                // Music mode inference for legacy rows lives in inferMusicMode (extracted so
+                // it can be unit-tested without a live database).
+                MusicMode musicMode = inferMusicMode(rs.getString("music_mode"), musicContext);
+
+                // Rebuild the context bundle from its columns (composition, like weather).
+                RunContext context = new RunContext(surface, company, shoeLabel, musicMode, musicContext);
+
                 // Optional effort level; valueOf() rebuilds the enum, null when skipped or a legacy row.
                 String effortStr = rs.getString("effort_level");
                 EffortLevel effortLevel = effortStr != null ? EffortLevel.valueOf(effortStr) : null;
 
                 Run run = new Run(runId, runner, date, startTime, endTime,
                         distance, distanceUnit, duration, routeName, routeLocation,
-                        preRunEnergy, postRunEnergy, musicContext, weather, effortLevel);
+                        preRunEnergy, postRunEnergy, context, weather, effortLevel);
                 runs.add(run);
             }
 
@@ -139,5 +168,26 @@ public class RunStorage {
         }
 
         return runs;
+    }
+
+    /*
+     * Decides the MusicMode for a loaded row. Package-private and static (no database
+     * needed) so it can be unit-tested directly.
+     *
+     * Rules (see design_runstyle_v1):
+     *   - A stored mode always wins — a new row that recorded MUSIC or NO_MUSIC.
+     *   - No stored mode but a music NOTE exists → a legacy row that clearly HAD music,
+     *     so infer MUSIC.
+     *   - Both null → the mode was never recorded; stay null. We NEVER infer NO_MUSIC,
+     *     because the absence of a note is not evidence of deliberate silence.
+     */
+    static MusicMode inferMusicMode(String storedMode, String musicNote) {
+        if (storedMode != null) {
+            return MusicMode.valueOf(storedMode);
+        }
+        if (musicNote != null) {
+            return MusicMode.MUSIC;
+        }
+        return null;
     }
 }

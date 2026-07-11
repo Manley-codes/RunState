@@ -40,8 +40,12 @@ public class Run {
     // Describes the runner's optional energy level after the run.
     private EnergyLevel postRunEnergy;
 
-    // What the runner listened to during the run, or null if skipped.
-    private String musicContext;
+    // Optional secondary context (surface, company, shoes, music) bundled into one
+    // immutable object — composition, the same design as `weather` below. Never null:
+    // a run with nothing recorded holds RunContext.EMPTY, so the delegating getters
+    // never have to guard a null bundle (this is where it diverges from weather, which
+    // stays nullable and is guarded field-by-field).
+    private final RunContext context;
 
     // Weather at the time of the run, bundled into one immutable object (composition).
     // The bundle may be null, and its fields may be null, when weather wasn't recorded.
@@ -74,7 +78,7 @@ public class Run {
     public Run(int runId, Runner runner, LocalDate date, String startTime, String endTime,
                double distance, DistanceUnit distanceUnit, double duration,
                String routeName, String routeLocation, EnergyLevel preRunEnergy,
-               EnergyLevel postRunEnergy, String musicContext, WeatherData weather,
+               EnergyLevel postRunEnergy, RunContext context, WeatherData weather,
                EffortLevel effortLevel) {
 
         // "this" refers to the current object's variables
@@ -90,7 +94,9 @@ public class Run {
         this.routeLocation = routeLocation;
         this.preRunEnergy = preRunEnergy;
         this.postRunEnergy = postRunEnergy;
-        this.musicContext = musicContext;
+        // Coerce a null bundle to the shared EMPTY instance so the getters below stay
+        // null-free and getRunContext() never returns null.
+        this.context = context != null ? context : RunContext.EMPTY;
         // A run starts with no PR label until the Runner checks the run history.
         this.longestDistanceRecord = false;
         // A run starts with no fastest pace PR label until the Runner checks the run history.
@@ -120,9 +126,36 @@ public class Run {
         return distanceUnit.getPaceName();
     }
 
-    // Returns what the runner listened to, or null if it was skipped.
+    // Returns the full context bundle (surface/company/shoes/music). Never null —
+    // an all-null RunContext.EMPTY stands in when nothing was recorded.
+    public RunContext getRunContext() {
+        return context;
+    }
+
+    // Returns what the runner listened to (free text), or null if it was skipped.
+    // Delegates into the context bundle — the note now lives there, not on Run.
     public String getMusicContext() {
-        return musicContext;
+        return context.getMusicNote();
+    }
+
+    // Returns the surface the run was on, or null if not recorded.
+    public SurfaceType getSurface() {
+        return context.getSurface();
+    }
+
+    // Returns whether the runner was solo or with others, or null if not recorded.
+    public RunCompany getRunCompany() {
+        return context.getCompany();
+    }
+
+    // Returns the reusable shoe label, or null if not recorded.
+    public String getShoeLabel() {
+        return context.getShoeLabel();
+    }
+
+    // Returns whether the runner had music (MUSIC / NO_MUSIC), or null if not recorded.
+    public MusicMode getMusicMode() {
+        return context.getMusicMode();
     }
 
     // This method lets other classes read the run date.

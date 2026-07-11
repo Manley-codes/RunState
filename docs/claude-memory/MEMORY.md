@@ -7,6 +7,7 @@
 - [Weather context design](design_weather_context.md) — historical reference (shipped): original Open-Meteo spec, WMO mapping, API URLs; as-built status lives in design_weather_cleanup.md
 - [App landscape & considerations](research_app_landscape.md) — competitive research, RPE science, privacy, scope-creep watch
 - [Comparison logic fix plan](design_comparison_logic_fix.md) — blended-average flaw + reviewed V1 build handoff (candidate-based comparison, 180-day/cap-10 recency, median, negative pre-filter); build after Effort V1 completes
+- [RunStyle V1 design](design_runstyle_v1.md) — LOCKED July 10 2026: living strategy profile (State Lift / Efficiency Gain / Controlled Finish + context facets + habit identity); replaces faster-AND-farther detectRunStyle; 4-commit build order
 - [Music suggestion direction](parked_music_recommendation.md) — phase-aware playlist agent accepted (pre-run brain in Phase 5, live adaptation at Phase 6); discovery + collaborative filtering parked; Spotify API facts
 - [Music ingredients](music_ingredients.md) — reference-only holding file for music concepts; consult when music touches current work, but do not implement directly from it
 - [Weather cleanup](design_weather_cleanup.md) — ✅ SHIPPED July 6–7 2026: persistence bug + forecast API + WeatherService extraction + WeatherData value object + TX→Texas geocoding fix

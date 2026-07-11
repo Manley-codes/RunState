@@ -87,7 +87,10 @@ Post-run energy: [label] ([level])
 Effort: [label] ([level]) or Not recorded   ← Effort Cost V1
 Personal records: [PR description or None]
 Route: [routeName or not recorded]
-Music: [musicContext or not recorded]
+Surface: [Road | Trail | Track | Treadmill | Mixed, or Not recorded]   ← RunStyle V1
+Run company: [Solo | With others, or Not recorded]                     ← RunStyle V1
+Shoes: [shoe label or Not recorded]                                    ← RunStyle V1
+Music: [<note> (had music) | Had music (track not noted) | No music (ran in silence) | Not recorded]   ← RunStyle V1 (unambiguous: silent ≠ never asked)
 Weather: [temperature°F, feels-like°F, condition or not recorded]   ← Phase 5 Step 2
 
 # Comparison Repair V1 — the block below REPLACES the old rolling-average lines and
@@ -104,6 +107,12 @@ The comparison lines are produced by `ComparisonService` (candidate selection �
 aggregation → confidence tier → positive-signal derivation with a negative pre-filter);
 `RunAgent` only formats what survives. The old blended 20-run rolling average was removed
 because it mixed easy/long/tempo/sprint runs and manufactured misleading "above average" labels.
+
+**RunStyle V1 note:** the four context fields above (surface, run company, shoes, music) are
+raw run data and DO get sent. The **RunStyle profile** built from them — the local pattern
+analysis (which patterns are forming, and the context that accompanies productive runs) — is
+computed on the machine and is **never** sent to the API. The system prompt may reference the
+raw context fields only as neutral association, never as praise or cause.
 
 See `docs/DATA_PRIVACY.md` for a full breakdown of what data leaves the app and to whom.
 
