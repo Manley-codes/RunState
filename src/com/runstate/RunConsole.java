@@ -120,10 +120,6 @@ public class RunConsole {
                 null
         );
 
-        // Snapshot history averages before this run enters the list. So it doesnt compare against itself
-        double avgPace = runner.getRollingAveragePace(20);
-        double avgDistance = runner.getRollingAverageDistance(20);
-
         // Adding the run now sets PR flags before we display the summary.
         runner.addRun(run);
 
@@ -149,7 +145,7 @@ public class RunConsole {
         System.out.println();
         System.out.println(RunAgent.buildRunResponse(run));
 
-        String runStyleAlert = runner.detectRunStyle(run, avgPace, avgDistance);
+        String runStyleAlert = runner.detectRunStyle(run);
         if (runStyleAlert != null) {
             System.out.println();
             System.out.println(runStyleAlert);

@@ -51,9 +51,16 @@ different pre-run labels and FOUR states — open question, see creative_directi
 **LOW → HIGH always adds:**
 "See what getting active can do. You started rough and finished feeling great."
 
-**Your Run Style (pattern feature — built in Phase 3):**
-- Stays quiet until minimum run threshold (11 total runs, 10 previous)
-- Elimination funnel: Layer 1 = both pace AND distance above rolling average (last 20 runs) → Layer 2 = post-run energy MODERATE or HIGH → Layer 3 = pre-run energy as context
-- LOW → HIGH pre/post always notable regardless of other factors
-- Consistency gate: 4+ of last 10 previous runs also qualify
-- New Run Style Alert fires after a qualifying run
+**RunStyle (pattern feature — REBUILT as RunStyle V1, July 10, 2026):**
+The original Phase 3 "Your Run Style" (faster-AND-farther vs a 20-run rolling average,
+consistency gate, LOW→HIGH bonus) was REPLACED. That elimination funnel rewarded a
+physiologically unusual combination and was blind to good easy/long and hard/short training.
+RunStyle V1 (see [[design-runstyle-v1]]) is a living, local, deterministic strategy profile:
+- Three primary families — State Lift, Efficiency Gain, Controlled Finish — each judged
+  point-in-time; a run "supports" a family only when that family is measurable.
+- Stages from the latest opportunities per family (EARLY 3/4, FORMING 4/5, ESTABLISHED 6/7);
+  strongest staged family becomes primary (PR and Demand-Explained can color, never lead).
+- Secondary context (surface/company/weather/music/shoes) only decorates as association
+  facets or a frequency-based habit line — it can never create or strengthen a pattern.
+- Announces only on a first advance or a newly qualified facet; never repeats or downgrades.
+- Lives in `RunStyleService`; `Runner.detectRunStyle(Run)` delegates. Never sent to the AI.

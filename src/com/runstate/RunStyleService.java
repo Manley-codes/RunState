@@ -559,7 +559,7 @@ public final class RunStyleService {
         sb.append(stage.getHeadline());
         sb.append("\n").append(primary.getObservation());
         sb.append("\nSupported in ").append(supportCount).append(" of ")
-                .append(opportunityCount).append(" comparable opportunities.");
+                .append(opportunityCount).append(" opportunities.");
         for (String facet : facets) {
             sb.append("\n").append(facet);
         }

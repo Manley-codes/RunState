@@ -10,7 +10,7 @@ As of June 25, 2026, the app is a working Java console app named **RunState**.
 **Completed phases:**
 - Phase 1: Console app — energy system, opening prompt, post-run responses, rolling averages
 - Phase 2: MySQL persistence — runs save and load between sessions (`RunStorage.java`, `runstate` DB schema)
-- Phase 3: Your Run Style — pattern detection (`detectRunStyle()` in Runner.java, wired into RunConsole.logRun())
+- Phase 3: Your Run Style — original pattern detection (`detectRunStyle()` in Runner.java). SUPERSEDED by RunStyle V1, July 10, 2026 (see below).
 - Phase 4: AI agent — `RunAgent.java` replaces `buildRunResponse()` with Anthropic API call (claude-haiku-4-5-20251001). Fallback to hardcoded logic on any failure. Gson added for JSON parsing. `Run.java` has `getRunner()` getter added.
 - Phase 5 (Steps 1–2): AI context expansion — music context (manual input) + weather (Open-Meteo, `WeatherData` value object, persisted at log time). Built June 26; weather cleanup + TX→Texas fix shipped July 6–7, 2026.
 - Effort Cost V1: post-run "How did that run land?" input — `EffortLevel` enum (Smooth/Working/Heavy/Empty tank + internal RPE ranges), persisted at log time, shown in run history and fed to the agent (prompt line + SYSTEM_PROMPT rule + offline fallback). Built July 8–9, 2026 (collector commit 8981b48 + display/agent follow-up).
@@ -21,20 +21,26 @@ As of June 25, 2026, the app is a working Java console app named **RunState**.
 - `pom.xml` groupId → `com.runstate`, artifactId → `RunState`
 - IntelliJ module name still shows "RunNet" — cosmetic only, fix via right-click → Rename in Project panel
 
-**Your Run Style — locked-in design (built):**
-- Minimum 11 total runs (10 previous) before anything fires
-- Layer 1: pace AND distance both above 20-run rolling average
-- Layer 2: post-run energy MODERATE or HIGH
-- Consistency gate: 4+ of last 10 previous runs also qualify (threshold grows: 4/10 at 11-20 runs, 5/10 at 21-30, 6/10 at 31+)
-- Layer 3: LOW→HIGH pre/post always adds a bonus line
-- Named styles (Morning Charger etc.) deferred to mobile phase — no time-of-day data yet
+**RunStyle V1 — REBUILT July 10, 2026 (replaces the original "Your Run Style"):**
+The old faster-AND-farther-vs-rolling-average funnel is GONE. RunStyle V1 is a living,
+local, deterministic strategy profile in `RunStyleService` (`Runner.detectRunStyle(Run)`
+delegates). Full spec: `design_runstyle_v1.md`. In brief:
+- Three primary families — State Lift, Efficiency Gain, Controlled Finish — judged
+  point-in-time (a run only counts where its family is measurable).
+- Stages from the latest opportunities per family (EARLY 3/4, FORMING 4/5, ESTABLISHED
+  6/7); strongest staged family is primary. PR and Demand-Explained color but never lead.
+- Secondary context (surface/company/weather/music/shoes) only decorates as association
+  facets (descriptive ≥3; comparative 5/5/80%/30pp; one condition + one personal) or a
+  frequency-based habit line (≥5 of last 10, ≥70%). Context never creates a pattern.
+- Announces only on a first advance or newly qualified facet — never repeats or downgrades.
+- Never sent to the AI. Time-of-day identity still OUT (start/end time stored null).
 
 **Next steps (in order):**
 1. Phase 5 — DONE (music + weather shipped June 26–July 7, 2026)
 2. Effort Cost V1 — DONE (July 8–9, 2026)
 3. Comparison Repair V1 — DONE (July 9, 2026); candidate-based comparison replaces the blended-average flaw (AI prompt + fallback; `detectRunStyle()` deferred)
 4. Stabilization sprint — DONE (July 10, 2026); privacy/code alignment, RunAgent HTTP timeouts, DB password moved to env var, and the project's first unit tests (see handoff below)
-5. **Run Style redesign — NEXT (now scoped as RunStyle V1).** Rebase `detectRunStyle()` off the faster-AND-farther rolling-average rule onto an identity-aligned profile. LOCKED design is `design_runstyle_v1.md` (reviewed July 10, 2026): three primary patterns (State Lift / Efficiency Gain / Controlled Finish), secondary context facets + habit identity, `RunStyleService`/`RunStyleInsight`, `RunContext` value object + four new context columns, point-in-time evaluation, 4-commit build order. This is comparison path #3, deferred from Comparison Repair V1. Step 0 (design doc) done July 10, 2026; Step 1 (context enums + RunContext + migration + persistence + console + AI + docs) is the next build move.
+5. **RunStyle V1 — BUILT July 10, 2026 (Steps 0–4 code-complete; see `design_runstyle_v1.md`).** Rebased `detectRunStyle()` off the faster-AND-farther rolling-average rule onto the identity-aligned profile: `RunContext` value object + four new context columns, `RunStyleService`/`RunStyleInsight` with three families / stages / facets / habit / point-in-time announcements, `ComparisonService.evaluateStrict` typed-evidence path (analyze() unchanged), wiring swapped and the rolling-average snapshot deleted. 36 unit tests green. This was comparison path #3, deferred from Comparison Repair V1. **REMAINING (Manley): run the MySQL migration (four ALTER COLUMNs in the design doc) and a live end-to-end log-run against the migrated DB — no Maven/DB was available during the build, so tests ran via a JUnit-platform launcher, not `mvn test`.**
 6. Phase 6: lyric-aware music responses (Genius/Musixmatch) — scoped in AI_AGENT.md + design_music_reply_style.md
 7. Mobile UI — futuristic/warm transition concept, GPS tracking
 

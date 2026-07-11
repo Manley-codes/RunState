@@ -133,70 +133,14 @@ public class Runner {
         return total / (runHistory.size() - start);
     }
 
-    // Returns a Run Style alert if a consistent above-average pattern is detected, or null if not.
-    public String detectRunStyle(Run currentRun, double avgPace, double avgDistance) {
-
-        // Need at least 10 previous runs to check for consistency.
-        if (runHistory.size() < 11) {
-            return null;
-        }
-
-        // Layer 1: current run must be faster AND farther than rolling average.
-        if (currentRun.getPaceInMinutesPerMile() >= avgPace) {
-            return null;
-        }
-        if (currentRun.getDistanceInMiles() <= avgDistance) {
-            return null;
-        }
-
-        // Layer 2: post-run energy must be MODERATE or HIGH.
-        if (currentRun.getPostRunEnergy() == null) {
-            return null;
-        }
-        if (currentRun.getPostRunEnergy().getValue() < 2) {
-            return null;
-        }
-
-        // Consistency gate: count how many of the 10 previous runs also qualified.
-        int matchCount = 0;
-        int windowStart = runHistory.size() - 11;
-        int windowEnd = runHistory.size() - 2;
-        for (int i = windowStart; i <= windowEnd; i++) {
-            Run previous = runHistory.get(i);
-            if (previous.getPaceInMinutesPerMile() < avgPace
-                    && previous.getDistanceInMiles() > avgDistance
-                    && previous.getPostRunEnergy() != null
-                    && previous.getPostRunEnergy().getValue() >= 2) {
-                matchCount++;
-            }
-        }
-
-        // Threshold grows with run count — the app expects more consistency as history builds.
-        int threshold;
-        if (runHistory.size() <= 20) {
-            threshold = 4;
-        } else if (runHistory.size() <= 30) {
-            threshold = 5;
-        } else {
-            threshold = 6;
-        }
-
-        if (matchCount < threshold) {
-            return null;
-        }
-
-        // Pattern confirmed — build the alert.
-        String alert = "Your Run Style is forming.\n"
-                + "In " + matchCount + " of your last 10 runs, "
-                + "you ran above your average and finished feeling strong.";
-
-        // Layer 3: LOW → HIGH lift is always worth calling out.
-        if (currentRun.getPreRunEnergy() == EnergyLevel.LOW
-                && currentRun.getPostRunEnergy() == EnergyLevel.HIGH) {
-            alert += "\nYou also have a habit of turning rough starts into strong finishes.";
-        }
-
-        return alert;
+    // Returns a RunStyle announcement for this run, or null when nothing new should be
+    // announced. All the detection logic now lives in RunStyleService (SRP, like
+    // ComparisonService) — Runner just hands it this run plus the full history and relays
+    // what comes back. getRunHistory() already includes currentRun, because addRun() runs
+    // before this in logRun(), which is exactly what analyze() expects.
+    public String detectRunStyle(Run currentRun) {
+        RunStyleInsight insight = RunStyleService.analyze(currentRun, getRunHistory());
+        return insight.shouldAnnounce() ? insight.getMessage() : null;
     }
 
     // Stores a newly logged run and requests that any new PRs be announced.

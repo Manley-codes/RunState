@@ -24,8 +24,15 @@ Build progress (July 10, 2026):
   habit line (>=5 of last 10, >=70%) + tests: CODE-COMPLETE, 13 new tests, 36 total
   green via the launcher. NOT yet wired into Runner/RunConsole (that is Step 4), so
   app behavior is unchanged until then. PENDING: commit.
-- Step 4 — swap detectRunStyle wiring to RunStyleService, delete rolling-average
-  snapshot, reconcile CLAUDE.md + design docs, full mvn test, end-to-end: NOT STARTED.
+- Step 4 — CODE-COMPLETE. detectRunStyle now delegates to RunStyleService (params +
+  faster-AND-farther logic gone); rolling-average snapshot deleted from RunConsole.logRun;
+  CLAUDE.md rolling-average rule replaced with a RunStyle/SRP note; the old Run Style
+  sections in design_run_response_system.md and project_current_state.md replaced with
+  RunStyle V1. 36 tests green; the real wired path was exercised in-process (State Lift
+  EARLY announcement prints; too-little-data returns null). getRollingAveragePace/Distance
+  remain in Runner but are now unused. PENDING (Manley, needs DB): the MySQL migration and
+  a live end-to-end log-run; and commit. Tests ran via a JUnit-platform launcher (no local
+  Maven), so `mvn test` still wants a confirming run on Manley's machine.
 
 Do not re-litigate the decisions below; flag anything that contradicts the actual
 code when reached. Supersedes the old "Your Run

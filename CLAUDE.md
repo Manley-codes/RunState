@@ -28,5 +28,5 @@ Java run-tracking app using MySQL for persistence. Use a dedicated DB user rathe
 ## Key architecture rules
 - loadRun() for sample data (no PR announcements), addRun() for new runs (announces PRs)
 - buildRunResponse() now lives in RunAgent.java — keep it isolated and clean
-- Rolling average snapshot must happen BEFORE addRun() in logRun()
+- RunStyle detection lives in RunStyleService.java (SRP); Runner.detectRunStyle(Run) only delegates. The profile is local and deterministic — never sent to the AI. See docs/claude-memory/design_runstyle_v1.md
 - Never mention below-average performance in run responses — stay quiet if numbers are down
