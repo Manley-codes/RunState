@@ -33,7 +33,9 @@ delegates). Full spec: `design_runstyle_v1.md`. In brief:
   facets (descriptive ≥3; comparative 5/5/80%/30pp; one condition + one personal) or a
   frequency-based habit line (≥5 of last 10, ≥70%). Context never creates a pattern.
 - Announces only on a first advance or newly qualified facet — never repeats or downgrades.
-- Never sent to the AI. Time-of-day identity still OUT (start/end time stored null).
+- Never sent to the AI. Time-of-day identity: deferred by data availability, not by
+  verdict — wanted eventually; revisit when start/end timestamps arrive (mobile phase).
+  Full status wording in design_runstyle_v1.md.
 
 **Completed sequence:**
 1. Phase 5 — DONE (music + weather shipped June 26–July 7, 2026)

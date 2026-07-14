@@ -139,8 +139,12 @@ Controlled Finish**.
 shown only when a context was recorded on **>=5 of the last 10 runs** AND
 present in **>=70% of the runs where it was recorded**. Wording is
 frequency-based ("Trails are becoming a consistent part of how you run"), never
-a title. Morning/time-of-day identity is OUT (start_time/end_time are stored
-null today).
+a title. **Time-of-day identity — deferred by data availability, not by verdict.**
+Wanted eventually: it's identity-rich (morning-runner culture) and feeds RunStyle
+facets, the music taste split, and reflection. Deferred because start_time/end_time
+are stored null today and manual console entry isn't worth the friction. Revisit
+when timestamps arrive (mobile phase). When built, it enters as an association
+facet under existing RunStyle rules — context decorates, never creates a pattern.
 
 ## Behavior
 

@@ -60,10 +60,15 @@ the runner's state, and make the runner feel like the product was built for runn
   meaning should be validated after the run.
 - **No-music runs still matter:** support non-music runs with mental anchors or
   self-suggestions when appropriate.
-- **Meaning-sync, not beat-sync:** Weav Run and RockMyRun already own tempo-matching, and it
-  needs data RunState can't get. RunState's lane is syncing music to the runner's state,
-  intent, and history — not their steps per minute. BPM matching is permanently out, not
-  deferred.
+- **Meaning-sync, not beat-sync:** RunState's current direction syncs music to the runner's
+  state, intent, and history — not steps per minute. Tempo/BPM matching is **out of current
+  scope by stage, not by verdict**: it is not a fit for the current build stage, and no
+  current work should depend on it or prepare for it — but the design must not foreclose it.
+  Keep room in the music/data layer so tempo-based features remain possible; if tempo
+  matching shows a real strength later in development, it can be added then, or justify
+  deliberate reconstruction. Practical constraint for any future version: per-track tempo
+  data is not currently accessible via Spotify (Audio Features deprecated Nov 2024), so it
+  would need its own data source.
 - **Settle / Hold / Build:** the only music question a runner should ever face — "What should
   the music do for you today?" Three answers. Ideally the agent proposes one from pre-run
   energy and history ("Sounds like a settle morning?") and the runner confirms with one tap.
@@ -116,7 +121,8 @@ causal certainty.
 - A generic AI chat room.
 - A stack of default fitness playlists.
 - A feature-dense product where the core running purpose gets buried.
-- Tempo/BPM matching in any form (wrong lane — see meaning-sync).
+- Tempo/BPM matching at the current stage (see the meaning-sync bullet for status — room
+  intentionally preserved for later evaluation).
 - Automatic mid-song interruption, even as an opt-in aggressive mode. LEAVE and QUEUE_NEXT
   are the only automatic actions; immediate skips are runner-initiated only.
 - Mid-run prompts or dialogs. Revisit only if a watch UI ever exists.
