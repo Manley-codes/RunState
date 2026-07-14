@@ -5,35 +5,25 @@ metadata:
   type: project
 ---
 
-**STATUS: LOCKED design, reviewed & agreed July 10, 2026.**
-Build progress (July 10, 2026):
-- Step 0 — design doc: DONE.
-- Step 1 — context enums (SurfaceType/RunCompany/MusicMode) + RunContext value
-  object + persistence (4 new columns, legacy music inference) + console Run-context
-  section + AI lines + privacy/AI docs + tests: CODE-COMPLETE, verified via javac +
-  a JUnit-platform launcher (no Maven locally). PENDING: the manual MySQL migration
-  and a live end-to-end log-run (needs DB access Manley has), and Manley's commit.
-- Step 2 — typed evidence (RunStyleSignal) + StrictEvidence value object +
-  ComparisonService.evaluateStrict strict candidate path (route+distance →
-  surface+distance → distance tiers, distance always required, cap 10) + tests:
-  CODE-COMPLETE. analyze() untouched; its 9 tests still green. PENDING: commit.
-- Step 3 — RunStyleService + RunStyleInsight + RunStyleFamily/RunStyleStage +
-  three families (point-in-time) + stages (3/4, 4/5, 6/7) + primary selection +
-  announcement transitions (evaluate full vs before-current, diff) + facets
-  (descriptive >=3, comparative 5/5/80%/30pp, one condition + one personal) +
-  habit line (>=5 of last 10, >=70%) + tests: CODE-COMPLETE, 13 new tests, 36 total
-  green via the launcher. NOT yet wired into Runner/RunConsole (that is Step 4), so
-  app behavior is unchanged until then. PENDING: commit.
-- Step 4 — CODE-COMPLETE. detectRunStyle now delegates to RunStyleService (params +
-  faster-AND-farther logic gone); rolling-average snapshot deleted from RunConsole.logRun;
-  CLAUDE.md rolling-average rule replaced with a RunStyle/SRP note; the old Run Style
-  sections in design_run_response_system.md and project_current_state.md replaced with
-  RunStyle V1. 36 tests green; the real wired path was exercised in-process (State Lift
-  EARLY announcement prints; too-little-data returns null). DONE + verified on Manley's
-  machine July 10, 2026: MySQL migration applied, `mvn test` green, end-to-end log-run OK.
-  Follow-up cleanup (same day): removed the now-dead getRollingAveragePace/Distance from
-  Runner, and synced AI_AGENT.md's system-prompt block to the real prompt (no more
-  rolling-average references).
+**STATUS: BUILT AND VERIFIED July 10, 2026.**
+
+All four implementation steps are complete and committed:
+- Step 1 added the context enums, `RunContext`, four persistence columns, console capture,
+  AI/privacy documentation, legacy music inference, and tests.
+- Step 2 added typed RunStyle evidence and the strict candidate path while leaving
+  `ComparisonService.analyze()` unchanged.
+- Step 3 added `RunStyleService`, `RunStyleInsight`, the three families and stages, facets,
+  habits, point-in-time evaluation, announcements, and tests.
+- Step 4 wired `Runner.detectRunStyle()` to the service, removed the faster-and-farther and
+  rolling-average path, and synchronized the related documentation.
+
+Verification evidence: Manley applied the four-column MySQL migration, `mvn test` passed
+with 36 tests, and a live end-to-end log-run succeeded against the migrated database.
+Same-day ordering is deterministic in the current flow: `RunStorage` loads by
+`run_date, run_id`, and the stable Java date sorts preserve that incoming order.
+
+Follow-up cleanup on the same day removed the dead rolling-average methods from `Runner`
+and synchronized `AI_AGENT.md` with the real prompt.
 
 Do not re-litigate the decisions below; flag anything that contradicts the actual
 code when reached. Supersedes the old "Your Run

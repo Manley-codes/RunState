@@ -133,11 +133,11 @@ See `docs/DATA_PRIVACY.md` for a full breakdown of what data leaves the app and 
 
 ---
 
-## Phase 5: AI Agent Context Expansion
+## Phase 5: AI Agent Context Expansion — SHIPPED
 
-> **Music first, then weather. This is the next phase.**
+> **Music capture and weather context shipped June 26–July 7, 2026.**
 
-Phase 4 built the agent with existing data. Phase 5 is what makes responses feel like
+Phase 4 built the agent with existing data. Phase 5 made responses feel like
 they could only have been written about this exact run.
 
 The agent becomes meaningfully more personal when it knows:
@@ -169,10 +169,10 @@ The agent becomes meaningfully more personal when it knows:
 - This is a signature feature candidate — the full music vision lives in
   `docs/claude-memory/parked_music_recommendation.md` (UNIQUE_IDEAS.md is archived)
 - Implementation path:
-  1. Phase 5: add optional music field to Run (artist + song text input during log flow)
-  2. Phase 5: agent uses artist/song name in response when available
-  3. Phase 6: integrate Genius or Musixmatch API to fetch lyrics
-  4. Phase 6: expand agent prompt to find emotionally resonant lyric matches
+  1. BUILT: optional music input during the log flow
+  2. BUILT: agent receives artist/song context when available
+  3. FUTURE: choose a legally usable lyrics provider; do not scrape Genius
+  4. FUTURE: expand the agent behavior for licensed lyric/theme context
 
 ### Trail or route awareness
 - Route name already exists in the Run model — the agent can use it now

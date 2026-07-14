@@ -109,14 +109,13 @@ fields, nullable reference, constructor evolution), flag commit points.
 
 ## Tie-ins
 
-- **design_comparison_logic_fix.md** — this provides the effort measure that fix has been
-  waiting for ("effort efficiency as the right direction"). Build effort input before or
-  with that fix.
+- **design_comparison_logic_fix.md** — Effort supplied the missing measure used by the
+  comparison repair, which was subsequently built July 9, 2026.
 - Runner-native test: "How did that run land?" passes; "Rate exertion 1–10" fails.
 - Positioning: strengthens the core intelligence layer (state-aware reflection) directly.
 
 ## Sequencing
 
-Weather is shipped. Candidates for the next backend thread: (a) effort input + comparison
-fix (core-strengthening, all-local, no new APIs), or (b) Phase 6 lyric-aware replies
-(gated by the lyrics-licensing legal flag). Manley decides; no deadline.
+Historical sequencing is complete: weather, Effort Cost V1, Comparison Repair V1,
+stabilization, and RunStyle V1 have all shipped. See `project_current_state.md` for the
+current music-work resume point.

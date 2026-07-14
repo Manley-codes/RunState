@@ -35,14 +35,18 @@ delegates). Full spec: `design_runstyle_v1.md`. In brief:
 - Announces only on a first advance or newly qualified facet — never repeats or downgrades.
 - Never sent to the AI. Time-of-day identity still OUT (start/end time stored null).
 
-**Next steps (in order):**
+**Completed sequence:**
 1. Phase 5 — DONE (music + weather shipped June 26–July 7, 2026)
 2. Effort Cost V1 — DONE (July 8–9, 2026)
 3. Comparison Repair V1 — DONE (July 9, 2026); candidate-based comparison replaces the blended-average flaw (AI prompt + fallback; `detectRunStyle()` deferred)
 4. Stabilization sprint — DONE (July 10, 2026); privacy/code alignment, RunAgent HTTP timeouts, DB password moved to env var, and the project's first unit tests (see handoff below)
-5. **RunStyle V1 — BUILT July 10, 2026 (Steps 0–4 code-complete; see `design_runstyle_v1.md`).** Rebased `detectRunStyle()` off the faster-AND-farther rolling-average rule onto the identity-aligned profile: `RunContext` value object + four new context columns, `RunStyleService`/`RunStyleInsight` with three families / stages / facets / habit / point-in-time announcements, `ComparisonService.evaluateStrict` typed-evidence path (analyze() unchanged), wiring swapped and the rolling-average snapshot deleted. 36 unit tests green. This was comparison path #3, deferred from Comparison Repair V1. **REMAINING (Manley): run the MySQL migration (four ALTER COLUMNs in the design doc) and a live end-to-end log-run against the migrated DB — no Maven/DB was available during the build, so tests ran via a JUnit-platform launcher, not `mvn test`.**
-6. Phase 6: lyric-aware music responses (Genius/Musixmatch) — scoped in AI_AGENT.md + design_music_reply_style.md
-7. Mobile UI — futuristic/warm transition concept, GPS tracking
+5. **RunStyle V1 — DONE AND VERIFIED July 10, 2026 (see `design_runstyle_v1.md`).** Rebased `detectRunStyle()` off the faster-AND-farther rolling-average rule onto the identity-aligned profile: `RunContext` value object + four new context columns, `RunStyleService`/`RunStyleInsight` with three families / stages / facets / habit / point-in-time announcements, `ComparisonService.evaluateStrict` typed-evidence path (`analyze()` unchanged), wiring swapped, and the rolling-average snapshot deleted. Verification evidence: Manley applied the four-column MySQL migration, `mvn test` passed with 36 tests, and a live end-to-end log-run succeeded against the migrated database. Same-day ordering is deterministic in the current flow: the database loads by `run_date, run_id`, and Java's stable in-memory date sorts preserve that incoming order.
+
+**Current resume point — music work:**
+- Candidate A: apply the core music reply craft rules in `design_music_reply_style.md`. This subset is prompt-only (`SYSTEM_PROMPT` / `buildUserMessage()`), with no schema or API work.
+- Candidate B: plan Music Intelligence V1 by turning the accepted and parked music ideas into a bounded purpose, evidence model, and execution sequence.
+- The cross-run music-reference frequency mechanism is a separate persistence decision, not part of the prompt-only craft subset. Do not build it before the V1 plan settles what should be stored.
+- The order of Candidates A and B is not locked. Lyric-provider integration and live/mobile music adaptation remain later work with legal, privacy, and platform dependencies.
 
 **Standing milestone — privacy / security / legal pass (added July 6, 2026):**
 Before RunState is released, shared publicly, or gains multi-user/all-day-listening features,
@@ -66,7 +70,7 @@ Feature map (July 6, 2026) — which features strongly trigger which concern:
   weight jumps at multi-user); user-generated content moderation if community playlists
   ship (Phase 7).
 
-**Phase 5 plan (locked in, ready to build):**
+**Phase 5 as-built record:**
 Both features follow the same four-file pattern:
   Run.java -> add field | RunStorage.java -> add DB column | RunConsole.java -> add optional prompt | RunAgent.java -> add to user message
 
@@ -76,7 +80,7 @@ Step 1 — Music (manual input now, Spotify integration in mobile phase): **BUIL
 - Optional "What were you listening to? (optional):" prompt in RunConsole.logRun(), stored null if skipped
 - "Music:" line added to RunAgent.buildUserMessage(); music rule added to SYSTEM_PROMPT (reference artist/song only when it genuinely fits — never force)
 - AI_AGENT.md data contract updated with the Music line
-- DB MIGRATION REQUIRED on the user's MySQL: `ALTER TABLE runs ADD COLUMN music_context VARCHAR(255) NULL;` (run manually — saveRun will fail until this exists)
+- The MySQL `music_context` migration was applied before the successful Phase 5 live verification.
 
 **Future refinement — music reference variety (user note, June 26, 2026):**
 When automation arrives (Spotify) and a runner plays the same song often, the agent must NOT keep
@@ -134,9 +138,9 @@ starting the Run Style redesign. All four are done and verified:
    unexplained higher effort filtered; explained PR effort allowed). Run with `mvn test` or the
    IntelliJ ▶ gutter arrows. Tested through the public `analyze(...)` only — internals stay private.
 
-**First thing to do next session: the Run Style redesign** (step 5 in the roadmap above) —
-rebase `detectRunStyle()` off the faster-AND-farther rolling-average rule. Handoff detail lives in
-`design_comparison_logic_fix.md` (path #3) and the Run Style design notes.
+**Historical next step at this handoff — COMPLETED July 10, 2026:** the Run Style redesign
+described here was subsequently built and verified. The current resume point is the music-work
+section near the top of this document.
 
 **Security-milestone reminder (unchanged):** rotating the DB password to a strong, unique value
 belongs in the pre-release security pass — not the local-dev "basic" password used now.
@@ -150,26 +154,17 @@ built, committed, and pushed. The weather cleanup (Step 2.5) and the TX→Texas 
 July 6–7, 2026 and are verified end-to-end. Privacy doc is done. No open weather work remains.
 Manley is taking a break here to review the whole app before building deeper.
 
-**First thing to do in the next session:**
-Nothing weather-related is pending. Backend queue (order clarified July 7, 2026 after a
-mislabel — reply-style is prompt-only and is NOT the lyric-API feature):
-1. Music reply-style craft rules (`design_music_reply_style.md`) — the decided next task
-   from the July 6 backend session. Prompt-only (SYSTEM_PROMPT + buildUserMessage), no
-   schema changes, no new APIs. Smallest step, immediately improves the signature moment.
-2. Effort input + comparison fix (`design_effort_cost.md` + `design_comparison_logic_fix.md`) —
-   core-strengthening, all-local; effort data is what the comparison fix needs.
-3. LATER, Phase 6: lyric-aware replies via a lyrics API — gated by the lyrics-licensing
-   legal flag (Musixmatch paid; Genius scraping violates ToS). Lyric references follow the
-   spectrum in design_music_reply_style.md rule 5 (creative theme-fit default; selective
-   exact/near-exact quotes allowed; distinctive-line quoting = deferred legal-pass item,
-   NOT banned — Manley decides).
-Order of 1 vs 2 is Manley's call; both are ready.
+**Historical queue at this handoff — SUPERSEDED:** Effort Cost, Comparison Repair, stabilization,
+and RunStyle V1 were completed after this note was written. This handoff also described the whole
+music reply-style task as prompt-only; the corrected design separates its prompt-only craft rules
+from its persistence-dependent cross-run frequency mechanism. The current resume point is the
+music-work section near the top of this document.
 
 **July 6, 2026 — UI phase paused; back to backend.**
 UI/creative-direction exploration is paused (see creative_direction_ui.md v0.2 — §0 has the
 locked July decisions reconciled from the prompt-iteration sessions). Moodboard is gitignored
 (local only, like the HTML prototypes); creative_direction_ui.md is the surviving text record.
-Current focus: the weather cleanup above.
+Historical focus at that time: the weather cleanup above, which has since shipped.
 NOTE FOR LATER (not a current focus): the UI "State Scan" concept implies FOUR pre-run energy
 states, but the backend energy system is THREE levels. Open question — resolve when UI work
 resumes, before Phase 6. Do not change the backend enum for it now.

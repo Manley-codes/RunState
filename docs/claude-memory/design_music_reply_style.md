@@ -1,6 +1,6 @@
 ---
 name: design-music-reply-style
-description: "Music reply craft rules (July 6, 2026) — early-user leniency, convergence-scaled references, stat-first structure, cross-run frequency balance. Prompt-only change, slots after weather cleanup."
+description: "Music reply design (July 6, 2026) — prompt-only core craft rules plus a separate cross-run frequency mechanism that requires a persistence decision."
 metadata:
   type: project
 ---
@@ -8,9 +8,17 @@ metadata:
 # Music reply style — craft rules for the AI agent (July 6, 2026)
 
 How the agent should reference music in post-run replies. Extends the Phase 5 Step 1
-music feature (manual input). These are SYSTEM_PROMPT + buildUserMessage() changes only —
-no schema or console changes. Natural next backend task AFTER the weather cleanup
-(design_weather_cleanup.md).
+music feature (manual input).
+
+**STATUS: DESIGNED, NOT BUILT.** This document contains two distinct slices:
+- **Core craft rules + early-user posture:** prompt-layer work only; no schema, console,
+  provider API, or reply-persistence change.
+- **Cross-run frequency balance:** a separate small mechanism that cannot be prompt-only
+  because the app does not currently store AI replies or a "music was referenced" signal.
+
+Either the core craft slice or Music Intelligence V1 planning can come first. Their order
+is not locked. The frequency mechanism should wait until the V1 plan decides what evidence
+belongs in persistence.
 
 ## The anti-pattern vs. the north star
 
@@ -64,18 +72,19 @@ the agent actively hunts for the genuine link (one almost always exists) instead
 staying silent unless the fit is undeniable. A forced hollow reference in week one is
 worse than silence — leniency means trying harder, not accepting worse.
 
-## Cross-run frequency balance (mechanism, small build)
+## Cross-run frequency balance (separate persistence-dependent mechanism)
 
 The agent is stateless — it cannot know it referenced music three replies in a row, so
-it cannot self-regulate. Fix: pass cross-run context into buildUserMessage():
+it cannot self-regulate. Candidate mechanism: pass cross-run context into buildUserMessage():
 - "Music referenced in X of the last Y replies"
 - "Runs logged so far: N"
 Early runs → lean in. Recent streak of music replies → hold back.
 This SAME mechanism solves the June 26 variety note in project_current_state.md
 (never call out the same song every run once Spotify automation exists).
-Implementation note: requires deciding how "was music referenced" is detected/stored —
-open question, resolve when building (options: flag column on runs, or lightweight
-string scan of stored replies — replies are not currently stored, so likely a flag).
+Implementation note: deciding how "was music referenced" is detected and stored remains
+open. Options include a flag associated with each run or persisting and analyzing replies;
+the current app does neither. Resolve the evidence and persistence contract during Music
+Intelligence V1 planning before building this mechanism.
 
 ## Out of scope here
 

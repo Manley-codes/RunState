@@ -9,18 +9,19 @@ metadata:
 
 Reference only. Do not implement from this file directly.
 
-Status: PARKED during core stabilization and Run Style work. However — on any music-related
-task, review this file first and flag anything that would be cheaper to include during that
-task than to retrofit later ("this fits this task, waiting complicates things" — Manley
-decides). When core tasks are complete, this file gets a full consideration/analysis pass —
-it is a holding file, not an archive.
+Status: ACTIVE FOR REVIEW now that core stabilization and RunStyle V1 are complete. On any
+music-related task, review this file first and flag anything that would be cheaper to include
+during that task than to retrofit later ("this fits this task, waiting complicates things" —
+Manley decides). This remains an ingredients file, not an execution plan or an archive.
 
 Use this file when current work touches music, privacy, comparison data, Spotify/device
 integration, AI-agent behavior, or run-culture positioning. Its job is to preserve the
 best music ideas without pulling the project away from the core build.
 
-Current priority is not expanding music. Current priority is stabilizing RunState's core:
-secrets, privacy, save reliability, AI timeout protection, tests, and comparison reliability.
+The core prerequisites that previously kept music parked are complete. The current resume
+point is to either apply the independent prompt-only music reply craft rules or define Music
+Intelligence V1 from these ingredients. Their order is not locked. The persistence-dependent
+cross-run reference-frequency mechanism should wait for the V1 evidence contract.
 
 ## Core principle
 
@@ -159,14 +160,14 @@ rules) before it's filed, same as the DJ document.
 
 ## Recommended order
 
-1. Handle urgent coding and security tasks first: secrets, privacy, save reliability, AI
-   timeout protection, tests, and comparison reliability.
-2. Stabilize the existing RunState core.
-3. Finish a clean music concept spec only after the core tasks are under control.
-4. Document music decisions only after exact file and section changes are approved.
-5. Build a tiny decision simulator before Spotify or mobile integration.
-6. Treat Spotify or other providers as playback/history pipes, not the music brain.
-7. Build live GPS, skips, pace drops, and queue control later in the mobile phase.
+1. Core stabilization and RunStyle V1 — COMPLETE.
+2. Choose the immediate music task: independent reply craft rules or Music Intelligence V1
+   planning. Either order is valid; do not bundle in the frequency mechanism yet.
+3. Turn the selected V1 decisions into a bounded execution plan, then document only the
+   decisions Manley approves.
+4. Build a tiny decision simulator before Spotify or mobile integration.
+5. Treat Spotify or other providers as playback/history pipes, not the music brain.
+6. Build live GPS, skips, pace drops, and queue control later in the mobile phase.
 
 ## Phrases to preserve
 
