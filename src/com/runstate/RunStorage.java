@@ -35,13 +35,27 @@ public class RunStorage {
         return DriverManager.getConnection(URL, USER, password);
     }
 
+    // The injectable seam. Production passes the real getConnection above; a test can
+    // pass a lambda that throws, simulating a dead database without touching MySQL.
+    // Package-private (no modifier) so tests in this package can supply their own.
+    @FunctionalInterface
+    interface ConnectionProvider {
+        Connection getConnection() throws SQLException;
+    }
+
     /*
      * Saves one completed run to the database.
      *
      * A PreparedStatement uses ? placeholders instead of inserting values
      * directly into the SQL string. This is safer and prevents SQL injection.
      */
-    public static void saveRun(Run run) {
+    // Public entry point: production always uses the real database connection.
+    public static void saveRun(Run run) throws RunStorageException {
+        saveRun(run, RunStorage::getConnection);
+    }
+
+    // Package-private worker: the connection source is injected (the seam).
+    static void saveRun(Run run, ConnectionProvider connectionProvider) throws RunStorageException {
         String sql =  "INSERT INTO runs (run_date, start_time, end_time, distance, distance_unit, " +
                 "duration, route_name, route_location, pre_run_energy, post_run_energy, music_context, " +
                 "music_mode, surface_type, shoe_label, run_company, " +
@@ -50,7 +64,7 @@ public class RunStorage {
 
         // try-with-resources automatically closes the connection and statement
         // when the block ends, even if an error occurs.
-        try (Connection conn = getConnection();
+        try (Connection conn = connectionProvider.getConnection();
              PreparedStatement stmt = conn.prepareStatement(sql)) {
 
             stmt.setObject(1, run.getDate());
@@ -83,7 +97,9 @@ public class RunStorage {
             stmt.executeUpdate();
 
         } catch (SQLException e) {
-            System.out.println("Could not save run: " + e.getMessage());
+            // Wrap the low-level cause in our domain exception. The caller can no longer
+            // continue as if the save succeeded — the compiler won't let it.
+            throw new RunStorageException("Could not save run", e);
         }
     }
 
@@ -93,13 +109,19 @@ public class RunStorage {
      * A ResultSet works like a cursor — rs.next() moves to each row one at a time.
      * We read each column by name and reconstruct a Run object from the values.
      */
-    public static List<Run> loadRuns(Runner runner) {
+    // Public entry point: production always uses the real database connection.
+    public static List<Run> loadRuns(Runner runner) throws RunStorageException {
+        return loadRuns(runner, RunStorage::getConnection);
+    }
+
+    // Package-private worker: the connection source is injected (the seam).
+    static List<Run> loadRuns(Runner runner, ConnectionProvider connectionProvider) throws RunStorageException {
         List<Run> runs = new ArrayList<>();
         // run_id is the tiebreak so same-day runs load in a deterministic order — the
         // point-in-time RunStyle logic depends on "which run came first" being stable.
         String sql = "SELECT * FROM runs ORDER BY run_date, run_id";
 
-        try (Connection conn = getConnection();
+        try (Connection conn = connectionProvider.getConnection();
              PreparedStatement stmt = conn.prepareStatement(sql);
              ResultSet rs = stmt.executeQuery()) {
 
@@ -164,7 +186,9 @@ public class RunStorage {
             }
 
         } catch (SQLException e) {
-            System.out.println("Could not load runs: " + e.getMessage());
+            // Throw instead of returning the half-built list — a partial history would
+            // silently corrupt PR flags and RunStyle. The plan requires all-or-nothing.
+            throw new RunStorageException("Could not load runs", e);
         }
 
         return runs;
