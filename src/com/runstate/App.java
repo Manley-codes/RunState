@@ -18,7 +18,21 @@ public class App {
 
         // Load all previously saved runs from the database.
         // loadRun() re-evaluates PR flags without replaying announcements.
-        List<Run> savedRuns = RunStorage.loadRuns(runner1);
+        List<Run> savedRuns;
+        try {
+            savedRuns = RunStorage.loadRuns(runner1);
+        } catch (RunStorageException e) {
+            // History could not be loaded. Per the plan we do NOT continue with an
+            // empty or partial history — that would silently look like "no runs yet"
+            // and corrupt PRs and RunStyle. Report the problem and exit before the
+            // opening prompt or menu ever appears. No existing history is modified.
+            System.out.println("RunState could not load your saved run history.");
+            System.out.println("Check the database connection, then restart RunState.");
+            System.out.println();
+            System.out.println("Details: " + e.getCause().getMessage());
+            return;
+        }
+
         for (Run run : savedRuns) {
             runner1.loadRun(run);
         }
