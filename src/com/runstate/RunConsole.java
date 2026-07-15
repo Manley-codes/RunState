@@ -39,8 +39,11 @@ public class RunConsole {
             System.out.println();
             switch (choice) {
                 case 1:
-                    // Starts the completed-run logging questions.
-                    logRun();
+                    // Starts the completed-run logging questions. logRun returns false only
+                    // when the save failed — end the menu loop after its recovery receipt.
+                    if (!logRun()) {
+                        running = false;
+                    }
                     break;
                 case 2:
                     // Displays every run currently stored for this runner.
@@ -71,7 +74,9 @@ public class RunConsole {
         System.out.println("4. Exit");
     }
 
-    private void logRun() {
+    // Returns true when the run was saved and the full success flow ran (menu continues),
+    // or false when the save failed (start() ends the session after the recovery receipt).
+    private boolean logRun() {
         System.out.println("Log Run");
         LocalDate date = readRunDate();
         DistanceUnit distanceUnit = readDistanceUnit();
@@ -120,36 +125,72 @@ public class RunConsole {
                 null
         );
 
-        // Adding the run now sets PR flags before we display the summary.
-        runner.addRun(run);
-
-        // The runner sees their metrics and any PR results before answering
-        // how they feel.
+        // Step 2 — show the metrics BEFORE reflection. addRun has not run yet, so the
+        // summary is pure metrics (plus pre-run energy) with no PR line. PRs are announced
+        // later, only after the run is durably saved (step 7). This preserves
+        // summary-before-reflection while moving PR confirmation behind the save.
         System.out.println();
         System.out.println(run.getRunSummary());
         System.out.println();
 
-        // Now that the runner has seen their results, ask post-run energy.
+        // Step 3 — now that the runner has seen their results, ask post-run energy.
         EnergyLevel postRunEnergy = readEnergyLevel(false);
 
         // Store the answer directly on the run object using the setter we just added.
         run.setPostRunEnergy(postRunEnergy);
 
-        // Immediately after energy, ask what the run COST — the effort axis. Same
+        // Step 4 — immediately after energy, ask what the run COST — the effort axis. Same
         // construct-early reason as post-run energy, so it's attached via a setter too.
         EffortLevel effortLevel = readEffortLevel();
         run.setEffortLevel(effortLevel);
 
-        RunStorage.saveRun(run);
+        // Step 5 — save the complete run FIRST. A run only counts once it is durably
+        // stored, so nothing below (history, PRs, AI, RunStyle) runs until this succeeds.
+        try {
+            RunStorage.saveRun(run);
+        } catch (RunStorageException e) {
+            // The run is still in hand but not saved. Print the recovery receipt and
+            // report failure so start() ends the session — without adding to history,
+            // announcing a PR, or generating AI/RunStyle for a run that was never saved.
+            printSaveFailureReceipt(run, e);
+            return false;
+        }
 
+        // Steps 6 & 7 — add the saved run to in-memory history; addRun both flips the PR
+        // flags and announces any new PR. This now happens only after a durable save,
+        // which is exactly what kills the phantom-PR bug.
+        runner.addRun(run);
+
+        // Step 8 — the AI response (PR flags are set now, so it can reflect them).
         System.out.println();
         System.out.println(RunAgent.buildRunResponse(run));
 
+        // Step 9 — any RunStyle announcement (history already includes this run).
         String runStyleAlert = runner.detectRunStyle(run);
         if (runStyleAlert != null) {
             System.out.println();
             System.out.println(runStyleAlert);
         }
+
+        // Full success flow ran — tell start() to keep the menu open.
+        return true;
+    }
+
+    // Prints the save-failure recovery receipt (spec wording). The temporary run is still
+    // in hand, so its summary — date, route, distance, pace, duration, energy, effort —
+    // becomes the recovery record. "Check Run History" is required because MySQL may have
+    // inserted the row before the connection dropped; re-entering blindly could duplicate it.
+    private void printSaveFailureReceipt(Run run, RunStorageException e) {
+        System.out.println();
+        System.out.println("RunState could not confirm that this run was saved.");
+        System.out.println();
+        System.out.println("Recovery summary:");
+        System.out.println(run.getRunSummary());
+        System.out.println();
+        System.out.println("Restart RunState and check Run History.");
+        System.out.println("Re-enter this run only if it is missing.");
+        System.out.println();
+        System.out.println("Details: " + e.getCause().getMessage());
     }
 
     // Greets the runner and captures pre-run energy before the main menu appears.
