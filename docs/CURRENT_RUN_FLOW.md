@@ -1,0 +1,91 @@
+# RunState Current Run Flow
+
+**Status:** Current Java console behavior, including known gaps  
+**Last verified:** July 15, 2026  
+**Code baseline:** `7df8647`
+
+## Purpose and scope
+
+This document is the durable map of how RunState currently handles one completed run.
+It is an **as-is flow**, not a future architecture diagram.
+
+The main path follows one **Log Run** cycle. Other menu choices are not expanded; audit
+marker 4 identifies the known Run History display gap. The final node states the return
+to the menu instead of drawing a long loop across the diagram.
+
+Included:
+
+- Java console startup and manual completed-run logging
+- Pre-run state, run details, optional context, post-run energy, and effort
+- Daily-mean weather lookup for the logged date
+- MySQL loading and saving
+- Personal-record confirmation, the post-run response, and RunStyle analysis
+- Current failure behavior and known verification gaps
+
+Excluded:
+
+- Automatic run detection or mobile tracking
+- Hourly or exact run-time weather
+- Offline queues, pending sync, retries, or a second durable store
+- Future Music Intelligence behavior
+
+## Flowchart
+
+Numbered markers correspond to the audit table below. Orange paths end the current
+session. A dashed node border marks a graceful fallback that allows logging to continue.
+
+[![RunState current console flow](diagrams/current-run-flow.svg)](diagrams/current-run-flow.svg)
+
+## Trust rules represented by the flow
+
+1. Saved history must load completely before the menu opens. RunState must never
+   silently treat an unconfirmed or partial load as empty history.
+2. A newly entered run is not considered logged until MySQL confirms the save.
+3. PR calculation, PR announcements, the post-run response, and RunStyle happen only
+   after that confirmed save.
+4. A save failure prints a recovery receipt and ends the session without adding the
+   temporary run to in-memory history.
+5. Weather and Anthropic failures may use an unavailable/local fallback because they do
+   not determine whether the run itself was durably recorded.
+6. Surface, shoes, company, music, and weather describe associations only. They never
+   create or strengthen a primary RunStyle.
+
+## Flow audit markers
+
+This table explains the numbered markers in the diagram. It is not RunState's complete
+product or engineering backlog.
+
+| ID | Gap | Real effect | Priority | Status |
+|---|---|---|---|---|
+| 1 | Invalid stored enum text, or a missing required distance unit, bypasses the friendly load-error boundary. | Startup ends with an uncaught error instead of the controlled explanation. No history is deleted or partially accepted. | Next | Open |
+| 2 | The partial-history test fails before any database row is loaded. | It does not prove that a failure after one valid row still returns no partial history. | Later hardening | Open |
+| 3 | The save-first console ordering is verified by code review and manual testing, but not by one orchestration regression test. | A future reorder could accidentally allow PR, AI, or RunStyle output after a failed save. | Later hardening | Open |
+| 4 | Run History and the save-failure receipt both reuse `Run.getRunSummary()`, which omits recorded context. | Surface, shoes, company, and music are saved but are not visible in history or available in the recovery record. | Later display task | Open |
+
+## Important current details
+
+- The startup prompt can capture starting energy and hold it for the next logged run.
+  Choosing “Not running today,” or logging another run in the same session, leaves no
+  pending answer; Log Run then asks for starting energy during capture.
+- Weather is the **daily mean for the entered run date and runner location**. It is not
+  exact run-time weather because RunState does not yet have real timestamps.
+- MySQL is the console app's only durable copy. A mobile phase will require a separate
+  local-first pending/synced design.
+- Audit item 1 does not make RunState accept bad history. The app still stops; the gap is
+  that the stop is abrupt and bypasses the friendly failure path.
+
+## When this document must be updated
+
+Update the diagram, audit table, verification date, and code baseline whenever a change
+affects any of these boundaries:
+
+- startup history loading or row decoding
+- the pre-run state prompt or Log Run question order
+- weather timing or weather source
+- what counts as a durably logged run
+- PR, post-run response, or RunStyle ordering
+- history or recovery-receipt display
+- the transition from manual console logging to automatic/mobile capture
+
+Future-state mobile behavior should receive its own diagram until it replaces this
+console flow; it should not be mixed into this current-state chart.

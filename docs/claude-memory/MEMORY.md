@@ -2,6 +2,7 @@
 
 - [Collaboration style](collab_style.md) — working preferences, pace, explanation style, commit habits
 - [Current development state](project_current_state.md) — what's built, what's next, open questions
+- [Current console run flow](../CURRENT_RUN_FLOW.md) — verified as-is startup-to-insight flow, durability gates, failure branches, and numbered audit markers
 - [Post-run response system design](design_run_response_system.md) — locked-in logic for contextual run responses and Your Run Style rules
 - [User goals and project scope](user_goals.md) — core goals, natural phases, scope boundaries, AI agent direction, LOCKED product positioning (run culture > state-aware reflection > music > privacy) + runner-native test
 - [Weather context design](design_weather_context.md) — historical reference (shipped): original Open-Meteo spec, WMO mapping, API URLs; as-built status lives in design_weather_cleanup.md

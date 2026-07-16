@@ -1,0 +1,263 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1120" height="1600" viewBox="0 0 1120 1600" role="img" aria-labelledby="title desc">
+  <title id="title">RunState current console flow</title>
+  <desc id="desc">Four lanes show the runner, RunState console, storage and services, and insights from startup through a durably saved run. Numbered markers identify known gaps documented below the diagram.</desc>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --fg: #1f2937;
+      --muted: #667085;
+      --line: #d0d5dd;
+      --node: #f8fafc;
+      --runner: #f3f4f6;
+      --console: #e8f2ff;
+      --system: #fff1e8;
+      --insight: #eaf7ee;
+      --fallback: #fdf0f6;
+      --stop: #c2410c;
+      --stop-fill: #fff7ed;
+      --audit: #2563eb;
+      --priority: #c2410c;
+      --marker-text: #ffffff;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --fg: #f5f7fa;
+        --muted: #aeb7c5;
+        --line: #465161;
+        --node: #252b34;
+        --runner: #2b313a;
+        --console: #19344f;
+        --system: #4a3022;
+        --insight: #203c2b;
+        --fallback: #402837;
+        --stop: #fb923c;
+        --stop-fill: #40271d;
+        --audit: #60a5fa;
+        --priority: #fb923c;
+        --marker-text: #111827;
+      }
+    }
+    text { font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; fill: var(--fg); }
+    .lane-head { stroke: none; }
+    .lane-runner { fill: var(--runner); }
+    .lane-console { fill: var(--console); }
+    .lane-system { fill: var(--system); }
+    .lane-insight { fill: var(--insight); }
+    .lane-label, .node-title, .decision-title, .terminal-text, .branch-label { font-size: 16px; font-weight: 600; }
+    .phase-label { font-size: 13px; font-weight: 600; letter-spacing: .06em; }
+    .node-copy, .decision-copy { fill: var(--muted); font-size: 13px; }
+    .lane-divider, .phase-divider { stroke: var(--line); stroke-width: 1; }
+    .phase-divider { stroke-dasharray: 4 7; }
+    .node, .decision { fill: var(--node); stroke: var(--line); stroke-width: 1.4; }
+    .node-runner { fill: var(--runner); }
+    .node-system, .node-save { fill: var(--system); }
+    .node-success { fill: var(--console); }
+    .node-insight { fill: var(--insight); }
+    .node-fallback { fill: var(--fallback); stroke-dasharray: 5 4; }
+    .node-stop, .terminal { fill: var(--stop-fill); stroke: var(--stop); stroke-width: 1.8; }
+    .stop-text, .terminal-text { fill: var(--stop); }
+    .flow-line, .fallback-line, .stop-line, .save-line { fill: none; stroke: var(--muted); stroke-width: 1.8; }
+    .fallback-line { stroke-dasharray: 7 5; }
+    .stop-line { stroke: var(--stop); }
+    .arrow-head { fill: var(--muted); }
+    .stop-arrow-head { fill: var(--stop); }
+    .audit-ring { fill: none; stroke: var(--audit); stroke-width: 3; }
+    .priority-ring { fill: none; stroke: var(--priority); stroke-width: 3; }
+    .audit-marker { fill: var(--audit); }
+    .priority-marker { fill: var(--priority); }
+    .marker-label { fill: var(--marker-text); font-size: 12px; font-weight: 600; }
+    .priority-note { fill: var(--priority); font-size: 10px; font-weight: 600; letter-spacing: .05em; }
+  </style>
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" class="arrow-head"/>
+    </marker>
+    <marker id="stop-arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" class="stop-arrow-head"/>
+    </marker>
+  </defs>
+
+  <rect class="lane-head lane-runner" x="0" y="0" width="180" height="54" rx="8"/>
+  <rect class="lane-head lane-console" x="180" y="0" width="340" height="54" rx="8"/>
+  <rect class="lane-head lane-system" x="520" y="0" width="300" height="54" rx="8"/>
+  <rect class="lane-head lane-insight" x="820" y="0" width="300" height="54" rx="8"/>
+  <text class="lane-label" x="90" y="34" text-anchor="middle">RUNNER</text>
+  <text class="lane-label" x="350" y="34" text-anchor="middle">RUNSTATE CONSOLE</text>
+  <text class="lane-label" x="670" y="34" text-anchor="middle">STORAGE &amp; SERVICES</text>
+  <text class="lane-label" x="970" y="34" text-anchor="middle">INSIGHTS</text>
+
+  <line class="lane-divider" x1="180" y1="54" x2="180" y2="1580"/>
+  <line class="lane-divider" x1="520" y1="54" x2="520" y2="1580"/>
+  <line class="lane-divider" x1="820" y1="54" x2="820" y2="1580"/>
+  <line class="phase-divider" x1="0" y1="535" x2="1120" y2="535"/>
+  <line class="phase-divider" x1="0" y1="870" x2="1120" y2="870"/>
+  <line class="phase-divider" x1="0" y1="1065" x2="1120" y2="1065"/>
+  <line class="phase-divider" x1="0" y1="1370" x2="1120" y2="1370"/>
+
+  <text class="phase-label" x="16" y="82">01 · STARTUP</text>
+  <text class="phase-label" x="16" y="567">02 · CAPTURE</text>
+  <text class="phase-label" x="16" y="902">03 · REFLECTION</text>
+  <text class="phase-label" x="16" y="1097">04 · DURABLE SAVE</text>
+  <text class="phase-label" x="16" y="1402">05 · MEANING</text>
+
+  <rect class="node" x="235" y="96" width="230" height="58" rx="10"/>
+  <text class="node-title" x="350" y="121" text-anchor="middle">App starts</text>
+  <text class="node-copy" x="350" y="143" text-anchor="middle">Create the runner</text>
+  <path class="flow-line" d="M465 125 H555" marker-end="url(#arrow)"/>
+
+  <rect class="node node-system" x="555" y="96" width="230" height="58" rx="10"/>
+  <rect class="audit-ring" x="552" y="93" width="236" height="64" rx="12"/>
+  <text class="node-title" x="670" y="121" text-anchor="middle">Read saved history</text>
+  <text class="node-copy" x="670" y="143" text-anchor="middle">MySQL · ordered by date + ID</text>
+  <circle class="audit-marker" cx="798" cy="98" r="15"/>
+  <text class="marker-label" x="798" y="102" text-anchor="middle">2</text>
+
+  <path class="flow-line" d="M670 154 V171" marker-end="url(#arrow)"/>
+  <polygon class="decision" points="670,171 775,214 670,257 565,214"/>
+  <text class="decision-title" x="670" y="209" text-anchor="middle">Database read succeeded?</text>
+  <text class="decision-copy" x="670" y="229" text-anchor="middle">connection · query · row access</text>
+
+  <path class="stop-line" d="M565 214 H465" marker-end="url(#stop-arrow)"/>
+  <text class="branch-label stop-text" x="520" y="202" text-anchor="middle">NO</text>
+  <rect class="node node-stop" x="235" y="184" width="230" height="60" rx="10"/>
+  <text class="node-title" x="350" y="209" text-anchor="middle">Friendly load error + detail</text>
+  <text class="node-copy" x="350" y="231" text-anchor="middle">Never pretend history is empty</text>
+  <path class="stop-line" d="M235 214 H155" marker-end="url(#stop-arrow)"/>
+  <rect class="terminal" x="35" y="191" width="120" height="46" rx="23"/>
+  <text class="terminal-text" x="95" y="220" text-anchor="middle">SESSION ENDS</text>
+
+  <text class="branch-label" x="685" y="275">YES</text>
+  <path class="flow-line" d="M670 257 V284" marker-end="url(#arrow)"/>
+  <rect class="node node-system" x="555" y="284" width="230" height="58" rx="10"/>
+  <text class="node-title" x="670" y="309" text-anchor="middle">Decode every stored run</text>
+  <text class="node-copy" x="670" y="331" text-anchor="middle">dates · enums · context · effort</text>
+
+  <path class="flow-line" d="M670 342 V358" marker-end="url(#arrow)"/>
+  <polygon class="decision" points="670,358 775,401 670,444 565,401"/>
+  <polygon class="priority-ring" points="670,352 785,401 670,450 555,401"/>
+  <text class="decision-title" x="670" y="396" text-anchor="middle">Stored values valid?</text>
+  <text class="decision-copy" x="670" y="416" text-anchor="middle">current row-decoding boundary</text>
+  <circle class="priority-marker" cx="790" cy="366" r="17"/>
+  <text class="marker-label" x="790" y="370" text-anchor="middle">1</text>
+  <text class="priority-note" x="814" y="370">NEXT</text>
+
+  <path class="flow-line" d="M565 401 H465" marker-end="url(#arrow)"/>
+  <text class="branch-label" x="520" y="390" text-anchor="middle">YES</text>
+  <rect class="node node-success" x="235" y="371" width="230" height="60" rx="10"/>
+  <text class="node-title" x="350" y="396" text-anchor="middle">Rebuild complete history</text>
+  <text class="node-copy" x="350" y="418" text-anchor="middle">PR flags, no old announcements</text>
+  <path class="flow-line" d="M235 401 H160" marker-end="url(#arrow)"/>
+
+  <rect class="node node-runner" x="20" y="371" width="140" height="60" rx="10"/>
+  <text class="node-title" x="90" y="396" text-anchor="middle">Pre-run state check</text>
+  <text class="node-copy" x="90" y="418" text-anchor="middle">starting energy (optional)</text>
+  <path class="flow-line" d="M90 431 V475 H235" marker-end="url(#arrow)"/>
+
+  <rect class="node" x="235" y="445" width="230" height="60" rx="10"/>
+  <text class="node-title" x="350" y="470" text-anchor="middle">Main menu opens</text>
+  <text class="node-copy" x="350" y="492" text-anchor="middle">Log · History · PRs · Exit</text>
+  <text class="node-copy" x="440" y="522" text-anchor="end">History summary omits context</text>
+  <circle class="audit-marker" cx="482" cy="518" r="15"/>
+  <text class="marker-label" x="482" y="522" text-anchor="middle">4</text>
+
+  <path class="stop-line" d="M670 444 V457" marker-end="url(#stop-arrow)"/>
+  <text class="branch-label stop-text" x="685" y="454">NO</text>
+  <rect class="node node-stop" x="555" y="457" width="230" height="72" rx="10"/>
+  <text class="node-title" x="670" y="478" text-anchor="middle">Unhandled row-decoding</text>
+  <text class="node-title" x="670" y="496" text-anchor="middle">error</text>
+  <text class="node-copy" x="670" y="518" text-anchor="middle">current gap · session ends · fix next</text>
+  <path class="stop-line" d="M785 493 H850" marker-end="url(#stop-arrow)"/>
+  <rect class="terminal" x="850" y="464" width="120" height="46" rx="23"/>
+  <text class="terminal-text" x="910" y="493" text-anchor="middle">SESSION ENDS</text>
+
+  <path class="flow-line" d="M260 505 V550 H90 V570" marker-end="url(#arrow)"/>
+  <rect class="node node-runner" x="20" y="570" width="140" height="60" rx="10"/>
+  <text class="node-title" x="90" y="595" text-anchor="middle">Choose Log Run</text>
+  <text class="node-copy" x="90" y="617" text-anchor="middle">completed activity</text>
+  <path class="flow-line" d="M160 600 H235" marker-end="url(#arrow)"/>
+
+  <rect class="node" x="235" y="570" width="230" height="120" rx="10"/>
+  <text class="node-title" x="350" y="594" text-anchor="middle">Capture run + context</text>
+  <text class="node-copy" x="350" y="617" text-anchor="middle">date · distance · duration · route</text>
+  <text class="node-copy" x="350" y="637" text-anchor="middle">surface · shoes · company · sound</text>
+  <text class="node-copy" x="350" y="657" text-anchor="middle">energy: use opening answer</text>
+  <text class="node-copy" x="350" y="677" text-anchor="middle">or ask during logging</text>
+  <path class="flow-line" d="M465 609 H555" marker-end="url(#arrow)"/>
+
+  <rect class="node node-fallback" x="555" y="570" width="230" height="98" rx="10"/>
+  <text class="node-title" x="670" y="594" text-anchor="middle">Fetch daily-mean weather</text>
+  <text class="node-copy" x="670" y="617" text-anchor="middle">Open-Meteo · logged date</text>
+  <text class="node-copy" x="670" y="637" text-anchor="middle">+ city/state</text>
+  <text class="node-copy" x="670" y="657" text-anchor="middle">failure → unavailable, continue</text>
+  <path class="flow-line" d="M670 668 V730 H465" marker-end="url(#arrow)"/>
+
+  <rect class="node" x="235" y="700" width="230" height="60" rx="10"/>
+  <text class="node-title" x="350" y="725" text-anchor="middle">Construct temporary Run</text>
+  <text class="node-copy" x="350" y="747" text-anchor="middle">starting energy attached</text>
+  <path class="flow-line" d="M235 730 H160" marker-end="url(#arrow)"/>
+
+  <rect class="node node-runner" x="20" y="700" width="140" height="60" rx="10"/>
+  <text class="node-title" x="90" y="725" text-anchor="middle">See run metrics</text>
+  <text class="node-copy" x="90" y="747" text-anchor="middle">no PR confirmation yet</text>
+
+  <path class="flow-line" d="M90 760 V918" marker-end="url(#arrow)"/>
+  <rect class="node node-runner" x="20" y="918" width="140" height="58" rx="10"/>
+  <text class="node-title" x="90" y="943" text-anchor="middle">Post-run energy</text>
+  <text class="node-copy" x="90" y="965" text-anchor="middle">optional reflection</text>
+  <path class="flow-line" d="M90 976 V992" marker-end="url(#arrow)"/>
+
+  <rect class="node node-runner" x="20" y="992" width="140" height="58" rx="10"/>
+  <text class="node-title" x="90" y="1017" text-anchor="middle">Effort cost</text>
+  <text class="node-copy" x="90" y="1039" text-anchor="middle">Smooth → Empty tank</text>
+  <path class="flow-line" d="M160 1021 H235" marker-end="url(#arrow)"/>
+
+  <rect class="node" x="235" y="970" width="230" height="60" rx="10"/>
+  <text class="node-title" x="350" y="995" text-anchor="middle">Complete the Run object</text>
+  <text class="node-copy" x="350" y="1017" text-anchor="middle">energy + effort attached</text>
+  <path class="save-line" d="M465 1000 H555 V1130" marker-end="url(#arrow)"/>
+
+  <rect class="node node-save" x="555" y="1100" width="230" height="60" rx="10"/>
+  <text class="node-title" x="670" y="1125" text-anchor="middle">Save complete run</text>
+  <text class="node-copy" x="670" y="1147" text-anchor="middle">MySQL is today’s durable copy</text>
+  <path class="flow-line" d="M670 1160 V1177" marker-end="url(#arrow)"/>
+
+  <polygon class="decision" points="670,1177 775,1220 670,1263 565,1220"/>
+  <polygon class="audit-ring" points="670,1171 785,1220 670,1269 555,1220"/>
+  <text class="decision-title" x="670" y="1215" text-anchor="middle">Save confirmed?</text>
+  <text class="decision-copy" x="670" y="1235" text-anchor="middle">durability gate</text>
+  <circle class="audit-marker" cx="790" cy="1188" r="15"/>
+  <text class="marker-label" x="790" y="1192" text-anchor="middle">3</text>
+
+  <path class="flow-line" d="M565 1220 H465" marker-end="url(#arrow)"/>
+  <text class="branch-label" x="520" y="1209" text-anchor="middle">YES</text>
+  <rect class="node node-success" x="235" y="1190" width="230" height="60" rx="10"/>
+  <text class="node-title" x="350" y="1215" text-anchor="middle">Add to history</text>
+  <text class="node-copy" x="350" y="1237" text-anchor="middle">calculate + announce PR</text>
+
+  <path class="stop-line" d="M670 1263 V1306 H465" marker-end="url(#stop-arrow)"/>
+  <text class="branch-label stop-text" x="685" y="1288">NO</text>
+  <rect class="node node-stop" x="235" y="1276" width="230" height="60" rx="10"/>
+  <rect class="audit-ring" x="232" y="1273" width="236" height="66" rx="12"/>
+  <text class="node-title" x="350" y="1301" text-anchor="middle">Recovery receipt</text>
+  <text class="node-copy" x="350" y="1323" text-anchor="middle">core run · check history · re-enter</text>
+  <circle class="audit-marker" cx="482" cy="1277" r="15"/>
+  <text class="marker-label" x="482" y="1281" text-anchor="middle">4</text>
+  <path class="stop-line" d="M235 1306 H155" marker-end="url(#stop-arrow)"/>
+  <rect class="terminal" x="35" y="1283" width="120" height="46" rx="23"/>
+  <text class="terminal-text" x="95" y="1312" text-anchor="middle">SESSION ENDS</text>
+
+  <path class="flow-line" d="M235 1250 H8 V1350 H835 V1430 H850" marker-end="url(#arrow)"/>
+  <rect class="node node-insight" x="850" y="1430" width="240" height="60" rx="10"/>
+  <text class="node-title" x="970" y="1455" text-anchor="middle">Post-run response</text>
+  <text class="node-copy" x="970" y="1477" text-anchor="middle">Anthropic or local fallback</text>
+  <path class="flow-line" d="M970 1490 V1506" marker-end="url(#arrow)"/>
+
+  <rect class="node node-insight" x="850" y="1506" width="240" height="60" rx="10"/>
+  <text class="node-title" x="970" y="1531" text-anchor="middle">RunStyle analysis</text>
+  <text class="node-copy" x="970" y="1553" text-anchor="middle">local · deterministic · optional alert</text>
+  <path class="flow-line" d="M850 1536 H160" marker-end="url(#arrow)"/>
+
+  <rect class="node node-runner" x="20" y="1506" width="140" height="60" rx="10"/>
+  <text class="node-title" x="90" y="1531" text-anchor="middle">Meaning delivered</text>
+  <text class="node-copy" x="90" y="1553" text-anchor="middle">return to menu</text>
+</svg>
