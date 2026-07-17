@@ -1,12 +1,24 @@
 package com.runstate;
 
+import java.lang.reflect.InvocationHandler;
+import java.lang.reflect.Method;
+import java.lang.reflect.Proxy;
+import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.LocalDate;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 
 /*
  * Storage-failure tests for RunStorage.
@@ -97,5 +109,155 @@ public class RunStorageTest {
         RunStorageException thrown = assertThrows(RunStorageException.class,
                 () -> RunStorage.saveRun(sampleRun(), FAILING_PROVIDER));
         assertSame(SIMULATED_DB_ERROR, thrown.getCause());
+    }
+
+    // --- Fake ResultSet ------------------------------------------------------
+
+    /*
+     * A test-only ResultSet backed by ordered row maps.
+     *
+     * ResultSet is an interface with ~190 methods; implementing it normally would mean
+     * writing ~190 method bodies to use five of them. Proxy builds an object at runtime
+     * that claims to implement ResultSet and routes EVERY call to the handler below, so
+     * we answer only what readRuns actually calls and let the rest return null.
+     *
+     * This is the second seam: FAILING_PROVIDER above simulates an unreachable database,
+     * this simulates a reachable database holding bad data. Neither touches MySQL, and
+     * no corrupt row is ever written to real history.
+     */
+    private static ResultSet fakeResultSet(List<Map<String, Object>> rows) {
+        return (ResultSet) Proxy.newProxyInstance(
+                RunStorageTest.class.getClassLoader(),
+                new Class<?>[]{ResultSet.class},
+                new InvocationHandler() {
+                    // Starts at -1 because next() advances BEFORE the first read, exactly
+                    // like a real JDBC cursor.
+                    private int index = -1;
+
+                    @Override
+                    public Object invoke(Object proxy, Method method, Object[] args) {
+                        switch (method.getName()) {
+                            case "next":
+                                index++;
+                                return index < rows.size();
+                            case "getString":
+                                return (String) rows.get(index).get((String) args[0]);
+                            case "getInt":
+                                return (Integer) rows.get(index).get((String) args[0]);
+                            case "getDouble":
+                                return (Double) rows.get(index).get((String) args[0]);
+                            case "getObject":
+                                return rows.get(index).get((String) args[0]);
+                            default:
+                                return null;
+                        }
+                    }
+                });
+    }
+
+    // One valid, fully populated row. Each test copies it and corrupts exactly one column,
+    // so a failure can only be caused by the thing that test is about.
+    private static Map<String, Object> validRow(int runId) {
+        Map<String, Object> row = new HashMap<>();
+        row.put("run_id", runId);
+        row.put("run_date", LocalDate.of(2026, 7, 16));
+        row.put("distance", 5.0);
+        row.put("distance_unit", "MILES");
+        row.put("duration", 40.0);
+        row.put("route_name", "Memorial Park");
+        row.put("pre_run_energy", "HIGH");
+        row.put("post_run_energy", "MODERATE");
+        row.put("effort_level", "LOW_COST");
+        row.put("music_mode", "MUSIC");
+        row.put("surface_type", "TRAIL");
+        row.put("run_company", "SOLO");
+        return row;
+    }
+
+    // --- Malformed stored rows -----------------------------------------------
+
+    /*
+     * @ParameterizedTest runs this ONE method once per @CsvSource row, so all seven enum
+     * columns get identical coverage and a failure names the exact column that broke.
+     *
+     * The bad values are deliberately realistic corruption: wrong case ("high"), a
+     * plausible-but-wrong constant ("PAVEMENT"), a typo ("MUSICC"). RunState must reject
+     * every one rather than trim, re-case, or guess its way to an answer.
+     */
+    @ParameterizedTest
+    @CsvSource({
+            "distance_unit,   MILEZ",
+            "pre_run_energy,  high",
+            "post_run_energy, VERY_HIGH",
+            "surface_type,    PAVEMENT",
+            "run_company,     ALONE",
+            "music_mode,      MUSICC",
+            "effort_level,    CHEAP"
+    })
+    void readRuns_whenAnyEnumColumnHasInvalidValue_throwsRunStorageException(
+            String column, String badValue) {
+        Map<String, Object> row = validRow(1);
+        row.put(column, badValue);
+
+        RunStorageException thrown = assertThrows(RunStorageException.class,
+                () -> RunStorage.readRuns(null, fakeResultSet(List.of(row))));
+
+        // The row/column diagnostic must survive to the cause — this is the text that
+        // reaches the "Details:" line at startup.
+        assertTrue(thrown.getCause().getMessage()
+                        .contains("Run 1 has invalid value \"" + badValue + "\" in " + column),
+                "Unexpected diagnostic: " + thrown.getCause().getMessage());
+    }
+
+    @Test
+    void readRuns_whenRequiredDistanceUnitIsMissing_throwsRunStorageException() {
+        // distance_unit is the one required enum: a distance with no unit is meaningless,
+        // so a null must fail rather than default to MILES or KILOMETERS.
+        Map<String, Object> row = validRow(1);
+        row.put("distance_unit", null);
+
+        RunStorageException thrown = assertThrows(RunStorageException.class,
+                () -> RunStorage.readRuns(null, fakeResultSet(List.of(row))));
+
+        assertEquals("Run 1 is missing required value in distance_unit",
+                thrown.getCause().getMessage());
+    }
+
+    @Test
+    void readRuns_whenValidRowIsFollowedByMalformedRow_failsEntireLoad() {
+        // Closes flow-audit item 2: proves a failure AFTER a row has already decoded
+        // successfully still yields NO partial history — the whole load throws.
+        Map<String, Object> good = validRow(1);
+        Map<String, Object> bad = validRow(2);
+        bad.put("effort_level", "CHEAP");
+
+        RunStorageException thrown = assertThrows(RunStorageException.class,
+                () -> RunStorage.readRuns(null, fakeResultSet(List.of(good, bad))));
+
+        // Naming run 2 proves run 1 decoded fine first and was then discarded.
+        assertTrue(thrown.getCause().getMessage().contains("Run 2"),
+                "Expected the second row to be the failure: " + thrown.getCause().getMessage());
+    }
+
+    @Test
+    void readRuns_whenLegacyRowHasOptionalNulls_loadsWithInferredMusicMode() throws Exception {
+        // The safety net for strictness: a legitimate legacy row must still LOAD. Every
+        // optional enum is null (skipped, or written before the column existed), and the
+        // music note with no stored mode infers MUSIC per design_runstyle_v1.
+        Map<String, Object> row = validRow(1);
+        row.put("pre_run_energy", null);
+        row.put("post_run_energy", null);
+        row.put("surface_type", null);
+        row.put("run_company", null);
+        row.put("effort_level", null);
+        row.put("music_mode", null);
+        row.put("music_context", "Kanye");
+
+        List<Run> runs = RunStorage.readRuns(null, fakeResultSet(List.of(row)));
+
+        assertEquals(1, runs.size());
+        assertNull(runs.get(0).getPreRunEnergy());
+        assertNull(runs.get(0).getEffortLevel());
+        assertEquals(MusicMode.MUSIC, runs.get(0).getMusicMode());
     }
 }

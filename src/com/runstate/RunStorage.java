@@ -44,6 +44,33 @@ public class RunStorage {
     }
 
     /*
+     * Signals that one stored row could not be decoded into a Run.
+     *
+     * PRIVATE and nested on purpose: this type never leaves RunStorage. The row-reading
+     * loop catches it and wraps it in the public RunStorageException, so App and
+     * RunConsole keep speaking only the storage vocabulary they already know.
+     *
+     * CHECKED (extends Exception) so the compiler forces the read loop to handle a
+     * malformed row instead of letting it escape as an uncaught runtime error.
+     *
+     * The message carries the row-level diagnostic (which run, which column, what value)
+     * that ends up on the "Details:" line at startup.
+     */
+    private static class StoredRunDecodeException extends Exception {
+
+        // For a missing required value: nothing threw, so there is no cause to preserve.
+        StoredRunDecodeException(String message) {
+            super(message);
+        }
+
+        // For an invalid value: the cause is the original IllegalArgumentException from
+        // Enum.valueOf, kept underneath so the low-level detail is never lost.
+        StoredRunDecodeException(String message, Throwable cause) {
+            super(message, cause);
+        }
+    }
+
+    /*
      * Saves one completed run to the database.
      *
      * A PreparedStatement uses ? placeholders instead of inserting values
@@ -116,7 +143,6 @@ public class RunStorage {
 
     // Package-private worker: the connection source is injected (the seam).
     static List<Run> loadRuns(Runner runner, ConnectionProvider connectionProvider) throws RunStorageException {
-        List<Run> runs = new ArrayList<>();
         // run_id is the tiebreak so same-day runs load in a deterministic order — the
         // point-in-time RunStyle logic depends on "which run came first" being stable.
         String sql = "SELECT * FROM runs ORDER BY run_date, run_id";
@@ -125,24 +151,51 @@ public class RunStorage {
              PreparedStatement stmt = conn.prepareStatement(sql);
              ResultSet rs = stmt.executeQuery()) {
 
+            return readRuns(runner, rs);
+
+        } catch (SQLException e) {
+            // Throw instead of returning the half-built list — a partial history would
+            // silently corrupt PR flags and RunStyle. The plan requires all-or-nothing.
+            throw new RunStorageException("Could not load runs", e);
+        }
+    }
+
+    /*
+     * Package-private row-iteration seam.
+     *
+     * The caller supplies the ResultSet, so a test can feed rows in without a live
+     * database — the ConnectionProvider seam simulates an unreachable database, this one
+     * simulates a reachable database holding bad data. Production passes the real
+     * ResultSet from loadRuns.
+     *
+     * Declares RunStorageException rather than the private decode exception because tests
+     * live outside this class and must be able to name what they catch; the private type
+     * stays sealed inside RunStorage.
+     */
+    static List<Run> readRuns(Runner runner, ResultSet rs) throws SQLException, RunStorageException {
+        List<Run> runs = new ArrayList<>();
+
+        try {
             while (rs.next()) {
                 int runId = rs.getInt("run_id");
                 LocalDate date = rs.getObject("run_date", LocalDate.class);
                 String startTime = rs.getString("start_time");
                 String endTime = rs.getString("end_time");
                 double distance = rs.getDouble("distance");
-                DistanceUnit distanceUnit = DistanceUnit.valueOf(rs.getString("distance_unit"));
+                DistanceUnit distanceUnit = decodeRequiredEnum(
+                        DistanceUnit.class, rs.getString("distance_unit"), runId, "distance_unit");
                 double duration = rs.getDouble("duration");
                 String routeName = rs.getString("route_name");
                 String routeLocation = rs.getString("route_location");
 
-                // valueOf() converts the stored string back into the matching enum constant.
-                // The null check handles optional fields that were skipped when logging.
-                String preStr = rs.getString("pre_run_energy");
-                EnergyLevel preRunEnergy = preStr != null ? EnergyLevel.valueOf(preStr) : null;
+                // Optional enum columns are decoded through decodeOptionalEnum: null stays
+                // null (the runner skipped the question, or this is a legacy row), and any
+                // non-null value must match an enum constant exactly.
+                EnergyLevel preRunEnergy = decodeOptionalEnum(
+                        EnergyLevel.class, rs.getString("pre_run_energy"), runId, "pre_run_energy");
 
-                String postStr = rs.getString("post_run_energy");
-                EnergyLevel postRunEnergy = postStr != null ? EnergyLevel.valueOf(postStr) : null;
+                EnergyLevel postRunEnergy = decodeOptionalEnum(
+                        EnergyLevel.class, rs.getString("post_run_energy"), runId, "post_run_energy");
 
                 // Weather columns are nullable. getObject(..., Double.class) returns a real
                 // Double or null — unlike getDouble, which turns a SQL NULL into 0.0 and would
@@ -157,27 +210,31 @@ public class RunStorage {
                 // Optional free-text music note; getString returns null if the column is empty.
                 String musicContext = rs.getString("music_context");
 
-                // Secondary context columns (RunStyle V1). Each enum rebuilds via valueOf(),
-                // staying null when the column is null (skipped, or a legacy row from before
-                // these columns existed). Shoe label is plain text.
-                String surfaceStr = rs.getString("surface_type");
-                SurfaceType surface = surfaceStr != null ? SurfaceType.valueOf(surfaceStr) : null;
+                // Secondary context columns (RunStyle V1). Each enum decodes through the
+                // optional helper, staying null when the column is null (skipped, or a legacy
+                // row from before these columns existed). Shoe label is plain text.
+                SurfaceType surface = decodeOptionalEnum(
+                        SurfaceType.class, rs.getString("surface_type"), runId, "surface_type");
 
-                String companyStr = rs.getString("run_company");
-                RunCompany company = companyStr != null ? RunCompany.valueOf(companyStr) : null;
+                RunCompany company = decodeOptionalEnum(
+                        RunCompany.class, rs.getString("run_company"), runId, "run_company");
 
                 String shoeLabel = rs.getString("shoe_label");
 
-                // Music mode inference for legacy rows lives in inferMusicMode (extracted so
-                // it can be unit-tested without a live database).
-                MusicMode musicMode = inferMusicMode(rs.getString("music_mode"), musicContext);
+                // Music mode is validated BEFORE the legacy inference rule runs: a corrupt
+                // stored mode must fail as corrupt, never fall through and get quietly
+                // re-inferred from the music note. Inference for legacy rows lives in
+                // inferMusicMode (extracted so it can be unit-tested without a live database).
+                MusicMode storedMusicMode = decodeOptionalEnum(
+                        MusicMode.class, rs.getString("music_mode"), runId, "music_mode");
+                MusicMode musicMode = inferMusicMode(storedMusicMode, musicContext);
 
                 // Rebuild the context bundle from its columns (composition, like weather).
                 RunContext context = new RunContext(surface, company, shoeLabel, musicMode, musicContext);
 
-                // Optional effort level; valueOf() rebuilds the enum, null when skipped or a legacy row.
-                String effortStr = rs.getString("effort_level");
-                EffortLevel effortLevel = effortStr != null ? EffortLevel.valueOf(effortStr) : null;
+                // Optional effort level; null when skipped or a legacy row.
+                EffortLevel effortLevel = decodeOptionalEnum(
+                        EffortLevel.class, rs.getString("effort_level"), runId, "effort_level");
 
                 Run run = new Run(runId, runner, date, startTime, endTime,
                         distance, distanceUnit, duration, routeName, routeLocation,
@@ -185,9 +242,11 @@ public class RunStorage {
                 runs.add(run);
             }
 
-        } catch (SQLException e) {
-            // Throw instead of returning the half-built list — a partial history would
-            // silently corrupt PR flags and RunStyle. The plan requires all-or-nothing.
+        } catch (StoredRunDecodeException e) {
+            // A stored row is malformed. Wrap our private diagnostic in the public storage
+            // exception so App's existing friendly boundary handles it — same controlled
+            // path as a dead connection. The row/column detail rides along as the cause and
+            // reaches the "Details:" line. The half-built list is discarded: never partial.
             throw new RunStorageException("Could not load runs", e);
         }
 
@@ -195,8 +254,65 @@ public class RunStorage {
     }
 
     /*
+     * Decodes one OPTIONAL stored enum column.
+     *
+     * null is a valid stored answer — the runner skipped the question, or this is a
+     * legacy row written before the column existed — so null passes straight through.
+     *
+     * A non-null value must match an enum constant EXACTLY. No trimming, no case
+     * conversion, no guessing, no defaulting: stored text that is not a real constant
+     * means the history itself is corrupted, and RunState says so instead of inventing
+     * a value that would silently poison PRs and RunStyle.
+     *
+     * <T extends Enum<T>> makes this work for every enum column; the Class<T> token is
+     * how the method knows which enum to look the text up in at runtime.
+     */
+    private static <T extends Enum<T>> T decodeOptionalEnum(
+            Class<T> type, String storedValue, int runId, String column)
+            throws StoredRunDecodeException {
+
+        if (storedValue == null) {
+            return null;
+        }
+
+        try {
+            return Enum.valueOf(type, storedValue);
+        } catch (IllegalArgumentException e) {
+            // Keep the original enum exception as the cause — the low-level detail stays
+            // available underneath our row-level diagnostic.
+            throw new StoredRunDecodeException(
+                    "Run " + runId + " has invalid value \"" + storedValue + "\" in " + column, e);
+        }
+    }
+
+    /*
+     * Decodes one REQUIRED stored enum column (currently distance_unit).
+     *
+     * null is NOT a valid answer here — a distance with no unit is meaningless, and every
+     * pace, PR, and RunStyle judgment downstream would be built on a guess. So this adds
+     * exactly one rule on top of decodeOptionalEnum and delegates everything else to it,
+     * keeping one single implementation of "stored text -> enum constant".
+     */
+    private static <T extends Enum<T>> T decodeRequiredEnum(
+            Class<T> type, String storedValue, int runId, String column)
+            throws StoredRunDecodeException {
+
+        if (storedValue == null) {
+            // No cause to pass: nothing threw. We looked at the column and found it empty.
+            throw new StoredRunDecodeException(
+                    "Run " + runId + " is missing required value in " + column);
+        }
+
+        return decodeOptionalEnum(type, storedValue, runId, column);
+    }
+
+    /*
      * Decides the MusicMode for a loaded row. Package-private and static (no database
      * needed) so it can be unit-tested directly.
+     *
+     * Takes an already-decoded MusicMode, not raw stored text: the caller validates the
+     * column first, so this method is purely the rule and a corrupt stored mode can never
+     * reach it and be silently re-inferred from the music note.
      *
      * Rules (see design_runstyle_v1):
      *   - A stored mode always wins — a new row that recorded MUSIC or NO_MUSIC.
@@ -205,9 +321,9 @@ public class RunStorage {
      *   - Both null → the mode was never recorded; stay null. We NEVER infer NO_MUSIC,
      *     because the absence of a note is not evidence of deliberate silence.
      */
-    static MusicMode inferMusicMode(String storedMode, String musicNote) {
+    static MusicMode inferMusicMode(MusicMode storedMode, String musicNote) {
         if (storedMode != null) {
-            return MusicMode.valueOf(storedMode);
+            return storedMode;
         }
         if (musicNote != null) {
             return MusicMode.MUSIC;

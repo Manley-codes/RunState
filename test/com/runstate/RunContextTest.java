@@ -100,8 +100,8 @@ public class RunContextTest {
     void inferMusicModeStoredValueAlwaysWins() {
         // A row that explicitly stored its mode uses it verbatim — even NO_MUSIC that
         // happens to sit next to a stray note.
-        assertEquals(MusicMode.NO_MUSIC, RunStorage.inferMusicMode("NO_MUSIC", "some note"));
-        assertEquals(MusicMode.MUSIC, RunStorage.inferMusicMode("MUSIC", null));
+        assertEquals(MusicMode.NO_MUSIC, RunStorage.inferMusicMode(MusicMode.NO_MUSIC, "some note"));
+        assertEquals(MusicMode.MUSIC, RunStorage.inferMusicMode(MusicMode.MUSIC, null));
     }
 
     @Test
