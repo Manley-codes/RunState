@@ -106,11 +106,8 @@
   <path class="flow-line" d="M465 125 H555" marker-end="url(#arrow)"/>
 
   <rect class="node node-system" x="555" y="96" width="230" height="58" rx="10"/>
-  <rect class="audit-ring" x="552" y="93" width="236" height="64" rx="12"/>
   <text class="node-title" x="670" y="121" text-anchor="middle">Read saved history</text>
   <text class="node-copy" x="670" y="143" text-anchor="middle">MySQL · ordered by date + ID</text>
-  <circle class="audit-marker" cx="798" cy="98" r="15"/>
-  <text class="marker-label" x="798" y="102" text-anchor="middle">2</text>
 
   <path class="flow-line" d="M670 154 V171" marker-end="url(#arrow)"/>
   <polygon class="decision" points="670,171 775,214 670,257 565,214"/>
@@ -134,12 +131,8 @@
 
   <path class="flow-line" d="M670 342 V358" marker-end="url(#arrow)"/>
   <polygon class="decision" points="670,358 775,401 670,444 565,401"/>
-  <polygon class="priority-ring" points="670,352 785,401 670,450 555,401"/>
   <text class="decision-title" x="670" y="396" text-anchor="middle">Stored values valid?</text>
-  <text class="decision-copy" x="670" y="416" text-anchor="middle">current row-decoding boundary</text>
-  <circle class="priority-marker" cx="790" cy="366" r="17"/>
-  <text class="marker-label" x="790" y="370" text-anchor="middle">1</text>
-  <text class="priority-note" x="814" y="370">NEXT</text>
+  <text class="decision-copy" x="670" y="416" text-anchor="middle">controlled decoding boundary</text>
 
   <path class="flow-line" d="M565 401 H465" marker-end="url(#arrow)"/>
   <text class="branch-label" x="520" y="390" text-anchor="middle">YES</text>
@@ -163,9 +156,9 @@
   <path class="stop-line" d="M670 444 V457" marker-end="url(#stop-arrow)"/>
   <text class="branch-label stop-text" x="685" y="454">NO</text>
   <rect class="node node-stop" x="555" y="457" width="230" height="72" rx="10"/>
-  <text class="node-title" x="670" y="478" text-anchor="middle">Unhandled row-decoding</text>
-  <text class="node-title" x="670" y="496" text-anchor="middle">error</text>
-  <text class="node-copy" x="670" y="518" text-anchor="middle">current gap · session ends · fix next</text>
+  <text class="node-title" x="670" y="478" text-anchor="middle">Friendly load error</text>
+  <text class="node-title" x="670" y="496" text-anchor="middle">+ detail</text>
+  <text class="node-copy" x="670" y="518" text-anchor="middle">run + column named · no partial history</text>
   <path class="stop-line" d="M785 493 H850" marker-end="url(#stop-arrow)"/>
   <rect class="terminal" x="850" y="464" width="120" height="46" rx="23"/>
   <text class="terminal-text" x="910" y="493" text-anchor="middle">SESSION ENDS</text>

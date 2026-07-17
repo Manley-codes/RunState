@@ -1,8 +1,9 @@
 # RunState Current Run Flow
 
 **Status:** Current Java console behavior, including known gaps  
-**Last verified:** July 15, 2026  
-**Code baseline:** `7df8647`
+**Last verified:** July 16, 2026  
+**Code baseline:** `0af9524`  
+**Test suite:** 51 passing
 
 ## Purpose and scope
 
@@ -57,8 +58,8 @@ product or engineering backlog.
 
 | ID | Gap | Real effect | Priority | Status |
 |---|---|---|---|---|
-| 1 | Invalid stored enum text, or a missing required distance unit, bypasses the friendly load-error boundary. | Startup ends with an uncaught error instead of the controlled explanation. No history is deleted or partially accepted. | Next | Open |
-| 2 | The partial-history test fails before any database row is loaded. | It does not prove that a failure after one valid row still returns no partial history. | Later hardening | Open |
+| 1 | Invalid stored enum text, or a missing required distance unit, bypasses the friendly load-error boundary. | Startup ended with an uncaught error instead of the controlled explanation. No history was deleted or partially accepted. | — | **Resolved July 16, 2026.** All seven enum columns decode through checked helpers; a malformed row raises `RunStorageException` and takes the same friendly load-error path as an unreachable database, naming the run and column on the `Details:` line. |
+| 2 | The partial-history test fails before any database row is loaded. | It did not prove that a failure after one valid row still returns no partial history. | — | **Resolved July 16, 2026.** `readRuns_whenValidRowIsFollowedByMalformedRow_failsEntireLoad` decodes one valid row, then hits a malformed second row, and asserts the entire load throws. |
 | 3 | The save-first console ordering is verified by code review and manual testing, but not by one orchestration regression test. | A future reorder could accidentally allow PR, AI, or RunStyle output after a failed save. | Later hardening | Open |
 | 4 | Run History and the save-failure receipt both reuse `Run.getRunSummary()`, which omits recorded context. | Surface, shoes, company, and music are saved but are not visible in history or available in the recovery record. | Later display task | Open |
 
@@ -71,8 +72,11 @@ product or engineering backlog.
   exact run-time weather because RunState does not yet have real timestamps.
 - MySQL is the console app's only durable copy. A mobile phase will require a separate
   local-first pending/synced design.
-- Audit item 1 does not make RunState accept bad history. The app still stops; the gap is
-  that the stop is abrupt and bypasses the friendly failure path.
+- Stored enum text must match an enum constant exactly. RunState never trims, re-cases,
+  guesses, or defaults a stored value: text that is not a real constant means the history
+  itself is corrupted, and RunState says so rather than inventing a value that would
+  silently poison PRs and RunStyle. `distance_unit` is the only required enum; the rest
+  stay valid as null, which means "skipped" or "legacy row".
 
 ## When this document must be updated
 
