@@ -172,9 +172,10 @@ public class RunAgent {
         return "Fall";
     }
 
-    private static String formatPace(double paceMinPerMile) {
-        int minutes = (int) paceMinPerMile;
-        int seconds = (int) Math.round((paceMinPerMile - minutes) * 60);
+    static String formatPace(double paceMinPerMile) {
+        long totalSeconds = Math.round(paceMinPerMile * 60);
+        long minutes = totalSeconds / 60;
+        long seconds = totalSeconds % 60;
         return minutes + ":" + String.format("%02d", seconds);
     }
 
