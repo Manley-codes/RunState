@@ -1,15 +1,21 @@
 ---
 name: parked-music-recommendation
-description: Music suggestion direction (July 2026) — phase-aware playlist agent accepted as north star (pre-run brain first, live adaptation at Phase 6); discovery + collaborative filtering parked; Spotify API constraints
+description: Music suggestion direction (July 2026) — phase-aware playlist agent accepted as north star; V1 planning and one console slice precede UI, Spring Boot, and later mobile live adaptation
 metadata:
   type: project
 ---
 
 # Music suggestion direction — accepted vision + parked ideas (July 2, 2026)
 
+> **Forward-path clarification — July 25, 2026:** References below to “Phase 6” mean
+> mobile-era capabilities, not the immediate next task. The locked execution path is Music
+> Intelligence V1 planning → one bounded console music slice → resume UI design → Spring Boot
+> API → mobile/GPS. Live adaptation remains in that later mobile stage.
+
 Manley explored music-suggestion features for RunState. Discussion evolved from a
-generic recommender into a context-aware playlist agent. Judged against [[user-goals]]
-scope discipline and [[research-app-landscape]] identity rule (deepen feeling-and-voice,
+generic recommender into a context-aware playlist agent. Judged against
+[user_goals.md](user_goals.md) scope discipline and
+[research_app_landscape.md](research_app_landscape.md) identity rule (deepen feeling-and-voice,
 don't chase parity).
 
 ## ACCEPTED north star — phase-aware playlist agent (on-identity)
@@ -23,7 +29,8 @@ An AI agent builds a run playlist from context only RunState holds:
 
 Sports-science backing: music tempo matched to cadence and motivational music
 measurably lower perceived exertion (RPE) — phases responding to different music is
-evidence-based, see RPE notes in [[research-app-landscape]].
+evidence-based, see RPE notes in
+[research_app_landscape.md](research_app_landscape.md).
 
 **Two-slice sequencing (key decision):**
 1. **Pre-run brain (buildable in console era, Phase 5 music direction):** given pre-run

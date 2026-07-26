@@ -126,8 +126,8 @@ public class RunConsole {
         );
 
         // Step 2 — show the metrics BEFORE reflection. addRun has not run yet, so the
-        // summary is pure metrics (plus pre-run energy) with no PR line. PRs are announced
-        // later, only after the run is durably saved (step 7). This preserves
+        // summary shows metrics, recorded context, and pre-run energy with no PR line. PRs
+        // are announced later, only after the run is durably saved (step 7). This preserves
         // summary-before-reflection while moving PR confirmation behind the save.
         System.out.println();
         System.out.println(run.getRunSummary());
@@ -183,7 +183,7 @@ public class RunConsole {
     }
 
     // Prints the save-failure recovery receipt (spec wording). The temporary run is still
-    // in hand, so its summary — date, route, distance, pace, duration, energy, effort —
+    // in hand, so its summary — date, route, distance, pace, duration, context, energy, effort —
     // becomes the recovery record. "Check Run History" is required because MySQL may have
     // inserted the row before the connection dropped; re-entering blindly could duplicate it.
     private void printSaveFailureReceipt(Run run, RunStorageException e) {

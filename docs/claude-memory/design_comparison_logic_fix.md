@@ -47,17 +47,17 @@ Additionally, "faster AND farther than average simultaneously" rewards a physiol
 ## Historical: three code paths that were fixed (Phase 5.5)
 
 **1. `buildUserMessage()` in RunAgent.java** — highest leverage
-- Currently: sends `aboveAvgPace` / `aboveAvgDistance` boolean labels
+- At the time: sent `aboveAvgPace` / `aboveAvgDistance` boolean labels
 - Fix: send effort-relative framing instead — "pace at similar effort vs. past similar runs"
 - This is the root fix. Both AI path and fallback improve from a single change here.
 
 **2. `buildFallbackResponse()` in RunAgent.java**
-- Currently: mechanically appends "You ran farther and faster than usual" when flags are true
+- At the time: mechanically appended "You ran farther and faster than usual" when flags were true
 - Fix: remove the mechanical performance note, or reframe around effort efficiency
 - Minor impact (fallback path only), but it's the most literal expression of the flaw
 
 **3. `detectRunStyle()` in Runner.java**
-- Currently: requires faster AND farther than rolling average + moderate/high energy
+- At the time: required faster AND farther than rolling average + moderate/high energy
 - Fix: rebase qualifying criteria — options include showing up consistently, LOW→HIGH lift habit, or effort efficiency (same pace, less effort over time)
 - The consistency gate and earned/quiet character should stay — only what counts as qualifying changes
 
@@ -99,7 +99,8 @@ Summarizes evidence for RunAgent; all selection/aggregation logic lives here, NO
   same-route implicitly controls terrain/hills — RunState has no elevation data.
 - Fallback: similar distance within `max(0.5 mi, 20% of current distance)` — sanity-check
   this band against the real runs table during build; adjust if typical runs find <2 candidates.
-- Same pre-run energy = stronger match when available. Never infer Run Type.
+- Pre-run energy is not a candidate-selection filter in the shipped V1. State Lift instead
+  uses the energy-complete subset after route/distance selection. Never infer Run Type.
 - Legacy NULL-effort rows participate in state/distance/route signals, not effort signals.
 
 **Aggregation: MEDIAN of comparable runs** for pace/effort/state deltas (robust at small n).
@@ -111,7 +112,9 @@ Summarizes evidence for RunAgent; all selection/aggregation logic lives here, NO
 1. State lift — similar start, better post-run energy / stronger pre→post change
 2. Quiet Gain — similar route/distance/output, lower effort cost
 3. Same cost, better output — similar effort + comparable distance, faster pace or stronger finish
-4. Demand explained — high effort justified by distance, PR, heat, route (never "bad run")
+4. Demand explained — high effort justified by a PR or greater distance (never "bad run").
+   Heat may add a separate hedged context note; route determines comparison basis but is not
+   itself treated as proof that higher effort was justified.
 
 **NEGATIVE-OUTCOME PRE-FILTER (critical rule):** the helper filters BEFORE the prompt.
 Negative deltas (finished lower, higher effort, slower) are omitted or collapsed to

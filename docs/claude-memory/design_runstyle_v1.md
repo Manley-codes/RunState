@@ -11,7 +11,8 @@ All four implementation steps are complete and committed:
 - Step 1 added the context enums, `RunContext`, four persistence columns, console capture,
   AI/privacy documentation, legacy music inference, and tests.
 - Step 2 added typed RunStyle evidence and the strict candidate path while leaving
-  `ComparisonService.analyze()` unchanged.
+  `ComparisonService.analyze()` unchanged at that time. The July 25 signal-confidence repair
+  later changed the general `analyze()` evidence pools without changing the strict path.
 - Step 3 added `RunStyleService`, `RunStyleInsight`, the three families and stages, facets,
   habits, point-in-time evaluation, announcements, and tests.
 - Step 4 wired `Runner.detectRunStyle()` to the service, removed the faster-and-farther and
@@ -27,8 +28,9 @@ and synchronized `AI_AGENT.md` with the real prompt.
 
 Do not re-litigate the decisions below; flag anything that contradicts the actual
 code when reached. Supersedes the old "Your Run
-Style" faster-AND-farther rule in [[design-run-response-system]] and closes
-path #3 (`detectRunStyle`) deferred from [[design-comparison-logic-fix]].
+Style" faster-AND-farther rule in [design_run_response_system.md](design_run_response_system.md) and closes
+path #3 (`detectRunStyle`) deferred from
+[design_comparison_logic_fix.md](design_comparison_logic_fix.md).
 
 ## Product intent
 
@@ -90,10 +92,11 @@ gaps. This must be deterministic.
 
 ## Detection
 
-- Keep `ComparisonService.analyze()` and its route-first tests **byte-for-byte
-  behavior-identical**. Add typed internal evidence (STATE_LIFT, QUIET_GAIN,
+- During the original RunStyle V1 build, keep `ComparisonService.analyze()` and its
+  route-first behavior unchanged. Add typed internal evidence (STATE_LIFT, QUIET_GAIN,
   SAME_COST_BETTER, DEMAND_EXPLAINED) and a **package-private strict RunStyle
-  path** that records which signals were measurable even when none fired.
+  path** that records which signals were measurable even when none fired. July 25 follow-up:
+  Task 2 later revised only the general comparison pools; this strict path stayed separate.
 - **Strict candidates:** previous runs within 180 days; similar distance ALWAYS
   required using `max(0.5 mi, 20%)`; prefer same route + similar distance, then
   same surface + similar distance, then similar distance; cap 10.
@@ -175,7 +178,8 @@ facet under existing RunStyle rules — context decorates, never creates a patte
 - **Doc reconciliation (same commit as the detector swap):** remove the
   CLAUDE.md "rolling average snapshot before addRun()" rule and delete the
   now-dead snapshot in `RunConsole.logRun` (lines ~120-122); replace the old Run
-  Style sections in [[design-run-response-system]] and [[project-current-state]].
+  Style sections in [design_run_response_system.md](design_run_response_system.md) and
+  [project_current_state.md](project_current_state.md).
 
 ## Execution order (each numbered step = one commit, flagged to Manley)
 
@@ -191,8 +195,8 @@ facet under existing RunStyle rules — context decorates, never creates a patte
 
 **Tests must cover:** every context choice saves/reloads/displays/reaches the
 AI; skips and legacy nulls safe; NO_MUSIC distinct from missing; legacy music
-text infers MUSIC; normalization matches case/space variants only; `analyze()`
-unchanged; strict path rejects same-route outside the distance band and uses
+text infers MUSIC; normalization matches case/space variants only; `analyze()` remained
+unchanged during this original build; strict path rejects same-route outside the distance band and uses
 surface fallback; missing data = non-opportunity; each family hits each stage at
 exact thresholds; habitual lifts stay detectable; point-in-time evaluation (a
 future run never changes a past count); same-day ordering deterministic;
@@ -212,26 +216,19 @@ safe.
   step-by-step PowerShell commit walkthrough each time — Manley runs the commits.
 - Never mention below-average performance in any run-facing output.
 
-## Reconciliation with current code (verified July 10, 2026, Step 0)
+## Historical pre-build reconciliation (performed July 10, 2026, Step 0)
 
-Confirmed the handoff matches the code, with one gap to resolve during the build:
+This was the Step 0 snapshot before implementation. Every item below was resolved during
+RunStyle V1: database loads now order by date and ID; Java's stable date sort preserves
+incoming/list position for same-day runs; `RunContext` replaced the loose music string;
+the INSERT now has 19 columns; and the old rolling-average wiring was removed.
 
-- `Runner.detectRunStyle(Run, double avgPace, double avgDistance)` — the params
-  are removed in Step 4; only `RunConsole.logRun` (line ~149) calls it.
-- The rolling-average snapshot (`RunConsole.logRun` ~120-122) feeds only that
-  call, so it becomes dead exactly when the params go.
-- `runId = runner.getRunCount() + 1` (`RunConsole.logRun` ~103) is the misorder
-  risk; also `RunStorage.saveRun` never reads back the DB auto-increment key, so
-  the in-memory id is always a guess. Deciding how to align these is part of
-  Step 1/4.
-- `RunStorage.loadRuns` currently `ORDER BY run_date ASC` → change to
-  `run_date, run_id`.
-- The `Run` constructor's loose `String musicContext` (position 13) is consumed
-  in three places: `RunConsole.logRun`, `RunStorage.loadRuns`, and
-  `ComparisonServiceTest` — all three change when `RunContext` lands.
-- `RunStorage.saveRun` INSERT is 15 columns today → 19 after the four new ones.
-- **GAP (not in the handoff):** `Runner.storeRun` sorts run history by DATE ONLY
-  (`Runner.java` ~237-238), with no `run_id` tiebreak. For the point-in-time
-  rule to be deterministic in memory — not just on DB reload — this comparator
-  must also apply the `run_id` (or list-position) tiebreak. Fold into the
-  ordering work in Step 1.
+Original observations retained for provenance:
+
+- `Runner.detectRunStyle` still had average parameters, and `RunConsole` still created a
+  rolling-average snapshot solely for that call.
+- `RunStorage.loadRuns` ordered only by date.
+- `Run` still carried loose `String musicContext` constructor data.
+- `RunStorage.saveRun` had 15 columns before the four RunContext columns.
+- `Runner.storeRun` sorted by date only. The accepted resolution was stable list position as
+  the in-memory same-day tiebreak, paired with database loading by `run_date, run_id`.

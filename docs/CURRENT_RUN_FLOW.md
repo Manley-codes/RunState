@@ -1,8 +1,8 @@
 # RunState Current Run Flow
 
-**Status:** Current Java console behavior — all four audit gaps now resolved  
-**Last verified:** July 25, 2026  
-**Code baseline:** pending sprint commit  
+**Status:** Current Java console behavior — all four audit gaps resolved
+**Last verified:** July 25, 2026
+**Code baseline:** `9548fc4` (last behavior-changing sprint commit)
 **Test suite:** 77 passing
 
 ## Purpose and scope
@@ -10,9 +10,9 @@
 This document is the durable map of how RunState currently handles one completed run.
 It is an **as-is flow**, not a future architecture diagram.
 
-The main path follows one **Log Run** cycle. Other menu choices are not expanded; audit
-marker 4 identifies the known Run History display gap. The final node states the return
-to the menu instead of drawing a long loop across the diagram.
+The main path follows one **Log Run** cycle. Other menu choices are not expanded; the
+Run History annotation records that saved context appears in its compact summaries. The
+final node states the return to the menu instead of drawing a long loop across the diagram.
 
 Included:
 
@@ -21,7 +21,7 @@ Included:
 - Daily-mean weather lookup for the logged date
 - MySQL loading and saving
 - Personal-record confirmation, the post-run response, and RunStyle analysis
-- Current failure behavior and known verification gaps
+- Current failure behavior and the regression protections for previously identified gaps
 
 Excluded:
 
@@ -51,10 +51,11 @@ that allows logging to continue.
 6. Surface, shoes, company, music, and weather describe associations only. They never
    create or strengthen a primary RunStyle.
 
-## Flow audit markers
+## Resolved flow-audit record
 
-This table explains the numbered markers in the diagram. It is not RunState's complete
-product or engineering backlog.
+This table preserves the four findings that were once shown as numbered markers in the
+diagram. All four are resolved, so the numbered marker graphics have been removed. This
+is not RunState's complete product or engineering backlog.
 
 | ID | Gap | Real effect | Priority | Status |
 |---|---|---|---|---|

@@ -1,5 +1,7 @@
 package com.runstate;
 
+import java.io.ByteArrayOutputStream;
+import java.io.PrintStream;
 import java.time.LocalDate;
 
 import org.junit.jupiter.api.Test;
@@ -14,10 +16,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * Step 1 (RunStyle V1) tests for the run-context layer — the RunContext value object,
  * the way Run delegates to it null-safely, and the legacy music-mode inference.
  *
- * These are all pure logic (no database, no console), so they run in-process. The
- * DB round-trip cases from the design's Step 1 list (save → reload → display) need a
- * live MySQL and are exercised by hand against the migrated schema; here we prove the
- * in-memory contracts those rows are rebuilt into.
+ * These tests use no database or external service. Most are pure value/formatting checks;
+ * one captures Run History console output to protect the shared-summary integration. The
+ * DB round-trip cases from the design's Step 1 list still need live MySQL and are exercised
+ * by hand against the migrated schema.
  */
 public class RunContextTest {
 
@@ -194,15 +196,28 @@ public class RunContextTest {
         assertTrue(runWith(context).getRunSummary().contains("Music: Old vinyl session"));
     }
 
-    // getRunSummary() is the shared method used by Run History, so verifying it
-    // contains the context line also verifies history shows context.
+    // Exercise the public Run History surface so a later display refactor cannot
+    // accidentally drop context while the lower-level summary test stays green.
     @Test
-    void runHistorySummaryContainsContextLine() {
+    void runHistoryDisplaysContextLine() {
         RunContext context = new RunContext(
                 SurfaceType.TRAIL, RunCompany.SOLO, null,
                 MusicMode.MUSIC, "Midnight Marauders");
         Run run = runWith(context);
-        assertTrue(run.getRunSummary().contains(
+        Runner runner = new Runner(
+                1, "runner", "Test", "Runner", "Houston", "TX", "runner@example.com");
+        runner.loadRun(run);
+
+        ByteArrayOutputStream captured = new ByteArrayOutputStream();
+        PrintStream original = System.out;
+        try {
+            System.setOut(new PrintStream(captured));
+            runner.displayRunHistory();
+        } finally {
+            System.setOut(original);
+        }
+
+        assertTrue(captured.toString().contains(
                 "Context: Trail | Solo | Music: Midnight Marauders"));
     }
 }

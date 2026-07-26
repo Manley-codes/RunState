@@ -26,6 +26,13 @@ metadata:
 5. Phase 5: AI agent context expansion — music (manual now, Spotify later), weather (automatic via Open-Meteo)
 6. Mobile UI — GPS tracking, automatic run detection
 
+**Forward execution path — LOCKED July 25, 2026:**
+The historical phase list above describes the product layers, but the implementation seam is
+now explicit: Music Intelligence V1 planning → one bounded console music slice → resume UI
+design → Spring Boot API → mobile client with GPS/automatic tracking. UI design resumes before
+Spring Boot so real screen needs shape endpoint and payload contracts; Spring Boot is built
+before the mobile client. Spotify/live-DJ depth remains later than this first mobile foundation.
+
 **Final product vision (locked in June 2026):**
 Manual input in the finished app is minimal by design:
 - Post-run energy (how they feel) — always asked, core to the app's identity, cannot be automated

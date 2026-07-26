@@ -13,8 +13,9 @@ import java.util.Set;
  * WeatherService) — RunAgent never does this work itself. Everything here is static:
  * the service holds no state, it just computes an answer from its inputs.
  *
- * Build status: Chunk A — candidate selection only. analyze() returns NONE until
- * Chunks B (medians) and C (signals + negative pre-filter) are added.
+ * Current status: candidate selection, signal-specific evidence pools, median aggregation,
+ * confidence tiers, and the negative pre-filter are built. The strict RunStyle evidence path
+ * remains separate near the bottom of this class.
  */
 public class ComparisonService {
 
@@ -362,8 +363,9 @@ public class ComparisonService {
     // =====================================================================
     // Strict RunStyle evidence path (RunStyle V1, Step 2).
     //
-    // Completely separate from analyze() above — it never calls this and this
-    // never calls it, so analyze() and its 9 tests stay byte-for-byte identical.
+    // Neither entry point calls the other, and their candidate/evidence orchestration stays
+    // separate. They still share low-level helpers and thresholds below, so changes to shared
+    // math must keep both the general-comparison and strict-RunStyle tests green.
     // RunStyleService (Step 3) consumes the typed evidence produced here.
     //
     // How "strict" differs from analyze()'s selection:
@@ -447,10 +449,10 @@ public class ComparisonService {
         return runs;
     }
 
-    // Evaluates the four typed signals for the current run against its strict
-    // candidates, recording which were MEASURABLE (enough data to judge) and which
-    // were SUPPORTED (fired positive). The thresholds mirror the string signals
-    // above so the two paths agree; they stay separate so analyze() is never touched.
+    // Evaluates the four typed signals for the current run against its strict candidates,
+    // recording which were MEASURABLE (enough data to judge) and which were SUPPORTED
+    // (fired positive). Signal meanings stay aligned with the general path, while strict
+    // candidate selection and evidence handling remain intentionally independent.
     static StrictEvidence evaluateStrict(Run current, List<Run> history) {
         if (current == null || history == null) {
             return StrictEvidence.NONE;

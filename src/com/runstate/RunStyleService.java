@@ -24,11 +24,11 @@ import java.util.Set;
  * Secondary context (surface/company/weather/music/shoes) can only decorate that result as
  * facets or a habit line — never create or strengthen a primary pattern.
  *
- * POINT-IN-TIME RULE: a run is judged using only the runs that precede it in chronological
- * order (run_date, then list position as the same-day tiebreak). Future runs never change a
- * past run's classification. Announcements are computed by evaluating the full history and
- * the history-without-the-current-run, then diffing — so a pattern is announced exactly once,
- * when it first advances, and never downgraded or repeated.
+ * POINT-IN-TIME RULE: a run is judged using only the chronological prefix through that run
+ * (run_date, then list position as the same-day tiebreak). Its previous state uses the prefix
+ * immediately before it, so future runs never change a past classification. Only the final
+ * chronological run is announcement-eligible; backdated entries contribute silently to later
+ * profiles instead of replaying a historical transition as though it happened today.
  */
 public final class RunStyleService {
 

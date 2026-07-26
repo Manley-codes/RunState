@@ -3,13 +3,16 @@ name: creative-direction-ui
 description: Exploratory creative + UI direction for the RunState mobile app phase (brainstorm synthesis, not locked)
 metadata:
   type: project
-status: v0.2 (July 6, 2026) — UI PHASE PAUSED; focus returned to backend (see design_weather_cleanup.md)
+status: v0.2 — UI PHASE PAUSED; resume after the first new console music slice, before Spring Boot
 ---
 
 # RunState — Creative Direction (v0.2)
 
-> Status: UI work PAUSED July 6, 2026 — Manley returned to the backend. This doc is the map for
-> the mobile phase (Phase 6). §1–12 are the original June 28 brainstorm synthesis; **§0 records the
+> Status: UI work remains PAUSED. When development resumes, first plan Music Intelligence V1
+> and ship one bounded console music slice. Then resume this UI work before Spring Boot so the
+> real State Scan, history, and post-run reply screens shape the API; build mobile/GPS after the
+> Spring Boot foundation. This doc is the map for that design phase. §1–12 are the original June
+> 28 brainstorm synthesis; **§0 records the
 > decisions made in the later prompt-iteration sessions (early July 2026) — where §0 conflicts with
 > §1–12, §0 wins.** Superseded ideas are kept, marked, not erased.
 > Moodboard images are being moved OUT of the repo (July 6, 2026) — visual references in §5–6
@@ -55,11 +58,12 @@ smooth arc, not an EKG). Static screens one at a time for design iteration; vide
 finishing step.
 
 **Open questions (v0.2):**
-- **State Scan energy states — SOLVE LATER, deliberately not a current focus (July 6, 2026).**
-  The UI concept used FOUR states (Low Charge / Building / Ready-ish / Sharp) but the backend
-  energy system is THREE levels. This is a UI sketch quietly implying a backend enum change —
-  see the 3-vs-more granularity tension already noted in research_app_landscape.md. Decide when
-  UI work resumes; do not let it leak into current backend work.
+- **State Scan energy states — decide during Music Intelligence V1 planning, before its first
+  implementation slice.** The UI concept used FOUR states (Low Charge / Building / Ready-ish /
+  Sharp) but the backend energy system is THREE levels. Because pre-run energy is a music input,
+  settle this as a domain/data-contract decision before music logic hardcodes the current enum.
+  This is one bounded decision, not an early restart of the full UI phase; do not change the enum
+  merely to match an old sketch.
 - Collapsible block → frosted sphere docking: personalization (permanent layout) vs focus mode
   (temporary)? Worth pursuing either way; discoverability needs an affordance.
 

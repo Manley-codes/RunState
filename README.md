@@ -124,10 +124,19 @@ mvn test
 
 ## Next direction
 
-Music Intelligence V1 — planning the core music reply craft rules, then the evidence model
-for cross-run music references.
+RunState is paused at a clean preparation point. When development resumes, the locked path is:
 
-Spotify integration, live-DJ mode, GPS, and mobile remain later possibilities.
+1. Plan Music Intelligence V1, including its evidence/persistence contract and the three-vs-four
+   pre-run energy-state decision.
+2. Build and verify one bounded console music slice, beginning with the approved core reply-craft
+   rules rather than provider integration.
+3. Resume UI design so the State Scan, history, and post-run reply screens define what the backend
+   must return.
+4. Migrate/design the Spring Boot API from those screen contracts.
+5. Build the mobile client and GPS/automatic-tracking layer against that API.
+
+Spotify integration and live-DJ behavior remain later possibilities with separate legal, privacy,
+provider, and platform dependencies.
 
 ---
 

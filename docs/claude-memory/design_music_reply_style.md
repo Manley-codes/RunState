@@ -16,9 +16,13 @@ music feature (manual input).
 - **Cross-run frequency balance:** a separate small mechanism that cannot be prompt-only
   because the app does not currently store AI replies or a "music was referenced" signal.
 
-Either the core craft slice or Music Intelligence V1 planning can come first. Their order
-is not locked. The frequency mechanism should wait until the V1 plan decides what evidence
-belongs in persistence.
+**Order locked July 25, 2026:** Music Intelligence V1 planning comes first so the purpose,
+evidence model, and persistence boundary are explicit. The prompt-only core craft rules are
+then the intended first bounded console music slice. The frequency mechanism waits until the
+V1 plan decides what evidence belongs in persistence.
+
+References below to “Phase 6” mean later mobile-era data availability. Under the current
+forward path, UI contract work and Spring Boot come before that mobile implementation.
 
 ## The anti-pattern vs. the north star
 

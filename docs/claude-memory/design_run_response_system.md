@@ -84,7 +84,8 @@ pre-filter already applied) is appended when available.
 The original Phase 3 "Your Run Style" (faster-AND-farther vs a 20-run rolling average,
 consistency gate, LOW→HIGH bonus) was REPLACED. That elimination funnel rewarded a
 physiologically unusual combination and was blind to good easy/long and hard/short training.
-RunStyle V1 (see [[design-runstyle-v1]]) is a living, local, deterministic strategy profile:
+RunStyle V1 (see [design_runstyle_v1.md](design_runstyle_v1.md)) is a living, local,
+deterministic strategy profile:
 - Three primary families — State Lift, Efficiency Gain, Controlled Finish — each judged
   point-in-time; a run "supports" a family only when that family is measurable.
 - Stages from the latest opportunities per family (EARLY 3/4, FORMING 4/5, ESTABLISHED 6/7);

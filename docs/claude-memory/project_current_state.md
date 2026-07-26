@@ -5,7 +5,7 @@ metadata:
   type: project
 ---
 
-As of June 25, 2026, the app is a working Java console app named **RunState**.
+As of July 25, 2026, the app is a working Java console app named **RunState**.
 
 **Completed phases:**
 - Phase 1: Console app — energy system, opening prompt, post-run responses, rolling averages
@@ -14,7 +14,7 @@ As of June 25, 2026, the app is a working Java console app named **RunState**.
 - Phase 4: AI agent — `RunAgent.java` replaces `buildRunResponse()` with Anthropic API call (claude-haiku-4-5-20251001). Fallback to hardcoded logic on any failure. Gson added for JSON parsing. `Run.java` has `getRunner()` getter added.
 - Phase 5 (Steps 1–2): AI context expansion — music context (manual input) + weather (Open-Meteo, `WeatherData` value object, persisted at log time). Built June 26; weather cleanup + TX→Texas fix shipped July 6–7, 2026.
 - Effort Cost V1: post-run "How did that run land?" input — `EffortLevel` enum (Smooth/Working/Heavy/Empty tank + internal RPE ranges), persisted at log time, shown in run history and fed to the agent (prompt line + SYSTEM_PROMPT rule + offline fallback). Built July 8–9, 2026 (collector commit 8981b48 + display/agent follow-up).
-- Comparison Repair V1: candidate-based run comparison (`ComparisonService` + `ComparisonInsight`) — 180-day/cap-10 selection (route-first, distance-fallback), median aggregation, confidence tiers, four positive signals behind a negative pre-filter — replaces the blended 20-run rolling-average flaw in the AI prompt + fallback. `detectRunStyle()` deferred to the identity redesign. Built July 9, 2026.
+- Comparison Repair V1: candidate-based run comparison (`ComparisonService` + `ComparisonInsight`) — 180-day/cap-10 selection (route-first, distance-fallback), median aggregation, four positive signals behind a negative pre-filter, and July 25 signal-specific energy/effort evidence pools and confidence — replaces the blended 20-run rolling-average flaw in the AI prompt + fallback. `detectRunStyle()` was later replaced by RunStyle V1. Built July 9 and refined July 25, 2026.
 
 **Rename completed June 22, 2026:**
 - Package renamed from `com.runclubapp` to `com.runstate` — all 7 source files updated
@@ -42,7 +42,7 @@ delegates). Full spec: `design_runstyle_v1.md`. In brief:
 2. Effort Cost V1 — DONE (July 8–9, 2026)
 3. Comparison Repair V1 — DONE (July 9, 2026); candidate-based comparison replaces the blended-average flaw (AI prompt + fallback; `detectRunStyle()` deferred)
 4. Stabilization sprint — DONE (July 10, 2026); privacy/code alignment, RunAgent HTTP timeouts, DB password moved to env var, and the project's first unit tests (see handoff below)
-5. **RunStyle V1 — DONE AND VERIFIED July 10, 2026 (see `design_runstyle_v1.md`).** Rebased `detectRunStyle()` off the faster-AND-farther rolling-average rule onto the identity-aligned profile: `RunContext` value object + four new context columns, `RunStyleService`/`RunStyleInsight` with three families / stages / facets / habit / point-in-time announcements, `ComparisonService.evaluateStrict` typed-evidence path (`analyze()` unchanged), wiring swapped, and the rolling-average snapshot deleted. Verification evidence: Manley applied the four-column MySQL migration, `mvn test` passed with 36 tests, and a live end-to-end log-run succeeded against the migrated database. Same-day ordering is deterministic in the current flow: the database loads by `run_date, run_id`, and Java's stable in-memory date sorts preserve that incoming order.
+5. **RunStyle V1 — DONE AND VERIFIED July 10, 2026 (see `design_runstyle_v1.md`).** Rebased `detectRunStyle()` off the faster-AND-farther rolling-average rule onto the identity-aligned profile: `RunContext` value object + four new context columns, `RunStyleService`/`RunStyleInsight` with three families / stages / facets / habit / point-in-time announcements, and a separate `ComparisonService.evaluateStrict` typed-evidence path. The general `analyze()` path stayed unchanged during that original build and was later refined by the July 25 signal-confidence task; the strict path remained separate. Wiring was swapped and the rolling-average snapshot deleted. Verification evidence: Manley applied the four-column MySQL migration, `mvn test` passed with 36 tests, and a live end-to-end log-run succeeded against the migrated database. Same-day ordering is deterministic in the current flow: the database loads by `run_date, run_id`, and Java's stable in-memory date sorts preserve that incoming order.
 6. **Honest Database Failure Handling — DONE AND VERIFIED July 15, 2026.** RunState now treats a run as logged only after a durable DB save. Added checked `RunStorageException` (preserves the original `SQLException` as cause) and a package-private `ConnectionProvider` seam in `RunStorage`; `saveRun`/`loadRuns` throw instead of the old swallow-and-print. `App` reports a startup load failure (friendly message + `Details:` from the cause) and exits before the opening prompt/menu — never an empty or partial history. `RunConsole.logRun()` was reordered to save BEFORE `addRun`/PR/AI/RunStyle (kills the phantom-PR bug where a failed save had already announced a PR), and prints a recovery receipt on save failure (includes the "check Run History" duplicate warning), ending the session via a boolean return. Summary-before-reflection preserved. Tests: 5 new `RunStorageTest` cases via the injected failing provider (load/save throw, load never returns partial, both preserve the cause) — 41 tests green. All three manual acceptance tests passed live. Built on the project's first feature branch (`feature/honest-db-failure-handling`), merged fast-forward to master and pushed. Out of scope by design: migrations, retries, offline queue, mobile sync, doc reconciliation. Locked future direction — mobile phase uses durable local-first recording (stable run id, pending/synced states, duplicate-safe sync, server retry without losing the recorded run).
 
 7. **Malformed Stored-Row Handling — DONE AND VERIFIED July 16, 2026 (code baseline `0af9524`).** Closes flow-audit items 1 and 2. Malformed persisted enum values now follow the same controlled startup-failure path as an unreachable database instead of escaping as an uncaught `IllegalArgumentException`. Added a private checked `StoredRunDecodeException` inside `RunStorage` (never escapes the class; wrapped in the public `RunStorageException` at the boundary, so `App`/`RunConsole` are unchanged) plus `decodeOptionalEnum`/`decodeRequiredEnum` generic helpers. All seven enum columns route through them: `distance_unit` (required), pre/post energy, surface, company, music mode, effort. Decode contract — exact enum names only, no trimming, casing, guessing, or defaulting; null stays valid for optional enums; any malformed row fails the WHOLE load (never partial); stored data is never mutated; causes preserved end to end. `inferMusicMode` now takes an already-decoded `MusicMode` rather than raw text, so a corrupt stored mode fails as corrupt instead of silently falling through to note-based inference (validation before inference). Added a package-private `readRuns(Runner, ResultSet)` seam — the second testing seam alongside `ConnectionProvider`: that one simulates an unreachable database, this one a reachable database holding bad data. Tests: 10 new (7 parameterized across every enum column, missing required unit, valid-row-then-malformed-row proving no partial history, and a legacy row with optional nulls + music inference that must still LOAD) via a `java.lang.reflect.Proxy` fake `ResultSet` — no MySQL touched, no corrupt rows written to real history. **51 tests green.** Startup guidance now reads "Check the database connection or stored run data..."; `CURRENT_RUN_FLOW.md` + `current-run-flow.svg` updated (markers 1 and 2 removed from the diagram, both rows marked Resolved in the table). Schema verified before enforcing: `distance_unit` is `NOT NULL` with zero null rows, so the required check cannot lock Manley out of existing history. Out of scope by design: no schema migration, no new dependencies, no public API change. Noted but NOT fixed: the `temperature` column has a stray default of `0` (harmless — `saveRun` always writes the column explicitly).
@@ -56,16 +56,25 @@ delegates). Full spec: `design_runstyle_v1.md`. In brief:
 | 3 | Backdated RunStyle announcement policy — `RunStyleService.analyze()` evaluates each run through its chronological prefix (indexOf + subList); only the genuinely last entry in sorted history is eligible to announce. Backdated runs save and contribute to future calculations silently; no historical-as-today announcement. |
 | 4 | Failed-save orchestration regression — `saveAndCompleteRun()` extracted from `logRun()` (behavior-neutral); `saveRun()` and `buildRunResponse()` added as package-private delegates. `RunConsoleTest` proves a failing save leaves history untouched, PR flags unset, AI response unsent, and RunStyle unchecked. Flow-audit item 3 closed. |
 | 5 | Context in summaries — `Run.getContextSummary()` private helper (parts-collector ArrayList, `String.join(" \| ", pieces)`) wired into `getRunSummary()` after pace/duration and before energy. Compact `Context:` line appears in post-run view, Run History, and recovery receipt. Nine `RunContextTest` cases; flow-audit item 4 closed. |
-| 6 | Documentation reconciliation — DATA_PRIVACY.md, README.md, requirements_nonfunctional.md, design_comparison_logic_fix.md, design_run_response_system.md, AI_AGENT.md, project_current_state.md, MEMORY.md, ROADMAP.md, CURRENT_RUN_FLOW.md, and current-run-flow.svg all updated to reflect current verified behavior. All four flow-audit findings confirmed closed. |
+| 6 | Documentation reconciliation — active privacy, AI, comparison, response, RunStyle, project-memory, README, roadmap, and flow records reconciled with verified behavior. A post-sprint audit then removed remaining stale flow text, historical-as-current wording, and music-order contradictions. All four flow-audit findings are closed. |
 
 Flow-audit findings: all four closed — items 1 and 2 (malformed-row handling, July 16); item 3 (save orchestration, Task 4); item 4 (context in summaries, Task 5).
 
-**Current resume point — Music Intelligence V1:**
-- Next: Music Intelligence V1 planning — turn accepted and parked music ideas into a bounded
-  purpose, evidence model, and execution sequence.
-- After planning: core music reply craft rules (prompt-only, no new persistence).
-- Spotify integration, live-DJ mode, GPS, and mobile remain later possibilities with legal,
-  privacy, and platform dependencies.
+**Current resume point — PAUSED before Music Intelligence V1:**
+- No Music Intelligence V1 implementation has started; the existing manual music/no-music
+  capture and raw agent context are the earlier foundation only. When Manley returns, first plan
+  V1: turn the accepted ingredients into a bounded purpose, evidence/persistence model, and
+  execution sequence. Settle the three-vs-four pre-run energy-state question inside that planning
+  as one domain/data-contract decision, not as a restart of the full UI phase.
+- After the plan: build and verify one bounded console music slice, beginning with the approved
+  prompt-only core reply-craft rules. The cross-run reference-frequency mechanism waits for the
+  V1 evidence/persistence decision.
+- After that first new music slice: resume UI design using `creative_direction_ui.md`. Let the
+  State Scan, history, and post-run reply screens define the backend payloads.
+- Then: design/migrate the Spring Boot API from those screen contracts.
+- Then: build the mobile client and GPS/automatic-tracking layer against Spring Boot.
+- Spotify integration and live-DJ behavior remain later possibilities with separate legal,
+  privacy, provider, and platform dependencies.
 
 *(Resume point updated above after Pre-Music Integrity Sprint completion.)*
 
@@ -186,19 +195,22 @@ UI/creative-direction exploration is paused (see creative_direction_ui.md v0.2 �
 locked July decisions reconciled from the prompt-iteration sessions). Moodboard is gitignored
 (local only, like the HTML prototypes); creative_direction_ui.md is the surviving text record.
 Historical focus at that time: the weather cleanup above, which has since shipped.
-NOTE FOR LATER (not a current focus): the UI "State Scan" concept implies FOUR pre-run energy
-states, but the backend energy system is THREE levels. Open question — resolve when UI work
-resumes, before Phase 6. Do not change the backend enum for it now.
+NEXT-PLANNING DECISION (not implementation yet): the UI "State Scan" concept implies FOUR
+pre-run energy states, but the backend energy system is THREE levels. Resolve this during Music
+Intelligence V1 planning because pre-run state is one of its inputs. Treat it as a domain/data-
+contract decision; do not change the backend enum merely to match the old UI sketch.
 
 **Current weather architecture (post-cleanup, for reference):**
 - `WeatherData.java` — immutable value object (nullable `Double` temperature/apparentTemperature,
   String weatherCondition; final fields, no setters).
 - `WeatherService.java` — `static WeatherData fetch(city, state, date)`; owns geocoding (forecast API),
   WMO code decoding, timeouts, and TX→Texas state canonicalization (`STATE_NAMES` + `normalizeState`).
-- `Run.java` — one `WeatherData` constructor param (last position); null-safe delegating getters.
+- `Run.java` — one grouped `WeatherData` constructor parameter followed by `EffortLevel`;
+  null-safe delegating weather getters.
 - `RunConsole.logRun()` — fetches weather BEFORE saveRun so it persists.
-- `RunStorage.java` — INSERT has 14 columns incl. `apparent_temperature` (setObject for nullable
-  Doubles); loadRuns reads the three weather columns via `rs.getObject` into a `WeatherData`.
+- `RunStorage.java` — the current INSERT has 19 columns, including `apparent_temperature` and
+  the later RunContext/effort fields; loadRuns reads the three weather columns via `rs.getObject`
+  into a `WeatherData`.
 - `RunAgent.java` — no longer fetches weather; `describeWeather(run)` formats the stored values.
 `design_weather_context.md` still holds the original spec (WMO mapping, API URLs) for reference.
 Note: `Runner.getCity()/getState()` exist (added June 26).

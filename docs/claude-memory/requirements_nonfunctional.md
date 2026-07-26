@@ -10,8 +10,9 @@ metadata:
 What the app must be, not what it does. Judge new work against these. Priorities are
 PHASE-DEPENDENT — the order below is for the current phase (single-user, local, pre-release);
 security and privacy jump to the top the day the repo goes public or anything server-shaped
-exists. Scalability is deliberately deferred, not forgotten — it re-enters at Phase 7
-(multi-user platform); #9 and the Spring Boot migration are its foundations.
+exists. Scalability is deliberately deferred, not forgotten — it re-enters with the Spring
+Boot foundation and grows again at the multi-user horizon. The locked transition is: first
+music slice → UI contract work → Spring Boot API → mobile/GPS.
 
 | # | Requirement | The bar | Status |
 |---|-------------|---------|--------|
