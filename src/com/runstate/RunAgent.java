@@ -147,16 +147,21 @@ public class RunAgent {
     // Formats the comparison evidence block for the prompt, or "" when there is no
     // insight. Everything here already passed the negative pre-filter in the service.
     private static String describeComparison(Run run) {
-        ComparisonInsight insight = comparisonFor(run);
+        return formatComparison(comparisonFor(run));
+    }
+
+    // Package-private so RunAgentTest can verify prompt shape without a network call.
+    static String formatComparison(ComparisonInsight insight) {
         if (!insight.hasInsight()) {
             return "";
         }
         StringBuilder block = new StringBuilder();
         block.append("Comparable run basis: ").append(insight.getBasis()).append("\n");
-        block.append("Comparable runs found: ").append(insight.getComparableCount()).append("\n");
-        block.append("Confidence: ").append(insight.getConfidence());
-        for (String line : insight.getOutcomeLines()) {
-            block.append("\n").append(line);
+        block.append("Positive comparison signals:");
+        for (ComparisonOutcome outcome : insight.getOutcomes()) {
+            block.append("\n- ").append(outcome.getLine())
+                 .append(" [evidence-bearing comparable runs: ").append(outcome.getEvidenceCount())
+                 .append("; confidence: ").append(outcome.getConfidencePhrase()).append("]");
         }
         if (insight.getContextNote() != null) {
             block.append("\n").append(insight.getContextNote());
@@ -286,7 +291,8 @@ public class RunAgent {
         // the comparison line is candidate-based and already filtered to positives.
         String effortLine = effortFallbackLine(run);
         ComparisonInsight insight = comparisonFor(run);
-        String comparisonNote = insight.hasInsight() ? "\n" + insight.getOutcomeLines().get(0) : "";
+        String comparisonNote = insight.hasInsight()
+                ? "\n" + insight.getOutcomes().get(0).getLine() : "";
 
         if (pre == EnergyLevel.LOW && post == EnergyLevel.HIGH) {
             return mainMessage + "\nSee what getting active can do. "

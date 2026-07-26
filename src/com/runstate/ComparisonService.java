@@ -38,32 +38,47 @@ public class ComparisonService {
             return ComparisonInsight.NONE;
         }
 
-        int count = candidates.size();
-        double medPace = medianPace(candidates);
-        double medLift = medianEnergyLift(candidates);
-        double medEffort = medianEffort(candidates);
+        // Energy pool: candidates with both energy readings — backs State Lift only.
+        List<Run> energyPool = new ArrayList<>();
+        for (Run r : candidates) {
+            if (r.getPreRunEnergy() != null && r.getPostRunEnergy() != null) {
+                energyPool.add(r);
+            }
+        }
+
+        // Effort pool: candidates with effort recorded — backs all three effort signals.
+        // Pace, distance, and effort medians for those signals all come from this pool.
+        List<Run> effortPool = new ArrayList<>();
+        for (Run r : candidates) {
+            if (r.getEffortLevel() != null) {
+                effortPool.add(r);
+            }
+        }
+
+        double medLift   = medianEnergyLift(energyPool);
+        double medPace   = medianPace(effortPool);
+        double medEffort = medianEffort(effortPool);
 
         // Derive signals in priority order. Each returns null unless its delta is
         // positive or explanatory — THAT is the negative pre-filter: nothing negative
-        // (slower, weaker, unexplained higher effort) is ever turned into a line.
-        List<String> outcomeLines = new ArrayList<>();
-        addIfPresent(outcomeLines, stateLiftLine(current, medLift, count));
-        addIfPresent(outcomeLines, quietGainLine(current, medEffort, medPace, count));
-        addIfPresent(outcomeLines, sameCostBetterLine(current, medEffort, medPace, count));
-        addIfPresent(outcomeLines, demandExplainedLine(current, candidates, medEffort, count));
+        // (slower, weaker, unexplained higher effort) is ever turned into an outcome.
+        List<ComparisonOutcome> outcomes = new ArrayList<>();
+        addIfPresent(outcomes, stateLiftOutcome(current, medLift, energyPool.size()));
+        addIfPresent(outcomes, quietGainOutcome(current, medEffort, medPace, effortPool.size()));
+        addIfPresent(outcomes, sameCostBetterOutcome(current, medEffort, medPace, effortPool.size()));
+        addIfPresent(outcomes, demandExplainedOutcome(current, effortPool, medEffort, effortPool.size()));
 
         // If nothing productive survived the filter, there is no comparison to make.
-        if (outcomeLines.isEmpty()) {
+        if (outcomes.isEmpty()) {
             return ComparisonInsight.NONE;
         }
 
         String basis = describeBasis(matchedByRoute(current, candidates));
-        String confidence = confidencePhrase(count);
-        // A weather hedge only rides along when effort was actually recorded.
+        // A weather hedge only rides along when effort was actually recorded on this run.
         String contextNote =
                 Double.isNaN(effortValue(current)) ? null : weatherContextNote(current);
 
-        return new ComparisonInsight(basis, count, confidence, outcomeLines, contextNote);
+        return new ComparisonInsight(basis, outcomes, contextNote);
     }
 
     // Picks the previous runs worth comparing against: recent, and matched by route
@@ -228,11 +243,10 @@ public class ComparisonService {
     // lower / about the same / clearly higher, so at most one effort signal fires.
     private static final double EFFORT_EPSILON = 0.5;
 
-    // Adds a line only when its signal fired (non-null). Null = didn't apply or the
-    // delta was negative — the pre-filter, expressed as one guard.
-    private static void addIfPresent(List<String> lines, String line) {
-        if (line != null) {
-            lines.add(line);
+    // Adds an outcome only when its signal fired (non-null).
+    private static void addIfPresent(List<ComparisonOutcome> outcomes, ComparisonOutcome outcome) {
+        if (outcome != null) {
+            outcomes.add(outcome);
         }
     }
 
@@ -260,71 +274,75 @@ public class ComparisonService {
         return count == 1 ? "last comparable run" : "comparable runs";
     }
 
-    // Signal 1 — State Lift: bigger start-to-finish energy climb than usual. Energy-
-    // based, so it works even when only legacy NULL-effort rows exist. Comparing the
-    // lift (post - pre) controls for the starting point without shrinking the pool.
-    private static String stateLiftLine(Run current, double medLift, int count) {
+    // Signal 1 — State Lift: bigger start-to-finish energy climb than usual.
+    // Uses energyPool so its count only reflects runs where lift was measurable.
+    private static ComparisonOutcome stateLiftOutcome(Run current, double medLift, int energyCount) {
+        if (energyCount == 0 || Double.isNaN(medLift)) return null;
         EnergyLevel pre = current.getPreRunEnergy();
         EnergyLevel post = current.getPostRunEnergy();
-        if (pre == null || post == null || Double.isNaN(medLift)) {
-            return null;
-        }
+        if (pre == null || post == null) return null;
         int lift = post.getValue() - pre.getValue();
         if (lift > medLift) {
-            return "Bigger start-to-finish energy lift than your " + comparableNoun(count) + ".";
+            String line = "Bigger start-to-finish energy lift than your "
+                    + comparableNoun(energyCount) + ".";
+            return new ComparisonOutcome(line, energyCount, confidencePhrase(energyCount));
         }
         return null;
     }
 
-    // Signal 2 — Quiet Gain: same output, clearly lower effort than usual. The
-    // beginner's progress signal — improvement the pace hasn't caught up to yet.
-    private static String quietGainLine(Run current, double medEffort, double medPace, int count) {
+    // Signal 2 — Quiet Gain: same output, clearly lower effort than usual.
+    // Uses effortPool so its count only reflects runs where effort was recorded.
+    private static ComparisonOutcome quietGainOutcome(Run current, double medEffort,
+                                                      double medPace, int effortCount) {
+        if (effortCount == 0) return null;
         double effort = effortValue(current);
-        if (Double.isNaN(effort) || Double.isNaN(medEffort)) {
-            return null;  // no effort data on either side → effort signals stay silent
-        }
+        if (Double.isNaN(effort) || Double.isNaN(medEffort)) return null;
         double pace = current.getPaceInMinutesPerMile();
         boolean lowerEffort = effort < medEffort - EFFORT_EPSILON;
         boolean paceHeld = Double.isNaN(medPace) || pace <= medPace * 1.05;
         if (lowerEffort && paceHeld) {
-            return "Same output, lower effort than your " + comparableNoun(count)
+            String line = "Same output, lower effort than your " + comparableNoun(effortCount)
                     + " — that's progress your pace won't show yet.";
+            return new ComparisonOutcome(line, effortCount, confidencePhrase(effortCount));
         }
         return null;
     }
 
     // Signal 3 — Same cost, better output: about the same effort, but faster.
-    private static String sameCostBetterLine(Run current, double medEffort, double medPace, int count) {
+    private static ComparisonOutcome sameCostBetterOutcome(Run current, double medEffort,
+                                                           double medPace, int effortCount) {
+        if (effortCount == 0) return null;
         double effort = effortValue(current);
-        if (Double.isNaN(effort) || Double.isNaN(medEffort) || Double.isNaN(medPace)) {
-            return null;
-        }
+        if (Double.isNaN(effort) || Double.isNaN(medEffort) || Double.isNaN(medPace)) return null;
         double pace = current.getPaceInMinutesPerMile();
         boolean sameCost = Math.abs(effort - medEffort) <= EFFORT_EPSILON;
         boolean faster = pace < medPace;
         if (sameCost && faster) {
-            return "Same effort as your " + comparableNoun(count) + ", but faster.";
+            String line = "Same effort as your " + comparableNoun(effortCount) + ", but faster.";
+            return new ComparisonOutcome(line, effortCount, confidencePhrase(effortCount));
         }
         return null;
     }
 
-    // Signal 4 — Demand explained: today cost clearly MORE, but for a good reason
-    // (PR or longer distance). Reframes high effort so it never reads as a bad run.
-    private static String demandExplainedLine(Run current, List<Run> candidates,
-                                              double medEffort, int count) {
+    // Signal 4 — Demand explained: today cost clearly MORE, but for a good reason.
+    // Distance median also comes from effortPool so all benchmarks share one source.
+    private static ComparisonOutcome demandExplainedOutcome(Run current, List<Run> effortPool,
+                                                            double medEffort, int effortCount) {
+        if (effortCount == 0) return null;
         double effort = effortValue(current);
         if (Double.isNaN(effort) || Double.isNaN(medEffort)
-                || effort <= medEffort + EFFORT_EPSILON) {
-            return null;  // not clearly higher-than-usual effort → nothing to explain
-        }
+                || effort <= medEffort + EFFORT_EPSILON) return null;
         if (current.isLongestDistanceRecord() || current.isFastestAveragePaceRecord()) {
-            return "Higher effort today — but you set a PR, so that's what it cost.";
+            String line = "Higher effort today — but you set a PR, so that's what it cost.";
+            return new ComparisonOutcome(line, effortCount, confidencePhrase(effortCount));
         }
-        double medDistance = medianDistance(candidates);
+        double medDistance = medianDistance(effortPool);
         if (!Double.isNaN(medDistance) && current.getDistanceInMiles() > medDistance) {
-            return "Higher effort today — but you went farther than your " + comparableNoun(count) + ".";
+            String line = "Higher effort today — but you went farther than your "
+                    + comparableNoun(effortCount) + ".";
+            return new ComparisonOutcome(line, effortCount, confidencePhrase(effortCount));
         }
-        return null;  // unexplained higher effort stays filtered out (never a bad run)
+        return null;
     }
 
     // Optional hedged weather note to accompany an effort line — explanation, never

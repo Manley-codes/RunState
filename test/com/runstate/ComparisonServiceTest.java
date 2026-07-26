@@ -85,7 +85,9 @@ public class ComparisonServiceTest {
         ComparisonInsight insight = ComparisonService.analyze(current, history);
 
         // Assert: only the two in-window runs count as comparable.
-        assertEquals(2, insight.getComparableCount());
+        // State Lift fires (LOW->HIGH current, both candidates are energy-complete),
+        // so the energy pool size equals the selected candidate count here.
+        assertEquals(2, insight.getOutcomes().get(0).getEvidenceCount());
     }
 
     @Test
@@ -104,7 +106,7 @@ public class ComparisonServiceTest {
         ComparisonInsight insight = ComparisonService.analyze(current, history);
 
         // Assert: the cap of 10 holds even though 12 were eligible.
-        assertEquals(10, insight.getComparableCount());
+        assertEquals(10, insight.getOutcomes().get(0).getEvidenceCount());
     }
 
     @Test
@@ -133,7 +135,7 @@ public class ComparisonServiceTest {
         ComparisonInsight insight = ComparisonService.analyze(current, history);
 
         // Assert: exactly the three same-route runs, and the basis says so.
-        assertEquals(3, insight.getComparableCount());
+        assertEquals(3, insight.getOutcomes().get(0).getEvidenceCount());
         assertEquals("same route", insight.getBasis());
     }
 
@@ -157,7 +159,7 @@ public class ComparisonServiceTest {
         ComparisonInsight insight = ComparisonService.analyze(current, history);
 
         // Assert: the two within-band runs, matched by distance rather than route.
-        assertEquals(2, insight.getComparableCount());
+        assertEquals(2, insight.getOutcomes().get(0).getEvidenceCount());
         assertEquals("similar distance", insight.getBasis());
     }
 
@@ -294,6 +296,192 @@ public class ComparisonServiceTest {
 
         // Assert: the explained higher effort fires, and the line names the PR reason.
         assertTrue(insight.hasInsight());
-        assertTrue(insight.getOutcomeLines().get(0).contains("PR"));
+        assertTrue(insight.getOutcomes().get(0).getLine().contains("PR"));
+    }
+
+    @Test
+    void energySignalCountReflectsOnlyEnergyCompleteCandidates() {
+        // 8 same-route candidates — only 2 have both pre+post energy.
+        // The other 6 have null pre-energy and are excluded from the energy pool.
+        // State Lift must fire with evidence count 2, not 8.
+        LocalDate today = date("2026-06-01");
+        // Current: LOW→HIGH, lift +2. Beats any MODERATE→MODERATE candidate (lift 0).
+        Run current = run(today, "Cedar Trail", 3.0, 24.0,
+                EnergyLevel.LOW, EnergyLevel.HIGH, null);
+        List<Run> history = new ArrayList<>();
+        history.add(run(today.minusDays(1), "Cedar Trail", 3.0, 27.0,
+                EnergyLevel.MODERATE, EnergyLevel.MODERATE, null));
+        history.add(run(today.minusDays(2), "Cedar Trail", 3.0, 27.0,
+                EnergyLevel.MODERATE, EnergyLevel.MODERATE, null));
+        for (int i = 3; i <= 8; i++) {
+            history.add(run(today.minusDays(i), "Cedar Trail", 3.0, 27.0,
+                    null, EnergyLevel.MODERATE, null));
+        }
+
+        ComparisonInsight insight = ComparisonService.analyze(current, history);
+
+        assertTrue(insight.hasInsight());
+        ComparisonOutcome stateLift = insight.getOutcomes().get(0);
+        assertTrue(stateLift.getLine().contains("energy lift"));
+        assertEquals(2, stateLift.getEvidenceCount());
+        assertEquals("early signal", stateLift.getConfidencePhrase());
+    }
+
+    @Test
+    void effortPoolExcludesMissingEffortFromPaceMedian() {
+        // Two effort-bearing candidates: pace 9 min/mile.
+        // Six non-effort candidates: pace 1 min/mile (unrealistically fast).
+        // If all 8 fed the pace median, median = 1 min/mile and current (8 min/mile)
+        // would NOT be faster — Same-Cost/Better would stay silent.
+        // Correct: effort pool (2 runs) gives median 9, signal fires with count 2.
+        LocalDate today = date("2026-06-01");
+        Run current = run(today, "Cedar Trail", 3.0, 24.0,
+                EnergyLevel.MODERATE, EnergyLevel.MODERATE, EffortLevel.MODERATE_COST);
+        List<Run> history = new ArrayList<>();
+        history.add(run(today.minusDays(1), "Cedar Trail", 3.0, 27.0,
+                EnergyLevel.MODERATE, EnergyLevel.MODERATE, EffortLevel.MODERATE_COST));
+        history.add(run(today.minusDays(2), "Cedar Trail", 3.0, 27.0,
+                EnergyLevel.MODERATE, EnergyLevel.MODERATE, EffortLevel.MODERATE_COST));
+        for (int i = 3; i <= 8; i++) {
+            history.add(run(today.minusDays(i), "Cedar Trail", 3.0, 3.0,
+                    EnergyLevel.MODERATE, EnergyLevel.MODERATE, null));
+        }
+
+        ComparisonInsight insight = ComparisonService.analyze(current, history);
+
+        assertTrue(insight.hasInsight());
+        ComparisonOutcome outcome = insight.getOutcomes().get(0);
+        assertTrue(outcome.getLine().contains("faster"));
+        assertEquals(2, outcome.getEvidenceCount());
+        assertEquals("early signal", outcome.getConfidencePhrase());
+    }
+
+    @Test
+    void simultaneousStateLiftAndEffortOutcomesRetainSeparateCounts() {
+        // 8 candidates — all effort-bearing (MODERATE_COST), only first 3 energy-complete.
+        // State Lift draws from the 3-run energy pool; Same-Cost/Better from the 8-run
+        // effort pool. The two outcomes must each carry their own count and confidence tier.
+        LocalDate today = date("2026-06-01");
+        Run current = run(today, "Cedar Trail", 3.0, 24.0,
+                EnergyLevel.LOW, EnergyLevel.HIGH, EffortLevel.MODERATE_COST);
+        List<Run> history = new ArrayList<>();
+        for (int i = 1; i <= 3; i++) {
+            history.add(run(today.minusDays(i), "Cedar Trail", 3.0, 27.0,
+                    EnergyLevel.MODERATE, EnergyLevel.MODERATE, EffortLevel.MODERATE_COST));
+        }
+        for (int i = 4; i <= 8; i++) {
+            history.add(run(today.minusDays(i), "Cedar Trail", 3.0, 27.0,
+                    null, EnergyLevel.MODERATE, EffortLevel.MODERATE_COST));
+        }
+
+        ComparisonInsight insight = ComparisonService.analyze(current, history);
+
+        assertEquals(2, insight.getOutcomes().size());
+        ComparisonOutcome stateLift = insight.getOutcomes().get(0);
+        assertTrue(stateLift.getLine().contains("energy lift"));
+        assertEquals(3, stateLift.getEvidenceCount());
+        assertEquals("early signal", stateLift.getConfidencePhrase());
+        ComparisonOutcome sameCostBetter = insight.getOutcomes().get(1);
+        assertTrue(sameCostBetter.getLine().contains("faster"));
+        assertEquals(8, sameCostBetter.getEvidenceCount());
+        assertEquals("strong personal pattern", sameCostBetter.getConfidencePhrase());
+    }
+
+    @Test
+    void confidenceTierBoundary_oneRun() {
+        LocalDate today = date("2026-06-01");
+        Run current = run(today, "Cedar Trail", 3.0, 24.0,
+                EnergyLevel.LOW, EnergyLevel.HIGH, null);
+        List<Run> history = List.of(
+                run(today.minusDays(1), "Cedar Trail", 3.0, 27.0,
+                        EnergyLevel.MODERATE, EnergyLevel.MODERATE, null));
+
+        ComparisonInsight insight = ComparisonService.analyze(current, history);
+
+        assertEquals(1, insight.getOutcomes().get(0).getEvidenceCount());
+        assertEquals("last comparable run", insight.getOutcomes().get(0).getConfidencePhrase());
+    }
+
+    @Test
+    void confidenceTierBoundary_twoRuns() {
+        LocalDate today = date("2026-06-01");
+        Run current = run(today, "Cedar Trail", 3.0, 24.0,
+                EnergyLevel.LOW, EnergyLevel.HIGH, null);
+        List<Run> history = new ArrayList<>();
+        for (int i = 1; i <= 2; i++) {
+            history.add(run(today.minusDays(i), "Cedar Trail", 3.0, 27.0,
+                    EnergyLevel.MODERATE, EnergyLevel.MODERATE, null));
+        }
+
+        ComparisonInsight insight = ComparisonService.analyze(current, history);
+
+        assertEquals(2, insight.getOutcomes().get(0).getEvidenceCount());
+        assertEquals("early signal", insight.getOutcomes().get(0).getConfidencePhrase());
+    }
+
+    @Test
+    void confidenceTierBoundary_fiveRuns() {
+        LocalDate today = date("2026-06-01");
+        Run current = run(today, "Cedar Trail", 3.0, 24.0,
+                EnergyLevel.LOW, EnergyLevel.HIGH, null);
+        List<Run> history = new ArrayList<>();
+        for (int i = 1; i <= 5; i++) {
+            history.add(run(today.minusDays(i), "Cedar Trail", 3.0, 27.0,
+                    EnergyLevel.MODERATE, EnergyLevel.MODERATE, null));
+        }
+
+        ComparisonInsight insight = ComparisonService.analyze(current, history);
+
+        assertEquals(5, insight.getOutcomes().get(0).getEvidenceCount());
+        assertEquals("recent pattern", insight.getOutcomes().get(0).getConfidencePhrase());
+    }
+
+    @Test
+    void confidenceTierBoundary_eightRuns() {
+        LocalDate today = date("2026-06-01");
+        Run current = run(today, "Cedar Trail", 3.0, 24.0,
+                EnergyLevel.LOW, EnergyLevel.HIGH, null);
+        List<Run> history = new ArrayList<>();
+        for (int i = 1; i <= 8; i++) {
+            history.add(run(today.minusDays(i), "Cedar Trail", 3.0, 27.0,
+                    EnergyLevel.MODERATE, EnergyLevel.MODERATE, null));
+        }
+
+        ComparisonInsight insight = ComparisonService.analyze(current, history);
+
+        assertEquals(8, insight.getOutcomes().get(0).getEvidenceCount());
+        assertEquals("strong personal pattern", insight.getOutcomes().get(0).getConfidencePhrase());
+    }
+
+    @Test
+    void effortSignalCountReflectsOnlyEffortBearingCandidates() {
+        // Arrange: 8 same-route candidates within recency. Only the first two have
+        // effort recorded. The other six have null effort and must not count toward
+        // the effort signal's evidence.
+        // Current run: same effort as effort-bearing candidates but faster pace → fires
+        // Same-Cost/Better (effort signal).
+        LocalDate today = date("2026-06-01");
+        Run current = run(today, "Cedar Trail", 3.0, 24.0,
+                EnergyLevel.MODERATE, EnergyLevel.MODERATE, EffortLevel.MODERATE_COST);
+        List<Run> history = new ArrayList<>();
+        // Two effort-bearing candidates (pace 27 min = 9 min/mile)
+        history.add(run(today.minusDays(1), "Cedar Trail", 3.0, 27.0,
+                EnergyLevel.MODERATE, EnergyLevel.MODERATE, EffortLevel.MODERATE_COST));
+        history.add(run(today.minusDays(2), "Cedar Trail", 3.0, 27.0,
+                EnergyLevel.MODERATE, EnergyLevel.MODERATE, EffortLevel.MODERATE_COST));
+        // Six candidates with no effort recorded
+        for (int i = 3; i <= 8; i++) {
+            history.add(run(today.minusDays(i), "Cedar Trail", 3.0, 27.0,
+                    EnergyLevel.MODERATE, EnergyLevel.MODERATE, null));
+        }
+
+        // Act
+        ComparisonInsight insight = ComparisonService.analyze(current, history);
+
+        // Assert: the effort signal fired, but its evidence count is 2, not 8.
+        assertTrue(insight.hasInsight());
+        ComparisonOutcome effortOutcome = insight.getOutcomes().get(0);
+        assertEquals(2, effortOutcome.getEvidenceCount());
+        assertEquals("early signal", effortOutcome.getConfidencePhrase());
     }
 }
