@@ -47,23 +47,27 @@ delegates). Full spec: `design_runstyle_v1.md`. In brief:
 
 7. **Malformed Stored-Row Handling — DONE AND VERIFIED July 16, 2026 (code baseline `0af9524`).** Closes flow-audit items 1 and 2. Malformed persisted enum values now follow the same controlled startup-failure path as an unreachable database instead of escaping as an uncaught `IllegalArgumentException`. Added a private checked `StoredRunDecodeException` inside `RunStorage` (never escapes the class; wrapped in the public `RunStorageException` at the boundary, so `App`/`RunConsole` are unchanged) plus `decodeOptionalEnum`/`decodeRequiredEnum` generic helpers. All seven enum columns route through them: `distance_unit` (required), pre/post energy, surface, company, music mode, effort. Decode contract — exact enum names only, no trimming, casing, guessing, or defaulting; null stays valid for optional enums; any malformed row fails the WHOLE load (never partial); stored data is never mutated; causes preserved end to end. `inferMusicMode` now takes an already-decoded `MusicMode` rather than raw text, so a corrupt stored mode fails as corrupt instead of silently falling through to note-based inference (validation before inference). Added a package-private `readRuns(Runner, ResultSet)` seam — the second testing seam alongside `ConnectionProvider`: that one simulates an unreachable database, this one a reachable database holding bad data. Tests: 10 new (7 parameterized across every enum column, missing required unit, valid-row-then-malformed-row proving no partial history, and a legacy row with optional nulls + music inference that must still LOAD) via a `java.lang.reflect.Proxy` fake `ResultSet` — no MySQL touched, no corrupt rows written to real history. **51 tests green.** Startup guidance now reads "Check the database connection or stored run data..."; `CURRENT_RUN_FLOW.md` + `current-run-flow.svg` updated (markers 1 and 2 removed from the diagram, both rows marked Resolved in the table). Schema verified before enforcing: `distance_unit` is `NOT NULL` with zero null rows, so the required check cannot lock Manley out of existing history. Out of scope by design: no schema migration, no new dependencies, no public API change. Noted but NOT fixed: the `temperature` column has a stray default of `0` (harmless — `saveRun` always writes the column explicitly).
 
-**Pre-Music Integrity Sprint — in progress (started July 25, 2026):**
-- Task 1 ✅ — Pace rollover fix in RunAgent.formatPace
-- Task 2 ✅ — Signal-specific comparison confidence (ComparisonOutcome, evidence pools)
-- Task 3 ✅ — Backdated RunStyle announcement policy: a manually entered backdated run is
-  saved and included in future RunStyle calculations but never produces a RunStyle
-  announcement at entry. RunStyle evaluates each run only through its deterministic
-  chronological position (prefix through that run), so later runs cannot alter its stage,
-  counts, facets, or habit. Only the genuinely latest run in sorted history may announce.
-- Task 4 ✅ — Failed-save orchestration regression: `saveAndCompleteRun()` extracted from `logRun()` (behavior-neutral refactor); `saveRun()` and `buildRunResponse()` added as package-private instance delegates; `RunConsoleTest` regression test (`saveAndCompleteRun_whenSaveFails_suppressesAllPostSaveWork`) asserts that a failing save leaves history untouched, PR flags unset, AI response unsent, and RunStyle unchecked, while the recovery receipt is printed. Closes flow-audit item 3. 68 tests green.
-- Task 5 ✅ — Context in summaries: `Run.getContextSummary()` private helper builds `Context: Surface | Company | Shoes: <label> | Music: <note>` using a parts-collector ArrayList; wired into `getRunSummary()` after pace/duration and before energy so the line appears in the post-run view, Run History, and the failed-save recovery receipt. Nine new `RunContextTest` cases cover all music-state edge cases and field order. `RunConsoleTest` extended with a populated context and exact context-line assertion. Flowchart audit item 4 resolved; all four audit rows now closed. 77 tests green.
-- Task 6: not yet started.
+**Pre-Music Integrity Sprint — COMPLETED July 25, 2026. All 6 tasks done, 77 tests green.**
 
-**Current resume point — music work:**
-- Candidate A: apply the core music reply craft rules in `design_music_reply_style.md`. This subset is prompt-only (`SYSTEM_PROMPT` / `buildUserMessage()`), with no schema or API work.
-- Candidate B: plan Music Intelligence V1 by turning the accepted and parked music ideas into a bounded purpose, evidence model, and execution sequence.
-- The cross-run music-reference frequency mechanism is a separate persistence decision, not part of the prompt-only craft subset. Do not build it before the V1 plan settles what should be stored.
-- The order of Candidates A and B is not locked. Lyric-provider integration and live/mobile music adaptation remain later work with legal, privacy, and platform dependencies.
+| Task | What shipped |
+|---|---|
+| 1 | Pace rollover fix — `RunAgent.formatPace` no longer formats `:60` when rounding pushes seconds to 60; rolls over to next whole minute instead. |
+| 2 | Signal-specific comparison confidence — `ComparisonOutcome` value object (line, evidenceCount, confidencePhrase); separate `energyPool` and `effortPool` formed after candidate selection so each signal's count and confidence reflect only the runs where that signal is measurable. Tiers: 1 → "last comparable run"; 2–4 → "early signal"; 5–7 → "recent pattern"; 8+ → "strong personal pattern". |
+| 3 | Backdated RunStyle announcement policy — `RunStyleService.analyze()` evaluates each run through its chronological prefix (indexOf + subList); only the genuinely last entry in sorted history is eligible to announce. Backdated runs save and contribute to future calculations silently; no historical-as-today announcement. |
+| 4 | Failed-save orchestration regression — `saveAndCompleteRun()` extracted from `logRun()` (behavior-neutral); `saveRun()` and `buildRunResponse()` added as package-private delegates. `RunConsoleTest` proves a failing save leaves history untouched, PR flags unset, AI response unsent, and RunStyle unchecked. Flow-audit item 3 closed. |
+| 5 | Context in summaries — `Run.getContextSummary()` private helper (parts-collector ArrayList, `String.join(" \| ", pieces)`) wired into `getRunSummary()` after pace/duration and before energy. Compact `Context:` line appears in post-run view, Run History, and recovery receipt. Nine `RunContextTest` cases; flow-audit item 4 closed. |
+| 6 | Documentation reconciliation — DATA_PRIVACY.md, README.md, requirements_nonfunctional.md, design_comparison_logic_fix.md, design_run_response_system.md, AI_AGENT.md, project_current_state.md, MEMORY.md, ROADMAP.md, CURRENT_RUN_FLOW.md, and current-run-flow.svg all updated to reflect current verified behavior. All four flow-audit findings confirmed closed. |
+
+Flow-audit findings: all four closed — items 1 and 2 (malformed-row handling, July 16); item 3 (save orchestration, Task 4); item 4 (context in summaries, Task 5).
+
+**Current resume point — Music Intelligence V1:**
+- Next: Music Intelligence V1 planning — turn accepted and parked music ideas into a bounded
+  purpose, evidence model, and execution sequence.
+- After planning: core music reply craft rules (prompt-only, no new persistence).
+- Spotify integration, live-DJ mode, GPS, and mobile remain later possibilities with legal,
+  privacy, and platform dependencies.
+
+*(Resume point updated above after Pre-Music Integrity Sprint completion.)*
 
 **Standing milestone — privacy / security / legal pass (added July 6, 2026):**
 Before RunState is released, shared publicly, or gains multi-user/all-day-listening features,

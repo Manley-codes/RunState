@@ -9,21 +9,24 @@ Two external services are used:
 
 ## Anthropic API
 
-After each run is logged, a summary of that run is sent to Anthropic's API to generate your
-post-run response. The data included in that request:
+After each run is durably saved, a summary of that run is sent to Anthropic's API to generate
+your post-run response. The data included in that request:
 
 - Run date and season
-- Distance, pace, and duration
+- Distance, pace (normalized to minutes per mile), and duration
 - Pre- and post-run energy levels
+- Post-run effort cost
 - Personal record status
 - Route name (if entered)
-- Surface (road, trail, track, treadmill, mixed), run company (solo or with others), and
-  shoe label (if entered) — the optional run-context details
-- Music: whether you ran with sound, and the free-text note of what you listened to
+- Surface, run company, and shoe label (if entered)
+- Music state (Music / No music / Not recorded) and the free-text note of what you listened to
   (if entered)
-- A short comparison summary derived from your recent runs (e.g. how this run's pace or
-  energy compares to similar past runs) — computed on your machine; only the summary is sent
-- Weather conditions for the run date (once the weather feature is enabled)
+- Daily-mean weather for your run date — temperature, apparent temperature, and condition —
+  only when the weather fetch succeeded
+- A candidate-based comparison summary when matching past runs exist: the shared basis
+  (same route or similar distance), and each positive or explanatory signal with its
+  evidence-run count and confidence tier. This is computed entirely on your machine;
+  only the derived summary is sent, not individual historical run rows.
 
 Run company is only ever the coarse value "solo" or "with others" — no names or identities
 of other people are ever collected or sent.
@@ -34,12 +37,12 @@ on how Anthropic handles API data.
 
 ---
 
-## Open-Meteo API (weather feature)
+## Open-Meteo API
 
-When weather data is fetched, your city and state are sent to Open-Meteo's geocoding API
-to retrieve coordinates. Those coordinates are then used to request weather conditions for
-your run date. Open-Meteo is a free, open-source weather service — no account or API key
-required. No personal information beyond city and state is sent. See
+Your city and state are sent to Open-Meteo's geocoding API to retrieve coordinates. Those
+coordinates are then used to request daily-mean weather conditions for your run date.
+Open-Meteo is a free, open-source weather service — no account or API key required. No
+personal information beyond city and state is sent. See
 [open-meteo.com](https://open-meteo.com) for details.
 
 ---
@@ -48,11 +51,11 @@ required. No personal information beyond city and state is sent. See
 
 - Your name or email address
 - GPS coordinates or precise device location
-- Any data outside of individual run entries
-- Your RunStyle profile — the local pattern analysis of your runs (which patterns are
-  forming, and the context that tends to accompany your productive runs) is computed on
-  your machine and is never sent to any API. Only the individual run fields listed above
-  leave the app; the profile built from them does not.
+- Your raw run history — only the derived comparison summary described above may be sent;
+  individual historical run rows do not leave the app
+- Your RunStyle profile — the local pattern analysis (which patterns are forming, and the
+  context that tends to accompany your productive runs) is computed on your machine and is
+  never sent to any API
 
 ---
 

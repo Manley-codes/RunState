@@ -5,14 +5,19 @@ metadata:
   type: project
 ---
 
-**STATUS: V1 BUILT July 9, 2026 (paths 1 & 2 only; commit pending — Manley commits).**
-Shipped as a new `ComparisonService` + `ComparisonInsight` pair: 180-day / cap-10 candidate
-selection (route-first, distance-fallback), median aggregation, confidence tiers, and four
-positive signals (State Lift as start-to-finish energy lift; Quiet Gain; Same-Cost/Better;
-Demand Explained) behind a negative pre-filter. `RunAgent.buildUserMessage` + the fallback now
-consume it; the rolling-average lines/flags are removed and the SYSTEM_PROMPT "Using history"
-rule updated. **Path #3, `detectRunStyle()`, was intentionally NOT touched** — deferred to the
-later identity redesign. The plan below is kept as the build record.
+**STATUS: V1 BUILT AND SHIPPED.**
+- Paths 1 and 2 — shipped July 9, 2026 as a new `ComparisonService` + `ComparisonInsight` pair:
+  180-day / cap-10 candidate selection (route-first, distance-fallback), median aggregation, and
+  four positive signals (State Lift, Quiet Gain, Same-Cost/Better, Demand Explained) behind a
+  negative pre-filter. `RunAgent.buildUserMessage` + the fallback now consume it; rolling-average
+  lines/flags removed; SYSTEM_PROMPT "Using history" rule updated.
+- Path 3 (`detectRunStyle`) — resolved by RunStyle V1, July 10, 2026 (see `design_runstyle_v1.md`).
+  The faster-AND-farther rolling-average path was replaced with a three-family stage/facet/habit
+  profile; `Runner.detectRunStyle(Run)` now delegates to `RunStyleService`.
+- Task 2 (Pre-Music Integrity Sprint, July 25, 2026) extended the comparison contract with
+  signal-specific evidence and confidence — see the as-built section below.
+
+The plan below is kept as the historical build record.
 
 > UPDATE July 7, 2026: the effort measure this fix has been waiting for now has a design —
 > see design_effort_cost.md ("How did that run land?"). Build them together or effort-first.
@@ -39,7 +44,7 @@ The system prompt instruction ("reference trends only when meaningful") controls
 
 Additionally, "faster AND farther than average simultaneously" rewards a physiologically unusual combination. The two healthiest run types — easy long run (farther, slower) and hard short workout (faster, shorter) — can never trigger Run Style. The detector is blind to good training.
 
-## Three code paths that need fixing (Phase 5.5)
+## Historical: three code paths that were fixed (Phase 5.5)
 
 **1. `buildUserMessage()` in RunAgent.java** — highest leverage
 - Currently: sends `aboveAvgPace` / `aboveAvgDistance` boolean labels
@@ -60,7 +65,13 @@ Additionally, "faster AND farther than average simultaneously" rewards a physiol
 
 The gold-standard amateur improvement signal is: *same pace, less effort over time*.
 
-Pre/post energy is essentially RPE. The app already captures both halves (pace + energy) but currently uses energy only for message tone. Redirecting it as a progress metric is:
+**Note (July 25, 2026):** energy and effort are now separate axes. Energy is how the runner
+*finished* (pre/post energy levels). Effort is what the run *cost* (`EffortLevel` — Smooth →
+Empty tank). They are not the same as RPE, though effort is RPE-adjacent. The original note
+that "pre/post energy is essentially RPE" was accurate at the time this was written; it is no
+longer correct now that effort cost is a distinct field.
+
+Redirecting the effort axis as a progress metric is:
 - Correct (scientifically)
 - Always positively framed (so "never mention below average" comes for free)
 - Built from data already in the model
@@ -69,13 +80,13 @@ Pre/post energy is essentially RPE. The app already captures both halves (pace +
 
 ---
 
-## V1 build handoff (reviewed July 7, 2026 — Codex draft + Cowork review, parameters chosen by Manley)
+## V1 build record (reviewed July 7, 2026 — Codex draft + Cowork review, parameters chosen by Manley; shipped July 9, 2026)
 
-**Depends on Effort Cost V1 being fully complete** (incl. the outstanding display + RunAgent
-wiring + docs steps). Fixes AI prompt + fallback only; `detectRunStyle()` is explicitly NOT
-touched (later identity redesign). Run Type stays parked. Industry validation: same-route
-matching = Strava Matched Activities; effort-normalized comparison = Relative Effort;
-session-RPE literature supports the effort axis.
+**Effort Cost V1 was a prerequisite** (display + RunAgent wiring + docs) — completed before
+this build. Fixed AI prompt + fallback only; `detectRunStyle()` was explicitly NOT touched
+(later identity redesign, completed July 10 as RunStyle V1). Run Type stays parked. Industry
+validation: same-route matching = Strava Matched Activities; effort-normalized comparison =
+Relative Effort; session-RPE literature supports the effort axis.
 
 **New class: comparison helper (value object + selector), isolated like WeatherService (SRP).**
 Summarizes evidence for RunAgent; all selection/aggregation logic lives here, NOT in RunAgent.
@@ -112,10 +123,12 @@ Same philosophy as the original fix: distortion is handled before input arrives.
   and both above/below flags. The candidate evidence replaces them — keeping averages risks
   the old flaw re-entering via "faster than your average" phrasing.
 - ADD (only when comparables exist and signal survives the pre-filter):
-  `Comparable run basis: same route, similar distance, same pre-run energy` /
-  `Comparable runs found: N` / `Confidence: <tier>` / positive outcome lines
-  (state / effort / performance, median-based) / hedged context note when relevant
+  `Comparable run basis: same route | similar distance` /
+  `Positive comparison signals:` / one or more `- [signal line] [evidence-bearing comparable
+  runs: N; confidence: tier]` lines / optional hedged context note when relevant
   ("warm weather may explain higher effort" — explanation, never causation).
+  NOTE: confidence and evidence count are per-signal (see Task 2 as-built below).
+  The old global `Comparable runs found: N` / `Confidence: <tier>` lines were replaced.
 
 **Fallback:** remove "You ran farther and faster than usual." One comparison note max, only
 when confidence ≥ single-run AND the signal is positive/explanatory. Never below-average.
@@ -127,11 +140,55 @@ comparison is the interpretation layer, not a replacement.
 **Docs (part of done):** AI_AGENT.md data contract rewritten (removed + added lines above);
 this file marked V1 BUILT with date; project_current_state.md status + queue pointer.
 
-**Test plan:** each signal type returns correctly (Quiet Gain / State Lift / Same-Cost /
-Demand-Explained); 0 comparables → no insight; 1 comparable → "last comparable run" wording;
-negative deltas never appear in the prompt (pre-filter test); route case/whitespace variants
-match; NULL-effort rows join non-effort signals only; runs older than 180 days excluded;
-cap-10 respected; fallback works with ANTHROPIC_API_KEY unset; legacy rows load.
+**Test plan (planned at design time):** each signal type returns correctly (Quiet Gain /
+State Lift / Same-Cost / Demand-Explained); 0 comparables → no insight; 1 comparable →
+"last comparable run" wording; negative deltas never appear in the prompt (pre-filter test);
+route case/whitespace variants match; NULL-effort rows join non-effort signals only; runs
+older than 180 days excluded; cap-10 respected; fallback works with ANTHROPIC_API_KEY unset;
+legacy rows load.
 
-**Collab rules apply:** one file at a time, approval each step, explain the OOP (static
-selector vs value object, streams/filtering if used, median on small lists), flag commits.
+**Verified tests (July 25, 2026, 17 tests in `ComparisonServiceTest`):** candidate selection
+(recency window, cap-10, route-first, distance fallback), median aggregation (odd/even, outlier
+resistance), negative pre-filter (lower lift and unexplained higher effort filtered; explained
+PR effort allowed), separate energy and effort pools, pool-isolation (each signal's count and
+median from its own pool), confidence tier boundaries at 1, 2, 5, and 8 runs.
+
+---
+
+## Task 2 as-built: signal-specific evidence and confidence (July 25, 2026)
+
+The V1 handoff used a single global evidence count and confidence tier for the whole comparison
+block. Task 2 replaced this with per-signal pools, counts, and tiers — so the runner
+and the AI both see which signals have strong backing and which are tentative.
+
+**Evidence pools (separate per signal family):**
+- `energyPool` — candidates where both pre- and post-run energy are recorded. Backs State Lift only.
+- `effortPool` — candidates where effort is recorded. Backs Quiet Gain, Same-Cost/Better, and Demand Explained.
+
+Each pool is formed after candidate selection (route-first / distance-fallback, 180-day / cap-10).
+A candidate missing the required field is silently excluded from that pool without affecting others.
+
+**Per-signal contract:**
+- `ComparisonOutcome` — immutable value object: `line` (formatted signal text), `evidenceCount`
+  (size of the relevant pool), `confidencePhrase` (tier text from that pool's count).
+- `ComparisonInsight` holds `List<ComparisonOutcome>` replacing the old flat fields. `NONE` uses
+  `List.of()`.
+- `formatComparison` in `RunAgent` formats each outcome as:
+  `- [line] [evidence-bearing comparable runs: N; confidence: tier]`
+
+**Confidence tiers (same thresholds, now per-pool):**
+| Pool size | Phrase |
+|---|---|
+| 1 | last comparable run |
+| 2–4 | early signal |
+| 5–7 | recent pattern |
+| 8+ | strong personal pattern |
+
+**No zero-evidence signal:** a signal only fires when its pool has at least one run. A signal
+never uses a count or median from the other pool.
+
+**No refill after cap-10:** the 10-candidate cap applies once before pool formation. Pools are
+subsets of candidates, not a second selection pass.
+
+**Collab rules applied:** one file at a time, approval each step, explained the OOP (immutable
+value objects, ArrayList pool isolation, median on small lists), flagged commits.

@@ -73,16 +73,18 @@ or above/below-average flags. The RunStyle profile is computed locally and never
 
 ## Architecture Decision
 
-`buildRunResponse()` moves out of `RunConsole.java` into a new class: `RunAgent.java`.
+`buildRunResponse()` lives in `RunAgent.java` (Single Responsibility — `RunConsole` handles UI,
+`RunAgent` handles the API call).
 
-Reason: Single Responsibility. `RunConsole` handles UI. `RunAgent` handles the API call.
-This also keeps the AI logic easy to find, test, and swap later.
-
-`RunConsole.logRun()` calls `RunAgent.buildRunResponse(run, avgPace, avgDistance)` exactly
-where the current method is called. The signature stays the same. The internals change.
+`RunConsole.saveAndCompleteRun()` calls `RunAgent.buildRunResponse(Run)` — a single `Run` argument.
+The old avgPace and avgDistance parameters were removed when the rolling-average comparison was
+replaced by the candidate-based approach (Comparison Repair V1, July 9, 2026).
 
 Fallback: if the API call fails for any reason, `RunAgent` falls back to the existing
-logic-based response. The app never breaks because the network is down.
+logic-based response. The app never breaks because the network is down or the key is unset.
+
+Timeouts: 5-second connect timeout on the shared `HttpClient`; 5-second per-request timeout on
+the Anthropic call. The local fallback returns immediately.
 
 ---
 
@@ -91,37 +93,45 @@ logic-based response. The app never breaks because the network is down.
 What gets sent to the Anthropic API as the user message per run:
 
 ```
-Runner: [username]
+Runner: Runner
 Date: [run date]
 Season: [derived from run date]
 Distance: [distance] [unit]
 Duration: [duration] min
-Pace: [formatted pace] min/[unit]
+Pace: [formatted pace] min/mile   ← normalized; always min/mile regardless of logged unit
 Pre-run energy: [label] ([level])
 Post-run energy: [label] ([level])
-Effort: [label] ([level]) or Not recorded   ← Effort Cost V1
+Effort: [label] ([level]) or Not recorded
 Personal records: [PR description or None]
 Route: [routeName or not recorded]
-Surface: [Road | Trail | Track | Treadmill | Mixed, or Not recorded]   ← RunStyle V1
-Run company: [Solo | With others, or Not recorded]                     ← RunStyle V1
-Shoes: [shoe label or Not recorded]                                    ← RunStyle V1
-Music: [<note> (had music) | Had music (track not noted) | No music (ran in silence) | Not recorded]   ← RunStyle V1 (unambiguous: silent ≠ never asked)
-Weather: [temperature°F, feels-like°F, condition or not recorded]   ← Phase 5 Step 2
+Surface: [Road | Trail | Track | Treadmill | Mixed, or Not recorded]
+Run company: [Solo | With others, or Not recorded]
+Shoes: [shoe label or Not recorded]
+Music: [<note> (had music) | Had music (track not noted) | No music (ran in silence) | Not recorded]
+       ← MUSIC/NO_MUSIC from RunContext; unambiguous: "No music" = deliberately silent,
+         "Not recorded" = never asked, "Had music" = MUSIC mode with no note
+Weather: [condition, temperature°F (feels like temperature°F) | Not available]
+         ← automatic daily-mean; only present when the fetch succeeded
 
-# Comparison Repair V1 — the block below REPLACES the old rolling-average lines and
-# both above/below flags. It appears ONLY when comparable past runs exist AND at least
-# one positive/explanatory signal survives the negative pre-filter (else nothing is sent).
+# The block below appears ONLY when comparable past runs exist AND at least one
+# positive/explanatory signal survives the negative pre-filter (else nothing is sent).
+# Each signal carries its own evidence count and confidence tier (Task 2, July 25 2026).
 Comparable run basis: [same route | similar distance]
-Comparable runs found: [N]
-Confidence: [last comparable run | early signal | recent pattern | strong personal pattern]
-[one or more positive outcome lines — state lift / quiet gain / same-cost-faster / demand explained]
-[optional hedged weather context note]
+Positive comparison signals:
+- [signal line] [evidence-bearing comparable runs: N; confidence: tier]
+- [additional signal lines, each with its own count and confidence]
+[optional hedged context note — explanation, never causation]
 ```
 
-The comparison lines are produced by `ComparisonService` (candidate selection → median
-aggregation → confidence tier → positive-signal derivation with a negative pre-filter);
-`RunAgent` only formats what survives. The old blended 20-run rolling average was removed
-because it mixed easy/long/tempo/sprint runs and manufactured misleading "above average" labels.
+**Privacy note:** `Runner: Runner` is a constant label — the runner's real username is never
+sent to the API. See `docs/DATA_PRIVACY.md`.
+
+The comparison lines are produced by `ComparisonService` (route-first / distance-fallback
+candidate selection → separate energy and effort pools → per-pool median and count →
+positive-signal derivation with negative pre-filter → per-signal evidence count and confidence
+tier). `RunAgent.formatComparison()` formats what survives. The old blended 20-run rolling
+average was removed because it mixed easy/long/tempo/sprint runs and manufactured misleading
+labels.
 
 **RunStyle V1 note:** the four context fields above (surface, run company, shoes, music) are
 raw run data and DO get sent. The **RunStyle profile** built from them — the local pattern
@@ -145,10 +155,10 @@ The agent becomes meaningfully more personal when it knows:
 ### Music context (Step 1 — priority)
 - See music section below — this is the signature feature
 
-### Weather and temperature (Step 2 — automatic via Open-Meteo)
-- Hot, cold, rain, wind, humidity
+### Weather and temperature (Step 2 — automatic via Open-Meteo, SHIPPED)
+- Daily-mean condition, temperature, and apparent temperature for the logged run date
 - Example response shift: "Five miles in that heat is a different kind of effort."
-- Implementation: new optional field on Run, asked during log flow or pulled from a weather API
+- Fetched automatically at log time via `WeatherService`; stored on the run; never re-fetched
 
 ### Music context — lyric-aware responses
 - Artist, song, or playlist the runner listened to
@@ -201,9 +211,6 @@ These show the intended voice.
 
 **LOW energy going in, HIGH energy finishing:**
 "You started rough and still delivered. That kind of run takes more than fitness."
-
-**Above average pace and distance:**
-"Farther and faster than usual, and you finished feeling strong. That's a productive day."
 
 **Rare dry moment (serious effort, low post-energy after a hard PR):**
 "New fastest pace on record. I don't have legs but you've somehow managed to make mine hurt."

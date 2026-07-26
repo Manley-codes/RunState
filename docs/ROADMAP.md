@@ -1,14 +1,20 @@
 # RunState Roadmap
 
+> **Historical snapshot — June 2026.** This file reflects the project state when Phase 5
+> shipped. It has not been updated as a live roadmap since then. For the current queue,
+> completed milestones, and the active next direction, see
+> [`docs/claude-memory/MEMORY.md`](claude-memory/MEMORY.md) and
+> [`docs/claude-memory/project_current_state.md`](claude-memory/project_current_state.md).
+
 This roadmap keeps the project focused while leaving room for future ideas.
 
-RunState is the current working name, and MoodPace is a strong alternate name. See `docs/archive/BRANDING.md`.
+RunState is the current working name, and MoodPace is a strong alternate name. See `docs/Archived/BRANDING.md`.
 
-For the ideas that make RunState feel more distinct, see `docs/archive/UNIQUE_IDEAS.md`.
+For the ideas that make RunState feel more distinct, see `docs/Archived/UNIQUE_IDEAS.md`.
 
 `[Unique]` marks future directions that help RunState stand out from a basic run log.
 
-For the current pre-run and post-run energy design discussion, see `docs/archive/ENERGY_STATE_DESIGN.md`.
+For the current pre-run and post-run energy design discussion, see `docs/Archived/ENERGY_STATE_DESIGN.md`.
 
 ## Phase Status
 
