@@ -58,18 +58,21 @@ public final class RunStyleService {
             return RunStyleInsight.NONE;
         }
         List<Run> ordered = chronological(history);
-        if (!ordered.contains(current)) {
+        int currentIndex = ordered.indexOf(current);
+        if (currentIndex < 0) {
             return RunStyleInsight.NONE;
         }
 
-        // State with the current run included, and the state as it was just before it.
-        State full = computeState(ordered);
+        // Evaluate the runner's profile only through the current run's chronological
+        // position — later runs cannot alter what this run's pattern looked like at entry.
+        List<Run> throughCurrent = new ArrayList<>(ordered.subList(0, currentIndex + 1));
+        State full = computeState(throughCurrent);
         if (full.primary == null) {
             return RunStyleInsight.NONE;
         }
-        List<Run> beforeCurrent = new ArrayList<>(ordered);
-        beforeCurrent.remove(current);
-        State prev = computeState(beforeCurrent);
+
+        // The state immediately before the current run — the diff reveals the advancement.
+        State prev = computeState(new ArrayList<>(ordered.subList(0, currentIndex)));
 
         // A stage advance is judged on the SAME family that is primary now, so changing
         // which family leads never counts as a downgrade.
@@ -87,7 +90,11 @@ public final class RunStyleService {
             }
         }
 
-        boolean announce = stageAdvance || newFacet;
+        // A backdated run may have a valid historical profile, but only the run that is
+        // genuinely latest in chronological order may announce. Same-day runs appended last
+        // remain eligible because the stable sort preserves incoming order.
+        boolean eligible = currentIndex == ordered.size() - 1;
+        boolean announce = eligible && (stageAdvance || newFacet);
 
         List<Opp> primaryOpps = full.opps.get(full.primary);
         int supportCount = supportedCount(primaryOpps);

@@ -151,6 +151,14 @@ facet under existing RunStyle rules — context decorates, never creates a patte
 - **Announce only** when the current run first creates an EARLY pattern,
   advances a pattern to FORMING/ESTABLISHED, or first qualifies a new facet.
   No counters, no repeats, no downgrades, no negative patterns — ever.
+- **Backdated entry policy (Task 3, July 25 2026):** A manually entered
+  backdated run is saved and included in future RunStyle calculations, but it
+  never produces a RunStyle announcement at entry. RunStyle evaluates each run
+  only through its deterministic chronological position (the prefix of history
+  up to and including that run), so later runs cannot alter that run's stage,
+  counts, facets, or habit. Only the run that is the final entry in the sorted
+  history is eligible to announce. Same-day runs appended last remain eligible
+  because the stable date sort preserves incoming order.
 - **Deterministic wording:**
   - Early — "A RunStyle pattern is beginning to show."
   - Forming — "Your RunStyle is forming."

@@ -480,7 +480,8 @@ public class ComparisonServiceTest {
 
         // Assert: the effort signal fired, but its evidence count is 2, not 8.
         assertTrue(insight.hasInsight());
-        ComparisonOutcome effortOutcome = insight.getOutcomes().get(0);
+        ComparisonOutcome effortOutcome = insight
+                .getOutcomes().get(0);
         assertEquals(2, effortOutcome.getEvidenceCount());
         assertEquals("early signal", effortOutcome.getConfidencePhrase());
     }

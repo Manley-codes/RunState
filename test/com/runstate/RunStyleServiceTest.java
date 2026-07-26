@@ -156,24 +156,117 @@ public class RunStyleServiceTest {
 
     @Test
     void aLaterRunDoesNotChangeAnEarlierPatternsCounts() {
-        // Establish an EARLY State Lift, then append a LATER run that is NOT a State Lift
-        // opportunity (no energy recorded). The earlier pattern's stage and counts must be
-        // untouched — future data never rewrites the past.
+        // Establish an EARLY State Lift (3 of 4 opportunities), then append a LATER run that
+        // IS also a supported State Lift opportunity. Without point-in-time protection the
+        // stage would advance to FORMING (4 of 5). With it, the earlier run's profile is
+        // computed only from history through its own chronological position.
         List<Run> history = new ArrayList<>(List.of(
                 flatLift(day(1)),
                 supportedLift(day(2)),
                 supportedLift(day(3)),
                 supportedLift(day(4))));
         RunStyleInsight before = RunStyleService.analyze(history.get(3), history);
+        assertEquals(RunStyleStage.EARLY, before.getStage());
+        assertEquals(3, before.getSupportCount());
+        assertEquals(4, before.getOpportunityCount());
+        assertTrue(before.shouldAnnounce());  // advanced to EARLY — eligible as latest run
 
         List<Run> withLater = new ArrayList<>(history);
-        withLater.add(run(day(5), null, 3.0, 27.0, null, null, null, null, null, null, null, null));
+        withLater.add(supportedLift(day(5)));  // later supported opportunity — must not rewire past
         RunStyleInsight after = RunStyleService.analyze(history.get(3), withLater);
 
-        assertEquals(before.getStage(), after.getStage());
-        assertEquals(before.getSupportCount(), after.getSupportCount());
-        assertEquals(before.getOpportunityCount(), after.getOpportunityCount());
+        assertEquals(RunStyleStage.EARLY, after.getStage());       // still EARLY, not FORMING
+        assertEquals(3, after.getSupportCount());                  // still 3 supported
+        assertEquals(4, after.getOpportunityCount());              // still 4 opportunities
         assertEquals(RunStyleFamily.STATE_LIFT, after.getPrimary());
+    }
+
+    // --- Backdated announcement policy (Task 3) ------------------------------
+
+    @Test
+    void backdatedRunHasHistoricalStageButDoesNotAnnounce() {
+        // r1 flat, r2–r4 supported, r5 is added LATER chronologically.
+        // analyze(r4, {r1..r5}): r4 is at index 3, not last (r5 is last) -> not eligible.
+        // But r4's historical profile through its own position: 3 of 4 = EARLY.
+        List<Run> history = new ArrayList<>(List.of(
+                flatLift(day(1)),
+                supportedLift(day(2)),
+                supportedLift(day(3)),
+                supportedLift(day(4)),   // the "backdated" run under test
+                supportedLift(day(5)))); // genuinely later run
+        Run backdated = history.get(3);  // day 4, at index 3 of 4
+
+        RunStyleInsight insight = RunStyleService.analyze(backdated, history);
+
+        assertEquals(RunStyleFamily.STATE_LIFT, insight.getPrimary());
+        assertEquals(RunStyleStage.EARLY, insight.getStage());
+        assertEquals(3, insight.getSupportCount());
+        assertEquals(4, insight.getOpportunityCount());
+        assertFalse(insight.shouldAnnounce());  // backdated: eligible=false, no alert
+        assertNull(insight.getMessage());
+    }
+
+    @Test
+    void backdatedFacetAppearsInInsightButDoesNotAnnounce() {
+        // r1 flat/trail, r2–r4 supported/trail, r5 is genuinely later.
+        // At r4's position the trail facet is newly qualified (3 supporting runs).
+        // The facet appears in the structured result, but no announcement is emitted.
+        List<Run> history = new ArrayList<>(List.of(
+                liftSurface(day(1), EnergyLevel.MODERATE, EnergyLevel.MODERATE, SurfaceType.TRAIL),
+                liftSurface(day(2), EnergyLevel.LOW, EnergyLevel.HIGH, SurfaceType.TRAIL),
+                liftSurface(day(3), EnergyLevel.LOW, EnergyLevel.HIGH, SurfaceType.TRAIL),
+                liftSurface(day(4), EnergyLevel.LOW, EnergyLevel.HIGH, SurfaceType.TRAIL),
+                liftSurface(day(5), EnergyLevel.LOW, EnergyLevel.HIGH, SurfaceType.TRAIL)));
+        Run backdated = history.get(3);  // day 4 — not last
+
+        RunStyleInsight insight = RunStyleService.analyze(backdated, history);
+
+        assertFalse(insight.shouldAnnounce());
+        assertNull(insight.getMessage());
+        // Historical facet is still present in the structured result.
+        assertTrue(insight.getFacetLines().stream()
+                .anyMatch(l -> l.toLowerCase().contains("trail")));
+    }
+
+    @Test
+    void nextLatestRunAfterBackfillTreatsBackfillAsPartOfItsBaseline() {
+        // Build a 5-run history: r1 flat, r2–r4 supported, r5 supported.
+        // analyze(r4) -> backdated, no announcement.
+        // analyze(r5) -> r5 is the genuine latest. With r4 counted, 4 of the latest 5 are
+        // supported -> FORMING. r5 advances from EARLY and correctly announces.
+        List<Run> history = new ArrayList<>(List.of(
+                flatLift(day(1)),
+                supportedLift(day(2)),
+                supportedLift(day(3)),
+                supportedLift(day(4)),   // "backdated" run
+                supportedLift(day(5)))); // genuinely latest
+        Run backdated = history.get(3);
+        Run latest    = history.get(4);
+
+        RunStyleInsight backdatedInsight = RunStyleService.analyze(backdated, history);
+        assertFalse(backdatedInsight.shouldAnnounce());  // backdated: suppressed
+
+        RunStyleInsight latestInsight = RunStyleService.analyze(latest, history);
+        assertEquals(RunStyleStage.FORMING, latestInsight.getStage());  // 4 of 5
+        assertTrue(latestInsight.shouldAnnounce());  // genuine advancement
+    }
+
+    @Test
+    void sameDayAppendedRunRemainsEligibleToAnnounce() {
+        // r1 flat (day 1), r2 supported (day 2), r3 supported (day 4), r4 supported (day 4).
+        // r3 and r4 share the same date. Stable sort preserves input order so r4 stays last.
+        // r4 is the same-day newly-appended run — eligible to announce the EARLY stage.
+        List<Run> history = new ArrayList<>(List.of(
+                flatLift(day(1)),
+                supportedLift(day(2)),
+                supportedLift(day(4)),   // r3: same date as r4, entered first
+                supportedLift(day(4)))); // r4: same date, appended last
+        Run sameDayRun = history.get(3); // the one appended last
+
+        RunStyleInsight insight = RunStyleService.analyze(sameDayRun, history);
+
+        assertEquals(RunStyleStage.EARLY, insight.getStage());
+        assertTrue(insight.shouldAnnounce());  // appended last -> eligible
     }
 
     // --- Efficiency Gain can be primary --------------------------------------
