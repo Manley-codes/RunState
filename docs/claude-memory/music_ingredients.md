@@ -26,12 +26,16 @@ reference-frequency mechanism waits for the V1 evidence contract.
 
 ## Core principle
 
-RunState is not becoming a music app.
+RunState is a running app with a strong music layer, not a general-purpose music service.
 
 In the music layer, RunState treats music as something that supports the run and reveals
-useful information about the runner. Music is a signature expression of RunState's running
-culture identity, but the app's larger purpose remains: track runs, compare runs, understand
-the runner's state, and make the runner feel like the product was built for runners.
+useful information about the runner. Music serves two independent jobs (July 26, 2026):
+ordinary listening and running convenience — complete on its own, with no obligation to
+produce insight — and optional music intelligence and learning, the signature layer. The
+boundary is "not a general-purpose music service," not "every feature must teach something."
+Music is a signature expression of RunState's running culture identity, but the app's larger
+purpose remains: track runs, compare runs, understand the runner's state, and make the
+runner feel like the product was built for runners.
 
 ## Ingredients to preserve
 
@@ -172,12 +176,15 @@ rules) before it's filed, same as the DJ document.
    as a domain/data-contract question; do not bundle in the frequency mechanism yet.
 3. Turn approved V1 decisions into a bounded execution plan, then build the prompt-only core
    reply craft rules as the first console music slice.
-4. Resume UI design after that slice is verified; use the real State Scan, history, and reply
+4. Run the tightly fenced Core Running Foundation Review after that slice; inspect only the
+   record → preserve safely → understand → manage → use-later journey and produce a short gap
+   list, not a feature hunt (full fence in project_current_state.md).
+5. Resume UI design after the review; use the real State Scan, history, and reply
    screens to define the Spring Boot API contracts.
-5. Build the Spring Boot API before the mobile client, then build mobile/GPS against it.
-6. Build a tiny music decision simulator before Spotify or live-DJ integration.
-7. Treat Spotify or other providers as playback/history pipes, not the music brain.
-8. Add skips, pace drops, and queue control later in the mobile phase.
+6. Build the Spring Boot API before the mobile client, then build mobile/GPS against it.
+7. Build a tiny music decision simulator before Spotify or live-DJ integration.
+8. Treat Spotify or other providers as playback/history pipes, not the music brain.
+9. Add skips, pace drops, and queue control later in the mobile phase.
 
 ## Phrases to preserve
 

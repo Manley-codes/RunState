@@ -69,10 +69,19 @@ Flow-audit findings: all four closed — items 1 and 2 (malformed-row handling, 
 - After the plan: build and verify one bounded console music slice, beginning with the approved
   prompt-only core reply-craft rules. The cross-run reference-frequency mechanism waits for the
   V1 evidence/persistence decision.
-- After that first new music slice: resume UI design using `creative_direction_ui.md`. Let the
+- After that first new music slice: run the **Core Running Foundation Review** — LOCKED into
+  the roadmap July 26, 2026 (Codex proposal, Manley confirmed). Tightly fenced: one question —
+  is the central journey (record a run → preserve it safely → understand it → manage it → use
+  it later) credible and structurally ready for a real interface? "Manage" (edit/delete a
+  logged run) is the known thin spot. Output is a short gap list, not a feature hunt; "add
+  every feature Strava has" is explicitly out.
+- Then: resume UI design using `creative_direction_ui.md`. Let the
   State Scan, history, and post-run reply screens define the backend payloads.
 - Then: design/migrate the Spring Boot API from those screen contracts.
 - Then: build the mobile client and GPS/automatic-tracking layer against Spring Boot.
+  The GPS phase delivers time-aligned run telemetry, and automatic splits are built there
+  as a **general running capability** (one shared system; run screens and music intelligence
+  both consume it — full decision record in parked_feature_ideas.md, July 26, 2026 entry).
 - Spotify integration and live-DJ behavior remain later possibilities with separate legal,
   privacy, provider, and platform dependencies.
 
@@ -100,7 +109,11 @@ Feature map (July 6, 2026) — which features strongly trigger which concern:
   weight jumps at multi-user); user-generated content moderation if community playlists
   ship (Phase 7).
 
-**Phase 5 as-built record:**
+**Phase 5 as-built record — HISTORICAL (June 26, 2026 snapshot; superseded):**
+The `musicContext` single-field model described below was replaced by `RunContext` with an
+explicit `MusicMode` (MUSIC / NO_MUSIC / not recorded) plus optional note, persisted
+separately, in RunStyle V1 (July 10, 2026). This section is preserved as a build record
+only — the current music data model is documented in design_runstyle_v1.md and AI_AGENT.md.
 Both features follow the same four-file pattern:
   Run.java -> add field | RunStorage.java -> add DB column | RunConsole.java -> add optional prompt | RunAgent.java -> add to user message
 

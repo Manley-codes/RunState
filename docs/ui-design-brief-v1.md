@@ -1,4 +1,11 @@
 # RunState — UI Design Brief v1
+
+> **SUPERSEDED — HISTORICAL SNAPSHOT (banner added July 26, 2026).** The live UI direction
+> is `docs/claude-memory/creative_direction_ui.md` (v0.2, §0 holds the locked July
+> decisions). This brief locks choices that are no longer settled — notably a three-state
+> energy model, while the three-versus-four State Scan question remains open and is decided
+> during Music Intelligence V1 planning. Do not design or build from this document.
+
 **Screens in scope:** Start (Idle) · Pre-Run Energy
 **Purpose:** High-fidelity direction for Claude Design / Figma execution
 

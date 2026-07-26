@@ -26,12 +26,15 @@ metadata:
 5. Phase 5: AI agent context expansion — music (manual now, Spotify later), weather (automatic via Open-Meteo)
 6. Mobile UI — GPS tracking, automatic run detection
 
-**Forward execution path — LOCKED July 25, 2026:**
+**Forward execution path — LOCKED July 25, expanded July 26, 2026:**
 The historical phase list above describes the product layers, but the implementation seam is
-now explicit: Music Intelligence V1 planning → one bounded console music slice → resume UI
-design → Spring Boot API → mobile client with GPS/automatic tracking. UI design resumes before
-Spring Boot so real screen needs shape endpoint and payload contracts; Spring Boot is built
-before the mobile client. Spotify/live-DJ depth remains later than this first mobile foundation.
+now explicit: Music Intelligence V1 planning → one bounded console music slice → tightly fenced
+Core Running Foundation Review → resume UI design → Spring Boot API → mobile client with
+GPS/automatic tracking. The review asks only whether the central record/preserve/understand/
+manage/use-later journey is structurally ready for a real interface; its output is a short gap
+list, not a feature hunt. UI design resumes before Spring Boot so real screen needs shape endpoint
+and payload contracts; Spring Boot is built before the mobile client. Spotify/live-DJ depth
+remains later than this first mobile foundation.
 
 **Final product vision (locked in June 2026):**
 Manual input in the finished app is minimal by design:
@@ -46,7 +49,18 @@ Music is the signature feature — go deep on one thing rather than shipping man
 Weather included but secondary to music.
 Both feed the AI agent for more personal, specific post-run responses.
 Refinement (July 6): music is the signature EXPRESSION of the reflection core, not the core
-itself — music features must always serve state-aware reflection (see positioning below).
+itself (see positioning below).
+Refinement (July 26): music serves TWO independent jobs — (a) ordinary music listening and
+running convenience, complete and useful on its own, and (b) optional music intelligence and
+learning. The boundary is "RunState is not a general-purpose music service" — NOT "every
+music feature must produce insight." A runner may simply listen and run.
+**Music Intelligence presentation principle (July 26, 2026):** Music Intelligence is optional
+but strongly recommended as RunState's signature experience. Runners may use RunState simply
+to listen and run, while intelligence adds personalized reflection, learning, and later
+adaptation. Basic listening must never be withheld or deliberately weakened to pressure
+adoption; any sensitive provider, playback-history, or external-AI access still requires
+clear consent — recommendation never substitutes for permission. Screen treatment is decided
+in the UI phase, not during Music V1 planning.
 
 **Product positioning — LOCKED July 6, 2026 (do not re-litigate; point identity questions here):**
 Third articulation of RunState's identity (after research_app_landscape's strategic read and

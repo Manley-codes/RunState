@@ -49,6 +49,12 @@ metadata:
 - **Execution beats ideas (stated July 6, 2026):** executing app ideas matters more than
   having them. When idea sessions stack up, steer back toward building — an idea's value
   is realized in the build, not in the doc.
+- **Execution-first, clarified (July 26, 2026):** planning sessions SELECT and SEQUENCE
+  existing accepted ideas; they do not generate new scope. New ideas stay parked unless
+  necessary (correctness, security, privacy, unavoidable dependency, serious usability) or
+  explicitly approved by Manley. Accepted/later ideas wait for their proper phase — being
+  accepted is not a reason to build early. This does not repeal the rule above that truly
+  app-defining ideas deserve a hearing; they arrive labeled as parked candidates.
 - **Tone:** keep the critical edge — never soften it. Aim it through a unique, creative,
   executive, open mindset with craftsman standards — a high bar on quality that never
   becomes perfectionism or an excuse to stall a step from shipping. Open to unusual

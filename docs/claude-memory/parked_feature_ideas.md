@@ -1,14 +1,17 @@
 ---
 name: parked-feature-ideas
-description: "Non-music parked feature ideas (harvested July 7, 2026 from the June docs) — Top Run Highlights, run suggestions, support messages, body feedback, context fields"
+description: "Non-music future feature decisions — parked ideas plus accepted/later automatic splits and time-aligned telemetry"
 metadata:
   type: project
 ---
 
-# Parked feature ideas (non-music)
+# Future feature decisions (non-music)
 
 Harvested July 7, 2026 from the archived June docs (UNIQUE_IDEAS.md, IDEAS.md). Music ideas
-live in parked_music_recommendation.md. Parked ≠ rejected — each entry notes what unlocks it.
+live in parked_music_recommendation.md. This file now holds TWO categories (July 26, 2026):
+**parked** (worth remembering, not promised; ≠ rejected — each entry notes what unlocks it)
+and **accepted/later** (committed to the vision, waiting for its proper phase — currently
+the automatic-splits/telemetry entry).
 
 ## Top Run Highlights — strongest of the batch
 
@@ -43,6 +46,29 @@ discomfort after faster runs over 4 miles"). Awareness only — never diagnosis,
 causal claims; persistent pain → professional. HEAVY health-data weight: joins the
 privacy/legal feature map (project_current_state.md) the moment it's considered.
 Explicitly labeled low priority right now.
+
+## Automatic splits / time-aligned telemetry — ACCEPTED/LATER, general running capability (July 26, 2026)
+
+**Status: accepted for the mobile/GPS phase — not parked, not music-only.** Decision made
+July 26, 2026 (Codex analysis + Claude review, confirmed by Manley): automatic mile/km
+splits are a first-class *running* feature — pacing visibility, portion comparison, start
+fast/finish strong shape — valuable even for runners who never touch music intelligence.
+Previously the docs mentioned splits only as a music/Phase 6 dependency; this entry makes
+the general-purpose capability explicit.
+
+**Architecture rule (one shared system):** GPS/time data → core time-aligned run telemetry
+→ automatic split calculation → consumed by BOTH general run screens AND music
+intelligence. Music must never build its own separate split system; advanced music features
+(reflective-song selection, hard-mile/turnaround detection, push vocabulary) consume the
+shared telemetry. Label for those music ideas: "requires time-aligned telemetry" (more
+precise than "requires splits" — splits are one derived summary of telemetry).
+
+**Nothing is built now.** Console era: do not build or manually collect splits; keep pace
+math centralized so the one-pace-per-run assumption stays easy to change. Design decisions
+deferred until real GPS/provider data exists (UI → Spring Boot → mobile phases): mile vs km
+boundaries, moving vs elapsed time, pause handling, partial final split, storage/recalc,
+display. Timestamped location + playback data is also a privacy/data-contract decision —
+belongs to the standing privacy/security/legal milestone when designed.
 
 ## Small context fields (capture-when-natural)
 

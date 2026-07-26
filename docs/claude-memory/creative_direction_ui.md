@@ -3,15 +3,16 @@ name: creative-direction-ui
 description: Exploratory creative + UI direction for the RunState mobile app phase (brainstorm synthesis, not locked)
 metadata:
   type: project
-status: v0.2 — UI PHASE PAUSED; resume after the first new console music slice, before Spring Boot
+status: v0.2 — UI PHASE PAUSED; resume after the first new console music slice and the Core Running Foundation Review, before Spring Boot
 ---
 
 # RunState — Creative Direction (v0.2)
 
 > Status: UI work remains PAUSED. When development resumes, first plan Music Intelligence V1
-> and ship one bounded console music slice. Then resume this UI work before Spring Boot so the
-> real State Scan, history, and post-run reply screens shape the API; build mobile/GPS after the
-> Spring Boot foundation. This doc is the map for that design phase. §1–12 are the original June
+> and ship one bounded console music slice, then complete the tightly fenced Core Running
+> Foundation Review. After that review, resume this UI work before Spring Boot so the real State
+> Scan, history, and post-run reply screens shape the API; build mobile/GPS after the Spring Boot
+> foundation. This doc is the map for that design phase. §1–12 are the original June
 > 28 brainstorm synthesis; **§0 records the
 > decisions made in the later prompt-iteration sessions (early July 2026) — where §0 conflicts with
 > §1–12, §0 wins.** Superseded ideas are kept, marked, not erased.

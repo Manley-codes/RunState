@@ -1,16 +1,17 @@
 ---
 name: parked-music-recommendation
-description: Music suggestion direction (July 2026) — phase-aware playlist agent accepted as north star; V1 planning and one console slice precede UI, Spring Boot, and later mobile live adaptation
+description: Music suggestion direction (July 2026) — phase-aware playlist agent accepted as north star; V1 planning, one console slice, and the Core Running Foundation Review precede UI, Spring Boot, and later mobile live adaptation
 metadata:
   type: project
 ---
 
 # Music suggestion direction — accepted vision + parked ideas (July 2, 2026)
 
-> **Forward-path clarification — July 25, 2026:** References below to “Phase 6” mean
+> **Forward-path clarification — July 25, expanded July 26, 2026:** References below to “Phase 6” mean
 > mobile-era capabilities, not the immediate next task. The locked execution path is Music
-> Intelligence V1 planning → one bounded console music slice → resume UI design → Spring Boot
-> API → mobile/GPS. Live adaptation remains in that later mobile stage.
+> Intelligence V1 planning → one bounded console music slice → tightly fenced Core Running
+> Foundation Review → resume UI design → Spring Boot API → mobile/GPS. Live adaptation remains
+> in that later mobile stage.
 
 Manley explored music-suggestion features for RunState. Discussion evolved from a
 generic recommender into a context-aware playlist agent. Judged against
@@ -20,12 +21,17 @@ don't chase parity).
 
 ## ACCEPTED north star — phase-aware playlist agent (on-identity)
 
-An AI agent builds a run playlist from context only RunState holds:
-- Pre-run energy/state (already core RunState data)
-- Favorite genres + past run/music/energy history
-- Time and day of the run
+An AI agent builds a run playlist from evidence RunState holds today plus inputs that may be
+added in later phases.
+Present evidence (exists in the app today):
+- Pre-run energy/state (core RunState data)
+- Per-run music mode + optional listening note (RunContext), date/time of the run
+Future candidate inputs (do NOT exist yet): Music V1 planning decides which, if any, belong
+in V1; it does not need to solve acquisition for inputs deferred to later phases.
+- Favorite genres
+- Structured music history (which songs, across which runs)
 - Run phase: opener to start strong → steady-rhythm middle → boost track held in
-  reserve for a mid-run slump
+  reserve for a mid-run slump (full phase detection needs time-aligned telemetry)
 
 Sports-science backing: music tempo matched to cadence and motivational music
 measurably lower perceived exertion (RPE) — phases responding to different music is
@@ -86,8 +92,9 @@ the basic playlist agent exists, not before):
 Certain words/lyrical themes trigger the runner to push harder. The agent learns a personal
 "push vocabulary" (defiance, winning, proving-people-wrong, calm focus...) from which lyric
 themes recur around strong efforts. Highly original — no app maps lyric language to effort.
-- Same Phase 6 dependency as reflective-song selection above: timestamped in-run music +
-  splits. File and build them together.
+- Same Phase 6 dependency as reflective-song selection above: time-aligned run and
+  playback telemetry (splits are one derived summary — see the general splits entry in
+  parked_feature_ideas.md). File and build them together.
 - **Overclaim guard:** pattern language only — "this kind of lyric keeps showing up around
   your strongest finishes" — NEVER causal claims ("this lyric made you faster").
 - **LEGAL FLAG:** lyrics text is licensed content (Musixmatch = paid API; scraping Genius
@@ -165,6 +172,8 @@ update when built. Sequencing: layers ON TOP of the pre-run playlist brain; do n
 it exists.
 APIs: https://www.last.fm/api/show/track.getSimilar · https://listenbrainz.readthedocs.io/en/latest/users/api-compat.html
 
-**How to apply:** steer music work toward the pre-run playlist brain first; live adaptation
-only at Phase 6; if discovery or cross-user ideas resurface, point back here. Reply craft
-rules live in design_music_reply_style.md.
+**How to apply (order corrected July 26, 2026):** the locked immediate order is Music
+Intelligence V1 planning → prompt-only reply-craft slice → Core Running Foundation Review
+→ UI. The pre-run playlist brain is the north star later approved music slices build toward,
+not the first task. Live adaptation only at Phase 6; if discovery or cross-user ideas
+resurface, point back here. Reply craft rules live in design_music_reply_style.md.

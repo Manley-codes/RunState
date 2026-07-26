@@ -130,10 +130,13 @@ RunState is paused at a clean preparation point. When development resumes, the l
    pre-run energy-state decision.
 2. Build and verify one bounded console music slice, beginning with the approved core reply-craft
    rules rather than provider integration.
-3. Resume UI design so the State Scan, history, and post-run reply screens define what the backend
+3. Run the tightly fenced Core Running Foundation Review: check whether the central journey
+   (record → preserve safely → understand → manage → use later) is ready for a real interface,
+   and produce a short gap list rather than a feature hunt.
+4. Resume UI design so the State Scan, history, and post-run reply screens define what the backend
    must return.
-4. Migrate/design the Spring Boot API from those screen contracts.
-5. Build the mobile client and GPS/automatic-tracking layer against that API.
+5. Migrate/design the Spring Boot API from those screen contracts.
+6. Build the mobile client and GPS/automatic-tracking layer against that API.
 
 Spotify integration and live-DJ behavior remain later possibilities with separate legal, privacy,
 provider, and platform dependencies.

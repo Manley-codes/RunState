@@ -5,14 +5,14 @@ metadata:
   type: project
 ---
 
-# Non-functional requirements (July 7, 2026 — updated July 25, 2026)
+# Non-functional requirements (July 7, 2026 — updated July 26, 2026)
 
 What the app must be, not what it does. Judge new work against these. Priorities are
 PHASE-DEPENDENT — the order below is for the current phase (single-user, local, pre-release);
 security and privacy jump to the top the day the repo goes public or anything server-shaped
 exists. Scalability is deliberately deferred, not forgotten — it re-enters with the Spring
 Boot foundation and grows again at the multi-user horizon. The locked transition is: first
-music slice → UI contract work → Spring Boot API → mobile/GPS.
+music slice → Core Running Foundation Review → UI contract work → Spring Boot API → mobile/GPS.
 
 | # | Requirement | The bar | Status |
 |---|-------------|---------|--------|
