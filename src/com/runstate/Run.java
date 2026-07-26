@@ -2,6 +2,7 @@ package com.runstate;
 
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.Locale;
 
 /*
@@ -303,6 +304,11 @@ public class Run {
                 "\n" + formatPace() + " min/" + getPaceUnit() +
                 " | " + formatNumber(duration) + " min";
 
+        String contextSummary = getContextSummary();
+        if (!contextSummary.isEmpty()) {
+            summary = summary + "\n" + contextSummary;
+        }
+
         if (preRunEnergy != null && postRunEnergy != null) {
             summary = summary + "\nEnergy: " + preRunEnergy.getPreRunLabel() +
                     " -> " + postRunEnergy.getPostRunLabel();
@@ -323,6 +329,43 @@ public class Run {
         }
 
         return summary;
+    }
+
+    // Builds an optional one-line context summary in a fixed field order:
+    // Surface | Company | Shoes: <label> | Music: <note> (or Music, No music).
+    // Returns an empty string when every context field is absent so the caller
+    // can decide whether to append a newline prefix.
+    private String getContextSummary() {
+        ArrayList<String> pieces = new ArrayList<>();
+
+        if (getSurface() != null) {
+            pieces.add(getSurface().getLabel());
+        }
+        if (getRunCompany() != null) {
+            pieces.add(getRunCompany().getLabel());
+        }
+        String shoe = getShoeLabel();
+        if (shoe != null && !shoe.isBlank()) {
+            pieces.add("Shoes: " + shoe);
+        }
+
+        MusicMode mode = getMusicMode();
+        String note = getMusicContext();
+        boolean hasNote = note != null && !note.isBlank();
+        if (mode == MusicMode.NO_MUSIC) {
+            // Explicit NO_MUSIC wins over any stray note.
+            pieces.add("No music");
+        } else if (mode == MusicMode.MUSIC) {
+            pieces.add(hasNote ? "Music: " + note : "Music");
+        } else if (hasNote) {
+            // Legacy row: note present but mode not stored — treat as music.
+            pieces.add("Music: " + note);
+        }
+
+        if (pieces.isEmpty()) {
+            return "";
+        }
+        return "Context: " + String.join(" | ", pieces);
     }
 
     // Builds the first summary line and omits the route when it is missing.

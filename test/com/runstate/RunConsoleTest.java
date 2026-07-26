@@ -65,9 +65,14 @@ public class RunConsoleTest {
 
     private static Run makeRun(Runner runner, LocalDate date,
                                double distanceMiles, double durationMin) {
+        return makeRun(runner, date, distanceMiles, durationMin, null);
+    }
+
+    private static Run makeRun(Runner runner, LocalDate date,
+                               double distanceMiles, double durationMin, RunContext context) {
         return new Run(0, runner, date, null, null,
                 distanceMiles, DistanceUnit.MILES, durationMin,
-                null, null, null, null, null, null, null);
+                null, null, null, null, context, null, null);
     }
 
     // --- Test -------------------------------------------------------------------
@@ -85,7 +90,9 @@ public class RunConsoleTest {
         Run baseline = makeRun(runner, LocalDate.of(2026, 1, 1), 3.0, 27.0); // 9 min/mi
         runner.loadRun(baseline);
 
-        Run unsaved = makeRun(runner, LocalDate.of(2026, 7, 25), 5.0, 35.0); // 7 min/mi
+        RunContext ctx = new RunContext(SurfaceType.TRAIL, RunCompany.SOLO,
+                "Pegasus 41", MusicMode.MUSIC, "Midnight Marauders");
+        Run unsaved = makeRun(runner, LocalDate.of(2026, 7, 25), 5.0, 35.0, ctx); // 7 min/mi
 
         FailingSaveConsole console = new FailingSaveConsole(runner);
 
@@ -126,6 +133,10 @@ public class RunConsoleTest {
             assertTrue(output.contains("check Run History"));
             assertTrue(output.contains("Re-enter"));
             assertTrue(output.contains("simulated save failure"));
+
+            // Recorded context appears in the recovery receipt via getRunSummary().
+            assertTrue(output.contains(
+                    "Context: Trail | Solo | Shoes: Pegasus 41 | Music: Midnight Marauders"));
         } finally {
             System.setOut(original);
         }

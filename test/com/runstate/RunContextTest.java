@@ -4,9 +4,11 @@ import java.time.LocalDate;
 
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /*
  * Step 1 (RunStyle V1) tests for the run-context layer — the RunContext value object,
@@ -115,5 +117,92 @@ public class RunContextTest {
     void inferMusicModeBothNullStaysNull() {
         // No mode, no note → never recorded. Must stay null and must NOT become NO_MUSIC.
         assertNull(RunStorage.inferMusicMode(null, null));
+    }
+
+    // --- Context summary in run summaries ------------------------------------
+
+    // A fully populated context must produce the exact line with fields in the
+    // fixed contract order: Surface | Company | Shoes: <label> | Music: <note>.
+    @Test
+    void contextSummary_fullyPopulated_hasCorrectLineAndOrder() {
+        RunContext context = new RunContext(
+                SurfaceType.TRAIL, RunCompany.WITH_OTHERS, "Pegasus 41",
+                MusicMode.MUSIC, "Midnight Marauders");
+        Run run = runWith(context);
+        assertTrue(run.getRunSummary().contains(
+                "Context: Trail | With others | Shoes: Pegasus 41 | Music: Midnight Marauders"));
+    }
+
+    // When only some fields are recorded, the absent ones must be silently omitted
+    // with no doubled separators or dangling labels.
+    @Test
+    void contextSummary_partialContext_omitsMissingValues() {
+        RunContext context = new RunContext(SurfaceType.ROAD, null, null, null, null);
+        String summary = runWith(context).getRunSummary();
+        assertTrue(summary.contains("Context: Road"));
+        assertFalse(summary.contains("Shoes:"));
+        assertFalse(summary.contains("Music"));
+        assertFalse(summary.contains("| |"));
+    }
+
+    // When no context field is present, the Context: line must be absent entirely —
+    // do not print "Context: " or "Not recorded".
+    @Test
+    void contextSummary_emptyContext_producesNoLine() {
+        String summary = runWith(RunContext.EMPTY).getRunSummary();
+        assertFalse(summary.contains("Context:"));
+        assertFalse(summary.contains("Not recorded"));
+    }
+
+    // MUSIC with a free-text note → "Music: <note>".
+    @Test
+    void contextSummary_musicWithNote_formattedCorrectly() {
+        RunContext context = new RunContext(null, null, null, MusicMode.MUSIC, "Kind of Blue");
+        assertTrue(runWith(context).getRunSummary().contains("Music: Kind of Blue"));
+    }
+
+    // MUSIC with no note → "Music" — no trailing colon or blank after it.
+    @Test
+    void contextSummary_musicWithoutNote_showsMusicLabel() {
+        RunContext context = new RunContext(null, null, null, MusicMode.MUSIC, null);
+        String summary = runWith(context).getRunSummary();
+        assertTrue(summary.contains("Context: Music"));
+        // Without a note, there must be no colon after "Music".
+        assertFalse(summary.contains("Music: "));
+    }
+
+    // NO_MUSIC → "No music".
+    @Test
+    void contextSummary_noMusic_showsNoMusicLabel() {
+        RunContext context = new RunContext(null, null, null, MusicMode.NO_MUSIC, null);
+        assertTrue(runWith(context).getRunSummary().contains("Context: No music"));
+    }
+
+    // NO_MUSIC overrides any stray note — the note must be invisible.
+    @Test
+    void contextSummary_noMusicOverridesStrayNote() {
+        RunContext context = new RunContext(null, null, null, MusicMode.NO_MUSIC, "some note");
+        String summary = runWith(context).getRunSummary();
+        assertTrue(summary.contains("No music"));
+        assertFalse(summary.contains("some note"));
+    }
+
+    // Null mode with a note (legacy row) → "Music: <note>" so stored data is not hidden.
+    @Test
+    void contextSummary_nullModeWithNotePreservesNote() {
+        RunContext context = new RunContext(null, null, null, null, "Old vinyl session");
+        assertTrue(runWith(context).getRunSummary().contains("Music: Old vinyl session"));
+    }
+
+    // getRunSummary() is the shared method used by Run History, so verifying it
+    // contains the context line also verifies history shows context.
+    @Test
+    void runHistorySummaryContainsContextLine() {
+        RunContext context = new RunContext(
+                SurfaceType.TRAIL, RunCompany.SOLO, null,
+                MusicMode.MUSIC, "Midnight Marauders");
+        Run run = runWith(context);
+        assertTrue(run.getRunSummary().contains(
+                "Context: Trail | Solo | Music: Midnight Marauders"));
     }
 }

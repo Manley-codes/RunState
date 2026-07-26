@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1120" height="1600" viewBox="0 0 1120 1600" role="img" aria-labelledby="title desc">
   <title id="title">RunState current console flow</title>
-  <desc id="desc">Four lanes show the runner, RunState console, storage and services, and insights from startup through a durably saved run. Numbered markers identify known gaps documented below the diagram.</desc>
+  <desc id="desc">Four lanes show the runner, RunState console, storage and services, and insights from startup through a durably saved run. All audit findings documented below are now resolved.</desc>
   <style>
     :root {
       color-scheme: light dark;
@@ -15,9 +15,6 @@
       --fallback: #fdf0f6;
       --stop: #c2410c;
       --stop-fill: #fff7ed;
-      --audit: #2563eb;
-      --priority: #c2410c;
-      --marker-text: #ffffff;
     }
     @media (prefers-color-scheme: dark) {
       :root {
@@ -32,9 +29,6 @@
         --fallback: #402837;
         --stop: #fb923c;
         --stop-fill: #40271d;
-        --audit: #60a5fa;
-        --priority: #fb923c;
-        --marker-text: #111827;
       }
     }
     text { font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; fill: var(--fg); }
@@ -61,12 +55,6 @@
     .stop-line { stroke: var(--stop); }
     .arrow-head { fill: var(--muted); }
     .stop-arrow-head { fill: var(--stop); }
-    .audit-ring { fill: none; stroke: var(--audit); stroke-width: 3; }
-    .priority-ring { fill: none; stroke: var(--priority); stroke-width: 3; }
-    .audit-marker { fill: var(--audit); }
-    .priority-marker { fill: var(--priority); }
-    .marker-label { fill: var(--marker-text); font-size: 12px; font-weight: 600; }
-    .priority-note { fill: var(--priority); font-size: 10px; font-weight: 600; letter-spacing: .05em; }
   </style>
   <defs>
     <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
@@ -149,9 +137,7 @@
   <rect class="node" x="235" y="445" width="230" height="60" rx="10"/>
   <text class="node-title" x="350" y="470" text-anchor="middle">Main menu opens</text>
   <text class="node-copy" x="350" y="492" text-anchor="middle">Log · History · PRs · Exit</text>
-  <text class="node-copy" x="440" y="522" text-anchor="end">History summary omits context</text>
-  <circle class="audit-marker" cx="482" cy="518" r="15"/>
-  <text class="marker-label" x="482" y="522" text-anchor="middle">4</text>
+  <text class="node-copy" x="482" y="522" text-anchor="end">History: compact context when recorded</text>
 
   <path class="stop-line" d="M670 444 V457" marker-end="url(#stop-arrow)"/>
   <text class="branch-label stop-text" x="685" y="454">NO</text>
@@ -227,11 +213,8 @@
   <path class="stop-line" d="M670 1263 V1306 H465" marker-end="url(#stop-arrow)"/>
   <text class="branch-label stop-text" x="685" y="1288">NO</text>
   <rect class="node node-stop" x="235" y="1276" width="230" height="60" rx="10"/>
-  <rect class="audit-ring" x="232" y="1273" width="236" height="66" rx="12"/>
   <text class="node-title" x="350" y="1301" text-anchor="middle">Recovery receipt</text>
-  <text class="node-copy" x="350" y="1323" text-anchor="middle">core run · check history · re-enter</text>
-  <circle class="audit-marker" cx="482" cy="1277" r="15"/>
-  <text class="marker-label" x="482" y="1281" text-anchor="middle">4</text>
+  <text class="node-copy" x="350" y="1323" text-anchor="middle">core + context · check history · re-enter</text>
   <path class="stop-line" d="M235 1306 H155" marker-end="url(#stop-arrow)"/>
   <rect class="terminal" x="35" y="1283" width="120" height="46" rx="23"/>
   <text class="terminal-text" x="95" y="1312" text-anchor="middle">SESSION ENDS</text>

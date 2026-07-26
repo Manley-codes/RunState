@@ -1,9 +1,9 @@
 # RunState Current Run Flow
 
-**Status:** Current Java console behavior, including known gaps  
+**Status:** Current Java console behavior — all four audit gaps now resolved  
 **Last verified:** July 25, 2026  
 **Code baseline:** pending sprint commit  
-**Test suite:** 68 passing
+**Test suite:** 77 passing
 
 ## Purpose and scope
 
@@ -32,8 +32,8 @@ Excluded:
 
 ## Flowchart
 
-Numbered markers correspond to the audit table below. Orange paths end the current
-session. A dashed node border marks a graceful fallback that allows logging to continue.
+Orange paths end the current session. A dashed node border marks a graceful fallback
+that allows logging to continue.
 
 [![RunState current console flow](diagrams/current-run-flow.svg)](diagrams/current-run-flow.svg)
 
@@ -44,8 +44,8 @@ session. A dashed node border marks a graceful fallback that allows logging to c
 2. A newly entered run is not considered logged until MySQL confirms the save.
 3. PR calculation, PR announcements, the post-run response, and RunStyle happen only
    after that confirmed save.
-4. A save failure prints a recovery receipt and ends the session without adding the
-   temporary run to in-memory history.
+4. A save failure prints a recovery receipt — including recorded run context — and ends
+   the session without adding the temporary run to in-memory history.
 5. Weather and Anthropic failures may use an unavailable/local fallback because they do
    not determine whether the run itself was durably recorded.
 6. Surface, shoes, company, music, and weather describe associations only. They never
@@ -61,7 +61,7 @@ product or engineering backlog.
 | 1 | Invalid stored enum text, or a missing required distance unit, bypasses the friendly load-error boundary. | Startup ended with an uncaught error instead of the controlled explanation. No history was deleted or partially accepted. | — | **Resolved July 16, 2026.** All seven enum columns decode through checked helpers; a malformed row raises `RunStorageException` and takes the same friendly load-error path as an unreachable database, naming the run and column on the `Details:` line. |
 | 2 | The partial-history test fails before any database row is loaded. | It did not prove that a failure after one valid row still returns no partial history. | — | **Resolved July 16, 2026.** `readRuns_whenValidRowIsFollowedByMalformedRow_failsEntireLoad` decodes one valid row, then hits a malformed second row, and asserts the entire load throws. |
 | 3 | The save-first console ordering is verified by code review and manual testing, but not by one orchestration regression test. | A future reorder could accidentally allow PR, AI, or RunStyle output after a failed save. | — | **Resolved July 25, 2026.** `saveAndCompleteRun()` extracted from `logRun()` as a behavior-neutral refactor. The regression test `saveAndCompleteRun_whenSaveFails_suppressesAllPostSaveWork` in `RunConsoleTest` injects a failing save delegate and asserts that in-memory history, PR flags, the AI response, and RunStyle are all suppressed when the save fails. |
-| 4 | Run History and the save-failure receipt both reuse `Run.getRunSummary()`, which omits recorded context. | Surface, shoes, company, and music are saved but are not visible in history or available in the recovery record. | Later display task | Open |
+| 4 | Run History and the save-failure receipt both reuse `Run.getRunSummary()`, which omits recorded context. | Surface, shoes, company, and music are saved but are not visible in history or available in the recovery record. | — | **Resolved July 25, 2026.** `Run.getContextSummary()` (private helper) builds a compact `Context: Surface \| Company \| Shoes: <label> \| Music: <note>` line from whichever fields are recorded, using `String.join(" \| ", pieces)` as the parts collector so absent fields produce no doubled separators. The line is inserted into `getRunSummary()` after pace/duration and before energy, so the shared summary supplies context to the immediate post-run view, Run History, and the failed-save recovery receipt. `RunContextTest` covers all music-state edge cases and the fully-populated ordering contract. `RunConsoleTest` asserts the exact context line appears in recovery output. |
 
 ## Important current details
 

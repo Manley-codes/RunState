@@ -56,7 +56,8 @@ delegates). Full spec: `design_runstyle_v1.md`. In brief:
   chronological position (prefix through that run), so later runs cannot alter its stage,
   counts, facets, or habit. Only the genuinely latest run in sorted history may announce.
 - Task 4 ✅ — Failed-save orchestration regression: `saveAndCompleteRun()` extracted from `logRun()` (behavior-neutral refactor); `saveRun()` and `buildRunResponse()` added as package-private instance delegates; `RunConsoleTest` regression test (`saveAndCompleteRun_whenSaveFails_suppressesAllPostSaveWork`) asserts that a failing save leaves history untouched, PR flags unset, AI response unsent, and RunStyle unchecked, while the recovery receipt is printed. Closes flow-audit item 3. 68 tests green.
-- Tasks 5–6: not yet started.
+- Task 5 ✅ — Context in summaries: `Run.getContextSummary()` private helper builds `Context: Surface | Company | Shoes: <label> | Music: <note>` using a parts-collector ArrayList; wired into `getRunSummary()` after pace/duration and before energy so the line appears in the post-run view, Run History, and the failed-save recovery receipt. Nine new `RunContextTest` cases cover all music-state edge cases and field order. `RunConsoleTest` extended with a populated context and exact context-line assertion. Flowchart audit item 4 resolved; all four audit rows now closed. 77 tests green.
+- Task 6: not yet started.
 
 **Current resume point — music work:**
 - Candidate A: apply the core music reply craft rules in `design_music_reply_style.md`. This subset is prompt-only (`SYSTEM_PROMPT` / `buildUserMessage()`), with no schema or API work.
