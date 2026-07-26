@@ -144,36 +144,42 @@ public class RunConsole {
         EffortLevel effortLevel = readEffortLevel();
         run.setEffortLevel(effortLevel);
 
-        // Step 5 — save the complete run FIRST. A run only counts once it is durably
-        // stored, so nothing below (history, PRs, AI, RunStyle) runs until this succeeds.
+        return saveAndCompleteRun(run);
+    }
+
+    // Attempts to durably save a run, then executes every post-save step only when that
+    // succeeds. Package-private so the regression test can call it directly and override
+    // the two instance delegates below without touching the console-input flow above.
+    boolean saveAndCompleteRun(Run run) {
+        // Step 5 — save FIRST. Nothing below runs until this succeeds.
         try {
-            RunStorage.saveRun(run);
+            saveRun(run);
         } catch (RunStorageException e) {
-            // The run is still in hand but not saved. Print the recovery receipt and
-            // report failure so start() ends the session — without adding to history,
-            // announcing a PR, or generating AI/RunStyle for a run that was never saved.
             printSaveFailureReceipt(run, e);
             return false;
         }
-
-        // Steps 6 & 7 — add the saved run to in-memory history; addRun both flips the PR
-        // flags and announces any new PR. This now happens only after a durable save,
-        // which is exactly what kills the phantom-PR bug.
+        // Steps 6 & 7 — add to in-memory history and announce any new PRs.
         runner.addRun(run);
-
-        // Step 8 — the AI response (PR flags are set now, so it can reflect them).
+        // Step 8 — AI response (PR flags are set now, so it can reflect them).
         System.out.println();
-        System.out.println(RunAgent.buildRunResponse(run));
-
-        // Step 9 — any RunStyle announcement (history already includes this run).
+        System.out.println(buildRunResponse(run));
+        // Step 9 — optional RunStyle announcement.
         String runStyleAlert = runner.detectRunStyle(run);
         if (runStyleAlert != null) {
             System.out.println();
             System.out.println(runStyleAlert);
         }
-
-        // Full success flow ran — tell start() to keep the menu open.
         return true;
+    }
+
+    // Delegates so the regression test can inject a failure without MySQL.
+    void saveRun(Run run) throws RunStorageException {
+        RunStorage.saveRun(run);
+    }
+
+    // Delegates so the regression test can inject a sentinel without the Anthropic API.
+    String buildRunResponse(Run run) {
+        return RunAgent.buildRunResponse(run);
     }
 
     // Prints the save-failure recovery receipt (spec wording). The temporary run is still

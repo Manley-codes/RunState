@@ -215,11 +215,8 @@
   <path class="flow-line" d="M670 1160 V1177" marker-end="url(#arrow)"/>
 
   <polygon class="decision" points="670,1177 775,1220 670,1263 565,1220"/>
-  <polygon class="audit-ring" points="670,1171 785,1220 670,1269 555,1220"/>
   <text class="decision-title" x="670" y="1215" text-anchor="middle">Save confirmed?</text>
   <text class="decision-copy" x="670" y="1235" text-anchor="middle">durability gate</text>
-  <circle class="audit-marker" cx="790" cy="1188" r="15"/>
-  <text class="marker-label" x="790" y="1192" text-anchor="middle">3</text>
 
   <path class="flow-line" d="M565 1220 H465" marker-end="url(#arrow)"/>
   <text class="branch-label" x="520" y="1209" text-anchor="middle">YES</text>

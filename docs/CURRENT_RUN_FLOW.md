@@ -1,9 +1,9 @@
 # RunState Current Run Flow
 
 **Status:** Current Java console behavior, including known gaps  
-**Last verified:** July 16, 2026  
-**Code baseline:** `0af9524`  
-**Test suite:** 51 passing
+**Last verified:** July 25, 2026  
+**Code baseline:** pending sprint commit  
+**Test suite:** 68 passing
 
 ## Purpose and scope
 
@@ -60,7 +60,7 @@ product or engineering backlog.
 |---|---|---|---|---|
 | 1 | Invalid stored enum text, or a missing required distance unit, bypasses the friendly load-error boundary. | Startup ended with an uncaught error instead of the controlled explanation. No history was deleted or partially accepted. | — | **Resolved July 16, 2026.** All seven enum columns decode through checked helpers; a malformed row raises `RunStorageException` and takes the same friendly load-error path as an unreachable database, naming the run and column on the `Details:` line. |
 | 2 | The partial-history test fails before any database row is loaded. | It did not prove that a failure after one valid row still returns no partial history. | — | **Resolved July 16, 2026.** `readRuns_whenValidRowIsFollowedByMalformedRow_failsEntireLoad` decodes one valid row, then hits a malformed second row, and asserts the entire load throws. |
-| 3 | The save-first console ordering is verified by code review and manual testing, but not by one orchestration regression test. | A future reorder could accidentally allow PR, AI, or RunStyle output after a failed save. | Later hardening | Open |
+| 3 | The save-first console ordering is verified by code review and manual testing, but not by one orchestration regression test. | A future reorder could accidentally allow PR, AI, or RunStyle output after a failed save. | — | **Resolved July 25, 2026.** `saveAndCompleteRun()` extracted from `logRun()` as a behavior-neutral refactor. The regression test `saveAndCompleteRun_whenSaveFails_suppressesAllPostSaveWork` in `RunConsoleTest` injects a failing save delegate and asserts that in-memory history, PR flags, the AI response, and RunStyle are all suppressed when the save fails. |
 | 4 | Run History and the save-failure receipt both reuse `Run.getRunSummary()`, which omits recorded context. | Surface, shoes, company, and music are saved but are not visible in history or available in the recovery record. | Later display task | Open |
 
 ## Important current details

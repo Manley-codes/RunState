@@ -55,7 +55,8 @@ delegates). Full spec: `design_runstyle_v1.md`. In brief:
   announcement at entry. RunStyle evaluates each run only through its deterministic
   chronological position (prefix through that run), so later runs cannot alter its stage,
   counts, facets, or habit. Only the genuinely latest run in sorted history may announce.
-- Tasks 4–6: not yet started.
+- Task 4 ✅ — Failed-save orchestration regression: `saveAndCompleteRun()` extracted from `logRun()` (behavior-neutral refactor); `saveRun()` and `buildRunResponse()` added as package-private instance delegates; `RunConsoleTest` regression test (`saveAndCompleteRun_whenSaveFails_suppressesAllPostSaveWork`) asserts that a failing save leaves history untouched, PR flags unset, AI response unsent, and RunStyle unchecked, while the recovery receipt is printed. Closes flow-audit item 3. 68 tests green.
+- Tasks 5–6: not yet started.
 
 **Current resume point — music work:**
 - Candidate A: apply the core music reply craft rules in `design_music_reply_style.md`. This subset is prompt-only (`SYSTEM_PROMPT` / `buildUserMessage()`), with no schema or API work.
