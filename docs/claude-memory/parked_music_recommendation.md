@@ -1,17 +1,20 @@
 ---
 name: parked-music-recommendation
-description: Music suggestion direction (July 2026) — phase-aware playlist agent accepted as north star; V1 planning, one console slice, and the Core Running Foundation Review precede UI, Spring Boot, and later mobile live adaptation
+description: Music suggestion direction (July 2026) — phase-aware playlist agent accepted as a later north star; combined Music Intelligence V1 (slice + tests + evaluation + approval) and then the Core Running Foundation Review precede UI, Spring Boot, and later mobile live adaptation
 metadata:
   type: project
 ---
 
 # Music suggestion direction — accepted vision + parked ideas (July 2, 2026)
 
-> **Forward-path clarification — July 25, expanded July 26, 2026:** References below to “Phase 6” mean
-> mobile-era capabilities, not the immediate next task. The locked execution path is Music
-> Intelligence V1 planning → one bounded console music slice → tightly fenced Core Running
-> Foundation Review → resume UI design → Spring Boot API → mobile/GPS. Live adaptation remains
-> in that later mobile stage.
+> **Forward-path clarification — July 25, expanded July 26, updated July 27, 2026:** References
+> below to “Phase 6” mean mobile-era capabilities, not the immediate next task. **Music
+> Intelligence V1 planning is COMPLETE** (`design_music_intelligence_v1.md`); the bounded
+> prompt-only slice and its evaluation are **next**. The locked execution path from here is
+> prompt slice + evaluation → **combined V1 complete** → tightly fenced Core Running Foundation
+> Review → resume UI design → Spring Boot API → mobile/GPS. The review begins only after
+> combined V1, not merely after the Java slice. Live adaptation remains in that later mobile
+> stage.
 
 Manley explored music-suggestion features for RunState. Discussion evolved from a
 generic recommender into a context-aware playlist agent. Judged against
@@ -25,9 +28,15 @@ An AI agent builds a run playlist from evidence RunState holds today plus inputs
 added in later phases.
 Present evidence (exists in the app today):
 - Pre-run energy/state (core RunState data)
-- Per-run music mode + optional listening note (RunContext), date/time of the run
-Future candidate inputs (do NOT exist yet): Music V1 planning decides which, if any, belong
-in V1; it does not need to solve acquisition for inputs deferred to later phases.
+- Per-run music mode + optional listening note (RunContext)
+- **Run date and derived season only. NO USABLE TIME OF DAY** (corrected July 27, 2026):
+  `Run` retains `startTime`/`endTime` fields and the database retains `start_time`/`end_time`
+  columns, but the **current console supplies and persists no usable times** — `saveRun` writes
+  null to both. V1 may therefore use **only date and derived season**, and must never guess or
+  approximate a time of day.
+Future candidate inputs (do NOT exist yet). **Resolved July 27, 2026: none were added to V1** —
+V1 uses existing current-run evidence only, and acquisition for these remains a later-phase
+problem.
 - Favorite genres
 - Structured music history (which songs, across which runs)
 - Run phase: opener to start strong → steady-rhythm middle → boost track held in
@@ -39,9 +48,13 @@ evidence-based, see RPE notes in
 [research_app_landscape.md](research_app_landscape.md).
 
 **Two-slice sequencing (key decision):**
-1. **Pre-run brain (buildable in console era, Phase 5 music direction):** given pre-run
-   energy, time of day, genre prefs, and history, the agent assembles a phase-structured
-   playlist BEFORE the run. No GPS needed.
+1. **Pre-run brain — a LATER north-star slice; the full proposed version is not buildable from
+   current data (corrected July 27, 2026).** The original description below ("buildable in
+   console era") assumed inputs the app does not supply: **no usable time of day** (fields and
+   columns exist, but the console persists nulls), **no genre preferences**, and **no
+   structured playback history**. It is **not part of Music Intelligence V1**. As originally
+   written: given pre-run energy, time of day, genre prefs, and
+   history, the agent assembles a phase-structured playlist BEFORE the run. No GPS needed.
 2. **Live adaptation (Phase 6, mobile only):** detecting a mid-run slowdown requires live
    GPS pace. Real-time queueing waits for the mobile phase. Same feature, two phases.
 
@@ -172,8 +185,17 @@ update when built. Sequencing: layers ON TOP of the pre-run playlist brain; do n
 it exists.
 APIs: https://www.last.fm/api/show/track.getSimilar · https://listenbrainz.readthedocs.io/en/latest/users/api-compat.html
 
-**How to apply (order corrected July 26, 2026):** the locked immediate order is Music
-Intelligence V1 planning → prompt-only reply-craft slice → Core Running Foundation Review
-→ UI. The pre-run playlist brain is the north star later approved music slices build toward,
-not the first task. Live adaptation only at Phase 6; if discovery or cross-user ideas
-resurface, point back here. Reply craft rules live in design_music_reply_style.md.
+**How to apply (order corrected July 26; updated July 27, 2026):** Music Intelligence V1
+planning is **COMPLETE** (`design_music_intelligence_v1.md`). The locked immediate order is now
+the **bounded prompt-only slice + its deterministic tests and manual evaluation** → **combined
+V1 complete** → Core Running Foundation Review → UI → Spring Boot → mobile/GPS.
+
+The pre-run playlist brain remains a **later north star** that approved music slices build
+toward — **not the next task**, and **the full proposed version is not buildable from current
+data**, since no usable time of day is persisted and genre preferences and structured playback
+history do not exist. Live adaptation only at Phase 6; if discovery or cross-user ideas
+resurface, point back here. Reply craft rules live in design_music_reply_style.md, subordinate
+to the canonical V1 plan.
+
+Note the Foundation Review sequencing: it begins only after **combined Music Intelligence V1**
+is complete, not merely after the Java prompt slice.

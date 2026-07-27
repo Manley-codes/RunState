@@ -19,8 +19,11 @@ One shared internal scale, different labels per moment; skipped answers stored n
 omitted from output. Labels are working wording, not final. Founding principle: **energy is
 an observation, never a run-quality grade** — Spent after a marathon is an achievement, and
 "energy decreased → bad run" must never appear (this principle later grew into the
-energy-vs-effort split in design_effort_cost.md). NOTE: the UI State Scan concept proposes
-different pre-run labels and FOUR states — open question, see creative_direction_ui §0.
+energy-vs-effort split in design_effort_cost.md). NOTE (RESOLVED July 27, 2026): the shared
+three-level energy domain above is **reaffirmed and closed**. The UI State Scan concept's
+FOUR states are **superseded as a domain change**; later label and presentation refinement
+remains UI work and does not alter these stored meanings. Decision record:
+`design_music_intelligence_v1.md`.
 
 **Core principles:**
 - Never imply a run was bad — the runner showed up, that counts

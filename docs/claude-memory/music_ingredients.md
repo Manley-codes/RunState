@@ -18,11 +18,16 @@ Use this file when current work touches music, privacy, comparison data, Spotify
 integration, AI-agent behavior, or run-culture positioning. Its job is to preserve the
 best music ideas without pulling the project away from the core build.
 
-The core prerequisites that previously kept music parked are complete. The locked resume
-point is Music Intelligence V1 planning from these ingredients. After that plan fixes the
-purpose, evidence model, and persistence boundary, the independent prompt-only music reply
-craft rules become the first bounded console slice. The persistence-dependent cross-run
-reference-frequency mechanism waits for the V1 evidence contract.
+The core prerequisites that previously kept music parked are complete. **Music Intelligence V1
+planning is now COMPLETE and approved (July 27, 2026)** — the canonical contract is
+`design_music_intelligence_v1.md`, and implementation must follow that plan rather than this
+ingredients file. The next task is its bounded prompt-only slice (`RunAgent.java` +
+`RunAgentTest.java`), then deterministic tests and manual evaluation.
+
+The canonical plan records the future three-state reply-outcome and persistence boundary
+(`REFERENCED` / `NOT_REFERENCED` / `UNKNOWN`) for cross-run reference frequency, but that
+mechanism's **implementation remains deferred** — no schema, rolling window, detection, or
+prompt line is part of the V1 slice.
 
 ## Core principle
 
@@ -139,13 +144,19 @@ many visible labels will make the app feel crowded.
 ## Current best structure
 
 1. **Core RunState:** track runs, compare runs, understand the runner.
-2. **Music Intelligence Layer:** learn how music connects to run state, effort, energy, and
-   patterns.
-3. **Music Agent Workspace:** optional depth where the runner helps the agent understand
+2. **Ordinary listening and playback convenience:** an independently valuable music job. It
+   does **not** require Music Intelligence, produces no obligation to generate insight, and
+   **must never be degraded or made intentionally inferior** to pressure adoption of the
+   intelligence layer. Real provider and playback work remains deferred.
+3. **Music Intelligence Layer:** learn how music connects to run state, effort, energy, and
+   patterns. **Optional**, but intended to be **strongly recommended** in later product
+   presentation — recommended because it is genuinely good, never by weakening the
+   alternative.
+4. **Music Agent Workspace:** optional depth where the runner helps the agent understand
    taste, intent, upcoming runs, and music fatigue.
-4. **Earned Music Moments:** special outputs that appear when deserved before, during, after,
+5. **Earned Music Moments:** special outputs that appear when deserved before, during, after,
    or across runs.
-5. **Future Community Layer:** anonymous aggregate music context only; no profiles, follower
+6. **Future Community Layer:** anonymous aggregate music context only; no profiles, follower
    mechanics, or ranking.
 
 ## How this connects to run comparisons
@@ -172,11 +183,16 @@ rules) before it's filed, same as the DJ document.
 ## Recommended order
 
 1. Core stabilization and RunStyle V1 — COMPLETE.
-2. Plan Music Intelligence V1 first, including the three-vs-four pre-run energy-state decision
-   as a domain/data-contract question; do not bundle in the frequency mechanism yet.
-3. Turn approved V1 decisions into a bounded execution plan, then build the prompt-only core
-   reply craft rules as the first console music slice.
-4. Run the tightly fenced Core Running Foundation Review after that slice; inspect only the
+2. Music Intelligence V1 planning — **COMPLETE (July 27, 2026)**, including the three-vs-four
+   pre-run energy decision, which closed at **three shared levels**. Canonical contract:
+   `design_music_intelligence_v1.md`.
+3. **NEXT:** implement, deterministically test, and manually evaluate the bounded prompt-only
+   slice (`RunAgent.java` + `RunAgentTest.java`) exactly as the canonical plan specifies. The
+   frequency mechanism is still not bundled in.
+4. Run the tightly fenced Core Running Foundation Review **only after COMBINED Music
+   Intelligence V1 is complete** (implementation, deterministic verification, manual
+   evaluation, independent review reconciliation, final documentation, and Manley's approval —
+   not merely after the Java slice); inspect only the
    record → preserve safely → understand → manage → use-later journey and produce a short gap
    list, not a feature hunt (full fence in project_current_state.md).
 5. Resume UI design after the review; use the real State Scan, history, and reply

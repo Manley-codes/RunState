@@ -124,19 +124,27 @@ mvn test
 
 ## Next direction
 
-RunState is paused at a clean preparation point. When development resumes, the locked path is:
+RunState is paused at a clean preparation point. **Music Intelligence V1 planning is complete
+and approved (July 27, 2026)** — the canonical contract is
+`docs/claude-memory/design_music_intelligence_v1.md`. That planning settled the energy-domain
+question: RunState **retains the shared three-level** (LOW / MODERATE / HIGH) energy domain, and
+the four-state State Scan sketch is superseded as a domain proposal.
 
-1. Plan Music Intelligence V1, including its evidence/persistence contract and the three-vs-four
-   pre-run energy-state decision.
-2. Build and verify one bounded console music slice, beginning with the approved core reply-craft
-   rules rather than provider integration.
-3. Run the tightly fenced Core Running Foundation Review: check whether the central journey
+Implementation has not started. When development resumes, the locked path is:
+
+1. Implement, deterministically test, and manually evaluate the bounded prompt-only music slice
+   (`RunAgent.java` + `RunAgentTest.java`) exactly as the canonical plan specifies — then
+   Manley's approval before it counts as complete.
+2. **Only after combined Music Intelligence V1 is complete** — implementation, deterministic
+   verification, manual evaluation, independent review reconciliation, final documentation, and
+   Manley's approval, as defined by the canonical plan — run the tightly fenced Core Running
+   Foundation Review: check whether the central journey
    (record → preserve safely → understand → manage → use later) is ready for a real interface,
    and produce a short gap list rather than a feature hunt.
-4. Resume UI design so the State Scan, history, and post-run reply screens define what the backend
+3. Resume UI design so the State Scan, history, and post-run reply screens define what the backend
    must return.
-5. Migrate/design the Spring Boot API from those screen contracts.
-6. Build the mobile client and GPS/automatic-tracking layer against that API.
+4. Migrate/design the Spring Boot API from those screen contracts.
+5. Build the mobile client and GPS/automatic-tracking layer against that API.
 
 Spotify integration and live-DJ behavior remain later possibilities with separate legal, privacy,
 provider, and platform dependencies.

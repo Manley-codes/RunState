@@ -5,7 +5,7 @@ metadata:
   type: project
 ---
 
-As of July 25, 2026, the app is a working Java console app named **RunState**.
+As of July 27, 2026, the app is a working Java console app named **RunState**.
 
 **Completed phases:**
 - Phase 1: Console app — energy system, opening prompt, post-run responses, rolling averages
@@ -60,16 +60,28 @@ delegates). Full spec: `design_runstyle_v1.md`. In brief:
 
 Flow-audit findings: all four closed — items 1 and 2 (malformed-row handling, July 16); item 3 (save orchestration, Task 4); item 4 (context in summaries, Task 5).
 
-**Current resume point — PAUSED before Music Intelligence V1:**
-- No Music Intelligence V1 implementation has started; the existing manual music/no-music
-  capture and raw agent context are the earlier foundation only. When Manley returns, first plan
-  V1: turn the accepted ingredients into a bounded purpose, evidence/persistence model, and
-  execution sequence. Settle the three-vs-four pre-run energy-state question inside that planning
-  as one domain/data-contract decision, not as a restart of the full UI phase.
-- After the plan: build and verify one bounded console music slice, beginning with the approved
-  prompt-only core reply-craft rules. The cross-run reference-frequency mechanism waits for the
-  V1 evidence/persistence decision.
-- After that first new music slice: run the **Core Running Foundation Review** — LOCKED into
+**Current resume point — Music Intelligence V1 PLANNING COMPLETE; implementation not started:**
+- **V1 planning is complete and approved (July 27, 2026).** The canonical contract is
+  `design_music_intelligence_v1.md` — purpose and boundary, closed foundational contracts,
+  current evidence and reply behavior, deferred persistence boundary, bounded implementation
+  contract, automated verification plan, manual model-evaluation plan, and execution order.
+  Treat it as the single source of truth; other music docs point to it rather than restate it.
+- **No Java, test, or evaluation work has started.** The existing manual music/no-music capture
+  and raw agent context remain the earlier foundation only.
+- **Energy domain — CLOSED.** The shared LOW/MODERATE/HIGH pre/post energy domain is retained.
+  The four-state State Scan sketch is **superseded as a domain proposal**; later UI work may
+  refine labels and presentation without changing stored meanings.
+- **Next task when Manley resumes:** the bounded `RunAgent.java` + `RunAgentTest.java` prompt
+  slice defined by the canonical plan — a prompt-and-formatting change only, with deterministic
+  tests, followed by smoke and final manual evaluation before combined Music Intelligence V1
+  can be called complete.
+- The future `REFERENCED / NOT_REFERENCED / UNKNOWN` reply-outcome boundary is **documented**
+  in the canonical plan, but cross-run reference-frequency implementation (schema, rolling
+  window, detection, prompt line) remains **deferred** — it is not part of the prompt slice.
+- **After COMBINED Music Intelligence V1 is complete** — implementation, deterministic
+  verification, manual evaluation, independent review reconciliation, final documentation, and
+  Manley's approval, as defined by the canonical plan; **not merely after the Java slice** —
+  run the **Core Running Foundation Review** — LOCKED into
   the roadmap July 26, 2026 (Codex proposal, Manley confirmed). Tightly fenced: one question —
   is the central journey (record a run → preserve it safely → understand it → manage it → use
   it later) credible and structurally ready for a real interface? "Manage" (edit/delete a
@@ -208,10 +220,10 @@ UI/creative-direction exploration is paused (see creative_direction_ui.md v0.2 �
 locked July decisions reconciled from the prompt-iteration sessions). Moodboard is gitignored
 (local only, like the HTML prototypes); creative_direction_ui.md is the surviving text record.
 Historical focus at that time: the weather cleanup above, which has since shipped.
-NEXT-PLANNING DECISION (not implementation yet): the UI "State Scan" concept implies FOUR
-pre-run energy states, but the backend energy system is THREE levels. Resolve this during Music
-Intelligence V1 planning because pre-run state is one of its inputs. Treat it as a domain/data-
-contract decision; do not change the backend enum merely to match the old UI sketch.
+RESOLVED July 27, 2026 (was an open three-vs-four planning decision at this July 6 handoff):
+the shared three-level energy domain is retained and the four-state State Scan sketch is
+superseded as a domain proposal. Later UI work may refine labels and presentation without
+changing stored meanings. Decision record: `design_music_intelligence_v1.md`.
 
 **Current weather architecture (post-cleanup, for reference):**
 - `WeatherData.java` — immutable value object (nullable `Double` temperature/apparentTemperature,

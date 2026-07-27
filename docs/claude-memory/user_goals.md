@@ -28,9 +28,12 @@ metadata:
 
 **Forward execution path — LOCKED July 25, expanded July 26, 2026:**
 The historical phase list above describes the product layers, but the implementation seam is
-now explicit: Music Intelligence V1 planning → one bounded console music slice → tightly fenced
-Core Running Foundation Review → resume UI design → Spring Boot API → mobile client with
-GPS/automatic tracking. The review asks only whether the central record/preserve/understand/
+now explicit: Music Intelligence V1 planning (COMPLETE July 27, 2026) → the bounded console
+music slice with its deterministic tests and manual evaluation → **combined Music Intelligence
+V1 complete** (including independent review reconciliation, final documentation, and Manley's
+approval) → tightly fenced Core Running Foundation Review → resume UI design → Spring Boot API
+→ mobile client with GPS/automatic tracking. The review begins only after combined V1, not
+merely after the Java slice. The review asks only whether the central record/preserve/understand/
 manage/use-later journey is structurally ready for a real interface; its output is a short gap
 list, not a feature hunt. UI design resumes before Spring Boot so real screen needs shape endpoint
 and payload contracts; Spring Boot is built before the mobile client. Spotify/live-DJ depth

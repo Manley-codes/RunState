@@ -42,8 +42,11 @@ Effort is the missing axis. (Predicted by the session-RPE note in research_app_l
   Premium = deeper interpretation (effort trends, load patterns, route/weather/music cost
   analysis, fatigue warnings).
 - **Question-budget rule:** default post-run flow = TWO quick taps max (energy + effort).
-  Deep reflection is opt-in ritual. Reconcile with the State Scan 4-state open question when
-  UI resumes — decide the whole run-flow question budget ONCE, together.
+  Deep reflection is opt-in ritual. Energy cardinality is **settled at three shared levels**
+  (July 27, 2026 — see `design_music_intelligence_v1.md`); the four-state State Scan is not a
+  domain change. When UI resumes, presentation wording and the **overall run-flow question
+  budget** (pre-run and post-run together, not the post-run flow alone) remain UI decisions —
+  decide that budget ONCE, together.
 
 ## Quiet Gains (product concept this data unlocks)
 
@@ -79,7 +82,11 @@ confirm actual energy column names before writing the migration.
 
 **Behavior**
 - `RunConsole.logRun()`: ask immediately after post-run energy, before `saveRun(run)`.
-  Do NOT disturb the rolling-average-snapshot-before-addRun order.
+  **Historical note (July 8, 2026 constraint — SUPERSEDED, not current):** this step originally
+  read "do NOT disturb the rolling-average-snapshot-before-addRun order." That snapshot was
+  **deleted by RunStyle V1 on July 10, 2026**, so the constraint no longer exists and must not
+  be reintroduced. The current orchestration is: **save safely → add to history → AI response →
+  RunStyle announcement.**
   Prompt: "How did that run land?" / 0. Skip / 1. Smooth / 2. Working / 3. Heavy / 4. Empty tank
 - History: `Effort: Smooth` only when recorded (parallels the "Energy:" line).
 - `RunAgent.buildUserMessage()`: `Effort: Smooth (LOW_COST)` or `Not recorded` — matches

@@ -11,8 +11,11 @@ What the app must be, not what it does. Judge new work against these. Priorities
 PHASE-DEPENDENT — the order below is for the current phase (single-user, local, pre-release);
 security and privacy jump to the top the day the repo goes public or anything server-shaped
 exists. Scalability is deliberately deferred, not forgotten — it re-enters with the Spring
-Boot foundation and grows again at the multi-user horizon. The locked transition is: first
-music slice → Core Running Foundation Review → UI contract work → Spring Boot API → mobile/GPS.
+Boot foundation and grows again at the multi-user horizon. The locked transition is: the first
+music slice and its evaluation → **combined Music Intelligence V1 complete** → Core Running
+Foundation Review → UI contract work → Spring Boot API → mobile/GPS. The review begins only
+after combined V1 (implementation, verification, evaluation, review reconciliation,
+documentation, and Manley's approval), not merely after the Java slice.
 
 | # | Requirement | The bar | Status |
 |---|-------------|---------|--------|

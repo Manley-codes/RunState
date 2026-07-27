@@ -3,14 +3,17 @@ name: creative-direction-ui
 description: Exploratory creative + UI direction for the RunState mobile app phase (brainstorm synthesis, not locked)
 metadata:
   type: project
-status: v0.2 — UI PHASE PAUSED; resume after the first new console music slice and the Core Running Foundation Review, before Spring Boot
+status: v0.2 — UI PHASE PAUSED; resume after combined Music Intelligence V1 is complete and the Core Running Foundation Review, before Spring Boot
 ---
 
 # RunState — Creative Direction (v0.2)
 
-> Status: UI work remains PAUSED. When development resumes, first plan Music Intelligence V1
-> and ship one bounded console music slice, then complete the tightly fenced Core Running
-> Foundation Review. After that review, resume this UI work before Spring Boot so the real State
+> Status: UI work remains PAUSED. Music Intelligence V1 **planning is complete** (July 27,
+> 2026 — `design_music_intelligence_v1.md`); the bounded prompt slice, its deterministic tests,
+> and its manual evaluation still come first. The tightly fenced Core Running
+> Foundation Review begins only **after COMBINED Music Intelligence V1 is complete** (including
+> independent review reconciliation, final documentation, and Manley's approval).
+> After that review, resume this UI work before Spring Boot so the real State
 > Scan, history, and post-run reply screens shape the API; build mobile/GPS after the Spring Boot
 > foundation. This doc is the map for that design phase. §1–12 are the original June
 > 28 brainstorm synthesis; **§0 records the
@@ -58,13 +61,13 @@ mountain-ridge line for the feelings visualization (jagged horizon ABOVE the two
 smooth arc, not an EKG). Static screens one at a time for design iteration; video only as a
 finishing step.
 
+**RESOLVED (July 27, 2026) — State Scan energy states:** the stored domain remains
+**LOW / MODERATE / HIGH**. The FOUR-state State Scan concept (Low Charge / Building /
+Ready-ish / Sharp) is **superseded as a domain proposal** — it does not change the stored
+enum. Later UI work may still refine **labels and presentation** freely, provided the three
+stored meanings are unchanged. Decision record: `design_music_intelligence_v1.md`.
+
 **Open questions (v0.2):**
-- **State Scan energy states — decide during Music Intelligence V1 planning, before its first
-  implementation slice.** The UI concept used FOUR states (Low Charge / Building / Ready-ish /
-  Sharp) but the backend energy system is THREE levels. Because pre-run energy is a music input,
-  settle this as a domain/data-contract decision before music logic hardcodes the current enum.
-  This is one bounded decision, not an early restart of the full UI phase; do not change the enum
-  merely to match an old sketch.
 - Collapsible block → frosted sphere docking: personalization (permanent layout) vs focus mode
   (temporary)? Worth pursuing either way; discoverability needs an affordance.
 
