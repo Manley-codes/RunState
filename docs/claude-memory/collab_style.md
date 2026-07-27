@@ -21,12 +21,15 @@ metadata:
 **On implementing:**
 - Never implement a full plan alone without user approval at each step
 - Present options with recommendations, then ask for agreement before proceeding
-- Small code steps only — do not dump large solutions
-- Let the user implement manually unless they ask for direct edits
+- Small code steps only — state the exact bounded section, receive approval, implement it, explain the significant changes, and stop before the next section
+- Claude Code is the default code implementer. The user does not need to type the code; Codex or another assistant implements only when explicitly requested for that task
+- The user handles routine Git work and already knows `pwd`, entering the project folder, `git status`, `git add`, `git commit -m`, and `git push`; do not reteach those commands
+- For an unfamiliar but career-useful Git operation, show the exact command and explain how it works before the user runs it. Keep complicated or uncommon recovery operations assistant-guided
+- Do not stage, commit, push, merge, or perform other routine Git mutations unless the user explicitly asks
 - Always indicate when it's a good time to commit or push
 
 **On explaining:**
-- This is a learning experience — explain Java and OOP concepts thoroughly
+- This is a learning experience — explain key, significant, or unfamiliar Java and OOP concepts thoroughly without narrating every routine line
 - Connect explanations to THIS project whenever possible
 - Ask comprehension questions occasionally but don't quiz every step
 - Comment code clearly — only where necessary, above the line being explained
@@ -68,7 +71,9 @@ metadata:
 
 **Workflow split:**
 - Cowork: planning, ideas, research, design notes
-- Claude Code: all coding, verification against real files, execution
+- Codex: planning, reconciliation, and review; code implementation only when explicitly requested
+- Claude Code: default owner of coding, verification against real files, and execution after each bounded approval
+- Manley: routine Git work, approval at each step, and final product decisions
 - Always bring Cowork plans to Claude Code for verification before touching any code
 
 **On response length:**

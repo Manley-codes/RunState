@@ -19,10 +19,12 @@ Java run-tracking app using MySQL for persistence. Use a dedicated DB user rathe
 
 ## Collaboration rules
 - Small steps only — never implement a full plan without approval at each step
-- This is a learning project — explain Java/OOP concepts, connect explanations to this codebase
+- Claude Code is the default code implementer after the user explicitly approves the exact bounded edit; Codex or another assistant implements code only when explicitly requested for that task
+- This is a learning project — explain significant or unfamiliar Java/OOP and architecture decisions by connecting them to this codebase; do not require the user to type every line or re-explain familiar basics
 - Present options with a recommendation, confirm before writing code
 - Always flag when it's a good time to commit
-- When explaining or implementing code, walk through changes line-by-line with educational pauses; the user is learning, not just shipping
+- The user handles routine Git work. For an unfamiliar but career-useful Git operation, show the exact command and explain it before the user runs it; keep complicated or uncommon recovery operations assistant-guided
+- Do not stage, commit, push, merge, or perform other routine Git mutations unless the user explicitly asks
 - Never replace existing code blocks with placeholder comments during edits; preserve real assignment/logic lines and only modify what was requested
 
 ## Key architecture rules
