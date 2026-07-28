@@ -19,10 +19,16 @@ integration, AI-agent behavior, or run-culture positioning. Its job is to preser
 best music ideas without pulling the project away from the core build.
 
 The core prerequisites that previously kept music parked are complete. **Music Intelligence V1
-planning is now COMPLETE and approved (July 27, 2026)** — the canonical contract is
-`design_music_intelligence_v1.md`, and implementation must follow that plan rather than this
-ingredients file. The next task is its bounded prompt-only slice (`RunAgent.java` +
-`RunAgentTest.java`), then deterministic tests and manual evaluation.
+planning is approved (July 27, 2026), and its bounded prompt-only slice (`RunAgent.java` +
+`RunAgentTest.java`) is now IMPLEMENTED with deterministic verification complete** — 198 tests,
+0 failures, 0 errors, 0 skipped (July 27, 2026). The canonical contract is
+`design_music_intelligence_v1.md`, and any further work must follow that plan rather than this
+ingredients file.
+
+**Combined Music Intelligence V1 remains incomplete.** The next task is preparing and approving
+the sanitized real-run fixtures, then the opt-in evaluation runner and record, then the
+separately approved smoke and final manual evaluations. A passing deterministic gate is not
+model-quality evidence.
 
 The canonical plan records the future three-state reply-outcome and persistence boundary
 (`REFERENCED` / `NOT_REFERENCED` / `UNKNOWN`) for cross-run reference frequency, but that
@@ -186,21 +192,25 @@ rules) before it's filed, same as the DJ document.
 2. Music Intelligence V1 planning — **COMPLETE (July 27, 2026)**, including the three-vs-four
    pre-run energy decision, which closed at **three shared levels**. Canonical contract:
    `design_music_intelligence_v1.md`.
-3. **NEXT:** implement, deterministically test, and manually evaluate the bounded prompt-only
-   slice (`RunAgent.java` + `RunAgentTest.java`) exactly as the canonical plan specifies. The
-   frequency mechanism is still not bundled in.
-4. Run the tightly fenced Core Running Foundation Review **only after COMBINED Music
+3. Bounded prompt-only slice (`RunAgent.java` + `RunAgentTest.java`) — **IMPLEMENTED and
+   deterministically verified July 27, 2026** (198 tests green), exactly as the canonical plan
+   specifies. The frequency mechanism was not bundled in and stays deferred.
+4. **NEXT:** the manual evaluation path — prepare and approve the sanitized real-run fixtures,
+   add the opt-in evaluation runner and evaluation record, then run the separately approved
+   12-call smoke and 36-output final evaluations, reconcile independent review, and obtain
+   Manley's final decision. **Only then** is combined Music Intelligence V1 complete.
+5. Run the tightly fenced Core Running Foundation Review **only after COMBINED Music
    Intelligence V1 is complete** (implementation, deterministic verification, manual
    evaluation, independent review reconciliation, final documentation, and Manley's approval —
    not merely after the Java slice); inspect only the
    record → preserve safely → understand → manage → use-later journey and produce a short gap
    list, not a feature hunt (full fence in project_current_state.md).
-5. Resume UI design after the review; use the real State Scan, history, and reply
+6. Resume UI design after the review; use the real State Scan, history, and reply
    screens to define the Spring Boot API contracts.
-6. Build the Spring Boot API before the mobile client, then build mobile/GPS against it.
-7. Build a tiny music decision simulator before Spotify or live-DJ integration.
-8. Treat Spotify or other providers as playback/history pipes, not the music brain.
-9. Add skips, pace drops, and queue control later in the mobile phase.
+7. Build the Spring Boot API before the mobile client, then build mobile/GPS against it.
+8. Build a tiny music decision simulator before Spotify or live-DJ integration.
+9. Treat Spotify or other providers as playback/history pipes, not the music brain.
+10. Add skips, pace drops, and queue control later in the mobile phase.
 
 ## Phrases to preserve
 

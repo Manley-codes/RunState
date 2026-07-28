@@ -26,13 +26,30 @@ metadata:
 5. Phase 5: AI agent context expansion — music (manual now, Spotify later), weather (automatic via Open-Meteo)
 6. Mobile UI — GPS tracking, automatic run detection
 
-**Forward execution path — LOCKED July 25, expanded July 26, 2026:**
+**Forward execution path — LOCKED July 25, expanded July 26, 2026; status updated July 28, 2026:**
 The historical phase list above describes the product layers, but the implementation seam is
-now explicit: Music Intelligence V1 planning (COMPLETE July 27, 2026) → the bounded console
-music slice with its deterministic tests and manual evaluation → **combined Music Intelligence
-V1 complete** (including independent review reconciliation, final documentation, and Manley's
-approval) → tightly fenced Core Running Foundation Review → resume UI design → Spring Boot API
-→ mobile client with GPS/automatic tracking. The review begins only after combined V1, not
+now explicit, and part of it is already done:
+
+- **Music Intelligence V1 planning — COMPLETE July 27, 2026.**
+- **The bounded console music prompt slice and its deterministic gate — IMPLEMENTED and
+  VERIFIED July 27, 2026**, at **198 passing tests** (0 failures, 0 errors, 0 skipped).
+- **Manual model evaluation has NOT started, so combined Music Intelligence V1 is NOT
+  complete.** The deterministic gate proves transport, placement, and prompt content — never
+  model behavior.
+
+The remaining path, each step behind its own explicit approval:
+
+1. **Next gate:** prepare, select, and obtain Manley's approval for the sanitized real-run
+   fixtures.
+2. After fixture approval, add the opt-in evaluation runner and the evaluation record.
+3. Separately approve and conduct the **12-call smoke** evaluation and the **36-output final**
+   evaluation.
+4. Reconcile independent review, finish documentation, and obtain Manley's final approval.
+5. **Only then** is **combined Music Intelligence V1** complete → tightly fenced Core Running
+   Foundation Review → resume UI design → Spring Boot API → mobile client with GPS/automatic
+   tracking.
+
+The review begins only after combined V1, not
 merely after the Java slice. The review asks only whether the central record/preserve/understand/
 manage/use-later journey is structurally ready for a real interface; its output is a short gap
 list, not a feature hunt. UI design resumes before Spring Boot so real screen needs shape endpoint

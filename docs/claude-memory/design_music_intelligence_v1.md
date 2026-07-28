@@ -1,13 +1,13 @@
 ---
 name: design-music-intelligence-v1
-description: "APPROVED CANONICAL PLAN July 27 2026 — Music Intelligence V1 planning contract, implementation not started: run-first recognition from current-run evidence; closed foundational contracts (three-level energy, EARLY/ESTABLISHED stage label, note classification, untrusted free text), bounded prompt slice, deterministic tests, manual evaluation gate"
+description: "PROMPT SLICE IMPLEMENTED — EVALUATION NOT STARTED. Canonical plan approved July 27 2026 and prompt slice implemented and verified the same day — Music Intelligence V1 contract: run-first recognition from current-run evidence; closed foundational contracts (three-level energy, EARLY/ESTABLISHED stage label, note classification, untrusted free text), bounded prompt slice complete with a deterministic gate passing at 198 tests; fixtures, evaluation runner, record, and live calls have not begun"
 metadata:
   type: project
 ---
 
 # Music Intelligence V1 (July 26, 2026)
 
-**STATUS: PLANNING COMPLETE — IMPLEMENTATION NOT STARTED.**
+**STATUS: PROMPT SLICE IMPLEMENTED — EVALUATION NOT STARTED.**
 
 This is the canonical planning document for Music Intelligence V1. Decisions recorded here
 are the source of truth; other documents should point here rather than restate them.
@@ -203,8 +203,14 @@ V1 must never:
 The existing offline / API-failure response remains **deliberately music-neutral** in this
 slice. V1 does not add music generation to the fallback path.
 
-This is an **accepted boundary**, not an oversight — and it must later receive a
-**regression test** so the neutrality cannot be lost silently.
+This is an **accepted boundary**, not an oversight — and it required a **regression test** so
+the neutrality cannot be lost silently.
+
+**That regression test now exists and passes.** `RunAgentTest` calls the package-private
+`buildFallbackResponse(Run)` directly across every music state and note variant, asserting
+relationally that changing only the music input never changes the fallback response and that
+no note text reaches it. Neutrality is now enforced by the deterministic suite rather than by
+convention.
 
 ## Deferred cross-run reference persistence boundary
 
@@ -272,8 +278,10 @@ V1 **preserves this contract in documentation while implementing none of it.**
 
 ## Bounded implementation contract
 
-**This section records the approved implementation shape. It does not authorize Java
-implementation yet.**
+**This section records the approved implementation shape, which the completed slice followed.**
+The slice was implemented on **July 27, 2026** under its own explicit approval; the numbered
+items below are retained as the contract the implementation was held to, and remain the
+standard any future change to this area must still satisfy.
 
 ### Production boundary
 
@@ -404,13 +412,15 @@ This slice must not change:
 - comparison selection logic
 - fallback wording or music behavior
 
-The later code slice must remain a **prompt-and-formatting change inside `RunAgent`**, with
-deterministic test access and **no architectural expansion**.
+The completed code slice **remained within that boundary** — a prompt-and-formatting change
+inside `RunAgent`, with deterministic test access and **no architectural expansion**. Every
+item in the explicit non-changes list above still held when the slice finished.
 
 ## Automated verification plan
 
-**This section records the tests that must accompany the later Java slice. It does not
-authorize Java or test implementation yet.**
+**This section records the tests that accompanied the completed Java slice and now stand as its
+regression contract.** They were written with the slice on July 27, 2026 and pass. Any future
+change to this area must keep satisfying them.
 
 ### Test boundary
 
@@ -610,20 +620,27 @@ The Java slice cannot pass automated verification unless:
 - **no** test makes a live model call
 - the **production** request builder, not a test duplicate, is what the tests inspect
 
-**Observed baseline.** On **July 26, 2026**, Codex ran the full Maven test suite:
-**77 tests run, 0 failures, 0 errors, 0 skipped.** This is the observed pre-implementation
-baseline, not an estimate.
+**Observed pre-implementation baseline — HISTORICAL.** On **July 26, 2026**, Codex ran the full
+Maven test suite: **77 tests run, 0 failures, 0 errors, 0 skipped.** This is the observed
+baseline **before** the slice existed, not an estimate and not the current figure.
 
-Those 77 executed cases are composed of 70 plain `@Test` methods plus one
+Those 77 executed cases were composed of 70 plain `@Test` methods plus one
 `@ParameterizedTest` expanding to 7 `@CsvSource` rows in `RunStorageTest`.
 
-The final total **may increase** based on parameterization. Do not lock a specific new total
-in this plan.
+**Observed post-implementation result.** After the July 27, 2026 slice, the full Maven suite
+runs **198 tests, 0 failures, 0 errors, 0 skipped.** The increase over 77 comes from the new
+music, stage, request-shape, prompt-policy, JSON-safety, and fallback-neutrality cases, several
+of which are parameterized — which is why no specific new total was locked in advance.
+
+The deterministic gate is **passing**. It verifies transport, placement, and prompt content
+only; it does **not** verify model behavior, which remains the manual-evaluation gate below.
 
 ## Manual model-evaluation plan
 
-**This section defines the live-model quality gate. It does not authorize Java
-implementation or live API calls yet.**
+**This is the still-pending live-model quality gate.** The prompt slice and its deterministic
+verification are complete; this gate is not. Nothing here authorizes creating the evaluation
+surface or making live API calls — the evaluation runner, the evaluation record, and each
+execution mode still require their own explicit approval.
 
 ### Separate evaluation surface
 
@@ -837,8 +854,13 @@ final outputs exist:
 
 ## Execution order, approval gates, and completion
 
-**This section closes the plan.** Planning and its documentation reconciliation are both
-complete as of July 27, 2026; implementation has not started.
+**This section closes the plan.** Planning, its documentation reconciliation, and the bounded
+prompt slice with its deterministic verification all completed **July 27, 2026**. The
+status-document reconciliation recording that outcome was performed **July 28, 2026**.
+
+**Steps 1–8 below are complete. Execution resumes at step 9.** The order itself remains
+locked — a completed step never authorizes skipping ahead, and each remaining step still
+requires its own explicit approval.
 
 ### Locked execution order
 
@@ -846,8 +868,9 @@ complete as of July 27, 2026; implementation has not started.
 2. Reconcile all affected active documents against it.
 3. Manley reviews and approves the completed planning documentation.
 4. Manley creates the **planning commit**.
-5. **Pause is valid here** — implementation has not started and the repository is
-   handoff-ready.
+5. **A pause was valid at this planning checkpoint** — at that point implementation had not
+   started and the repository was handoff-ready. Recorded as the historical checkpoint it
+   was; it is not a statement about the current state.
 6. When work resumes, Manley explicitly approves the bounded Java-and-test slice.
 7. Claude Code implements **only** the approved `RunAgent.java` and `RunAgentTest.java`
    changes.
@@ -1040,12 +1063,30 @@ This is the **intended clean pause point**.
 
 ### Current status
 
-`PLANNING COMPLETE — IMPLEMENTATION NOT STARTED`
+`PROMPT SLICE IMPLEMENTED — EVALUATION NOT STARTED`
 
-- The canonical plan is **complete and approved**.
-- Planning documentation is **reconciled** across all affected active documents (July 27, 2026).
-- **No Java, test, or evaluation work has started.**
+- Planning is **complete and committed** (`0f22c99`).
+- The bounded `RunAgent.java` / `RunAgentTest.java` **prompt slice is implemented**
+  (July 27, 2026).
+- The deterministic Maven gate is **passing at 198 tests, 0 failures, 0 errors, 0 skipped**.
+- The as-built **`AI_AGENT.md` and `DATA_PRIVACY.md`** documents are **reconciled** with the
+  implementation.
+- **No sanitized fixtures have been selected or approved.**
+- **No evaluation runner and no evaluation record exist.**
+- **No smoke or final live calls have been made.**
+- **Combined Music Intelligence V1 is NOT complete.**
 
-**Manley's final approval and the planning commit form the clean pause checkpoint.** Past that
-point the repository is handoff-ready, and the next action is the bounded Java-and-test slice —
-which requires its own explicit approval.
+**Next gate:** prepare and select the sanitized real-run fixtures, and obtain Manley's review
+and approval. Only after that do the opt-in evaluation runner, the evaluation record, and the
+separately approved smoke and final evaluations follow.
+
+This status sits inside completion definition **2 — "Prompt slice implemented — evaluation not
+complete"** above, specifically at that definition's **evaluation-not-started substate**.
+Definition 2 covers the whole span from "the slice just landed" through "evaluation is underway
+but unfinished"; the project is at the **beginning** of that span, with no fixture, runner,
+record, or live-call work begun at all.
+
+The definition keeps its name — **evaluation not complete** — because that is the reusable
+category. **Evaluation not started** is the more precise current label, and the two are not in
+conflict: not started is one way of being not complete. Neither may be reported as combined V1
+complete.

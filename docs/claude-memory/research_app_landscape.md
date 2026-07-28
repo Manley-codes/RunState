@@ -47,6 +47,27 @@ City-level data is coarse/low-risk, but two external services now receive run da
 Recommended action: a short "Data & Privacy" note in README/docs (what leaves the app, to whom, why).
 Cheap, intentional, and a maturity signal employers notice. Tracked in [[design-weather-context]].
 
+> **Correction to the June statement above (July 28, 2026).** The June research note predates the
+> as-built behavior and is preserved as a research record, but its privacy claim is **imprecise**
+> in two ways. As built:
+> - **Open-Meteo, request 1:** the **city name** may be sent to the geocoding endpoint. A missing
+>   or blank city produces **no request at all**.
+> - **Open-Meteo, request 2:** the **selected candidate's returned coordinates plus the run date**
+>   may be sent to the forecast endpoint, and **only if geocoding succeeded**.
+> - **The stored state is used locally** to pick which returned candidate matches. It is
+>   **never placed in either request**.
+> - **Anthropic receives no runner-profile city or state**, and **no Open-Meteo geocoding or
+>   forecast coordinates.** So "city may enter the agent prompt" is **not** true of the current
+>   build.
+> - **The weather path contributes only derived values** to the run message — temperature,
+>   apparent temperature, and condition.
+> - **Separately, the runner-entered route name is an outbound run field, and a route name may
+>   itself identify a location.** That is user-typed free text, not weather-path data, and it is
+>   sent as the runner wrote it. This is why "Anthropic receives no location information" would
+>   be too strong a claim.
+>
+> The authoritative as-built disclosure is **`docs/DATA_PRIVACY.md`**, not this file.
+
 ## Scope-creep watch — consciously RESIST (mostly already parked)
 
 These are table stakes for the big apps and explicitly NOT RunState's lane as a console learning

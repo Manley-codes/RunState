@@ -124,27 +124,32 @@ mvn test
 
 ## Next direction
 
-RunState is paused at a clean preparation point. **Music Intelligence V1 planning is complete
-and approved (July 27, 2026)** — the canonical contract is
-`docs/claude-memory/design_music_intelligence_v1.md`. That planning settled the energy-domain
-question: RunState **retains the shared three-level** (LOW / MODERATE / HIGH) energy domain, and
-the four-state State Scan sketch is superseded as a domain proposal.
+**Music Intelligence V1 planning is approved (July 27, 2026)** and the **bounded prompt slice is
+implemented**, with **deterministic verification complete at 198 tests, 0 failures, 0 errors,
+0 skipped**. The canonical contract is `docs/claude-memory/design_music_intelligence_v1.md`.
+That planning settled the energy-domain question: RunState **retains the shared three-level**
+(LOW / MODERATE / HIGH) energy domain, and the four-state State Scan sketch is superseded as a
+domain proposal.
 
-Implementation has not started. When development resumes, the locked path is:
+**Manual model evaluation has not started, so combined Music Intelligence V1 is not complete.**
+The deterministic gate proves transport, placement, and prompt content — not model behavior.
+The locked path from here is:
 
-1. Implement, deterministically test, and manually evaluate the bounded prompt-only music slice
-   (`RunAgent.java` + `RunAgentTest.java`) exactly as the canonical plan specifies — then
-   Manley's approval before it counts as complete.
-2. **Only after combined Music Intelligence V1 is complete** — implementation, deterministic
+1. Prepare, select, and approve the sanitized real-run evaluation scenarios.
+2. Add the opt-in evaluation runner and the evaluation record.
+3. Separately approve and conduct the 12-call smoke evaluation and the 36-output final
+   evaluation.
+4. Reconcile independent review against the locked rubric and obtain Manley's final decision.
+5. **Only after combined Music Intelligence V1 is complete** — implementation, deterministic
    verification, manual evaluation, independent review reconciliation, final documentation, and
    Manley's approval, as defined by the canonical plan — run the tightly fenced Core Running
    Foundation Review: check whether the central journey
    (record → preserve safely → understand → manage → use later) is ready for a real interface,
    and produce a short gap list rather than a feature hunt.
-3. Resume UI design so the State Scan, history, and post-run reply screens define what the backend
+6. Resume UI design so the State Scan, history, and post-run reply screens define what the backend
    must return.
-4. Migrate/design the Spring Boot API from those screen contracts.
-5. Build the mobile client and GPS/automatic-tracking layer against that API.
+7. Migrate/design the Spring Boot API from those screen contracts.
+8. Build the mobile client and GPS/automatic-tracking layer against that API.
 
 Spotify integration and live-DJ behavior remain later possibilities with separate legal, privacy,
 provider, and platform dependencies.

@@ -5,7 +5,7 @@ metadata:
   type: project
 ---
 
-As of July 27, 2026, the app is a working Java console app named **RunState**.
+As of July 28, 2026, the app is a working Java console app named **RunState**.
 
 **Completed phases:**
 - Phase 1: Console app — energy system, opening prompt, post-run responses, rolling averages
@@ -60,21 +60,38 @@ delegates). Full spec: `design_runstyle_v1.md`. In brief:
 
 Flow-audit findings: all four closed — items 1 and 2 (malformed-row handling, July 16); item 3 (save orchestration, Task 4); item 4 (context in summaries, Task 5).
 
-**Current resume point — Music Intelligence V1 PLANNING COMPLETE; implementation not started:**
-- **V1 planning is complete and approved (July 27, 2026).** The canonical contract is
+**Current resume point — Music Intelligence V1 PROMPT SLICE IMPLEMENTED — EVALUATION NOT STARTED:**
+- **V1 planning is complete and committed (`0f22c99`, July 27, 2026).** The canonical contract is
   `design_music_intelligence_v1.md` — purpose and boundary, closed foundational contracts,
   current evidence and reply behavior, deferred persistence boundary, bounded implementation
   contract, automated verification plan, manual model-evaluation plan, and execution order.
   Treat it as the single source of truth; other music docs point to it rather than restate it.
-- **No Java, test, or evaluation work has started.** The existing manual music/no-music capture
-  and raw agent context remain the earlier foundation only.
+- **The bounded prompt slice is IMPLEMENTED (July 27, 2026).** The bounded Java/test
+  implementation portion changed exactly `RunAgent.java` and `RunAgentTest.java`; no other
+  production Java or test file changed. (The overall checkpoint also carries documentation
+  updates, so these are not the only modified repository files.) What landed:
+  `MUSIC_REPLY_RULES` separated from the general
+  `SYSTEM_PROMPT` behind the `Music reply rules:` marker, a deterministic no-network
+  `buildRequestBody(Run)` seam, the private `EARLY|ESTABLISHED` stage derivation, blank-safe
+  `describeMusic`, the all-free-text-is-data instruction, a music-neutral fallback regression,
+  and Gson-correct JSON serialization replacing the hand-written escaper.
+- **The deterministic Maven gate is PASSING: 198 tests, 0 failures, 0 errors, 0 skipped**
+  (independently verified July 27, 2026). It verifies transport, placement, and prompt
+  content — **not** model behavior.
+- **`AI_AGENT.md` and `DATA_PRIVACY.md` are reconciled** with the implementation as as-built
+  documentation.
+- **Evaluation has not started.** No sanitized fixtures are selected or approved, no evaluation
+  runner or evaluation record exists, and no smoke or final live calls have been made.
+  **Combined Music Intelligence V1 is NOT complete.**
 - **Energy domain — CLOSED.** The shared LOW/MODERATE/HIGH pre/post energy domain is retained.
   The four-state State Scan sketch is **superseded as a domain proposal**; later UI work may
   refine labels and presentation without changing stored meanings.
-- **Next task when Manley resumes:** the bounded `RunAgent.java` + `RunAgentTest.java` prompt
-  slice defined by the canonical plan — a prompt-and-formatting change only, with deterministic
-  tests, followed by smoke and final manual evaluation before combined Music Intelligence V1
-  can be called complete.
+- **Next task when Manley resumes:** prepare and select the sanitized real-run scenario
+  fixtures and obtain Manley's review and approval. Only then add the opt-in evaluation runner
+  (`MusicIntelligenceEvaluationRunner`, `main` only, never Maven-discovered) and the evaluation
+  record, followed by the separately approved 12-call smoke and 36-output final evaluations,
+  independent review reconciliation, final documentation, and Manley's approval — all of which
+  are required before combined Music Intelligence V1 can be called complete.
 - The future `REFERENCED / NOT_REFERENCED / UNKNOWN` reply-outcome boundary is **documented**
   in the canonical plan, but cross-run reference-frequency implementation (schema, rolling
   window, detection, prompt line) remains **deferred** — it is not part of the prompt slice.
@@ -97,7 +114,9 @@ Flow-audit findings: all four closed — items 1 and 2 (malformed-row handling, 
 - Spotify integration and live-DJ behavior remain later possibilities with separate legal,
   privacy, provider, and platform dependencies.
 
-*(Resume point updated above after Pre-Music Integrity Sprint completion.)*
+*(Resume point rewritten in the July 28, 2026 status-document reconciliation, recording the
+Music Intelligence V1 prompt slice and deterministic gate that completed July 27, 2026. The
+earlier Pre-Music Integrity Sprint update it replaced is superseded.)*
 
 **Standing milestone — privacy / security / legal pass (added July 6, 2026):**
 Before RunState is released, shared publicly, or gains multi-user/all-day-listening features,
@@ -111,8 +130,12 @@ location data raises the bar again. Not a current blocker; IS a release blocker.
 Feature map (July 6, 2026) — which features strongly trigger which concern:
 - PRIVACY: all-day listening profiling (heaviest — needs its own opt-in tier); GPS routes +
   live location (Phase 6); run/energy data → Anthropic API (live now, covered in
-  DATA_PRIVACY.md); city/state → Open-Meteo (live now); cross-user aggregate content
-  (Phase 7); run photos (share card/gallery).
+  DATA_PRIVACY.md); location → Open-Meteo (live now) — the **city name** goes to the geocoding
+  endpoint and, **only after geocoding succeeds**, the **selected candidate's coordinates plus
+  the run date** go to the forecast endpoint. The stored **state is used locally** to pick which
+  returned candidate matches and is **never placed in either request**; a missing or blank city
+  produces no Open-Meteo request at all. Authoritative as-built disclosure: DATA_PRIVACY.md.
+  Also: cross-user aggregate content (Phase 7); run photos (share card/gallery).
 - SECURITY: Anthropic API key out of source code; MySQL dedicated user, no root (existing
   rule); Spotify/Last.fm OAuth token storage; server + user accounts if Phase 7 happens.
 - LEGAL: lyrics text licensing (Musixmatch paid, Genius scraping = ToS violation) — gates

@@ -1,6 +1,6 @@
 ---
 name: design-music-reply-style
-description: "Music reply craft reference (July 6, 2026; reconciled July 27, 2026) — subordinate to the canonical design_music_intelligence_v1.md contract; prompt-only craft rules for the next bounded slice, with cross-run frequency implementation deferred."
+description: "Music reply craft reference (July 6, 2026; reconciled July 27, 2026; status updated July 28, 2026) — subordinate to the canonical design_music_intelligence_v1.md contract; the core prompt-only craft rules are implemented and deterministically verified, manual evaluation has not started, and cross-run frequency implementation remains deferred."
 metadata:
   type: project
 ---
@@ -10,7 +10,14 @@ metadata:
 How the agent should reference music in post-run replies. Extends the Phase 5 Step 1
 music feature (manual input).
 
-**STATUS: DESIGNED, NOT BUILT — CRAFT REFERENCE ONLY.**
+**STATUS: CORE CRAFT RULES IMPLEMENTED — MANUAL EVALUATION NOT STARTED. CRAFT REFERENCE ONLY.**
+
+The core craft rules below — run fact first, music supporting rather than replacing, the
+one-sentence music ceiling, convergence-scaled confidence, no taste evaluation, no causation,
+no fabrication, no exact or near-exact lyrics, and no lasting pattern from one run — are
+**implemented in the V1 prompt slice and deterministically verified** (198 tests, 0 failures,
+0 errors, 0 skipped, July 27, 2026). **Manual model evaluation has not started**, so the rules
+are proven to be *present in the prompt*, not proven to be *followed by the model*.
 
 > **Canonical authority: [`design_music_intelligence_v1.md`](design_music_intelligence_v1.md).**
 > Music Intelligence V1 planning is **COMPLETE and approved (July 27, 2026)**. That document
@@ -20,8 +27,9 @@ music feature (manual input).
 
 This document contains two distinct slices:
 - **Core craft rules + early-user posture:** prompt-layer work only; no schema, console,
-  provider API, or reply-persistence change. **This is the next bounded slice**, executed per
-  the canonical plan's bounded implementation contract.
+  provider API, or reply-persistence change. **This slice is implemented and deterministically
+  verified**, executed per the canonical plan's bounded implementation contract. The manual
+  evaluation gate that follows it has not started.
 - **Cross-run frequency balance:** a separate mechanism that cannot be prompt-only because the
   app stores neither AI replies nor a "music was referenced" signal. The canonical plan
   documents its future three-state outcome boundary; the **physical schema, rolling window,

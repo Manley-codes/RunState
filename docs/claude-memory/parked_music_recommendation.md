@@ -7,14 +7,17 @@ metadata:
 
 # Music suggestion direction — accepted vision + parked ideas (July 2, 2026)
 
-> **Forward-path clarification — July 25, expanded July 26, updated July 27, 2026:** References
-> below to “Phase 6” mean mobile-era capabilities, not the immediate next task. **Music
-> Intelligence V1 planning is COMPLETE** (`design_music_intelligence_v1.md`); the bounded
-> prompt-only slice and its evaluation are **next**. The locked execution path from here is
-> prompt slice + evaluation → **combined V1 complete** → tightly fenced Core Running Foundation
-> Review → resume UI design → Spring Boot API → mobile/GPS. The review begins only after
-> combined V1, not merely after the Java slice. Live adaptation remains in that later mobile
-> stage.
+> **Forward-path clarification — July 25, expanded July 26, updated July 27, 2026; status
+> wording reconciled July 28, 2026:**
+> References below to “Phase 6” mean mobile-era capabilities, not the immediate next task.
+> **Music Intelligence V1 planning is COMPLETE and its bounded prompt-only slice is IMPLEMENTED
+> with the deterministic gate passing** (`design_music_intelligence_v1.md`; 198 tests green,
+> July 27, 2026). The **manual evaluation path is next** — sanitized fixtures, the opt-in
+> runner and record, then the separately approved smoke and final evaluations. The locked
+> execution path from here is evaluation → **combined V1 complete** → tightly fenced Core
+> Running Foundation Review → resume UI design → Spring Boot API → mobile/GPS. The review
+> begins only after combined V1, not merely after the Java slice. Live adaptation remains in
+> that later mobile stage.
 
 Manley explored music-suggestion features for RunState. Discussion evolved from a
 generic recommender into a context-aware playlist agent. Judged against
@@ -186,9 +189,12 @@ it exists.
 APIs: https://www.last.fm/api/show/track.getSimilar · https://listenbrainz.readthedocs.io/en/latest/users/api-compat.html
 
 **How to apply (order corrected July 26; updated July 27, 2026):** Music Intelligence V1
-planning is **COMPLETE** (`design_music_intelligence_v1.md`). The locked immediate order is now
-the **bounded prompt-only slice + its deterministic tests and manual evaluation** → **combined
-V1 complete** → Core Running Foundation Review → UI → Spring Boot → mobile/GPS.
+planning is **COMPLETE**, and the **bounded prompt-only slice and its deterministic gate are
+also complete** (`design_music_intelligence_v1.md`; 198 tests green, July 27, 2026). The locked
+immediate order
+is now the **manual evaluation path — sanitized fixtures, opt-in runner and record, then the
+separately approved smoke and final evaluations** → **combined V1 complete** → Core Running
+Foundation Review → UI → Spring Boot → mobile/GPS.
 
 The pre-run playlist brain remains a **later north star** that approved music slices build
 toward — **not the next task**, and **the full proposed version is not buildable from current
