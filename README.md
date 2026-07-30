@@ -124,21 +124,23 @@ mvn test
 
 ## Next direction
 
-**Music Intelligence V1 planning is approved (July 27, 2026)** and the **bounded prompt slice is
-implemented**, with **deterministic verification complete at 198 tests, 0 failures, 0 errors,
-0 skipped**. The canonical contract is `docs/claude-memory/design_music_intelligence_v1.md`.
+**Music Intelligence V1 planning is approved** and the prompt, sanitized evaluation fixtures,
+and opt-in evaluation runner are implemented. The first valid smoke test exposed a generic,
+music-avoidant voice; the approved creative-policy revision is committed at `693bfb3`, with
+**deterministic verification complete at 256 tests, 0 failures, 0 errors, 0 skipped**. The
+canonical contract is `docs/claude-memory/design_music_intelligence_v1.md`.
 That planning settled the energy-domain question: RunState **retains the shared three-level**
 (LOW / MODERATE / HIGH) energy domain, and the four-state State Scan sketch is superseded as a
 domain proposal.
 
-**Manual model evaluation has not started, so combined Music Intelligence V1 is not complete.**
-The deterministic gate proves transport, placement, and prompt content — not model behavior.
-The locked path from here is:
+**Manual model evaluation is underway but not accepted, so combined Music Intelligence V1 is
+not complete.** An authentication-invalid launch produced no model evidence; the first valid
+12-call smoke failed product quality and drove the revision. No revised-prompt smoke or final
+evaluation has run. The locked path from here is:
 
-1. Prepare, select, and approve the sanitized real-run evaluation scenarios.
-2. Add the opt-in evaluation runner and the evaluation record.
-3. Separately approve and conduct the 12-call smoke evaluation and the 36-output final
-   evaluation.
+1. Explicitly approve and conduct a fresh 12-call smoke against the revised prompt.
+2. Review that smoke as a diagnostic and correct only real problems.
+3. Separately approve and conduct the 36-output final evaluation.
 4. Reconcile independent review against the locked rubric and obtain Manley's final decision.
 5. **Only after combined Music Intelligence V1 is complete** — implementation, deterministic
    verification, manual evaluation, independent review reconciliation, final documentation, and

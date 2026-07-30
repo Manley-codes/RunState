@@ -5,7 +5,7 @@ metadata:
   type: project
 ---
 
-As of July 28, 2026, the app is a working Java console app named **RunState**.
+As of July 30, 2026, the app is a working Java console app named **RunState**.
 
 **Completed phases:**
 - Phase 1: Console app — energy system, opening prompt, post-run responses, rolling averages
@@ -60,38 +60,40 @@ delegates). Full spec: `design_runstyle_v1.md`. In brief:
 
 Flow-audit findings: all four closed — items 1 and 2 (malformed-row handling, July 16); item 3 (save orchestration, Task 4); item 4 (context in summaries, Task 5).
 
-**Current resume point — Music Intelligence V1 PROMPT SLICE IMPLEMENTED — EVALUATION NOT STARTED:**
+**Current resume point — Music Intelligence V1 REVISED PROMPT IMPLEMENTED — NEXT QUALITY SMOKE PENDING:**
 - **V1 planning is complete and committed (`0f22c99`, July 27, 2026).** The canonical contract is
   `design_music_intelligence_v1.md` — purpose and boundary, closed foundational contracts,
   current evidence and reply behavior, deferred persistence boundary, bounded implementation
   contract, automated verification plan, manual model-evaluation plan, and execution order.
   Treat it as the single source of truth; other music docs point to it rather than restate it.
-- **The bounded prompt slice is IMPLEMENTED (July 27, 2026).** The bounded Java/test
-  implementation portion changed exactly `RunAgent.java` and `RunAgentTest.java`; no other
-  production Java or test file changed. (The overall checkpoint also carries documentation
-  updates, so these are not the only modified repository files.) What landed:
+- **The original bounded prompt slice was implemented July 27, then revised from live smoke
+  evidence and committed July 30 (`693bfb3`).** Production remains bounded to
+  `RunAgent.java`; deterministic coverage lives in `RunAgentTest.java`, with the opt-in
+  `MusicIntelligenceEvaluationRunner.java` as the separate manual-evaluation surface. What
+  remains structurally true:
   `MUSIC_REPLY_RULES` separated from the general
   `SYSTEM_PROMPT` behind the `Music reply rules:` marker, a deterministic no-network
   `buildRequestBody(Run)` seam, the private `EARLY|ESTABLISHED` stage derivation, blank-safe
   `describeMusic`, the all-free-text-is-data instruction, a music-neutral fallback regression,
   and Gson-correct JSON serialization replacing the hand-written escaper.
-- **The deterministic Maven gate is PASSING: 198 tests, 0 failures, 0 errors, 0 skipped**
-  (independently verified July 27, 2026). It verifies transport, placement, and prompt
-  content — **not** model behavior.
-- **`AI_AGENT.md` and `DATA_PRIVACY.md` are reconciled** with the implementation as as-built
-  documentation.
-- **Evaluation has not started.** No sanitized fixtures are selected or approved, no evaluation
-  runner or evaluation record exists, and no smoke or final live calls have been made.
-  **Combined Music Intelligence V1 is NOT complete.**
+- **The deterministic Maven gate is PASSING: 256 tests, 0 failures, 0 errors, 0 skipped**
+  (clean July 30 run). It verifies transport, placement, prompt content, evaluation-runner
+  safety, and fixture integrity — **not** final model quality.
+- **Active design, AI-agent, evaluation, privacy, roadmap, and status documents were reconciled
+  July 30.** The creative revision sends no new data and adds no provider, so the privacy
+  disclosure itself did not change; its prompt-source cross-reference was corrected.
+- **Evaluation is underway, not complete.** Sanitized fixtures and the opt-in runner exist.
+  One authentication-invalid launch produced fallback text only; the first valid 12-call smoke
+  completed with zero fallbacks but failed product quality. The prompt was revised in response.
+  **No revised-prompt smoke and no final run have occurred. Combined Music Intelligence V1 is
+  NOT complete.**
 - **Energy domain — CLOSED.** The shared LOW/MODERATE/HIGH pre/post energy domain is retained.
   The four-state State Scan sketch is **superseded as a domain proposal**; later UI work may
   refine labels and presentation without changing stored meanings.
-- **Next task when Manley resumes:** prepare and select the sanitized real-run scenario
-  fixtures and obtain Manley's review and approval. Only then add the opt-in evaluation runner
-  (`MusicIntelligenceEvaluationRunner`, `main` only, never Maven-discovered) and the evaluation
-  record, followed by the separately approved 12-call smoke and 36-output final evaluations,
-  independent review reconciliation, final documentation, and Manley's approval — all of which
-  are required before combined Music Intelligence V1 can be called complete.
+- **Next task when Manley resumes:** explicitly approve and run one fresh 12-call smoke against
+  the revised prompt. Review it as a diagnostic. If it is sound, separately approve the
+  36-output final evaluation, then reconcile independent review and Manley's final decision.
+  Every live mode keeps its own approval gate.
 - The future `REFERENCED / NOT_REFERENCED / UNKNOWN` reply-outcome boundary is **documented**
   in the canonical plan, but cross-run reference-frequency implementation (schema, rolling
   window, detection, prompt line) remains **deferred** — it is not part of the prompt slice.
@@ -114,9 +116,9 @@ Flow-audit findings: all four closed — items 1 and 2 (malformed-row handling, 
 - Spotify integration and live-DJ behavior remain later possibilities with separate legal,
   privacy, provider, and platform dependencies.
 
-*(Resume point rewritten in the July 28, 2026 status-document reconciliation, recording the
-Music Intelligence V1 prompt slice and deterministic gate that completed July 27, 2026. The
-earlier Pre-Music Integrity Sprint update it replaced is superseded.)*
+*(Resume point rewritten July 30, 2026 after the first valid smoke, approved creative-policy
+revision, S11 fixture decontamination, and clean 256-test gate. The July 28
+evaluation-not-started resume point is superseded.)*
 
 **Standing milestone — privacy / security / legal pass (added July 6, 2026):**
 Before RunState is released, shared publicly, or gains multi-user/all-day-listening features,

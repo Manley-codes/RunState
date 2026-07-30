@@ -26,25 +26,26 @@ metadata:
 5. Phase 5: AI agent context expansion — music (manual now, Spotify later), weather (automatic via Open-Meteo)
 6. Mobile UI — GPS tracking, automatic run detection
 
-**Forward execution path — LOCKED July 25, expanded July 26, 2026; status updated July 28, 2026:**
+**Forward execution path — LOCKED July 25, expanded July 26; status updated July 30, 2026:**
 The historical phase list above describes the product layers, but the implementation seam is
 now explicit, and part of it is already done:
 
 - **Music Intelligence V1 planning — COMPLETE July 27, 2026.**
-- **The bounded console music prompt slice and its deterministic gate — IMPLEMENTED and
-  VERIFIED July 27, 2026**, at **198 passing tests** (0 failures, 0 errors, 0 skipped).
-- **Manual model evaluation has NOT started, so combined Music Intelligence V1 is NOT
-  complete.** The deterministic gate proves transport, placement, and prompt content — never
-  model behavior.
+- **The music prompt, sanitized fixtures, and opt-in evaluation surface are implemented.** The
+  first valid smoke exposed a generic, music-avoidant voice, so Manley approved a substantial
+  creative-policy revision. That revision is committed at `693bfb3` and the clean gate now
+  passes **256 tests** (0 failures, 0 errors, 0 skipped).
+- **Manual model evaluation is underway but not accepted, so combined Music Intelligence V1 is
+  NOT complete.** An authentication-invalid launch produced no evidence; the first valid smoke
+  failed product quality; no revised-prompt smoke or final evaluation has run.
 
 The remaining path, each step behind its own explicit approval:
 
-1. **Next gate:** prepare, select, and obtain Manley's approval for the sanitized real-run
-   fixtures.
-2. After fixture approval, add the opt-in evaluation runner and the evaluation record.
-3. Separately approve and conduct the **12-call smoke** evaluation and the **36-output final**
-   evaluation.
-4. Reconcile independent review, finish documentation, and obtain Manley's final approval.
+1. **Next gate:** explicitly approve and conduct a fresh **12-call smoke** against the revised
+   prompt.
+2. Review the smoke as a diagnostic; correct and retest only if it exposes a real problem.
+3. Separately approve and conduct the **36-output final** evaluation.
+4. Reconcile independent review, finish final documentation, and obtain Manley's approval.
 5. **Only then** is **combined Music Intelligence V1** complete → tightly fenced Core Running
    Foundation Review → resume UI design → Spring Boot API → mobile client with GPS/automatic
    tracking.

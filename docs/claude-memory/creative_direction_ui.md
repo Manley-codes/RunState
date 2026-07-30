@@ -9,10 +9,11 @@ status: v0.2 — UI PHASE PAUSED; resume after combined Music Intelligence V1 is
 # RunState — Creative Direction (v0.2)
 
 > Status: UI work remains PAUSED. For Music Intelligence V1 (`design_music_intelligence_v1.md`),
-> **planning, the bounded prompt implementation, and its deterministic verification are all
-> complete** (July 27, 2026; 198 tests green). Still outstanding before combined V1 can be
-> called complete: **manual model evaluation, independent review reconciliation, final
-> documentation, and Manley's approval.** The tightly fenced Core Running
+> **planning, the revised prompt, sanitized fixtures, opt-in runner, and deterministic
+> verification are complete** (July 30, 2026; 256 tests green). The first valid smoke failed
+> quality and drove the revision; a fresh smoke, final evaluation, independent review,
+> final documentation, and Manley's approval remain before combined V1 can be called complete.
+> The tightly fenced Core Running
 > Foundation Review begins only **after COMBINED Music Intelligence V1 is complete**, and UI work
 > stays paused until both that combined milestone and the fenced review are done.
 > After that review, resume this UI work before Spring Boot so the real State

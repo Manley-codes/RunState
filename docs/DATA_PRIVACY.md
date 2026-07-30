@@ -56,7 +56,8 @@ Each request has two parts.
 - prohibitions on guessing evidence RunState does not have
 - instructions for handling the internal history-stage label
 
-The exact text is reproduced in `docs/AI_AGENT.md`.
+The authoritative text lives in `RunAgent.java`. `docs/AI_AGENT.md` summarizes the current
+prompt and preserves the July 27 prompt snapshot as explicitly labeled evaluation history.
 
 **2. A dynamic per-run user message**, containing:
 

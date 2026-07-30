@@ -19,16 +19,15 @@ integration, AI-agent behavior, or run-culture positioning. Its job is to preser
 best music ideas without pulling the project away from the core build.
 
 The core prerequisites that previously kept music parked are complete. **Music Intelligence V1
-planning is approved (July 27, 2026), and its bounded prompt-only slice (`RunAgent.java` +
-`RunAgentTest.java`) is now IMPLEMENTED with deterministic verification complete** — 198 tests,
-0 failures, 0 errors, 0 skipped (July 27, 2026). The canonical contract is
-`design_music_intelligence_v1.md`, and any further work must follow that plan rather than this
-ingredients file.
+planning is approved, the prompt and opt-in evaluation surface are implemented, and the revised
+creative policy passes 256 deterministic tests** (July 30, 2026; `693bfb3`). The canonical
+contract is `design_music_intelligence_v1.md`; implement from it, not this ingredients file.
 
-**Combined Music Intelligence V1 remains incomplete.** The next task is preparing and approving
-the sanitized real-run fixtures, then the opt-in evaluation runner and record, then the
-separately approved smoke and final manual evaluations. A passing deterministic gate is not
-model-quality evidence.
+**Combined Music Intelligence V1 remains incomplete.** An authentication-invalid launch
+produced no model evidence. The first valid 12-call smoke failed product quality and triggered
+the approved music-forward revision. The next task is a separately approved fresh smoke,
+followed—if sound—by the separately approved final evaluation. A passing deterministic gate is
+not model-quality evidence.
 
 The canonical plan records the future three-state reply-outcome and persistence boundary
 (`REFERENCED` / `NOT_REFERENCED` / `UNKNOWN`) for cross-run reference frequency, but that
@@ -192,12 +191,11 @@ rules) before it's filed, same as the DJ document.
 2. Music Intelligence V1 planning — **COMPLETE (July 27, 2026)**, including the three-vs-four
    pre-run energy decision, which closed at **three shared levels**. Canonical contract:
    `design_music_intelligence_v1.md`.
-3. Bounded prompt-only slice (`RunAgent.java` + `RunAgentTest.java`) — **IMPLEMENTED and
-   deterministically verified July 27, 2026** (198 tests green), exactly as the canonical plan
-   specifies. The frequency mechanism was not bundled in and stays deferred.
-4. **NEXT:** the manual evaluation path — prepare and approve the sanitized real-run fixtures,
-   add the opt-in evaluation runner and evaluation record, then run the separately approved
-   12-call smoke and 36-output final evaluations, reconcile independent review, and obtain
+3. Prompt, deterministic tests, sanitized fixtures, and opt-in evaluation runner —
+   **IMPLEMENTED**. The first valid smoke failed quality; the approved creative-policy revision
+   is committed at `693bfb3`, with **256 tests green**. The frequency mechanism stays deferred.
+4. **NEXT:** obtain explicit approval for the revised-prompt 12-call smoke. If it is sound,
+   separately approve the 36-output final evaluation, reconcile independent review, and obtain
    Manley's final decision. **Only then** is combined Music Intelligence V1 complete.
 5. Run the tightly fenced Core Running Foundation Review **only after COMBINED Music
    Intelligence V1 is complete** (implementation, deterministic verification, manual
