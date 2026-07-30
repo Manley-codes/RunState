@@ -320,6 +320,23 @@ public class MusicIntelligenceEvaluationRunner {
         return messages;
     }
 
+    // Every scenario's complete outgoing request body, keyed by scenario id, built through the
+    // same network-free seam everything else here uses.
+    //
+    // Package-private for one caller: MusicIntelligenceCreativeCeilingProbe, which runs a
+    // prompt-ablation study. That study is only valid if the ONLY thing that changes between
+    // production and probe is the system prompt, so the probe must start from the real request
+    // rather than assemble a lookalike — a lookalike could drift in model, token limit, field
+    // order, or user-message content and quietly turn a one-variable experiment into a
+    // multi-variable one. Calling this makes no network call and needs no API key.
+    static Map<String, String> scenarioRequestBodies() {
+        Map<String, String> bodies = new LinkedHashMap<>();
+        for (Scenario scenario : scenarios()) {
+            bodies.put(scenario.id, requestBodyOf(scenario.fixture.get()));
+        }
+        return bodies;
+    }
+
     private static String lineStartingWith(String userMessage, String prefix) {
         for (String line : userMessage.split("\n")) {
             if (line.startsWith(prefix)) {
