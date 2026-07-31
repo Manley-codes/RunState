@@ -1,13 +1,18 @@
 ---
 name: music-intelligence-stronger-model-control
-description: "STATUS: NOT RUN — ZERO LIVE CONTROL CALLS MADE. Pre-registered stronger-model control for the Music Intelligence creative ceiling probe: the same 12 calls across S1/S2/S11/S12, replayed from frozen probe request bytes with the model as the single variable (claude-haiku-4-5-20251001 -> claude-opus-5). Blank grading record. DIAGNOSTIC ONLY — never V1 acceptance evidence."
+description: "STATUS: NOT COMPLETED — ONE FAILED ATTEMPT, NOW CORRECTED, ZERO USABLE OUTPUTS. Pre-registered stronger-model control for the Music Intelligence creative ceiling probe: 12 calls across S1/S2/S11/S12, replayed from frozen probe request bytes with two approved substitutions (claude-haiku-4-5-20251001 -> claude-opus-5, and max_tokens 256 -> 4096 because Opus 5 thinking shares the reply budget). The 2026-07-31 attempt spent one billable call, produced no model output, and saved eleven; its evidence is infrastructure evidence only. Grading record still blank. DIAGNOSTIC ONLY — never V1 acceptance evidence."
 metadata:
   type: project
 ---
 
 # Music Intelligence — stronger-model control
 
-## STATUS: NOT RUN — ZERO LIVE CONTROL CALLS MADE
+## STATUS: NOT COMPLETED — ONE FAILED ATTEMPT, CORRECTED. ZERO USABLE OUTPUTS.
+
+One live attempt on 2026-07-31 reached Opus 5, spent **one billable call**, produced **no model
+output**, and stopped — saving the other eleven. The cause was a response-parsing defect in the
+runner, not a model result. It has been corrected and is covered by tests. **Nothing has been
+graded, and there is nothing to grade.** See *Attempt history* below.
 
 **This is a diagnostic detour. It is not V1 acceptance evidence and can never become it.**
 Nothing recorded here may be copied into [[music-intelligence-v1-evaluation]] as smoke or final
@@ -15,8 +20,9 @@ output, and nothing here changes the V1 gates in [[design-music-intelligence-v1]
 execution order is untouched: the 36-call final evaluation against the production prompt still
 requires its own separate approval, and this control does nothing to earn it.
 
-**The runner exists and is deterministically guarded. The live run is a separate decision and
-has not been approved.** Building the apparatus is not authorization to spend.
+**The runner exists, is deterministically guarded, and has been corrected. A further live run is
+a separate decision and has not been approved.** Building or fixing the apparatus is not
+authorization to spend.
 
 ## Why this branch
 
@@ -47,7 +53,6 @@ This is a **model substitution**, not a new experiment and not a rewrite.
 | Held constant | Why it matters |
 | --- | --- |
 | The exact request bytes from the probe | Replayed from committed evidence, not rebuilt |
-| `max_tokens` (256) | Reply length is part of what is being judged |
 | The full temporary minimal system prompt | The probe's ablated prompt, character for character |
 | The exact user messages | Including parenthetical enum tokens and stage lines |
 | Field ordering | The request is fixed apparatus |
@@ -56,12 +61,24 @@ This is a **model substitution**, not a new experiment and not a rewrite.
 | The 30-second diagnostic timeout | Latency is being compared, so the ceiling must not move |
 | The grading labels, hard-trust checks, and decision bands | Carried over unchanged — see below |
 
-**Changed — exactly one thing:** `"model": "claude-haiku-4-5-20251001"` becomes
-`"model": "claude-opus-5"`.
+**Changed — exactly two things, both approved:**
 
-**Not sent:** no `temperature`, no `effort`, no `thinking`, no `top_p`, no `top_k`. Opus runs at
-its **default effort**. Every one of those would be a second variable, and a control with two
-variables answers nothing.
+1. `"model": "claude-haiku-4-5-20251001"` becomes `"model": "claude-opus-5"`.
+2. `"max_tokens":256` becomes `"max_tokens":4096`.
+
+**Why max_tokens had to move.** Opus 5 has thinking enabled by default, and its thinking and its
+visible reply draw on the **same** `max_tokens` budget. The first live attempt discovered this
+the expensive way: at 256, the model spent its entire allowance thinking and returned no text
+block at all. Holding 256 constant would not have been a cleaner control — it would have been a
+control that cannot produce an output to grade.
+
+This is a **compatibility correction, not a tuning change**. The 2–3 sentence contract is
+unchanged and still enforced by the prompt, which the model is still held to. `max_tokens` is a
+ceiling, not a target, and a reply that sprawls past the contract is still a rubric failure.
+
+**Not sent:** no `temperature`, no `effort`, no explicit `thinking` field, no `output_config`,
+no `top_p`, no `top_k`. Opus runs at its **default effort**. Every one of those would be an
+unapproved third variable.
 
 ## Why the requests are replayed, not rebuilt
 
@@ -100,22 +117,27 @@ approval while still matching the file's self-report, the failure is reported as
 | S11 | `2DAEFF8E0D025FDF844471AD599169FB5CBDEAEFF56D72FA2E47BBE73905442C` | 1774 |
 | S12 | `3FF23C16834F83C70ADE128D35FA0E753657433C0C699510B324A40F769C6E76` | 1980 |
 
-The substitution is performed on the frozen **string**, not on a re-serialized object graph, so
-every other byte is carried across by construction. **Undoing the substitution reproduces the
-frozen body byte-for-byte and rehashes to the recorded value** — that reversal is the proof
-`preview` prints, and it is asserted per scenario in the deterministic suite.
+**The frozen bodies and their pinned hashes are unchanged by the `max_tokens` correction.** The
+substitutions are applied to the frozen string at send time; the stored evidence still carries
+`"max_tokens":256` and still hashes to the values above. Nothing in `evidence/` was rewritten.
+
+Both substitutions are performed on the frozen **string**, not on a re-serialized object graph,
+so every other byte is carried across by construction. **Undoing both substitutions reproduces
+the frozen body byte-for-byte and rehashes to the pinned approved value** — that reversal is the
+proof `preview` prints, and it is asserted per scenario in the deterministic suite.
 
 The control bodies that would be sent hash to:
 
 | Scenario | Control request SHA-256 | Bytes |
 | --- | --- | --- |
-| S1 | `399BA22126372E1C2EDF903348433314DD101E8C8A3238E6EB5943D6F74582A2` | 1764 |
-| S2 | `E0BB2CB9FA4A27E6737559CDFA636F25179107F434ADD303E39A3161617A80C1` | 1773 |
-| S11 | `DADF99309C957EA8973C36E88EF88ECCC88EB0CDA98E49D67546DD26A39250C3` | 1762 |
-| S12 | `9C1A5F306EA60EA4A1820D809AD2FA0ACBE36E7CC13E14E6423FDFBEE1C4C6CB` | 1968 |
+| S1 | `1F0C7528E6E25F80887FE37746CE53AEABBCBF429A711B3064A103754E5FB42B` | 1765 |
+| S2 | `44C62EED698AE84429872BD77A150922D67AAAFADF8F0A42924906B189A88790` | 1774 |
+| S11 | `45F7B2E83FD656C764A4E1389F5F3901391DB1C0ED9D703035BD7617D20ECAFB` | 1763 |
+| S12 | `4B0C8A77E5FD72A0F0871B3E79DBCD5F3CB190D8B9F1B0BA58E533E3E9EB2537` | 1969 |
 
-Each control body is exactly 12 bytes shorter than its frozen original — the difference in
-length between the two model identifiers, and nothing else.
+Each control body is exactly 11 bytes shorter than its frozen original: −12 from the shorter
+model identifier, +1 from `256` becoming `4096`, and nothing else. That arithmetic is asserted
+per scenario, so a third edit of any size would fail the build.
 
 ## Run parameters
 
@@ -126,6 +148,7 @@ length between the two model identifiers, and nothing else.
 | Scenarios | `S1`, `S2`, `S11`, `S12`, in that order |
 | Iterations | 3 per scenario |
 | **Planned live calls** | **12** |
+| `max_tokens` | **4096** (the probe sent 256; see the compatibility correction above) |
 | Request timeout | 30 seconds (diagnostic; deliberately the probe's value) |
 | Latency | Recorded per call, in milliseconds, with a summary table |
 | Transcript | UTF-8, written **directly into `docs/claude-memory/evidence/`**, rewritten after every completed call |
@@ -247,6 +270,52 @@ advance.
 If more than one person grades, each grades the packet independently before any comparison, and
 disagreements are reconciled **against the rubric** — not by averaging. Both tallies are
 preserved unreconciled, as the probe's were.
+
+## Attempt history
+
+### 2026-07-31 01:58:25 — FAILED, INFRASTRUCTURE EVIDENCE ONLY
+
+**This is not model evidence. There is nothing here to grade, and nothing here may be graded.**
+
+| Field | Value |
+| --- | --- |
+| Executed on | July 31, 2026, 01:58:25 local |
+| Model reached | `claude-opus-5` — the call succeeded in reaching the model |
+| Frozen evidence verified | Yes, all four against the pinned hashes |
+| Live calls attempted | **1** |
+| Calls saved by the fail-fast stop | **11** |
+| Usable model outputs | **0** |
+| Failure | `API FAILURE: response carried no content[0].text` |
+| Cause | The runner assumed `content[0]` was a text block. Opus 5 has thinking enabled by default, so a thinking block led the array and `content[0].text` did not exist. |
+| Grading status | **Not graded and never to be graded.** No output was produced. |
+
+**Preserved evidence — do not delete, overwrite, or grade:**
+
+- `docs/claude-memory/evidence/stronger-model-control-20260731-015825.md`
+- `docs/claude-memory/evidence/blind-grading-packet-20260731-015825.md`
+
+The transcript carries its verified hashes and its un-blinding key; the packet reads
+`Outputs recorded so far: 0 of 12` with an empty grade table. Both are kept exactly as the run
+left them. They are the record of an **infrastructure failure**, and their value is that they
+prove what did *not* happen: the frozen requests verified, the records were created before call
+one, one call was made, and the run stopped rather than spending the other eleven against a
+broken response path.
+
+**What it cost and what it bought.** One billable call, no usable output. In exchange it found
+a defect that would otherwise have consumed all twelve, and it surfaced the `max_tokens`
+interaction — thinking and reply sharing one budget — that no amount of local testing would have
+revealed. The fail-fast design worked exactly as specified.
+
+**Corrections made in response** (see the runner section below):
+
+1. The whole `content` array is parsed; every `text` block is appended in order. Thinking blocks
+   are skipped, and their contents and signatures are never read, recorded, or reported.
+2. A response with no text block fails safely, reporting only `stop_reason`, the content block
+   types, and output-token usage — never the raw response, thinking text, request body, or key.
+3. `max_tokens` for the control request moves 256 → 4096.
+
+**The blind seed and un-blinding key in the failed transcript are spent.** The next attempt
+generates its own; do not reuse them.
 
 ## Results — BLANK, NOT RUN
 
@@ -412,8 +481,20 @@ so it cannot be typed by accident or half-remembered from a shell history entry.
 - Stops at the **first** HTTP, parsing, or API failure and reports calls attempted and calls not
   spent. Unlike the V1 evaluation runner — which reads an opaque fallback and honestly reports
   `UNKNOWN API-PATH FAILURE` — this control owns its HTTP path and can name the real cause.
-- **A failure is never converted into model output.** A non-200 or a missing `content[0].text`
-  throws; nothing is written to the transcript for that call, and no latency is recorded for it.
+- **The whole response `content` array is parsed.** Every block whose `type` is `text` is
+  appended **in order**; the API may split a reply across several text blocks, and combining
+  them out of order would silently scramble the graded output. Every other block type —
+  `thinking`, `redacted_thinking`, or anything added later — is skipped without failing.
+- **Thinking is never recorded or exposed.** Its contents and signatures are not read into the
+  reply, not written to either record, and not quoted in any diagnostic. Thinking is model
+  working-notes, not the reply; grading it would corrupt the experiment as badly as fabricating
+  an output.
+- **A failure is never converted into model output.** A non-200, or a response carrying no text
+  block, throws; nothing is written to either record for that call, and no latency is recorded.
+- **A no-text failure reports exactly three facts and nothing else:** `stop_reason`, the content
+  block types, and output-token usage. The raw response, any thinking text, any signature, the
+  request body, and the API key are all excluded — this string reaches a console, a
+  `LiveResult`, and pasted documents, so anything that must not leave the process never enters it.
 - **Both records must be creatable before call 1.** The transcript header and the packet header
   are written first, and if either write fails the run aborts having made **zero** API calls.
 - **A reply that cannot be saved is never lost, and never followed by another call.** Each
@@ -438,7 +519,7 @@ mode is now designed out rather than remembered.
 
 ## Deterministic guards
 
-`test/com/runstate/MusicIntelligenceStrongerModelControlTest.java` — 58 local tests, no key, no
+`test/com/runstate/MusicIntelligenceStrongerModelControlTest.java` — 67 local tests, no key, no
 network. They protect the **experiment**, not the model:
 
 - exactly `S1`, `S2`, `S11`, `S12`, in that order, matching the probe's set
@@ -451,13 +532,30 @@ network. They protect the **experiment**, not the model:
   regenerated** file whose bodies and self-reported hashes agree with each other but not with
   approval — the case a self-referential check could never catch
 - the two refusals are diagnosed differently: "corrupt" versus "REGENERATED; restore it from git"
-- every control request differs from its frozen original **only** in `model` — field set and
-  order, `max_tokens`, `system`, and the entire `messages` array all compare equal
-- **undoing the substitution reproduces the frozen bytes exactly and rehashes to the approved
-  value**, per scenario
-- the substitution refuses when the model name does not appear exactly once
-- no `temperature`, `effort`, `thinking`, `top_p`, or `top_k` is added, and the body carries
-  exactly four fields
+- every control request differs from its frozen original **only** in `model` and `max_tokens` —
+  checked field by field, so field set and order, `system`, and the entire `messages` array all
+  compare equal
+- the frozen request still carries `256`; the control request carries `4096`
+- **undoing both substitutions reproduces the frozen bytes exactly and rehashes to the approved
+  value**, per scenario, with the exact −11 byte arithmetic pinned
+- each substitution refuses when its target does not appear exactly once, and a `256` inside run
+  data survives untouched because the match is on the serialized field, not the bare number
+- no `temperature`, `effort`, explicit `thinking`, `output_config`, `top_p`, or `top_k` is
+  added, and the body carries exactly four fields
+
+**Opus 5 response shape** — the defect that ended the first attempt:
+
+- a **thinking block followed by text returns the text**
+- **multiple text blocks are combined in order**
+- a plain single-text (Haiku-shaped) response still works
+- **a thinking-only response fails** with `stop_reason`, block types, and output-token usage
+- **the diagnostic never exposes thinking text, signatures, the raw response, or input tokens** —
+  asserted against a response carrying a realistic signature value
+- an empty `content` array, an absent one, and an empty text block all fail rather than
+  returning an empty reply that would be recorded as gradable
+- unknown future block types are skipped without losing the text or crashing
+- end to end, **a failed extraction is never recorded as an output** in either record, records no
+  latency, and stops the run after one call
 - production enum tokens and stage lines reach the control unchanged
 - preview builds with no key, is deterministic, shows every hash and the diff proof, and aborts
   visibly on unverifiable evidence
@@ -489,6 +587,6 @@ network. They protect the **experiment**, not the model:
 - the frozen prompt is provably **not** today's production prompt, which is the point of
   replaying rather than rebuilding
 
-Full clean suite with `ANTHROPIC_API_KEY` unset: **353 tests, 0 failures, 0 errors, 0 skipped**
+Full clean suite with `ANTHROPIC_API_KEY` unset: **362 tests, 0 failures, 0 errors, 0 skipped**
 (295 before this control). Surefire runs 9 test classes and collects neither the evaluation
 runner, the probe, nor this control.

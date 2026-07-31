@@ -96,9 +96,25 @@ public class MusicIntelligenceStrongerModelControl {
     // calls by autocompleting a short flag or re-running a half-remembered shell entry.
     static final String LIVE_CONFIRMATION = "--confirm-12-billable-calls";
 
-    // The single experimental variable, as a before/after pair.
+    // The experimental variable, as a before/after pair.
     static final String BASELINE_MODEL = "claude-haiku-4-5-20251001";
     static final String CONTROL_MODEL = "claude-opus-5";
+
+    // The SECOND approved substitution, forced by how Opus 5 actually works.
+    //
+    // Opus 5 has thinking enabled by default, and its thinking and its visible reply draw on the
+    // SAME max_tokens budget. At 256 the first live attempt spent its entire allowance thinking
+    // and returned no text block at all -- one billable call, zero usable output.
+    //
+    // Raising the ceiling is therefore not a tuning change and not an attempt to make the model
+    // look better: it is what makes a 2-3 sentence reply reachable at all under a model that
+    // must think first. The reply-length contract is unchanged and still lives in the prompt,
+    // which the model is still held to. max_tokens is a ceiling, not a target.
+    //
+    // Matched on the serialized field so the substitution cannot hit a stray 256 elsewhere in
+    // the body -- and asserted to occur exactly once, like the model.
+    static final String BASELINE_MAX_TOKENS = "\"max_tokens\":256";
+    static final String CONTROL_MAX_TOKENS = "\"max_tokens\":4096";
 
     // The frozen probe requests. Repository-relative, because that is what makes them frozen:
     // they are committed evidence, not something regenerated at run time.
@@ -280,25 +296,36 @@ public class MusicIntelligenceStrongerModelControl {
         return ordered;
     }
 
-    // The one substitution, performed on the frozen string.
+    // The two approved substitutions, performed on the frozen string.
     //
-    // Asserting a single occurrence is what makes "only the model changed" a fact rather than a
-    // hope: if the baseline model name ever appeared inside a system prompt or a music note, a
-    // blind replace would quietly rewrite run data too.
+    // Asserting a single occurrence of each is what makes "only these two things changed" a fact
+    // rather than a hope: if the baseline model name ever appeared inside a system prompt or a
+    // music note, a blind replace would quietly rewrite run data too.
     static String controlBody(String frozenBodyRaw) {
-        int occurrences = occurrencesOf(frozenBodyRaw, BASELINE_MODEL);
-        if (occurrences != 1) {
+        int modelOccurrences = occurrencesOf(frozenBodyRaw, BASELINE_MODEL);
+        if (modelOccurrences != 1) {
             throw new IllegalStateException(
                     "expected exactly one occurrence of the baseline model in the frozen body, found "
-                            + occurrences + " — refusing to substitute");
+                            + modelOccurrences + " — refusing to substitute");
         }
-        return frozenBodyRaw.replace(BASELINE_MODEL, CONTROL_MODEL);
+        int tokenOccurrences = occurrencesOf(frozenBodyRaw, BASELINE_MAX_TOKENS);
+        if (tokenOccurrences != 1) {
+            throw new IllegalStateException(
+                    "expected exactly one occurrence of " + BASELINE_MAX_TOKENS
+                            + " in the frozen body, found " + tokenOccurrences
+                            + " — refusing to substitute");
+        }
+        return frozenBodyRaw
+                .replace(BASELINE_MODEL, CONTROL_MODEL)
+                .replace(BASELINE_MAX_TOKENS, CONTROL_MAX_TOKENS);
     }
 
-    // Undoes the substitution. Preview hashes the result against the recorded hash, which proves
-    // the control body carries no change other than the model.
+    // Undoes both substitutions. Preview hashes the result against the pinned approved hash,
+    // which proves the control body carries no change beyond the model and max_tokens.
     static String reverseSubstitution(String controlBodyRaw) {
-        return controlBodyRaw.replace(CONTROL_MODEL, BASELINE_MODEL);
+        return controlBodyRaw
+                .replace(CONTROL_MODEL, BASELINE_MODEL)
+                .replace(CONTROL_MAX_TOKENS, BASELINE_MAX_TOKENS);
     }
 
     static Map<String, String> controlRequestBodies(Path frozenRequestsPath) throws Exception {
@@ -371,9 +398,15 @@ public class MusicIntelligenceStrongerModelControl {
         out.append("iterations     : ").append(ITERATIONS).append(" per scenario\n");
         out.append("planned calls  : ").append(PLANNED_CALLS).append(" (billable, only in live mode)\n");
         out.append("request timeout: ").append(REQUEST_TIMEOUT.toSeconds()).append("s (diagnostic)\n");
-        out.append("changed        : the model, and nothing else\n");
-        out.append("held constant  : max_tokens, system prompt, user messages, field order, fixtures\n");
-        out.append("not sent       : temperature, effort, thinking — Opus runs at its default effort\n\n");
+        out.append("changed        : the model, and max_tokens 256 -> 4096\n");
+        out.append("held constant  : system prompt, user messages, field order, fixtures\n");
+        out.append("not sent       : temperature, effort, thinking, output_config — Opus runs at\n");
+        out.append("                 its default effort\n");
+        out.append("why max_tokens : Opus 5 thinks by default and its thinking shares the reply's\n");
+        out.append("                 token budget. At 256 the first attempt spent the whole\n");
+        out.append("                 allowance thinking and returned no text block. The 2-3\n");
+        out.append("                 sentence contract is unchanged and still enforced by the\n");
+        out.append("                 prompt; max_tokens is a ceiling, not a target.\n\n");
 
         out.append("frozen requests: ").append(frozenRequestsPath).append("\n");
         out.append("  All four bodies VERIFIED against the hashes PINNED IN THE RUNNER before any\n");
@@ -405,8 +438,10 @@ public class MusicIntelligenceStrongerModelControl {
             out.append("  control sha256  : ").append(sha256(control)).append("\n");
             out.append("  control bytes   : ")
                     .append(control.getBytes(StandardCharsets.UTF_8).length).append("\n");
-            out.append("  substitution    : \"model\": \"").append(BASELINE_MODEL)
+            out.append("  substitution 1  : \"model\": \"").append(BASELINE_MODEL)
                     .append("\" -> \"").append(CONTROL_MODEL).append("\"  (1 occurrence)\n");
+            out.append("  substitution 2  : ").append(BASELINE_MAX_TOKENS)
+                    .append(" -> ").append(CONTROL_MAX_TOKENS).append("  (1 occurrence)\n");
             out.append("  reverse proof   : undoing the substitution reproduces the frozen body ")
                     .append(restored.equals(frozen.bodyRaw) ? "EXACTLY" : "**DIFFERENTLY**")
                     .append("\n");
@@ -418,9 +453,9 @@ public class MusicIntelligenceStrongerModelControl {
                     .append("\n");
             out.append("  model           : ").append(frozenJson.get("model").getAsString())
                     .append(" -> ").append(controlJson.get("model").getAsString()).append("\n");
-            out.append("  max_tokens      : ").append(controlJson.get("max_tokens").getAsInt())
-                    .append(frozenJson.get("max_tokens").equals(controlJson.get("max_tokens"))
-                            ? "  unchanged" : "  CHANGED").append("\n");
+            out.append("  max_tokens      : ").append(frozenJson.get("max_tokens").getAsInt())
+                    .append(" -> ").append(controlJson.get("max_tokens").getAsInt())
+                    .append("  (approved second variable)\n");
             out.append("  temperature     : ")
                     .append(controlJson.has("temperature") ? "**PRESENT**" : "absent").append("\n");
             out.append("  system          : ")
@@ -591,11 +626,16 @@ public class MusicIntelligenceStrongerModelControl {
                     .append("` |\n");
         }
         record.append("\nHashes above are the APPROVED constants pinned in the runner, not values\n");
-        record.append("read from the evidence file. The only difference between each frozen body\n");
-        record.append("and the control body sent is\n");
-        record.append("`\"model\": \"").append(BASELINE_MODEL).append("\"` -> `\"model\": \"")
-                .append(CONTROL_MODEL).append("\"`. max_tokens stays 256; no temperature,\n");
-        record.append("effort, or thinking field is sent.\n");
+        record.append("read from the evidence file. Each control body differs from its frozen\n");
+        record.append("original in exactly two approved ways:\n\n");
+        record.append("1. `\"model\": \"").append(BASELINE_MODEL).append("\"` -> `\"model\": \"")
+                .append(CONTROL_MODEL).append("\"`\n");
+        record.append("2. `").append(BASELINE_MAX_TOKENS).append("` -> `")
+                .append(CONTROL_MAX_TOKENS).append("`\n\n");
+        record.append("Opus 5 thinks by default and its thinking shares the reply's token budget,\n");
+        record.append("so 256 left no room for a visible answer. The 2-3 sentence contract is\n");
+        record.append("unchanged and still enforced by the prompt. No temperature, effort,\n");
+        record.append("thinking, or output_config field is sent.\n");
 
         // The blind order, fixed before the first call so no output can be placed after the fact.
         Map<String, String> blindLabels = blindAssignment(blindSeed);
@@ -874,15 +914,74 @@ public class MusicIntelligenceStrongerModelControl {
             throw new Exception("HTTP " + response.statusCode());
         }
 
-        JsonObject first = JsonParser.parseString(response.body())
-                .getAsJsonObject()
-                .getAsJsonArray("content")
-                .get(0)
-                .getAsJsonObject();
-        if (!first.has("text")) {
-            throw new Exception("response carried no content[0].text");
+        return extractText(response.body());
+    }
+
+    // Pulls the visible reply out of a response, tolerating everything that is not visible reply.
+    //
+    // The first live attempt died here. It assumed content[0] was the text block, which is true
+    // of Haiku and false of Opus 5: thinking is on by default, so a thinking block leads the
+    // array and content[0].text does not exist. One billable call bought a crash.
+    //
+    // So: walk the WHOLE array, append every `text` block in order, and ignore every other block
+    // type. Order matters -- the API may split a reply across several text blocks, and
+    // concatenating them out of order would silently scramble the output being graded.
+    //
+    // Thinking blocks are skipped entirely. Their contents and signatures are never read into
+    // the returned string, never written to either record, and never quoted in a diagnostic.
+    // They are model working-notes, not the reply, and treating them as gradable output would
+    // corrupt the experiment as badly as fabricating one.
+    static String extractText(String responseBody) throws Exception {
+        JsonObject response = JsonParser.parseString(responseBody).getAsJsonObject();
+
+        StringBuilder text = new StringBuilder();
+        List<String> blockTypes = new ArrayList<>();
+
+        JsonArray content = response.getAsJsonArray("content");
+        if (content != null) {
+            for (int i = 0; i < content.size(); i++) {
+                JsonObject block = content.get(i).getAsJsonObject();
+                String type = block.has("type") ? block.get("type").getAsString() : "(untyped)";
+                blockTypes.add(type);
+                if ("text".equals(type) && block.has("text")) {
+                    text.append(block.get("text").getAsString());
+                }
+            }
         }
-        return first.get("text").getAsString();
+
+        if (text.length() == 0) {
+            throw new Exception(noTextDiagnostic(response, blockTypes));
+        }
+        return text.toString();
+    }
+
+    // What an operator is told when a paid call produced no reply.
+    //
+    // Exactly three facts, and deliberately nothing else: stop_reason (usually `max_tokens`,
+    // which says the budget ran out mid-thought), the block types that came back (which says
+    // whether the model thought and then stopped), and output-token usage (which says how much
+    // was actually bought). Together those are enough to diagnose the failure and fix the
+    // request.
+    //
+    // The raw response, any thinking text, any signature, the request body, and the API key are
+    // all excluded. This string is printed to a console, returned in a LiveResult, and pasted
+    // into documents -- so anything that must not leave the process must not enter it.
+    private static String noTextDiagnostic(JsonObject response, List<String> blockTypes) {
+        String stopReason = "(absent)";
+        if (response.has("stop_reason") && !response.get("stop_reason").isJsonNull()) {
+            stopReason = response.get("stop_reason").getAsString();
+        }
+        String outputTokens = "(absent)";
+        if (response.has("usage") && response.get("usage").isJsonObject()) {
+            JsonObject usage = response.getAsJsonObject("usage");
+            if (usage.has("output_tokens") && !usage.get("output_tokens").isJsonNull()) {
+                outputTokens = usage.get("output_tokens").getAsString();
+            }
+        }
+        return "response carried no text block"
+                + " — stop_reason: " + stopReason
+                + "; content block types: " + blockTypes
+                + "; output tokens: " + outputTokens;
     }
 
     // ---------------------------------------------------------------------------------

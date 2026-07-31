@@ -199,17 +199,28 @@ public class MusicIntelligenceStrongerModelControlTest {
         assertEquals(new ArrayList<>(frozenJson.keySet()), new ArrayList<>(controlJson.keySet()),
                 "the control body must keep the frozen field set and order");
 
-        assertEquals(frozenJson.get("max_tokens"), controlJson.get("max_tokens"));
-        assertEquals(256, controlJson.get("max_tokens").getAsInt(), "max_tokens must stay 256");
         assertEquals(frozenJson.get("system"), controlJson.get("system"),
-                "the system prompt must survive the model swap untouched");
+                "the system prompt must survive the substitutions untouched");
         // JsonArray equality is structural, so this compares the whole user message — role,
         // content, enum tokens, field ordering, every character.
         assertEquals(frozenJson.getAsJsonArray("messages"), controlJson.getAsJsonArray("messages"));
 
-        // ...and the one thing that IS supposed to move.
+        // ...and the two things that ARE supposed to move, and only those.
         assertEquals("claude-haiku-4-5-20251001", frozenJson.get("model").getAsString());
         assertEquals("claude-opus-5", controlJson.get("model").getAsString());
+        assertEquals(256, frozenJson.get("max_tokens").getAsInt(),
+                "the frozen request must still carry the probe's 256");
+        assertEquals(4096, controlJson.get("max_tokens").getAsInt(),
+                "the control request must raise the ceiling to 4096");
+
+        // Nothing else, checked field by field rather than by trusting the two above.
+        for (String field : controlJson.keySet()) {
+            if (field.equals("model") || field.equals("max_tokens")) {
+                continue;
+            }
+            assertEquals(frozenJson.get(field), controlJson.get(field),
+                    field + " must be identical to the frozen request");
+        }
     }
 
     @ParameterizedTest(name = "{0}")
@@ -230,11 +241,13 @@ public class MusicIntelligenceStrongerModelControlTest {
                         MusicIntelligenceStrongerModelControl.reverseSubstitution(control)),
                 scenarioId + ": the restored body must rehash to the approved value");
 
-        // ...and the substitution really is a single-token edit of the frozen string.
+        // ...and the substitutions really are two small edits of the frozen string: the model
+        // identifier (25 -> 13 chars) and the token ceiling ("256" -> "4096", +1).
         assertEquals(frozen.length()
-                        - "claude-haiku-4-5-20251001".length() + "claude-opus-5".length(),
+                        - "claude-haiku-4-5-20251001".length() + "claude-opus-5".length()
+                        - "\"max_tokens\":256".length() + "\"max_tokens\":4096".length(),
                 control.length(),
-                scenarioId + ": exactly one model identifier's worth of characters may change");
+                scenarioId + ": only the model identifier and the token ceiling may change length");
     }
 
     @ParameterizedTest(name = "{0}")
@@ -243,10 +256,12 @@ public class MusicIntelligenceStrongerModelControlTest {
         JsonObject control = parse(
                 MusicIntelligenceStrongerModelControl.controlBody(frozenBody(scenarioId)));
 
-        // Opus runs at its default effort. Every one of these would be a second variable.
+        // Opus runs at its DEFAULT effort. Raising max_tokens is an approved substitution;
+        // every field below would be an unapproved third variable.
         assertFalse(control.has("temperature"), "temperature must not be sent");
         assertFalse(control.has("effort"), "effort must not be sent");
-        assertFalse(control.has("thinking"), "thinking must not be sent");
+        assertFalse(control.has("thinking"), "an explicit thinking field must not be sent");
+        assertFalse(control.has("output_config"), "output_config must not be sent");
         assertFalse(control.has("top_p"), "top_p must not be sent");
         assertFalse(control.has("top_k"), "top_k must not be sent");
 
@@ -259,14 +274,35 @@ public class MusicIntelligenceStrongerModelControlTest {
         // If the baseline model name ever appeared inside a system prompt or a music note, a
         // blind replace would rewrite run data too. The guard is asserted, not assumed.
         IllegalStateException none = assertThrows(IllegalStateException.class,
-                () -> MusicIntelligenceStrongerModelControl.controlBody("{\"model\":\"other\"}"));
+                () -> MusicIntelligenceStrongerModelControl.controlBody(
+                        "{\"model\":\"other\",\"max_tokens\":256}"));
         assertTrue(none.getMessage().contains("found 0"), none.getMessage());
 
         IllegalStateException twice = assertThrows(IllegalStateException.class,
                 () -> MusicIntelligenceStrongerModelControl.controlBody(
-                        "{\"model\":\"claude-haiku-4-5-20251001\","
+                        "{\"model\":\"claude-haiku-4-5-20251001\",\"max_tokens\":256,"
                                 + "\"system\":\"claude-haiku-4-5-20251001\"}"));
         assertTrue(twice.getMessage().contains("found 2"), twice.getMessage());
+    }
+
+    @Test
+    void theSubstitutionRefusesWhenTheTokenCeilingDoesNotAppearExactlyOnce() {
+        // Same guard on the second variable. Matching the serialized field rather than the bare
+        // number is what keeps a stray 256 in the run data out of range.
+        IllegalStateException none = assertThrows(IllegalStateException.class,
+                () -> MusicIntelligenceStrongerModelControl.controlBody(
+                        "{\"model\":\"claude-haiku-4-5-20251001\",\"max_tokens\":512}"));
+        assertTrue(none.getMessage().contains("max_tokens")
+                        && none.getMessage().contains("found 0"),
+                none.getMessage());
+
+        // A 256 that is not the token ceiling must not be touched at all.
+        String withStray256 = "{\"model\":\"claude-haiku-4-5-20251001\",\"max_tokens\":256,"
+                + "\"system\":\"you ran 256 miles\"}";
+        String control = MusicIntelligenceStrongerModelControl.controlBody(withStray256);
+        assertTrue(control.contains("you ran 256 miles"),
+                "a 256 inside run data must survive the substitution untouched");
+        assertTrue(control.contains("\"max_tokens\":4096"));
     }
 
     @ParameterizedTest(name = "{0}")
@@ -284,6 +320,163 @@ public class MusicIntelligenceStrongerModelControlTest {
                 scenarioId + " must still carry the probe's stage line");
         assertTrue(content.contains("(had music)"),
                 scenarioId + " must still carry the probe's music-state token");
+    }
+
+    // --- Opus 5 response shape ---------------------------------------------------------
+    //
+    // The first live attempt died here: the runner assumed content[0] was the text block, which
+    // is true of Haiku and false of Opus 5. Thinking is on by default, so a thinking block leads
+    // the array. One billable call bought a crash, and these tests exist so it cannot recur.
+
+    @Test
+    void aThinkingBlockBeforeTheTextReturnsTheText() {
+        String response = "{\"content\":["
+                + "{\"type\":\"thinking\",\"thinking\":\"Let me consider the pace and the song.\","
+                + "\"signature\":\"abc123signature\"},"
+                + "{\"type\":\"text\",\"text\":\"Three miles on a dirt trail in the heat.\"}"
+                + "],\"stop_reason\":\"end_turn\"}";
+
+        assertEquals("Three miles on a dirt trail in the heat.",
+                assertDoesNotThrow(() -> MusicIntelligenceStrongerModelControl.extractText(response)),
+                "a leading thinking block must be skipped, not treated as the reply");
+    }
+
+    @Test
+    void multipleTextBlocksAreCombinedInOrder() {
+        // The API may split a reply across several text blocks. Concatenating them out of order
+        // would silently scramble the output being graded.
+        String response = "{\"content\":["
+                + "{\"type\":\"thinking\",\"thinking\":\"planning\",\"signature\":\"sig\"},"
+                + "{\"type\":\"text\",\"text\":\"First part. \"},"
+                + "{\"type\":\"text\",\"text\":\"Second part. \"},"
+                + "{\"type\":\"text\",\"text\":\"Third part.\"}"
+                + "],\"stop_reason\":\"end_turn\"}";
+
+        assertEquals("First part. Second part. Third part.",
+                assertDoesNotThrow(() -> MusicIntelligenceStrongerModelControl.extractText(response)));
+    }
+
+    @Test
+    void aPlainSingleTextBlockStillWorks() {
+        // The Haiku-shaped response must keep working — the frozen probe comparison depends on
+        // the same code path reading both.
+        String response = "{\"content\":[{\"type\":\"text\",\"text\":\"Just the reply.\"}],"
+                + "\"stop_reason\":\"end_turn\"}";
+
+        assertEquals("Just the reply.",
+                assertDoesNotThrow(() -> MusicIntelligenceStrongerModelControl.extractText(response)));
+    }
+
+    @Test
+    void aThinkingOnlyResponseFailsWithSafeDiagnosticsAndNoOutput() {
+        // Exactly what happened on the first live attempt: the whole 256-token budget went to
+        // thinking and no text block was ever emitted.
+        String response = "{\"content\":["
+                + "{\"type\":\"thinking\",\"thinking\":\"I should mention the trail and heat.\","
+                + "\"signature\":\"ErUBCkYIBRgCKkBxs2secret\"}"
+                + "],\"stop_reason\":\"max_tokens\",\"usage\":{\"input_tokens\":412,"
+                + "\"output_tokens\":256}}";
+
+        Exception failure = assertThrows(Exception.class,
+                () -> MusicIntelligenceStrongerModelControl.extractText(response));
+
+        // The three facts an operator needs to diagnose and fix the request.
+        assertTrue(failure.getMessage().contains("stop_reason: max_tokens"),
+                "the diagnostic must report stop_reason: " + failure.getMessage());
+        assertTrue(failure.getMessage().contains("thinking"),
+                "the diagnostic must report the block types: " + failure.getMessage());
+        assertTrue(failure.getMessage().contains("output tokens: 256"),
+                "the diagnostic must report output-token usage: " + failure.getMessage());
+    }
+
+    @Test
+    void noTextDiagnosticNeverExposesThinkingContentSignaturesOrTheRawResponse() {
+        String thinkingText = "I should mention the trail and the heat and the song title.";
+        String signature = "ErUBCkYIBRgCKkBxs2SECRETSIGNATUREVALUE";
+        String response = "{\"content\":["
+                + "{\"type\":\"thinking\",\"thinking\":\"" + thinkingText + "\","
+                + "\"signature\":\"" + signature + "\"}"
+                + "],\"stop_reason\":\"max_tokens\",\"usage\":{\"output_tokens\":256}}";
+
+        Exception failure = assertThrows(Exception.class,
+                () -> MusicIntelligenceStrongerModelControl.extractText(response));
+        String message = failure.getMessage();
+
+        // Thinking is model working-notes, not the reply. It must never reach a console, a
+        // record, or a document — and this message goes to all three.
+        assertFalse(message.contains(thinkingText), "the diagnostic must not quote thinking text");
+        assertFalse(message.contains(signature), "the diagnostic must not expose a signature");
+        assertFalse(message.contains("signature"), "the diagnostic must not mention signatures");
+        assertFalse(message.contains("I should mention"));
+        assertFalse(message.contains(response), "the diagnostic must not carry the raw response");
+        assertFalse(message.contains("\"content\":"), "the diagnostic must not carry raw JSON");
+        assertFalse(message.contains("input_tokens"), "only output-token usage is reported");
+    }
+
+    @Test
+    void anEmptyOrAbsentContentArrayFailsRatherThanReturningAnEmptyReply() {
+        // An empty string would be recorded as a gradable output. It must be a failure instead.
+        Exception empty = assertThrows(Exception.class,
+                () -> MusicIntelligenceStrongerModelControl.extractText(
+                        "{\"content\":[],\"stop_reason\":\"end_turn\"}"));
+        assertTrue(empty.getMessage().contains("no text block"), empty.getMessage());
+
+        Exception absent = assertThrows(Exception.class,
+                () -> MusicIntelligenceStrongerModelControl.extractText(
+                        "{\"stop_reason\":\"end_turn\"}"));
+        assertTrue(absent.getMessage().contains("no text block"), absent.getMessage());
+
+        // A text block that is present but empty is still no reply.
+        Exception blank = assertThrows(Exception.class,
+                () -> MusicIntelligenceStrongerModelControl.extractText(
+                        "{\"content\":[{\"type\":\"text\",\"text\":\"\"}]}"));
+        assertTrue(blank.getMessage().contains("no text block"), blank.getMessage());
+    }
+
+    @Test
+    void unknownBlockTypesAreSkippedWithoutLosingTheText() {
+        // Forward compatibility: a block type this runner has never heard of must not crash it
+        // and must not end up in the graded output.
+        String response = "{\"content\":["
+                + "{\"type\":\"redacted_thinking\",\"data\":\"opaque\"},"
+                + "{\"type\":\"some_future_block\",\"payload\":\"whatever\"},"
+                + "{\"type\":\"text\",\"text\":\"The reply survived.\"}"
+                + "],\"stop_reason\":\"end_turn\"}";
+
+        assertEquals("The reply survived.",
+                assertDoesNotThrow(() -> MusicIntelligenceStrongerModelControl.extractText(response)));
+    }
+
+    @Test
+    void aFailedExtractionIsNeverRecordedAsAnOutput() {
+        // End to end: a thinking-only response must stop the run the same way any other API
+        // failure does, leaving no reply in either record.
+        CountingSink transcript = new CountingSink();
+        CountingSink packet = new CountingSink();
+
+        MusicIntelligenceStrongerModelControl.LiveResult result =
+                MusicIntelligenceStrongerModelControl.executeControl(
+                        MusicIntelligenceStrongerModelControl.FROZEN_REQUESTS_PATH,
+                        FIXED_SEED,
+                        (id, iteration, body) -> MusicIntelligenceStrongerModelControl.extractText(
+                                "{\"content\":[{\"type\":\"thinking\",\"thinking\":\"secret notes\","
+                                        + "\"signature\":\"sigvalue\"}],"
+                                        + "\"stop_reason\":\"max_tokens\","
+                                        + "\"usage\":{\"output_tokens\":4096}}"),
+                        transcript, packet, line -> { });
+
+        assertEquals(1, result.callsAttempted, "the run must stop after the first failure");
+        assertTrue(result.stopped());
+        assertTrue(result.stopReason.startsWith(
+                MusicIntelligenceStrongerModelControl.API_FAILURE));
+        assertTrue(result.stopReason.contains("stop_reason: max_tokens"));
+        assertFalse(result.stopReason.contains("secret notes"),
+                "thinking must not reach the stop reason");
+        assertFalse(result.stopReason.contains("sigvalue"),
+                "a signature must not reach the stop reason");
+        assertEquals(1, transcript.writes, "only the header may have been written");
+        assertEquals(1, packet.writes, "only the packet header may have been written");
+        assertTrue(result.latenciesMs.isEmpty());
     }
 
     // --- The cost gate -----------------------------------------------------------------
@@ -307,8 +500,12 @@ public class MusicIntelligenceStrongerModelControlTest {
         assertTrue(report.contains("request timeout: 30s"));
         assertTrue(report.contains("DIAGNOSTIC ONLY"),
                 "the preview must say plainly that this is not V1 evidence");
-        assertTrue(report.contains("not sent       : temperature, effort, thinking"),
+        assertTrue(report.contains("not sent       : temperature, effort, thinking, output_config"),
                 "the preview must state that no tuning field is sent");
+        assertTrue(report.contains("changed        : the model, and max_tokens 256 -> 4096"),
+                "the preview must name both approved variables");
+        assertTrue(report.contains("why max_tokens :"),
+                "the preview must explain why the ceiling moved");
 
         // Same output twice — a report that reached the network or the clock would not be.
         assertEquals(report, MusicIntelligenceStrongerModelControl.previewReport(
@@ -336,9 +533,12 @@ public class MusicIntelligenceStrongerModelControlTest {
         assertTrue(report.contains("temperature     : absent"));
         assertTrue(report.contains("system          : unchanged (structurally equal)"));
         assertTrue(report.contains("messages        : unchanged (structurally equal)"));
-        assertTrue(report.contains("max_tokens      : 256  unchanged"));
+        assertTrue(report.contains("max_tokens      : 256 -> 4096  (approved second variable)"));
+        assertTrue(report.contains("substitution 1  :"), "preview must show the model swap");
+        assertTrue(report.contains("substitution 2  :"), "preview must show the ceiling change");
         assertFalse(report.contains("MISMATCH"), "no hash in the preview may mismatch");
-        assertFalse(report.contains("**CHANGED**"), "nothing but the model may be reported changed");
+        assertFalse(report.contains("**CHANGED**"),
+                "nothing beyond the two approved variables may be reported changed");
     }
 
     @Test
@@ -768,7 +968,8 @@ public class MusicIntelligenceStrongerModelControlTest {
         assertEquals(Set.of("main", "resolveMode", "loadFrozenRequests", "controlBody",
                         "reverseSubstitution", "controlRequestBodies", "sha256",
                         "previewReport", "executeControl", "transcriptSink",
-                        "blindAssignment", "blindPacket", "transcriptPath", "gradingPacketPath"),
+                        "blindAssignment", "blindPacket", "transcriptPath", "gradingPacketPath",
+                        "extractText"),
                 reachable,
                 "the control must expose only its no-network seams plus main");
 
