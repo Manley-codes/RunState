@@ -1,13 +1,13 @@
 ---
 name: design-music-intelligence-v1
-description: "REVISED PROMPT IMPLEMENTED — NEXT QUALITY SMOKE PENDING. Canonical Music Intelligence V1 contract, updated July 30 2026 after the first valid smoke exposed a generic, restraint-heavy voice: music-forward creative policy implemented, sanitized fixtures and opt-in evaluation surface built, deterministic gate passing at 256 tests; combined V1 remains incomplete until a fresh smoke, final evaluation, review, and approval."
+description: "REVISED-PROMPT SMOKE RAN AND FAILED. Canonical Music Intelligence V1 contract. The music-forward creative policy, sanitized fixtures, and opt-in evaluation surface are built and the deterministic gate passes at 256 tests, but the July 30 2026 revised-prompt smoke completed 12 calls with zero fallbacks and still failed quality and trust, and a separate creative-ceiling probe reached its pre-registered 0–3 branch. Combined V1 remains incomplete; the next live branch is a separately approved stronger-model control, which is not approved."
 metadata:
   type: project
 ---
 
 # Music Intelligence V1 (July 26, 2026)
 
-**STATUS: REVISED PROMPT IMPLEMENTED — NEXT QUALITY SMOKE PENDING.**
+**STATUS: REVISED-PROMPT SMOKE RAN AND FAILED — NEXT LIVE BRANCH IS AN UNAPPROVED STRONGER-MODEL CONTROL.**
 
 This is the canonical planning document for Music Intelligence V1. Decisions recorded here
 are the source of truth; other documents should point here rather than restate them.
@@ -663,8 +663,13 @@ only; it does **not** verify model behavior, which remains the manual-evaluation
 runner, and evaluation record now exist. An authentication-invalid launch produced fallback
 text only and no model evidence; the first valid 12-call smoke then exposed a generic,
 restraint-heavy voice and small fabrications. That smoke served its diagnostic purpose and
-failed quality. The prompt was revised and the deterministic suite returned green. A fresh
-12-call smoke still requires Manley's explicit approval; no final run has occurred.
+failed quality. The prompt was revised and the deterministic suite returned green.
+
+**The revised-prompt 12-call smoke has since run** (July 30, 2026) and **also failed** quality
+and trust despite completing all 12 calls with zero fallbacks. A separate creative-ceiling probe
+then reached its pre-registered 0–3 branch. **No final run has occurred**, and the next live
+branch — a stronger-model control — requires Manley's explicit approval, which has not been
+given.
 
 ### Separate evaluation surface
 
@@ -896,11 +901,18 @@ final outputs exist:
 documentation reconciliation completed July 27–28. Fixtures and the opt-in evaluation
 surface followed, then live diagnostic evidence caused one approved creative-policy reopening.
 
-**Steps 1–10 are complete. Step 11 produced one authentication-invalid attempt and one valid
-quality-failed diagnostic smoke. Step 12 is complete for that cycle: the prompt was revised,
-fixtures were decontaminated, and 256 deterministic tests pass. Execution now returns to the
-step-11 approval gate for a fresh 12-call smoke.** The order remains locked; prior approval
-does not authorize the next paid run.
+**Steps 1–10 are complete. Step 11 has now produced one authentication-invalid attempt and
+*two* valid quality-failed diagnostic smokes** — the July 29 baseline smoke and the July 30
+revised-prompt smoke, the latter completing 12 calls with zero fallbacks and still failing
+quality and trust. **Step 12 is complete for the first cycle** (prompt revised, fixtures
+decontaminated, 256 deterministic tests passing), and the second cycle is **open**: the July 30
+smoke's failures have not yet been answered by a further production change.
+
+**A separate creative-ceiling probe then ran outside this execution order** and reached its
+pre-registered 0–3 branch — see [[music-intelligence-creative-ceiling-probe]]. It is diagnostic
+only and satisfies **no** step here. **The next live branch is a separately designed and
+separately approved stronger-model control, which is not approved.** The order remains locked;
+prior approval does not authorize the next paid run.
 
 ### Locked execution order
 
@@ -1131,7 +1143,7 @@ This is the **intended clean pause point**.
 
 ### Current status
 
-`REVISED PROMPT IMPLEMENTED — NEXT QUALITY SMOKE PENDING`
+`REVISED-PROMPT SMOKE RAN AND FAILED — CREATIVE-CEILING PROBE RAN AND FAILED — NEXT LIVE BRANCH IS AN UNAPPROVED STRONGER-MODEL CONTROL`
 
 - Planning remains committed at `0f22c99`; the original prompt slice at `949952c`.
 - Sanitized fixtures, the opt-in `MusicIntelligenceEvaluationRunner`, the revised creative
@@ -1150,12 +1162,32 @@ This is the **intended clean pause point**.
   praise, and better treatment of difficult runs.
 - S11 was replaced so it no longer duplicates calibration example 4. Neutral acknowledgment
   and stateless-variation wording were also hardened.
+- **The revised-prompt 12-call smoke then ran on July 30, 2026** against `693bfb3` and completed
+  **12 calls with zero fallbacks**, but **failed product quality and trust**. Prose quality and
+  music participation both improved over July 29 — the revision worked on the axis it targeted —
+  but the model still asserted unsupported characteristics for named tracks (the S4
+  unfamiliar-music fixture is the clearest failure), openings collapsed onto a single
+  distance-plus-pace template, and closings returned to interchangeable coaching filler. It is
+  retained as a failed diagnostic, not acceptance evidence.
+- **A separate creative-ceiling probe ran later the same day** at `6cb3075` — 12 completed
+  calls with a minimal creative system prompt as the single variable. **Minimal prompting
+  improved the prose but did not produce reliable replies.** Both independent graders reached
+  the pre-registered **0–3** band (Cowork 0 Hit / 1 Near-hit / 11 Miss; Codex 2 Hit /
+  1 Near-hit / 9 Miss, preserved unreconciled) and both counted **nine hard-trust failures**,
+  triggering the three-or-more override. Manley found **neither disputed reply app-worthy**,
+  preferring S11-1 only if forced — a relative preference, **not** a Hit. The probe is
+  diagnostic only and is never V1 acceptance evidence.
+- Raw evidence for both is preserved under `docs/claude-memory/evidence/`: the byte-for-byte
+  probe transcript, the four complete sanitized request bodies with per-body SHA-256, and the
+  three revised-prompt smoke screenshots.
 - **No final 36-output evaluation has run. Combined Music Intelligence V1 is NOT complete.**
 
-**Next gate:** after this documentation reconciliation is approved, Manley separately approves
-a fresh 12-call smoke against commit `693bfb3` plus the documentation commit. If that smoke is
-sound, the separately approved 36-call final evaluation follows.
+**Next gate:** the next live branch is a **separately designed and separately approved
+stronger-model control** — the identical probe on a stronger model, as the pre-registered 0–3
+branch requires. **It is not approved.** Only if that control is sound does the separately
+approved 36-call final evaluation follow. **Phase 0-A holdout-fixture design is likewise not
+approved.**
 
 This status remains completion definition **2 — prompt slice implemented, evaluation not
-complete**. Evaluation is now **underway**, not "not started." Neither this revision nor a
-successful smoke may be reported as combined V1 complete.
+complete**. Evaluation is now **underway**, not "not started." Neither this revision, nor any
+smoke, nor the creative-ceiling probe may be reported as combined V1 complete.

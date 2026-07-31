@@ -1,19 +1,21 @@
 ---
 name: music-intelligence-v1-evaluation
-description: "EVALUATION UNDERWAY — first valid 12-call smoke failed product quality and drove an approved creative-policy revision; an earlier authentication-invalid launch produced fallback text only. Revised prompt and fixtures pass 256 deterministic tests. Next quality smoke requires fresh approval; no final evaluation has run."
+description: "EVALUATION UNDERWAY — the July 30 revised-prompt smoke ran, completed 12 calls with zero fallbacks, and FAILED product quality and trust; a separate creative-ceiling probe also ran and reached its pre-registered 0–3 branch. Two smokes and one probe have now failed diagnostically. No final evaluation has run; combined V1 is NOT complete; the next live branch is a separately approved stronger-model control."
 metadata:
   type: project
 ---
 
 # Music Intelligence V1 — manual evaluation record
 
-**STATUS: EVALUATION UNDERWAY — REVISED-PROMPT SMOKE PENDING.**
+**STATUS: EVALUATION UNDERWAY — REVISED-PROMPT SMOKE RAN AND FAILED. NO FINAL EVALUATION HAS RUN.**
 
 This file is the **record surface** for the manual model-evaluation gate defined in
 [[design-music-intelligence-v1]]. It contains the active definitions and gates, the honest
-diagnostic history, and empty fields for the next smoke and final run. The first valid smoke
-**did happen** and failed product quality; it is not acceptance evidence. An earlier
-authentication-invalid launch produced only fallback text and is not model evidence at all.
+diagnostic history, and empty fields for the final run. Two 12-call smokes **did happen** and
+both failed product quality; neither is acceptance evidence. An earlier authentication-invalid
+launch produced only fallback text and is not model evidence at all. A separate
+**creative-ceiling probe** also ran — see [[music-intelligence-creative-ceiling-probe]] — and it
+is diagnostic only, so nothing from it appears in this file's acceptance tables.
 Combined V1 is **NOT complete**.
 
 ## What is done and what is not
@@ -28,9 +30,11 @@ Combined V1 is **NOT complete**.
 | Authentication-invalid launch | Attempted July 29, 2026; 12 fallback/invalid responses, later confirmed HTTP 401; **no model evidence** |
 | First valid 12-call smoke | Completed July 29, 2026 with 0 fallbacks; **failed product quality** and triggered prompt revision |
 | Revised creative policy + evaluation safeguards | Implemented and committed July 30, 2026 (`693bfb3`); **256 tests green** |
-| **Next 12-call smoke** | **PENDING** — requires new explicit approval because the prompt changed |
+| Revised-prompt 12-call smoke | **Ran July 30, 2026**; 12 calls, **0 fallbacks**; **failed product quality and trust** |
+| Creative-ceiling probe (separate, diagnostic) | **Ran July 30, 2026**; 12 calls; reached its pre-registered **0–3** branch — see [[music-intelligence-creative-ceiling-probe]] |
 | **36-call final evaluation** | **NOT RUN** — requires its own separate explicit approval |
-| Independent review (Claude Cowork) | Not started — cannot start before final outputs exist |
+| **Next live branch** | A separately designed, separately approved **stronger-model control**. **Not approved.** |
+| Independent review (Claude Cowork) | Not started **for V1 acceptance** — cannot start before final outputs exist. (Cowork did grade the separate creative-ceiling probe; that is diagnostic and is not V1 review.) |
 | Manley's final decision | Not made |
 
 The deterministic Maven suite proves **transport, placement, and prompt content**. It
@@ -255,7 +259,7 @@ label is the only difference. Re-verified automatically at the start of every la
 
 | Field | Value |
 | --- | --- |
-| Preflight result at last launch | *(not yet launched)* |
+| Preflight result at last launch | **PASSED** (July 30, 2026 revised-prompt smoke) — S2 `EARLY` vs S3 `ESTABLISHED`; stage label was the only difference |
 
 ## Locked hard-failure gate
 
@@ -370,23 +374,108 @@ The full verbatim terminal transcript was not preserved as a repository artifact
 record does **not** invent or reconstruct it. The user-held screenshots remain diagnostic
 context; only the confirmed metadata and findings above are recorded here.
 
-## Pending run metadata
-
-Fill these blocks only when their separately approved runs execute.
-
-### Next smoke run — PENDING
+### Revised-prompt 12-call smoke — RAN, FAILED DIAGNOSTIC
 
 | Field | Value |
 | --- | --- |
 | Mode | `smoke` |
-| Executed on (date) | *(pending)* |
-| Approved by Manley at execution time | *(requires fresh approval)* |
-| Prompt / code commit | `693bfb3` |
-| Model identifier | *(read from the request body at run time)* |
-| Live calls attempted | *(pending — would be 12)* |
-| `FALLBACK/INVALID` count | *(pending)* |
-| Preflight result | *(pending)* |
-| Outcome | **Diagnostic only — a smoke run can never complete V1.** |
+| Executed on (date) | **July 30, 2026**, approximately 04:32 local |
+| Approved by Manley at execution time | Yes — the revised-prompt smoke was explicitly approved |
+| Prompt / code commit | `693bfb3` (working tree at `8c47ce9`, which changed documentation only) |
+| Model identifier | `claude-haiku-4-5-20251001` |
+| Live calls attempted | **12 of 12** |
+| `FALLBACK/INVALID` count | **0** |
+| Preflight result | **PASSED** — stage label was the only S2/S3 difference |
+| Outcome | **Failed product quality and trust. Diagnostic only — a smoke run can never complete V1.** |
+
+**Evidence.** No verbatim terminal transcript was captured to a file. Three console screenshots
+were preserved instead:
+
+- `docs/claude-memory/evidence/smoke-20260730-revised-prompt-01-preflight-and-s1-s4.png`
+- `docs/claude-memory/evidence/smoke-20260730-revised-prompt-02-s4-s9.png`
+- `docs/claude-memory/evidence/smoke-20260730-revised-prompt-03-s9-s12-and-summary.png`
+
+The third screenshot records the run's own summary: `Attempted live calls : 12 (expected 12)`
+and `FALLBACK/INVALID : 0`.
+
+#### Screenshot-transcribed diagnostic evidence — not guaranteed verbatim
+
+**All twelve outputs below were transcribed by reading console screenshots. They are NOT
+guaranteed verbatim, and they are NOT final-acceptance evidence.** They are recorded so the
+diagnostic findings have a visible basis; the screenshots above are the artifacts of record.
+
+Two normalizations were applied for readability, and nothing else:
+
+1. **Display-encoding corruption was normalized.** The console rendered every em dash as the
+   mojibake sequence `ГÇö`. Each occurrence has been restored to `—`. Spacing around the dash
+   is preserved as displayed. No other character was changed.
+2. **Terminal line-wrapping was rejoined.** The console broke lines mid-word at its width; those
+   breaks are display artifacts and have been closed up.
+
+**Model content was not repaired.** Where the third screenshot's right edge clipped characters
+at a wrap boundary, the gap is marked `[…]` rather than guessed. Three outputs — S10, S11, S12 —
+carry such a gap. Nothing was invented to fill them.
+
+| S | Fallback | Screenshot-transcribed response |
+| --- | --- | --- |
+| S1 | no | Three miles at 9:29 on a dirt trail in 95-degree heat, starting low and finishing powered up—that's a real reversal, and it cost you genuine effort to pull it off. Eminem's whole point was showing up when it matters, and you did exactly that today. You walked in depleted and left with momentum. |
+| S2 | no | Three miles at 9:05 per mile on dirt — heavy work that left you spent, and you powered through anyway. Kendrick's precision and aggression on ELEMENT. matched what you demanded of yourself out there today. That's the kind of run that builds something real. |
+| S3 | no | Three miles on a dirt trail at 9:05 per mile, heavy effort that left you spent—you demanded something real from yourself today and delivered it. ELEMENT. played you toward that kind of focused intensity, the kind that doesn't soften when the work gets harder. That's a run that moved you forward. |
+| S4 | no | Four miles at 9:56 per mile on the trail in clear spring weather—solid, steady work that left you feeling good. Kendrick's reincarnated energy matched what you brought: grounded, controlled, purposeful. You moved through that distance with the kind of quiet confidence that builds real consistency. |
+| S5 | no | Four miles on a 79-degree trail at a steady 9:56 per mile—you moved through that run with real control. Kendrick's \*PRIDE.\* carries weight and introspection, and you matched it: a working effort that felt balanced, finishing with energy still there. That's the kind of run that builds. |
+| S6 | no | Two miles on a dirt trail in 91-degree heat at 9:57 per mile—that's a solid working effort in real conditions. You came in ready and finished feeling good, which means you paced it right and didn't leave anything on the table. That's the discipline that builds consistency. |
+| S7 | no | Two miles on a dirt trail in 91-degree heat, running silent and steady at 9:57 per mile—that's a working effort that paid off with solid footing and a clean finish. You held the pace and came out feeling good, which on a day like this means you ran smart. |
+| S8 | no | Two miles on a dirt trail in 91 degrees — that's a serious ask, and you answered it. Working effort at that temperature is the real win here, not the pace or the distance. You came in ready and left feeling good, which means the run moved you forward exactly the way it needed to. |
+| S9 | no | Four miles at 9:56 on the Riverside Trail under clear skies—a steady, solid outing that you finished feeling good. Kanye's "KING" is built on confidence, and you ran with that same measured control today, letting the effort land right where it needed to without overextending. |
+| S10 | no | Four miles forty-two on a trail you've never gone that far—that's your new longest distance, and you did it at a steady working pace in clear heat. Key Glock's "Run It Up" had the right energy for a run that actually moves your range forward. You finished moderate and re[…], which on a distance day like this means you've got room to grow. |
+| S11 | no | One mile eighty-four on a dirt trail in 88 degrees, starting from low and finishing spent — that took real heaviness from you, and you ran it anyway. Drake's "Started From the Bottom" is fitting: you showed up when the tank was already empty, which is exactly when showin[…]p matters most. |
+| S12 | no | Three miles at 9:29 on a dirt trail in 95 degrees—you came in low and left powered up, which is exactly what that heat and distance demanded of you. The energy lift you found today outpaced what this route gave you last time, a real shift from start to finish. You didn't[…]st survive the heat; you seized the moment. |
+
+*(In `smoke` mode only iteration 1 of each scenario is produced, so the twelve rows above are
+twelve scenarios at one iteration each — not the 36 outputs a final run requires.)*
+
+#### Why this smoke failed
+
+The revision worked on the axis it targeted and failed on others. Prose quality and music
+participation both improved markedly over the July 29 smoke — music appears in most outputs
+rather than being avoided. What it did not fix:
+
+- **Unsupported claims about music.** S4 is the clearest: the fixture exists to test an
+  unfamiliar or ambiguous track, and the reply asserted a specific character for it
+  ("Kendrick's reincarnated energy … grounded, controlled, purposeful"). S9 similarly asserted
+  what `KING` "is built on". Both are the fabricated-music-fact hard failure.
+- **Restraint fixtures not respected.** S4 was supposed to demonstrate restraint and did not.
+- **Openings collapsed into one template.** Ten of twelve open on distance-plus-pace or
+  distance-plus-temperature, which is exactly the mandatory-opening tendency the revision was
+  written to loosen.
+- **Closing filler returned.** Several outputs end on interchangeable coaching abstractions —
+  "builds consistency", "that builds", "builds something real".
+
+Manley's assessment was that these outputs are not product quality. That judgment stands and is
+what motivated the separate creative-ceiling probe below.
+
+**This block is diagnostic. None of it may be copied into the acceptance tables in this file.**
+
+### Separate creative-ceiling probe — RAN, DIAGNOSTIC ONLY
+
+A prompt-ablation study run later the same day at commit `6cb3075`. It is recorded in full in
+[[music-intelligence-creative-ceiling-probe]] and is **not** V1 evidence in either direction.
+
+| Field | Value |
+| --- | --- |
+| Purpose | Distinguish "the production prompt suppresses the model" from "the model cannot do this" |
+| Executed on | July 30, 2026, 15:45 local |
+| Model | `claude-haiku-4-5-20251001` |
+| Calls | **12 of 12**, zero failures |
+| Independent grading | Cowork **0 Hit / 1 Near-hit / 11 Miss / 9 hard-trust failures**; Codex **2 Hit / 1 Near-hit / 9 Miss / 9 hard-trust failures**. Preserved unreconciled. |
+| Manley's adjudication | Neither disputed reply (S1-1, S11-1) is app-worthy; **S11-1 preferred only if forced to choose**, which is explicitly **not** a Hit |
+| Pre-registered band | **0–3**, reached on both tallies |
+| Trust override | **Triggered** — nine hard-trust failures against a threshold of three |
+| Conclusion | Minimal prompting **did not** solve the problem; creative freedom introduced excessive factual risk. The next live branch is an **identical stronger-model control**, requiring separate approval. |
+
+**Neither this probe nor the smoke above completes any part of V1.**
+
+## Pending run metadata
 
 ### Final run — NOT RUN
 
@@ -403,11 +492,22 @@ Fill these blocks only when their separately approved runs execute.
 | Hard-failure result | *(not run)* |
 | Quality-rubric result | *(not run)* |
 
-## Candidate output record
+## Candidate output record — FINAL RUN ONLY
 
-Empty for the revised prompt. The earlier valid smoke generated diagnostic outputs, but they
-failed quality and were not preserved verbatim in the repository; they are summarized above
-and cannot be used as final evidence.
+**Empty, and it stays empty until the 36-call final run executes.**
+
+This table is the **acceptance surface**. Nothing diagnostic belongs in it. Specifically, none
+of the following may be copied here:
+
+- the July 29 authentication-invalid launch (fallback text, not model evidence);
+- the July 29 first valid smoke (failed quality, not preserved verbatim);
+- the **July 30 revised-prompt smoke** (failed quality and trust; its outputs are
+  screenshot-transcribed and not guaranteed verbatim);
+- the **July 30 creative-ceiling probe** (a different system prompt entirely — see
+  [[music-intelligence-creative-ceiling-probe]]).
+
+A smoke produces one iteration per scenario and cannot fill a 3-iteration acceptance row, and a
+probe under an ablated prompt is not evidence about the production prompt at all.
 
 Record every output verbatim, labeled by scenario and iteration. A `FALLBACK/INVALID`
 output is recorded as such and **never** counted as model evidence — one anywhere in a final
@@ -455,7 +555,8 @@ For each iteration record: the verbatim response, `FALLBACK` yes/no, hard-failur
 | S12 | 2 | | | | | |
 | S12 | 3 | | | | | |
 
-*(In `smoke` mode only iteration 1 of each scenario is produced.)*
+*(In `smoke` mode only iteration 1 of each scenario is produced, which is why no smoke — the
+July 30 one included — can populate the three-iteration rows above.)*
 
 ### Per-scenario tallies
 
@@ -488,7 +589,12 @@ a final run makes that final result stale — rerun all 36.
 
 ## Reviewer notes
 
-Empty. Independent review cannot begin before final outputs exist.
+Empty **for V1 acceptance**. Independent review of V1 cannot begin before final outputs exist.
+
+Cowork and Codex did independently grade the separate **creative-ceiling probe** on July 30,
+2026. That was a different system prompt against a different, pre-registered diagnostic rubric.
+It is **not** the V1 independent review and does not start it. Those tallies live in
+[[music-intelligence-creative-ceiling-probe]], preserved unreconciled.
 
 **Claude Cowork — narrow independent reviewer.** Provide the locked rubric above and the
 sanitized outputs only. Do **not** ask it to redesign the feature or add scope. Blind the
@@ -523,3 +629,23 @@ Empty. No decision has been made.
 Combined Music Intelligence V1 remains **NOT complete** until every row above is filled,
 the gates are met, the independent review is reconciled, Manley approves, and the final
 status and handoff documentation is updated.
+
+## Where this stands, and what the next live branch is
+
+As of July 30, 2026:
+
+- The **revised-prompt Haiku smoke ran** — 12 calls, zero fallbacks — and **failed** diagnostic
+  quality and trust.
+- The separate **creative-ceiling probe ran** on Haiku with **12 completed calls**.
+- Minimal prompting **improved prose but did not produce reliable replies**.
+- Both independent graders reached the pre-registered **0–3** branch and counted **nine**
+  hard-trust failures.
+- Manley found **neither disputed reply app-worthy**, while preferring **S11-1 if forced** —
+  which is a relative preference, not a Hit.
+- **Combined Music Intelligence V1 remains incomplete. No final evaluation has run.**
+
+The next live branch is a **separately designed and separately approved stronger-model
+control**. It is **not approved**, and no work on it may begin without that approval.
+
+Holdout-fixture design (Phase 0-A) is likewise **not approved** and must not be performed as
+part of recording this evidence.

@@ -324,8 +324,10 @@ The agent becomes meaningfully more personal when it knows:
 
 ### Music context — Music Intelligence V1
 
-**Status: revised prompt and evaluation safeguards implemented; first valid smoke failed
-quality; next quality smoke pending. Combined Music Intelligence V1 is NOT complete.**
+**Status: revised prompt and evaluation safeguards implemented; the revised-prompt smoke ran
+July 30, 2026 and failed diagnostic quality and trust; a separate creative-ceiling probe also
+ran and reached its pre-registered 0–3 branch. The next live branch is a separately approved
+stronger-model control, which is NOT approved. Combined Music Intelligence V1 is NOT complete.**
 
 The canonical contract is `docs/claude-memory/design_music_intelligence_v1.md`. This section
 records only what is **as-built**; it does not restate the plan.
@@ -378,16 +380,32 @@ the ordinary suite makes no Anthropic call.
 The live record is separate. An authentication-invalid launch produced only fallback text and
 no evidence. The first valid 12-call smoke returned twelve model responses with zero fallbacks,
 but failed product quality: generic coaching, music avoidance, repetition, and small unsupported
-details. The revision above responds to that evidence. **No revised-prompt smoke and no
-36-output final evaluation have run.**
+details. The revision above responds to that evidence.
+
+**The revised-prompt smoke then ran on July 30, 2026** — 12 calls, **zero fallbacks** — and
+**also failed** diagnostic quality and trust. Prose and music participation both improved, but
+the model still asserted unsupported characteristics for named tracks (the S4 unfamiliar-music
+fixture is the clearest case), openings collapsed onto one template, and closings returned to
+interchangeable coaching filler.
+
+A separate **creative-ceiling probe** ran the same day at commit `6cb3075` — 12 completed calls
+with a minimal creative system prompt as the single variable. Minimal prompting improved the
+prose but did not produce reliable replies: both independent graders reached the pre-registered
+**0–3** branch and counted **nine hard-trust failures**, triggering the trust override. Manley
+found **neither disputed reply app-worthy**, preferring S11-1 only if forced, which is not a Hit.
+Raw evidence is preserved under `docs/claude-memory/evidence/`.
+
+**No 36-output final evaluation has run, and combined V1 is not complete.**
 
 - Implementation path:
   1. BUILT: optional music input during the log flow
   2. BUILT: agent receives artist/song context when available
   3. BUILT: V1 prompt slice, blank-safe music states, stage label, deterministic gate
   4. BUILT: sanitized fixtures, opt-in fail-fast evaluation runner, record, and revised prompt
-  5. NEXT: separately approved revised-prompt smoke, then separately approved final evaluation
-  6. FUTURE: settle the release lyric boundary; do not scrape Genius
+  5. RAN AND FAILED: revised-prompt smoke (July 30) and the separate creative-ceiling probe
+  6. NEXT: a separately designed, separately approved **stronger-model control** — **not
+     approved** — then, only if sound, the separately approved final evaluation
+  7. FUTURE: settle the release lyric boundary; do not scrape Genius
 
 ### Trail or route awareness
 - Route name already exists in the Run model — the agent can use it now

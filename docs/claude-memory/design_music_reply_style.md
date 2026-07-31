@@ -1,6 +1,6 @@
 ---
 name: design-music-reply-style
-description: "Music reply craft reference (July 6, 2026; creative policy revised July 30, 2026) — subordinate to design_music_intelligence_v1.md; inclusion-first music-forward voice, three creative registers, flexible craft tendencies, and the development-phase lyric boundary are implemented and deterministically verified at 256 tests; next quality smoke pending."
+description: "Music reply craft reference (July 6, 2026; creative policy revised July 30, 2026) — subordinate to design_music_intelligence_v1.md; inclusion-first music-forward voice, three creative registers, flexible craft tendencies, and the development-phase lyric boundary are implemented and deterministically verified at 256 tests. The July 30 revised-prompt smoke ran and failed quality/trust, so these craft rules are verified as present in the prompt but NOT accepted in model behavior."
 metadata:
   type: project
 ---
@@ -10,15 +10,21 @@ metadata:
 How the agent should reference music in post-run replies. Extends the Phase 5 Step 1
 music feature (manual input).
 
-**STATUS: REVISED CRAFT RULES IMPLEMENTED — NEXT QUALITY SMOKE PENDING. CRAFT REFERENCE ONLY.**
+**STATUS: REVISED CRAFT RULES IMPLEMENTED — SMOKE RAN AND FAILED. CRAFT REFERENCE ONLY.**
 
 The revised craft rules below — run and runner as subject, music as an inclusion-first creative
 lens, light / featured / run-only registers, flexible rather than formulaic construction,
 earned praise, accurate facts, short lyric references but no extended or garbled reproduction,
 and no lasting pattern from one run — are **implemented and deterministically verified**
-(256 tests green, July 30, 2026). The first valid smoke failed quality under the older
-restraint-heavy prompt; a fresh smoke against the revision is pending, so prompt presence is
-verified but revised model behavior is not yet accepted.
+(256 tests green, July 30, 2026).
+
+**The revised-prompt smoke has since run (July 30, 2026) and failed quality and trust.** The
+craft rules are verified as *present in the prompt*; they are **not** verified as *achieved in
+model behavior*. The smoke showed the model still asserting unsupported characteristics for
+named tracks, collapsing openings onto one template, and closing on interchangeable coaching
+filler — three things these rules exist to prevent. A separate creative-ceiling probe then
+showed that removing the rules entirely did not fix it either. Treat this file as the craft
+target, not as a description of observed behavior.
 
 > **Canonical authority: [`design_music_intelligence_v1.md`](design_music_intelligence_v1.md).**
 > Music Intelligence V1 planning is **COMPLETE and approved (July 27, 2026)**. That document
@@ -30,8 +36,9 @@ This document contains two distinct slices:
 - **Core craft rules + early-user posture:** prompt-layer work only; no schema, console,
   provider API, or reply-persistence change. **This slice is implemented and deterministically
   verified**, executed per the canonical plan's bounded implementation contract. Manual
-  evaluation is underway: the first valid smoke failed quality, the policy was revised, and
-  the next smoke is pending fresh approval.
+  evaluation is underway and failing: the first valid smoke failed quality, the policy was
+  revised, and the revised-prompt smoke then failed quality and trust as well. The next live
+  branch is a separately approved stronger-model control, which is not approved.
 - **Cross-run frequency balance:** a separate mechanism that cannot be prompt-only because the
   app stores neither AI replies nor a "music was referenced" signal. The canonical plan
   documents its future three-state outcome boundary; the **physical schema, rolling window,

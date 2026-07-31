@@ -11,8 +11,11 @@ metadata:
 > References below to “Phase 6” mean mobile-era capabilities, not the immediate next task.
 > **Music Intelligence V1 planning, revised prompt, sanitized fixtures, and opt-in runner are
 > implemented with the deterministic gate passing** (`design_music_intelligence_v1.md`; 256
-> tests green, July 30, 2026). The first valid smoke failed quality and drove the revision.
-> The **next gate is a separately approved fresh smoke**, then—if sound—the separately approved
+> tests green, July 30, 2026). The first valid smoke failed quality and drove the revision, and
+> the **revised-prompt smoke then ran July 30 and also failed** quality and trust; a separate
+> creative-ceiling probe reached its pre-registered 0–3 branch.
+> The **next gate is a separately designed and separately approved stronger-model control,
+> which is NOT approved**, then—if sound—the separately approved
 > final evaluation. The locked
 > execution path from here is evaluation → **combined V1 complete** → tightly fenced Core
 > Running Foundation Review → resume UI design → Spring Boot API → mobile/GPS. The review
@@ -190,10 +193,11 @@ APIs: https://www.last.fm/api/show/track.getSimilar · https://listenbrainz.read
 
 **How to apply (order reconciled July 30, 2026):** Music Intelligence V1 planning, revised
 prompt, sanitized fixtures, and opt-in runner are implemented
-(`design_music_intelligence_v1.md`; 256 tests green). The locked immediate order is now a
-**separately approved fresh smoke against the revised prompt → separately approved final
-evaluation → independent review and Manley's decision** → **combined V1 complete** → Core
-Running Foundation Review → UI → Spring Boot → mobile/GPS.
+(`design_music_intelligence_v1.md`; 256 tests green), but the revised-prompt smoke has run and
+failed, as has the separate creative-ceiling probe. The locked immediate order is now a
+**separately designed and separately approved stronger-model control (not approved) →
+separately approved final evaluation → independent review and Manley's decision** → **combined
+V1 complete** → Core Running Foundation Review → UI → Spring Boot → mobile/GPS.
 
 The pre-run playlist brain remains a **later north star** that approved music slices build
 toward — **not the next task**, and **the full proposed version is not buildable from current

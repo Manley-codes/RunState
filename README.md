@@ -134,12 +134,17 @@ That planning settled the energy-domain question: RunState **retains the shared 
 domain proposal.
 
 **Manual model evaluation is underway but not accepted, so combined Music Intelligence V1 is
-not complete.** An authentication-invalid launch produced no model evidence; the first valid
-12-call smoke failed product quality and drove the revision. No revised-prompt smoke or final
-evaluation has run. The locked path from here is:
+not complete.** An authentication-invalid launch produced no model evidence. The first valid
+12-call smoke failed product quality and drove the revision. The **revised-prompt smoke then
+ran on July 30, 2026** — 12 calls, zero fallbacks — and **also failed** diagnostic quality and
+trust. A separate **creative-ceiling probe** ran the same day with 12 completed calls: minimal
+prompting improved the prose but did not produce reliable replies, both independent graders
+reached the pre-registered 0–3 branch and counted nine hard-trust failures, and Manley found
+neither disputed reply app-worthy. **No final evaluation has run.** The locked path from here is:
 
-1. Explicitly approve and conduct a fresh 12-call smoke against the revised prompt.
-2. Review that smoke as a diagnostic and correct only real problems.
+1. Separately design and separately approve a **stronger-model control** — the next live branch,
+   and **not yet approved**.
+2. Review that control as a diagnostic and correct only real problems.
 3. Separately approve and conduct the 36-output final evaluation.
 4. Reconcile independent review against the locked rubric and obtain Manley's final decision.
 5. **Only after combined Music Intelligence V1 is complete** — implementation, deterministic

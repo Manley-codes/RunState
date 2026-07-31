@@ -60,7 +60,7 @@ delegates). Full spec: `design_runstyle_v1.md`. In brief:
 
 Flow-audit findings: all four closed — items 1 and 2 (malformed-row handling, July 16); item 3 (save orchestration, Task 4); item 4 (context in summaries, Task 5).
 
-**Current resume point — Music Intelligence V1 REVISED PROMPT IMPLEMENTED — NEXT QUALITY SMOKE PENDING:**
+**Current resume point — Music Intelligence V1 REVISED-PROMPT SMOKE RAN AND FAILED; CREATIVE-CEILING PROBE RAN AND FAILED; NEXT LIVE BRANCH IS AN UNAPPROVED STRONGER-MODEL CONTROL:**
 - **V1 planning is complete and committed (`0f22c99`, July 27, 2026).** The canonical contract is
   `design_music_intelligence_v1.md` — purpose and boundary, closed foundational contracts,
   current evidence and reply behavior, deferred persistence boundary, bounded implementation
@@ -85,15 +85,31 @@ Flow-audit findings: all four closed — items 1 and 2 (malformed-row handling, 
 - **Evaluation is underway, not complete.** Sanitized fixtures and the opt-in runner exist.
   One authentication-invalid launch produced fallback text only; the first valid 12-call smoke
   completed with zero fallbacks but failed product quality. The prompt was revised in response.
-  **No revised-prompt smoke and no final run have occurred. Combined Music Intelligence V1 is
-  NOT complete.**
+  **The revised-prompt smoke then ran July 30 — 12 calls, zero fallbacks — and also failed
+  diagnostic quality and trust.** Prose and music participation improved, but the model still
+  asserted unsupported characteristics for named tracks (S4 unfamiliar-music is the clearest
+  case), openings collapsed onto one template, and closings returned to coaching filler.
+  **No final run has occurred. Combined Music Intelligence V1 is NOT complete.**
+- **A separate creative-ceiling probe ran July 30 at `6cb3075` — 12 completed calls,
+  diagnostic only.** It swapped in a minimal creative system prompt as the single variable to
+  test whether the production prompt was suppressing the model or the model simply cannot do
+  this. **Minimal prompting improved the prose but did not produce reliable replies.** Both
+  independent graders reached the pre-registered **0–3** band (Cowork 0 Hit / 1 Near-hit /
+  11 Miss; Codex 2 Hit / 1 Near-hit / 9 Miss — preserved unreconciled) and both counted **nine
+  hard-trust failures**, triggering the three-or-more trust override. **Manley found neither
+  disputed reply app-worthy**, preferring S11-1 only if forced — a relative preference, not a
+  Hit. Full record in `music_intelligence_creative_ceiling_probe.md`; raw transcript, request
+  bodies, and smoke screenshots are preserved under `docs/claude-memory/evidence/`.
 - **Energy domain — CLOSED.** The shared LOW/MODERATE/HIGH pre/post energy domain is retained.
   The four-state State Scan sketch is **superseded as a domain proposal**; later UI work may
   refine labels and presentation without changing stored meanings.
-- **Next task when Manley resumes:** explicitly approve and run one fresh 12-call smoke against
-  the revised prompt. Review it as a diagnostic. If it is sound, separately approve the
-  36-output final evaluation, then reconcile independent review and Manley's final decision.
-  Every live mode keeps its own approval gate.
+- **Next task when Manley resumes:** the next live branch is a **separately designed and
+  separately approved stronger-model control** — the identical probe on a stronger model, as the
+  pre-registered 0–3 branch requires. **It is not approved**, and nothing may be run for it
+  without that approval. Review it as a diagnostic. Only if it is sound does the separately
+  approved 36-output final evaluation follow, then independent review reconciliation and
+  Manley's final decision. Every live mode keeps its own approval gate.
+  **Phase 0-A holdout-fixture design is NOT approved** and must not be started.
 - The future `REFERENCED / NOT_REFERENCED / UNKNOWN` reply-outcome boundary is **documented**
   in the canonical plan, but cross-run reference-frequency implementation (schema, rolling
   window, detection, prompt line) remains **deferred** — it is not part of the prompt slice.
@@ -117,8 +133,11 @@ Flow-audit findings: all four closed — items 1 and 2 (malformed-row handling, 
   privacy, provider, and platform dependencies.
 
 *(Resume point rewritten July 30, 2026 after the first valid smoke, approved creative-policy
-revision, S11 fixture decontamination, and clean 256-test gate. The July 28
-evaluation-not-started resume point is superseded.)*
+revision, S11 fixture decontamination, and clean 256-test gate. Updated later the same day after
+the revised-prompt smoke and the creative-ceiling probe both ran and both failed, and their
+evidence was preserved under `docs/claude-memory/evidence/`. The July 28
+evaluation-not-started resume point and the "next quality smoke pending" resume point are both
+superseded.)*
 
 **Standing milestone — privacy / security / legal pass (added July 6, 2026):**
 Before RunState is released, shared publicly, or gains multi-user/all-day-listening features,

@@ -37,13 +37,16 @@ now explicit, and part of it is already done:
   passes **256 tests** (0 failures, 0 errors, 0 skipped).
 - **Manual model evaluation is underway but not accepted, so combined Music Intelligence V1 is
   NOT complete.** An authentication-invalid launch produced no evidence; the first valid smoke
-  failed product quality; no revised-prompt smoke or final evaluation has run.
+  failed product quality; the **revised-prompt smoke ran July 30, 2026 and also failed**
+  quality and trust; and a separate **creative-ceiling probe** ran with 12 completed calls,
+  reaching its pre-registered 0–3 branch with nine hard-trust failures on both independent
+  tallies. **No final evaluation has run.**
 
 The remaining path, each step behind its own explicit approval:
 
-1. **Next gate:** explicitly approve and conduct a fresh **12-call smoke** against the revised
-   prompt.
-2. Review the smoke as a diagnostic; correct and retest only if it exposes a real problem.
+1. **Next gate:** separately design and separately approve a **stronger-model control** — the
+   next live branch. **It is not approved.**
+2. Review that control as a diagnostic; correct and retest only if it exposes a real problem.
 3. Separately approve and conduct the **36-output final** evaluation.
 4. Reconcile independent review, finish final documentation, and obtain Manley's approval.
 5. **Only then** is **combined Music Intelligence V1** complete → tightly fenced Core Running

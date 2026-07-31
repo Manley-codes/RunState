@@ -1,19 +1,24 @@
 ---
 name: music-intelligence-creative-ceiling-probe
-description: "STATUS: NOT RUN — ZERO LIVE PROBE CALLS MADE. Pre-registered prompt-ablation protocol and blank grading record for the Music Intelligence creative ceiling probe: 12 planned Haiku calls across S1/S2/S11/S12, minimal creative prompt as the single variable. DIAGNOSTIC ONLY — never V1 acceptance evidence."
+description: "STATUS: RUN AND GRADED — COMPLETED DIAGNOSTIC. 12 live Haiku calls on July 30 2026 across S1/S2/S11/S12 with the minimal creative prompt as the single variable. Both independent graders reached the pre-registered 0–3 band and counted nine hard-trust failures; Manley found neither disputed reply app-worthy. DIAGNOSTIC ONLY — never V1 acceptance evidence."
 metadata:
   type: project
 ---
 
 # Music Intelligence — creative ceiling probe
 
-## STATUS: NOT RUN — ZERO LIVE PROBE CALLS MADE
+## STATUS: RUN AND GRADED — COMPLETED DIAGNOSTIC
+
+Twelve live calls completed on **July 30, 2026** at commit `6cb3075`. The pre-registered
+protocol, grading labels, and decision rule below are reproduced **exactly as they were
+registered before any call** and were not adjusted after seeing results.
 
 **This is a diagnostic detour. It is not V1 acceptance evidence and can never become it.**
 Nothing recorded here may be copied into
 [[music-intelligence-v1-evaluation]] as smoke or final output, and nothing here changes the
-V1 gates in [[design-music-intelligence-v1]]. The V1 execution order is untouched: a fresh
-12-call smoke against the production prompt still requires its own separate approval.
+V1 gates in [[design-music-intelligence-v1]]. The V1 execution order is untouched: the
+36-call final evaluation against the production prompt still requires its own separate
+approval, and this probe does nothing to earn it.
 
 ## The question
 
@@ -28,6 +33,13 @@ Those call for opposite responses. Explanation 1 means rebuild the prompt around
 direction; explanation 2 means the prompt is not the lever and a stronger model or a different
 feature shape is. Guessing between them is expensive, so this probe changes one variable and
 asks the model directly.
+
+**Sequencing note, added after the run.** Between registering this protocol and executing it,
+the separately approved **revised-prompt smoke also ran** (July 30, 2026, ~04:32, prompt
+baseline `693bfb3`) and **also failed** product quality and trust — see
+[[music-intelligence-v1-evaluation]]. So by the time these 12 calls were made, two production
+prompts had failed, which sharpened rather than changed the question above. The variable under
+test here is still only the system prompt.
 
 ## Experimental contract
 
@@ -144,90 +156,217 @@ A failed API call is **not** an output. Do not grade it and do not count it as a
 freedom introduces excessive factual risk. Stronger trust protection is required in any rebuild,
 regardless of how good the hit rate looked.
 
-## Results — BLANK, NOT RUN
-
-Do not fabricate results. Every cell below stays empty until 12 live calls have actually been made.
+## Results — RUN AND GRADED
 
 **Run metadata**
 
 | Field | Value |
 | --- | --- |
-| Date run | *(not run)* |
-| Model returned by the production request | *(not run)* |
-| Commit | *(not run)* |
-| Transcript path | *(not run)* |
-| Calls attempted | *(not run)* |
-| Calls not spent | *(not run)* |
+| Date run | July 30, 2026, 15:45:03 local (`2026-07-30T15:45:03.527170700`) |
+| Model returned by the production request | `claude-haiku-4-5-20251001` |
+| Commit | `6cb3075` (working tree clean at launch) |
+| Transcript path | written to `target/creative-ceiling-probe-20260730-154503.md`; preserved under `docs/` — see below |
+| Calls attempted | **12 of 12** |
+| Calls not spent | 0 |
+| Failed calls | 0 — every call returned model output, so all 12 are gradable |
 
-**Raw outputs**
+**Raw evidence — preserved**
 
-| # | Scenario | Iteration | Output |
-| --- | --- | --- | --- |
-| 1 | S1 | 1 | |
-| 2 | S1 | 2 | |
-| 3 | S1 | 3 | |
-| 4 | S2 | 1 | |
-| 5 | S2 | 2 | |
-| 6 | S2 | 3 | |
-| 7 | S11 | 1 | |
-| 8 | S11 | 2 | |
-| 9 | S11 | 3 | |
-| 10 | S12 | 1 | |
-| 11 | S12 | 2 | |
-| 12 | S12 | 3 | |
+`target/` is build output and disposable, so both artifacts were copied into the repository
+before anything could clear it.
+
+| Artifact | Path | SHA-256 |
+| --- | --- | --- |
+| Raw transcript, byte-for-byte | `docs/claude-memory/evidence/creative-ceiling-probe-20260730-154503.md` | `DD5BC41A919CDC01873400164894AB0376B6FEE8C4BBD3FD5F7CEC4EF11715FB` |
+| Complete sanitized request bodies | `docs/claude-memory/evidence/creative-ceiling-probe-20260730-154503-requests.json` | *(hashes are per body, below)* |
+
+The transcript is the raw artifact and is **not** rewritten or normalized. Its 8,040 bytes hash
+to the value above both at its original `target/` location and at the preserved path.
+
+**Request bodies actually sent**
+
+All four complete bodies — model, `max_tokens`, the full temporary system prompt, the full
+production user message, roles, and field order — are preserved in the JSON above. Each body
+was POSTed unchanged once per iteration, so 4 bodies produced 12 calls.
+
+| Scenario | Field order as sent | `temperature` | Bytes | SHA-256 of the exact posted body |
+| --- | --- | --- | --- | --- |
+| S1 | `model`, `max_tokens`, `system`, `messages` | **absent** | 1776 | `050E05E22871C5CC2EA34954E2C71F1B91DB1746BF89B310A14D8FDF0B1FC1CC` |
+| S2 | `model`, `max_tokens`, `system`, `messages` | **absent** | 1785 | `9DA5B6B53B6B870B81E717A9579F14203397657B95868052DB16BC43C468E21C` |
+| S11 | `model`, `max_tokens`, `system`, `messages` | **absent** | 1774 | `2DAEFF8E0D025FDF844471AD599169FB5CBDEAEFF56D72FA2E47BBE73905442C` |
+| S12 | `model`, `max_tokens`, `system`, `messages` | **absent** | 1980 | `3FF23C16834F83C70ADE128D35FA0E753657433C0C699510B324A40F769C6E76` |
+
+`temperature` is **absent from every body**, exactly as it was during the run:
+`RunAgent.buildRequestBody` sets exactly `model`, `max_tokens`, `system`, `messages` and never
+sets `temperature`. The bodies were re-read after the fact through the same no-network seam the
+probe itself used, `MusicIntelligenceCreativeCeilingProbe.probeRequestBodies()`; no production
+or tracked file was modified to produce them, and no API key appears in the artifact.
+
+**Raw outputs — all 12, verbatim from the raw transcript**
+
+Reproduced exactly as the transcript records them, in transcript order.
+
+### S1 — strong convergence
+
+**1 · S1 iteration 1**
+
+> Three miles on a dirt trail in 95-degree heat—and you went from running on empty to absolutely electric. "Lose Yourself" paired with that kind of transformation feels like more than a song choice; it's the perfect witness to what happens when you show up anyway and let the work speak for itself. That's the real victory today.
+
+**2 · S1 iteration 2**
+
+> Three miles through summer heat and dirt on a day you showed up low—Eminem's relentless drive matched your steady 9:29 pace perfectly, turning moderate effort into something that actually mattered. You didn't just run yourself out of that low place; you ran straight into powered-up territory, proving the trail and the moment were exactly what you needed.
+
+**3 · S1 iteration 3**
+
+> You showed up on a scorching trail when energy was scarce, and three miles later you're flying—that's the real victory here. "Lose Yourself" demanded your focus and delivered exactly what you needed: a reminder that preparation meets opportunity when you actually step outside, even on a 95-degree day when staying still feels easier.
+
+### S2 — EARLY thin fit
+
+**4 · S2 iteration 1**
+
+> Three miles of dirt under your feet on a cool spring afternoon—that's honest work, and "ELEMENT." rode along as you pushed through the heaviness. You came in moderate and left spent, which means you gave what the day demanded, not what was easy.
+
+**5 · S2 iteration 2**
+
+> Three miles on a dirt trail with nothing but Kendrick's restless energy and your own breath—a heavy effort that left everything out there. "ELEMENT." paired perfectly with that solo push through the spring clouds, its relentless beat matching the real cost of running without a cushion. You went deep, spent it all, and that's the kind of run that sticks with you long after your legs settle.
+
+**6 · S2 iteration 3**
+
+> Three miles on dirt with Kendrick's relentless pace—you met that energy head-on, trading moderate confidence for genuine exhaustion. Trail running asks everything of your legs and focus, and today you gave it, even as the cool spring air pushed back. That spent feeling isn't emptiness; it's the honest cost of showing up solo and running hard when the ground won't make it easy.
+
+### S11 — short, difficult run
+
+**7 · S11 iteration 1**
+
+> You showed up on a dirt trail in 88-degree heat when your tank was already running low—that's the kind of grounded commitment Drake's talking about. Starting from the bottom means showing up anyway, and you did that for 1.84 miles, trading your last bit of energy for the work itself. That's the run that counts.
+
+**8 · S11 iteration 2**
+
+> You ran a dirt trail solo in summer heat at a heavy effort—that's real work, and you showed up for it. Drake's "Started From the Bottom" played witness to your 1.84 miles, a track about grinding through resistance that matched the terrain and temperature pushing back against you. Sometimes the most meaningful runs aren't the fastest ones; they're the ones where you kept moving despite everything feeling spent.
+
+**9 · S11 iteration 3**
+
+> You showed up on a summer afternoon when the heat was bearing down and your tank was already running low—that's the real victory here. "Started From the Bottom" carries a different weight when you're grinding through 1.84 miles on dirt with nothing left to give; sometimes showing up *is* the climb. You spent yourself honest on that trail, and that counts.
+
+### S12 — lyric and pattern trap
+
+**10 · S12 iteration 1**
+
+> You showed up low and left high—that's the real win on a 95-degree dirt trail. "Lose Yourself" met you where you were, and somewhere between mile one and that final push, the heat and the hustle clicked into something powerful, giving you a bigger energy shift than last time you ran this route.
+
+**11 · S12 iteration 2**
+
+> You showed up low on a scorching 95-degree day and let Eminem's relentless momentum carry you through three miles of dirt trail—a gutsy move that paid off. That energy lift from start to finish exceeded what you managed last time on this same route, proving that sometimes the right soundtrack and sheer determination can override the heat. Three miles stronger than you felt walking in.
+
+**12 · S12 iteration 3**
+
+> You arrived low and left powered up—a three-mile dirt trail conversion that turned the summer heat into fuel rather than friction. "Lose Yourself" did what it promises: the intensity you brought to that moderate effort created a bigger energy lift than last time you ran this route, proving the shift wasn't just the music playing, but *you* showing up differently.
 
 **Hard trust checks**
 
-| # | Scenario | Iteration | Trust result (pass / fail + which check) |
-| --- | --- | --- | --- |
-| 1 | S1 | 1 | |
-| 2 | S1 | 2 | |
-| 3 | S1 | 3 | |
-| 4 | S2 | 1 | |
-| 5 | S2 | 2 | |
-| 6 | S2 | 3 | |
-| 7 | S11 | 1 | |
-| 8 | S11 | 2 | |
-| 9 | S11 | 3 | |
-| 10 | S12 | 1 | |
-| 11 | S12 | 2 | |
-| 12 | S12 | 3 | |
+Two independent graders each counted **nine hard-trust failures out of twelve**. Their
+**per-output** trust grids were not supplied to this session, so they are not reconstructed
+here — inventing which nine would be fabrication, and it would also misrepresent gradings
+neither reviewer wrote down in this form.
+
+The column below is the **recording assistant's own reading**, made while transcribing the
+outputs into this record. It is written down because a trust claim with no per-output basis is
+not auditable. It is **not** either reviewer's grading, it does not replace or reconcile them,
+and where it disagrees with them, **they are the graders of record**.
+
+| # | Scenario | Iter | Recording assistant's trust reading — NOT a reviewer grade | Check implicated |
+| --- | --- | --- | --- | --- |
+| 1 | S1 | 1 | pass | — |
+| 2 | S1 | 2 | fail | music causation — "turning moderate effort into something that actually mattered" attributes the change to the music's drive |
+| 3 | S1 | 3 | fail | music causation and fabricated theme — "demanded your focus and delivered exactly what you needed" |
+| 4 | S2 | 1 | fail | fabricated run fact — "afternoon"; time of day is not supplied |
+| 5 | S2 | 2 | fail | fabricated music fact — "its relentless beat" asserts an unsupplied musical property |
+| 6 | S2 | 3 | fail | fabricated music fact and run behavior — "Kendrick's relentless pace"; "the ground won't make it easy" |
+| 7 | S11 | 1 | pass | — |
+| 8 | S11 | 2 | fail | fabricated song theme — "a track about grinding through resistance" |
+| 9 | S11 | 3 | fail | fabricated run fact — "a summer afternoon"; time of day is not supplied |
+| 10 | S12 | 1 | fail | fabricated run behavior — "somewhere between mile one and that final push"; no split data exists |
+| 11 | S12 | 2 | fail | music causation — "let Eminem's momentum carry you"; "the right soundtrack … can override the heat" |
+| 12 | S12 | 3 | fail | music causation — "did what it promises"; "the shift wasn't just the music playing" |
+
+**This reading counts ten, not nine.** The difference is recorded rather than smoothed away:
+both graders passed trust on one output that this reading fails, and which one is not
+determinable from the tallies supplied. The discrepancy does not change any outcome — nine and
+ten both clear the three-or-more override by a wide margin, and both leave the hit count in the
+same pre-registered band.
 
 **Creative grade and final label**
 
-| # | Scenario | Iteration | Creative notes | Label (Hit / Near-hit / Miss) |
-| --- | --- | --- | --- | --- |
-| 1 | S1 | 1 | | |
-| 2 | S1 | 2 | | |
-| 3 | S1 | 3 | | |
-| 4 | S2 | 1 | | |
-| 5 | S2 | 2 | | |
-| 6 | S2 | 3 | | |
-| 7 | S11 | 1 | | |
-| 8 | S11 | 2 | | |
-| 9 | S11 | 3 | | |
-| 10 | S12 | 1 | | |
-| 11 | S12 | 2 | | |
-| 12 | S12 | 3 | | |
+Both reviewers graded independently and are **preserved unreconciled**. Their per-output label
+grids were not supplied to this session; what is recorded below is what the supplied tallies
+determine with certainty.
 
-**Tally**
+| # | Scenario | Iter | Cowork label | Codex label | Basis |
+| --- | --- | --- | --- | --- | --- |
+| 1 | S1 | 1 | **Miss** | **Hit** | Named as one of the two disputed replies; Cowork recorded zero Hits |
+| 7 | S11 | 1 | **Miss** | **Hit** | Named as the other disputed reply; Cowork recorded zero Hits |
+| — | *one output* | — | **Near-hit** | **Near-hit** | Each grader recorded exactly one Near-hit; **which output is not supplied** |
+| — | *remaining nine* | — | **Miss** | **Miss** | The balance of both tallies |
 
-| Measure | Value |
-| --- | --- |
-| Hits | *(not run)* |
-| Near-hits | *(not run)* |
-| Misses | *(not run)* |
-| Hard trust failures | *(not run)* |
-| Hit rate | *(not run)* |
+The two tallies differ **only** on outputs 1 and 7. Cowork's 0/1/11 and Codex's 2/1/9 are
+otherwise identical, so the whole disagreement is whether S1-1 and S11-1 clear the Hit bar.
 
-**Conclusion**
+**Tally — both reviewers, preserved unreconciled**
+
+| Measure | Cowork | Codex |
+| --- | --- | --- |
+| Hits | **0** | **2** |
+| Near-hits | **1** | **1** |
+| Misses | **11** | **9** |
+| Hard trust failures | **9** | **9** |
+| Hit rate | **0 / 12 (0%)** | **2 / 12 (17%)** |
+
+**Manley's adjudication — recorded separately**
+
+Recorded here as its own record. It does **not** overwrite either reviewer's independent
+grading above.
 
 | Field | Value |
 | --- | --- |
-| Decision-rule band reached | *(not run)* |
-| Trust override triggered | *(not run)* |
-| Conclusion | *(not run)* |
-| Manley's decision | *(not run)* |
+| S1-1 | **Not app-worthy** |
+| S11-1 | **Not app-worthy** |
+| If forced to choose between them | Prefers **S11-1** |
+| How that preference must be read | A relative preference **only**. It is explicitly **not** a Hit, and must not be reinterpreted as one, counted as one, or used to move either tally. |
+| Effect on the tallies above | **None.** Both reviewers' records stand as written. |
+
+**Conclusion — unchanged from the pre-registered rule**
+
+| Field | Value |
+| --- | --- |
+| Decision-rule band reached | **0–3**, on **both** tallies (Cowork 0 hits, Codex 2 hits). Manley's adjudication of the two disputed replies as not app-worthy is consistent with that band and does not move it. |
+| Trust override triggered | **Yes.** Both graders counted **nine** hard trust failures against a threshold of **three or more**. |
+| Conclusion | **Minimal prompting did not solve the problem.** Creative freedom raised the prose quality but introduced excessive factual risk. Per the pre-registered 0–3 branch, the next live branch is an **identical stronger-model control**, which requires **separate approval**. Per the overriding trust rule, **stronger trust protection is required in any rebuild**, regardless of how the hit rate looked. |
+| Manley's decision | Neither disputed reply is app-worthy. The stronger-model control is **not approved**; it must be designed and approved separately. |
+
+## Post-probe hypotheses — NOT pre-registered findings
+
+Everything in this section was formed **after** seeing the outputs. It is recorded so the
+thinking is not lost, and it is fenced off so it can never be mistaken for evidence this probe
+produced. None of it was registered in advance, none of it was tested here, and none of it may
+be cited as a probe result.
+
+- **Input shape.** The production user message may be doing more damage than the system prompt
+  — flat labelled fields with parenthetical enum tokens read like a form, and the replies read
+  like a form being narrated back. Untested.
+- **Deterministic validation.** Several failures above are mechanically checkable against the
+  supplied facts (time of day never appears in the input; split behavior does not exist in the
+  data). A validator could catch that class without any model change. Untested.
+- **Named shapes.** Free construction produced the same three-move template repeatedly. A small
+  set of named reply shapes might buy variety more cheaply than freedom did. Untested.
+- **Best-of-N.** With one non-failing output per scenario at best, sampling several and
+  selecting might raise the usable rate — at multiplied cost, and it does nothing about the
+  trust failures. Untested.
+- **Start time.** Two outputs invented a time of day. The app stores start/end columns the
+  console does not populate; supplying a real time would remove the temptation without
+  loosening any rule. Untested, and it is a data-capture change, not a prompt change.
+
+These are **candidate next experiments**, not conclusions. Each would need its own design and
+its own approval.
 
 ## The probe runner
 

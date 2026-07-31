@@ -25,9 +25,12 @@ contract is `design_music_intelligence_v1.md`; implement from it, not this ingre
 
 **Combined Music Intelligence V1 remains incomplete.** An authentication-invalid launch
 produced no model evidence. The first valid 12-call smoke failed product quality and triggered
-the approved music-forward revision. The next task is a separately approved fresh smoke,
-followed—if sound—by the separately approved final evaluation. A passing deterministic gate is
-not model-quality evidence.
+the approved music-forward revision. **The revised-prompt smoke then ran July 30, 2026 — 12
+calls, zero fallbacks — and also failed quality and trust**, and a separate creative-ceiling
+probe reached its pre-registered 0–3 branch with nine hard-trust failures on both independent
+tallies. The next live branch is a **separately designed and separately approved stronger-model
+control**, which is **not approved**; only if it is sound does the separately approved final
+evaluation follow. A passing deterministic gate is not model-quality evidence.
 
 The canonical plan records the future three-state reply-outcome and persistence boundary
 (`REFERENCED` / `NOT_REFERENCED` / `UNKNOWN`) for cross-run reference frequency, but that
@@ -194,9 +197,13 @@ rules) before it's filed, same as the DJ document.
 3. Prompt, deterministic tests, sanitized fixtures, and opt-in evaluation runner —
    **IMPLEMENTED**. The first valid smoke failed quality; the approved creative-policy revision
    is committed at `693bfb3`, with **256 tests green**. The frequency mechanism stays deferred.
-4. **NEXT:** obtain explicit approval for the revised-prompt 12-call smoke. If it is sound,
-   separately approve the 36-output final evaluation, reconcile independent review, and obtain
-   Manley's final decision. **Only then** is combined Music Intelligence V1 complete.
+4. Revised-prompt 12-call smoke — **RAN JULY 30, 2026 AND FAILED** quality and trust (12 calls,
+   zero fallbacks). A separate creative-ceiling probe then ran and reached its pre-registered
+   **0–3** branch with nine hard-trust failures on both independent tallies.
+5. **NEXT:** separately design and separately approve a **stronger-model control**. **It is not
+   approved.** If it is sound, separately approve the 36-output final evaluation, reconcile
+   independent review, and obtain Manley's final decision. **Only then** is combined Music
+   Intelligence V1 complete.
 5. Run the tightly fenced Core Running Foundation Review **only after COMBINED Music
    Intelligence V1 is complete** (implementation, deterministic verification, manual
    evaluation, independent review reconciliation, final documentation, and Manley's approval —

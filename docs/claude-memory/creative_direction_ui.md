@@ -11,7 +11,9 @@ status: v0.2 — UI PHASE PAUSED; resume after combined Music Intelligence V1 is
 > Status: UI work remains PAUSED. For Music Intelligence V1 (`design_music_intelligence_v1.md`),
 > **planning, the revised prompt, sanitized fixtures, opt-in runner, and deterministic
 > verification are complete** (July 30, 2026; 256 tests green). The first valid smoke failed
-> quality and drove the revision; a fresh smoke, final evaluation, independent review,
+> quality and drove the revision; the revised-prompt smoke then ran July 30 and **also failed**
+> quality and trust, and a separate creative-ceiling probe reached its pre-registered 0–3 branch.
+> A stronger-model control (not approved), final evaluation, independent review,
 > final documentation, and Manley's approval remain before combined V1 can be called complete.
 > The tightly fenced Core Running
 > Foundation Review begins only **after COMBINED Music Intelligence V1 is complete**, and UI work
