@@ -5,7 +5,7 @@ metadata:
   type: project
 ---
 
-As of July 30, 2026, the app is a working Java console app named **RunState**.
+As of July 31, 2026, the app is a working Java console app named **RunState**.
 
 **Completed phases:**
 - Phase 1: Console app — energy system, opening prompt, post-run responses, rolling averages
@@ -60,7 +60,7 @@ delegates). Full spec: `design_runstyle_v1.md`. In brief:
 
 Flow-audit findings: all four closed — items 1 and 2 (malformed-row handling, July 16); item 3 (save orchestration, Task 4); item 4 (context in summaries, Task 5).
 
-**Current resume point — Music Intelligence V1 REVISED-PROMPT SMOKE RAN AND FAILED; CREATIVE-CEILING PROBE RAN AND FAILED; NEXT LIVE BRANCH IS AN UNAPPROVED STRONGER-MODEL CONTROL:**
+**Current resume point — MUSIC INTELLIGENCE STRONGER-MODEL CONTROL COMPLETED AND GRADED; NEXT WORK IS A BOUNDED DESIGN REVISION, NOT ANOTHER LIVE RUN:**
 - **V1 planning is complete and committed (`0f22c99`, July 27, 2026).** The canonical contract is
   `design_music_intelligence_v1.md` — purpose and boundary, closed foundational contracts,
   current evidence and reply behavior, deferred persistence boundary, bounded implementation
@@ -76,8 +76,8 @@ Flow-audit findings: all four closed — items 1 and 2 (malformed-row handling, 
   `buildRequestBody(Run)` seam, the private `EARLY|ESTABLISHED` stage derivation, blank-safe
   `describeMusic`, the all-free-text-is-data instruction, a music-neutral fallback regression,
   and Gson-correct JSON serialization replacing the hand-written escaper.
-- **The deterministic Maven gate is PASSING: 256 tests, 0 failures, 0 errors, 0 skipped**
-  (clean July 30 run). It verifies transport, placement, prompt content, evaluation-runner
+- **The deterministic Maven gate is PASSING: 362 tests, 0 failures, 0 errors, 0 skipped**
+  (clean July 31 run after the Opus response-handling correction). It verifies transport, placement, prompt content, evaluation-runner
   safety, and fixture integrity — **not** final model quality.
 - **Active design, AI-agent, evaluation, privacy, roadmap, and status documents were reconciled
   July 30.** The creative revision sends no new data and adds no provider, so the privacy
@@ -100,16 +100,31 @@ Flow-audit findings: all four closed — items 1 and 2 (malformed-row handling, 
   disputed reply app-worthy**, preferring S11-1 only if forced — a relative preference, not a
   Hit. Full record in `music_intelligence_creative_ceiling_probe.md`; raw transcript, request
   bodies, and smoke screenshots are preserved under `docs/claude-memory/evidence/`.
+- **The separately approved stronger-model control completed July 31 — 12 usable Opus 5
+  replies, diagnostic only.** Manley graded the shuffled packet before opening the scenario
+  mapping; the model identity was already known. Tally: **1 Hit / 7 Near-hits / 4 Misses**,
+  plus **6 clear hard-trust failures**. Both the pre-registered 0–3 Hit band and the
+  three-or-more trust-failure override apply: **Opus alone does not meet the bar.** The seven
+  Near-hits are still useful evidence: creative ideas appeared, but the replies routinely
+  over-explained the music, sounded too formal or literary, led with artist/title names too
+  often, and lacked editing/compression. Full record:
+  `music_intelligence_stronger_model_control.md`; exact transcript and grading packet are in
+  `docs/claude-memory/evidence/`.
 - **Energy domain — CLOSED.** The shared LOW/MODERATE/HIGH pre/post energy domain is retained.
   The four-state State Scan sketch is **superseded as a domain proposal**; later UI work may
   refine labels and presentation without changing stored meanings.
-- **Next task when Manley resumes:** the next live branch is a **separately designed and
-  separately approved stronger-model control** — the identical probe on a stronger model, as the
-  pre-registered 0–3 branch requires. **It is not approved**, and nothing may be run for it
-  without that approval. Review it as a diagnostic. Only if it is sound does the separately
-  approved 36-output final evaluation follow, then independent review reconciliation and
-  Manley's final decision. Every live mode keeps its own approval gate.
-  **Phase 0-A holdout-fixture design is NOT approved** and must not be started.
+- **Next task when Manley resumes:** design one bounded revision from the graded Opus evidence
+  before changing the production prompt. The target is **creative wording that lands cleanly**:
+  clever and clear, usually understood immediately or after a quick beat, with run facts and a
+  small music shard often fused instead of followed by a song explanation. Build the next
+  calibration candidates from Manley's successful rewrites and label the different techniques
+  so one construction does not become the new template. Treat performance-first openings,
+  persona tags, and title fusion as options, not mandatory formulas. Review and approve that
+  design before any code handoff. **No further live call or final evaluation is approved.**
+  Before a later readiness claim, add limited non-hip-hop calibration and evaluation coverage;
+  the hip-hop-only control does not prove that the behavior transfers across genres. A possible
+  `Ready-ish` wording change and a stronger persona preference are noted but are not part of this
+  immediate revision.
 - The future `REFERENCED / NOT_REFERENCED / UNKNOWN` reply-outcome boundary is **documented**
   in the canonical plan, but cross-run reference-frequency implementation (schema, rolling
   window, detection, prompt line) remains **deferred** — it is not part of the prompt slice.
@@ -132,12 +147,9 @@ Flow-audit findings: all four closed — items 1 and 2 (malformed-row handling, 
 - Spotify integration and live-DJ behavior remain later possibilities with separate legal,
   privacy, provider, and platform dependencies.
 
-*(Resume point rewritten July 30, 2026 after the first valid smoke, approved creative-policy
-revision, S11 fixture decontamination, and clean 256-test gate. Updated later the same day after
-the revised-prompt smoke and the creative-ceiling probe both ran and both failed, and their
-evidence was preserved under `docs/claude-memory/evidence/`. The July 28
-evaluation-not-started resume point and the "next quality smoke pending" resume point are both
-superseded.)*
+*(Resume point updated July 31, 2026 after the corrected stronger-model control completed and
+Manley graded its shuffled packet. The earlier “stronger-model control not approved/not run”
+resume point is superseded. No V1 acceptance gate has been earned.)*
 
 **Standing milestone — privacy / security / legal pass (added July 6, 2026):**
 Before RunState is released, shared publicly, or gains multi-user/all-day-listening features,

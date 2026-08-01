@@ -1,13 +1,26 @@
 ---
 name: music-intelligence-stronger-model-control
-description: "STATUS: NOT COMPLETED — ONE FAILED ATTEMPT, NOW CORRECTED, ZERO USABLE OUTPUTS. Pre-registered stronger-model control for the Music Intelligence creative ceiling probe: 12 calls across S1/S2/S11/S12, replayed from frozen probe request bytes with two approved substitutions (claude-haiku-4-5-20251001 -> claude-opus-5, and max_tokens 256 -> 4096 because Opus 5 thinking shares the reply budget). The 2026-07-31 attempt spent one billable call, produced no model output, and saved eleven; its evidence is infrastructure evidence only. Grading record still blank. DIAGNOSTIC ONLY — never V1 acceptance evidence."
+description: "STATUS: COMPLETED AND GRADED JULY 31, 2026. Pre-registered stronger-model control for the Music Intelligence creative ceiling probe: 12 completed Opus 5 calls across S1/S2/S11/S12, replayed from frozen probe request bytes with two approved substitutions (claude-haiku-4-5-20251001 -> claude-opus-5, and max_tokens 256 -> 4096 because Opus 5 thinking shares the reply budget). Manley graded the shuffled packet 1 Hit / 7 Near-hits / 4 Misses with 6 clear hard-trust failures. The pre-registered 0–3 Hit band and trust override both apply: Opus alone does not meet the bar. DIAGNOSTIC ONLY — never V1 acceptance evidence."
 metadata:
   type: project
 ---
 
 # Music Intelligence — stronger-model control
 
-## STATUS: NOT COMPLETED — ONE FAILED ATTEMPT, CORRECTED. ZERO USABLE OUTPUTS.
+## STATUS: COMPLETED AND GRADED — 12 USABLE OUTPUTS, JULY 31, 2026
+
+The corrected control completed all **12 planned Opus 5 calls** on July 31, 2026. Manley graded
+the shuffled packet **1 Hit / 7 Near-hits / 4 Misses**. Six replies contain clear unsupported
+details that fail the hard-trust checks. The result therefore reaches the pre-registered **0–3
+Hit** band and also triggers the **three-or-more trust-failure override**: **Opus alone does not
+meet the bar under these conditions.**
+
+The result still changed the diagnosis. Seven Near-hits show that the creative core is often
+present. The repeated weaknesses are over-explained music connections, formal or literary
+delivery, automatic artist/title naming, and insufficient editing judgment. The next work is to
+control and compress that creativity without flattening it. No further live call is approved.
+
+### Earlier failed attempt
 
 One live attempt on 2026-07-31 reached Opus 5, spent **one billable call**, produced **no model
 output**, and stopped — saving the other eleven. The cause was a response-parsing defect in the
@@ -20,9 +33,8 @@ output, and nothing here changes the V1 gates in [[design-music-intelligence-v1]
 execution order is untouched: the 36-call final evaluation against the production prompt still
 requires its own separate approval, and this control does nothing to earn it.
 
-**The runner exists, is deterministically guarded, and has been corrected. A further live run is
-a separate decision and has not been approved.** Building or fixing the apparatus is not
-authorization to spend.
+**The corrected runner later completed the separately approved 12-call control recorded below.**
+That approval covered only this completed run; it is not authorization for another live call.
 
 ## Why this branch
 
@@ -317,129 +329,150 @@ revealed. The fail-fast design worked exactly as specified.
 **The blind seed and un-blinding key in the failed transcript are spent.** The next attempt
 generates its own; do not reuse them.
 
-## Results — BLANK, NOT RUN
+## Results — COMPLETED AND GRADED
 
-Do not fabricate results. Every cell below stays empty until 12 live calls have actually been made.
+The raw transcript and the shuffled grading packet are preserved in `evidence/`. Manley's notes
+under each shuffled reply remain unchanged; the tables below organize those judgments and the
+later trust review without rewriting the raw record.
 
 **Run metadata**
 
 | Field | Value |
 | --- | --- |
-| Date run | *(not run)* |
-| Model returned by the control request | *(not run)* |
-| Commit | *(not run)* |
-| Frozen evidence verified against pinned hashes | *(not run)* |
-| Transcript path | *(not run)* |
-| Blind packet path | *(not run)* |
-| Blind seed | *(not run)* |
-| Graded blind before un-blinding | *(not run)* |
-| Calls attempted | *(not run)* |
-| Calls not spent | *(not run)* |
+| Date run | 2026-07-31 02:34:33 local |
+| Model returned by the control request | `claude-opus-5` |
+| Commit | `1efb68a` |
+| Frozen evidence verified against pinned hashes | Yes — all four approved hashes matched before the calls |
+| Transcript path | `docs/claude-memory/evidence/stronger-model-control-20260731-023433.md` |
+| Blind packet path | `docs/claude-memory/evidence/blind-grading-packet-20260731-023433.md` |
+| Blind seed | `55384303551600` |
+| Graded blind before un-blinding | The shuffled packet was graded before the output mapping was opened; the model identity was already known |
+| Calls attempted | 12 |
+| Calls not spent | 0 |
 
 **Blind grades** — fill this from the packet **before** un-blinding.
 
 | Blind label | Hard trust (pass / fail + which check) | Creative notes | Label |
 | --- | --- | --- | --- |
-| A | | | |
-| B | | | |
-| C | | | |
-| D | | | |
-| E | | | |
-| F | | | |
-| G | | | |
-| H | | | |
-| I | | | |
-| J | | | |
-| K | | | |
-| L | | | |
+| A | Pass | Weather opening had value; label use and ELEMENT. wordplay felt forced | Miss |
+| B | Pass | Strong comparison idea; labels felt inserted and music ran too long | Near-hit |
+| C | Fail — invented dust | Energy shift worked; opening and Eminem explanation need compression | Near-hit |
+| D | Fail — invented uneven ground | “Charged full price” worked; the rest was over-described | Near-hit |
+| E | Pass | No usable portion identified | Miss |
+| F | Pass | Strong opening and energy movement; song explanation too long | Near-hit |
+| G | Pass | Smooth opening; title explanation weak and overlong | Near-hit |
+| H | Fail — invented first-step heaviness and breathing | One heat/trail fragment had potential; Drake idea unclear | Miss |
+| I | Pass | Specific, productive, complete arc; music ending worked | Hit |
+| J | Fail — unsupported steady-pace claim | Framing did not fit; comparison too long and music forced | Miss |
+| K | Fail — invented mile-and-a-half event | Concise comparison; music needs cleaner fusion | Near-hit |
+| L | Fail — invented “no one to impress” | Run framing worked; Kendrick connection began too literally | Near-hit |
 
 **Blind tally — write this down before opening the transcript**
 
 | Measure | Value |
 | --- | --- |
-| Hits | *(not run)* |
-| Near-hits | *(not run)* |
-| Misses | *(not run)* |
-| Hard trust failures | *(not run)* |
+| Hits | 1 |
+| Near-hits | 7 |
+| Misses | 4 |
+| Hard trust failures | 6 |
 
 **Raw outputs** — fill this only after un-blinding.
 
 | # | Scenario | Iteration | Blind label | Latency (ms) | Output |
 | --- | --- | --- | --- | --- | --- |
-| 1 | S1 | 1 | | |
-| 2 | S1 | 2 | | |
-| 3 | S1 | 3 | | |
-| 4 | S2 | 1 | | |
-| 5 | S2 | 2 | | |
-| 6 | S2 | 3 | | |
-| 7 | S11 | 1 | | |
-| 8 | S11 | 2 | | |
-| 9 | S11 | 3 | | |
-| 10 | S12 | 1 | | |
-| 11 | S12 | 2 | | |
-| 12 | S12 | 3 | | |
+| 1 | S1 | 1 | C | 8753 | See the exact S1 iteration 1 text in the preserved transcript |
+| 2 | S1 | 2 | F | 10086 | See the exact S1 iteration 2 text in the preserved transcript |
+| 3 | S1 | 3 | I | 10085 | See the exact S1 iteration 3 text in the preserved transcript |
+| 4 | S2 | 1 | D | 6255 | See the exact S2 iteration 1 text in the preserved transcript |
+| 5 | S2 | 2 | L | 5857 | See the exact S2 iteration 2 text in the preserved transcript |
+| 6 | S2 | 3 | A | 7449 | See the exact S2 iteration 3 text in the preserved transcript |
+| 7 | S11 | 1 | G | 8633 | See the exact S11 iteration 1 text in the preserved transcript |
+| 8 | S11 | 2 | H | 7712 | See the exact S11 iteration 2 text in the preserved transcript |
+| 9 | S11 | 3 | E | 9175 | See the exact S11 iteration 3 text in the preserved transcript |
+| 10 | S12 | 1 | J | 10765 | See the exact S12 iteration 1 text in the preserved transcript |
+| 11 | S12 | 2 | B | 6749 | See the exact S12 iteration 2 text in the preserved transcript |
+| 12 | S12 | 3 | K | 9773 | See the exact S12 iteration 3 text in the preserved transcript |
 
 **Hard trust checks**
 
 | # | Scenario | Iteration | Trust result (pass / fail + which check) |
 | --- | --- | --- | --- |
-| 1 | S1 | 1 | |
-| 2 | S1 | 2 | |
-| 3 | S1 | 3 | |
-| 4 | S2 | 1 | |
-| 5 | S2 | 2 | |
-| 6 | S2 | 3 | |
-| 7 | S11 | 1 | |
-| 8 | S11 | 2 | |
-| 9 | S11 | 3 | |
-| 10 | S12 | 1 | |
-| 11 | S12 | 2 | |
-| 12 | S12 | 3 | |
+| 1 | S1 | 1 | **Fail** — invented dust |
+| 2 | S1 | 2 | Pass |
+| 3 | S1 | 3 | Pass |
+| 4 | S2 | 1 | **Fail** — invented uneven ground |
+| 5 | S2 | 2 | **Fail** — invented the motivation “no one to impress” |
+| 6 | S2 | 3 | Pass |
+| 7 | S11 | 1 | Pass |
+| 8 | S11 | 2 | **Fail** — invented first-step heaviness and the runner's breathing |
+| 9 | S11 | 3 | Pass |
+| 10 | S12 | 1 | **Fail** — asserted a steady pace throughout without evidence |
+| 11 | S12 | 2 | Pass |
+| 12 | S12 | 3 | **Fail** — invented a mile-and-a-half event |
 
 **Creative grade and final label**
 
 | # | Scenario | Iteration | Creative notes | Label (Hit / Near-hit / Miss) |
 | --- | --- | --- | --- | --- |
-| 1 | S1 | 1 | | |
-| 2 | S1 | 2 | | |
-| 3 | S1 | 3 | | |
-| 4 | S2 | 1 | | |
-| 5 | S2 | 2 | | |
-| 6 | S2 | 3 | | |
-| 7 | S11 | 1 | | |
-| 8 | S11 | 2 | | |
-| 9 | S11 | 3 | | |
-| 10 | S12 | 1 | | |
-| 11 | S12 | 2 | | |
-| 12 | S12 | 3 | | |
+| 1 | S1 | 1 | Energy shift worked; opening and music explanation need compression | Near-hit |
+| 2 | S1 | 2 | Strong opening and movement; music explanation too long | Near-hit |
+| 3 | S1 | 3 | Specific and productive; complete arc with a working music ending | Hit |
+| 4 | S2 | 1 | One sharp line surrounded by too much description | Near-hit |
+| 5 | S2 | 2 | Good run framing; music should be fused rather than explained | Near-hit |
+| 6 | S2 | 3 | Forced label use and wordplay | Miss |
+| 7 | S11 | 1 | Smooth opening; title explanation needs compression | Near-hit |
+| 8 | S11 | 2 | Unclear, overworked Drake connection | Miss |
+| 9 | S11 | 3 | No usable portion identified | Miss |
+| 10 | S12 | 1 | Framing and music did not fit | Miss |
+| 11 | S12 | 2 | Strong comparison idea; too long and label-heavy | Near-hit |
+| 12 | S12 | 3 | Concise comparison; music explanation needs cleaner fusion | Near-hit |
 
 **Tally**
 
 | Measure | Value |
 | --- | --- |
-| Hits | *(not run)* |
-| Near-hits | *(not run)* |
-| Misses | *(not run)* |
-| Hard trust failures | *(not run)* |
-| Hit rate | *(not run)* |
+| Hits | 1 |
+| Near-hits | 7 |
+| Misses | 4 |
+| Hard trust failures | 6 |
+| Hit rate | 8.3% |
 
 **Latency**
 
 | Measure | Value |
 | --- | --- |
-| Fastest call | *(not run)* |
-| Slowest call | *(not run)* |
-| Median call | *(not run)* |
+| Fastest call | 5857 ms |
+| Slowest call | 10765 ms |
+| Median call | 8693 ms |
 
 **Conclusion**
 
 | Field | Value |
 | --- | --- |
-| Decision-rule band reached | *(not run)* |
-| Trust override triggered | *(not run)* |
-| Comparison against the probe baseline | *(not run)* |
-| Conclusion | *(not run)* |
-| Manley's decision | *(not run)* |
+| Decision-rule band reached | 0–3 Hits — 1 Hit |
+| Trust override triggered | Yes — 6 hard-trust failures |
+| Comparison against the probe baseline | More Near-hits and fewer Misses, but still unreliable and below the approved bar |
+| Conclusion | Opus shows that the creative core is reachable, but model strength alone does not solve structure, editing judgment, or trust |
+| Manley's decision | Do not accept or ship these replies; use the grading evidence to design the next bounded revision |
+
+### What the control taught us
+
+- The main creative problem is no longer an absence of ideas. It is **selection and compression**:
+  the model often finds a useful connection and then explains it until it becomes heavy.
+- The target voice is not formal or scholarly. It is fun, run-connected, deliberate, and polished:
+  **creative wording that lands cleanly**.
+- Music and run facts should often arrive fused. Do not narrate what the music means and then
+  explain why it fits. Use a recognizable shard — title, persona, or concept — inside the run.
+- Cleverness and clarity work together. A connection may take a quick beat to click, but it
+  should not require rereading or an explanation, and it should not be flattened into literal
+  wording merely because literal wording is safer.
+- No single construction becomes mandatory. Leading with performance, using a persona tag, or
+  fusing a title into a state are available techniques, not formulas.
+- The control used hip-hop fixtures only. These results do not prove transfer to other genres.
+  Limited non-hip-hop calibration and evaluation should be added before the next readiness claim,
+  without rewriting this completed experiment.
+- A possible future change to the user-facing `Ready-ish` label and a stronger preference for
+  persona-based connections are parked; neither changes this control's result.
 
 ## The control runner
 
