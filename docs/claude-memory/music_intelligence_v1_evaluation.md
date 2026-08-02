@@ -140,12 +140,13 @@ fastest-pace PR does not: 2025-02-09 3.00/27:00, 2025-03-09 2.50/25:00, 2025-04-
 `Riverside Trail` route, but the latest of them still falls outside the target's 180-day
 window, so none becomes a candidate and the PR stays the only history-derived signal.
 
-**Scenario 12 comparable.** 2026-06-28, 3.00 mi / 28:00, Ready-ish → Feeling Good, Working,
+**Scenario 12 comparable.** 2026-06-28, 3.10 mi / 29:30, I'm Here → Feeling Good, Working,
 `Dirt Trail`, Trail/Solo, no music, no weather. It is the only run in that scenario's history
-able to qualify, which pins the comparison to the `last comparable run` tier. Flat energy
-against the target's LOW→HIGH climb is what makes the energy-lift signal fire; matching
-`MODERATE_COST` effort and a slightly faster pace are what keep the other three signals
-silent.
+able to qualify, which pins the comparison to the `last comparable run` tier. Its smaller
+one-step climb against the target's LOW→HIGH climb is what makes the energy-lift signal fire;
+matching `MODERATE_COST` effort and a slightly faster pace (9:31 against the target's 9:36) are
+what keep the other three signals silent. Replaced August 2, 2026 alongside the S12 target — see
+the fixture-replacement note below.
 
 ## Twelve-scenario definitions
 
@@ -157,10 +158,17 @@ is deterministic fixture verification, **not** evaluation evidence.
 
 ### S1 — Strong convergence
 - **Tests:** several independent run details genuinely supporting a confident but bounded connection.
-- **Run:** 2026-07-12 · `Dirt Trail` · 3.02 mi · 28:37 · I'm Here → Powered Up · Working · Trail/Solo · Clear 95°F
-- **Music:** `MUSIC` + `Eminem — Lose Yourself`
+- **Run:** 2026-07-12 · `Dirt Trail` · 3.25 mi · 31:15 · I'm Here → Feeling Good · Heavy · Trail/Solo · Clear 88°F
+- **Music:** `MUSIC` + `Drake — Started From the Bottom`
 - **History:** standard nine + filler → 11 saved · ESTABLISHED · no PR · no comparison
-- **Verified prompt lines:** `Pace: 9:29 min/mile` · `Personal records: None` · `Music: Eminem — Lose Yourself (had music)` · `Music reply stage: ESTABLISHED` · `Weather: Clear, 95F`
+- **Verified prompt lines:** `Pace: 9:37 min/mile` · `Personal records: None` · `Music: Drake — Started From the Bottom (had music)` · `Music reply stage: ESTABLISHED` · `Weather: Clear, 88F`
+- **Replaced August 2, 2026** — see the fixture-replacement note below. Its date, `Dirt Trail`
+  route, solo context, standard history, ESTABLISHED construction, and no-comparison purpose are
+  unchanged.
+- **Paired with S11 on purpose:** the two share one song across contrasting outcomes — S1 climbs
+  to a good finish, S11 ends Spent — so the evaluation can see whether the model adapts its
+  treatment of the same music or repeats one construction. Everything else about the two runs
+  differs, and a deterministic test asserts that.
 
 ### S2 — EARLY thin fit
 - **Tests:** one clear but thin connection under `EARLY`; only a light reference is permitted.
@@ -231,18 +239,45 @@ is deterministic fixture verification, **not** evaluation evidence.
 - **History:** standard nine + filler → 11 saved · ESTABLISHED · no PR · no comparison
 - **Verified prompt lines:** `Pace: 10:04 min/mile` · `Effort: Heavy (HIGH_COST)` · `Personal records: None`
 - **Fixture-integrity guard:** no evaluation scenario may share both the music value and pace
-  of a calibration example. S11 is deliberately unlike calibration example 4.
+  of a calibration example. S11 is deliberately unlike the short-hard-run calibration example
+  (position 4 before August 2, 2026; position 2 in the approved set).
 
 ### S12 — Lyric and pattern trap
 - **Tests:** a recognizable lyric temptation combined with only single-comparable evidence.
   Any lyric reference must be brief and accurate; no lasting music-pattern claim may be made.
-- **Run:** scenario 1's target (2026-07-12 · `Dirt Trail` · 3.02 mi · 28:37 · I'm Here → Powered Up · Working · Clear 95°F)
-- **Music:** `MUSIC` + `Eminem — Lose Yourself`
+- **Run:** 2026-07-12 · `Dirt Trail` · 3.10 mi · 29:45 · I'm Here → Powered Up · Working · Trail/Solo · Clear 84°F
+- **Music:** `MUSIC` + `Eminem — Till I Collapse`
 - **History:** standard nine + the 2026-06-28 comparable → 11 saved · ESTABLISHED · no PR
-- **Verified prompt lines:** exactly one comparison outcome —
+- **Verified prompt lines:** `Pace: 9:36 min/mile` · `Personal records: None` · `Music: Eminem — Till I Collapse (had music)` · `Music reply stage: ESTABLISHED` · `Weather: Clear, 84F`, plus exactly one comparison outcome —
   `Comparable run basis: same route`
   `- Bigger start-to-finish energy lift than your last comparable run. [evidence-bearing comparable runs: 1; confidence: last comparable run]`
   The `last comparable run` confidence tier is the trap: it must not become pattern language.
+  **No pace, effort, distance, or PR signal appears**, and a deterministic test asserts that the
+  block carries exactly this one signal.
+- **Replaced August 2, 2026** — target and comparable both — see the fixture-replacement note
+  below. Its date, `Dirt Trail` route, solo context, and ESTABLISHED construction are unchanged,
+  and the recognizable-lyric temptation moved with it: a different Eminem track keeps the trap
+  without carrying a calibration example's finished answer.
+
+### Fixture replacement — August 2, 2026
+
+The approved four-example calibration set (implemented in `RunAgent.java` on August 2) made the
+previous S1 and S12 targets **contaminated**. Both carried 3.02 mi / 28:37 / 9:29 with
+`Eminem — Lose Yourself`, and calibration example 1 now ships **exactly those facts together with
+a finished approved reply**. Left alone, those two scenarios would have measured copying rather
+than behavior — the same failure S11 had, and the reason the fixture-integrity guard exists.
+
+The replacements above are **controlled evaluation fixtures, not claimed personal run history**.
+They are chosen to preserve each scenario's purpose while sharing neither the music value nor the
+displayed pace of any calibration example.
+
+**S2–S11 are unchanged**, including the S6–S8 music-state trio. Both contamination guards remain
+in force and unweakened: the S11-specific regression test, and the all-scenario scan that fails
+if any fixture carries both the music value and the pace of a calibration example.
+
+**No new live evaluation ran.** This was a prompt, fixture, test, and record change only —
+zero API or model calls were made, and every historical smoke, probe, Opus output, tally, and
+piece of evidence below is preserved unchanged.
 
 ## S2/S3 no-network preflight
 
@@ -302,8 +337,13 @@ Any of the following makes an output a **hard failure**:
 - inventing track or artist information when explicit music has no usable note
 - mentioning below-average performance
 - asking the runner a question
-- violating the approved response-length/display contract. Until UI testing replaces it, the
-  current provisional contract remains **2–3 sentences**
+- violating the approved response-length/display contract. Since August 2, 2026 the contract is
+  **governed by the idea rather than by a sentence count**: land quickly, use no more wording
+  than the strongest idea needs, stop as soon as that idea lands, and a short fragment may stand
+  alone when it adds punch. **No numeric sentence limit is in force.** This is a **provisional
+  implementation limit, not a permanent UI decision** — the reply-card fit test measured density,
+  not a final length rule, and later accessibility and interaction checks may change it. It
+  replaces the earlier provisional **2–3 sentence** contract
 - turning the reply into a detached song review or artist biography
 - stacking unrelated music observations instead of forming one coherent interpretation
 - allowing music to displace or trivialize a PR, comparison insight, or major effort signal

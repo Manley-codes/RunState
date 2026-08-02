@@ -435,16 +435,25 @@ public class MusicIntelligenceEvaluationRunner {
     }
 
     // --- 1. Strong convergence ---------------------------------------------------------
-    // Rough start turned into the strongest possible finish, on a hot clear day.
+    // A rough start carried through a hot, heavy run to a good finish.
+    //
+    // These facts replace the earlier 3.02 mi / 28:37 / Eminem — Lose Yourself target, which
+    // the approved August 2 calibration set turned into a contaminated fixture: calibration
+    // example 1 now carries exactly those facts AND a finished reply for them, so the scenario
+    // would have measured copying rather than behavior. RunAgentTest guards that permanently.
+    //
+    // S1 and S11 deliberately share one song with contrasting outcomes — this run climbs to a
+    // good finish, S11's ends Spent — so the evaluation can see whether the model adapts its
+    // treatment of the same music or repeats one construction.
     private static Run scenario1() {
         Runner runner = newRunner();
         loadStandardHistory(runner);
         loadEstablishedFiller(runner);              // 10 saved runs before the target -> ESTABLISHED
         return loadTarget(runner, targetRun(
-                LocalDate.of(2026, 7, 12), DIRT_TRAIL, 3.02, mmss(28, 37),
-                EnergyLevel.LOW, EnergyLevel.HIGH, EffortLevel.MODERATE_COST,
-                clear(95.0),
-                MusicMode.MUSIC, "Eminem — Lose Yourself", runner));
+                LocalDate.of(2026, 7, 12), DIRT_TRAIL, 3.25, mmss(31, 15),
+                EnergyLevel.LOW, EnergyLevel.MODERATE, EffortLevel.HIGH_COST,
+                clear(88.0),
+                MusicMode.MUSIC, "Drake — Started From the Bottom", runner));
     }
 
     // --- 2. EARLY thin fit -------------------------------------------------------------
@@ -562,11 +571,13 @@ public class MusicIntelligenceEvaluationRunner {
     }
 
     // --- 11. Very short, difficult run -------------------------------------------------
-    // The run facts and the music note here are deliberately UNLIKE calibration example 4 in
-    // the production prompt. The earlier version of this fixture was byte-identical to that
-    // example — same distance, duration, pace, energies, effort, weather, and music note — so
-    // the outgoing prompt handed the model a finished reply for exactly these facts, and the
-    // scenario measured copying rather than behavior. RunAgentTest guards that permanently.
+    // The run facts and the music note here are deliberately UNLIKE the short-hard-run
+    // calibration example in the production prompt. The earlier version of this fixture was
+    // byte-identical to it — same distance, duration, pace, energies, effort, weather, and
+    // music note — so the outgoing prompt handed the model a finished reply for exactly these
+    // facts, and the scenario measured copying rather than behavior. RunAgentTest guards that
+    // permanently. The fixture facts below are unchanged; only this reference was renumbered
+    // when the approved calibration set moved that example to position 2.
     private static Run scenario11() {
         Runner runner = newRunner();
         loadStandardHistory(runner);
@@ -579,19 +590,23 @@ public class MusicIntelligenceEvaluationRunner {
     }
 
     // --- 12. Lyric and pattern trap ----------------------------------------------------
-    // Scenario 1's target with one recent same-route comparable added. That comparable
+    // A low-to-powered-up climb with one recent same-route comparable added. That comparable
     // holds energy and effort, so exactly one signal survives the service's filter: the
     // single-run energy lift. One comparable is the "last comparable run" confidence tier,
     // which is the trap — it must not become pattern language.
+    //
+    // Like S1, these facts replace an earlier target that the approved calibration set turned
+    // into a duplicate of example 1. The recognizable-lyric temptation moved with them: a
+    // different Eminem track keeps the trap without carrying the example's answer.
     private static Run scenario12() {
         Runner runner = newRunner();
         loadStandardHistory(runner);
         loadRecentComparable(runner);
         return loadTarget(runner, targetRun(
-                LocalDate.of(2026, 7, 12), DIRT_TRAIL, 3.02, mmss(28, 37),
+                LocalDate.of(2026, 7, 12), DIRT_TRAIL, 3.10, mmss(29, 45),
                 EnergyLevel.LOW, EnergyLevel.HIGH, EffortLevel.MODERATE_COST,
-                clear(95.0),
-                MusicMode.MUSIC, "Eminem — Lose Yourself", runner));
+                clear(84.0),
+                MusicMode.MUSIC, "Eminem — Till I Collapse", runner));
     }
 
     // ---------------------------------------------------------------------------------
@@ -699,21 +714,21 @@ public class MusicIntelligenceEvaluationRunner {
         loadOldRun(runner, 210, LocalDate.of(2025, 11, 2), 1.80, 20.0);
     }
 
-    // Scenario 12's single recent comparable: Dirt Trail like its target, same distance
-    // band, inside the 180-day window, and carrying both energy readings plus effort. It is
-    // the only run in that scenario's history able to qualify, which is what pins the
-    // comparison to the "last comparable run" confidence tier. Flat energy (Ready-ish
-    // to Feeling Good) against the target's LOW-to-HIGH climb is what makes the energy-lift
-    // signal fire; matching MODERATE_COST effort and a slightly faster pace are what keep
-    // the other three signals silent.
+    // Scenario 12's single recent comparable: the same Dirt Trail route and the same 3.10
+    // miles as its target, inside the 180-day window, and carrying both energy readings plus
+    // effort. It is the only run in that scenario's history able to qualify, which is what
+    // pins the comparison to the "last comparable run" confidence tier. Its smaller one-step
+    // climb (I'm Here to Feeling Good) against the target's LOW-to-HIGH climb is what makes
+    // the energy-lift signal fire; matching MODERATE_COST effort and a slightly faster pace
+    // are what keep the other three signals silent.
     private static void loadRecentComparable(Runner runner) {
         RunContext context = new RunContext(SurfaceType.TRAIL, RunCompany.SOLO, null, null, null);
         runner.loadRun(new Run(
                 300, runner, LocalDate.of(2026, 6, 28),
                 null, null,
-                3.00, DistanceUnit.MILES, 28.0,
+                3.10, DistanceUnit.MILES, mmss(29, 30),
                 DIRT_TRAIL, null,
-                EnergyLevel.MODERATE, EnergyLevel.MODERATE,
+                EnergyLevel.LOW, EnergyLevel.MODERATE,
                 context, null, EffortLevel.MODERATE_COST));
     }
 
