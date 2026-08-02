@@ -12,7 +12,9 @@ status: v0.2 — FULL UI PHASE PAUSED; the narrow low-fidelity reply-card fit te
 > revised-prompt smoke, creative-ceiling probe, and Opus 5 stronger-model control are now
 > complete diagnostic evidence; none earned V1 acceptance, and no final evaluation has run.
 > The bounded, display-independent music-design revision and four-example calibration set were
-> approved August 2. The narrow low-fidelity reply-card fit test also passed August 2.
+> approved August 2 and implemented at `b2227b2` with 382 deterministic tests green and no live
+> model call. The narrow low-fidelity reply-card fit test also passed August 2. A fresh diagnostic
+> smoke still requires separate approval; combined Music Intelligence V1 remains incomplete.
 >
 > The reviewed expanded card comfortably held the four-line Larry June sample without crowding
 > its separate music source. Treat that density as a useful reference, not a fixed four-line,
@@ -22,6 +24,11 @@ status: v0.2 — FULL UI PHASE PAUSED; the narrow low-fidelity reply-card fit te
 > state announcements, and motion remain later checks. This was measurement, not a full UI build;
 > the larger RunStyle redesign, Spring Boot, and mobile work remain outside this pass. Full screens
 > will still shape the API before Spring Boot, and mobile/GPS follows the Spring Boot foundation.
+> Manley now has a separate, thorough replacement direction for RunStyle that also introduces a
+> proposed new product feature. The built RunStyle V1 remains the current behavior. During the
+> later UI/Foundation loop, rough screens may use neutral RunStyle placeholders; then the new
+> strategy must be reviewed before navigation, final screen hierarchy, or API contracts are locked.
+> Nothing in that separate strategy is approved or implemented by this note.
 >
 > This doc is the map for that later full design phase. §1–12 are the original June
 > 28 brainstorm synthesis; **§0 records the
@@ -78,6 +85,24 @@ stored meanings are unchanged. Decision record: `design_music_intelligence_v1.md
 **Open questions (v0.2):**
 - Collapsible block → frosted sphere docking: personalization (permanent layout) vs focus mode
   (temporary)? Worth pursuing either way; discoverability needs an affordance.
+
+**Candidate Sony-inspired direction (August 2, 2026 — exploratory, not locked):**
+- Use Sony as a **design philosophy, not a visual template**: visionary, simple, human-centered,
+  confident, immersive, and premium; "smart, not intellectual" and "cool, not trendy."
+- Translate that into a clean light canvas, disciplined black, one concentrated warm accent,
+  sculptural hierarchy, purposeful asymmetry, one strong hero scene, and quiet supporting controls.
+  Premium should come from proportion, spacing, materials, and precision rather than decoration.
+- Blend technology into human and natural environments. Keep RunState's athletic energy, bold
+  metrics, orange action/music signal, GPS blue, sparse positive green, and selective dark cinematic
+  moments; Sony-like calm should make those elements more deliberate, not drain their movement.
+- Do not copy Sony logos, product-showcase compositions, spheres/stones, repeated pill controls, or
+  tiny low-contrast labels. A runner should still understand the screen quickly while tired and sweaty.
+- The white Active Run / Run Complete explorations are currently closer to this direction than the
+  darker photo-heavy concept, but neither is final. Their instrument-like hierarchy is promising;
+  the next pass should add more human warmth and material depth without adding clutter.
+- The supplied sand/mineral, white, silver-gray, black, and restrained yellow reference is a
+  **palette experiment only**. Test its color relationship against the current white/black/orange
+  system; it does not yet supersede the clean-white base or make beige/gold a locked brand color.
 
 **Community clarification (July 6, 2026) — refines §2's social-comparison line:** the ban
 is on direct social-network mechanics (profiles, followers, feeds-as-graph, head-to-head),

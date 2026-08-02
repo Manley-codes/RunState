@@ -33,8 +33,9 @@ now explicit, and part of it is already done:
 - **Music Intelligence V1 planning — COMPLETE July 27, 2026.**
 - **The music prompt, sanitized fixtures, and opt-in evaluation surface are implemented.** The
   first valid smoke exposed a generic, music-avoidant voice, so Manley approved a substantial
-  creative-policy revision. That revision is committed at `693bfb3` and the clean gate now
-  passes **256 tests** (0 failures, 0 errors, 0 skipped).
+  creative-policy revision. The latest bounded revision and four-example calibration set are
+  committed at `b2227b2`; the clean gate passes **382 tests** (0 failures, 0 errors, 0 skipped),
+  and no live model call occurred during implementation.
 - **Manual model evaluation is underway but not accepted, so combined Music Intelligence V1 is
   NOT complete.** The first valid smoke and revised-prompt smoke failed product quality; the
   creative-ceiling probe failed its quality/trust bar; and the July 31 Opus 5 control also did
@@ -44,15 +45,13 @@ now explicit, and part of it is already done:
 
 The remaining path, each step behind its own explicit approval:
 
-1. **Completed August 2:** the bounded, display-independent music direction and four-example
-   calibration set built from Manley's rewrites are approved. This did not itself approve a
-   prompt/code change or live call.
-2. **Current gate:** put short, medium, and longer candidate replies into a **low-fidelity expandable reply card**
-   before locking sentence count, word budget, line breaks, or collapsed content. Rough screens
-   may now loop into the tightly fenced Core Running Foundation Review because the interface is a
-   test of the foundation, not merely its final consumer.
-3. If the design survives that test, separately approve the exact prompt/code/test handoff and
-   any new diagnostic run. Test non-hip-hop behavior later before claiming genre transfer; do not
+1. **Completed August 2:** the bounded, display-independent music direction, four-example
+   calibration set, and low-fidelity expandable-card fit test are approved. The card supports
+   expanded-first with user-controlled collapse and does not impose a numeric sentence limit.
+2. **Completed August 2:** the bounded prompt/code/test handoff is committed at `b2227b2` with
+   382 deterministic tests green. This implementation did not make a live API call.
+3. **Current gate:** separately review and approve a fresh **12-call diagnostic smoke** of the
+   implemented revision. Test non-hip-hop behavior later before claiming genre transfer; do not
    force it into the first calibration set.
 4. Only after stable diagnostics, separately approve and conduct the **36-output final**
    evaluation; then reconcile independent review, finish documentation, and obtain Manley's
@@ -62,9 +61,12 @@ The remaining path, each step behind its own explicit approval:
 
 The Core Running Foundation Review remains narrow: is the central record/preserve/understand/
 manage/use-later journey structurally ready for a real interface? Its output is a short gap list,
-not a feature hunt. The low-fidelity card test is not permission to build the full UI, reopen the
-separate RunStyle redesign, or start Spring Boot. Full screens still precede Spring Boot so real
-screen needs shape endpoint and payload contracts; Spring Boot precedes the mobile client.
+not a feature hunt. The low-fidelity card test is not permission to implement the separate
+RunStyle redesign or start Spring Boot. After the music checkpoint, rough screens should expose
+where Manley's replacement RunStyle strategy and its proposed new product feature belong; review
+them before final UI/navigation and backend contracts are locked. Existing RunStyle V1 remains
+current until a separate replacement is reviewed and approved. Full screens still precede Spring
+Boot so real screen needs shape endpoint and payload contracts; Spring Boot precedes the mobile client.
 Spotify/live-DJ depth remains later than this first mobile foundation.
 
 **Final product vision (locked in June 2026):**

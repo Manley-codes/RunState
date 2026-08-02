@@ -35,7 +35,7 @@ diagnostic only. Combined V1 is **NOT complete**.
 | Creative-ceiling probe (separate, diagnostic) | **Ran July 30, 2026**; 12 calls; reached its pre-registered **0–3** branch — see [[music-intelligence-creative-ceiling-probe]] |
 | Stronger-model control (separate, diagnostic) | **Ran July 31, 2026**; 12 usable Opus 5 replies; creative assessment 1/7/4, strict old-rule tally 1/3/8, 6 trust failures; failed the approved bar — see [[music-intelligence-stronger-model-control]] |
 | **36-call final evaluation** | **NOT RUN** — requires its own separate explicit approval |
-| **Next work** | Bounded post-control design and calibration revision. No live run is approved. |
+| **Next work** | Bounded post-control revision implemented at `b2227b2`; 382 deterministic tests green. Next gate is separate approval of a fresh 12-call diagnostic smoke. No live run is approved. |
 | Independent review (Claude Cowork) | Not started **for V1 acceptance** — cannot start before final outputs exist. (Cowork did grade the separate creative-ceiling probe; that is diagnostic and is not V1 review.) |
 | Manley's final decision | Not made |
 
@@ -713,11 +713,12 @@ As of August 1, 2026:
   next problem is selection, compression, voice, fusion, and trust rather than no creativity.
 - **Combined Music Intelligence V1 remains incomplete. No final evaluation has run.**
 
-The bounded design revision and four-example calibration set were approved August 2. The next work
-is the **low-fidelity expandable-card fit test**: compare how the approved replies sit when
-collapsed and expanded before fixing length or density. Unfamiliar music stays in evaluation as a
-safety case, not a teaching example; genre transfer remains unproven and should be tested later.
-No prompt/code handoff, live smoke, or final evaluation is approved yet.
+The bounded design revision, four-example calibration set, controlled S1/S12 fixture replacements,
+and idea-governed compression rule were implemented August 2 at `b2227b2`; 382 deterministic tests
+passed and no live model call occurred. The low-fidelity expandable-card fit test also passed.
+Unfamiliar music stays in evaluation as a safety case, not a teaching example; genre transfer
+remains unproven and should be tested later. The next gate is Manley's separate approval of a fresh
+12-call diagnostic smoke. No live smoke or final evaluation is approved yet.
 
 Holdout-fixture design (Phase 0-A) is likewise **not approved** and must not be performed as
 part of recording this evidence.

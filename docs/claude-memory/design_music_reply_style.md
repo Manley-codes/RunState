@@ -1,6 +1,6 @@
 ---
 name: design-music-reply-style
-description: "Music reply craft reference (July 6, 2026; post-control direction added August 1, 2026; four-example calibration set approved August 2) — subordinate to design_music_intelligence_v1.md. The implemented July 30 policy failed live quality/trust tests; the July 31 Opus control showed a reachable creative core but weak selection, compression, and trust. The approved design target is creative wording that lands cleanly, music/run fusion, optional rather than mandatory techniques, separate creative/trust/readiness grading, and UI-open reply length. No prompt or code revision has implemented it yet."
+description: "Music reply craft reference (July 6, 2026; post-control direction added August 1, 2026; four-example calibration set implemented August 2) — subordinate to design_music_intelligence_v1.md. The implemented July 30 policy failed live quality/trust tests; the July 31 Opus control showed a reachable creative core but weak selection, compression, and trust. The revised target is creative wording that lands cleanly, music/run fusion, optional rather than mandatory techniques, separate creative/trust/readiness grading, and idea-governed compression. It is implemented and deterministically verified, but not yet validated by a fresh live diagnostic."
 metadata:
   type: project
 ---
@@ -10,8 +10,8 @@ metadata:
 How the agent should reference music in post-run replies. Extends the Phase 5 Step 1
 music feature (manual input).
 
-**STATUS: POST-CONTROL DESIGN AND FOUR-EXAMPLE CALIBRATION SET APPROVED — NOT YET
-IMPLEMENTED. CRAFT REFERENCE ONLY.**
+**STATUS: POST-CONTROL DESIGN AND FOUR-EXAMPLE CALIBRATION SET IMPLEMENTED AT `b2227b2` —
+DETERMINISTICALLY VERIFIED, NOT YET LIVE-MODEL VALIDATED. CRAFT REFERENCE ONLY.**
 
 The **July 30 baseline craft rules** — run and runner as subject, music as an inclusion-first
 creative lens, light / featured / run-only registers, flexible rather than formulaic
@@ -41,7 +41,7 @@ This document contains two distinct slices:
   evaluation is underway and failing: the first valid smoke failed quality, the policy was
   revised, the revised-prompt smoke failed quality and trust, and the stronger-model control
   also failed its approved bar. The August 1 direction and August 2 four-example calibration set
-  remain design-only. No further live run is approved.
+  are implemented with 382 deterministic tests green. No further live run is approved.
 - **Cross-run frequency balance:** a separate mechanism that cannot be prompt-only because the
   app stores neither AI replies nor a "music was referenced" signal. The canonical plan
   documents its future three-state outcome boundary; the **physical schema, rolling window,
@@ -53,8 +53,8 @@ forward path, UI contract work and Spring Boot come before that mobile implement
 ## Post-control direction — approved August 1–2, 2026
 
 This direction replaces the old goal of an “organized professional” voice and the blunt
-“clarity over cleverness” hierarchy. Its four calibration replies were approved August 2. It is
-**not yet a prompt or code change**.
+“clarity over cleverness” hierarchy. Its four calibration replies and bounded prompt changes were
+implemented August 2 at `b2227b2`. That proves prompt content and wiring, not live model behavior.
 
 ### Voice target
 

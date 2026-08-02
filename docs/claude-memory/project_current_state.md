@@ -120,7 +120,7 @@ Flow-audit findings: all four closed — items 1 and 2 (malformed-row handling, 
 - **Energy domain — CLOSED.** The shared LOW/MODERATE/HIGH pre/post energy domain is retained.
   The four-state State Scan sketch is **superseded as a domain proposal**; later UI work may
   refine labels and presentation without changing stored meanings.
-- **Display-independent revision — APPROVED August 2.** The target is **creative wording that lands
+- **Display-independent revision — IMPLEMENTED August 2 at `b2227b2`.** The target is **creative wording that lands
   cleanly**: clever and clear, usually understood immediately or after a quick beat, with run
   facts and a small music shard often fused instead of followed by a song explanation. Build
   calibration candidates from Manley's successful rewrites and label the different techniques
@@ -128,24 +128,30 @@ Flow-audit findings: all four closed — items 1 and 2 (malformed-row handling, 
   persona tags, title fusion, direct naming, and music-free runner truth as optional colors, not
   mandatory formulas. Manley approved four exact calibration replies. Unfamiliar music remains a
   safety evaluation case rather than a teaching example. The hip-hop-only evidence does not prove
-  genre transfer; test that later before claiming it. **No prompt/code handoff, further live call,
-  or final evaluation is approved.**
-- **Current bounded task — reply-card fit:** place short,
-  medium, and longer candidate replies into the existing expandable reply-card concept. Use the
-  screen to decide density, line breaks, initial collapsed content, and whether a word or sentence
-  limit is actually needed. This narrow low-fidelity test is not the full UI build and does not
-  authorize Spring Boot or mobile implementation.
+  genre transfer; test that later before claiming it. The approved prompt, calibration examples,
+  controlled S1/S12 fixture replacements, and deterministic guards are committed at `b2227b2`;
+  **382 tests passed and no live model call occurred.**
+- **Reply-card fit — COMPLETED August 2:** short, medium, and longer candidates were checked in the
+  expandable card. The result supports expanded-first with user-controlled collapse and
+  idea-governed compression with no numeric sentence limit. This was a narrow measurement, not a
+  full UI build or authorization for Spring Boot or mobile implementation.
+- **Current gate — fresh diagnostic decision:** Manley must separately approve any new 12-call
+  smoke of the implemented revision. No fresh smoke or 36-call final evaluation is approved yet.
 - **Separate lanes remain deferred:** the possible `Ready-ish` wording change, stronger persona
   preference, and the larger RunStyle redesign are recorded but are not part of this immediate
-  revision. Do not open the separate RunStyle-feedback work while the music calibration pass is
-  active.
+  revision. Manley has a thorough replacement RunStyle strategy containing a proposed new product
+  feature. Do not open it while the music calibration pass is active. After the music checkpoint,
+  create rough post-run/history/State Scan screens first, then review that strategy inside the
+  UI/Core Running Foundation loop before final screen hierarchy and API contracts are locked.
+  Existing RunStyle V1 remains the built behavior unless a separate V2 proposal is reviewed and
+  explicitly approved.
 - The future `REFERENCED / NOT_REFERENCED / UNKNOWN` reply-outcome boundary is **documented**
   in the canonical plan, but cross-run reference-frequency implementation (schema, rolling
   window, detection, prompt line) remains **deferred** — it is not part of the prompt slice.
 - **Roadmap refinement approved August 1:** low-fidelity screen work may now loop into the Core
   Running Foundation Review after the bounded display-independent music checkpoint, instead of
   waiting for every display-dependent music decision to be finalized in a terminal. The first
-  screen experiment is the reply-card density test above. The **Core Running Foundation Review**
+  first screen experiment was the completed reply-card density test above. The **Core Running Foundation Review**
   remains tightly fenced to one question —
   is the central journey (record a run → preserve it safely → understand it → manage it → use
   it later) credible and structurally ready for a real interface? "Manage" (edit/delete a
@@ -163,9 +169,9 @@ Flow-audit findings: all four closed — items 1 and 2 (malformed-row handling, 
 - Spotify integration and live-DJ behavior remain later possibilities with separate legal,
   privacy, provider, and platform dependencies.
 
-*(Resume point updated August 2, 2026 after the four-example calibration set was approved. The
-next task is the narrow reply-card measurement loop. No prompt/code change or V1 acceptance gate
-has been earned.)*
+*(Resume point updated August 2, 2026 after the revised prompt and calibration set were committed
+at `b2227b2` with 382 deterministic tests green and no live call. The next music gate is a separate
+decision on a fresh 12-call diagnostic smoke. Combined V1 remains incomplete.)*
 
 **Standing milestone — privacy / security / legal pass (added July 6, 2026):**
 Before RunState is released, shared publicly, or gains multi-user/all-day-listening features,

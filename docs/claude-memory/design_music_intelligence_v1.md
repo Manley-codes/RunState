@@ -134,12 +134,14 @@ extends to any free-text run field added later.
 
 ## Current evidence and V1 reply behavior
 
-### Post-control design amendment and calibration set — approved August 1–2, 2026; not implemented
+### Post-control design amendment and calibration set — implemented August 2, 2026
 
 The July 31 Opus control showed that stronger model capability can produce promising creative
 material, but does not by itself provide reliable selection, compression, factual trust, or
 the intended voice. The bounded design revision, four-example calibration set, and narrow
-low-fidelity reply-card fit test are now complete. No further live call is approved.
+low-fidelity reply-card fit test are now complete. The approved prompt, examples, controlled
+fixture replacements, and deterministic guards are committed at `b2227b2`; 382 tests passed and
+no live model call occurred. No further live call is approved.
 
 The approved direction is:
 
@@ -172,12 +174,8 @@ text sizing, tap-target size, screen-reader expanded/collapsed announcements, an
 remain later UI checks.
 
 This result completes only the approved measurement exercise. The full UI phase remains paused,
-RunStyle is not reopened, and prompt/code/test changes still require a separate bounded handoff and
-explicit approval.
-
-This amendment changes the design target only. The production prompt, deterministic tests,
-fixtures, and evaluation runner still reflect the currently implemented policy until a later
-bounded handoff is separately reviewed and approved.
+and RunStyle is not reopened. The later bounded prompt/code/test handoff was separately approved
+and implemented at `b2227b2`; a new live diagnostic still requires its own approval.
 
 ### Evidence available now
 
@@ -1207,12 +1205,12 @@ This is the **intended clean pause point**.
 
 ### Current status
 
-`STRONGER-MODEL CONTROL COMPLETED AND FAILED ITS BAR — POST-CONTROL DESIGN REVISION UNDERWAY — NO LIVE RUN APPROVED`
+`POST-CONTROL DESIGN REVISION IMPLEMENTED — DETERMINISTIC GATE GREEN — NO NEW LIVE RUN APPROVED`
 
 - Planning remains committed at `0f22c99`; the original prompt slice at `949952c`.
 - Sanitized fixtures, the opt-in `MusicIntelligenceEvaluationRunner`, the revised creative
   policy, and their deterministic guards are committed at `693bfb3`.
-- The latest clean Maven gate after the stronger-model runner correction passes at **362 tests,
+- The latest clean Maven gate after the bounded August 2 revision passes at **382 tests,
   0 failures, 0 errors, 0 skipped**. Surefire does not discover any opt-in evaluation runner;
   no Anthropic call occurs in the ordinary suite.
 - One authentication-invalid launch produced only fallback text and is **not model evidence**.
@@ -1247,15 +1245,19 @@ This is the **intended clean pause point**.
   hard-trust failures trigger the override either way, so Opus alone did not meet the bar.
   The result did reveal a reachable creative core and shifted the next work toward voice,
   fusion, selection, compression, and clearer diagnostic grading.
+- **The bounded post-control revision was implemented August 2 at `b2227b2`.** It installs the
+  approved voice and fusion direction, four calibration examples, idea-governed compression with
+  no numeric sentence limit, controlled S1/S12 fixture replacements, and deterministic guards.
+  The 382-test gate is green. No live model call occurred, so behavior is not yet validated.
 - Raw evidence is preserved under `docs/claude-memory/evidence/`: the probe transcript and
   request bodies, revised-prompt smoke screenshots, and the Opus transcript plus shuffled
   grading packet.
 - **No final 36-output evaluation has run. Combined Music Intelligence V1 is NOT complete.**
 
-**Next gate:** the low-fidelity expandable-card fit test is complete and passed at the reviewed
-density. Expanded-first with user-controlled collapse is the current recommendation, not a locked
-production interaction. Any prompt/code/test handoff, live smoke, or 36-call final evaluation still
-requires separate approval.
+**Next gate:** the low-fidelity expandable-card fit test and bounded prompt/code/test handoff are
+complete. Expanded-first with user-controlled collapse is the current recommendation, not a locked
+production interaction. A fresh 12-call diagnostic smoke requires Manley's separate explicit
+approval. The 36-call final evaluation remains separately gated and has not run.
 **Phase 0-A holdout-fixture design is likewise not approved.**
 
 This status remains completion definition **2 — prompt slice implemented, evaluation not
