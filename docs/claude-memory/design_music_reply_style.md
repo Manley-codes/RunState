@@ -83,13 +83,18 @@ reflection, and other techniques are all available. None is mandatory, none is a
 and none receives a fixed sentence position. The goal is varied judgment, not rotating through
 a visible template list.
 
-### What remains open for UI testing
+### Reply-card fit result and what remains open
 
-The current implementation still asks for 2–3 sentences, but that is now a **provisional
-implementation limit**, not a final product decision. Exact sentence count, word budget, line
-breaks, paragraph structure, and compact-versus-expandable presentation remain open until
-short, average, and long replies are placed into the actual card design. No prompt change is
-authorized by reopening these display questions.
+The August 2 low-fidelity fit test passed: the expanded card comfortably held the four-line
+Larry June sample without crowding its separate music source. That density is a reference for the
+approved replies, not a hard four-line, sentence-count, or word-count rule. The current
+recommendation is to show the reply expanded immediately after a run and allow the runner to
+collapse it; the collapsed state needs a clearer expansion cue.
+
+The current implementation still asks for 2–3 sentences, but that remains a **provisional
+implementation limit**, not a final product decision. Dynamic text sizing, contrast, tap targets,
+screen-reader behavior, motion, and final compact-versus-expanded content remain later UI checks.
+No prompt change is authorized by this fit result alone.
 
 ### Grading separation
 

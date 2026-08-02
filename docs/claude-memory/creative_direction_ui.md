@@ -3,7 +3,7 @@ name: creative-direction-ui
 description: Exploratory creative + UI direction for the RunState mobile app phase (brainstorm synthesis, not locked)
 metadata:
   type: project
-status: v0.2 — FULL UI PHASE PAUSED; one low-fidelity reply-card density test is allowed after the bounded music-design checkpoint
+status: v0.2 — FULL UI PHASE PAUSED; the narrow low-fidelity reply-card fit test passed August 2
 ---
 
 # RunState — Creative Direction (v0.2)
@@ -12,15 +12,16 @@ status: v0.2 — FULL UI PHASE PAUSED; one low-fidelity reply-card density test 
 > revised-prompt smoke, creative-ceiling probe, and Opus 5 stronger-model control are now
 > complete diagnostic evidence; none earned V1 acceptance, and no final evaluation has run.
 > The bounded, display-independent music-design revision and four-example calibration set were
-> approved August 2. The current task is the narrow low-fidelity reply-card fit test below.
+> approved August 2. The narrow low-fidelity reply-card fit test also passed August 2.
 >
-> One narrow exception was approved August 1: after that music checkpoint, place short, medium,
-> and longer candidate replies into the existing expandable reply-card concept before locking
-> sentence count, word budget, line breaks, or collapsed content. This is a low-fidelity
-> measurement exercise, not a full UI build. Rough screens may feed the tightly fenced Core
-> Running Foundation Review; the larger RunStyle redesign, Spring Boot, and mobile work remain
-> outside this pass. Full screens will still shape the API before Spring Boot, and mobile/GPS
-> follows the Spring Boot foundation.
+> The reviewed expanded card comfortably held the four-line Larry June sample without crowding
+> its separate music source. Treat that density as a useful reference, not a fixed four-line,
+> sentence-count, or word-count rule. The current recommendation is expanded-first immediately
+> after a run, followed by user-controlled collapse. The collapsed state needs a subtle expansion
+> cue and a fully tappable music row. Contrast, dynamic text sizing, tap targets, screen-reader
+> state announcements, and motion remain later checks. This was measurement, not a full UI build;
+> the larger RunStyle redesign, Spring Boot, and mobile work remain outside this pass. Full screens
+> will still shape the API before Spring Boot, and mobile/GPS follows the Spring Boot foundation.
 >
 > This doc is the map for that later full design phase. §1–12 are the original June
 > 28 brainstorm synthesis; **§0 records the

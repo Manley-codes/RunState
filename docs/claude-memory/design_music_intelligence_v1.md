@@ -138,8 +138,8 @@ extends to any free-text run field added later.
 
 The July 31 Opus control showed that stronger model capability can produce promising creative
 material, but does not by itself provide reliable selection, compression, factual trust, or
-the intended voice. The bounded design revision and four-example calibration set are now complete;
-the next work is the approved low-fidelity reply-card fit test, not another live call.
+the intended voice. The bounded design revision, four-example calibration set, and narrow
+low-fidelity reply-card fit test are now complete. No further live call is approved.
 
 The approved direction is:
 
@@ -157,6 +157,23 @@ The approved direction is:
   open until short, average, and long replies are tested in the actual card design;
 - do not claim genre transfer from the hip-hop-only evidence. Non-hip-hop behavior remains a later
   evaluation question rather than a forced example in this first calibration set.
+
+### Low-fidelity reply-card fit result — completed August 2, 2026
+
+The reviewed collapsed and expanded mobile-card mockups passed the narrow fit test. At that
+card size, the expanded state comfortably holds a reply at roughly the density of the four-line
+Larry June sample without crowding the separate music source. This is a useful reference for the
+current approved reply set, **not** a strict four-line, sentence-count, or word-count rule.
+
+For the immediate post-run screen, the current recommendation is to show the RunState reply
+expanded first and let the runner collapse it afterward. The collapsed state needs a subtle but
+clear expansion cue, and the full music row should be tappable. Small gray-text contrast, dynamic
+text sizing, tap-target size, screen-reader expanded/collapsed announcements, and transition motion
+remain later UI checks.
+
+This result completes only the approved measurement exercise. The full UI phase remains paused,
+RunStyle is not reopened, and prompt/code/test changes still require a separate bounded handoff and
+explicit approval.
 
 This amendment changes the design target only. The production prompt, deterministic tests,
 fixtures, and evaluation runner still reflect the currently implemented policy until a later
@@ -701,8 +718,9 @@ then reached its pre-registered 0–3 branch. The separately approved Opus 5 str
 control completed July 31 and also failed its approved bar: Manley's creative tally was
 1 Hit / 7 Near-hits / 4 Misses, the old trust-collapsing rule yields 1 / 3 / 8, and six clear
 hard-trust failures trigger the override either way. **No final run has occurred.** The bounded
-post-control design and four-example calibration set were approved August 2. The current gate is
-the low-fidelity expandable-card fit test; no further live branch is approved.
+post-control design and four-example calibration set were approved August 2. The low-fidelity
+expandable-card fit test also passed August 2; no further live branch is approved. The next music
+gate is a separately reviewed and approved bounded prompt/code/test handoff.
 
 ### Separate evaluation surface
 
@@ -982,12 +1000,12 @@ locked: prior approval never authorizes the next paid run.
 18. Update final status and handoff documentation.
 19. **Only then** is combined Music Intelligence V1 eligible to be called complete.
 
-A narrow August 1 roadmap refinement now precedes any new production prompt: once the
-display-independent music direction is approved, place short, medium, and longer candidate
-replies into a low-fidelity expandable reply card. Use that screen to settle density, line
-breaks, collapsed content, and any word/sentence limit. Rough screens may loop into the fenced
-**Core Running Foundation Review**; this is measurement, not the full UI build, and it does not
-reopen RunStyle or authorize Spring Boot.
+The narrow August 1 roadmap refinement was completed August 2: the approved reply set was checked
+against the low-fidelity expandable reply card. The expanded card passed at the reviewed density;
+the result is a reference rather than a fixed line, sentence, or word limit. The recommendation is
+expanded-first immediately after a run, with user-controlled collapse and a clearer collapsed-state
+affordance. Rough screens may still loop into the fenced **Core Running Foundation Review**; this
+was measurement, not the full UI build, and it did not reopen RunStyle or authorize Spring Boot.
 
 After the music/foundation loop, return to the rest of the roadmap:
 
@@ -1234,10 +1252,10 @@ This is the **intended clean pause point**.
   grading packet.
 - **No final 36-output evaluation has run. Combined Music Intelligence V1 is NOT complete.**
 
-**Next gate:** place the approved replies into the low-fidelity expandable-card concept and decide
-what should be visible initially versus after expansion. Reply length and density remain
-provisional until that test. Any prompt/code/test handoff, live smoke, or 36-call final evaluation
-still requires separate approval.
+**Next gate:** the low-fidelity expandable-card fit test is complete and passed at the reviewed
+density. Expanded-first with user-controlled collapse is the current recommendation, not a locked
+production interaction. Any prompt/code/test handoff, live smoke, or 36-call final evaluation still
+requires separate approval.
 **Phase 0-A holdout-fixture design is likewise not approved.**
 
 This status remains completion definition **2 — prompt slice implemented, evaluation not
