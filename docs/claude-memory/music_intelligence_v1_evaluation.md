@@ -1,13 +1,13 @@
 ---
 name: music-intelligence-v1-evaluation
-description: "EVALUATION UNDERWAY — the July 30 revised-prompt smoke ran, completed 12 calls with zero fallbacks, and FAILED product quality and trust; a separate creative-ceiling probe also ran and reached its pre-registered 0–3 branch. Two smokes and one probe have now failed diagnostically. No final evaluation has run; combined V1 is NOT complete; the next live branch is a separately approved stronger-model control."
+description: "EVALUATION UNDERWAY — two prompt smokes, the creative-ceiling probe, and the July 31 Opus control are completed diagnostic evidence and none earned acceptance. The Opus control showed a reachable creative core but failed quality/trust. Future diagnostics now separate creative value, trust, and app readiness; final acceptance still requires trustworthy outputs. No final evaluation or further live run is approved."
 metadata:
   type: project
 ---
 
 # Music Intelligence V1 — manual evaluation record
 
-**STATUS: EVALUATION UNDERWAY — REVISED-PROMPT SMOKE RAN AND FAILED. NO FINAL EVALUATION HAS RUN.**
+**STATUS: EVALUATION UNDERWAY — STRONGER-MODEL CONTROL COMPLETED AND FAILED ITS BAR. NO FINAL EVALUATION HAS RUN.**
 
 This file is the **record surface** for the manual model-evaluation gate defined in
 [[design-music-intelligence-v1]]. It contains the active definitions and gates, the honest
@@ -16,7 +16,8 @@ both failed product quality; neither is acceptance evidence. An earlier authenti
 launch produced only fallback text and is not model evidence at all. A separate
 **creative-ceiling probe** also ran — see [[music-intelligence-creative-ceiling-probe]] — and it
 is diagnostic only, so nothing from it appears in this file's acceptance tables.
-Combined V1 is **NOT complete**.
+The later Opus control also ran — see [[music-intelligence-stronger-model-control]] — and is
+diagnostic only. Combined V1 is **NOT complete**.
 
 ## What is done and what is not
 
@@ -32,8 +33,9 @@ Combined V1 is **NOT complete**.
 | Revised creative policy + evaluation safeguards | Implemented and committed July 30, 2026 (`693bfb3`); **256 tests green** |
 | Revised-prompt 12-call smoke | **Ran July 30, 2026**; 12 calls, **0 fallbacks**; **failed product quality and trust** |
 | Creative-ceiling probe (separate, diagnostic) | **Ran July 30, 2026**; 12 calls; reached its pre-registered **0–3** branch — see [[music-intelligence-creative-ceiling-probe]] |
+| Stronger-model control (separate, diagnostic) | **Ran July 31, 2026**; 12 usable Opus 5 replies; creative assessment 1/7/4, strict old-rule tally 1/3/8, 6 trust failures; failed the approved bar — see [[music-intelligence-stronger-model-control]] |
 | **36-call final evaluation** | **NOT RUN** — requires its own separate explicit approval |
-| **Next live branch** | A separately designed, separately approved **stronger-model control**. **Not approved.** |
+| **Next work** | Bounded post-control design and calibration revision. No live run is approved. |
 | Independent review (Claude Cowork) | Not started **for V1 acceptance** — cannot start before final outputs exist. (Cowork did grade the separate creative-ceiling probe; that is diagnostic and is not V1 review.) |
 | Manley's final decision | Not made |
 
@@ -261,6 +263,27 @@ label is the only difference. Re-verified automatically at the start of every la
 | --- | --- |
 | Preflight result at last launch | **PASSED** (July 30, 2026 revised-prompt smoke) — S2 `EARLY` vs S3 `ESTABLISHED`; stage label was the only difference |
 
+## Grading method for future diagnostics — approved August 1, 2026
+
+The creative-ceiling probe and stronger-model control used one combined label: a trust failure
+automatically changed the whole output to a Miss. Manley's Opus review instead judged creative
+value and factual trust separately, which produced more useful information. Future diagnostics
+use three independent fields:
+
+| Field | Values | Meaning |
+| --- | --- | --- |
+| Creative value | Strong / Promising / Weak | Whether the writing contains a useful, RunState-fitting creative move |
+| Trust | Pass / Fail—removable / Fail—load-bearing | Whether every factual claim is supported; a removable defect can be deleted without losing the core move, while a load-bearing defect supports the move itself |
+| Ready for the app | Yes / No | Whether this exact wording is safe and good enough to show a runner |
+
+Any trust failure makes the current wording **not ready for the app** until repaired. It does
+not erase the creative assessment. Final V1 acceptance still requires zero hard failures; this
+change improves diagnosis rather than lowering the release bar.
+
+The historical probe and control rubrics remain unchanged as records of what was run. The Opus
+control record preserves both Manley's creative assessment (1/7/4) and the strict tally produced
+by its old written rule (1/3/8). Their conclusion is the same.
+
 ## Locked hard-failure gate
 
 Any of the following makes an output a **hard failure**:
@@ -279,7 +302,8 @@ Any of the following makes an output a **hard failure**:
 - inventing track or artist information when explicit music has no usable note
 - mentioning below-average performance
 - asking the runner a question
-- exceeding the **2–3 sentence** contract
+- violating the approved response-length/display contract. Until UI testing replaces it, the
+  current provisional contract remains **2–3 sentences**
 - turning the reply into a detached song review or artist biography
 - stacking unrelated music observations instead of forming one coherent interpretation
 - allowing music to displace or trivialize a PR, comparison insight, or major effort signal
@@ -304,8 +328,8 @@ For outputs **without** a hard failure, assess:
   without being framed by what they lacked
 - craft tendencies remain flexible: no mandatory weather/distance opening or repeated
   `you showed...` closing
-- the voice feels like an organized professional who understands running first and uses
-  creativity, warmth, directness, and music knowledge with judgment
+- the voice feels fun, run-connected, deliberate, and polished; creative wording lands cleanly
+  without becoming formal, scholarly, or a song explanation
 - a strong music moment feels **earned rather than decorative**
 
 **Do not judge whether the evaluator personally likes the song.** Taste is not the subject.
@@ -471,7 +495,7 @@ A prompt-ablation study run later the same day at commit `6cb3075`. It is record
 | Manley's adjudication | Neither disputed reply (S1-1, S11-1) is app-worthy; **S11-1 preferred only if forced to choose**, which is explicitly **not** a Hit |
 | Pre-registered band | **0–3**, reached on both tallies |
 | Trust override | **Triggered** — nine hard-trust failures against a threshold of three |
-| Conclusion | Minimal prompting **did not** solve the problem; creative freedom introduced excessive factual risk. The next live branch is an **identical stronger-model control**, requiring separate approval. |
+| Conclusion at that checkpoint | Minimal prompting **did not** solve the problem; creative freedom introduced excessive factual risk. The selected next branch was a separately approved identical stronger-model control. That branch later completed and is recorded below; this row preserves the probe-era decision. |
 
 **Neither this probe nor the smoke above completes any part of V1.**
 
@@ -630,9 +654,9 @@ Combined Music Intelligence V1 remains **NOT complete** until every row above is
 the gates are met, the independent review is reconciled, Manley approves, and the final
 status and handoff documentation is updated.
 
-## Where this stands, and what the next live branch is
+## Where this stands, and what comes next
 
-As of July 30, 2026:
+As of August 1, 2026:
 
 - The **revised-prompt Haiku smoke ran** — 12 calls, zero fallbacks — and **failed** diagnostic
   quality and trust.
@@ -642,10 +666,18 @@ As of July 30, 2026:
   hard-trust failures.
 - Manley found **neither disputed reply app-worthy**, while preferring **S11-1 if forced** —
   which is a relative preference, not a Hit.
+- The separately approved **Opus 5 stronger-model control completed July 31** with 12 usable
+  replies. Manley's creative assessment was 1 Hit / 7 Near-hits / 4 Misses; strict application
+  of the old trust-collapsing rule yields 1 / 3 / 8. Six trust failures trigger the override
+  either way. Opus alone did not meet the bar, but seven creative Near-hits showed that the
+  next problem is selection, compression, voice, fusion, and trust rather than no creativity.
 - **Combined Music Intelligence V1 remains incomplete. No final evaluation has run.**
 
-The next live branch is a **separately designed and separately approved stronger-model
-control**. It is **not approved**, and no work on it may begin without that approval.
+The bounded design revision and four-example calibration set were approved August 2. The next work
+is the **low-fidelity expandable-card fit test**: compare how the approved replies sit when
+collapsed and expanded before fixing length or density. Unfamiliar music stays in evaluation as a
+safety case, not a teaching example; genre transfer remains unproven and should be tested later.
+No prompt/code handoff, live smoke, or final evaluation is approved yet.
 
 Holdout-fixture design (Phase 0-A) is likewise **not approved** and must not be performed as
 part of recording this evidence.

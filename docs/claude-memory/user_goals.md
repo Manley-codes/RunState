@@ -26,7 +26,7 @@ metadata:
 5. Phase 5: AI agent context expansion — music (manual now, Spotify later), weather (automatic via Open-Meteo)
 6. Mobile UI — GPS tracking, automatic run detection
 
-**Forward execution path — LOCKED July 25, expanded July 26; status updated July 30, 2026:**
+**Forward execution path — LOCKED July 25, expanded July 26, refined August 1, 2026:**
 The historical phase list above describes the product layers, but the implementation seam is
 now explicit, and part of it is already done:
 
@@ -36,29 +36,36 @@ now explicit, and part of it is already done:
   creative-policy revision. That revision is committed at `693bfb3` and the clean gate now
   passes **256 tests** (0 failures, 0 errors, 0 skipped).
 - **Manual model evaluation is underway but not accepted, so combined Music Intelligence V1 is
-  NOT complete.** An authentication-invalid launch produced no evidence; the first valid smoke
-  failed product quality; the **revised-prompt smoke ran July 30, 2026 and also failed**
-  quality and trust; and a separate **creative-ceiling probe** ran with 12 completed calls,
-  reaching its pre-registered 0–3 branch with nine hard-trust failures on both independent
-  tallies. **No final evaluation has run.**
+  NOT complete.** The first valid smoke and revised-prompt smoke failed product quality; the
+  creative-ceiling probe failed its quality/trust bar; and the July 31 Opus 5 control also did
+  not meet its approved bar. The Opus control did reveal a usable creative core, so the next
+  problem is bounded voice, fusion, selection, compression, and trust design rather than simply
+  adding more constraints. **No final evaluation has run.**
 
 The remaining path, each step behind its own explicit approval:
 
-1. **Next gate:** separately design and separately approve a **stronger-model control** — the
-   next live branch. **It is not approved.**
-2. Review that control as a diagnostic; correct and retest only if it exposes a real problem.
-3. Separately approve and conduct the **36-output final** evaluation.
-4. Reconcile independent review, finish final documentation, and obtain Manley's approval.
-5. **Only then** is **combined Music Intelligence V1** complete → tightly fenced Core Running
-   Foundation Review → resume UI design → Spring Boot API → mobile client with GPS/automatic
-   tracking.
+1. **Completed August 2:** the bounded, display-independent music direction and four-example
+   calibration set built from Manley's rewrites are approved. This did not itself approve a
+   prompt/code change or live call.
+2. **Current gate:** put short, medium, and longer candidate replies into a **low-fidelity expandable reply card**
+   before locking sentence count, word budget, line breaks, or collapsed content. Rough screens
+   may now loop into the tightly fenced Core Running Foundation Review because the interface is a
+   test of the foundation, not merely its final consumer.
+3. If the design survives that test, separately approve the exact prompt/code/test handoff and
+   any new diagnostic run. Test non-hip-hop behavior later before claiming genre transfer; do not
+   force it into the first calibration set.
+4. Only after stable diagnostics, separately approve and conduct the **36-output final**
+   evaluation; then reconcile independent review, finish documentation, and obtain Manley's
+   approval.
+5. After that music/foundation loop, finish the full UI direction → Spring Boot API →
+   cross-platform mobile client with GPS/automatic tracking.
 
-The review begins only after combined V1, not
-merely after the Java slice. The review asks only whether the central record/preserve/understand/
-manage/use-later journey is structurally ready for a real interface; its output is a short gap
-list, not a feature hunt. UI design resumes before Spring Boot so real screen needs shape endpoint
-and payload contracts; Spring Boot is built before the mobile client. Spotify/live-DJ depth
-remains later than this first mobile foundation.
+The Core Running Foundation Review remains narrow: is the central record/preserve/understand/
+manage/use-later journey structurally ready for a real interface? Its output is a short gap list,
+not a feature hunt. The low-fidelity card test is not permission to build the full UI, reopen the
+separate RunStyle redesign, or start Spring Boot. Full screens still precede Spring Boot so real
+screen needs shape endpoint and payload contracts; Spring Boot precedes the mobile client.
+Spotify/live-DJ depth remains later than this first mobile foundation.
 
 **Final product vision (locked in June 2026):**
 Manual input in the finished app is minimal by design:

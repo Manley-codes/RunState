@@ -3,24 +3,26 @@ name: creative-direction-ui
 description: Exploratory creative + UI direction for the RunState mobile app phase (brainstorm synthesis, not locked)
 metadata:
   type: project
-status: v0.2 — UI PHASE PAUSED; resume after combined Music Intelligence V1 is complete and the Core Running Foundation Review, before Spring Boot
+status: v0.2 — FULL UI PHASE PAUSED; one low-fidelity reply-card density test is allowed after the bounded music-design checkpoint
 ---
 
 # RunState — Creative Direction (v0.2)
 
-> Status: UI work remains PAUSED. For Music Intelligence V1 (`design_music_intelligence_v1.md`),
-> **planning, the revised prompt, sanitized fixtures, opt-in runner, and deterministic
-> verification are complete** (July 30, 2026; 256 tests green). The first valid smoke failed
-> quality and drove the revision; the revised-prompt smoke then ran July 30 and **also failed**
-> quality and trust, and a separate creative-ceiling probe reached its pre-registered 0–3 branch.
-> A stronger-model control (not approved), final evaluation, independent review,
-> final documentation, and Manley's approval remain before combined V1 can be called complete.
-> The tightly fenced Core Running
-> Foundation Review begins only **after COMBINED Music Intelligence V1 is complete**, and UI work
-> stays paused until both that combined milestone and the fenced review are done.
-> After that review, resume this UI work before Spring Boot so the real State
-> Scan, history, and post-run reply screens shape the API; build mobile/GPS after the Spring Boot
-> foundation. This doc is the map for that design phase. §1–12 are the original June
+> Status: the **full UI phase remains paused**. Music Intelligence's original smoke,
+> revised-prompt smoke, creative-ceiling probe, and Opus 5 stronger-model control are now
+> complete diagnostic evidence; none earned V1 acceptance, and no final evaluation has run.
+> The bounded, display-independent music-design revision and four-example calibration set were
+> approved August 2. The current task is the narrow low-fidelity reply-card fit test below.
+>
+> One narrow exception was approved August 1: after that music checkpoint, place short, medium,
+> and longer candidate replies into the existing expandable reply-card concept before locking
+> sentence count, word budget, line breaks, or collapsed content. This is a low-fidelity
+> measurement exercise, not a full UI build. Rough screens may feed the tightly fenced Core
+> Running Foundation Review; the larger RunStyle redesign, Spring Boot, and mobile work remain
+> outside this pass. Full screens will still shape the API before Spring Boot, and mobile/GPS
+> follows the Spring Boot foundation.
+>
+> This doc is the map for that later full design phase. §1–12 are the original June
 > 28 brainstorm synthesis; **§0 records the
 > decisions made in the later prompt-iteration sessions (early July 2026) — where §0 conflicts with
 > §1–12, §0 wins.** Superseded ideas are kept, marked, not erased.

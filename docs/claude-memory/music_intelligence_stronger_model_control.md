@@ -1,6 +1,6 @@
 ---
 name: music-intelligence-stronger-model-control
-description: "STATUS: COMPLETED AND GRADED JULY 31, 2026. Pre-registered stronger-model control for the Music Intelligence creative ceiling probe: 12 completed Opus 5 calls across S1/S2/S11/S12, replayed from frozen probe request bytes with two approved substitutions (claude-haiku-4-5-20251001 -> claude-opus-5, and max_tokens 256 -> 4096 because Opus 5 thinking shares the reply budget). Manley graded the shuffled packet 1 Hit / 7 Near-hits / 4 Misses with 6 clear hard-trust failures. The pre-registered 0–3 Hit band and trust override both apply: Opus alone does not meet the bar. DIAGNOSTIC ONLY — never V1 acceptance evidence."
+description: "STATUS: COMPLETED AND GRADED JULY 31, 2026. Pre-registered stronger-model control for the Music Intelligence creative ceiling probe: 12 completed Opus 5 calls across S1/S2/S11/S12. Manley's independent creative assessment was 1 Hit / 7 Near-hits / 4 Misses; the control's old rule that converted every trust failure to a Miss yields a strict historical tally of 1 / 3 / 8. Six clear hard-trust failures trigger the override either way, so Opus alone does not meet the bar. DIAGNOSTIC ONLY — never V1 acceptance evidence."
 metadata:
   type: project
 ---
@@ -9,11 +9,12 @@ metadata:
 
 ## STATUS: COMPLETED AND GRADED — 12 USABLE OUTPUTS, JULY 31, 2026
 
-The corrected control completed all **12 planned Opus 5 calls** on July 31, 2026. Manley graded
-the shuffled packet **1 Hit / 7 Near-hits / 4 Misses**. Six replies contain clear unsupported
-details that fail the hard-trust checks. The result therefore reaches the pre-registered **0–3
-Hit** band and also triggers the **three-or-more trust-failure override**: **Opus alone does not
-meet the bar under these conditions.**
+The corrected control completed all **12 planned Opus 5 calls** on July 31, 2026. Manley's
+independent creative assessment was **1 Hit / 7 Near-hits / 4 Misses**. Under the written
+historical rule that converted every trust failure to a Miss, the strict tally is **1 / 3 / 8**.
+Six replies contain clear unsupported details. The result therefore reaches the pre-registered
+**0–3 Hit** band and also triggers the **three-or-more trust-failure override**: **Opus alone
+does not meet the bar under these conditions.**
 
 The result still changed the diagnosis. Seven Near-hits show that the creative core is often
 present. The repeated weaknesses are over-explained music connections, formal or literary
@@ -455,6 +456,35 @@ later trust review without rewriting the raw record.
 | Conclusion | Opus shows that the creative core is reachable, but model strength alone does not solve structure, editing judgment, or trust |
 | Manley's decision | Do not accept or ship these replies; use the grading evidence to design the next bounded revision |
 
+### Grading-method clarification — added after the control
+
+The pre-registered rule above explicitly said that any hard-trust failure also changes the
+output's label to **Miss**. Manley did not use the labels that way while grading: he judged the
+creative value of the writing and later reviewed factual trust separately. That is why four
+replies with trust failures remain Near-hits in the recorded creative table.
+
+Both views are preserved rather than silently rewriting the experiment:
+
+| View | Hit | Near-hit | Miss | Trust failures |
+| --- | ---: | ---: | ---: | ---: |
+| Manley's diagnostic creative assessment | 1 | 7 | 4 | 6, recorded separately |
+| Strict application of the old control rule | 1 | 3 | 8 | 6 |
+
+The experimental conclusion is unchanged: both views remain in the 0–3 Hit band, and six trust
+failures independently trigger the override.
+
+**Future diagnostics do not reuse the collapsed rule.** They record three separate judgments:
+
+1. **Creative value:** Strong / Promising / Weak.
+2. **Trust:** Pass / Fail—removable / Fail—load-bearing. “Removable” means the unsupported
+   detail can be deleted without destroying the core creative move; “load-bearing” means the
+   creative move depends on the unsupported claim.
+3. **Ready for the app:** Yes / No. Any trust failure makes the current wording **No** until it
+   is repaired, but it does not erase what the creative assessment can teach us.
+
+This is a post-control methodology improvement. It does not retroactively change the approved
+decision bands or turn any diagnostic output into acceptance evidence.
+
 ### What the control taught us
 
 - The main creative problem is no longer an absence of ideas. It is **selection and compression**:
@@ -469,7 +499,8 @@ later trust review without rewriting the raw record.
 - No single construction becomes mandatory. Leading with performance, using a persona tag, or
   fusing a title into a state are available techniques, not formulas.
 - The control used hip-hop fixtures only. These results do not prove transfer to other genres.
-  Limited non-hip-hop calibration and evaluation should be added before the next readiness claim,
+  Manley later chose not to force a non-hip-hop example into the first calibration set; genre
+  transfer remains a later evaluation question before any claim that the behavior generalizes,
   without rewriting this completed experiment.
 - A possible future change to the user-facing `Ready-ish` label and a stronger preference for
   persona-based connections are parked; neither changes this control's result.

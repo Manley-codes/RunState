@@ -102,43 +102,59 @@ Flow-audit findings: all four closed — items 1 and 2 (malformed-row handling, 
   bodies, and smoke screenshots are preserved under `docs/claude-memory/evidence/`.
 - **The separately approved stronger-model control completed July 31 — 12 usable Opus 5
   replies, diagnostic only.** Manley graded the shuffled packet before opening the scenario
-  mapping; the model identity was already known. Tally: **1 Hit / 7 Near-hits / 4 Misses**,
-  plus **6 clear hard-trust failures**. Both the pre-registered 0–3 Hit band and the
-  three-or-more trust-failure override apply: **Opus alone does not meet the bar.** The seven
+  mapping; the model identity was already known. Manley's creative tally was **1 Hit / 7
+  Near-hits / 4 Misses**; strict application of the control's old trust-collapsing label rule
+  gives **1 / 3 / 8**. There were **6 clear hard-trust failures**. Both the pre-registered 0–3
+  Hit band and the three-or-more trust-failure override apply: **Opus alone does not meet the
+  bar.** The seven
   Near-hits are still useful evidence: creative ideas appeared, but the replies routinely
   over-explained the music, sounded too formal or literary, led with artist/title names too
   often, and lacked editing/compression. Full record:
   `music_intelligence_stronger_model_control.md`; exact transcript and grading packet are in
   `docs/claude-memory/evidence/`.
+- **Future diagnostic grading keeps three questions separate:** creative value (Strong /
+  Promising / Weak), trust (Pass / Fail—removable / Fail—load-bearing), and app readiness
+  (Yes / No). A trust failure means that wording is not app-ready until corrected, but a useful
+  creative move may still be harvested. Final V1 acceptance remains zero-tolerance for hard
+  trust failures. Historical grades are not retroactively rewritten.
 - **Energy domain — CLOSED.** The shared LOW/MODERATE/HIGH pre/post energy domain is retained.
   The four-state State Scan sketch is **superseded as a domain proposal**; later UI work may
   refine labels and presentation without changing stored meanings.
-- **Next task when Manley resumes:** design one bounded revision from the graded Opus evidence
-  before changing the production prompt. The target is **creative wording that lands cleanly**:
-  clever and clear, usually understood immediately or after a quick beat, with run facts and a
-  small music shard often fused instead of followed by a song explanation. Build the next
+- **Display-independent revision — APPROVED August 2.** The target is **creative wording that lands
+  cleanly**: clever and clear, usually understood immediately or after a quick beat, with run
+  facts and a small music shard often fused instead of followed by a song explanation. Build
   calibration candidates from Manley's successful rewrites and label the different techniques
   so one construction does not become the new template. Treat performance-first openings,
-  persona tags, and title fusion as options, not mandatory formulas. Review and approve that
-  design before any code handoff. **No further live call or final evaluation is approved.**
-  Before a later readiness claim, add limited non-hip-hop calibration and evaluation coverage;
-  the hip-hop-only control does not prove that the behavior transfers across genres. A possible
-  `Ready-ish` wording change and a stronger persona preference are noted but are not part of this
-  immediate revision.
+  persona tags, title fusion, direct naming, and music-free runner truth as optional colors, not
+  mandatory formulas. Manley approved four exact calibration replies. Unfamiliar music remains a
+  safety evaluation case rather than a teaching example. The hip-hop-only evidence does not prove
+  genre transfer; test that later before claiming it. **No prompt/code handoff, further live call,
+  or final evaluation is approved.**
+- **Current bounded task — reply-card fit:** place short,
+  medium, and longer candidate replies into the existing expandable reply-card concept. Use the
+  screen to decide density, line breaks, initial collapsed content, and whether a word or sentence
+  limit is actually needed. This narrow low-fidelity test is not the full UI build and does not
+  authorize Spring Boot or mobile implementation.
+- **Separate lanes remain deferred:** the possible `Ready-ish` wording change, stronger persona
+  preference, and the larger RunStyle redesign are recorded but are not part of this immediate
+  revision. Do not open the separate RunStyle-feedback work while the music calibration pass is
+  active.
 - The future `REFERENCED / NOT_REFERENCED / UNKNOWN` reply-outcome boundary is **documented**
   in the canonical plan, but cross-run reference-frequency implementation (schema, rolling
   window, detection, prompt line) remains **deferred** — it is not part of the prompt slice.
-- **After COMBINED Music Intelligence V1 is complete** — implementation, deterministic
-  verification, manual evaluation, independent review reconciliation, final documentation, and
-  Manley's approval, as defined by the canonical plan; **not merely after the Java slice** —
-  run the **Core Running Foundation Review** — LOCKED into
-  the roadmap July 26, 2026 (Codex proposal, Manley confirmed). Tightly fenced: one question —
+- **Roadmap refinement approved August 1:** low-fidelity screen work may now loop into the Core
+  Running Foundation Review after the bounded display-independent music checkpoint, instead of
+  waiting for every display-dependent music decision to be finalized in a terminal. The first
+  screen experiment is the reply-card density test above. The **Core Running Foundation Review**
+  remains tightly fenced to one question —
   is the central journey (record a run → preserve it safely → understand it → manage it → use
   it later) credible and structurally ready for a real interface? "Manage" (edit/delete a
   logged run) is the known thin spot. Output is a short gap list, not a feature hunt; "add
   every feature Strava has" is explicitly out.
-- Then: resume UI design using `creative_direction_ui.md`. Let the
-  State Scan, history, and post-run reply screens define the backend payloads.
+- Use rough screens and that review as a loop, then resume the full UI design using
+  `creative_direction_ui.md`. Let the State Scan, history, and post-run reply screens define the
+  backend payloads. This does not make screens an excuse to leave Music Intelligence without a
+  clear checkpoint: the display-independent music direction must be approved first.
 - Then: design/migrate the Spring Boot API from those screen contracts.
 - Then: build the mobile client and GPS/automatic-tracking layer against Spring Boot.
   The GPS phase delivers time-aligned run telemetry, and automatic splits are built there
@@ -147,9 +163,9 @@ Flow-audit findings: all four closed — items 1 and 2 (malformed-row handling, 
 - Spotify integration and live-DJ behavior remain later possibilities with separate legal,
   privacy, provider, and platform dependencies.
 
-*(Resume point updated July 31, 2026 after the corrected stronger-model control completed and
-Manley graded its shuffled packet. The earlier “stronger-model control not approved/not run”
-resume point is superseded. No V1 acceptance gate has been earned.)*
+*(Resume point updated August 2, 2026 after the four-example calibration set was approved. The
+next task is the narrow reply-card measurement loop. No prompt/code change or V1 acceptance gate
+has been earned.)*
 
 **Standing milestone — privacy / security / legal pass (added July 6, 2026):**
 Before RunState is released, shared publicly, or gains multi-user/all-day-listening features,

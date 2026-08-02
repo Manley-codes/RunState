@@ -1,13 +1,13 @@
 ---
 name: design-music-intelligence-v1
-description: "REVISED-PROMPT SMOKE RAN AND FAILED. Canonical Music Intelligence V1 contract. The music-forward creative policy, sanitized fixtures, and opt-in evaluation surface are built and the deterministic gate passes at 256 tests, but the July 30 2026 revised-prompt smoke completed 12 calls with zero fallbacks and still failed quality and trust, and a separate creative-ceiling probe reached its pre-registered 0–3 branch. Combined V1 remains incomplete; the next live branch is a separately approved stronger-model control, which is not approved."
+description: "Canonical Music Intelligence V1 contract. The two prompt smokes, creative-ceiling probe, and July 31 Opus control are completed diagnostic evidence; none earned V1 acceptance. The Opus control showed a reachable creative core but failed trust and quality. The August 1–2 design revision and four-example calibration set are approved; they separate creative value, trust, and app readiness, target creative wording that lands cleanly, and leave final reply length open for UI testing. No prompt/code revision or further live run is approved."
 metadata:
   type: project
 ---
 
 # Music Intelligence V1 (July 26, 2026)
 
-**STATUS: REVISED-PROMPT SMOKE RAN AND FAILED — NEXT LIVE BRANCH IS AN UNAPPROVED STRONGER-MODEL CONTROL.**
+**STATUS: STRONGER-MODEL CONTROL COMPLETED AND FAILED ITS BAR — BOUNDED DESIGN REVISION UNDERWAY; NO LIVE RUN APPROVED.**
 
 This is the canonical planning document for Music Intelligence V1. Decisions recorded here
 are the source of truth; other documents should point here rather than restate them.
@@ -134,6 +134,34 @@ extends to any free-text run field added later.
 
 ## Current evidence and V1 reply behavior
 
+### Post-control design amendment and calibration set — approved August 1–2, 2026; not implemented
+
+The July 31 Opus control showed that stronger model capability can produce promising creative
+material, but does not by itself provide reliable selection, compression, factual trust, or
+the intended voice. The bounded design revision and four-example calibration set are now complete;
+the next work is the approved low-fidelity reply-card fit test, not another live call.
+
+The approved direction is:
+
+- voice target: fun, run-connected, deliberate, and polished — **creative wording that lands
+  cleanly**, not formal or scholarly prose;
+- cleverness and clarity work together; most connections should land immediately or after one
+  quick beat without needing an explanation;
+- use title, persona, theme, tone, lyric fragment, or other music material as an optional
+  creative palette; no technique or sentence position becomes mandatory;
+- when it fits, fuse a small music shard into the run rather than naming the song and then
+  explaining it;
+- grade **creative value**, **trust**, and **app readiness** separately during diagnostics;
+  unsafe wording remains unready, but its useful creative move may still be studied;
+- keep exact sentence count, word budget, line breaks, and compact-versus-expandable behavior
+  open until short, average, and long replies are tested in the actual card design;
+- do not claim genre transfer from the hip-hop-only evidence. Non-hip-hop behavior remains a later
+  evaluation question rather than a forced example in this first calibration set.
+
+This amendment changes the design target only. The production prompt, deterministic tests,
+fixtures, and evaluation runner still reflect the currently implemented policy until a later
+bounded handoff is separately reviewed and approved.
+
 ### Evidence available now
 
 The V1 prompt may use only evidence currently available for the saved run:
@@ -168,7 +196,9 @@ absent — it is not something to reconstruct from what is present.
 
 1. The run and runner remain the **subject**; music is a creative lens, never a detached song
    review or artist biography.
-2. The complete response remains **2–3 sentences**.
+2. The current implementation requests **2–3 sentences**. That remains the provisional,
+   testable behavior until UI card testing establishes the final display contract; it is not
+   a permanently locked product limit.
 3. A vivid run fact often opens well and the last beat often lands on the runner, but these
    are craft options, **not mandatory sentence positions**.
 4. Music may use more than one short phrase or sentence when every music move supports **one
@@ -603,7 +633,7 @@ Add verification that:
 Use **one focused assertion per general responsibility**, covering every existing
 non-music mentor rule:
 
-- 2–3 sentence response
+- current provisional 2–3-sentence response
 - grounding in what actually happened
 - productive / supportive posture
 - kind but confident tone
@@ -667,9 +697,12 @@ failed quality. The prompt was revised and the deterministic suite returned gree
 
 **The revised-prompt 12-call smoke has since run** (July 30, 2026) and **also failed** quality
 and trust despite completing all 12 calls with zero fallbacks. A separate creative-ceiling probe
-then reached its pre-registered 0–3 branch. **No final run has occurred**, and the next live
-branch — a stronger-model control — requires Manley's explicit approval, which has not been
-given.
+then reached its pre-registered 0–3 branch. The separately approved Opus 5 stronger-model
+control completed July 31 and also failed its approved bar: Manley's creative tally was
+1 Hit / 7 Near-hits / 4 Misses, the old trust-collapsing rule yields 1 / 3 / 8, and six clear
+hard-trust failures trigger the override either way. **No final run has occurred.** The bounded
+post-control design and four-example calibration set were approved August 2. The current gate is
+the low-fidelity expandable-card fit test; no further live branch is approved.
 
 ### Separate evaluation surface
 
@@ -806,6 +839,10 @@ at execution time**.
 
 ### Hard-failure gate
 
+The final acceptance decision still requires zero hard failures. Diagnostic review now keeps
+creative value separate so a factual defect does not erase what the writing can teach; that
+separation never makes unsafe wording app-ready.
+
 Any of the following makes an output a **hard failure**:
 
 - fallback output presented as model evidence
@@ -822,7 +859,8 @@ Any of the following makes an output a **hard failure**:
 - inventing track or artist information when explicit music has no usable note
 - mentioning below-average performance
 - asking the runner a question
-- exceeding the **2–3 sentence** contract
+- violating the approved response-length/display contract. Until UI testing replaces it, the
+  current provisional contract remains **2–3 sentences**
 - turning the response into a detached song review or artist biography
 - stacking unrelated music observations instead of forming one coherent interpretation
 - allowing music to displace or trivialize a PR, comparison insight, or major effort signal
@@ -847,8 +885,8 @@ For outputs **without** a hard failure, assess:
   without being framed by what they lacked
 - craft tendencies remain flexible: no mandatory weather/distance opening or repeated
   `you showed...` closing
-- the voice feels like an organized professional who understands running first and uses
-  creativity, warmth, directness, and music knowledge with judgment
+- the voice feels fun, run-connected, deliberate, and polished; creative wording lands cleanly
+  without becoming formal, scholarly, or a song explanation
 - a strong music moment feels **earned rather than decorative**
 
 **Do not judge whether the evaluator personally likes the song.** Taste is not the subject.
@@ -901,18 +939,20 @@ final outputs exist:
 documentation reconciliation completed July 27–28. Fixtures and the opt-in evaluation
 surface followed, then live diagnostic evidence caused one approved creative-policy reopening.
 
-**Steps 1–10 are complete. Step 11 has now produced one authentication-invalid attempt and
-*two* valid quality-failed diagnostic smokes** — the July 29 baseline smoke and the July 30
-revised-prompt smoke, the latter completing 12 calls with zero fallbacks and still failing
-quality and trust. **Step 12 is complete for the first cycle** (prompt revised, fixtures
-decontaminated, 256 deterministic tests passing), and the second cycle is **open**: the July 30
-smoke's failures have not yet been answered by a further production change.
+**Steps 1–10 are complete. Step 11 produced one authentication-invalid attempt and *two* valid
+quality-failed diagnostic smokes** — the July 29 baseline smoke and the July 30 revised-prompt
+smoke, the latter completing 12 calls with zero fallbacks and still failing quality and trust.
+**Step 12 is complete for the first cycle** (prompt revised, fixtures decontaminated, 256
+deterministic tests passing). The later creative-ceiling probe and Opus control were separate
+diagnostic branches, not extra Step 11 approvals. Their findings now feed a bounded second-cycle
+design revision; no further production change has been approved.
 
 **A separate creative-ceiling probe then ran outside this execution order** and reached its
 pre-registered 0–3 branch — see [[music-intelligence-creative-ceiling-probe]]. It is diagnostic
-only and satisfies **no** step here. **The next live branch is a separately designed and
-separately approved stronger-model control, which is not approved.** The order remains locked;
-prior approval does not authorize the next paid run.
+only and satisfies **no** step here. A separately approved Opus 5 stronger-model control then
+completed and also failed its approved bar. The current work is an unbilled design and
+calibration revision; **no further live branch is approved.** The approval boundary remains
+locked: prior approval never authorizes the next paid run.
 
 ### Locked execution order
 
@@ -942,12 +982,18 @@ prior approval does not authorize the next paid run.
 18. Update final status and handoff documentation.
 19. **Only then** is combined Music Intelligence V1 eligible to be called complete.
 
-After combined V1, return to the locked roadmap:
+A narrow August 1 roadmap refinement now precedes any new production prompt: once the
+display-independent music direction is approved, place short, medium, and longer candidate
+replies into a low-fidelity expandable reply card. Use that screen to settle density, line
+breaks, collapsed content, and any word/sentence limit. Rough screens may loop into the fenced
+**Core Running Foundation Review**; this is measurement, not the full UI build, and it does not
+reopen RunStyle or authorize Spring Boot.
 
-- fenced **Core Running Foundation Review**
-- resume **UI design**
+After the music/foundation loop, return to the rest of the roadmap:
+
+- finish the fenced **Core Running Foundation Review** and full **UI design**
 - **Spring Boot API**
-- **mobile / GPS**
+- cross-platform **mobile / GPS**
 
 Do **not** begin the pre-run playlist brain or cross-run reference-frequency implementation
 as part of this V1 slice.
@@ -1143,14 +1189,14 @@ This is the **intended clean pause point**.
 
 ### Current status
 
-`REVISED-PROMPT SMOKE RAN AND FAILED — CREATIVE-CEILING PROBE RAN AND FAILED — NEXT LIVE BRANCH IS AN UNAPPROVED STRONGER-MODEL CONTROL`
+`STRONGER-MODEL CONTROL COMPLETED AND FAILED ITS BAR — POST-CONTROL DESIGN REVISION UNDERWAY — NO LIVE RUN APPROVED`
 
 - Planning remains committed at `0f22c99`; the original prompt slice at `949952c`.
 - Sanitized fixtures, the opt-in `MusicIntelligenceEvaluationRunner`, the revised creative
   policy, and their deterministic guards are committed at `693bfb3`.
-- The clean Maven gate passes at **256 tests, 0 failures, 0 errors, 0 skipped**. Surefire runs
-  seven test classes and never discovers the evaluation runner; no Anthropic call occurs in
-  the ordinary suite.
+- The latest clean Maven gate after the stronger-model runner correction passes at **362 tests,
+  0 failures, 0 errors, 0 skipped**. Surefire does not discover any opt-in evaluation runner;
+  no Anthropic call occurs in the ordinary suite.
 - One authentication-invalid launch produced only fallback text and is **not model evidence**.
 - The first valid 12-call smoke completed with zero fallbacks but **failed product quality**:
   the voice was generic and music rarely participated, with small unsupported details. It is
@@ -1177,16 +1223,22 @@ This is the **intended clean pause point**.
   triggering the three-or-more override. Manley found **neither disputed reply app-worthy**,
   preferring S11-1 only if forced — a relative preference, **not** a Hit. The probe is
   diagnostic only and is never V1 acceptance evidence.
-- Raw evidence for both is preserved under `docs/claude-memory/evidence/`: the byte-for-byte
-  probe transcript, the four complete sanitized request bodies with per-body SHA-256, and the
-  three revised-prompt smoke screenshots.
+- **The separately approved Opus 5 control then completed July 31** with 12 usable replies.
+  Manley's independent creative assessment was 1 Hit / 7 Near-hits / 4 Misses; strict
+  application of the control's old trust-collapsing label rule yields 1 / 3 / 8. Six clear
+  hard-trust failures trigger the override either way, so Opus alone did not meet the bar.
+  The result did reveal a reachable creative core and shifted the next work toward voice,
+  fusion, selection, compression, and clearer diagnostic grading.
+- Raw evidence is preserved under `docs/claude-memory/evidence/`: the probe transcript and
+  request bodies, revised-prompt smoke screenshots, and the Opus transcript plus shuffled
+  grading packet.
 - **No final 36-output evaluation has run. Combined Music Intelligence V1 is NOT complete.**
 
-**Next gate:** the next live branch is a **separately designed and separately approved
-stronger-model control** — the identical probe on a stronger model, as the pre-registered 0–3
-branch requires. **It is not approved.** Only if that control is sound does the separately
-approved 36-call final evaluation follow. **Phase 0-A holdout-fixture design is likewise not
-approved.**
+**Next gate:** place the approved replies into the low-fidelity expandable-card concept and decide
+what should be visible initially versus after expansion. Reply length and density remain
+provisional until that test. Any prompt/code/test handoff, live smoke, or 36-call final evaluation
+still requires separate approval.
+**Phase 0-A holdout-fixture design is likewise not approved.**
 
 This status remains completion definition **2 — prompt slice implemented, evaluation not
 complete**. Evaluation is now **underway**, not "not started." Neither this revision, nor any
