@@ -337,19 +337,21 @@ Any of the following makes an output a **hard failure**:
 - inventing track or artist information when explicit music has no usable note
 - mentioning below-average performance
 - asking the runner a question
-- violating the approved response-length/display contract. Since August 2, 2026 the contract is
-  **governed by the idea rather than by a sentence count**: land quickly, use no more wording
-  than the strongest idea needs, stop as soon as that idea lands, and a short fragment may stand
-  alone when it adds punch. **No numeric sentence limit is in force.** This is a **provisional
-  implementation limit, not a permanent UI decision** — the reply-card fit test measured density,
-  not a final length rule, and later accessibility and interaction checks may change it. It
-  replaces the earlier provisional **2–3 sentence** contract
 - turning the reply into a detached song review or artist biography
 - stacking unrelated music observations instead of forming one coherent interpretation
 - allowing music to displace or trivialize a PR, comparison insight, or major effort signal
 - inventing a semantic music connection where none is supported
 
 **The final evaluation requires zero hard failures across all 36 outputs.**
+
+**Length is no longer on this list — moved to the quality rubric, August 2026.** Every earlier
+length contract (the provisional 2–3 sentence limit, then the idea-only contract of August 2)
+appeared here as a hard failure. The word budget adopted in August 2026 does not, for a
+measurement reason: on the August 2 smoke a hard ceiling at 35 words would have disqualified
+**9 of 12 outputs** before a grader could read them, and a truthful, well-fused reply would be
+struck from the record on length alone. Trust violations disqualify an output; length is graded.
+The budget itself is stated in the prompt as a hard instruction — the prompt and the gate are
+deliberately different instruments here.
 
 ## Locked quality rubric
 
@@ -371,6 +373,11 @@ For outputs **without** a hard failure, assess:
 - the voice feels fun, run-connected, deliberate, and polished; creative wording lands cleanly
   without becoming formal, scholarly, or a song explanation
 - a strong music moment feels **earned rather than decorative**
+- the reply lands inside the word budget: **25–30 is a target, not a floor**, with a ceiling of 35.
+  A shorter reply is fully acceptable — and often better — when the strongest idea lands cleanly;
+  on the August 2 smoke the shortest output in the set was also the cleanest. An over-ceiling reply
+  is assessed for **what was stretched** — explanation, restatement, or a subordinated final beat.
+  A reply that is rich and compressed beats one that is creative but stretched thin
 
 **Do not judge whether the evaluator personally likes the song.** Taste is not the subject.
 
@@ -538,6 +545,145 @@ A prompt-ablation study run later the same day at commit `6cb3075`. It is record
 | Conclusion at that checkpoint | Minimal prompting **did not** solve the problem; creative freedom introduced excessive factual risk. The selected next branch was a separately approved identical stronger-model control. That branch later completed and is recorded below; this row preserves the probe-era decision. |
 
 **Neither this probe nor the smoke above completes any part of V1.**
+
+### Post-revision 12-call smoke — RAN, DIAGNOSTIC ONLY
+
+The first live run against the revised prompt at `b2227b2` (voice revision, fusion direction, four
+calibration examples, S1/S12 fixture replacement). Transcript committed at `116b8b9`.
+
+| Field | Value |
+| --- | --- |
+| Executed on | August 2, 2026, 18:29 local |
+| Prompt under test | `b2227b2` |
+| Model | `claude-haiku-4-5-20251001`, `max_tokens` 256, temperature unset |
+| Mode | `smoke` — 12 scenarios, 1 iteration each |
+| Calls | **12 of 12 completed, 0 fallbacks, 0 invalid** |
+| S2/S3 preflight | PASSED — stage label was the only difference |
+| Transcript | `evidence/smoke-20260802-182905.txt` (UTF-16LE; read with `iconv -f UTF-16LE -t UTF-8`) |
+| Manley's creative assessment | **7.8–8 out of 10 against his vision** — the best result of the arc to date |
+| Hard failures | **2 of 12** (S5, S9) |
+| Status | Diagnostic only. **Not** V1 acceptance evidence. |
+
+**The creative assessment and the trust result both stand.** A run can be the strongest creative
+result so far and still fail the trust gate, and this one does. The revised voice and fusion
+direction produced replies that read as speech rather than as craft, which was the failure mode of
+both the creative-ceiling probe and the Opus control.
+
+#### Hard failures — 2 of 12
+
+Both fall under the locked gate line *"fabricated run, song, artist, theme, lyric, **telemetry**,
+time-of-day, or provider fact."* The console persists no split, segment, or time-aligned data, so
+any claim about how pace or effort behaved **across a stretch of the run** is fabricated telemetry.
+
+- **S5 — "You moved steady the whole way."** The exact phrase the production prompt forbids by
+  name. Third consecutive smoke in which it appeared.
+- **S9 — "You held that pace clean through the middle miles."** A specific claim about pace
+  consistency over a named segment, from an app that received one aggregate pace.
+
+**On the boundary.** This is not a rule that every unstored detail is a failure. *"The hard
+middle,"* *"the real climb,"* and *"the lift you're after"* all appeared in this smoke and are all
+acceptable — they are interpretation, and the runner would recognize them without the app having
+measured anything. The test is whether the sentence **reports a measurement** or **remarks on an
+experience**.
+
+#### Quantified findings
+
+**The verdict-clause construction appeared in 12 of 12 outputs** — a *fact → "that's ..." →
+verdict* move in every reply. Seven of twelve share one of two closer templates: *"That's the work
+that ___"* (S2, S4, S7, S8) and *"the kind of ___ that builds ___"* (S5, S6, S9). S7 and S8 close
+with the identical sentence, *"That's the work that counts."*
+
+**Length, against the budget adopted after this smoke (target 25–30, ceiling 35):**
+
+| Scenario | Words | |
+| --- | --- | --- |
+| S8 | 19 | under target — acceptable, and the cleanest reply in the set |
+| S6 | 28 | **in target** |
+| S10 | 32 | over target, under ceiling |
+| S7 | 36 | over ceiling |
+| S2 | 37 | over ceiling |
+| S1 | 40 | over ceiling |
+| S12 | 40 | over ceiling |
+| S5 | 41 | over ceiling — hard failure |
+| S11 | 42 | over ceiling |
+| S9 | 46 | over ceiling — hard failure |
+| S4 | 48 | over ceiling |
+| S3 | 51 | over ceiling |
+
+**1 of 12** lands in the target band; **9 of 12** exceed 35. Both hard failures sit in the top four
+by length, and the three shortest replies are the cleanest in the set. No numeric budget was in
+force during this run — these bands are applied retrospectively, and this table is the evidence
+that motivated adopting them. Manley on reading the set: every long reply was *slightly
+over-expressed — creative, but it does not land quickly.* The target is a reply that is **rich
+rather than stretched thin**.
+
+**Announce-then-explain persists where the direction calls for embedding.** S12 (*"Till I Collapse
+fit the moment: you didn't coast..."*) is structurally identical to the rejected specimen
+*"Started From the Bottom fits the shape of this one."* S1 and S9 name the reference and then gloss
+it. S11 shows the target move working — *"Started from the bottom of your day and didn't quit"* —
+where the reference is load-bearing inside ordinary language.
+
+**Music took its own sentence in S3 and its own paragraph in S9.** Recorded as an observation, not
+a failure. An earlier draft of this record graded it as failed fusion on the basis of *"fusion
+happens in a phrase, not a sentence"* — that line comes from a session summary and **is not in any
+canonical document**. The canonical rubric explicitly allows a **featured connection** alongside
+light accent and run-only, and a featured connection can reasonably occupy a sentence. What is
+worth watching in S3 and S9 is not the sentence boundary but whether the music beat *explains
+itself* — S3's *"ELEMENT. is a track built on restlessness, and that's exactly what you ran with"*
+states the interpretation rather than performing it.
+
+**Open question this raises:** whether "fusion happens in a phrase, not a sentence" should be
+written into `design_music_reply_style.md` as canonical, softened, or dropped. Until it is
+canonized it must not be used as a grading criterion.
+
+**The S2/S3 watch item fired.** Identical evidence, stage label the only variable: S2 produced **no
+music at all**, S3 produced a full music thesis. Against the rubric line *"omission is intentional
+rather than a default escape hatch,"* S2's silence has no visible judgment behind it. Remains on
+the watch list.
+
+#### Findings confirmed
+
+- **Naming a forbidden phrase plants it.** S5 reproduced *"steady the whole way"* verbatim while
+  the prompt names it. Third consecutive occurrence.
+- **Stating a semantic rule does not enforce it.** The category ban already covers time-aligned
+  telemetry and mid-run behavior. S9 violated it anyway.
+- **Length correlates with defects** — with the caveat immediately below.
+
+#### Finding this smoke adds — the verdict clause is rule compliance, not padding
+
+`SYSTEM_PROMPT` stated the productivity objective twice: once as the job (*"leave the runner
+feeling productive — like the run moved them forward and meant something"*) and again as a rule
+with an explicit imperative (*"Always leave the runner feeling productive. Even on an ordinary
+day, name what the run moved forward"*).
+
+Every recurring closer above is a paraphrase of that imperative. The model was naming what the run
+moved forward, in the closing position, because it was told to.
+
+This predicts something a word budget alone will not fix: **S8 is the shortest reply in the set at
+19 words and still closes with the template.** Compression removes length-correlated trust
+defects; it does not remove a closer the prompt asks for. Note also that `SYSTEM_PROMPT` already
+banned a *different* repeated closer — *"do not end every response with 'you showed...' or any
+other repeated runner-assessment structure"* — and that ban did not prevent this one. A positive
+instruction with a concrete action beat a negative instruction without a named mechanism.
+
+This is the basis for the August 2026 revision's third edit, which deletes the duplicate rule
+rather than adding a counter-rule.
+
+#### Pre-registered watch items for the next smoke
+
+Recorded before the run so the result means something either way.
+
+1. **Does deleting the duplicate productivity rule remove the verdict closer?** **4 or fewer of
+   12** confirms the objective-echo hypothesis. **7 or more of 12** falsifies it — the construction
+   is model default, and the next lever is calibration examples rather than any further rule change.
+2. **Does the 35-word ceiling squeeze out the music beat?** Count replies with no music where
+   usable named music was supplied. On August 2 that was **1** (S2). **3 or more** means the ceiling
+   is cutting the wrong thing.
+3. **Does the 25-word target behave like a floor and manufacture filler?** Count replies that reach
+   the band only by way of a generic closer. The prompt states shorter replies are welcome
+   precisely to prevent this; this item measures whether that held.
+
+**This smoke completes no part of V1.**
 
 ## Pending run metadata
 
