@@ -685,6 +685,80 @@ Recorded before the run so the result means something either way.
 
 **This smoke completes no part of V1.**
 
+### Post-budget 12-call smoke — RAN, DIAGNOSTIC ONLY
+
+The first live run against the word budget and the two rule deletions. Its purpose was to resolve
+three **pre-registered** questions, so the counts below decide, not impressions.
+
+| Field | Value |
+| --- | --- |
+| Executed on | August 3, 2026 |
+| Model | `claude-haiku-4-5-20251001`, `max_tokens` 256 |
+| Mode | `smoke` — 12 scenarios, 1 iteration each |
+| Calls | **12 of 12 completed, 0 fallbacks** |
+| S2/S3 preflight | PASSED |
+| Transcript | `evidence/smoke-20260802-230747.txt` (UTF-8) |
+| Status | Diagnostic only. **Not** V1 acceptance evidence. |
+
+#### The three pre-registered results
+
+**1. Verdict closer — 11 of 12. FALSIFIED.** The threshold was 4 or fewer to confirm the
+objective-echo hypothesis, 7 or more to falsify it. Deleting the duplicate productivity rule did
+not remove the construction, so it is **model default, not rule compliance**. It also tightened:
+*"That's the run."* appears verbatim three times (S2, S4, S5).
+
+**2. Music squeezed out by the ceiling — 2 of 9, under the threshold of 3.** S9 (Kanye — KING) and
+S10 (Key Glock — Run It Up) went run-only. **This count is uninterpretable** under the selection
+standard clarified the same day — see `design_music_reply_style.md`. Both may have been correct
+judgment. The fixtures do not state a fit expectation for either scenario, so neither reading can
+be confirmed.
+
+**3. Floor manufacturing filler — no.** Five replies came in *under* 25 words. The *"shorter is
+welcome"* clause held.
+
+#### Length: the budget worked
+
+Over the 35-word ceiling dropped from **9 of 12 to 2 of 12**. Median fell from about 40 words to
+26. Five replies landed under 25.
+
+#### Hard failures — 3 of 12, up from 2
+
+All three are the same category as before, and all are **fabricated telemetry or causation**:
+
+- **S4** — *"you held steady the whole way."* Note this is the phrase **deleted from the prompt in
+  this very revision.** It appeared anyway, which weakens the naming-plants-it theory: removing the
+  name did not remove the behavior.
+- **S5** — *"You held it together when the middle wanted to slip."* Mid-run behavior.
+- **S12** — *"Till I Collapse became the turning point."* Claims the music **caused** the energy
+  change, against the locked gate.
+
+Two contested: S3 *"ELEMENT. kept pace"* and S6 *"with music carrying you."*
+
+#### The finding that matters
+
+Manley's four preferred replies — S6, S7, S8, S9 — are the **four with no music content at all**.
+Three had no usable track; S9 had a named track and used none of it. **Every reply that attempted a
+music move was rejected.** The run-only voice is working; the music writing is the problem.
+
+Checked against the delete test (*remove the music — does the sentence still stand?*), **three of
+the four calibration examples are separable.** Only the Eminem example is not. The model produced
+separable replies because three-quarters of what it was shown was separable.
+
+#### Conclusion — the remaining lever
+
+Rules moved the countable constraint and nothing else. Length obeyed because it can be counted;
+the closer and the music writing did not move at all. This is the third independent confirmation
+that **examples are the control surface at Haiku scale and rules are only guardrails.**
+
+Restraint-heavy, permission-heavy, minimal prompting, a stronger model, and now rule deletion have
+all been tried. **Replacing the calibration examples is the last untried lever.** The next cycle
+should rebuild them on *assert versus observe* and count the assert/observe ratio, currently about
+8 of 12 asserting. Both branches are informative: a sharp drop confirms examples as the control
+surface and gives V1 a path; no movement means the model itself is the constraint, which reopens
+the production-model and feature-scope questions rather than the prompt.
+
+**This smoke completes no part of V1.**
+
 ## Pending run metadata
 
 ### Final run — NOT RUN
