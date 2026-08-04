@@ -104,6 +104,31 @@ stored meanings are unchanged. Decision record: `design_music_intelligence_v1.md
   **palette experiment only**. Test its color relationship against the current white/black/orange
   system; it does not yet supersede the clean-white base or make beige/gold a locked brand color.
 
+**Soundtrack Log direction (August 3, 2026 — promising prototype, not locked or implemented):**
+- The Claude Design exploration revealed a stronger home for the music reflection: a newest-first
+  **run-and-soundtrack log** that people can revisit, rather than a one-time AI reply that disappears
+  after the post-run moment. The working header `RUNSTATE · SOUNDTRACK LOG` and the idea of each run
+  becoming a record are directionally strong; final naming is still open.
+- Each collapsed row shows the selected soundtrack moment, artist/album context, and run date/time.
+  Opening a row reveals the reflection and updates the visible run-facts panel for that record. Keep
+  only one row expanded at a time so the screen remains focused and the chosen reply has room to land.
+- The expanded record may show the reply, song metadata, a run-relative stamp such as a mile marker,
+  and `READ FROM` evidence chips. A chip must name information the reply actually used. Mile markers,
+  splits, cadence, heart rate, elevation, wind, and other richer mock data are **future capability
+  references, not claims about what the current console app records**; show them only when the real
+  run data eventually supports them.
+- **Reflection voice behavior:** opening a record may automatically read its AI reply aloud; `Replay`
+  repeats it. Collapsing it or opening another record stops the current reading, and the newly chosen
+  record may then begin. This is audio presentation of the existing reflection—not a revival of the
+  previously parked general-purpose voice-message feature. Later prototypes must still test mute,
+  silent-mode, accessibility, and an obvious way to stop audio so the app never surprises the runner.
+- The visual split of a concrete run read followed by a human/music read is a useful card-composition
+  reference, not a mandatory two-line writing formula. The reply still follows the strongest idea.
+- **Unresolved data-model question:** a `record` currently reads best as one intentionally selected
+  signature soundtrack moment for a run, not every track that happened to play. Do not let `14 runs,
+  14 records` silently lock one-song-per-run or prevent multiple meaningful moments later. Resolve
+  what qualifies as a record before persistence or provider integration is designed.
+
 **Community clarification (July 6, 2026) — refines §2's social-comparison line:** the ban
 is on direct social-network mechanics (profiles, followers, feeds-as-graph, head-to-head),
 NOT on community presence. Anonymous, aggregate culture content — community shoe-mileage

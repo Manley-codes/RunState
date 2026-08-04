@@ -136,6 +136,27 @@ themes recur around strong efforts. Highly original — no app maps lyric langua
   and building profiles from their content. Formal review item before any deep integration —
   belongs to the standing privacy/security/legal milestone in project_current_state.md.
 
+## PARKED — reflection-to-song preview handoff (August 3, 2026)
+
+The Soundtrack Log prototype introduced a strong later experience: after the app finishes reading
+an expanded AI reflection aloud, it may hand off to a **short, provider-authorized preview or snippet
+of the connected song**. The intent is to let the reflection land and then let the soundtrack answer,
+not to turn the reply into a music player or interrupt the spoken message.
+
+- This is a future mobile/provider-integration capability, not Music Intelligence V1 and not current
+  console behavior.
+- Use only playback or preview access explicitly supplied by the connected music platform with the
+  required account permissions and licensing. Never bundle, scrape, recreate, or generate a substitute
+  for copyrighted song audio.
+- The reflection must remain complete without audio. If a preview is unavailable, restricted, or the
+  user has audio disabled, omit it cleanly with no degraded reply.
+- `Replay` repeats the reflection. A later prototype must decide whether song-preview replay is a
+  separate control. Collapsing the record, choosing another record, or pressing stop ends whichever
+  reflection or preview is currently playing before the next selection begins.
+- Exact Spotify, Apple Music, and other provider capabilities must be re-verified against their current
+  APIs, platform rules, and licensing terms at implementation time. Privacy/security/legal review is a
+  release gate.
+
 ## PARKED — discovery of new songs
 
 Recommendation engine for unfamiliar music: not viable (API gone, N=1 can't beat

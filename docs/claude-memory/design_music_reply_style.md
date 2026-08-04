@@ -76,6 +76,71 @@ persona, theme, tone, or brief accurate lyric fragment — and use it inside the
 Do not routinely name the artist or song and then explain what it means. The run and music
 should feel transformed together rather than delivered as two separate topics.
 
+### Assert versus observe — refinement of August 3, 2026
+
+The August 2 evidence produced a sharper cut than "fusion happens in a phrase." The failing
+replies **assert** what the music is and then map it onto the run. The working ones **observe**
+something true of the song and the run at the same time, without ever explaining either.
+
+Asserting: *"Kendrick's 'reincarnated' carries weight — that song finds something real in the
+struggle, and so did you."* Two objects and a connector. The reply survives deleting the music.
+
+Observing: *"A nine-minute song for a run that wasn't about proving anything."* Nothing is stated
+about what the song means. *"Larry June on Cedar Trail at sunrise: the taste matched the
+discipline"* places the artist like weather — a condition of the run, never a topic.
+
+This supersedes the phrase-versus-sentence framing, which was withdrawn as non-canonical. A music
+beat may occupy its own sentence or its own line; what it may not do is announce the song and then
+gloss it. **The working test:** delete the music. If the sentence still stands, it was assertion.
+
+### Music is a supply of language, not a subject
+
+The model treats a song as a referent — a thing to point at — and pointing creates an obligation to
+justify the pointing, which produces the fact → bridge → gloss shape. The reframe: the title is
+available words, the artist is an available diction. They enter the sentence as language and the
+sentence stays about the run.
+
+**Use the knowledge, never state it.** Understanding the persona is required — writing *"slim
+odds"* demands knowing Eminem. Telling the runner what the song is about is forbidden. Naming an
+artist or persona directly is still permitted when it lands; costume reads corny, register does not.
+
+The card displays artist and song as their own element, so **the reply carries no attribution
+burden**. This is a dependency, not just a permission: telling the model that credit is handled
+commits the product to actually shipping that element.
+
+Borrowed language is still bound by the truth boundary. A title used as raw vocabulary must not
+assert a run fact that did not happen.
+
+### Selection is a first-class capability — clarified August 3, 2026
+
+Manley's standard: the model is **not** expected to make something unique out of every possible
+song. It is expected to recognize when a song is a **strong fit** and use it then. Music is one
+source of connection among several, and **run facts standing alone is a legitimate, sometimes
+correct, outcome.**
+
+**This is the most dangerous direction in the project's history and must be handled carefully.**
+Iteration 1 failed precisely here: an unconditional permission to stay silent about music caused
+music to nearly vanish and replies to collapse into coaching filler. Selection and avoidance
+**produce identical output** — a run-only reply looks the same whether the model judged the song a
+poor fit or simply took the easier path. The difference is invisible in the text.
+
+Consequences, recorded so they are not rediscovered:
+
+- Calibration example 2 carries an explicit label that its run-only choice is deliberate selection
+  and **not** a general escape. That label is load-bearing. An unlabeled music-free example
+  recreates iteration 1.
+- **The current fixture set cannot measure selection.** Only S1 (*strong convergence*) and S2/S3
+  (*thin fit*) state a fit expectation; the other nine test mechanics — injection, not-recorded,
+  legacy note, PR precedence. For those, there is no stated answer to "should music have been used
+  here?", so a run-only reply can be graded neither right nor wrong.
+- On the August 3 smoke this mattered immediately. S9 (Kanye — KING) and S10 (Key Glock — Run It
+  Up) both went run-only and were counted against the pre-registered *music squeezed out* item.
+  Under this standard that count is uninterpretable — both may have been correct judgment.
+- **Before selection can be evaluated**, the fixtures need a labeled fit strength, plus at least one
+  scenario where run-only is the *correct* answer because the song genuinely does not fit, and one
+  where run-only is a *miss* because the fit was obvious and passed over. Without both poles,
+  selection quality is unmeasurable and the iteration-1 failure mode is undetectable.
+
 ### Creative palette, not formulas
 
 Persona tags, title fusion, performance-first openings, direct naming, contrast, run-only
