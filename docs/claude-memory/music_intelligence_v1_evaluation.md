@@ -740,9 +740,15 @@ Manley's four preferred replies — S6, S7, S8, S9 — are the **four with no mu
 Three had no usable track; S9 had a named track and used none of it. **Every reply that attempted a
 music move was rejected.** The run-only voice is working; the music writing is the problem.
 
-Checked against the delete test (*remove the music — does the sentence still stand?*), **three of
-the four calibration examples are separable.** Only the Eminem example is not. The model produced
-separable replies because three-quarters of what it was shown was separable.
+Checked against the delete test (*remove the music — does the sentence still stand?*): of the
+**three examples that use music, two are separable** — Key Glock (*"Let's Go!"* inserted as an
+exclamation) and Larry June (*"Ain't life beautiful"* appended at the end). Only the Eminem example
+is inseparable, because *slim* and *lost the will* carry the run and the song in the same words.
+The fourth example is run-only by judgment, so the delete test does not apply to it; under the
+August 3 selection standard that example becomes **more** load-bearing, not less.
+
+So half the example set demonstrates the target move or a defensible variant, and half demonstrates
+announce-then-append. The model landed on announce-then-append roughly 8 of 12 times.
 
 #### Conclusion — the remaining lever
 
