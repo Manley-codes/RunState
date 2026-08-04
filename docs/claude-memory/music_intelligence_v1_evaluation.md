@@ -765,6 +765,35 @@ the production-model and feature-scope questions rather than the prompt.
 
 **This smoke completes no part of V1.**
 
+### Example-swap smoke — RAN, and the arc reaches a stable stopping point
+
+August 3, 2026. Calibration examples 3 and 4 replaced with two built on *assert versus observe*
+(examples 1 and 2 unchanged). 12 of 12 completed, 0 fallbacks. Transcript:
+`evidence/smoke-20260803-215052.txt`.
+
+**Result: announce-then-map fell from roughly 8 of 12 to 4 of 12** (S2, S3, S9, S12). Two replies
+reached the target move for the first time in the arc — S1 *"Started from the bottom of your tank
+in 88 degrees"* and S11 *"Drake on the dirt: you started from the bottom of the tank and finished
+anyway."*
+
+**The finding worth keeping.** S11's construction is structurally the new Larry June example —
+artist as a condition of the run, colon, payoff. The example transferred directly into output.
+After restraint-heavy prompting, permission-heavy prompting, minimal prompting, a stronger model,
+and rule deletion all failed to move the writing, **swapping two examples halved the defect in one
+pass.** Examples are the control surface at Haiku scale. That is now demonstrated rather than
+inferred, and it is the lever to reach for whenever this work resumes.
+
+**What did not move:** the verdict-clause closers (still about 7 of 12) and the trust failures.
+S2 and S12 still have music causing outcomes; S4 and S10 still claim pace held across the run.
+Fabricated telemetry and music-causation remain the two open hard-failure categories.
+
+**Status — decided by Manley, August 3, 2026.** Good enough for now. Music Intelligence has
+reached a **stable direction**, which was roadmap step one. This is a stopping point, not
+completion: combined V1 is still not accepted, no final 36-output run has occurred, and the
+acceptance gates above stand unchanged for whenever the work resumes. The next roadmap step is
+rough screens for the post-run experience — much of which the Claude Design Soundtrack Log
+exploration has already produced.
+
 ## Pending run metadata
 
 ### Final run — NOT RUN
