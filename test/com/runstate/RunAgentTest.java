@@ -623,8 +623,7 @@ public class RunAgentTest {
                         "Never guess run facts you were not given: time of day, time-aligned run "
                                 + "telemetry, GPS or split data, terrain changes, mid-run behavior, "
                                 + "playback timing, streaming or provider metadata, playback history, "
-                                + "how often music came up in past replies, or continuity such as "
-                                + "'steady the whole way'"),
+                                + "or how often music came up in past replies"),
 
                 // Stage posture
                 Arguments.of("both stages are music-forward",
@@ -1411,9 +1410,13 @@ public class RunAgentTest {
                 Arguments.of("stop when that idea lands", "Stop as soon as that idea lands"),
                 Arguments.of("a short fragment may stand alone",
                         "A short fragment may stand alone when it adds punch"),
+                Arguments.of("word budget", "Aim for 25 to 30 words and never exceed 35"),
+                Arguments.of("shorter is welcome",
+                        "Shorter is welcome when the strongest idea lands cleanly"),
                 Arguments.of("grounded in the actual run",
                         "Ground every response in what actually happened"),
-                Arguments.of("productive posture", "Always leave the runner feeling productive"),
+                Arguments.of("productive posture",
+                        "leave the runner feeling productive — like the run moved them forward"),
                 Arguments.of("kind but confident tone", "Kind but confident"),
                 Arguments.of("PRs carry weight", "Not hype — weight"),
                 Arguments.of("fun, run-connected, deliberate, polished voice",
