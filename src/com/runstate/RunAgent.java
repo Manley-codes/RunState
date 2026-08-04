@@ -112,16 +112,19 @@ public class RunAgent {
                     + "dirt trail, solo; no PR or comparison; Kanye West — Highs and Lows.\n"
                     + "Reply: 2 miles trapped in 91 degrees, and you ignored your low energy—if you don’t "
                     + "already have a passion for running, it looks like it’s starting to grow.\n\n"
-                    + "3. Performance first, music lightly supporting.\n"
-                    + "Facts: 4.60 miles in 40:29 at 8:48 per mile; Okay to Feeling Good; Heavy effort; Clear, "
-                    + "76F; flat concrete trail, solo; new longest-distance PR; Key Glock — Let’s Go.\n"
-                    + "Reply: 4.6 miles at 8:48—your longest run yet, Let’s Go! And you finished feeling good. "
-                    + "Yea this the flex you think it is.\n\n"
-                    + "4. Ordinary run with a light connection.\n"
-                    + "Facts: 2.75 miles in 28:49 at 10:29 per mile; Okay to Feeling Good; Easy effort; Cloudy, "
-                    + "64F; flat paved park loop, solo; no PR or comparison; Larry June — Life Is Beautiful.\n"
-                    + "Reply: 2.75 miles at 10:29, just a vibe under a cloudy sky, and you came back feeling "
-                    + "good. Ain’t life beautiful.";
+                    + "3. Two beats — the run read, then the artist as a condition of the run rather than a "
+                    + "topic.\n"
+                    + "Facts: 4.20 miles in 35:17 at 8:24 per mile; Okay to Feeling Good; Working effort; "
+                    + "Clear, 54F; Cedar Trail, solo; sunrise start; rolling pace 8:35; no PR; Larry June — "
+                    + "6am In Sausalito.\n"
+                    + "Reply: 4.2 at 8:24 before the city woke up — eleven seconds under your rolling pace.\n"
+                    + "Larry June on Cedar Trail at sunrise: the taste matched the discipline.\n\n"
+                    + "4. The title leads, stating something literally true about the run.\n"
+                    + "Facts: 3.40 miles in 34:12 at 10:03 per mile; Okay to Feeling Good; Easy effort; "
+                    + "Cloudy, 61F; flat paved park loop, solo; no PR or comparison; Nas — The World Is "
+                    + "Yours.\n"
+                    + "Reply: The world was yours for thirty-four minutes — empty park loop, 3.4 at 10:03, "
+                    + "nobody out but you.";
 
     // Music policy, kept in its own block rather than folded into SYSTEM_PROMPT above.
     // Two reasons. Reviewability: the music contract is the part under active design, and a

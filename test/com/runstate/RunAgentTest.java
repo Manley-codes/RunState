@@ -899,32 +899,20 @@ public class RunAgentTest {
                         "Reply: 2 miles trapped in 91 degrees, and you ignored your low energy—if you "
                                 + "don’t already have a passion for running, it looks like it’s "
                                 + "starting to grow."),
-                Arguments.of("performance first, music lightly supporting",
-                        "Facts: 4.60 miles in 40:29 at 8:48 per mile; Okay to Feeling Good; Heavy "
-                                + "effort; Clear, 76F; flat concrete trail, solo; new longest-distance "
-                                + "PR; Key Glock — Let’s Go.",
-                        "Reply: 4.6 miles at 8:48—your longest run yet, Let’s Go! And you finished "
-                                + "feeling good. Yea this the flex you think it is."),
-                Arguments.of("ordinary run with a light connection",
-                        "Facts: 2.75 miles in 28:49 at 10:29 per mile; Okay to Feeling Good; Easy "
-                                + "effort; Cloudy, 64F; flat paved park loop, solo; no PR or "
-                                + "comparison; Larry June — Life Is Beautiful.",
-                        "Reply: 2.75 miles at 10:29, just a vibe under a cloudy sky, and you came back "
-                                + "feeling good. Ain’t life beautiful.")
+                Arguments.of("two beats — run read, then artist as a condition",
+                        "Facts: 4.20 miles in 35:17 at 8:24 per mile; Okay to Feeling Good; Working "
+                                + "effort; Clear, 54F; Cedar Trail, solo; sunrise start; rolling pace "
+                                + "8:35; no PR; Larry June — 6am In Sausalito.",
+                        "Reply: 4.2 at 8:24 before the city woke up — eleven seconds under your rolling "
+                                + "pace.\nLarry June on Cedar Trail at sunrise: the taste matched the "
+                                + "discipline."),
+                Arguments.of("title leads, literally true of the run",
+                        "Facts: 3.40 miles in 34:12 at 10:03 per mile; Okay to Feeling Good; Easy "
+                                + "effort; Cloudy, 61F; flat paved park loop, solo; no PR or "
+                                + "comparison; Nas — The World Is Yours.",
+                        "Reply: The world was yours for thirty-four minutes — empty park loop, 3.4 at "
+                                + "10:03, nobody out but you.")
         );
-    }
-
-    // Example 3's three beats are separate on purpose — the title supplies the burst, the finish
-    // state supplies the payoff, and the last sentence carries the song's character. A later
-    // edit that smoothed them into one flowing sentence would quietly teach the opposite lesson,
-    // so the boundaries themselves are asserted rather than only the whole string.
-    @Test
-    void thePerformanceFirstExampleKeepsItsSeparateBeats() {
-        String musicBlock = musicBlockOf(systemPromptOf());
-
-        assertTrue(musicBlock.contains("your longest run yet, Let’s Go! And you finished feeling "
-                        + "good. Yea this the flex you think it is."),
-                "the approved beats must not be merged or normalized");
     }
 
     @ParameterizedTest(name = "calibration example: {0}")
