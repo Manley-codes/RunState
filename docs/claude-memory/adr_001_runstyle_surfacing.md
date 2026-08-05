@@ -187,6 +187,27 @@ failure mode.
 
 ---
 
+## Update — August 4, 2026: the summary has its first concrete section
+
+`RunStyle Sound` was named as a **subset of RunStyle**, not a sibling feature — the music facet of
+the same pattern engine, showing which artists and songs recur around the runner's strongest runs,
+with an optional shareable card. Full entry in `music_feature_register.md`.
+
+Three consequences for this ADR:
+
+- **It supports the decision above rather than reopening it.** This is a *section* of a summary, not
+  a return to a multi-card destination. The rejection stands.
+- **It partially answers the hardest open problem here** — what a summary should actually contain.
+  The answer emerging is *questions a runner would ask*, not categories: when do I perform best, what
+  music helps, what conditions challenge me. RunStyle Sound is the first of those with concrete
+  content behind it.
+- **It strengthens the case against the "looked at once, then buried" worry.** A shareable artifact
+  gives the summary a reason to be opened that isn't curiosity.
+
+**It also inherits this ADR's open question.** RunStyle Sound sits inside the summary, so whether
+that summary recomputes from history or reads a persisted insight log determines how its content is
+assembled. Deciding recompute-versus-persist unblocks it.
+
 ## Notes
 
 **This ADR does not adopt the wider product strategy.** Prepare to Detect, provisional run

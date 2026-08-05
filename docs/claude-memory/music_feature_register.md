@@ -292,6 +292,68 @@ Two connections worth noting:
 
 Unresolved as a feature. Recorded so it isn't lost.
 
+### RunStyle Sound — EXPERIMENT *(named August 4, 2026)*
+
+**A subset of RunStyle, not a sibling feature.** "Which artists show up around your strongest runs"
+is a RunStyle output — the music facet of the same pattern engine. Naming it as a subset states what
+is architecturally true and avoids adding another top-level feature name to a product that already
+has several.
+
+It also fills a slot Manley had already sketched. When thinking about how to present a RunStyle
+summary without cards, he floated badges organized around questions — mood, marathon, best
+performance — and separately asked *what music helps run performance.* This is that section.
+
+**Two forms, doing different jobs, both approved:**
+
+| Form | Job | Nature |
+| --- | --- | --- |
+| **Personal view** | *What music works for me?* | A utility, inside the app |
+| **Shareable card** | *Who am I as a music runner?* | An artifact, exported |
+
+**Personal view.** Artists and songs that recur around the runner's strongest runs, plus the
+inverse — what appears around mood improvement, easy days, or hard finishes. This is a presentation
+of relationship-web output, not new intelligence.
+
+**Shareable card.** The runner's picture with their top runs and the songs beside them. Manley's
+position, stated August 4: he accepts that some comparison will happen and does not want it to
+become the app's core identity — an optional artifact is not a core mechanic. **See the social
+position refinement in `creative_direction_ui.md`.**
+
+**Card, not page.** Cards are exported; pages are browsed. The locked exclusion is on browsable
+feeds and social-graph mechanics, and an artifact sidesteps that entirely. RunState already has a
+share card in its design system — this belongs to that family and reuses its export behavior rather
+than introducing a new browsing surface.
+
+**Distribution, not vanity.** People share things that say something about them. A card showing the
+three songs that carried a runner's best runs is the kind of thing that gets posted, which makes it
+a distribution channel rather than a decoration.
+
+**Wording constraint.** *"Artists who promote your best performances"* is a causal claim and
+collides with the overclaim guard. The associative form carries the same information safely:
+**artists that keep showing up around your strongest runs.**
+
+**Confidence constraint.** Three runs is a small sample — three coincidences can look like a
+pattern. Reuse the thresholds already calibrated in `RunStyleService`: a descriptive minimum of
+three supporting runs, comparative minimums of five with and five without, an 80% support rate, and
+a 30% lead over runs lacking the context. Without them this becomes astrology.
+
+**Naming notes.** Singular — **RunStyle Sound** — reads better than the plural, which drifts toward
+sounding like a tagline. **The feature name should not appear on the exported card.** Inside the app
+it is coherent; on a card seen by someone who does not use RunState it is jargon. The artifact needs
+the face, the runs, the songs, and the RunState mark, and nothing else.
+
+**Relationship to cross-user suggestions.** The aggregate side — *runners who respond to the artists
+you respond to also run well to this* — is already recorded as **on-vision, waiting only on the
+platform**, alongside browsable community playlists with run context. The two forms coexist: the
+aggregate is a recommendation engine, the card is identity. Neither requires the other.
+
+**Dependency worth knowing:** this lives inside whatever RunStyle summary eventually exists, and
+that summary's shape is still open (see `adr_001_runstyle_surfacing.md` — recompute versus persisted
+insight log). RunStyle Sound inherits that open question.
+
+*Needs:* structured song history, enough run history to clear the confidence thresholds, and a
+decided RunStyle summary surface.
+
 ### Playlist grading — taste versus run impact — EXPERIMENT
 
 **The reframe that makes it work:** do not ask the runner to grade *how well the AI understood their

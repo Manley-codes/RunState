@@ -129,6 +129,21 @@ stored meanings are unchanged. Decision record: `design_music_intelligence_v1.md
   14 records` silently lock one-song-per-run or prevent multiple meaningful moments later. Resolve
   what qualifies as a record before persistence or provider integration is designed.
 
+**Social position refinement (August 4, 2026) — REFINES the profile exclusion below.** Manley's
+decision: a **shareable personal card** carrying the runner's picture, top runs, and the songs
+beside them is **permitted**, as `RunStyle Sound` (see `music_feature_register.md`). His stated
+reasoning: he accepts that some comparison will happen and does not want comparison to become the
+app's **core identity** — an optional exported artifact is not a core mechanic.
+
+The distinction that keeps this consistent with the July 6 line: **a card is exported, a page is
+browsed.** What remains excluded is the browsable surface — profile pages other runners navigate to,
+follower graphs, feeds, rankings, and head-to-head. What is now allowed is an artifact the runner
+chooses to share, in the same family as the existing share card.
+
+Two constraints attach: the exported card carries no feature name (it would be jargon to a
+non-user), and the associations shown must be worded associatively rather than causally, per the
+overclaim guard.
+
 **Community clarification (July 6, 2026) — refines §2's social-comparison line:** the ban
 is on direct social-network mechanics (profiles, followers, feeds-as-graph, head-to-head),
 NOT on community presence. Anonymous, aggregate culture content — community shoe-mileage
