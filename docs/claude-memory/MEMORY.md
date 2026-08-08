@@ -8,7 +8,8 @@ Index only. One line per file — detail lives in the file. Keep it that way.
 
 | Item | Unlocks when | Detail lives in |
 | --- | --- | --- |
-| **State Scan screen** — the current task. Asks-vs-prefills is its central problem | Now | `ui_phase_handoff.md` |
+| **Progressive-input ladder needs a home** — what gets asked vs prefilled. State Scan collapsed to an energy selector and did not answer where shoes, route, surface, company live. Must not default onto the Start screen | **Now — the current task** | `design_state_scan.md` |
+| State Scan energy selector — decided August 8; wording, presentation and visual weight go to Claude Design | Ready to build | `design_state_scan.md` |
 | Run Complete screen — a mockup exists, never went through the pass process | After State Scan | `ui_phase_handoff.md` |
 | RunStyle Sound screen | After Run Complete | `music_feature_register.md` |
 | **Core Running Foundation Review** — one question: is record → preserve → understand → manage → use-later ready for a real interface | After the rough screens | `project_current_state.md` |
@@ -16,10 +17,14 @@ Index only. One line per file — detail lives in the file. Keep it that way.
 | **Edit / delete a logged run** — the known hole. No UPDATE or DELETE exists; INSERT and SELECT do | Any time, doesn't queue | `ui_phase_handoff.md` |
 | Does a RunStyle summary recompute from history, or read a stored insight log? | Before any summary surface is designed | `adr_001_runstyle_surfacing.md` |
 | What counts as a PR — the term covers several achievements | Before the PRs filter ships | `ui_phase_handoff.md` |
+| **Log History empty states** — two of them: a rich cold-start preview, and a minimal empty-filter state. Metrics panel has the same cold-start hole | Has to exist before the screen ships | `ui_phase_handoff.md` §4 |
+| Log History refinement / QA pass — `READ FROM` chips, dawn-vs-sun glyphs, split-music view | After the rough screens exist | `ui_phase_handoff.md` §4 |
+| **Future Run Suggestions needs a ruling** — parked against the scope-watch resistance to proactive coaching nudges | Before any pre-run suggestion is designed | `parked_feature_ideas.md` |
 | Settle / Hold / Build — NEEDS REVIEW, recommended shape is axis-internal with no prompt | Manley deciding | `music_feature_register.md` |
 | Structured song history — the narrowest gap to a real music system | Any time | `music_feature_register.md` |
 | Music final 36-output evaluation — never run, all gates stand | If music resumes | `music_intelligence_v1_evaluation.md` |
 | **Backend gaps the log screen surfaced** — start time, BPM, splits, rolling-pace comparison | Mobile phase, except start time | `ui_phase_handoff.md` §5 |
+| Parked non-music ideas — Top Run Highlights, support messages, body feedback, context fields. Automatic splits is ACCEPTED/LATER, not parked | Each entry names its own unlock | `parked_feature_ideas.md` |
 
 ⚠️ **Nothing visual is locked.** Read the open-mind section at the top of `creative_direction_ui.md`
 before advising on look. Direction is found by making, not specifying.
@@ -33,6 +38,8 @@ Claude Code if needed · Manley decides.
 
 - **[UI phase handoff](ui_phase_handoff.md)** — ⭐ **START HERE.** State of the UI phase, the Log
   History screen's settled decisions, and the backend gaps it surfaced.
+- [State Scan](design_state_scan.md) — pre-run energy is a bypassable selector on the Start screen,
+  not a screen. Bypass stores `unknown`, never Moderate.
 - [Creative direction / UI](creative_direction_ui.md) — visual direction. Frosted panels over a
   photographic environment; open-mind rules at the top.
 - [Idea organization analysis](idea_organization_analysis.md) — every loose idea, collapsed into four
