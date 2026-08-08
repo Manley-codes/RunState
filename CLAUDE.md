@@ -4,7 +4,15 @@ Java console running app. Learning project and portfolio piece for Manley Johnso
 
 ## Project memory
 Full context is in `docs/claude-memory/`. Read `docs/claude-memory/MEMORY.md` first, then relevant detail files, before starting any work.
-Both Claude Code and Cowork share this folder. Keep it up to date when decisions are locked in.
+Both Claude Code and Cowork share this folder. Keep it current as decisions are made.
+
+## How decisions get recorded
+Manley works on this project with an agile mindset. He revises freely and expects to.
+- **Default status is CURRENT, not locked.** A recorded decision is the working answer at the time it was made — a reference, never authority against a new idea. The few genuinely locked items say so and name what would reopen them.
+- **Do not harden an agreement into a principle.** Him agreeing to something once is a choice, not a rule. Record it as the current choice with its reasoning.
+- **Reasoning is recorded so it can be re-examined later, not to stop it being re-argued.** A decision being revisited is the process working, not backsliding.
+- **A rule written for one context does not automatically govern another.** Check what an existing rule was actually written to govern before citing it against a new idea, and give its reasons rather than its authority.
+- **Lead with what an idea makes possible before what constrains it.** Constraints are work items, not verdicts.
 
 ## Build & run
 Main class: `com.runstate.App`
