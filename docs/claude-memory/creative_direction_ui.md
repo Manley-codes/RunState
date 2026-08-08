@@ -86,6 +86,68 @@ stored meanings are unchanged. Decision record: `design_music_intelligence_v1.md
 - Collapsible block → frosted sphere docking: personalization (permanent layout) vs focus mode
   (temporary)? Worth pursuing either way; discoverability needs an affordance.
 
+**RESOLVED — August 6, 2026. The visual foundation is frosted panels over a photographic
+environment.** Read this before the Sony entry below; it supersedes that entry's *clean light
+canvas* translation.
+
+---
+
+## ⚠️ HOW TO WORK WITH THIS SECTION — read before advising on anything visual
+
+**Nothing here is locked. Manley's own words: *"keep an open mind — this is something I might
+constantly do until I find what I want."***
+
+This is a standing instruction, not a caveat. It changes how anyone should behave:
+
+- **Do not cite this document as authority against a new visual direction.** Give the reasons behind
+  a recorded decision and what would reopen it — never "the docs say X." Manley: *"don't worry too
+  much about the style rules in the docs — consider them, but keep an open mind."*
+- **Direction gets found by making, not by specifying.** The foundation below was arrived at by
+  building several variants and looking, after a specified version failed. Do not short-circuit that
+  with a spec that decides in advance.
+- **Colour, shape, and layout are all open.** *"I don't like to be restrained when it comes to
+  visual art... when it comes to colors, shapes, layouts etc I'm open to all suggestions."* That
+  includes replacing orange.
+- **Iteration is not indecision.** Repeatedly revisiting the look is the process working. Treat a
+  reversal as new information, not as churn.
+- **What is stable is the target, not the execution:** premium, stylish, light, productive-looking,
+  and *very slightly* futuristic — advanced-looking rather than futuristic.
+
+**A lesson worth keeping.** A light version failed on August 5 because its spec was a list of
+**removals** — no borders, no shadows, no gradients, flat fills. In the dark build those read as
+restraint because translucency and depth were already carrying the quality. In light, nothing was
+left doing that work and the result was structurally correct and visually empty. **Specifying visual
+quality by prohibition does not work.** A direction has to say what *creates* the quality, not only
+what to avoid.
+
+---
+
+## The foundation — frosted panels over a photographic environment
+
+**Manley's articulation:** *"a more soft tone of Sony, to connect better with the environment of
+running — that's why I also added 'light' in my description."*
+
+That resolves what looked like a contradiction. *Light* never meant a white page; it meant luminous.
+Off-white and cream were rejected specifically, not lightness.
+
+**How it works.** A photographic environment sits behind everything — a runner in motion, foliage,
+rain. Frosted translucent panels float over it. The screen reads bright because the panels glow,
+while staying dark enough inside to hold text. It is light and dark at once, which is why neither
+alone ever satisfied.
+
+**This is a return, not a departure.** §5 of this document already specified *"frosted glass over a
+warm, natural world,"* and §0 already required that *"each screen needs an environmental foundation
+layer — UI must never sit on empty white."* That thesis was written months earlier and got buried;
+the August 2026 build arrived back at it independently. **It is the strongest evidence that the
+original visual instinct was right.**
+
+**Parameterised in Claude Design.** The screens expose live controls — background surface, panel
+clarity, palette, and pill style — so the look can be tuned by looking rather than by respecifying.
+Treat those as the iteration surface.
+
+**Open and being handled by Manley:** legibility over busy photography, what determines which
+background appears, and the production cost of sourcing imagery. Raised August 6; he is ahead of it.
+
 **Candidate Sony-inspired direction (August 2, 2026 — exploratory, not locked):**
 - Use Sony as a **design philosophy, not a visual template**: visionary, simple, human-centered,
   confident, immersive, and premium; "smart, not intellectual" and "cool, not trendy."

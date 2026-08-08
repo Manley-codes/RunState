@@ -18,9 +18,14 @@ Roadmap step one is closed. See `music_intelligence_v1_evaluation.md`.
 
 **The UI phase started August 4 and the first screen is near-complete.**
 
-**Current file: `RunState - LogPhase2.html`** in the repo root. Earlier states are `logphase1.html`
-and `Music Replies.html`; the `RunState - Soundtrack Log v2–v6`, `Type Scale`, `Metric Ring Options`,
-`Merge Options`, and `Accent Comparison` files are Cowork's decision mockups, not builds.
+**`RunState - LogPhase2.html` in the repo root is NOT the current state.** More stable and preferred
+versions exist in Claude Design and have not been downloaded yet. The repo copy is a snapshot from
+part-way through; changes have been made since. **Do not treat it as authoritative** — ask for the
+current export before working from a file.
+
+Earlier states are `logphase1.html` and `Music Replies.html`. The `RunState - Soundtrack Log v2–v6`,
+`Type Scale`, `Metric Ring Options`, `Merge Options`, and `Accent Comparison` files are Cowork's
+decision mockups, not builds.
 
 **None of these files are committed.**
 
@@ -28,18 +33,23 @@ and `Music Replies.html`; the `RunState - Soundtrack Log v2–v6`, `Type Scale`,
 
 ## 2. The working process — this is the important part
 
-Established August 4 and it works. Do not collapse it back into one big pass.
+**Roles for this phase — reverted to the project's standard split:**
 
-1. **Decisions get made in conversation with Cowork**, one change at a time, with mockups built to
-   compare options where a choice isn't obvious.
-2. **Cowork writes a short handoff for Claude Design** — one pass, one job.
-3. **Claude Design executes**, since it has the visual craft. It also holds the file in its platform.
-4. **Manley reviews the result before the next pass goes out.**
+1. **Manley plans, with ChatGPT.** Direction, decisions, and what goes in a pass.
+2. **Cowork reviews.** Checks work against the repo, flags contradictions, gives a verdict first with
+   only the caveats that change the decision. Builds comparison mockups when a choice isn't obvious.
+3. **Claude Design executes**, since it has the visual craft. It also holds the live file.
+4. **Claude Code** if code is needed in this phase.
+5. **Manley decides**, and reviews each result before the next pass goes out.
+
+*(During August 4–6 Cowork also planned and wrote the handoffs. That was situational, not the
+standing arrangement.)*
+
+**Two process rules hold regardless of who writes the handoff.** Both were learned by getting them
+wrong, and neither should be relaxed.
 
 **Cowork's mockups are diagrams of decisions, not visual targets.** They show what goes where and
 what marks state. They are deliberately plain. Claude Design produces the finish.
-
-**Two rules learned the hard way:**
 
 - **A handoff covers one pass.** A full-screen spec was written on August 5, and it was wrong — it
   threw away the ability to tell which change caused which result. Split into passes instead.
@@ -58,8 +68,9 @@ Named **RunState Log History**. It absorbed Run History; it holds every run, not
 
 **Structure**
 
+- **The `14 runs, 14 records.` headline is removed.** The header is now the eyebrow and `Share` only.
 - Metrics panel at top follows the open record, and rests on the most recent run when nothing is
-  open. *(The resting state is currently wrong in the build — see section 4.)*
+  open.
 - Filter pill: `All · PRs · Fastest · Longest`. Manley's set, and it beats the earlier
   `All · Music · Silence · Best` — Music would return most records, which isn't a filter.
 - Records grouped by month, newest first. Every header carries month and year plus that month's
@@ -76,6 +87,9 @@ Named **RunState Log History**. It absorbed Run History; it holds every run, not
 > **Right column** — weather glyph above day and date. Time removed: nearly every run starts
 > between 5:41 and 6:33, so the field said the same thing on every row
 
+**The expanded record's stamp** now reads `SONG DETECTED — MILE 2.4` rather than the mile marker
+alone. It names what the app noticed, not just where.
+
 **Music-free records.** One treatment covers both *ran in silence* and *not recorded*. The
 distinction is real in the data — the reply system must never claim anything about music it doesn't
 know about — but on screen it's the app narrating its own data quality. The crossed-out headphones
@@ -85,6 +99,48 @@ otherwise.
 **Weather glyphs.** Outlined, no fill, uniform stroke. Sun, dawn, half moon, cloud, sun behind cloud,
 rain, fog, wind. The moon is reserved for genuine night runs. **Dawn is its own glyph** because runs
 cluster at 5:41–6:33 and *clear* would otherwise swallow almost every record.
+
+**The visual foundation — resolved August 6**
+
+**Frosted panels over a photographic environment.** A runner in motion, foliage, rain sits behind
+everything; translucent panels float over it. The screen reads bright because the panels glow, while
+staying dark enough inside to hold text.
+
+Manley: *"a more soft tone of Sony, to connect better with the environment of running — that's why I
+also added 'light' in my description."* **Light meant luminous, not a white page.** Off-white and
+cream were rejected specifically; lightness never was.
+
+**This is a return to §5 of `creative_direction_ui.md`** — *"frosted glass over a warm, natural
+world"* — written months earlier and buried. Neither Cowork nor the build referenced it; the
+direction was rearrived at independently.
+
+**Claude Design exposes live controls** for background surface, panel clarity, palette, and pill
+style. That is the iteration surface — tune by looking, not by respecifying.
+
+> ⚠️ **Before advising on anything visual, read the open-mind section at the top of
+> `creative_direction_ui.md`.** Nothing about the look is locked, direction is found by making rather
+> than specifying, and recorded decisions are references — never authority against a new idea.
+
+**Where the Sony direction landed**
+
+`creative_direction_ui.md` records a Sony-inspired direction from August 2, exploratory and not
+locked: *design philosophy not visual template — visionary, simple, human-centered, confident,
+premium; "smart, not intellectual" and "cool, not trendy."* Its stated visual translation was a
+**clean light canvas**, disciplined black, one concentrated warm accent, sculptural hierarchy,
+premium coming from proportion, spacing, materials, and precision rather than decoration.
+
+**The direction split in two during this build, and only half of it survived.**
+
+**The philosophy holds.** Restraint, one accent, quiet chrome, quality from proportion and spacing
+rather than ornament. That is the Sony brief being met.
+
+**The literal *clean light canvas* did not**, and the frosted-environment foundation above replaces
+it. The August 5 light attempt was that translation taken literally, and it failed on execution
+rather than on direction — a spec made of removals, with nothing left creating depth.
+
+**So: Sony as a softened philosophy, expressed through material and environment rather than through a
+white page.** That is a better fit for a running app than the original translation was, and it is
+Manley's phrasing, not a reinterpretation.
 
 **Rejected, with reasons**
 
@@ -104,13 +160,11 @@ cluster at 5:41–6:33 and *clear* would otherwise swallow almost every record.
 
 Not blocking; revisit later.
 
-- **The metrics panel's resting state is wrong.** It follows the open record correctly, but with
-  nothing open it shows an arbitrary run rather than the most recent.
-- **PRs.** Manley's direction: lime as the accent, a reward marker rather than a trophy or medal
-  (those read gamified). Cowork's note — it needs to appear **in two places**: a small marker on the
-  record row so the PRs filter returns a list where something looks special, and a fuller treatment
-  in the metrics panel naming what the record was (*Longest run*, *Fastest pace*). Naming the
-  achievement beats a badge. **What counts as a PR still needs defining.**
+- **PRs.** Revisit later; nothing here is a requirement. Changes have already been made since these
+  notes. The only durable item is that **what counts as a PR still needs defining** — the term covers
+  several different achievements. Ideas discussed but not adopted: a marker on the record row so the
+  PRs filter returns a list where something looks distinct, and a fuller treatment in the metrics
+  panel naming the achievement rather than showing a badge.
 - **Empty state** for a filter with no results. Cold-start rule applies: never fabricate, never leave
   a blank.
 - **`READ FROM` chips and `Remove response`.** Agreed to remove; left in for now. *Remove response*
