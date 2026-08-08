@@ -43,8 +43,9 @@ Not a separate screen, not a question.
 - **`Start Run` stays active with no selection made.** Energy is bypassable.
 - **A bypassed run stores energy as `unknown`** rather than defaulting to Moderate. The reason is
   that a default would feed State Lift a value nobody entered. If a later idea makes inferring a
-  value worthwhile — a population prior, say — that's a fair thing to revisit; the requirement is
-  only that the app knows the difference between entered and inferred.
+  value worthwhile — a population prior, say — that's a fair thing to revisit. The requirement isn't
+  that inference is forbidden; it's that an inferred value stays **visibly inferred to the runner**
+  and never overwrites what they did or didn't enter.
 - **No *Not running today* control.** It duplicates ordinary navigation.
 - **`Start Run` remains the visually dominant action.** The container is what makes this work: it
   turns three competing tap targets into **one control** sitting above `Start Run`, rather than four

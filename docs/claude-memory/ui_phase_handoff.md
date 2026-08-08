@@ -242,9 +242,12 @@ then screen finalisation, then Spring Boot from the screen contracts, then mobil
 
 **Screens still to design**
 
-- **State Scan** — the pre-run screen, first in the flow. Carries the progressive-input ladder: what
-  gets asked versus prefilled. Stored energy domain is `LOW / MODERATE / HIGH` and that doesn't
-  change; labels and presentation are open.
+- **State Scan** — **superseded August 8 2026, see `design_state_scan.md`.** It is no longer a
+  separate screen: pre-run energy became a bypassable `Start energy` selector on the Start screen.
+  The name still refers to the concept. **The progressive-input ladder therefore has no home** —
+  where shoes, route, surface and run company get asked versus prefilled is now the open planning
+  question, and it must not default onto the Start screen. Stored energy domain remains
+  `LOW / MODERATE / HIGH`.
 - **Run Complete** — a Claude Design mockup exists but hasn't been through this process.
 - **RunStyle Sound** — the artists and songs recurring around strongest runs, plus the shareable
   card. See `music_feature_register.md`.
