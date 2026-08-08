@@ -8,6 +8,8 @@ metadata:
 # UI phase — handoff, August 6 2026
 
 Written because the session that produced this got very long. Everything needed to continue is here.
+Amended August 7 2026: interaction behavior, `Share` status, the song-location requirement, the
+`READ FROM` parking, and a corrected housekeeping section.
 
 ---
 
@@ -69,6 +71,8 @@ Named **RunState Log History**. It absorbed Run History; it holds every run, not
 **Structure**
 
 - **The `14 runs, 14 records.` headline is removed.** The header is now the eyebrow and `Share` only.
+  `Share` is a visual placeholder; no behavior is decided. The nearest real thing is the RunStyle
+  Sound shareable card in `music_feature_register.md`.
 - Metrics panel at top follows the open record, and rests on the most recent run when nothing is
   open.
 - Filter pill: `All · PRs · Fastest · Longest`. Manley's set, and it beats the earlier
@@ -90,6 +94,13 @@ Named **RunState Log History**. It absorbed Run History; it holds every run, not
 **The expanded record's stamp** now reads `SONG DETECTED — MILE 2.4` rather than the mile marker
 alone. It names what the app noticed, not just where.
 
+**Interaction.** Opening a record closes the one already open — one expanded record at a time. The
+metrics panel updates to the opened record, and the reply is read on open. `REPLAY` is provisional.
+Approved August 7: these are behavior decisions, not build artifacts, and they hold unless a backend
+limit or a later direction change forces a revision. *Small open point, cheap to settle later:*
+`creative_direction_ui.md` describes auto-read as **optional**, so whether it is always-on or a
+default-on setting is unsettled.
+
 **Music-free records.** One treatment covers both *ran in silence* and *not recorded*. The
 distinction is real in the data — the reply system must never claim anything about music it doesn't
 know about — but on screen it's the app narrating its own data quality. The crossed-out headphones
@@ -100,7 +111,7 @@ otherwise.
 rain, fog, wind. The moon is reserved for genuine night runs. **Dawn is its own glyph** because runs
 cluster at 5:41–6:33 and *clear* would otherwise swallow almost every record.
 
-**The visual foundation — resolved August 6**
+**The visual foundation — current stable direction, August 6**
 
 **Frosted panels over a photographic environment.** A runner in motion, foliage, rain sits behind
 everything; translucent panels float over it. The screen reads bright because the panels glow, while
@@ -167,7 +178,8 @@ Not blocking; revisit later.
   panel naming the achievement rather than showing a badge.
 - **Empty state** for a filter with no results. Cold-start rule applies: never fabricate, never leave
   a blank.
-- **`READ FROM` chips and `Remove response`.** Agreed to remove; left in for now. *Remove response*
+- **`READ FROM` chips and `Remove response`.** **Left in place; removal is parked until explicitly
+  revisited.** *Remove response*
   is mislabeled — it only collapses. The chips were meant to show what the reply drew on, which is
   the UI answer to fabricated telemetry, but as permanent static decoration they answer a question
   nobody asked. **The better form is on-demand** — revealed by tapping the reply. Worth parking
@@ -192,6 +204,7 @@ Not blocking; revisit later.
 | **Rolling pace comparison** — the reply says *"eleven seconds under your rolling pace"* | Removed as a comparison baseline in July. Manley: it returns as an app-visible stat; whether it returns as a *comparison* is decided at redesign |
 | **Monthly aggregates** — month header totals | Derivable from stored runs; nothing new needed |
 | **PR categories** — for the PRs filter and marker | Personal records exist in the console; categories aren't defined |
+| **Song location** — the `SONG DETECTED — MILE 2.4` stamp, and the split-music view | **Not collected, not needed now, and parked for the mobile/GPS phase.** The mile marker requires a playback timestamp joined to time-aligned cumulative-distance/GPS telemetry; stored splits are not a prerequisite. An earlier non-GPS form could be time-based once playback and run-start timestamps exist. |
 
 **Already available and used correctly:** distance, duration, pace, route name, surface, shoes, run
 company, weather condition, temperature, pre- and post-run energy, effort.
@@ -227,9 +240,17 @@ then do API contracts lock. Spring Boot gets designed **from** the screen payloa
 
 ## 7. Housekeeping
 
-**Nothing in the repo root is committed** — three handoffs, the decision queue, and eleven HTML files
-including six Cowork mockups that have served their purpose. Worth a cleanup and a commit before the
-next screen starts.
+**Committed as of August 7.** The working tree is clean. `RunState - LogPhase2.html` and
+`logphase1.html` are tracked (`7aeb2c3`); the doc updates landed at `13776c9`. The Cowork decision
+mockups and `Music Replies.html` were never tracked and are no longer in the repo — they served
+their purpose.
+
+⚠️ **`HANDOFF - Log pass 2.md` and `SPEC - RunState Log v1.md` have never been in the repo.** Not
+deleted — never tracked. They live only in Claude Design and local files, so the running decision
+queue for this screen sits outside the durable record. Anything decided in them reaches this folder
+only if someone writes it here. **This project has already lost decisions that way once** — see the
+July 9 DJ-session note in `music_feature_register.md`. Transcription into `docs/claude-memory/` is
+the step that makes a decision real.
 
 **Live documents to read first:** `idea_organization_analysis.md`, `music_feature_register.md`,
 `run_initiation_register.md`, `adr_001_runstyle_surfacing.md`. All four are indexed in `MEMORY.md`
