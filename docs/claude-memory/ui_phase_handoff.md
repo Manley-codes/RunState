@@ -176,8 +176,31 @@ Not blocking; revisit later.
   several different achievements. Ideas discussed but not adopted: a marker on the record row so the
   PRs filter returns a list where something looks distinct, and a fuller treatment in the metrics
   panel naming the achievement rather than showing a badge.
-- **Empty state** for a filter with no results. Cold-start rule applies: never fabricate, never leave
-  a blank.
+- **Empty state — two different states, not one.** Current thinking as of August 8 2026, Manley's
+  idea; nothing built and nothing settled.
+
+  **Cold start, no runs at all — rich.** Show a sample record previewing what a logged run becomes,
+  and let it go once the runner has one of their own. Two reasons it earns its place. First, this
+  screen *is* the product's argument — the Soundtrack Log frame graded Distinct 9 in
+  `idea_organization_analysis.md` for turning disposable replies into an accumulating record, and on
+  day one that frame is invisible. Second, it answers the input question by demonstration: seeing a
+  song, a weather glyph, a run type and a reply tells the runner what to give the app without a
+  prompt or an onboarding tour, which suits this app's voice better than either.
+
+  **The craft problem to solve is distinguishability.** The sample must be unmistakably not the
+  runner's, or someone could believe they logged a run, or wonder later where it went. Worth being
+  precise about the neighbouring rule: *never fabricate* was written about the app claiming things
+  about the runner's **own** runs — the fabricated-telemetry failure from the music work. A clearly
+  marked demo record isn't that. Still open: when the preview leaves — first real run, runner
+  dismissal, or something else.
+
+  **Empty filter, runs already exist — minimal.** PRs with no PRs yet, Fastest with a single run.
+  The runner already knows what a record looks like by then, so a sample would be redundant and a
+  little condescending. Different problem, different answer.
+
+  **The metrics panel has the same cold-start hole.** It rests on the most recent run when nothing is
+  open, and with zero runs there is no most recent run. Same screen, same day — worth deciding
+  together.
 - **`READ FROM` chips and `Remove response`.** **Left in place; removal is parked until explicitly
   revisited.** *Remove response*
   is mislabeled — it only collapses. The chips were meant to show what the reply drew on, which is
@@ -245,12 +268,18 @@ then do API contracts lock. Spring Boot gets designed **from** the screen payloa
 mockups and `Music Replies.html` were never tracked and are no longer in the repo — they served
 their purpose.
 
-⚠️ **`HANDOFF - Log pass 2.md` and `SPEC - RunState Log v1.md` have never been in the repo.** Not
-deleted — never tracked. They live only in Claude Design and local files, so the running decision
-queue for this screen sits outside the durable record. Anything decided in them reaches this folder
-only if someone writes it here. **This project has already lost decisions that way once** — see the
-July 9 DJ-session note in `music_feature_register.md`. Transcription into `docs/claude-memory/` is
-the step that makes a decision real.
+**On per-pass handoffs and the decision queue.** `HANDOFF - Log pass 2.md` and
+`SPEC - RunState Log v1.md` were never tracked by git and have since been deleted, deliberately.
+That is correct: they specified a version Claude Design did not build — it made its own typographic
+choices, which Manley preferred — so the documents describe a screen that does not exist. **The
+built file is the source of truth, not the spec that was never followed.** Claude Design holds it
+and can carry the treatment forward to later screens, which is what consistency actually depends on.
+
+⚠️ **The durable rule, which outlives those two files:** per-pass handoffs and decision queues are
+working documents. They live outside the repo and they get deleted. A decision only survives if it
+is written into `docs/claude-memory/` before its working document goes away. **This project has
+already lost decisions that way once** — see the July 9 DJ-session note in
+`music_feature_register.md`.
 
 **Live documents to read first:** `idea_organization_analysis.md`, `music_feature_register.md`,
 `run_initiation_register.md`, `adr_001_runstyle_surfacing.md`. All four are indexed in `MEMORY.md`
