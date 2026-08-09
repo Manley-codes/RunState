@@ -12,6 +12,7 @@ Amended August 7 2026: interaction behavior, `Share` status, the song-location r
 `READ FROM` parking, and a corrected housekeeping section.
 Amended August 8 2026: State Scan became a Start-screen energy selector, the Log History empty states
 were separated, and the expanded record gained the current `REPLY | SPLITS` direction.
+Amended August 9 2026: added the most-recent-record quick peek and the current visual vision.
 
 ---
 
@@ -101,6 +102,11 @@ metrics panel updates to the opened record, and the reply is read on open. Appro
 are behavior decisions, not build artifacts, and they hold unless a backend limit or a later
 direction change forces a revision.
 
+**Most-recent-record quick peek — current idea, not built.** When Log History opens, the most recent
+record briefly expands and returns to its closed state, creating a quick visual peek at what the
+record contains. The motion may last less than half a second; it is intended as a visual cue, not
+enough time to read the expanded content.
+
 `REPLAY` remains **provisional and currently leans toward removal, but removal is not decided.** It
 was added so Manley could repeatedly hear the voice replies while judging and adjusting them; that
 testing purpose is not evidence that runners need historical playback. If later user testing shows
@@ -118,19 +124,32 @@ otherwise.
 rain, fog, wind. The moon is reserved for genuine night runs. **Dawn is its own glyph** because runs
 cluster at 5:41–6:33 and *clear* would otherwise swallow almost every record.
 
-**The visual foundation — current stable direction, August 6**
+**The visual vision — primary working direction, August 9**
 
-**Frosted panels over a photographic environment.** A runner in motion, foliage, rain sits behind
-everything; translucent panels float over it. The screen reads bright because the panels glow, while
-staying dark enough inside to hold text.
+> **RunState should feel like a purposeful running experience held within a soft, sensorial
+> atmosphere. Real running environments, physical exertion, sweat, movement, and confidence give
+> it athletic substance; strategically placed dark elements and precise structure add premium
+> discipline; and everything remains productive and forward-moving. The surrounding softness
+> never weakens the physical intensity—it gives that intensity somewhere fresh, human, and
+> inviting to live.**
 
-Manley: *"a more soft tone of Sony, to connect better with the environment of running — that's why I
-also added 'light' in my description."* **Light meant luminous, not a white page.** Off-white and
-cream were rejected specifically; lightness never was.
+The running is not soft; the world holding it is. Physical fitness remains first. Softness is the
+surrounding visual atmosphere, while real running environments, intensity, sweat, confidence,
+productivity, and premium discipline give it substance. Soft colours dominate; near-black, darker
+colours, or darker shades of those colours are used strategically. Real-life running imagery is part
+of the identity and may carry indirect sensuality through natural light, reflected or sweaty skin,
+movement, attitude, and confident editorial photography.
 
-**This is a return to §5 of `creative_direction_ui.md`** — *"frosted glass over a warm, natural
-world"* — written months earlier and buried. Neither Cowork nor the build referenced it; the
-direction was rearrived at independently.
+**Productivity remains a top identity trait.** The experience must stay clear, useful, and
+forward-moving rather than becoming passive or spa-like.
+
+**Frosted panels over a photographic environment remain a material approach, not the whole
+identity.** They let real environments and their colours live through the interface. Sony is now a
+supporting influence for precision, spacing, materials, restraint, and premium structure; its heavy
+technological atmosphere is not the target. No single colour, including green, is the identity.
+
+The full reasoning, updates to older palette/art/tonal-arc statements, and open execution rules live
+in `creative_direction_ui.md` under **The primary visual vision — August 9, 2026**.
 
 **Claude Design exposes live controls** for background surface, panel clarity, palette, and pill
 style. That is the iteration surface — tune by looking, not by respecifying.
@@ -156,9 +175,8 @@ rather than ornament. That is the Sony brief being met.
 it. The August 5 light attempt was that translation taken literally, and it failed on execution
 rather than on direction — a spec made of removals, with nothing left creating depth.
 
-**So: Sony as a softened philosophy, expressed through material and environment rather than through a
-white page.** That is a better fit for a running app than the original translation was, and it is
-Manley's phrasing, not a reinterpretation.
+**So: Sony survives as a supporting discipline, not the visual atmosphere.** Its precision and
+premium restraint can strengthen the soft, sensorial running environment without dominating it.
 
 **Rejected, with reasons**
 
@@ -266,18 +284,20 @@ then screen finalisation, then Spring Boot from the screen contracts, then mobil
 
 **Immediate sequence — one small pass at a time**
 
-1. **Pre-run energy / State Scan selector design pass.** Send the bypassable `Start energy` control
+1. **Most-recent-record quick-peek design pass.** Add the brief expansion and return to the current
+   Log History screen.
+2. **Pre-run energy / State Scan selector design pass.** Send the bypassable `Start energy` control
    on the Start screen to Claude Design. The three stored levels remain `LOW / MODERATE / HIGH`, and
    `Start Run` remains visually dominant. This is the visual execution of the State Scan energy
    decision, not a separate State Scan screen.
-2. **Remaining State Scan planning — the progressive-input ladder's home.** Decide where shoes,
+3. **Remaining State Scan planning — the progressive-input ladder's home.** Decide where shoes,
    route, surface and run company get asked, suggested, prefilled and corrected now that the energy
    selector did not absorb them. Do not default them onto the Start screen.
-3. **Run Complete rough-screen pass.** A Claude Design mockup exists but has not been through this
+4. **Run Complete rough-screen pass.** A Claude Design mockup exists but has not been through this
    process.
-4. **RunStyle Sound rough-screen pass.** The artists and songs recurring around strongest runs, plus
+5. **RunStyle Sound rough-screen pass.** The artists and songs recurring around strongest runs, plus
    the shareable card. See `music_feature_register.md`.
-5. **Log History refinement pass.** Resolve the cold-start and empty-filter states, mock the expanded
+6. **Log History refinement pass.** Resolve the cold-start and empty-filter states, mock the expanded
    record's `REPLY | SPLITS` states, and revisit the remaining row/glyph QA. This is when the expanded
    interaction is designed; its real split-and-song implementation still waits for the required
    telemetry.
