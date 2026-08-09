@@ -10,6 +10,8 @@ metadata:
 Written because the session that produced this got very long. Everything needed to continue is here.
 Amended August 7 2026: interaction behavior, `Share` status, the song-location requirement, the
 `READ FROM` parking, and a corrected housekeeping section.
+Amended August 8 2026: State Scan became a Start-screen energy selector, the Log History empty states
+were separated, and the expanded record gained the current `REPLY | SPLITS` direction.
 
 ---
 
@@ -95,11 +97,16 @@ Named **RunState Log History**. It absorbed Run History; it holds every run, not
 alone. It names what the app noticed, not just where.
 
 **Interaction.** Opening a record closes the one already open — one expanded record at a time. The
-metrics panel updates to the opened record, and the reply is read on open. `REPLAY` is provisional.
-Approved August 7: these are behavior decisions, not build artifacts, and they hold unless a backend
-limit or a later direction change forces a revision. *Small open point, cheap to settle later:*
-`creative_direction_ui.md` describes auto-read as **optional**, so whether it is always-on or a
-default-on setting is unsettled.
+metrics panel updates to the opened record, and the reply is read on open. Approved August 7: these
+are behavior decisions, not build artifacts, and they hold unless a backend limit or a later
+direction change forces a revision.
+
+`REPLAY` remains **provisional and currently leans toward removal, but removal is not decided.** It
+was added so Manley could repeatedly hear the voice replies while judging and adjusting them; that
+testing purpose is not evidence that runners need historical playback. If later user testing shows
+that people want to hear a saved reply again, it can remain or return. Separately,
+`creative_direction_ui.md` describes auto-read as **optional**, so whether reading on open is
+always-on or a default-on setting is still unsettled.
 
 **Music-free records.** One treatment covers both *ran in silence* and *not recorded*. The
 distinction is real in the data — the reply system must never claim anything about music it doesn't
@@ -201,17 +208,33 @@ Not blocking; revisit later.
   **The metrics panel has the same cold-start hole.** It rests on the most recent run when nothing is
   open, and with zero runs there is no most recent run. Same screen, same day — worth deciding
   together.
-- **`READ FROM` chips and `Remove response`.** **Left in place; removal is parked until explicitly
-  revisited.** *Remove response*
-  is mislabeled — it only collapses. The chips were meant to show what the reply drew on, which is
-  the UI answer to fabricated telemetry, but as permanent static decoration they answer a question
-  nobody asked. **The better form is on-demand** — revealed by tapping the reply. Worth parking
-  rather than dropping. Note `REPLAY` will be alone in that row once they go.
+- **`READ FROM` chips — current direction is removal from the persistent row.** The chips were meant
+  to show what the reply drew on, which is the UI answer to fabricated telemetry, but as permanent
+  static decoration they answer a question nobody asked. Removing the chips does **not** discard
+  provenance as an idea: the better later form remains on-demand, revealed from the reply when a
+  runner wants to know what informed it.
+- **`Remove response`** remains a separate wording/behavior cleanup if the control survives; it only
+  collapses the record and does not remove anything.
 - **Dawn and sun glyphs read too similarly** at small size.
 - **`Morning run` will dominate** the label, given the run times. Milder than the `SOUNDTRACK`
   problem it replaced, and the weather glyph now carries differentiation.
-- **The split-music view.** Not built, needs playback timing that doesn't exist. Design the expanded
-  record so a second view can live inside it later without restructuring.
+- **The split-music view — accepted later direction, presentation refined August 8.** This is the
+  already recorded second view inside the expanded record, not a newly separate music feature. The
+  current interaction direction is a two-view control in the existing action row: `REPLY | SPLITS`.
+  `REPLY` is the default; `SPLITS` changes the body of the same expanded record rather than opening a
+  permanent new screen.
+
+  The first design target is the familiar running-app split list: split number/distance, time, pace,
+  and the song title connected to that part of the run. **Song title only in this view — no album or
+  artist.** Do not manufacture a one-song-per-split relationship: a song may cross multiple splits,
+  and several songs may overlap one split, so the eventual treatment must be able to show overlap or
+  a song-change location honestly. Both split timing and song timing read from shared run-session
+  telemetry; music does not build a second split system.
+
+  The switch and both states should be explored during the later Log History refinement pass so the
+  panel reserves the right structure. A shippable split view waits for automatic splits from the
+  mobile/GPS phase plus structured song playback timestamps. `REPLAY` does not currently have a
+  settled place beside this switch because its removal is still open.
 
 ---
 
@@ -223,10 +246,11 @@ Not blocking; revisit later.
 | --- | --- |
 | **Run start time** — time-of-day run labels, any displayed time | Fields and columns exist; `RunConsole` writes `null`. Needs a prompt, or arrives free on mobile |
 | **Heart rate / BPM** — shown in the metrics panel | Not collected. Mobile phase |
-| **Splits** — referenced by the old `READ FROM` chips, and by the split-music view | Not collected. Mobile/GPS phase |
+| **Splits** — required by the split-music view | Not collected. Mobile/GPS phase |
 | **Rolling pace comparison** — the reply says *"eleven seconds under your rolling pace"* | Removed as a comparison baseline in July. Manley: it returns as an app-visible stat; whether it returns as a *comparison* is decided at redesign |
 | **Monthly aggregates** — month header totals | Derivable from stored runs; nothing new needed |
 | **PR categories** — for the PRs filter and marker | Personal records exist in the console; categories aren't defined |
+| **Structured song playback history** — every song title plus when it started and stopped during the run | Not collected. Does not require GPS and can exist earlier; it becomes distance-aware only when joined to run timing/GPS telemetry |
 | **Song location** — the `SONG DETECTED — MILE 2.4` stamp, and the split-music view | **Not collected, not needed now, and parked for the mobile/GPS phase.** The mile marker requires a playback timestamp joined to time-aligned cumulative-distance/GPS telemetry; stored splits are not a prerequisite. An earlier non-GPS form could be time-based once playback and run-start timestamps exist. |
 
 **Already available and used correctly:** distance, duration, pace, route name, surface, shoes, run
@@ -240,17 +264,23 @@ company, weather condition, temperature, pre- and post-run energy, effort.
 Step three is the Core Running Foundation Review, driven by those screens. Then RunStyle V2 review,
 then screen finalisation, then Spring Boot from the screen contracts, then mobile and GPS.
 
-**Screens still to design**
+**Immediate sequence — one small pass at a time**
 
-- **State Scan** — **superseded August 8 2026, see `design_state_scan.md`.** It is no longer a
-  separate screen: pre-run energy became a bypassable `Start energy` selector on the Start screen.
-  The name still refers to the concept. **The progressive-input ladder therefore has no home** —
-  where shoes, route, surface and run company get asked versus prefilled is now the open planning
-  question, and it must not default onto the Start screen. Stored energy domain remains
-  `LOW / MODERATE / HIGH`.
-- **Run Complete** — a Claude Design mockup exists but hasn't been through this process.
-- **RunStyle Sound** — the artists and songs recurring around strongest runs, plus the shareable
-  card. See `music_feature_register.md`.
+1. **Pre-run energy / State Scan selector design pass.** Send the bypassable `Start energy` control
+   on the Start screen to Claude Design. The three stored levels remain `LOW / MODERATE / HIGH`, and
+   `Start Run` remains visually dominant. This is the visual execution of the State Scan energy
+   decision, not a separate State Scan screen.
+2. **Remaining State Scan planning — the progressive-input ladder's home.** Decide where shoes,
+   route, surface and run company get asked, suggested, prefilled and corrected now that the energy
+   selector did not absorb them. Do not default them onto the Start screen.
+3. **Run Complete rough-screen pass.** A Claude Design mockup exists but has not been through this
+   process.
+4. **RunStyle Sound rough-screen pass.** The artists and songs recurring around strongest runs, plus
+   the shareable card. See `music_feature_register.md`.
+5. **Log History refinement pass.** Resolve the cold-start and empty-filter states, mock the expanded
+   record's `REPLY | SPLITS` states, and revisit the remaining row/glyph QA. This is when the expanded
+   interaction is designed; its real split-and-song implementation still waits for the required
+   telemetry.
 
 **Then the Core Running Foundation Review.** One question only: is the central journey — record a run,
 preserve it safely, understand it, manage it, use it later — credible and structurally ready for a

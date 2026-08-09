@@ -8,17 +8,17 @@ Index only. One line per file — detail lives in the file. Keep it that way.
 
 | Item | Unlocks when | Detail lives in |
 | --- | --- | --- |
-| **Progressive-input ladder needs a home** — what gets asked vs prefilled. State Scan collapsed to an energy selector and did not answer where shoes, route, surface, company live. Must not default onto the Start screen | **Now — the current task** | `design_state_scan.md` |
-| State Scan energy selector — decided August 8; wording, presentation and visual weight go to Claude Design | Ready to build | `design_state_scan.md` |
-| Run Complete screen — a mockup exists, never went through the pass process | After State Scan | `ui_phase_handoff.md` |
+| State Scan energy selector — current August 8 direction; wording, presentation and visual weight go to Claude Design | **Now — next design pass** | `design_state_scan.md` |
+| **Progressive-input ladder needs a home** — what gets asked vs prefilled. State Scan collapsed to an energy selector and did not answer where shoes, route, surface, company live. Must not default onto the Start screen | After the energy-selector pass | `design_state_scan.md` |
+| Run Complete screen — a mockup exists, never went through the pass process | After remaining State Scan planning | `ui_phase_handoff.md` |
 | RunStyle Sound screen | After Run Complete | `music_feature_register.md` |
-| **Core Running Foundation Review** — one question: is record → preserve → understand → manage → use-later ready for a real interface | After the rough screens | `project_current_state.md` |
+| **Core Running Foundation Review** — one question: is record → preserve → understand → manage → use-later ready for a real interface | After the rough screens and Log History refinement | `project_current_state.md` |
 | RunStyle V2 strategy review — Manley's replacement direction | After rough screens exist | `idea_organization_analysis.md` |
 | **Edit / delete a logged run** — the known hole. No UPDATE or DELETE exists; INSERT and SELECT do | Any time, doesn't queue | `ui_phase_handoff.md` |
 | Does a RunStyle summary recompute from history, or read a stored insight log? | Before any summary surface is designed | `adr_001_runstyle_surfacing.md` |
 | What counts as a PR — the term covers several achievements | Before the PRs filter ships | `ui_phase_handoff.md` |
 | **Log History empty states** — two of them: a rich cold-start preview, and a minimal empty-filter state. Metrics panel has the same cold-start hole | Has to exist before the screen ships | `ui_phase_handoff.md` §4 |
-| Log History refinement / QA pass — `READ FROM` chips, dawn-vs-sun glyphs, split-music view | After the rough screens exist | `ui_phase_handoff.md` §4 |
+| Log History refinement / QA pass — empty states, `REPLY | SPLITS` expanded-record mockup, `REPLAY` decision, dawn-vs-sun glyphs | After the rough screens exist; before Foundation Review | `ui_phase_handoff.md` §4 |
 | **Future Run Suggestions needs a ruling** — parked against the scope-watch resistance to proactive coaching nudges | Before any pre-run suggestion is designed | `parked_feature_ideas.md` |
 | Settle / Hold / Build — NEEDS REVIEW, recommended shape is axis-internal with no prompt | Manley deciding | `music_feature_register.md` |
 | Structured song history — the narrowest gap to a real music system | Any time | `music_feature_register.md` |
