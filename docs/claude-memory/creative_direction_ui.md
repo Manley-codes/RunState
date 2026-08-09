@@ -1,12 +1,12 @@
 ---
 name: creative-direction-ui
-description: Exploratory creative + UI direction for the RunState mobile app phase (brainstorm synthesis, not locked)
+description: Creative + UI direction for the RunState mobile app phase; includes the primary August 9 visual vision and its exploratory history
 metadata:
   type: project
-status: v0.2 — FULL UI PHASE PAUSED; the narrow low-fidelity reply-card fit test passed August 2
+status: v0.3 — August 9 visual vision recorded; execution remains open and is found through design passes
 ---
 
-# RunState — Creative Direction (v0.2)
+# RunState — Creative Direction (v0.3)
 
 > Status: the **full UI phase remains paused**. Music Intelligence's original smoke,
 > revised-prompt smoke, creative-ceiling probe, and Opus 5 stronger-model control are now
@@ -41,7 +41,12 @@ status: v0.2 — FULL UI PHASE PAUSED; the narrow low-fidelity reply-card fit te
 
 ---
 
-## 0. v0.2 — Locked decisions from the prompt-iteration sessions (July 2026)
+## 0. v0.2 — Decisions from the prompt-iteration sessions (July 2026)
+
+> **Visual-history notice, August 9:** the fixed clean-white/black/orange palette, geometric-athlete
+> foundation, and other visual translations in this section no longer govern the current direction.
+> They remain here as evidence of what was tried. Product, behavior, and flow decisions in this
+> section are unaffected. For current visual guidance, use **The primary visual vision** below.
 
 **Palette — SUPERSEDES §5's warm/cream direction:**
 - Clean WHITE base. No cream, no beige, no warm gold. "White is a canvas, not emptiness" —
@@ -86,9 +91,9 @@ stored meanings are unchanged. Decision record: `design_music_intelligence_v1.md
 - Collapsible block → frosted sphere docking: personalization (permanent layout) vs focus mode
   (temporary)? Worth pursuing either way; discoverability needs an affordance.
 
-**RESOLVED — August 6, 2026. The visual foundation is frosted panels over a photographic
-environment.** Read this before the Sony entry below; it supersedes that entry's *clean light
-canvas* translation.
+**HISTORICAL FOUNDATION — August 6, 2026.** Frosted panels over a photographic environment
+replaced the Sony entry's *clean light canvas* translation. On August 9 this became one material
+expression inside the broader visual vision below, rather than the identity by itself.
 
 ---
 
@@ -122,7 +127,66 @@ what to avoid.
 
 ---
 
-## The foundation — frosted panels over a photographic environment
+## The primary visual vision — August 9, 2026
+
+This description is important and is the **primary working reference for atmosphere and identity**:
+
+> **RunState should feel like a purposeful running experience held within a soft, sensorial
+> atmosphere. Real running environments, physical exertion, sweat, movement, and confidence give
+> it athletic substance; strategically placed dark elements and precise structure add premium
+> discipline; and everything remains productive and forward-moving. The surrounding softness
+> never weakens the physical intensity—it gives that intensity somewhere fresh, human, and
+> inviting to live.**
+
+**The running is not soft; the world holding it is.** Physical fitness and running remain first.
+Softness describes the persistent visual atmosphere—present before, around, and after the stronger
+substance—not the effort, athlete, or sport. Real running environments, intensity, sweat, attitude,
+confidence, productivity, and structure inhabit that atmosphere. They give it weight and purpose
+without destroying it. The tension between a soft surrounding world and genuine physical intensity
+is central to the freshness and indirect sexiness of the identity.
+
+**Productivity is a top identity trait.** The softness must never drift into passive, sleepy, spa-like
+wellness. RunState should remain clear, useful, and forward-moving: it helps the runner prepare, act,
+reflect, and improve without adopting the cold or mechanical atmosphere common to productivity and
+fitness software.
+
+**Current visual interpretation:**
+
+- Soft, luminous colour and tonal variation dominate. Near-black, darker colours, or darker shades
+  of the dominant soft colours are placed strategically for structure, confidence, navigation,
+  emphasis, and premium contrast. They do not take over the atmosphere.
+- Real-life running and related athletic environments are part of the identity, not incidental
+  decoration. The environment may supply green, clay red, blue, amber, morning grey, or another
+  natural colour relationship; this is not a rule that everything becomes green.
+- Photography may carry indirect sensuality through reflected or sweaty skin, natural light,
+  physical texture, movement, close editorial crops, attitude, and self-possessed confidence.
+  The aim is athletic presence and allure, not explicit sexualisation.
+- Sony remains a **supporting influence**, used minimally and strategically for precision,
+  proportion, materials, hierarchy, restraint, and premium discipline. Its heavier technological
+  atmosphere is not the target.
+- Frosted or glass-like panels remain a promising material because they let the environment live
+  through the interface. Glassmorphism is not the identity and is not required everywhere.
+- The strongest current reference pattern is a soft, luminous environment with one concentrated
+  dark structural element, such as a confident navigation or action surface. Exact components are
+  still resolved screen by screen.
+
+**What this updates without erasing the design history:**
+
+- The fixed clean-white/black/orange palette is no longer an active identity rule. Exact colours
+  remain open; the stable relationship is soft colour dominance with selective dark structure.
+- Geometric athlete art is no longer the environmental foundation. It remains an optional technique;
+  real-life running and athletic imagery is the primary identity candidate.
+- The earlier dark-open → light-use → dark-close arc is not a governing rule. A screen may still use
+  a dark moment when it strengthens that moment without overwhelming the soft atmosphere.
+- The photographic environment, natural freshness, editorial confidence, productive feeling,
+  restrained futurism, selective darkness, and premium quality through precision all remain useful.
+
+This is a strong vision, not an immutable component specification. The open-mind rules above still
+apply: design passes may discover better executions without re-arguing the identity from scratch.
+
+---
+
+## Earlier material foundation — frosted panels over a photographic environment
 
 **Manley's articulation:** *"a more soft tone of Sony, to connect better with the environment of
 running — that's why I also added 'light' in my description."*
@@ -133,7 +197,8 @@ Off-white and cream were rejected specifically, not lightness.
 **How it works.** A photographic environment sits behind everything — a runner in motion, foliage,
 rain. Frosted translucent panels float over it. The screen reads bright because the panels glow,
 while staying dark enough inside to hold text. It is light and dark at once, which is why neither
-alone ever satisfied.
+alone ever satisfied. This remains a useful material approach, now subordinate to the broader
+August 9 vision rather than treated as the whole identity.
 
 **This is a return, not a departure.** §5 of this document already specified *"frosted glass over a
 warm, natural world,"* and §0 already required that *"each screen needs an environmental foundation
@@ -148,7 +213,7 @@ Treat those as the iteration surface.
 **Open and being handled by Manley:** legibility over busy photography, what determines which
 background appears, and the production cost of sourcing imagery. Raised August 6; he is ahead of it.
 
-**Candidate Sony-inspired direction (August 2, 2026 — exploratory, not locked):**
+**Candidate Sony-inspired direction (August 2, 2026 — historical exploration, not current authority):**
 - Use Sony as a **design philosophy, not a visual template**: visionary, simple, human-centered,
   confident, immersive, and premium; "smart, not intellectual" and "cool, not trendy."
 - Translate that into a clean light canvas, disciplined black, one concentrated warm accent,
