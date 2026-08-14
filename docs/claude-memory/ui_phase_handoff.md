@@ -1,11 +1,11 @@
 ---
 name: ui-phase-handoff
-description: State of the UI design phase as of August 6 2026. Log History screen is near-complete; records the working process, what's decided, what's parked, the backend requirements the screen surfaced, and what comes next. Written so a fresh session can pick up without re-deriving anything.
+description: State of the UI design phase through August 13 2026. Log History and Start/Active Run have stable foundations; records the process, decisions, backend requirements, and current queue.
 metadata:
   type: project
 ---
 
-# UI phase — handoff, August 6 2026
+# UI phase — handoff, updated August 13 2026
 
 Written because the session that produced this got very long. Everything needed to continue is here.
 Amended August 7 2026: interaction behavior, `Share` status, the song-location requirement, the
@@ -13,6 +13,8 @@ Amended August 7 2026: interaction behavior, `Share` status, the song-location r
 Amended August 8 2026: State Scan became a Start-screen energy selector, the Log History empty states
 were separated, and the expanded record gained the current `REPLY | SPLITS` direction.
 Amended August 9 2026: added the most-recent-record quick peek and the current visual vision.
+Amended August 13 2026: reconciled the completed Start/Active Run design pass, its current visual
+proof, pause controls, and the remaining five-task queue.
 
 ---
 
@@ -21,7 +23,10 @@ Amended August 9 2026: added the most-recent-record quick peek and the current v
 **Music Intelligence reached a stable stopping point on August 3** and is not being worked on.
 Roadmap step one is closed. See `music_intelligence_v1_evaluation.md`.
 
-**The UI phase started August 4 and the first screen is near-complete.**
+**The UI phase started August 4. Log History and Start/Active Run now have stable design
+foundations.** Neither is production mobile code. The Start screen's canonical current behavior,
+including its active tracking transformation and Pause → Stop / Play state, lives in
+`design_start_active_run.md`. Its optional energy rules live in `design_state_scan.md`.
 
 **`RunState - LogPhase2.html` in the repo root is NOT the current state.** More stable and preferred
 versions exist in Claude Design and have not been downloaded yet. The repo copy is a snapshot from
@@ -114,6 +119,26 @@ that people want to hear a saved reply again, it can remain or return. Separatel
 `creative_direction_ui.md` describes auto-read as **optional**, so whether reading on open is
 always-on or a default-on setting is still unsettled.
 
+**Voice-playback prototype — successful test result, not a production voice decision.** The current
+Claude Design prototype exposes one voice selector in the tweak controls with six natural Microsoft
+Edge personas: Aria (American, calm/reflective), Guy (American, motivational), Sonia (British,
+sophisticated), Connor (Irish, slightly informal), Ezinne (Nigerian, observant), and Prabhat (Indian,
+productive). Three are women and three are men. Manley tested the exported versions in Edge and
+found the voices smooth and human enough for the design prototype.
+
+The playback treatment matters as much as the persona: synthesize each reply as one continuous
+utterance; use punctuation and phrase boundaries to create natural cadence; speak pace,
+temperature, heart rate, distance, and time as human language rather than raw notation; and avoid
+audible joins, clipped fragments, uniform robotic timing, exaggerated accents, or pitch-shifting one
+base voice into several characters. Motivational, productive, sophisticated, lightly informal,
+calm, and observant/reflective deliveries are all valid variations — no single emotional register
+should govern every run.
+
+The downloaded standalone HTML files preserve a browser prototype, not deployable voice assets or a
+chosen production TTS provider. Edge supplies those voices at runtime; another browser may fall back
+to more synthetic system voices. Production voice availability, platform consistency, licensing,
+offline behavior, and cost remain open. Do not treat the six names or the Edge engine as locked.
+
 **Music-free records.** One treatment covers both *ran in silence* and *not recorded*. The
 distinction is real in the data — the reply system must never claim anything about music it doesn't
 know about — but on screen it's the app narrating its own data quality. The crossed-out headphones
@@ -124,7 +149,7 @@ otherwise.
 rain, fog, wind. The moon is reserved for genuine night runs. **Dawn is its own glyph** because runs
 cluster at 5:41–6:33 and *clear* would otherwise swallow almost every record.
 
-**The visual vision — primary working direction, August 9**
+**The visual vision — primary working direction, updated August 13**
 
 > **RunState should feel like a purposeful running experience held within a soft, sensorial
 > atmosphere. Real running environments, physical exertion, sweat, movement, and confidence give
@@ -148,8 +173,8 @@ identity.** They let real environments and their colours live through the interf
 supporting influence for precision, spacing, materials, restraint, and premium structure; its heavy
 technological atmosphere is not the target. No single colour, including green, is the identity.
 
-The full reasoning, updates to older palette/art/tonal-arc statements, and open execution rules live
-in `creative_direction_ui.md` under **The primary visual vision — August 9, 2026**.
+The full reasoning, updates to older palette/art/tonal-arc statements, the August 13 Start/Active Run
+working proof, and open execution rules live in `creative_direction_ui.md`.
 
 **Claude Design exposes live controls** for background surface, panel clarity, palette, and pill
 style. That is the iteration surface — tune by looking, not by respecifying.
@@ -171,20 +196,21 @@ premium coming from proportion, spacing, materials, and precision rather than de
 **The philosophy holds.** Restraint, one accent, quiet chrome, quality from proportion and spacing
 rather than ornament. That is the Sony brief being met.
 
-**The literal *clean light canvas* did not**, and the frosted-environment foundation above replaces
-it. The August 5 light attempt was that translation taken literally, and it failed on execution
-rather than on direction — a spec made of removals, with nothing left creating depth.
+**The flat August 5 execution of the *clean light canvas* did not survive.** It failed because the
+spec removed borders, shadows, gradients, and atmosphere without replacing their depth — not because
+light or near-white is wrong for RunState. The foggy porcelain Start/Active Run field now proves that
+a luminous near-white surface can work when tonal variation, photography, material, or motion gives
+it substance.
 
 **So: Sony survives as a supporting discipline, not the visual atmosphere.** Its precision and
 premium restraint can strengthen the soft, sensorial running environment without dominating it.
 
 **Rejected, with reasons**
 
-- **The light palette.** Built August 5 and rejected on sight. The spec was a list of removals — no
-  borders, no shadows, no gradients. In the dark build those read as restraint because translucency
-  and depth were already carrying the quality; in light, nothing was left doing that work. If light
-  is ever revisited: off-white and creams are out, and a light system needs something specified that
-  *creates* depth rather than a list of things not to use.
+- **The flat August 5 light treatment.** Rejected on sight because it was a list of removals — no
+  borders, no shadows, no gradients, and nothing else creating depth. This rejects an untreated,
+  generic execution, not lightness itself. The current foggy near-white screen is the successful
+  counterexample; any future light surface still needs a deliberate atmospheric source.
 - **Nature motif tiles.** Specified, then Manley changed direction. The tile carries music state, not
   identity — identity lives in the song title and run type.
 - **Curved metrics on the ring's inner edge.** A number you have to tilt your head for fails exactly
@@ -270,6 +296,9 @@ Not blocking; revisit later.
 | **PR categories** — for the PRs filter and marker | Personal records exist in the console; categories aren't defined |
 | **Structured song playback history** — every song title plus when it started and stopped during the run | Not collected. Does not require GPS and can exist earlier; it becomes distance-aware only when joined to run timing/GPS telemetry |
 | **Song location** — the `SONG DETECTED — MILE 2.4` stamp, and the split-music view | **Not collected, not needed now, and parked for the mobile/GPS phase.** The mile marker requires a playback timestamp joined to time-aligned cumulative-distance/GPS telemetry; stored splits are not a prerequisite. An earlier non-GPS form could be time-based once playback and run-start timestamps exist. |
+| **Active run session states** — countdown, running, paused, resumed, stopped | Not present in the console flow. The mobile tracker needs a durable local session state machine. Current UI behavior: Pause reveals Stop and Play; Play resumes; Stop ends. Stop confirmation is not yet decided. |
+| **Live now-playing metadata and music-reactive visualizer** | Prototype only. Needs music-provider/playback integration and a defined no-music state; must fail independently of core tracking. |
+| **Natural reflection speech** | The Edge-based six-voice selector is a successful design prototype, not a production TTS choice. Provider/platform voice availability, licensing, cost, offline behavior, accessibility controls, and cross-device consistency remain open. |
 
 **Already available and used correctly:** distance, duration, pace, route name, surface, shoes, run
 company, weather condition, temperature, pre- and post-run energy, effort.
@@ -284,20 +313,19 @@ then screen finalisation, then Spring Boot from the screen contracts, then mobil
 
 **Immediate sequence — one small pass at a time**
 
+**Completed August 13:** the pre-run energy, Start, and Active Run pass now has a stable prototype
+foundation. See `design_start_active_run.md`; do not re-derive it from the older State Scan notes.
+
 1. **Most-recent-record quick-peek design pass.** Add the brief expansion and return to the current
    Log History screen.
-2. **Pre-run energy / State Scan selector design pass.** Send the bypassable `Start energy` control
-   on the Start screen to Claude Design. The three stored levels remain `LOW / MODERATE / HIGH`, and
-   `Start Run` remains visually dominant. This is the visual execution of the State Scan energy
-   decision, not a separate State Scan screen.
-3. **Remaining State Scan planning — the progressive-input ladder's home.** Decide where shoes,
+2. **Progressive-input ladder planning.** Decide where shoes,
    route, surface and run company get asked, suggested, prefilled and corrected now that the energy
-   selector did not absorb them. Do not default them onto the Start screen.
-4. **Run Complete rough-screen pass.** A Claude Design mockup exists but has not been through this
+   selector did not absorb them. The current shoe and route icons are entry points, not the answer.
+3. **Run Complete rough-screen pass.** A Claude Design mockup exists but has not been through this
    process.
-5. **RunStyle Sound rough-screen pass.** The artists and songs recurring around strongest runs, plus
+4. **RunStyle Sound rough-screen pass.** The artists and songs recurring around strongest runs, plus
    the shareable card. See `music_feature_register.md`.
-6. **Log History refinement pass.** Resolve the cold-start and empty-filter states, mock the expanded
+5. **Log History refinement pass.** Resolve the cold-start and empty-filter states, mock the expanded
    record's `REPLY | SPLITS` states, and revisit the remaining row/glyph QA. This is when the expanded
    interaction is designed; its real split-and-song implementation still waits for the required
    telemetry.

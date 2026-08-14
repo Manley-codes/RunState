@@ -1,6 +1,6 @@
 ---
 name: design-state-scan
-description: "State Scan working choices as of August 8 2026 — pre-run energy is a bypassable selector on the Start screen, not its own screen. STATUS: CURRENT, not locked; all of it predates any build. Records the choices, the evidence behind them, what they reverse, and the progressive-input ladder question left open."
+description: "State Scan current choices as of August 13 2026 — optional LOW/MODERATE/HIGH energy tiles on the Start screen, visually tested, with the progressive-input ladder still open"
 metadata:
   type: project
 ---
@@ -13,45 +13,38 @@ reference it by that name, so the name is kept for findability.
 
 ---
 
-## Current choices — August 8 2026
+## Current choices — August 13 2026
 
-> **Status: CURRENT, not locked.** These are the working answers as of August 8, made before anything
-> was built. Every one of them is open to change, and the reasoning below is recorded so it can be
-> re-examined — not to stop it being re-argued. Nothing here outranks a better idea.
+> **Status: CURRENT, not locked.** These choices have now been tested in an interactive Claude Design
+> prototype and are stable enough to move on from this pass. They are not production behavior, and
+> their visual execution remains adjustable. Reasoning is recorded so it can be re-examined, not to
+> prevent revision.
 
-**Pre-run energy is a compact selector sitting directly above `Start Run` on the Start screen.**
-Not a separate screen, not a question.
+**Pre-run energy is an optional three-tile control on the Start screen.** It is not a separate
+screen and does not use a question or instruction label in the current version.
 
 - **Three options, LOW / MODERATE / HIGH.** This one *is* settled, and not by this document — the
   shared three-level energy domain was closed earlier and is recorded in `creative_direction_ui.md`
   and `design_music_intelligence_v1.md`. It's shared with post-run energy and the comparison logic,
   so changing it is a data-model change rather than a screen decision. Wording and presentation on
   this screen are open.
-- **The label is `Start energy`.** A noun, not an instruction. *Choose start energy* was considered
-  and dropped: an instruction is a question wearing a different jacket, and this label appears before
-  every run — repetition wears an instruction down faster than a name. *Pre-run energy* was also
-  dropped as too clinical for a runner-facing label; it stays the internal/data-model term, which is
-  what `AI_AGENT.md` and `DATA_PRIVACY.md` already use. **`Start energy` matches the console's own
-  wording** — `CURRENT_RUN_FLOW.md` says *starting energy* — and ties to the `Start Run` button
-  directly below it.
-- **The options carry their own meaning.** No question, no instruction. Manley: the answers should
-  indicate their purpose through the wording itself.
-- **Form: three equal-width blocks inside one longer container block.** Not pills. Two reasons —
-  pills read as filters rather than a one-of-three state selection, and **Log History already uses a
-  pill for filtering**, so the same visual form doing a different job across two screens would
-  collide. Blocks also give better touch targets.
-- **`Start Run` stays active with no selection made.** Energy is bypassable.
+- **No visible energy heading in the current version.** Earlier `Start energy` and `Choose Start
+  Energy` proposals were removed through visual iteration. The tile labels carry the meaning.
+- **Form: three adjacent, independent rounded-square tiles.** The earlier longer outer container was
+  tested and abandoned. The current neutral material family is named **State Glass** in the tweak
+  controls; palette variations remain open.
+- **The central Start button stays active with no selection made.** Energy is bypassable.
 - **A bypassed run stores energy as `unknown`** rather than defaulting to Moderate. The reason is
   that a default would feed State Lift a value nobody entered. If a later idea makes inferring a
   value worthwhile — a population prior, say — that's a fair thing to revisit. The requirement isn't
   that inference is forbidden; it's that an inferred value stays **visibly inferred to the runner**
   and never overwrites what they did or didn't enter.
 - **No *Not running today* control.** It duplicates ordinary navigation.
-- **`Start Run` remains the visually dominant action.** The container is what makes this work: it
-  turns three competing tap targets into **one control** sitting above `Start Run`, rather than four
-  things asking for attention on the most time-sensitive screen in the app. Watch-item for the build:
-  if the container reads as a full frosted panel it may re-acquire the weight the grouping was meant
-  to remove — something to judge by looking rather than to settle here.
+- **Start remains the visually dominant action.** It is a larger black circular control beneath the
+  tiles, flanked by smaller shoe and route/trail controls. Selecting energy does not start the run.
+- **The detailed transition into active tracking is canonical elsewhere.** See
+  `design_start_active_run.md` for countdown, metric hierarchy, visualizer, now-playing strip, and
+  Pause → Stop / Play behavior.
 
 ---
 
@@ -67,10 +60,9 @@ the UI expression of shipped behavior rather than a new compromise.
 and post-run energy are recorded — **backs State Lift only.** A run with no starting energy loses
 that one signal. The rest of the run record and every other comparison signal are unaffected.
 
-**`unknown` over a default is a principle, not a detail.** It is the data-layer form of the rule the
-music work spent a month learning: never claim what you don't know. Fabricated telemetry was the most
-persistent failure across every music evaluation. A silent default to Moderate would manufacture
-false State Lift readings from data nobody entered.
+**`unknown` is the current data choice when the runner bypasses energy.** The reason is to avoid
+manufacturing a Moderate value and false State Lift evidence from data nobody entered. A future
+inference approach may be reconsidered, but inferred and entered values must remain distinguishable.
 
 **Screens cost more here than elsewhere.** `idea_organization_analysis.md` §10: the pre-run screen
 has seconds, not minutes — design it for someone about to put the phone away.
@@ -87,6 +79,10 @@ LOW/MODERATE/HIGH selection to continue, with a fourth *Not running today* actio
 because a required pre-run prompt blocks the runner at the moment friction costs most, and the exit
 control duplicated navigation.
 
+The August 8 `Start energy` label and three blocks inside one longer container are also superseded by
+the tested August 13 screen. The current version uses no energy heading, no parent selector panel,
+and three adjacent independent tiles.
+
 ---
 
 ## Explicitly open — the next decision
@@ -95,9 +91,10 @@ control duplicated navigation.
 asked versus prefilled — and `idea_organization_analysis.md` grades it the clearest value proposition
 in any of the strategy documents (Problem 8, Distinct 8).
 
-Collapsing State Scan to a single energy control does not answer where shoes, route, surface, and run
-company live. **That is the next decision and it is deliberately left open — it must not be squeezed
-onto the Start screen by default.**
+Resolving pre-run energy does not answer how shoes, route, surface, and run company are asked,
+suggested, prefilled, corrected, and remembered. Shoe and route icons now exist as visual entry
+points on the Start screen, but that does **not** settle the progressive-input behavior or force the
+remaining inputs onto this screen. That is the next planning decision after the Log quick-peek pass.
 
 Two further items that touch this screen, both recorded elsewhere and neither resolved here:
 

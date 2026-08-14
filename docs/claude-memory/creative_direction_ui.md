@@ -1,34 +1,23 @@
 ---
 name: creative-direction-ui
-description: Creative + UI direction for the RunState mobile app phase; includes the primary August 9 visual vision and its exploratory history
+description: Creative + UI direction for the RunState mobile app phase; includes the primary visual vision, August 13 working proof, and exploratory history
 metadata:
   type: project
-status: v0.3 — August 9 visual vision recorded; execution remains open and is found through design passes
+status: v0.4 — August 13 working proof recorded; execution remains open and is found through design passes
 ---
 
-# RunState — Creative Direction (v0.3)
+# RunState — Creative Direction (v0.4)
 
-> Status: the **full UI phase remains paused**. Music Intelligence's original smoke,
-> revised-prompt smoke, creative-ceiling probe, and Opus 5 stronger-model control are now
-> complete diagnostic evidence; none earned V1 acceptance, and no final evaluation has run.
-> The bounded, display-independent music-design revision and four-example calibration set were
-> approved August 2 and implemented at `b2227b2` with 382 deterministic tests green and no live
-> model call. The narrow low-fidelity reply-card fit test also passed August 2. A fresh diagnostic
-> smoke still requires separate approval; combined Music Intelligence V1 remains incomplete.
+> **Current status, August 13:** the UI phase is active. Log History has a stable visual foundation,
+> and the Start screen has now been prototyped through its transition into active tracking. That
+> Start/Active Run pass is stable enough to leave for now; it is design evidence, not mobile code.
+> The next queued pass is the most-recent Log-record quick peek, followed by the progressive-input
+> ladder, Run Complete, RunStyle Sound, and Log History refinement. Full screens continue to expose
+> backend and mobile requirements before Spring Boot and mobile contracts are finalized.
 >
-> The reviewed expanded card comfortably held the four-line Larry June sample without crowding
-> its separate music source. Treat that density as a useful reference, not a fixed four-line,
-> sentence-count, or word-count rule. The current recommendation is expanded-first immediately
-> after a run, followed by user-controlled collapse. The collapsed state needs a subtle expansion
-> cue and a fully tappable music row. Contrast, dynamic text sizing, tap targets, screen-reader
-> state announcements, and motion remain later checks. This was measurement, not a full UI build;
-> the larger RunStyle redesign, Spring Boot, and mobile work remain outside this pass. Full screens
-> will still shape the API before Spring Boot, and mobile/GPS follows the Spring Boot foundation.
-> Manley now has a separate, thorough replacement direction for RunStyle that also introduces a
-> proposed new product feature. The built RunStyle V1 remains the current behavior. During the
-> later UI/Foundation loop, rough screens may use neutral RunStyle placeholders; then the new
-> strategy must be reviewed before navigation, final screen hierarchy, or API contracts are locked.
-> Nothing in that separate strategy is approved or implemented by this note.
+> Music Intelligence remains at its separate stable stopping point, and the built RunStyle V1
+> remains current behavior. Their status lives in their own records; neither should be inferred from
+> this visual-direction file.
 >
 > This doc is the map for that later full design phase. §1–12 are the original June
 > 28 brainstorm synthesis; **§0 records the
@@ -65,10 +54,11 @@ photography stays on the share/completion card. The actual rule: no childish fla
 cinematic geometric art welcome. Panels = material glassmorphism (blur/tonal depth, NO border
 strokes — avoid the "gift card" look).
 
-**Screen flow (decided):** State Scan (pre-run) → GPS Route Start → Active Run → Run Complete.
-"HOLD TO START" — explicitly no swipe-to-start. Full-bleed GPS map is the start screen's
-foundation (supersedes §7's block-home concept). Each screen needs an environmental foundation
-layer — UI must never sit on empty white.
+**Historical screen-flow translation — superseded visually August 13:** the overall journey from
+pre-run setup → Active Run → Run Complete remains useful. The former `HOLD TO START`, full-screen GPS
+foundation, and mandatory environmental-background interpretation do not describe the current Start
+prototype. The current screen uses a direct Start button and a luminous near-white atmospheric field;
+details live in `design_start_active_run.md`.
 
 **Signature moment — RESOLVES §11:** the AI reply card IS RunState's face ("the taste matched
 the discipline"). The completion screen and share card merged: completion = full version in-app,
@@ -169,6 +159,34 @@ fitness software.
 - The strongest current reference pattern is a soft, luminous environment with one concentrated
   dark structural element, such as a confident navigation or action surface. Exact components are
   still resolved screen by screen.
+- Typography is also resolved screen by screen. Strong condensed or instrument-like numerals,
+  clean functional labels, and selective editorial character are all available; the historical
+  universal `NO serif` rule does not govern the current direction.
+
+### August 13 working proof — Start to Active Run
+
+The circular Start/Active Run prototype is the clearest current test of the vision. Its canonical
+screen and behavior record is `design_start_active_run.md`.
+
+- A foggy porcelain near-white field carries softness through tonal depth rather than through a
+  full-screen color or photograph. This proves that near-white can be atmospheric; **flat, untreated
+  white**, not white itself, is the failure mode.
+- A grayscale group-running photograph is contained inside a circular timer/music instrument. Real
+  athletic imagery remains part of the identity even when it is not the whole background.
+- The neutral **State Glass** energy tiles and a concentrated near-black Start/Pause control provide
+  structure without letting dark technology take over the screen.
+- The **Electrolyte** blend — softened blue-gray, eucalyptus/forest, and pale luminous yellow — adds
+  life only to the radial music visualizer on the neutral screen. It is adjustable evidence, not a
+  locked palette or permission to spread those colors across every component.
+- The same circle transforms from preparation to active tracking: pace, BPM, and elapsed time live
+  inside; large heavy distance numerals live below. Productivity comes from this immediate hierarchy,
+  not from adding dashboard density.
+- The compact live now-playing strip borrows Log History's material DNA while remaining clearly part
+  of the current run. This creates continuity between the live moment and what will later be saved.
+
+The successful ingredients are the relationships — softness around physical substance, selective
+dark structure, real athletic presence, clear metric hierarchy, and restrained living color. Future
+screens should not copy the circular composition merely because it worked here.
 
 **What this updates without erasing the design history:**
 
@@ -191,20 +209,19 @@ apply: design passes may discover better executions without re-arguing the ident
 **Manley's articulation:** *"a more soft tone of Sony, to connect better with the environment of
 running — that's why I also added 'light' in my description."*
 
-That resolves what looked like a contradiction. *Light* never meant a white page; it meant luminous.
-Off-white and cream were rejected specifically, not lightness.
+That resolves what looked like a contradiction. *Light* means luminous, but it neither requires nor
+forbids a near-white page. A foggy porcelain field is valid when tonal depth, material, photography,
+or motion gives it atmosphere. The rejected direction was blank, flat, and generic — not white itself.
 
-**How it works.** A photographic environment sits behind everything — a runner in motion, foliage,
-rain. Frosted translucent panels float over it. The screen reads bright because the panels glow,
-while staying dark enough inside to hold text. It is light and dark at once, which is why neither
-alone ever satisfied. This remains a useful material approach, now subordinate to the broader
-August 9 vision rather than treated as the whole identity.
+**How it works.** A photographic environment behind translucent panels remains one useful
+expression. The August 13 Start screen demonstrates another: photography can be contained inside a
+live interface instrument while a luminous atmospheric field carries the surrounding softness. Both
+approaches can belong to RunState; neither is required on every screen.
 
-**This is a return, not a departure.** §5 of this document already specified *"frosted glass over a
-warm, natural world,"* and §0 already required that *"each screen needs an environmental foundation
-layer — UI must never sit on empty white."* That thesis was written months earlier and got buried;
-the August 2026 build arrived back at it independently. **It is the strongest evidence that the
-original visual instinct was right.**
+**What survives from the earlier foundation.** Interfaces need an atmospheric source — photography,
+fog, tonal light, glass, texture, motion, or a deliberate relationship among them. They should not
+feel like controls dropped onto an untreated blank canvas. That is a quality requirement, not a rule
+that every screen needs a full-bleed photograph or colored background.
 
 **Parameterised in Claude Design.** The screens expose live controls — background surface, panel
 clarity, palette, and pill style — so the look can be tuned by looking rather than by respecifying.
@@ -379,9 +396,10 @@ The through-line across every reference Manley pulled:
 
 ## 6. Rules of the look
 
-- **No equal blocks.** Identical rounded cards in a tidy grid = the cliché Manley hates. Use
-  hierarchy + asymmetry: one hero block, supporting "scenes" at different sizes — film-poster /
-  *Kill Bill* cutaway, not dashboard.
+- **Avoid unconsidered equal-card dashboards.** Hierarchy and asymmetry should usually prevent the
+  generic tidy-grid cliché: one hero block with supporting scenes at different sizes. A bounded
+  one-of-three control can still use equal adjacent forms when equality communicates the domain;
+  the current State Glass energy tiles are the deliberate exception, not a new dashboard template.
 - **The UI dresses like a runner.** Style components like running gear/fashion, not software widgets —
   the start control "worn like shades," the hero piece that carries the fit.
 - **Restraint is the brand.** Fewer features, done beautifully. Cutting lazy half-features is strategy,

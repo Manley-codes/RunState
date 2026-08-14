@@ -5,7 +5,27 @@ metadata:
   type: project
 ---
 
-As of July 31, 2026, the app is a working Java console app named **RunState**.
+As of August 13, 2026, the implemented app remains a working Java console app named **RunState**.
+The mobile screens discussed below are interactive design prototypes, not production UI or tracker
+code.
+
+## Current UI resume point — August 13, 2026
+
+- Log History has a stable design foundation; its most-recent-record quick peek is the **next UI
+  pass** and is not yet built.
+- The optional pre-run energy and Start-to-Active Run pass is stable enough to leave for now. Its
+  canonical record is `design_start_active_run.md`; energy-domain details are in
+  `design_state_scan.md`.
+- Current active-run behavior includes pace, BPM, and elapsed time inside the circular instrument;
+  large distance below; a live now-playing/current-run strip; and one Pause control. Pressing Pause
+  reveals Stop and Play. Play resumes run tracking; Stop ends it. Stop confirmation is not decided.
+- Log History voice playback now has a successful six-persona Edge prototype for smooth, human
+  delivery. It remains a testing surface, not a selected production TTS engine or bundle of reusable
+  voice assets; details and open dependencies live in `ui_phase_handoff.md`.
+- After the quick peek, the queue is: progressive-input ladder → Run Complete → RunStyle Sound →
+  Log History refinement → Core Running Foundation Review.
+- No mobile implementation, GPS tracking, BPM source, music-provider integration, or active-session
+  persistence has been authorized or built by this design work.
 
 **Completed phases:**
 - Phase 1: Console app — energy system, opening prompt, post-run responses, rolling averages
@@ -60,7 +80,9 @@ delegates). Full spec: `design_runstyle_v1.md`. In brief:
 
 Flow-audit findings: all four closed — items 1 and 2 (malformed-row handling, July 16); item 3 (save orchestration, Task 4); item 4 (context in summaries, Task 5).
 
-**Current resume point — MUSIC INTELLIGENCE STRONGER-MODEL CONTROL COMPLETED AND GRADED; NEXT WORK IS A BOUNDED DESIGN REVISION, NOT ANOTHER LIVE RUN:**
+**Historical Music Intelligence stopping point — August 2, 2026.** This section preserves the music
+evidence and gate as they stood when that work paused. It is **not** the current project resume point;
+the authoritative August 13 UI resume point and queue are at the top of this file.
 - **V1 planning is complete and committed (`0f22c99`, July 27, 2026).** The canonical contract is
   `design_music_intelligence_v1.md` — purpose and boundary, closed foundational contracts,
   current evidence and reply behavior, deferred persistence boundary, bounded implementation
@@ -82,7 +104,7 @@ Flow-audit findings: all four closed — items 1 and 2 (malformed-row handling, 
 - **Active design, AI-agent, evaluation, privacy, roadmap, and status documents were reconciled
   July 30.** The creative revision sends no new data and adds no provider, so the privacy
   disclosure itself did not change; its prompt-source cross-reference was corrected.
-- **Evaluation is underway, not complete.** Sanitized fixtures and the opt-in runner exist.
+- **Evaluation was incomplete when this lane paused.** Sanitized fixtures and the opt-in runner exist.
   One authentication-invalid launch produced fallback text only; the first valid 12-call smoke
   completed with zero fallbacks but failed product quality. The prompt was revised in response.
   **The revised-prompt smoke then ran July 30 — 12 calls, zero fallbacks — and also failed
@@ -135,32 +157,30 @@ Flow-audit findings: all four closed — items 1 and 2 (malformed-row handling, 
   expandable card. The result supports expanded-first with user-controlled collapse and
   idea-governed compression with no numeric sentence limit. This was a narrow measurement, not a
   full UI build or authorization for Spring Boot or mobile implementation.
-- **Current gate — fresh diagnostic decision:** Manley must separately approve any new 12-call
-  smoke of the implemented revision. No fresh smoke or 36-call final evaluation is approved yet.
-- **Separate lanes remain deferred:** the possible `Ready-ish` wording change, stronger persona
-  preference, and the larger RunStyle redesign are recorded but are not part of this immediate
-  revision. Manley has a thorough replacement RunStyle strategy containing a proposed new product
-  feature. Do not open it while the music calibration pass is active. After the music checkpoint,
-  create rough post-run/history/State Scan screens first, then review that strategy inside the
-  UI/Core Running Foundation loop before final screen hierarchy and API contracts are locked.
-  Existing RunStyle V1 remains the built behavior unless a separate V2 proposal is reviewed and
-  explicitly approved.
+- **Gate if Music Intelligence resumes:** Manley must separately approve any new 12-call smoke of
+  the implemented revision. No fresh smoke or 36-call final evaluation is approved yet. This gate
+  applies to renewed music evaluation; it does not block the active UI queue.
+- **Separate lanes recorded at that stopping point:** the possible `Ready-ish` wording change,
+  stronger persona preference, and the larger RunStyle redesign were not part of the bounded music
+  revision. The old instruction to wait for music calibration before continuing UI work is
+  superseded by the August 13 resume point. Existing RunStyle V1 remains the built behavior unless
+  a separate V2 proposal is reviewed and explicitly approved.
 - The future `REFERENCED / NOT_REFERENCED / UNKNOWN` reply-outcome boundary is **documented**
   in the canonical plan, but cross-run reference-frequency implementation (schema, rolling
   window, detection, prompt line) remains **deferred** — it is not part of the prompt slice.
-- **Roadmap refinement approved August 1:** low-fidelity screen work may now loop into the Core
-  Running Foundation Review after the bounded display-independent music checkpoint, instead of
-  waiting for every display-dependent music decision to be finalized in a terminal. The first
-  first screen experiment was the completed reply-card density test above. The **Core Running Foundation Review**
+- **Roadmap refinement approved August 1 — now active:** low-fidelity screen work may loop into the
+  Core Running Foundation Review without waiting for every display-dependent music decision to be
+  finalized in a terminal. The first screen experiment was the completed reply-card density test
+  above. The **Core Running Foundation Review**
   remains tightly fenced to one question —
   is the central journey (record a run → preserve it safely → understand it → manage it → use
   it later) credible and structurally ready for a real interface? "Manage" (edit/delete a
   logged run) is the known thin spot. Output is a short gap list, not a feature hunt; "add
   every feature Strava has" is explicitly out.
-- Use rough screens and that review as a loop, then resume the full UI design using
-  `creative_direction_ui.md`. Let the State Scan, history, and post-run reply screens define the
-  backend payloads. This does not make screens an excuse to leave Music Intelligence without a
-  clear checkpoint: the display-independent music direction must be approved first.
+- The rough-screen/Foundation loop is now underway. Follow the current queue at the top of this file
+  and use `creative_direction_ui.md` for visual direction. Let the Start/Active Run, history, and
+  post-run reply screens expose backend payloads. If Music Intelligence evaluation resumes, retain
+  its separate approval gate above rather than inserting it ahead of the UI queue.
 - Then: design/migrate the Spring Boot API from those screen contracts.
 - Then: build the mobile client and GPS/automatic-tracking layer against Spring Boot.
   The GPS phase delivers time-aligned run telemetry, and automatic splits are built there
@@ -169,9 +189,9 @@ Flow-audit findings: all four closed — items 1 and 2 (malformed-row handling, 
 - Spotify integration and live-DJ behavior remain later possibilities with separate legal,
   privacy, provider, and platform dependencies.
 
-*(Resume point updated August 2, 2026 after the revised prompt and calibration set were committed
-at `b2227b2` with 382 deterministic tests green and no live call. The next music gate is a separate
-decision on a fresh 12-call diagnostic smoke. Combined V1 remains incomplete.)*
+*(Historical music snapshot updated August 2, 2026 after the revised prompt and calibration set were
+committed at `b2227b2` with 382 deterministic tests green and no live call. If that lane resumes, its
+next gate is a separate decision on a fresh 12-call diagnostic smoke. Combined V1 remains incomplete.)*
 
 **Standing milestone — privacy / security / legal pass (added July 6, 2026):**
 Before RunState is released, shared publicly, or gains multi-user/all-day-listening features,
@@ -184,7 +204,8 @@ location data raises the bar again. Not a current blocker; IS a release blocker.
 
 Feature map (July 6, 2026) — which features strongly trigger which concern:
 - PRIVACY: all-day listening profiling (heaviest — needs its own opt-in tier); GPS routes +
-  live location (Phase 6); run/energy data → Anthropic API (live now, covered in
+  live location (Phase 6), including shared meetup beacons and any later live friend/group
+  locations or trail playlist beacons; run/energy data → Anthropic API (live now, covered in
   DATA_PRIVACY.md); location → Open-Meteo (live now) — the **city name** goes to the geocoding
   endpoint and, **only after geocoding succeeds**, the **selected candidate's coordinates plus
   the run date** go to the forecast endpoint. The stored **state is used locally** to pick which

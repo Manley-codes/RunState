@@ -8,9 +8,8 @@ Index only. One line per file — detail lives in the file. Keep it that way.
 
 | Item | Unlocks when | Detail lives in |
 | --- | --- | --- |
-| Most-recent-record quick peek — briefly expands and returns when Log History opens; may last less than half a second | **First pass when Claude Design access returns** | `ui_phase_handoff.md` §3 |
-| State Scan energy selector — current August 8 direction; wording, presentation and visual weight go to Claude Design | After the quick-peek pass | `design_state_scan.md` |
-| **Progressive-input ladder needs a home** — what gets asked vs prefilled. State Scan collapsed to an energy selector and did not answer where shoes, route, surface, company live. Must not default onto the Start screen | After the energy-selector pass | `design_state_scan.md` |
+| Most-recent-record quick peek — briefly expands and returns when Log History opens; may last less than half a second | **NEXT UI PASS** | `ui_phase_handoff.md` §3 |
+| **Progressive-input ladder needs a home** — what gets asked, suggested, prefilled and corrected. Shoe and route icons now exist, but their behavior and the home for surface/company remain open | After the quick-peek pass | `design_state_scan.md` |
 | Run Complete screen — a mockup exists, never went through the pass process | After remaining State Scan planning | `ui_phase_handoff.md` |
 | RunStyle Sound screen | After Run Complete | `music_feature_register.md` |
 | **Core Running Foundation Review** — one question: is record → preserve → understand → manage → use-later ready for a real interface | After the rough screens and Log History refinement | `project_current_state.md` |
@@ -39,10 +38,13 @@ Claude Code if needed · Manley decides.
 
 - **[UI phase handoff](ui_phase_handoff.md)** — ⭐ **START HERE.** State of the UI phase, the Log
   History screen's settled decisions, and the backend gaps it surfaced.
-- [State Scan](design_state_scan.md) — pre-run energy is a bypassable selector on the Start screen,
-  not a screen. Bypass stores `unknown`, never Moderate.
-- [Creative direction / UI](creative_direction_ui.md) — primary August 9 visual vision: purposeful
-  running held within a soft, sensorial atmosphere; open-mind rules remain active.
+- [Start and Active Run](design_start_active_run.md) — current stable design foundation: circular
+  Start-to-tracking transformation, active metrics, live now-playing strip, and Pause revealing Stop
+  and Play. Prototype only; production dependencies are named there.
+- [State Scan](design_state_scan.md) — pre-run energy is three optional LOW/MODERATE/HIGH tiles on
+  the Start screen. No heading or outer selector panel; bypass stores `unknown`, never Moderate.
+- [Creative direction / UI](creative_direction_ui.md) — primary visual vision plus the August 13
+  Start/Active Run working proof; open-mind rules remain active.
 - [Idea organization analysis](idea_organization_analysis.md) — every loose idea, collapsed into four
   systems and graded.
 
