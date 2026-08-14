@@ -347,6 +347,32 @@ you respond to also run well to this* — is already recorded as **on-vision, wa
 platform**, alongside browsable community playlists with run context. The two forms coexist: the
 aggregate is a recommendation engine, the card is identity. Neither requires the other.
 
+#### Trail playlist beacons — FAR-FUTURE CANDIDATE *(added August 9, 2026)*
+
+**A community and distribution layer around RunStyle Sound, not the core of RunStyle Sound.**
+RunStyle Sound learns and explains what music works for a runner. This later layer would let a
+runner explicitly make a playlist available through a circular trail or event beacon so another
+runner nearby can tap it, preview it, and choose to use or save it. The person sharing is not
+interrupted and does not need to approve each receipt.
+
+The visual seed came from circular presence markers in an earlier map-based Start-screen
+exploration. A future beacon could represent an opted-in runner, group, or event, but it should
+communicate **general trail-level availability, not a precise live position by default**. Emoji or
+limited imagery may provide presence without requiring a public profile. Availability should be
+temporary and expire when the sharing window ends. This feature would need its own route, map, or
+trail surface; it does not constrain the current Start/Active Run screen.
+
+**The useful feedback is aggregate reuse, not surveillance.** A runner may later see that a shared
+playlist was used during a number of other runs. They should not be shown who used it, exactly where
+it was used, or a ranked popularity contest. Receiving a playlist should not open chat, direct
+messages, a follower graph, or a feed. This keeps the idea inside RunState's culture-community
+direction rather than turning it into network-community.
+
+Implementation would share or save a music-provider playlist reference, not transfer song files.
+It waits on the Phase 7 multi-user platform, provider integration, temporary presence/location
+sharing, explicit privacy controls, and aggregate usage telemetry. The earlier circular-beacon idea
+is preserved as one possible future language; it does not change the current screen or roadmap.
+
 **Dependency worth knowing:** this lives inside whatever RunStyle summary eventually exists, and
 that summary's shape is still open (see `adr_001_runstyle_surfacing.md` — recompute versus persisted
 insight log). RunStyle Sound inherits that open question.

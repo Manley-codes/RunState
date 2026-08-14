@@ -175,6 +175,30 @@ known context, ask one meaningful question, offer at most one or two useful acti
 confirm only what is uncertain, ask briefly if at all, prepare silently, arm and wait. The runner
 can put the phone away before drills, conversation, or the group's takeoff.
 
+### Group meetup beacons / specific start locations — EXPERIMENT *(added August 9, 2026)*
+
+RunState may eventually place photo-backed location beacons on a dedicated route, map, or meetup
+surface so a runner can find the **specific place** where a friend, running group, race team, or
+event is gathering. The problem is smaller and more concrete than navigation: the runner may have
+reached the correct park or race but still cannot find the group's tent, trail entrance, parking
+area, landmark, or actual setup.
+
+**Initial shape:** a static meetup point shared by an organizer, friend, event invite, or run link,
+optionally paired with a recognizable photo and a short location detail. Circular map beacons came
+from an earlier map-based Start-screen exploration and remain a compatible future visual seed, not
+part of the current Start/Active Run screen. They identify practical destinations, not profile
+activity, social status, or automatic people tracking.
+
+**Later extension:** an explicitly enabled live friend or group location can use the same beacon
+language, but it is a separate, heavier capability. It requires accounts or invite identity,
+real-time infrastructure, battery testing, clear visibility and expiration controls, and the
+standing privacy/security/legal pass.
+
+**Guardrails:** never broadcast a runner's location automatically; share only with invited people
+or a defined group; make who can see the location and for how long explicit; no feed, follower
+mechanics, leaderboard, or friend comparison. The value is arriving and starting with less
+friction, not turning RunState into a social network or run-club platform.
+
 **Adaptive question policy** — the progressive-input ladder in practice:
 
 | Information | Default | When to ask |
