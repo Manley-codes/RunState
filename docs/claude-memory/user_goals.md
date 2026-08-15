@@ -69,13 +69,23 @@ current until a separate replacement is reviewed and approved. Full screens stil
 Boot so real screen needs shape endpoint and payload contracts; Spring Boot precedes the mobile client.
 Spotify/live-DJ depth remains later than this first mobile foundation.
 
-**Final product vision (locked in June 2026):**
+**Final product vision (locked in June 2026; reflection input refined August 14, 2026):**
 Manual input in the finished app is minimal by design:
-- Post-run energy (how they feel) — always asked, core to the app's identity, cannot be automated
+- Post-run energy and effort are valuable subjective signals that cannot be reliably automated.
+  On the future mobile Run Complete screen they are compact, optional additions: a runner may record
+  either, both, or neither; ignored values remain unknown. Energy receives slightly more prominence
+  because it is closer to the app's identity, but neither input blocks completion.
 - Lower-priority optional details (shoe choice, notes, etc.) — future, low priority
-Everything else is automatic: distance/pace/duration via GPS, weather via API, music via Spotify/device.
+Objective capture should be automatic where practical: distance/pace/duration via GPS, weather via
+API, and music via Spotify/device.
 Manual logging in the console app is development scaffolding only — not the final UX.
 The console app is a build-and-test tool, not the finished product.
+
+**Deeper Run Analysis — current exploration, not a settled product mode:** RunState may later offer a
+reversible choice for runners who want more analysis, possibly in onboarding and again after the app
+can demonstrate a concrete benefit. Exact timing, wording, defaults, included features and any tier
+relationship remain open. It is not a prerequisite for recording Energy or Effort, and those inputs
+remain individually optional.
 
 **Signature feature direction (locked in June 2026; refined July 6, 2026):**
 Music is the signature feature — go deep on one thing rather than shipping many features halfway.

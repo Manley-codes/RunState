@@ -87,14 +87,17 @@ and three adjacent independent tiles.
 
 ## Explicitly open — the next decision
 
-**The progressive-input ladder has no home.** It was State Scan's central design problem — what gets
+**The progressive-input ladder now has a first working home.** It was State Scan's central design problem — what gets
 asked versus prefilled — and `idea_organization_analysis.md` grades it the clearest value proposition
 in any of the strategy documents (Problem 8, Distinct 8).
 
-Resolving pre-run energy does not answer how shoes, route, surface, and run company are asked,
-suggested, prefilled, corrected, and remembered. Shoe and route icons now exist as visual entry
-points on the Start screen, but that does **not** settle the progressive-input behavior or force the
-remaining inputs onto this screen. That is the next planning decision after the Log quick-peek pass.
+The shoe control now opens an accepted `Add Shoes` prototype with search, saved/add/select behavior
+and per-shoe mileage; canonical detail lives in `design_shoe_selection.md`. This resolves deliberate
+shoe entry, not the whole ladder. Real persistence and mileage updates remain unbuilt.
+
+Route, surface, and run company still need decisions about where they are asked, suggested,
+prefilled, corrected, and remembered. The route icon remains a visual entry point, not an answer,
+and the remaining inputs are not automatically forced onto the Start screen.
 
 Two further items that touch this screen, both recorded elsewhere and neither resolved here:
 

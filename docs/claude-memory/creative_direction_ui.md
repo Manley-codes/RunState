@@ -11,9 +11,10 @@ status: v0.4 — August 13 working proof recorded; execution remains open and is
 > **Current status, August 13:** the UI phase is active. Log History has a stable visual foundation,
 > and the Start screen has now been prototyped through its transition into active tracking. That
 > Start/Active Run pass is stable enough to leave for now; it is design evidence, not mobile code.
-> The next queued pass is the most-recent Log-record quick peek, followed by the progressive-input
-> ladder, Run Complete, RunStyle Sound, and Log History refinement. Full screens continue to expose
-> backend and mobile requirements before Spring Boot and mobile contracts are finalized.
+> The most-recent Log-record quick peek is now complete. The next queued pass is the
+> progressive-input ladder, followed by Run Complete, RunStyle Sound, and Log History refinement.
+> Full screens continue to expose backend and mobile requirements before Spring Boot and mobile
+> contracts are finalized.
 >
 > Music Intelligence remains at its separate stable stopping point, and the built RunStyle V1
 > remains current behavior. Their status lives in their own records; neither should be inferred from

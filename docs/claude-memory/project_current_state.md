@@ -5,25 +5,34 @@ metadata:
   type: project
 ---
 
-As of August 13, 2026, the implemented app remains a working Java console app named **RunState**.
+As of August 14, 2026, the implemented app remains a working Java console app named **RunState**.
 The mobile screens discussed below are interactive design prototypes, not production UI or tracker
 code.
 
-## Current UI resume point — August 13, 2026
+## Current UI resume point — August 14, 2026
 
-- Log History has a stable design foundation; its most-recent-record quick peek is the **next UI
-  pass** and is not yet built.
+- Log History has a stable design foundation. Its most-recent-record quick peek was completed and
+  accepted August 13: approximately 1.66 seconds of total visible expansion-and-collapse motion,
+  with only about 0.10 seconds held fully open. Exact timing lives in `ui_phase_handoff.md`.
 - The optional pre-run energy and Start-to-Active Run pass is stable enough to leave for now. Its
   canonical record is `design_start_active_run.md`; energy-domain details are in
   `design_state_scan.md`.
+- The shoe control now has an accepted `Add Shoes` prototype with live search, saved/add/select
+  behavior, selected-shoe confirmation and displayed mileage. Automatic exactly-once mileage remains
+  a production requirement, some shoe images need later cutout cleanup, and removal is changing to a
+  recoverable Undo that preserves past-run history. See `design_shoe_selection.md`.
 - Current active-run behavior includes pace, BPM, and elapsed time inside the circular instrument;
   large distance below; a live now-playing/current-run strip; and one Pause control. Pressing Pause
   reveals Stop and Play. Play resumes run tracking; Stop ends it. Stop confirmation is not decided.
 - Log History voice playback now has a successful six-persona Edge prototype for smooth, human
   delivery. It remains a testing surface, not a selected production TTS engine or bundle of reusable
   voice assets; details and open dependencies live in `ui_phase_handoff.md`.
-- After the quick peek, the queue is: progressive-input ladder → Run Complete → RunStyle Sound →
-  Log History refinement → Core Running Foundation Review.
+- The future mobile Run Complete direction now treats post-run Energy and Effort as compact optional
+  additions rather than sequential required questions. Either, both or neither may be recorded;
+  ignored values remain unknown. The exact screen treatment is still the upcoming Run Complete pass,
+  and the built console flow remains unchanged. See `design_effort_cost.md`.
+- The current queue is: finish the remaining progressive-input ladder (route, surface and company)
+  → Run Complete → RunStyle Sound → Log History refinement → Core Running Foundation Review.
 - No mobile implementation, GPS tracking, BPM source, music-provider integration, or active-session
   persistence has been authorized or built by this design work.
 

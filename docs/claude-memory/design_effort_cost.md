@@ -1,6 +1,6 @@
 ---
 name: design-effort-cost
-description: "✅ V1 BUILT July 8–9 2026 — post-run effort input ('How did that run land?'): energy vs effort axes, runner-native RPE mapping, Quiet Gains concept, question-budget rules"
+description: "Console V1 built July 8–9 2026; current mobile direction presents post-run energy and effort as compact optional additions on Run Complete"
 metadata:
   type: project
 ---
@@ -16,6 +16,51 @@ design_comparison_logic_fix.md, which consumes this effort data.
 From the Codex RPE session. Direction approved, built as specified (with the Option A setter
 correction noted under Key changes).
 
+## Current mobile Run Complete direction — August 14, 2026
+
+**STATUS: CURRENT UI DIRECTION, NOT BUILT.** This section governs the future mobile Run Complete
+screen. The console record below remains accurate history, but its sequential prompts are not the
+mobile interaction to reproduce.
+
+The goal is to preserve two useful subjective signals without making the runner feel interviewed.
+Energy and effort remain separate because they answer different things:
+
+- **Energy:** how the runner feels after the run — `Spent / Feeling Good / Powered Up`.
+- **Effort:** what the run cost — `Smooth / Working / Heavy / Empty tank`.
+
+The current interaction direction is a compact, low-pressure **addition pattern**, similar in
+prominence to an optional photo or note rather than a required questionnaire:
+
+- Use a small working group such as `ADD TO THIS RUN`, containing `ENERGY +` and `EFFORT +`.
+- Show Energy with slightly more visual prominence because it sits closer to RunState's identity;
+  Effort remains clearly available beside it as the quieter secondary addition.
+- Tapping one control reveals only that control's choices, either inline or in a lightweight sheet.
+  Do not expose all seven choices at rest.
+- After a choice, return to a compact confirmation such as `ENERGY · FEELING GOOD` or
+  `EFFORT · HEAVY`. The runner can reopen it to change the value.
+- Either value, both values, or neither may be recorded. Ignoring a control stores `unknown`/`null`;
+  never infer an answer, silently default one, or convert absence into a middle value.
+- No `Skip` button is needed because continuing without touching either control is the skip.
+- Choosing one must not automatically open the other. Neither control may block completion, delay
+  leaving the screen, or appear as a required modal.
+
+This accepts a deliberate tradeoff: optional, quiet controls may collect fewer answers, but the
+answers are more likely to be intentional than values entered only to dismiss a prompt. The Run
+Complete pass should test whether the controls are discoverable without making them feel mandatory.
+
+**Deeper Run Analysis remains an exploration, not a prerequisite.** A runner may later be offered a
+reversible choice for more analysis — possibly during onboarding and again after the app has shown
+concrete value — but the timing, wording, scope and defaults are not settled. Energy and Effort stay
+individually skippable whether or not that broader mode ever exists.
+
+**Discarded branch from this discussion:** sensor-derived or app-estimated demand is not an active
+feature direction. Do not create an estimated-effort field, fallback or roadmap item from the
+brainstorm. Runner-reported Effort remains exactly that: a runner report.
+
+**Still open for the Run Complete design pass:** final group label, inline versus lightweight-sheet
+presentation, exact visual hierarchy and motion, whether a newly added value updates an already
+visible reflection, and how discoverability/response quality will be tested.
+
 ## The gap
 
 The app knows state in → what you did → state out, but not WHAT IT COST. Two runs can both
@@ -23,7 +68,10 @@ end "Feeling Good" — one smooth, one a fight — and today's agent can't tell 
 Effort is the missing axis. (Predicted by the session-RPE note in research_app_landscape:
 "on-identity future analytic using data already captured — NOT scope creep.")
 
-## Design (locked in principle)
+## Console V1 design — historical build record
+
+The bullets in this section describe the shipped console collector and the reasoning used in July.
+Where they differ from the August 14 mobile direction above, the mobile direction governs future UI.
 
 - ONE quick post-run choice, right after post-run energy, before the AI reply:
   **"How did that run land?"** 1 Smooth / 2 Working / 3 Heavy / 4 Empty tank / 0 Skip
@@ -38,15 +86,16 @@ Effort is the missing axis. (Predicted by the session-RPE note in research_app_l
 - Capture immediately — the post-run moment is the app's magic (and matches the RPE-timing
   science in research_app_landscape). A later "settled check: still feel Heavy?" is a
   mobile-phase nicety; it never holds the post-run reply hostage.
-- NOT paywalled: the input is core — the app needs the data from everyone to learn.
-  Premium = deeper interpretation (effort trends, load patterns, route/weather/music cost
-  analysis, fatigue warnings).
-- **Question-budget rule:** default post-run flow = TWO quick taps max (energy + effort).
-  Deep reflection is opt-in ritual. Energy cardinality is **settled at three shared levels**
+- **Historical V1 scope:** the console input was not paywalled. This does not make manual entry
+  mandatory in the future mobile UI; the current direction above offers both inputs to everyone and
+  lets every runner ignore either one.
+- **Historical V1 question budget:** the console flow used at most two quick taps (energy + effort).
+  This is not a mobile-UI requirement and is superseded there by the optional addition pattern.
+  Energy cardinality is **settled at three shared levels**
   (July 27, 2026 — see `design_music_intelligence_v1.md`); the four-state State Scan is not a
-  domain change. When UI resumes, presentation wording and the **overall run-flow question
-  budget** (pre-run and post-run together, not the post-run flow alone) remain UI decisions —
-  decide that budget ONCE, together.
+  domain change. The August 14 direction resolves this portion of the flow by removing sequential
+  required questions. The broader run-flow input budget remains a cross-screen concern for the
+  progressive-input and Run Complete passes.
 
 ## Quiet Gains (product concept this data unlocks)
 

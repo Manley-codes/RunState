@@ -14,7 +14,10 @@ Amended August 8 2026: State Scan became a Start-screen energy selector, the Log
 were separated, and the expanded record gained the current `REPLY | SPLITS` direction.
 Amended August 9 2026: added the most-recent-record quick peek and the current visual vision.
 Amended August 13 2026: reconciled the completed Start/Active Run design pass, its current visual
-proof, pause controls, and the remaining five-task queue.
+proof and pause controls; then recorded the completed most-recent-record quick peek and the remaining
+four-task queue.
+Amended August 14 2026: bounded post-run Energy and Effort as compact optional additions for the
+upcoming Run Complete pass; no sequential required-question flow carries into mobile.
 
 ---
 
@@ -107,10 +110,18 @@ metrics panel updates to the opened record, and the reply is read on open. Appro
 are behavior decisions, not build artifacts, and they hold unless a backend limit or a later
 direction change forces a revision.
 
-**Most-recent-record quick peek — current idea, not built.** When Log History opens, the most recent
-record briefly expands and returns to its closed state, creating a quick visual peek at what the
-record contains. The motion may last less than half a second; it is intended as a visual cue, not
-enough time to read the expanded content.
+**Most-recent-record quick peek — prototype completed and accepted August 13.** When Log History
+opens, the most recent record automatically expands and then returns to its closed state. It uses the
+same expansion and collapse behavior as an ordinary record interaction, providing a clear glimpse of
+the richer state without leaving the row open.
+
+The accepted prototype timing is longer than the original sub-half-second estimate. Expansion is
+triggered `0.32s` after entry, and collapse is triggered at `1.20s`. The row's existing transition is
+`780ms` in each direction: it reaches full height at roughly `1.10s`, remains fully open for about
+`0.10s`, and finishes closing around `1.98s`. That produces approximately **1.66 seconds of visible
+motion** from first movement to fully closed. The brief fully-open dwell — not an artificially fast
+total animation — is what keeps it feeling like a peek. The earlier “less than half a second” note is
+superseded.
 
 `REPLAY` remains **provisional and currently leans toward removal, but removal is not decided.** It
 was added so Manley could repeatedly hear the voice replies while judging and adjusting them; that
@@ -313,19 +324,26 @@ then screen finalisation, then Spring Boot from the screen contracts, then mobil
 
 **Immediate sequence — one small pass at a time**
 
-**Completed August 13:** the pre-run energy, Start, and Active Run pass now has a stable prototype
-foundation. See `design_start_active_run.md`; do not re-derive it from the older State Scan notes.
+**Completed August 13:** the pre-run energy, Start, and Active Run pass has a stable prototype
+foundation, and the most-recent-record quick peek has been added to Log History with its accepted
+timing above. See `design_start_active_run.md`; do not re-derive Start behavior from the older State
+Scan notes.
 
-1. **Most-recent-record quick-peek design pass.** Add the brief expansion and return to the current
-   Log History screen.
-2. **Progressive-input ladder planning.** Decide where shoes,
-   route, surface and run company get asked, suggested, prefilled and corrected now that the energy
-   selector did not absorb them. The current shoe and route icons are entry points, not the answer.
-3. **Run Complete rough-screen pass.** A Claude Design mockup exists but has not been through this
-   process.
-4. **RunStyle Sound rough-screen pass.** The artists and songs recurring around strongest runs, plus
+1. **Progressive-input ladder planning.** The shoe slice now has an accepted interactive foundation:
+   `Add Shoes` search, saved/add/select behavior, Start-screen confirmation, and per-shoe mileage.
+   `design_shoe_selection.md` is canonical; image cleanup and the accepted recoverable Undo removal
+   remain. Continue with route, then decide where surface and run company are asked, suggested,
+   prefilled and corrected. The route icon is still an entry point, not the answer.
+2. **Run Complete rough-screen pass.** A Claude Design mockup exists but has not been through this
+   process. The August 14 input direction is already bounded: Energy and Effort appear as compact,
+   independently tappable optional additions rather than sequential questions. Either, both or
+   neither may be recorded; Energy is slightly more prominent; selecting one never opens the other;
+   and ignoring them stores unknown without a `Skip` action. Exact layout, motion, group label and
+   reply-update behavior remain part of this pass. Canonical detail lives in
+   `design_effort_cost.md`.
+3. **RunStyle Sound rough-screen pass.** The artists and songs recurring around strongest runs, plus
    the shareable card. See `music_feature_register.md`.
-5. **Log History refinement pass.** Resolve the cold-start and empty-filter states, mock the expanded
+4. **Log History refinement pass.** Resolve the cold-start and empty-filter states, mock the expanded
    record's `REPLY | SPLITS` states, and revisit the remaining row/glyph QA. This is when the expanded
    interaction is designed; its real split-and-song implementation still waits for the required
    telemetry.

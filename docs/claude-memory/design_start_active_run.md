@@ -60,8 +60,11 @@ The screen transforms in place. Starting a run does not navigate to a visually u
 - A central black circular Start button with a white right-facing triangle is the primary action.
 - A smaller shoe control sits to its left; a smaller route/trail control sits to its right.
 - These are solid circular controls, not glass energy tiles.
-- The shoe and route controls establish quick entry points only. Their selection, suggestion,
-  prefilling, correction, and persistence behavior remain part of the progressive-input-ladder task.
+- The shoe control now has an accepted interactive prototype: it opens the `Add Shoes` bottom sheet,
+  supports search/add/select, returns the selected shoe and mileage to Start, and exposes automatic
+  completed-run mileage as a production requirement. `design_shoe_selection.md` is canonical.
+- The route control remains an entry point only. Its selection, suggestion, prefilling, correction,
+  and persistence behavior remain part of the progressive-input-ladder task.
 - There is no `Not running today` action; ordinary navigation already provides the exit.
 
 ---
@@ -169,7 +172,8 @@ The prototype exposes requirements; it does not satisfy them:
 | Music-reactive radial visualizer | Real playback/audio signal and permission strategy needed |
 | Live song, artist, and album metadata | Music-provider integration needed |
 | Pause / Play-resume / Stop session states | Mobile run-session state machine and durable local persistence needed |
-| Shoe and route choices | Visual entry points exist; progressive-input behavior is still open |
+| Shoe choice and mileage | Interactive design exists; saved-shoe identity, persistence and exactly-once completed-run mileage are not implemented |
+| Route choice | Visual entry point exists; progressive-input behavior is still open |
 | Current weather in the live strip | Current console weather is logged-run context, not a live mobile contract |
 
 Later refinement must also test contrast over photography, dynamic type, screen-reader labels and

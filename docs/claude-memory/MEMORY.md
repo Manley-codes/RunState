@@ -8,9 +8,8 @@ Index only. One line per file — detail lives in the file. Keep it that way.
 
 | Item | Unlocks when | Detail lives in |
 | --- | --- | --- |
-| Most-recent-record quick peek — briefly expands and returns when Log History opens; may last less than half a second | **NEXT UI PASS** | `ui_phase_handoff.md` §3 |
-| **Progressive-input ladder needs a home** — what gets asked, suggested, prefilled and corrected. Shoe and route icons now exist, but their behavior and the home for surface/company remain open | After the quick-peek pass | `design_state_scan.md` |
-| Run Complete screen — a mockup exists, never went through the pass process | After remaining State Scan planning | `ui_phase_handoff.md` |
+| **Progressive-input ladder is partially resolved** — shoe search/add/select/mileage now has a Start-screen home; route, surface and company remain open | **NEXT UI PASS** | `design_shoe_selection.md` + `design_state_scan.md` |
+| Run Complete screen — a mockup exists; Energy/Effort are bounded as compact optional additions, but the screen has not gone through the pass process | After remaining State Scan planning | `design_effort_cost.md` + `ui_phase_handoff.md` |
 | RunStyle Sound screen | After Run Complete | `music_feature_register.md` |
 | **Core Running Foundation Review** — one question: is record → preserve → understand → manage → use-later ready for a real interface | After the rough screens and Log History refinement | `project_current_state.md` |
 | RunStyle V2 strategy review — Manley's replacement direction | After rough screens exist | `idea_organization_analysis.md` |
@@ -36,11 +35,13 @@ Claude Code if needed · Manley decides.
 
 ## Current work
 
-- **[UI phase handoff](ui_phase_handoff.md)** — ⭐ **START HERE.** State of the UI phase, the Log
-  History screen's settled decisions, and the backend gaps it surfaced.
+- **[UI phase handoff](ui_phase_handoff.md)** — ⭐ **START HERE.** State of the UI phase, the accepted
+  1.66-second Log quick peek, settled Log decisions, current queue, and surfaced backend gaps.
 - [Start and Active Run](design_start_active_run.md) — current stable design foundation: circular
   Start-to-tracking transformation, active metrics, live now-playing strip, and Pause revealing Stop
   and Play. Prototype only; production dependencies are named there.
+- [Shoe selection and mileage](design_shoe_selection.md) — accepted `Add Shoes` prototype,
+  Start-screen selection, automatic completed-run mileage contract, and pending recoverable Undo.
 - [State Scan](design_state_scan.md) — pre-run energy is three optional LOW/MODERATE/HIGH tiles on
   the Start screen. No heading or outer selector panel; bypass stores `unknown`, never Moderate.
 - [Creative direction / UI](creative_direction_ui.md) — primary visual vision plus the August 13
@@ -74,7 +75,8 @@ Claude Code if needed · Manley decides.
   recency and confidence.
 - [RunStyle V1](design_runstyle_v1.md) — BUILT + VERIFIED. Local deterministic profile, never sent
   to the AI.
-- [Effort cost](design_effort_cost.md) — BUILT. Post-run effort input, Quiet Gains.
+- [Effort cost](design_effort_cost.md) — console collector BUILT; future mobile Energy/Effort input
+  is now bounded as compact optional Run Complete additions. Quiet Gains remains the main unlock.
 - [Weather cleanup](design_weather_cleanup.md) — SHIPPED. Persistence fix, forecast API,
   WeatherService.
 - [Post-run response system](design_run_response_system.md) — locked response and Run Style logic.
