@@ -18,6 +18,8 @@ proof and pause controls; then recorded the completed most-recent-record quick p
 four-task queue.
 Amended August 14 2026: bounded post-run Energy and Effort as compact optional additions for the
 upcoming Run Complete pass; no sequential required-question flow carries into mobile.
+Amended August 16 2026: separated the immediate factual run receipt from the contextual reflection,
+settled late-input behavior, and left exact response timing to the Run Complete prototype.
 
 ---
 
@@ -146,8 +148,13 @@ calm, and observant/reflective deliveries are all valid variations — no single
 should govern every run.
 
 The downloaded standalone HTML files preserve a browser prototype, not deployable voice assets or a
-chosen production TTS provider. Edge supplies those voices at runtime; another browser may fall back
-to more synthetic system voices. Production voice availability, platform consistency, licensing,
+chosen production TTS provider. Edge supplies those voices at runtime.
+
+**Confirmed August 16, 2026 on a real device.** The same hosted file sounds correct in desktop
+Edge and robotic in Safari on an iPhone. The cause is structural, not a bug: browser speech
+synthesis can only use voices already installed on the device, and phones ship compact voices
+while keeping the higher-quality ones behind a manual download most people never make. This is
+not fixable by choosing different persona names. Production voice availability, platform consistency, licensing,
 offline behavior, and cost remain open. Do not treat the six names or the Edge engine as locked.
 
 **Music-free records.** One treatment covers both *ran in silence* and *not recorded*. The
@@ -309,7 +316,8 @@ Not blocking; revisit later.
 | **Song location** — the `SONG DETECTED — MILE 2.4` stamp, and the split-music view | **Not collected, not needed now, and parked for the mobile/GPS phase.** The mile marker requires a playback timestamp joined to time-aligned cumulative-distance/GPS telemetry; stored splits are not a prerequisite. An earlier non-GPS form could be time-based once playback and run-start timestamps exist. |
 | **Active run session states** — countdown, running, paused, resumed, stopped | Not present in the console flow. The mobile tracker needs a durable local session state machine. Current UI behavior: Pause reveals Stop and Play; Play resumes; Stop ends. Stop confirmation is not yet decided. |
 | **Live now-playing metadata and music-reactive visualizer** | Prototype only. Needs music-provider/playback integration and a defined no-music state; must fail independently of core tracking. |
-| **Natural reflection speech** | The Edge-based six-voice selector is a successful design prototype, not a production TTS choice. Provider/platform voice availability, licensing, cost, offline behavior, accessibility controls, and cross-device consistency remain open. |
+| **Natural reflection speech** | The Edge-based six-voice selector is a successful design prototype, not a production TTS choice. Provider/platform voice availability, licensing, cost, offline behavior, accessibility controls, and cross-device consistency remain open. **Cross-device inconsistency is now observed rather than anticipated** — see §3. A production version cannot rely on browser speech synthesis; it needs either the platform's own speech system, which exposes better voices than the web layer does, or audio from a hosted text-to-speech provider. That choice is a real architecture decision with cost, licensing and offline consequences, not a settings tweak. |
+| **Run Complete save / reflection separation** | Mobile must save the run durably before saying `Run saved`, show metrics with a deterministic factual audio receipt, then request the contextual reflection separately after the optional-input window. `Saved` means durable on-device storage, not completed cloud sync. Late Energy/Effort values persist for future learning but never regenerate the reflection. |
 
 **Already available and used correctly:** distance, duration, pace, route name, surface, shoes, run
 company, weather condition, temperature, pre- and post-run energy, effort.
@@ -335,12 +343,18 @@ Scan notes.
    remain. Continue with route, then decide where surface and run company are asked, suggested,
    prefilled and corrected. The route icon is still an entry point, not the answer.
 2. **Run Complete rough-screen pass.** A Claude Design mockup exists but has not been through this
-   process. The August 14 input direction is already bounded: Energy and Effort appear as compact,
-   independently tappable optional additions rather than sequential questions. Either, both or
-   neither may be recorded; Energy is slightly more prominent; selecting one never opens the other;
-   and ignoring them stores unknown without a `Skip` action. Exact layout, motion, group label and
-   reply-update behavior remain part of this pass. Canonical detail lives in
-   `design_effort_cost.md`.
+   process. The August 16 correction partly supersedes the August 14 addition pattern: all three
+   Energy choices are visible and prominent at rest, while Effort alone stays behind the quieter
+   `EFFORT +` action. Either, both or neither may be recorded; selecting Energy never opens Effort;
+   and ignoring them stores unknown without a `Skip` action. The response contract is also settled:
+   after durable local save, metrics and a short factual audio receipt appear immediately;
+   the one-time contextual reflection follows after the runner stops adding values, with a longer
+   fallback if nothing is entered. Late values still save for future patterns and comparisons but do
+   not regenerate the reflection. `ADD TO THIS RUN` is no longer a settled group label now that only
+   one input is collapsed. Exact layout, motion, group label, discoverability and timing are found in
+   this prototype pass rather than specified as a fixed delay. Canonical detail lives in
+   `design_effort_cost.md` and `design_run_response_system.md`. Rewriting the reflection is explicitly
+   outside this screen pass; only its placement, timing and input snapshot are in scope.
 3. **RunStyle Sound rough-screen pass.** The artists and songs recurring around strongest runs, plus
    the shareable card. See `music_feature_register.md`.
 4. **Log History refinement pass.** Resolve the cold-start and empty-filter states, mock the expanded
