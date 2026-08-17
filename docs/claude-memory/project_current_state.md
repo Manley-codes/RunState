@@ -5,7 +5,7 @@ metadata:
   type: project
 ---
 
-As of August 14, 2026, the implemented app remains a working Java console app named **RunState**.
+As of August 16, 2026, the implemented app remains a working Java console app named **RunState**.
 The mobile screens discussed below are interactive design prototypes, not production UI or tracker
 code.
 
@@ -27,12 +27,19 @@ code.
 - Log History voice playback now has a successful six-persona Edge prototype for smooth, human
   delivery. It remains a testing surface, not a selected production TTS engine or bundle of reusable
   voice assets; details and open dependencies live in `ui_phase_handoff.md`.
-- The future mobile Run Complete direction now treats post-run Energy and Effort as compact optional
-  additions rather than sequential required questions. Either, both or neither may be recorded;
-  ignored values remain unknown. The exact screen treatment is still the upcoming Run Complete pass,
-  and the built console flow remains unchanged. See `design_effort_cost.md`.
+- The future mobile Run Complete direction shows all three post-run Energy choices prominently and
+  keeps Effort behind a quieter `EFFORT +` action rather than using sequential required questions.
+  Either, both or neither may be recorded; ignored values remain unknown. It also separates an
+  immediate durable-save receipt from the
+  contextual reflection: metrics and a short factual audio confirmation appear first, then the
+  one-time reflection uses whatever optional values exist when its request begins. Late values still
+  save for future patterns and comparisons and never regenerate the reply. Exact timing is left to
+  the prototype rather than fixed in documentation. The built console flow remains unchanged. See
+  `design_effort_cost.md` and `design_run_response_system.md`.
 - The current queue is: finish the remaining progressive-input ladder (route, surface and company)
-  → Run Complete → RunStyle Sound → Log History refinement → Core Running Foundation Review.
+  → Run Complete → Log History refinement → Core Running Foundation Review → music feature
+  inventory and prioritization. RunStyle Sound is one music candidate, not the predetermined next
+  screen.
 - No mobile implementation, GPS tracking, BPM source, music-provider integration, or active-session
   persistence has been authorized or built by this design work.
 

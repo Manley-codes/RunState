@@ -9,15 +9,15 @@ Index only. One line per file — detail lives in the file. Keep it that way.
 | Item | Unlocks when | Detail lives in |
 | --- | --- | --- |
 | **Progressive-input ladder is partially resolved** — shoe search/add/select/mileage now has a Start-screen home; route, surface and company remain open | **NEXT UI PASS** | `design_shoe_selection.md` + `design_state_scan.md` |
-| Run Complete screen — a mockup exists; Energy/Effort are bounded as compact optional additions, but the screen has not gone through the pass process | After remaining State Scan planning | `design_effort_cost.md` + `ui_phase_handoff.md` |
-| RunStyle Sound screen | After Run Complete | `music_feature_register.md` |
+| Run Complete screen — visible Energy choices, quieter `EFFORT +`, immediate durable-save receipt and one-time input-aware reflection behavior are bounded; exact layout and timing still need the pass | After remaining State Scan planning | `design_effort_cost.md` + `design_run_response_system.md` + `ui_phase_handoff.md` |
+| Log History refinement / QA pass — empty states, `REPLY | SPLITS` expanded-record mockup, `REPLAY` decision, dawn-vs-sun glyphs | After Run Complete; before Foundation Review | `ui_phase_handoff.md` §4 |
 | **Core Running Foundation Review** — one question: is record → preserve → understand → manage → use-later ready for a real interface | After the rough screens and Log History refinement | `project_current_state.md` |
+| **Music feature inventory and prioritization** — review the full music layer before choosing what to design or build next; RunStyle Sound is one candidate, not the predetermined next screen | After Foundation Review | `design_music_selection_system.md` + `music_feature_register.md` |
 | RunStyle V2 strategy review — Manley's replacement direction | After rough screens exist | `idea_organization_analysis.md` |
 | **Edit / delete a logged run** — the known hole. No UPDATE or DELETE exists; INSERT and SELECT do | Any time, doesn't queue | `ui_phase_handoff.md` |
 | Does a RunStyle summary recompute from history, or read a stored insight log? | Before any summary surface is designed | `adr_001_runstyle_surfacing.md` |
 | What counts as a PR — the term covers several achievements | Before the PRs filter ships | `ui_phase_handoff.md` |
 | **Log History empty states** — two of them: a rich cold-start preview, and a minimal empty-filter state. Metrics panel has the same cold-start hole | Has to exist before the screen ships | `ui_phase_handoff.md` §4 |
-| Log History refinement / QA pass — empty states, `REPLY | SPLITS` expanded-record mockup, `REPLAY` decision, dawn-vs-sun glyphs | After the rough screens exist; before Foundation Review | `ui_phase_handoff.md` §4 |
 | **Future Run Suggestions needs a ruling** — parked against the scope-watch resistance to proactive coaching nudges | Before any pre-run suggestion is designed | `parked_feature_ideas.md` |
 | Settle / Hold / Build — NEEDS REVIEW, recommended shape is axis-internal with no prompt | Manley deciding | `music_feature_register.md` |
 | Structured song history — the narrowest gap to a real music system | Any time | `music_feature_register.md` |
@@ -51,6 +51,10 @@ Claude Code if needed · Manley decides.
 
 ## Live registers
 
+- **[Music selection system](design_music_selection_system.md)** — ⭐ the aim under the whole music
+  layer, stated by Manley August 16 2026: song choice as accurate as possible for this runner. Six
+  layers — evidence, judgment, rules, assembly, feedback, proof — with every contributing item placed.
+  Read this before sequencing any music work.
 - [Music feature register](music_feature_register.md) — named music decisions, each with a status and
   an execution path.
 - [Run initiation register](run_initiation_register.md) — Prepare to Detect, provisional detection,
@@ -76,7 +80,8 @@ Claude Code if needed · Manley decides.
 - [RunStyle V1](design_runstyle_v1.md) — BUILT + VERIFIED. Local deterministic profile, never sent
   to the AI.
 - [Effort cost](design_effort_cost.md) — console collector BUILT; future mobile Energy/Effort input
-  is now bounded as compact optional Run Complete additions. Quiet Gains remains the main unlock.
+  is now bounded as visible Energy choices plus quieter optional `EFFORT +` on Run Complete. Quiet
+  Gains remains the main unlock.
 - [Weather cleanup](design_weather_cleanup.md) — SHIPPED. Persistence fix, forecast API,
   WeatherService.
 - [Post-run response system](design_run_response_system.md) — locked response and Run Style logic.

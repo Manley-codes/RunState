@@ -326,9 +326,11 @@ company, weather condition, temperature, pre- and post-run energy, effort.
 
 ## 6. What comes next
 
-**Roadmap position:** step one (music to a stable direction) is done. Step two is rough screens.
-Step three is the Core Running Foundation Review, driven by those screens. Then RunStyle V2 review,
-then screen finalisation, then Spring Boot from the screen contracts, then mobile and GPS.
+**Roadmap position:** the earlier music lane is at a stable stopping point. The immediate product
+sequence is the remaining rough screens, then the Core Running Foundation Review, then a full music
+feature inventory and prioritization before choosing the next music surface. RunStyle Sound is one
+candidate in that later review, not a predetermined rough screen. RunStyle V2 review, screen
+finalisation, Spring Boot from the screen contracts, and mobile/GPS remain later work.
 
 **Immediate sequence — one small pass at a time**
 
@@ -355,9 +357,7 @@ Scan notes.
    this prototype pass rather than specified as a fixed delay. Canonical detail lives in
    `design_effort_cost.md` and `design_run_response_system.md`. Rewriting the reflection is explicitly
    outside this screen pass; only its placement, timing and input snapshot are in scope.
-3. **RunStyle Sound rough-screen pass.** The artists and songs recurring around strongest runs, plus
-   the shareable card. See `music_feature_register.md`.
-4. **Log History refinement pass.** Resolve the cold-start and empty-filter states, mock the expanded
+3. **Log History refinement pass.** Resolve the cold-start and empty-filter states, mock the expanded
    record's `REPLY | SPLITS` states, and revisit the remaining row/glyph QA. This is when the expanded
    interaction is designed; its real split-and-song implementation still waits for the required
    telemetry.
@@ -367,6 +367,12 @@ preserve it safely, understand it, manage it, use it later — credible and stru
 real interface? Output is a short gap list, not a feature hunt. **"Manage" is the known thin spot:
 there is no edit or delete for a logged run anywhere in the code.** That's ordinary CRUD against a
 table where INSERT and SELECT already exist — the smallest item on any list, just never written.
+
+**After the Foundation Review: music feature inventory and prioritization.** Review the full music
+layer before choosing what to design or build next. RunStyle Sound remains a valid candidate — its
+personal view and shareable card are recorded in `music_feature_register.md` — but it is not the
+automatic next screen. Use `design_music_selection_system.md` to separate features that improve
+song selection from reflection, record-keeping and expression ideas before prioritizing them.
 
 **How screens drive code.** The gap table in section 5 is the mechanism. Screens expose what the
 backend can't deliver, those become requirements, the foundation gets fixed, screens refine, and only

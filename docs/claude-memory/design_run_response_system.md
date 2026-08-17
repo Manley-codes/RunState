@@ -7,6 +7,29 @@ metadata:
 
 Every successfully saved run gets a contextual response. No exceptions.
 
+## Mobile Run Complete delivery contract — August 16, 2026
+
+The future mobile flow preserves the immediate post-run moment without making subjective input a
+gate:
+
+- The run is durably saved locally before any success language or reflection request. `Run saved`
+  means the phone can recover the run; it does not claim that server sync has finished.
+- Metrics appear immediately with a short audible factual receipt built from saved run facts. That
+  receipt is deterministic confirmation, not the contextual AI reflection.
+- All three post-run Energy choices are visible and prominent while the receipt plays. Effort stays
+  behind a quieter `EFFORT +` action. Either, both or neither may be recorded.
+- The reflection request begins a natural beat after the runner stops adding values, with a longer
+  fallback when no value is entered. Exact timing is a prototype decision, not a fixed duration in
+  this contract.
+- The request snapshots whatever Energy and Effort exist at that moment. Later answers still save
+  and feed future patterns and comparisons, but the reflection is never regenerated.
+- No answer is required to receive a reflection. The existing rule at the top of this file still
+  holds for every successfully saved run.
+
+The mobile API must therefore support durable run saving and contextual-response generation as
+separate operations. AI or speech failure must never undo or block the saved run; the existing local
+fallback principle still applies.
+
 **Canonical energy labels (harvested July 7, 2026 from archived ENERGY_STATE_DESIGN.md):**
 
 | Internal level | Pre-run label | Post-run label |

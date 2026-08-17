@@ -1,6 +1,6 @@
 ---
 name: design-effort-cost
-description: "Console V1 built July 8–9 2026; current mobile direction presents post-run energy and effort as compact optional additions on Run Complete"
+description: "Console V1 built July 8–9 2026; current mobile direction shows post-run Energy choices at rest and keeps Effort behind a quieter optional action"
 metadata:
   type: project
 ---
@@ -28,25 +28,58 @@ Energy and effort remain separate because they answer different things:
 - **Energy:** how the runner feels after the run — `Spent / Feeling Good / Powered Up`.
 - **Effort:** what the run cost — `Smooth / Working / Heavy / Empty tank`.
 
-The current interaction direction is a compact, low-pressure **addition pattern**, similar in
-prominence to an optional photo or note rather than a required questionnaire:
+### August 16 correction to the August 14 addition pattern
 
-- Use a small working group such as `ADD TO THIS RUN`, containing `ENERGY +` and `EFFORT +`.
-- Show Energy with slightly more visual prominence because it sits closer to RunState's identity;
-  Effort remains clearly available beside it as the quieter secondary addition.
-- Tapping one control reveals only that control's choices, either inline or in a lightweight sheet.
-  Do not expose all seven choices at rest.
-- After a choice, return to a compact confirmation such as `ENERGY · FEELING GOOD` or
-  `EFFORT · HEAVY`. The runner can reopen it to change the value.
-- Either value, both values, or neither may be recorded. Ignoring a control stores `unknown`/`null`;
+The August 14 direction is **partly superseded**. Energy and Effort remain separate, optional and
+independently skippable, but they no longer both rest behind collapsed `+` controls:
+
+- Show all three post-run Energy choices — `Spent / Feeling Good / Powered Up` — clearly and
+  prominently at rest while the factual receipt plays. Energy is the main invitation because it is
+  closer to RunState's identity and can immediately inform the reflection.
+- Keep only Effort collapsed behind the quieter `EFFORT +` action. Tapping it reveals
+  `Smooth / Working / Heavy / Empty tank`, either inline or in a lightweight sheet. After selection,
+  it may return to a compact confirmation such as `EFFORT · HEAVY`.
+- The earlier working group label `ADD TO THIS RUN` is no longer a given. It made sense around two
+  collapsed additions; with only Effort behind `+`, whether the screen still needs a group label is
+  open for the Run Complete pass.
+- Either value, both values, or neither may be recorded. Ignoring them stores `unknown`/`null`;
   never infer an answer, silently default one, or convert absence into a middle value.
-- No `Skip` button is needed because continuing without touching either control is the skip.
-- Choosing one must not automatically open the other. Neither control may block completion, delay
+- No `Skip` button is needed because continuing without choosing is the skip.
+- Choosing Energy must not automatically open Effort. Neither input may block completion, delay
   leaving the screen, or appear as a required modal.
 
-This accepts a deliberate tradeoff: optional, quiet controls may collect fewer answers, but the
-answers are more likely to be intentional than values entered only to dismiss a prompt. The Run
-Complete pass should test whether the controls are discoverable without making them feel mandatory.
+This accepts a deliberate tradeoff: optional input may collect fewer answers, but the answers are
+more likely to be intentional than values entered only to dismiss a prompt. The Run Complete pass
+should test whether visible Energy feels inviting rather than mandatory and whether the quieter
+Effort action remains discoverable.
+
+### Two-stage Run Complete response — August 16, 2026
+
+**STATUS: CURRENT DIRECTION, NOT BUILT.** Run Complete now separates immediate confirmation from the
+contextual reflection so the reply stays close to the finish without making Energy or Effort
+mandatory.
+
+1. Ending the run first completes a durable local save. The app may say `Run saved` only after that
+   succeeds. On mobile, `saved` means recoverable on the phone; it must not imply that cloud sync has
+   completed.
+2. The completed-run metrics appear immediately. At the same time, RunState gives one short audible
+   factual receipt assembled from saved run facts, such as distance and duration. This is not the AI
+   reflection and does not require a generative-model call.
+3. Post-run Energy choices are clearly visible during that receipt. `EFFORT +` remains available
+   with lower prominence. Either value, both values, or neither may be entered.
+4. The contextual reflection is requested a natural beat after the runner stops adding values. If
+   the runner adds nothing, a longer fallback still requests the reflection so every saved run gets
+   one. **No fixed number of seconds is specified.** The prototype must find the timing by testing
+   the real stop-breathe-look-tap moment.
+5. The reflection uses the Energy and Effort values present when its request begins. It is created
+   once and never regenerated. Values entered afterward still save to the run and remain useful for
+   future patterns and comparisons, but they do not rewrite that run's reflection.
+6. Effort may change the reflection when it genuinely changes the run's story. RunState does not
+   promise a more unique reply merely because Effort was entered.
+
+This makes run persistence and reflection generation separate mobile operations. Saving the run
+must not depend on the AI call, and the factual receipt fills the immediate emotional moment while
+the optional input window and reflection request complete.
 
 **Deeper Run Analysis remains an exploration, not a prerequisite.** A runner may later be offered a
 reversible choice for more analysis — possibly during onboarding and again after the app has shown
@@ -58,8 +91,13 @@ feature direction. Do not create an estimated-effort field, fallback or roadmap 
 brainstorm. Runner-reported Effort remains exactly that: a runner report.
 
 **Still open for the Run Complete design pass:** final group label, inline versus lightweight-sheet
-presentation, exact visual hierarchy and motion, whether a newly added value updates an already
-visible reflection, and how discoverability/response quality will be tested.
+presentation, exact visual hierarchy and motion, prototype-tuned timing for the input window and
+fallback, and how discoverability/response quality will be tested. The late-input behavior is no
+longer open: late values save for future learning and never regenerate the visible reflection.
+
+**Out of scope for this screen pass:** rewriting or recalibrating the reflection itself. Run Complete
+decides where and when the existing response appears and which optional values reach it; reply craft
+remains in the separate AI and music-response lane.
 
 ## The gap
 
@@ -90,7 +128,7 @@ Where they differ from the August 14 mobile direction above, the mobile directio
   mandatory in the future mobile UI; the current direction above offers both inputs to everyone and
   lets every runner ignore either one.
 - **Historical V1 question budget:** the console flow used at most two quick taps (energy + effort).
-  This is not a mobile-UI requirement and is superseded there by the optional addition pattern.
+  This is not a mobile-UI requirement and is superseded there by the optional mobile presentation.
   Energy cardinality is **settled at three shared levels**
   (July 27, 2026 — see `design_music_intelligence_v1.md`); the four-state State Scan is not a
   domain change. The August 14 direction resolves this portion of the flow by removing sequential

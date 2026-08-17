@@ -72,9 +72,9 @@ Spotify/live-DJ depth remains later than this first mobile foundation.
 **Final product vision (locked in June 2026; reflection input refined August 14, 2026):**
 Manual input in the finished app is minimal by design:
 - Post-run energy and effort are valuable subjective signals that cannot be reliably automated.
-  On the future mobile Run Complete screen they are compact, optional additions: a runner may record
-  either, both, or neither; ignored values remain unknown. Energy receives slightly more prominence
-  because it is closer to the app's identity, but neither input blocks completion.
+  On the future mobile Run Complete screen all three Energy choices are visible and prominent while
+  Effort stays behind a quieter `EFFORT +` action. A runner may record either, both, or neither;
+  ignored values remain unknown, and neither input blocks completion.
 - Lower-priority optional details (shoe choice, notes, etc.) — future, low priority
 Objective capture should be automatic where practical: distance/pace/duration via GPS, weather via
 API, and music via Spotify/device.
