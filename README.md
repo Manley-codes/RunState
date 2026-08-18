@@ -1,91 +1,75 @@
 # RunState
 
-A Java 17 console app for logging completed runs, tracking personal progress, and receiving
-a contextual AI response after every saved run. Learning project and portfolio piece.
+**A Java console application that logs completed runs and responds to what actually happened.**
+
+RunState is a run tracker built around one idea: the numbers matter less than what they meant.
+It records a run, protects that record, compares it against your own history, and returns a short
+contextual response grounded in the actual data — the energy shift, the effort cost, how this run
+sits against similar past runs.
+
+Learning project and portfolio piece. Java 17, Maven, MySQL, JUnit 5.
 
 ---
 
 ## What it does
 
-You log a completed run through an interactive console menu. RunState stores it, checks for
-personal records, and responds with a short AI-generated message grounded in what actually
-happened — the energy shift, the effort, how it compares to similar past runs.
+You log a completed run through an interactive console menu. RunState stores it durably, checks
+for personal records, fetches the weather for that date and location, compares the run against
+similar past runs, and generates a short response about it.
+
+| Area | Behavior |
+|---|---|
+| **Logging** | Date, distance (mi/km), duration, route, plus optional pre- and post-run energy, effort cost, surface, company, shoes, and music state |
+| **Persistence** | MySQL via JDBC. History is durable and load-protected |
+| **Personal records** | Longest distance and fastest average pace, unit-normalized across miles and kilometers |
+| **Weather** | Automatic daily-mean temperature and conditions via Open-Meteo, fetched once at log time and stored with the run |
+| **Comparisons** | Up to 10 comparable runs (same route or similar distance, last 180 days), producing four explanatory signals with evidence counts and confidence tiers |
+| **RunStyle** | A local, deterministic strategy profile across three families and three maturity stages |
+| **Response** | 2–3 sentences from the Anthropic API grounded in the run's real data, with a local fallback when the API is unavailable |
 
 ---
 
-## Features
+## Engineering notes
 
-**Logging a run**
-- Manually log a completed run: date, distance (miles or kilometers), duration, route
-- Optional pre-run and post-run energy levels (I'm Here / Ready-ish / Let's Go! and
-  Spent / Feeling Good / Powered Up)
-- Optional post-run effort cost (Smooth → Empty tank)
-- Optional run context: surface (road, trail, track, treadmill, mixed), company (solo or with
-  others), shoe label, and explicit music state (Music / No music) with a free-text note
+These are the decisions I would want to talk through in an interview.
 
-**Persistence and history**
-- Runs save to MySQL between sessions — history is durable and load-protected
-- Complete-history startup protection: a failed or malformed load exits cleanly rather than
-  pretending history is empty
-- Save-first durability: PRs, AI response, and RunStyle are only generated after the run is
-  confirmed saved; a save failure prints a recovery receipt and ends the session
-- Run history displayed newest-first as compact runner-friendly cards, including recorded
-  context
+**Save-first durability.** Personal records, the generated response, and RunStyle analysis are
+produced *only* after MySQL confirms the save. A save failure prints a recovery receipt containing
+the full run — including recorded context — and ends the session rather than leaving a run that
+looks logged but isn't. There is a dedicated regression test that injects a failing save delegate
+and asserts every piece of post-save work is suppressed, so a future refactor cannot quietly
+reorder it.
 
-**Personal records**
-- Longest distance PR and fastest average pace PR tracked automatically
-- Unit-normalized: miles and kilometers compared on a common scale
-- PRs announced only after a successful save
+**Complete-history load protection.** A failed or malformed history load exits cleanly with an
+explanation naming the offending run and column. It never degrades into "you have no runs yet."
+Stored enum text must match a constant exactly — RunState does not trim, re-case, or guess,
+because a silently defaulted value would poison personal records and RunStyle from then on.
 
-**AI response**
-- A short contextual response from the Anthropic API (claude-haiku-4-5-20251001) after every
-  saved run — 2–3 sentences grounded in the actual run data
-- Includes energy, effort, run context, music, automatic daily-mean weather, and a
-  candidate-based comparison when matching past runs exist
-- Local fallback response when the API is unavailable or the key is unset — logging never fails
-- Five-second connection and request timeouts
+**Testing seams over mocking frameworks.** Storage is tested through a package-private
+`ConnectionProvider` overload, and `ResultSet` — a ~190-method interface — is faked with a
+`java.lang.reflect.Proxy` that implements the five methods actually used. The console's post-save
+orchestration is reachable through package-private delegates. The full suite runs with **no
+database and no API key**.
 
-**Weather**
-- Automatic daily-mean weather (temperature, apparent temperature, condition) via Open-Meteo
-  for the logged run date and runner location
-- Fetched once at log time and stored with the run — no re-fetch, no blocking on failure
+**Association, never causation.** Surface, shoes, company, music, and weather are recorded as
+context and described as associations. They never create or strengthen a RunStyle. The RunStyle
+profile itself is computed locally and deterministically and is never sent to the model.
 
-**Comparisons**
-- Candidate-based: up to 10 comparable runs (same route or similar distance, last 180 days)
-- Four positive/explanatory signals — State Lift, Quiet Gain, Same-Cost/Better, Demand
-  Explained — each with its own evidence count and confidence tier
-- Negative outcomes are filtered before the prompt; below-average results are never sent
-
-**RunStyle V1**
-- Local, deterministic strategy profile: three families (State Lift, Efficiency Gain,
-  Controlled Finish), stages (Early → Forming → Established), facets, and habit lines
-- Evaluated point-in-time — a backdated run contributes to future calculations but never
-  produces an announcement on entry
-- Association language only; never causal, never sent to the AI
+**Failure handling is graded by consequence.** A weather or API failure degrades to a fallback,
+because neither determines whether the run was durably recorded. A storage failure does not
+degrade — it stops.
 
 ---
 
-## Prerequisites
+## Test suite
 
-- Java 17
-- Maven
-- MySQL with a dedicated RunState database user and schema
-- Environment variable `RUNSTATE_DB_PASSWORD` set to the database user's password
-- Environment variable `ANTHROPIC_API_KEY` set for AI responses (optional — falls back locally)
-
----
-
-## Running the app
-
-```
-mvn compile exec:java -Dexec.mainClass=com.runstate.App
-```
-
-Main class: `com.runstate.App`
-
----
-
-## Running tests
+- **383 tests, 0 failures, 0 errors, 0 skipped** — last verified August 18, 2026
+- 9 test classes: 175 `@Test` methods plus 18 `@ParameterizedTest` methods, expanding to 383
+  executed cases at run time
+- **7,276 lines of test code against 4,082 lines of source**
+- No live MySQL instance and no API key required
+- Live-API evaluation harnesses are separate classes with `main()` methods, deliberately outside
+  the Surefire naming pattern so they never run as part of the suite
 
 ```
 mvn test
@@ -93,76 +77,92 @@ mvn test
 
 ---
 
-## Concepts practiced
+## Architecture
 
-- Classes and objects, constructors, encapsulation
-- Enums with fields and methods
-- Immutable value objects (composition pattern)
-- Checked exceptions and exception hierarchies
-- Generics and generic helper methods
-- Service separation (RunAgent, RunStyleService, WeatherService, ComparisonService)
-- Testing seams: ConnectionProvider, ResultSet proxy, package-private console delegates
-- JUnit 5 unit tests without live external dependencies
-- HTTP client with timeouts
-- Scanner input and input validation
-- ArrayList, loops, helper methods, median aggregation
+```
+App ──► RunConsole ──► RunStorage ──────► MySQL
+              │
+              ├──────► WeatherService ──► Open-Meteo
+              ├──────► ComparisonService
+              ├──────► RunStyleService
+              └──────► RunAgent ────────► Anthropic API
+```
+
+Service separation is deliberate. `RunAgent` owns everything that talks to the model, including
+prompt construction. `RunStyleService` owns profile detection and `Runner` only delegates to it.
+`ComparisonService` filters candidates and grades evidence before any of it reaches a prompt.
+
+A rendered diagram of the full current run flow, including failure paths, is in
+[docs/CURRENT_RUN_FLOW.md](docs/CURRENT_RUN_FLOW.md).
+
+---
+
+## Getting started
+
+**Prerequisites**
+
+- Java 17
+- Maven
+- MySQL, with a dedicated RunState database user and schema
+- `RUNSTATE_DB_PASSWORD` — the database user's password
+- `ANTHROPIC_API_KEY` — optional; without it the app uses its local fallback response
+
+**Run**
+
+```
+mvn compile exec:java -Dexec.mainClass=com.runstate.App
+```
+
+**Test**
+
+```
+mvn test
+```
+
+---
+
+## Documentation
+
+The design record is the most substantial part of this project. Decisions are written with an
+explicit status, the reasoning behind them, and what would reopen them.
+
+**[Start here → docs/README.md](docs/README.md)** — a guided reading path for anyone reviewing
+this repository.
+
+Highlights:
+
+- [Current run flow](docs/CURRENT_RUN_FLOW.md) — the verified as-is behavior, with a flowchart
+- [AI agent design](docs/AI_AGENT.md) — identity, prompt architecture, and constraints
+- [Data and privacy](docs/DATA_PRIVACY.md) — exactly what leaves the machine, and when
+- [ADR-001: RunStyle surfacing](docs/design/adr_001_runstyle_surfacing.md) — a rejected design,
+  and why
+
+---
+
+## Current status
+
+The console application is built and working. Phases 1 through 5 — console app and energy system,
+MySQL persistence, RunStyle detection, the AI agent, and context expansion for music and weather —
+are complete.
+
+**Music Intelligence V1 is implemented but not accepted.** Its evaluation harness was built, run,
+and blind-graded, and the feature did not meet the quality bar that was set for it before testing
+began. That result is documented rather than worked around. The full record, including what was
+tried and what the graders found, is in
+**[docs/EVALUATION_RECORD.md](docs/EVALUATION_RECORD.md)**.
+
+Current work is UI design for a mobile client — defining what screens need so the backend contract
+follows from real interface requirements rather than the reverse. A Spring Boot API and a mobile
+client with GPS tracking follow from there.
 
 ---
 
 ## Technologies
 
-- Java 17
-- Maven
-- MySQL / JDBC
-- Gson (JSON parsing for Anthropic API responses)
-- Java HTTP client (`java.net.http`)
-- JUnit 5 (Jupiter)
-- IntelliJ IDEA
-- Git / GitHub
-
----
-
-## Next direction
-
-**Music Intelligence V1 planning is approved** and the prompt, sanitized evaluation fixtures,
-and opt-in evaluation runner are implemented. The first valid smoke test exposed a generic,
-music-avoidant voice; the approved creative-policy revision is committed at `693bfb3`, with
-**deterministic verification complete at 256 tests, 0 failures, 0 errors, 0 skipped**. The
-canonical contract is `docs/claude-memory/design_music_intelligence_v1.md`.
-That planning settled the energy-domain question: RunState **retains the shared three-level**
-(LOW / MODERATE / HIGH) energy domain, and the four-state State Scan sketch is superseded as a
-domain proposal.
-
-**Manual model evaluation is underway but not accepted, so combined Music Intelligence V1 is
-not complete.** An authentication-invalid launch produced no model evidence. The first valid
-12-call smoke failed product quality and drove the revision. The **revised-prompt smoke then
-ran on July 30, 2026** — 12 calls, zero fallbacks — and **also failed** diagnostic quality and
-trust. A separate **creative-ceiling probe** ran the same day with 12 completed calls: minimal
-prompting improved the prose but did not produce reliable replies, both independent graders
-reached the pre-registered 0–3 branch and counted nine hard-trust failures, and Manley found
-neither disputed reply app-worthy. **No final evaluation has run.** The locked path from here is:
-
-1. Separately design and separately approve a **stronger-model control** — the next live branch,
-   and **not yet approved**.
-2. Review that control as a diagnostic and correct only real problems.
-3. Separately approve and conduct the 36-output final evaluation.
-4. Reconcile independent review against the locked rubric and obtain Manley's final decision.
-5. **Only after combined Music Intelligence V1 is complete** — implementation, deterministic
-   verification, manual evaluation, independent review reconciliation, final documentation, and
-   Manley's approval, as defined by the canonical plan — run the tightly fenced Core Running
-   Foundation Review: check whether the central journey
-   (record → preserve safely → understand → manage → use later) is ready for a real interface,
-   and produce a short gap list rather than a feature hunt.
-6. Resume UI design so the State Scan, history, and post-run reply screens define what the backend
-   must return.
-7. Migrate/design the Spring Boot API from those screen contracts.
-8. Build the mobile client and GPS/automatic-tracking layer against that API.
-
-Spotify integration and live-DJ behavior remain later possibilities with separate legal, privacy,
-provider, and platform dependencies.
+Java 17 · Maven · MySQL / JDBC · Gson · `java.net.http` · JUnit 5 (Jupiter) · IntelliJ IDEA · Git
 
 ---
 
 ## Author
 
-Manley Johnson
+**Manley Johnson** — CS student, SNHU
