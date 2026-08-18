@@ -12,7 +12,7 @@ DIAGNOSTIC ONLY. Not V1 acceptance evidence.
 
 ## Frozen probe requests — verified before call 1
 
-Source: `docs\claude-memory\evidence\creative-ceiling-probe-20260730-154503-requests.json`
+Source: `docs\design\evidence\creative-ceiling-probe-20260730-154503-requests.json`
 
 | Scenario | Recorded SHA-256 | Verified | Control SHA-256 |
 | --- | --- | --- | --- |

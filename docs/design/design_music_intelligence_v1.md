@@ -725,7 +725,7 @@ gate is a separately reviewed and approved bounded prompt/code/test handoff.
 The manual-evaluation surface consists of exactly two files:
 
 - `test/com/runstate/MusicIntelligenceEvaluationRunner.java`
-- `docs/claude-memory/music_intelligence_v1_evaluation.md`
+- `docs/design/music_intelligence_v1_evaluation.md`
 
 The evaluation runner must:
 
@@ -1069,34 +1069,34 @@ final evaluation and Manley's approval.
 These existing files were reconciled against this plan in the July 27, 2026 documentation
 pass. Recorded as the completed change set:
 
-1. `docs/claude-memory/MEMORY.md`
+1. `docs/design/MEMORY.md`
    - index the canonical V1 plan
    - mark the three-level energy decision **closed**
    - update the music-reply-style status
 
-2. `docs/claude-memory/project_current_state.md`
+2. `docs/design/project_current_state.md`
    - mark V1 planning complete
    - make the prompt slice the next implementation task
    - close the three-versus-four domain question
    - preserve the post-music **Foundation Review → UI → Spring Boot → mobile** order
 
-3. `docs/claude-memory/creative_direction_ui.md`
+3. `docs/design/creative_direction_ui.md`
    - mark the four-state domain proposal **superseded**
    - preserve later freedom to refine UI wording without changing the three stored meanings
 
-4. `docs/claude-memory/design_run_response_system.md`
+4. `docs/design/design_run_response_system.md`
    - remove the stale open-question note
    - reaffirm the shared three-level domain
 
-5. `docs/claude-memory/design_effort_cost.md`
+5. `docs/design/design_effort_cost.md`
    - remove or replace the stale three-versus-four question
 
-6. `docs/claude-memory/music_ingredients.md`
+6. `docs/design/music_ingredients.md`
    - mark V1 planning complete
    - point implementation to the canonical plan
    - keep later music ingredients deferred
 
-7. `docs/claude-memory/design_music_reply_style.md`
+7. `docs/design/design_music_reply_style.md`
    - point to the canonical V1 contract
    - make the first bounded prompt slice next
    - reconcile "roughly ten" to the exact **`1–10` / `11+`** contract
@@ -1112,7 +1112,7 @@ pass. Recorded as the completed change set:
 9. `README.md`
    - update the immediate next step and remove the stale open energy-domain question
 
-10. `docs/claude-memory/parked_music_recommendation.md`
+10. `docs/design/parked_music_recommendation.md`
     - correct present evidence from "date/time" to **date only**
     - keep time-of-day and playback timestamps deferred
 
@@ -1120,8 +1120,8 @@ pass. Recorded as the completed change set:
 edited, because the final audit found a real sequencing ambiguity (each implied the Foundation
 Review follows the prompt slice rather than **combined V1**):
 
-- `docs/claude-memory/user_goals.md`
-- `docs/claude-memory/requirements_nonfunctional.md`
+- `docs/design/user_goals.md`
+- `docs/design/requirements_nonfunctional.md`
 
 **Do not edit:**
 
@@ -1135,7 +1135,7 @@ Review follows the prompt slice rather than **combined V1**):
 
 **Created during the separately approved evaluation-surface step, before the first live call:**
 
-- `docs/claude-memory/music_intelligence_v1_evaluation.md`
+- `docs/design/music_intelligence_v1_evaluation.md`
 
 ### Creative-policy and evaluation reconciliation — COMPLETED July 30, 2026
 
@@ -1249,7 +1249,7 @@ This is the **intended clean pause point**.
   approved voice and fusion direction, four calibration examples, idea-governed compression with
   no numeric sentence limit, controlled S1/S12 fixture replacements, and deterministic guards.
   The 382-test gate is green. No live model call occurred, so behavior is not yet validated.
-- Raw evidence is preserved under `docs/claude-memory/evidence/`: the probe transcript and
+- Raw evidence is preserved under `docs/design/evidence/`: the probe transcript and
   request bodies, revised-prompt smoke screenshots, and the Opus transcript plus shuffled
   grading packet.
 - **No final 36-output evaluation has run. Combined Music Intelligence V1 is NOT complete.**

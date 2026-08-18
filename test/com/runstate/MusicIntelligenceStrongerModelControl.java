@@ -38,9 +38,9 @@ import java.util.function.Consumer;
  *
  * DIAGNOSTIC ONLY. Like the probe, its outputs are never V1 acceptance evidence and can never
  * become it. The V1 gates live in MusicIntelligenceEvaluationRunner and
- * docs/claude-memory/music_intelligence_v1_evaluation.md. This control's protocol and its blank
+ * docs/design/music_intelligence_v1_evaluation.md. This control's protocol and its blank
  * pre-registered grading record live in
- * docs/claude-memory/music_intelligence_stronger_model_control.md.
+ * docs/design/music_intelligence_stronger_model_control.md.
  *
  * WHAT MAKES THIS A CONTROL, AND WHY IT READS FROM EVIDENCE
  *
@@ -54,7 +54,7 @@ import java.util.function.Consumer;
  * control into an uncontrolled rerun. So the requests are not rebuilt at all: they are read
  * back verbatim from the frozen bytes preserved after the probe, in
  *
- *   docs/claude-memory/evidence/creative-ceiling-probe-20260730-154503-requests.json
+ *   docs/design/evidence/creative-ceiling-probe-20260730-154503-requests.json
  *
  * and their recorded SHA-256 hashes are verified BEFORE anything is spent. If the evidence file
  * has drifted by even one byte, this refuses to run rather than produce a comparison nobody
@@ -119,7 +119,7 @@ public class MusicIntelligenceStrongerModelControl {
     // The frozen probe requests. Repository-relative, because that is what makes them frozen:
     // they are committed evidence, not something regenerated at run time.
     static final Path FROZEN_REQUESTS_PATH = Paths.get(
-            "docs", "claude-memory", "evidence",
+            "docs", "design", "evidence",
             "creative-ceiling-probe-20260730-154503-requests.json");
 
     // Where the record is written. Straight into committed evidence, NOT into target/.
@@ -127,7 +127,7 @@ public class MusicIntelligenceStrongerModelControl {
     // target/ is disposable, and the probe's transcript had to be rescued out of it after the
     // fact. A record that can be deleted by a routine `clean` is not a record. Writing here from
     // the first byte means the outputs are in the repository the instant they exist.
-    static final Path EVIDENCE_DIR = Paths.get("docs", "claude-memory", "evidence");
+    static final Path EVIDENCE_DIR = Paths.get("docs", "design", "evidence");
 
     // The four approved request hashes, PINNED HERE.
     //
@@ -562,7 +562,7 @@ public class MusicIntelligenceStrongerModelControl {
         System.out.println("output has been graded and the tally is written down.");
         System.out.println();
         System.out.println("Record the grades in");
-        System.out.println("docs/claude-memory/music_intelligence_stronger_model_control.md");
+        System.out.println("docs/design/music_intelligence_stronger_model_control.md");
         System.out.println("against the PRE-REGISTERED rule already written there. Nothing here is");
         System.out.println("written into the V1 evaluation record automatically, and nothing here may");
         System.out.println("be moved into it as acceptance evidence.");

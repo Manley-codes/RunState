@@ -1,7 +1,7 @@
 # RunState Features
 
 > ⚠ ARCHIVED July 7, 2026 — June snapshot; "Next Core Features" listed here shipped long
-> ago. Live status: docs/claude-memory/project_current_state.md. Nothing harvested.
+> ago. Live status: docs/design/project_current_state.md. Nothing harvested.
 > Kept for history; safe to move to docs/archive/.
 
 This file describes the main features RunState has now or is clearly moving toward soon.

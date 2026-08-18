@@ -921,9 +921,9 @@ public class MusicIntelligenceStrongerModelControlTest {
         Path transcript = MusicIntelligenceStrongerModelControl.transcriptPath("20260731-120000");
         Path packet = MusicIntelligenceStrongerModelControl.gradingPacketPath("20260731-120000");
 
-        assertTrue(transcript.startsWith(Path.of("docs", "claude-memory", "evidence")),
+        assertTrue(transcript.startsWith(Path.of("docs", "design", "evidence")),
                 "the transcript must be written into committed evidence: " + transcript);
-        assertTrue(packet.startsWith(Path.of("docs", "claude-memory", "evidence")),
+        assertTrue(packet.startsWith(Path.of("docs", "design", "evidence")),
                 "the blind packet must be written into committed evidence: " + packet);
         assertFalse(transcript.startsWith("target"), "target/ is disposable");
         assertFalse(packet.startsWith("target"), "target/ is disposable");

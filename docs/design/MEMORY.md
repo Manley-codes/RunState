@@ -67,8 +67,8 @@ Claude Code if needed · Manley decides.
 - [Current development state](project_current_state.md) — what's built, what's next, roadmap order.
 - [User goals and scope](user_goals.md) — core goals, phases, locked product positioning.
 - [Collaboration style](collab_style.md) — working preferences, pace, commit habits.
-- [Learning and collaboration prompt](../LEARNING_AND_COLLABORATION.md) — approval boundary and
-  pacing rules.
+- Learning and collaboration prompt — approval boundary and pacing rules. Local-only
+  (gitignored); intentionally not part of the published repository.
 - [Non-functional requirements](requirements_nonfunctional.md) — 11 quality bars with status.
 - [App landscape](research_app_landscape.md) — competitive research, RPE science, scope-creep watch.
 

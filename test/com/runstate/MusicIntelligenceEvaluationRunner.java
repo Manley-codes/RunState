@@ -16,8 +16,8 @@ import java.util.function.Supplier;
 
 /*
  * MusicIntelligenceEvaluationRunner — the opt-in surface for the Music Intelligence V1
- * MANUAL evaluation (see docs/claude-memory/design_music_intelligence_v1.md and the
- * record in docs/claude-memory/music_intelligence_v1_evaluation.md).
+ * MANUAL evaluation (see docs/design/design_music_intelligence_v1.md and the
+ * record in docs/design/music_intelligence_v1_evaluation.md).
  *
  * This class is deliberately NOT a JUnit test. Surefire collects test classes by NAME
  * pattern — Test*, *Test, *Tests, *TestCase — so the name below is a safety boundary, not
@@ -174,7 +174,7 @@ public class MusicIntelligenceEvaluationRunner {
         System.out.println("=================================================================");
         System.out.println("Attempted live calls : " + callsMade + " (expected " + totalCalls + ")");
         System.out.println("FALLBACK/INVALID     : 0");
-        System.out.println("Record these outputs in docs/claude-memory/music_intelligence_v1_evaluation.md");
+        System.out.println("Record these outputs in docs/design/music_intelligence_v1_evaluation.md");
         System.out.println("=================================================================");
     }
 

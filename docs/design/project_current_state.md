@@ -137,7 +137,7 @@ the authoritative August 13 UI resume point and queue are at the top of this fil
   hard-trust failures**, triggering the three-or-more trust override. **Manley found neither
   disputed reply app-worthy**, preferring S11-1 only if forced — a relative preference, not a
   Hit. Full record in `music_intelligence_creative_ceiling_probe.md`; raw transcript, request
-  bodies, and smoke screenshots are preserved under `docs/claude-memory/evidence/`.
+  bodies, and smoke screenshots are preserved under `docs/design/evidence/`.
 - **The separately approved stronger-model control completed July 31 — 12 usable Opus 5
   replies, diagnostic only.** Manley graded the shuffled packet before opening the scenario
   mapping; the model identity was already known. Manley's creative tally was **1 Hit / 7
@@ -149,7 +149,7 @@ the authoritative August 13 UI resume point and queue are at the top of this fil
   over-explained the music, sounded too formal or literary, led with artist/title names too
   often, and lacked editing/compression. Full record:
   `music_intelligence_stronger_model_control.md`; exact transcript and grading packet are in
-  `docs/claude-memory/evidence/`.
+  `docs/design/evidence/`.
 - **Future diagnostic grading keeps three questions separate:** creative value (Strong /
   Promising / Weak), trust (Pass / Fail—removable / Fail—load-bearing), and app readiness
   (Yes / No). A trust failure means that wording is not app-ready until corrected, but a useful

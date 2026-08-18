@@ -1,6 +1,6 @@
 # RunState Ideas
 
-> ⚠ ARCHIVED July 7, 2026 — June doc, superseded by docs/claude-memory/. Harvested:
+> ⚠ ARCHIVED July 7, 2026 — June doc, superseded by docs/design/. Harvested:
 > solo/partner/group context + trail gallery (→ parked_feature_ideas.md). Everything else
 > is built or captured deeper in the memory docs. Kept for history; safe to move to docs/archive/.
 

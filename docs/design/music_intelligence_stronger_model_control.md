@@ -105,7 +105,7 @@ uncontrolled rerun that looks identical from the outside.
 
 So the four request bodies are read back verbatim from committed evidence:
 
-`docs/claude-memory/evidence/creative-ceiling-probe-20260730-154503-requests.json`
+`docs/design/evidence/creative-ceiling-probe-20260730-154503-requests.json`
 
 and **every body is verified before anything is spent.** If the evidence file has drifted by even
 one byte, the run refuses at zero calls.
@@ -164,7 +164,7 @@ per scenario, so a third edit of any size would fail the build.
 | `max_tokens` | **4096** (the probe sent 256; see the compatibility correction above) |
 | Request timeout | 30 seconds (diagnostic; deliberately the probe's value) |
 | Latency | Recorded per call, in milliseconds, with a summary table |
-| Transcript | UTF-8, written **directly into `docs/claude-memory/evidence/`**, rewritten after every completed call |
+| Transcript | UTF-8, written **directly into `docs/design/evidence/`**, rewritten after every completed call |
 | Blind packet | UTF-8, same directory, rewritten after every completed call |
 
 ## What this control does NOT answer
@@ -304,8 +304,8 @@ preserved unreconciled, as the probe's were.
 
 **Preserved evidence — do not delete, overwrite, or grade:**
 
-- `docs/claude-memory/evidence/stronger-model-control-20260731-015825.md`
-- `docs/claude-memory/evidence/blind-grading-packet-20260731-015825.md`
+- `docs/design/evidence/stronger-model-control-20260731-015825.md`
+- `docs/design/evidence/blind-grading-packet-20260731-015825.md`
 
 The transcript carries its verified hashes and its un-blinding key; the packet reads
 `Outputs recorded so far: 0 of 12` with an empty grade table. Both are kept exactly as the run
@@ -344,8 +344,8 @@ later trust review without rewriting the raw record.
 | Model returned by the control request | `claude-opus-5` |
 | Commit | `1efb68a` |
 | Frozen evidence verified against pinned hashes | Yes — all four approved hashes matched before the calls |
-| Transcript path | `docs/claude-memory/evidence/stronger-model-control-20260731-023433.md` |
-| Blind packet path | `docs/claude-memory/evidence/blind-grading-packet-20260731-023433.md` |
+| Transcript path | `docs/design/evidence/stronger-model-control-20260731-023433.md` |
+| Blind packet path | `docs/design/evidence/blind-grading-packet-20260731-023433.md` |
 | Blind seed | `55384303551600` |
 | Graded blind before un-blinding | The shuffled packet was graded before the output mapping was opened; the model identity was already known |
 | Calls attempted | 12 |
@@ -577,7 +577,7 @@ sanitized user messages. It reads one local file and makes no network call. If t
 evidence does not verify, preview **aborts visibly** and does not print the live command.
 
 **Nothing needs preserving afterwards.** Both records are written straight into
-`docs/claude-memory/evidence/` from the first byte, before call one and again after every
+`docs/design/evidence/` from the first byte, before call one and again after every
 response. The probe's transcript had to be rescued out of `target/` after the fact; that failure
 mode is now designed out rather than remembered.
 
@@ -642,7 +642,7 @@ network. They protect the **experiment**, not the model:
   iteration numbers, scenario grouping, request hashes, or the probe's reviewers and tallies
 - **the packet's filename does not un-blind the run** before the file is opened
 - **the un-blinding key is in the transcript and not in the packet**
-- both records are written into `docs/claude-memory/evidence/`, never `target/`, and never to
+- both records are written into `docs/design/evidence/`, never `target/`, and never to
   the same path
 - the real sink propagates failure instead of swallowing it, and writes UTF-8
 - the control class is not name- or annotation-discoverable by Surefire

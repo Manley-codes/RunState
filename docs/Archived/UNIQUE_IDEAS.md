@@ -1,6 +1,6 @@
 # RunState Unique Ideas
 
-> ⚠ ARCHIVED July 7, 2026 — June doc, superseded by docs/claude-memory/. Harvested:
+> ⚠ ARCHIVED July 7, 2026 — June doc, superseded by docs/design/. Harvested:
 > Top Run Highlights, Future Run Suggestions (with scope-watch tension), Support Messages
 > (text kept, voice scrapped), Body Feedback (low priority) → parked_feature_ideas.md.
 > Music vision superseded by parked_music_recommendation.md + design_music_reply_style.md.

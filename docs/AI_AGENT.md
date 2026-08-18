@@ -329,7 +329,7 @@ July 30, 2026 and failed diagnostic quality and trust; a separate creative-ceili
 ran and reached its pre-registered 0–3 branch. The next live branch is a separately approved
 stronger-model control, which is NOT approved. Combined Music Intelligence V1 is NOT complete.**
 
-The canonical contract is `docs/claude-memory/design_music_intelligence_v1.md`. This section
+The canonical contract is `docs/design/design_music_intelligence_v1.md`. This section
 records only what is **as-built**; it does not restate the plan.
 
 What V1 is designed to prove is **run-first recognition from current-run evidence** with music
@@ -362,7 +362,7 @@ licensed lyrics, transformed allusion only, or removal.
 
 **Deferred, not built:** provider-backed playback, lyric licensing, time-aligned telemetry,
 splits, and cross-run reply-frequency tracking. The full long-range music vision lives in
-`docs/claude-memory/parked_music_recommendation.md` (UNIQUE_IDEAS.md is archived).
+`docs/design/parked_music_recommendation.md` (UNIQUE_IDEAS.md is archived).
 
 **What this slice did not change.** It was a prompt-and-formatting change inside `RunAgent`.
 It made **no** console or UI changes, **no** schema or persistence changes, **no**
@@ -393,7 +393,7 @@ with a minimal creative system prompt as the single variable. Minimal prompting 
 prose but did not produce reliable replies: both independent graders reached the pre-registered
 **0–3** branch and counted **nine hard-trust failures**, triggering the trust override. Manley
 found **neither disputed reply app-worthy**, preferring S11-1 only if forced, which is not a Hit.
-Raw evidence is preserved under `docs/claude-memory/evidence/`.
+Raw evidence is preserved under `docs/design/evidence/`.
 
 **No 36-output final evaluation has run, and combined V1 is not complete.**
 

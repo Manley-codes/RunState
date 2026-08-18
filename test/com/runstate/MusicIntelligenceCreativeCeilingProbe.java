@@ -27,9 +27,9 @@ import java.util.function.Consumer;
  * MusicIntelligenceCreativeCeilingProbe — a DIAGNOSTIC prompt-ablation study.
  *
  * This is not V1 evaluation evidence and can never become it. The V1 gates live in
- * MusicIntelligenceEvaluationRunner and docs/claude-memory/music_intelligence_v1_evaluation.md.
+ * MusicIntelligenceEvaluationRunner and docs/design/music_intelligence_v1_evaluation.md.
  * The protocol and the pre-registered grading record for this probe live in
- * docs/claude-memory/music_intelligence_creative_ceiling_probe.md.
+ * docs/design/music_intelligence_creative_ceiling_probe.md.
  *
  * The question it exists to answer: the first valid smoke produced a generic, restraint-heavy
  * voice. Two explanations fit that evidence equally well — either the production prompt is
@@ -316,7 +316,7 @@ public class MusicIntelligenceCreativeCeilingProbe {
         System.out.println("Completed calls      : " + result.callsAttempted + " of " + PLANNED_CALLS);
         System.out.println("Transcript           : " + transcript.toAbsolutePath());
         System.out.println();
-        System.out.println("Grade these into docs/claude-memory/music_intelligence_creative_ceiling_probe.md");
+        System.out.println("Grade these into docs/design/music_intelligence_creative_ceiling_probe.md");
         System.out.println("against the PRE-REGISTERED rule already written there. Nothing here is");
         System.out.println("written into the V1 evaluation record automatically, and nothing here may");
         System.out.println("be moved into it as acceptance evidence.");

@@ -462,9 +462,9 @@ context; only the confirmed metadata and findings above are recorded here.
 **Evidence.** No verbatim terminal transcript was captured to a file. Three console screenshots
 were preserved instead:
 
-- `docs/claude-memory/evidence/smoke-20260730-revised-prompt-01-preflight-and-s1-s4.png`
-- `docs/claude-memory/evidence/smoke-20260730-revised-prompt-02-s4-s9.png`
-- `docs/claude-memory/evidence/smoke-20260730-revised-prompt-03-s9-s12-and-summary.png`
+- `docs/design/evidence/smoke-20260730-revised-prompt-01-preflight-and-s1-s4.png`
+- `docs/design/evidence/smoke-20260730-revised-prompt-02-s4-s9.png`
+- `docs/design/evidence/smoke-20260730-revised-prompt-03-s9-s12-and-summary.png`
 
 The third screenshot records the run's own summary: `Attempted live calls : 12 (expected 12)`
 and `FALLBACK/INVALID : 0`.

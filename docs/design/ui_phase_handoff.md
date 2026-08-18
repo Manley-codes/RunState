@@ -396,7 +396,7 @@ and can carry the treatment forward to later screens, which is what consistency 
 
 ⚠️ **The durable rule, which outlives those two files:** per-pass handoffs and decision queues are
 working documents. They live outside the repo and they get deleted. A decision only survives if it
-is written into `docs/claude-memory/` before its working document goes away. **This project has
+is written into `docs/design/` before its working document goes away. **This project has
 already lost decisions that way once** — see the July 9 DJ-session note in
 `music_feature_register.md`.
 

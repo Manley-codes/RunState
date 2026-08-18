@@ -1,10 +1,10 @@
 # RunState — UI Design Brief v1
 
 > **SUPERSEDED — HISTORICAL SNAPSHOT (banner added July 26, 2026; updated July 27, 2026).**
-> The live UI direction is `docs/claude-memory/creative_direction_ui.md` (v0.2, §0 holds the
+> The live UI direction is `docs/design/creative_direction_ui.md` (v0.2, §0 holds the
 > locked July decisions). **The stored energy domain is now CLOSED at three levels**
 > (LOW / MODERATE / HIGH), and the four-state State Scan is **superseded as a domain
-> proposal** — decision record: `docs/claude-memory/design_music_intelligence_v1.md`. Later UI
+> proposal** — decision record: `docs/design/design_music_intelligence_v1.md`. Later UI
 > presentation and label wording may still change without altering those stored meanings.
 > This brief remains a historical snapshot; do not design or build from this document.
 

@@ -177,8 +177,8 @@ before anything could clear it.
 
 | Artifact | Path | SHA-256 |
 | --- | --- | --- |
-| Raw transcript, byte-for-byte | `docs/claude-memory/evidence/creative-ceiling-probe-20260730-154503.md` | `DD5BC41A919CDC01873400164894AB0376B6FEE8C4BBD3FD5F7CEC4EF11715FB` |
-| Complete sanitized request bodies | `docs/claude-memory/evidence/creative-ceiling-probe-20260730-154503-requests.json` | *(hashes are per body, below)* |
+| Raw transcript, byte-for-byte | `docs/design/evidence/creative-ceiling-probe-20260730-154503.md` | `DD5BC41A919CDC01873400164894AB0376B6FEE8C4BBD3FD5F7CEC4EF11715FB` |
+| Complete sanitized request bodies | `docs/design/evidence/creative-ceiling-probe-20260730-154503-requests.json` | *(hashes are per body, below)* |
 
 The transcript is the raw artifact and is **not** rewritten or normalized. Its 8,040 bytes hash
 to the value above both at its original `target/` location and at the preserved path.

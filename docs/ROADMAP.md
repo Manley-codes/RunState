@@ -3,8 +3,8 @@
 > **Historical snapshot — June 2026.** This file reflects the project state when Phase 5
 > shipped. It has not been updated as a live roadmap since then. For the current queue,
 > completed milestones, and the active next direction, see
-> [`docs/claude-memory/MEMORY.md`](claude-memory/MEMORY.md) and
-> [`docs/claude-memory/project_current_state.md`](claude-memory/project_current_state.md).
+> [`docs/design/MEMORY.md`](design/MEMORY.md) and
+> [`docs/design/project_current_state.md`](design/project_current_state.md).
 
 This roadmap keeps the project focused while leaving room for future ideas.
 
@@ -29,7 +29,7 @@ For the current pre-run and post-run energy design discussion, see `docs/Archive
 
 > **Phase 5 has shipped.** Music and weather context are built, committed, and verified.
 > ⚠ This file is largely a June 2026 snapshot — for live status, next-task candidates, and
-> current decisions, `docs/claude-memory/MEMORY.md` and `project_current_state.md` are the
+> current decisions, `docs/design/MEMORY.md` and `project_current_state.md` are the
 > source of truth.
 
 ## Present Focus

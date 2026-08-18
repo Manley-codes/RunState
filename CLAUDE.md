@@ -3,7 +3,7 @@
 Java console running app. Learning project and portfolio piece for Manley Johnson (CS student, SNHU).
 
 ## Project memory
-Full context is in `docs/claude-memory/`. Read `docs/claude-memory/MEMORY.md` first, then relevant detail files, before starting any work.
+Full context is in `docs/design/`. Read `docs/design/MEMORY.md` first, then relevant detail files, before starting any work.
 Both Claude Code and Cowork share this folder. Keep it current as decisions are made.
 
 ## How decisions get recorded
@@ -38,5 +38,5 @@ Java run-tracking app using MySQL for persistence. Use a dedicated DB user rathe
 ## Key architecture rules
 - loadRun() for sample data (no PR announcements), addRun() for new runs (announces PRs)
 - buildRunResponse() now lives in RunAgent.java — keep it isolated and clean
-- RunStyle detection lives in RunStyleService.java (SRP); Runner.detectRunStyle(Run) only delegates. The profile is local and deterministic — never sent to the AI. See docs/claude-memory/design_runstyle_v1.md
+- RunStyle detection lives in RunStyleService.java (SRP); Runner.detectRunStyle(Run) only delegates. The profile is local and deterministic — never sent to the AI. See docs/design/design_runstyle_v1.md
 - Never mention below-average performance in run responses — stay quiet if numbers are down
