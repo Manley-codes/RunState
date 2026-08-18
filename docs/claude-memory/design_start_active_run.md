@@ -8,6 +8,50 @@ status: CURRENT DESIGN FOUNDATION — stable enough to move on; interactive prot
 
 # Start and Active Run — current design foundation
 
+> ⚠️ **AMENDED August 16, 2026 — this file no longer describes the current prototype.**
+> **Start Run V6** (`RunState - Circular Timer v6.dc.html`) replaces the screen described below.
+> Everything after this block is preserved as design history until V6's own open questions close
+> and it gets documented properly.
+>
+> **What V6 changed:**
+>
+> - **Foundation** — a map fills the screen from the status bar down to the white panel, edge to
+>   edge, instead of the foggy porcelain field.
+> - **The circle** — contains the map, not a grayscale photograph of runners on a bridge. Pressing
+>   Start collapses the full-bleed map into a 440px circle on one ease curve, corner radius
+>   travelling 80px to 220px. **The map becomes the timer rather than being replaced by it.** No
+>   crossfade, no second screen. This is the strongest idea in the design.
+> - **Stop** — a 1.5-second hold with a filling ring, labelled `HOLD TO END`. This settles the
+>   previously open question of whether Stop needs a confirmation step, by building one.
+> - **Panel** — one draggable white panel with two rest positions 340px apart. Route, location
+>   sharing and run context are rows inside it.
+> - **Primary row** — shoe, Start, Run Mix. The route control has moved off the primary row and
+>   into the panel.
+> - **Metrics inside the circle** — pace, duration and calories. **BPM is not present.**
+>
+> ⚠️ **Three of these are ideas this file previously recorded as replaced:** a full-screen map
+> foundation, a hold action, and one expandable parent panel. They have returned **without the
+> reversal being recorded.** Nothing visual is locked and re-adopting them is legitimate — but the
+> reasons they were dropped were never revisited, which is the same pattern that produced the
+> independently-rearrived-at frosted-glass direction. Worth one sentence each explaining why, when
+> V6 is documented properly.
+>
+> **Open in V6, decided by nobody yet:**
+>
+> - **Calories.** Raised August 16 as the most generic metric a fitness app can show and the one
+>   least connected to what a run meant. Manley is changing it.
+> - **What the pre-run map is for.** Standing still before a run, a map of where you are standing
+>   tells the runner nothing they cannot already see. Its current job is to be the thing that
+>   collapses — a transition job, not an information job. Unresolved.
+> - **How an accidental start is undone.** `cancelCount()` exists in the code and is wired to
+>   nothing, so a mistaken Start must be ridden out, paused, and held to end — and the hold banks
+>   mileage onto the active shoe on its way out. Manley's direction, August 16: **no cancel
+>   button.** Instead detect that a run probably was not real from very early stoppage, and either
+>   discard it or ask whether to keep it. Not settled; he is still thinking.
+> - Whether pre-run energy should visibly change anything during the run.
+> - Whether the readiness panel needs a GPS-acquiring state.
+> - Whether the pre-run map needs any live control at all.
+
 ## Status and scope
 
 This file is the canonical record for the current Start-to-active-run screen. It replaces earlier
