@@ -1,0 +1,41 @@
+name: Tests
+
+# Runs the JUnit suite on every push and pull request touching master.
+# The suite is designed to need no MySQL instance and no API key:
+#   - storage is tested through a package-private ConnectionProvider seam
+#   - ResultSet is faked with java.lang.reflect.Proxy
+#   - the live-API evaluation harnesses are separate classes with main() methods,
+#     deliberately outside Surefire's *Test.java pattern, so they never run here
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: mvn test (Java 17)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: maven
+
+      - name: Run the test suite
+        run: mvn -B --no-transfer-progress test
+
+      - name: Upload test reports on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: surefire-reports
+          path: target/surefire-reports/
+          retention-days: 7
