@@ -26,7 +26,7 @@ similar past runs, and generates a short response about it.
 | **Weather** | Automatic daily-mean temperature and conditions via Open-Meteo, fetched once at log time and stored with the run |
 | **Comparisons** | Up to 10 comparable runs (same route or similar distance, last 180 days), producing four explanatory signals with evidence counts and confidence tiers |
 | **RunStyle** | A local, deterministic strategy profile across three families and three maturity stages |
-| **Response** | 2–3 sentences from the Anthropic API grounded in the run's real data, with a local fallback when the API is unavailable |
+| **Response** | A creative 2–3 sentence AI response grounded in the run’s actual data, including music context from what the runner listened to during the run. Depending on relevance, the song may be ignored, briefly referenced, or become the central theme of the response. Includes a local fallback when the API is unavailable.|
 
 ---
 
