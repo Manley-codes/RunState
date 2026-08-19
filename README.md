@@ -50,14 +50,10 @@ These are the decisions I would want to talk through in an interview.
 
 ## Test suite
 
-- **383 tests, 0 failures, 0 errors, 0 skipped** — last verified August 18, 2026
-- 9 test classes: 175 `@Test` methods plus 18 `@ParameterizedTest` methods, expanding to 383
-  executed cases at run time
-- **7,276 lines of test code against 4,082 lines of source**
-- No live MySQL instance and no API key required
-- Live-API evaluation harnesses are separate classes with `main()` methods, deliberately outside
-  the Surefire naming pattern so they never run as part of the suite
-
+- 383 automated tests, 0 failures
+Runs automatically on every push to master through GitHub Actions
+Tests run without a live MySQL database or API key
+Covers storage, run analysis, personal records, RunStyle, AI-response behavior, and failure handling
 ```
 mvn test
 ```
@@ -75,9 +71,7 @@ App ──► RunConsole ──► RunStorage ──────► MySQL
               └──────► RunAgent ────────► Anthropic API
 ```
 
-Service separation is deliberate. `RunAgent` owns everything that talks to the model, including
-prompt construction. `RunStyleService` owns profile detection and `Runner` only delegates to it.
-`ComparisonService` filters candidates and grades evidence before any of it reaches a prompt.
+RunState separates major responsibilities instead of putting everything into one class. Storage handles saving and loading runs, the weather service retrieves conditions, the comparison system analyzes similar runs, RunStyle identifies personal running patterns, and the AI service builds responses from the results. This separation keeps each part easier to test, change, and reason about independently.
 
 A rendered diagram of the full current run flow, including failure paths, is in
 [docs/CURRENT_RUN_FLOW.md](docs/CURRENT_RUN_FLOW.md).
