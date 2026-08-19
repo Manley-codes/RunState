@@ -3,7 +3,7 @@
 
 **RunState is a running app designed to understand a run beyond its numbers by interpreting the environment surrounding the experience.**
 
-It combines run data with personal history, pre and post run energy, effort, weather, route context, run gear and music to build a clearer picture of what made a run feel and perform the way it did. After each logged run, RunState can surface personal patterns, compare similar efforts, and generate a contextual AI response grounded in what actually happened.
+It combines run data with personal history, pre- and post-run energy, effort, weather, route context, running gear, and music to build a clearer picture of what made a run feel and perform the way it did. After each logged run, RunState can surface personal patterns, compare similar efforts, and generate a contextual AI response grounded in what actually happened—including the music that shaped the experience when relevant.
 
 Learning project and portfolio piece. Java 17, Maven, MySQL, JUnit 5.
 
