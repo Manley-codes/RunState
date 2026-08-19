@@ -126,10 +126,7 @@ The console application is built and working. Phases 1 through 5 — console app
 MySQL persistence, RunStyle detection, the AI agent, and context expansion for music and weather —
 are complete.
 
-**Music Intelligence V1 is implemented but not accepted.** Its evaluation harness was built, run,
-and blind-graded, and the feature did not meet the quality bar that was set for it before testing
-began. That result is documented rather than worked around. The full record, including what was
-tried and what the graders found, is in
+**Music Intelligence V1 is implemented but not accepted.** Music Intelligence V1 has been implemented and formally evaluated. It did not meet the quality bar defined before testing, so it has not been promoted as a finished feature. The evaluation process, results, and lessons learned are documented in
 **[docs/EVALUATION_RECORD.md](docs/EVALUATION_RECORD.md)**.
 
 Current work is UI design for a mobile client — defining what screens need so the backend contract
