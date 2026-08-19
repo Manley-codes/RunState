@@ -56,6 +56,8 @@ database and no API key**.
 context and described as associations. They never create or strengthen a RunStyle. The RunStyle
 profile itself is computed locally and deterministically and is never sent to the model.
 
+**Music context is modeled deliberately.** RunState distinguishes between a known song, music without an identified track, intentional silence, and unknown music state rather than treating them as the same thing. That state determines what the AI is allowed to say about music, helping responses use a song meaningfully when appropriate without inventing context that was never recorded. The offline fallback remains music neutral.
+
 **Failure handling is graded by consequence.** A weather or API failure degrades to a fallback,
 because neither determines whether the run was durably recorded. A storage failure does not
 degrade — it stops.
