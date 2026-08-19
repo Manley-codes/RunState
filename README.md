@@ -112,8 +112,7 @@ Highlights:
 - [Current run flow](docs/CURRENT_RUN_FLOW.md) — the verified as-is behavior, with a flowchart
 - [AI agent design](docs/AI_AGENT.md) — identity, prompt architecture, and constraints
 - [Data and privacy](docs/DATA_PRIVACY.md) — exactly what leaves the machine, and when
-- [ADR-001: RunStyle surfacing](docs/design/adr_001_runstyle_surfacing.md) — a rejected design,
-  and why
+
 
 ---
 
