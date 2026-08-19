@@ -1,9 +1,9 @@
 # RunState
 [![Tests](https://github.com/Manley-codes/RunState/actions/workflows/ci.yml/badge.svg)](https://github.com/Manley-codes/RunState/actions/workflows/ci.yml)
 
-**RunState is a running app designed to help runners understand more than pace, distance, and time.**
+**RunState is a running app designed to understand a run beyond its numbers by interpreting the environment surrounding the experience.**
 
-It combines run data with personal history, energy, effort, weather, route context, and music to build a clearer picture of what made a run feel and perform the way it did. After each logged run, RunState can surface personal patterns, compare similar efforts, and generate a contextual AI response grounded in what actually happened.
+It combines run data with personal history, pre and post run energy, effort, weather, route context, run gear and music to build a clearer picture of what made a run feel and perform the way it did. After each logged run, RunState can surface personal patterns, compare similar efforts, and generate a contextual AI response grounded in what actually happened.
 
 Learning project and portfolio piece. Java 17, Maven, MySQL, JUnit 5.
 
