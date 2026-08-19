@@ -1,12 +1,9 @@
 # RunState
 [![Tests](https://github.com/Manley-codes/RunState/actions/workflows/ci.yml/badge.svg)](https://github.com/Manley-codes/RunState/actions/workflows/ci.yml)
 
-**A Java application that logs completed runs and responds to what actually happened.**
+**RunState is a running app designed to help runners understand more than pace, distance, and time.**
 
-RunState is a run tracker built around one idea: the numbers matter less than what they meant.
-It records a run, protects that record, compares it against your own history, and returns a short
-contextual response grounded in the actual data — the energy shift, the effort cost, how this run
-sits against similar past runs.
+It combines run data with personal history, energy, effort, weather, route context, and music to build a clearer picture of what made a run feel and perform the way it did. After each logged run, RunState can surface personal patterns, compare similar efforts, and generate a contextual AI response grounded in what actually happened.
 
 Learning project and portfolio piece. Java 17, Maven, MySQL, JUnit 5.
 
