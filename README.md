@@ -1,7 +1,7 @@
 # RunState
 [![Tests](https://github.com/Manley-codes/RunState/actions/workflows/ci.yml/badge.svg)](https://github.com/Manley-codes/RunState/actions/workflows/ci.yml)
 
-**A Java console application that logs completed runs and responds to what actually happened.**
+**A Java application that logs completed runs and responds to what actually happened.**
 
 RunState is a run tracker built around one idea: the numbers matter less than what they meant.
 It records a run, protects that record, compares it against your own history, and returns a short
