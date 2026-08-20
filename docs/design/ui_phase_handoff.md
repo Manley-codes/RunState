@@ -20,6 +20,10 @@ Amended August 14 2026: bounded post-run Energy and Effort as compact optional a
 upcoming Run Complete pass; no sequential required-question flow carries into mobile.
 Amended August 16 2026: separated the immediate factual run receipt from the contextual reflection,
 settled late-input behavior, and left exact response timing to the Run Complete prototype.
+Amended August 20 2026: the Log correctness pass and three Start passes landed, and both screens went
+up as a public preview. The Start screen's current description moved to `design_start_run_v7.md`; the
+preview itself is documented in `design_preview_build.md`. Section 7's rule about working documents
+was narrowed after it was being applied more broadly than intended.
 
 ---
 
@@ -29,14 +33,18 @@ settled late-input behavior, and left exact response timing to the Run Complete 
 Roadmap step one is closed. See `music_intelligence_v1_evaluation.md`.
 
 **The UI phase started August 4. Log History and Start/Active Run now have stable design
-foundations.** Neither is production mobile code. The Start screen's canonical current behavior,
-including its active tracking transformation and Pause → Stop / Play state, lives in
-`design_start_active_run.md`. Its optional energy rules live in `design_state_scan.md`.
+foundations.** Neither is production mobile code. **The Start screen's current behavior lives in
+`design_start_run_v7.md`** — `design_start_active_run.md` describes the August 13 version and is now
+history. The optional energy rules still live in `design_state_scan.md`.
 
-**`RunState - LogPhase2.html` in the repo root is NOT the current state.** More stable and preferred
-versions exist in Claude Design and have not been downloaded yet. The repo copy is a snapshot from
-part-way through; changes have been made since. **Do not treat it as authoritative** — ask for the
-current export before working from a file.
+**Both screens are now publicly hosted** at `manley-codes.github.io/runstate-preview`, built
+August 16–19 with AfroTech in November as the reason. What's live, how to update it, and what
+testing on a real phone surfaced are all in `design_preview_build.md`.
+
+**`RunState - LogPhase2.html` and `RunState - logphase1.html` in the repo root are NOT the current
+state.** They are snapshots from part-way through, kept as history. The current exports are the
+hosted ones. **Do not work from the repo-root files** — use the hosted version, or ask Claude Design
+for the current export.
 
 Earlier states are `logphase1.html` and `Music Replies.html`. The `RunState - Soundtrack Log v2–v6`,
 `Type Scale`, `Metric Ring Options`, `Merge Options`, and `Accent Comparison` files are Cowork's
@@ -124,6 +132,13 @@ triggered `0.32s` after entry, and collapse is triggered at `1.20s`. The row's e
 motion** from first movement to fully closed. The brief fully-open dwell — not an artificially fast
 total animation — is what keeps it feeling like a peek. The earlier “less than half a second” note is
 superseded.
+
+**A correctness pass ran August 16 and all five items landed.** Nothing new was designed; these were
+fixes to the existing build. In short: a phone-viewport variant, the `READ FROM` chips removed, the
+reply card sized to its content instead of a fixed 470px ceiling, month headers computed from the
+data instead of recognising only `JUL` and `JUN`, and one source of truth for each reply's text
+instead of separate copies for display and speech. Full detail with the reasoning behind each is in
+`design_preview_build.md`.
 
 `REPLAY` remains **provisional and currently leans toward removal, but removal is not decided.** It
 was added so Manley could repeatedly hear the voice replies while judging and adjusting them; that
@@ -270,11 +285,11 @@ Not blocking; revisit later.
   **The metrics panel has the same cold-start hole.** It rests on the most recent run when nothing is
   open, and with zero runs there is no most recent run. Same screen, same day — worth deciding
   together.
-- **`READ FROM` chips — current direction is removal from the persistent row.** The chips were meant
-  to show what the reply drew on, which is the UI answer to fabricated telemetry, but as permanent
-  static decoration they answer a question nobody asked. Removing the chips does **not** discard
-  provenance as an idea: the better later form remains on-demand, revealed from the reply when a
-  runner wants to know what informed it.
+- **`READ FROM` chips — removed August 16, done.** The chips were meant to show what the reply drew
+  on, which is the UI answer to fabricated telemetry, but as permanent static decoration they
+  answered a question nobody asked. Removing them did **not** discard provenance as an idea: the
+  better later form is on-demand, revealed from the reply when a runner wants to know what informed
+  it. **That on-demand form has not been designed** and is a separate future pass.
 - **`Remove response`** remains a separate wording/behavior cleanup if the control survives; it only
   collapses the record and does not remove anything.
 - **Dawn and sun glyphs read too similarly** at small size.
@@ -334,10 +349,23 @@ finalisation, Spring Boot from the screen contracts, and mobile/GPS remain later
 
 **Immediate sequence — one small pass at a time**
 
-**Completed August 13:** the pre-run energy, Start, and Active Run pass has a stable prototype
-foundation, and the most-recent-record quick peek has been added to Log History with its accepted
-timing above. See `design_start_active_run.md`; do not re-derive Start behavior from the older State
-Scan notes.
+**Completed August 13:** the pre-run energy, Start and Active Run pass reached a stable prototype
+foundation, and the most-recent-record quick peek was added to Log History with its accepted timing
+above.
+
+**Completed August 16–19, four passes:**
+
+1. **Log History correctness pass** — five fixes, all landed. Summarised in §3.
+2. **Start Run, the RunStyle card** — the pre-run screen now shows the runner's last run at this
+   place. This is the one element on that screen saying something only RunState can say. Produced V7.
+3. **Start Run, energy absorbed into the ring** — choosing an energy level sends the tiles up into
+   the ring and the controls rise into the space. Manley added an Undo afterward.
+4. **Start Run, preview prep** — phone viewport, a guidance line, no new design.
+
+**Then both screens went up as a public preview.** See `design_preview_build.md`.
+
+**For current Start behavior read `design_start_run_v7.md`**, not `design_start_active_run.md` and
+not the older State Scan notes.
 
 1. **Progressive-input ladder planning.** The shoe slice now has an accepted interactive foundation:
    `Add Shoes` search, saved/add/select behavior, Start-screen confirmation, and per-shoe mileage.
@@ -394,11 +422,24 @@ choices, which Manley preferred — so the documents describe a screen that does
 built file is the source of truth, not the spec that was never followed.** Claude Design holds it
 and can carry the treatment forward to later screens, which is what consistency actually depends on.
 
-⚠️ **The durable rule, which outlives those two files:** per-pass handoffs and decision queues are
-working documents. They live outside the repo and they get deleted. A decision only survives if it
-is written into `docs/design/` before its working document goes away. **This project has
-already lost decisions that way once** — see the July 9 DJ-session note in
+**What happens to working documents — narrowed August 20, 2026.**
+
+Per-pass handoffs and decision queues live outside the repo and get deleted when they've served
+their purpose. So anything worth keeping has to move into `docs/design/` before that happens. The
+project has lost something that way once — see the July 9 DJ-session note in
 `music_feature_register.md`.
+
+⚠️ **This was being read too broadly, and Manley flagged it.** As originally written it implied that
+any choice made during a design session had to be written into the repo or it "didn't count," which
+turned active exploration into a series of forced commitments. That was never the point.
+
+**What it actually means:** move the *conclusions* — why something failed, a constraint that was
+discovered, reasoning that's worth having later. Working notes can stay working notes. A design
+choice made mid-exploration is provisional and does not need to be promoted into a project decision
+to be legitimate.
+
+The collaboration side of this — that choices are provisional unless Manley says otherwise, and that
+nobody else decides on his behalf that something is durable — is recorded in `collab_style.md`.
 
 **Live documents to read first:** `idea_organization_analysis.md`, `music_feature_register.md`,
 `run_initiation_register.md`, `adr_001_runstyle_surfacing.md`. All four are indexed in `MEMORY.md`
