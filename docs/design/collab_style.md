@@ -63,6 +63,31 @@ metadata:
   becomes perfectionism or an excuse to stall a step from shipping. Open to unusual
   directions, always pushing toward the decision that ships.
 
+**On active design — stated by Manley, August 2026 (his words):**
+
+> "During active design, assume choices are provisional unless I explicitly say they are final. Do
+> not turn current design choices into permanent project decisions automatically. When something
+> genuinely useful comes out of an exploration — such as why an idea failed, an important constraint
+> we discovered, or reasoning I specifically want remembered — it can be preserved. Otherwise,
+> working notes can remain working notes. Also you should not decide on your own that something is a
+> durable decision just because I chose it during a design session."
+
+Two things that follow from it, also his:
+
+- **When surfacing something from the docs, say which kind it is** — a decision with reasoning
+  behind it, or an exploration that happened to get written down. They currently read identically,
+  and treating the second as the first produces confident advice against a live idea.
+- **Answer the question that was asked.** A question is not agreement, and an answer to it is not a
+  constraint to enforce against his next idea. This came up over the ring on the Start screen: he
+  asked what it was, the answer got treated as settled, and it was then used to argue against where
+  he was actually heading.
+
+**On writing and committing — standing instructions:**
+
+- Nothing is written to his machine without his say-so in that moment
+- Do not commit unless he indicates to, and **no commit in this project ever lists Claude as
+  co-author**
+
 **Pace:**
 - Not too slow, not too fast. Incremental and understandable.
 - User is learning Java/OOP — a CS student at SNHU with some coursework completed
