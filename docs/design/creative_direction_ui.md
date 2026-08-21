@@ -166,6 +166,13 @@ fitness software.
   clean functional labels, and selective editorial character are all available; the historical
   universal `NO serif` rule does not govern the current direction.
 
+**Seasonal palette exploration — provisional, August 21:** RunState may eventually let its palette
+shift with the season, giving several successful directions a purposeful home rather than forcing
+one palette to carry the entire year. Possible references include ACG Frost for winter, Court Sage
+for spring, Adventure × ACG Frost for summer, and Sonny or King for autumn. This is not a locked
+decision or an AfroTech requirement; it is a future theming possibility to revisit after the core
+journey is stable.
+
 ### August 13 working proof — Start to Active Run
 
 The circular Start/Active Run prototype is the clearest current test of the vision. Its canonical
