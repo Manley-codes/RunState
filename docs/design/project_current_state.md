@@ -29,13 +29,15 @@ code.
   voice assets; details and open dependencies live in `ui_phase_handoff.md`.
 - The future mobile Run Complete direction shows all three post-run Energy choices prominently and
   keeps Effort behind a quieter `EFFORT +` action rather than using sequential required questions.
-  Either, both or neither may be recorded; ignored values remain unknown. It also separates an
-  immediate durable-save receipt from the
-  contextual reflection: metrics and a short factual audio confirmation appear first, then the
-  one-time reflection uses whatever optional values exist when its request begins. Late values still
-  save for future patterns and comparisons and never regenerate the reply. Exact timing is left to
-  the prototype rather than fixed in documentation. The built console flow remains unchanged. See
-  `design_effort_cost.md` and `design_run_response_system.md`.
+  Either, both or neither may be recorded; ignored values remain unknown. After durable local save,
+  metrics and a short factual audio confirmation appear while RunState prepares four responses from
+  one factual foundation: `Spent`, `Feeling Good`, `Powered Up`, and no selection. Energy selects
+  the one immediate response that is revealed and stored; the candidates may differ creatively in
+  interpretation and structure, not only in their ending. Effort does not change that response. It
+  is stored for future comparisons, Quiet Gains, runner learning, RunStyle or Run Rhythm analysis,
+  and accurate references to past effort in later messages. Exact fallback timing is left to the
+  prototype. The built console flow remains unchanged. See `design_run_response_system.md` and
+  `design_effort_cost.md`.
 - The current queue is: finish the remaining progressive-input ladder (route, surface and company)
   → Run Complete → Log History refinement → Core Running Foundation Review → music feature
   inventory and prioritization. RunStyle Sound is one music candidate, not the predetermined next

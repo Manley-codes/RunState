@@ -16,7 +16,7 @@ design_comparison_logic_fix.md, which consumes this effort data.
 From the Codex RPE session. Direction approved, built as specified (with the Option A setter
 correction noted under Key changes).
 
-## Current mobile Run Complete direction — August 14, 2026
+## Current mobile Run Complete direction — updated August 20, 2026
 
 **STATUS: CURRENT UI DIRECTION, NOT BUILT.** This section governs the future mobile Run Complete
 screen. The console record below remains accurate history, but its sequential prompts are not the
@@ -28,14 +28,14 @@ Energy and effort remain separate because they answer different things:
 - **Energy:** how the runner feels after the run — `Spent / Feeling Good / Powered Up`.
 - **Effort:** what the run cost — `Smooth / Working / Heavy / Empty tank`.
 
-### August 16 correction to the August 14 addition pattern
+### Input presentation
 
-The August 14 direction is **partly superseded**. Energy and Effort remain separate, optional and
-independently skippable, but they no longer both rest behind collapsed `+` controls:
+Energy and Effort remain separate, optional and independently skippable, but they do not have the
+same prominence or the same job:
 
 - Show all three post-run Energy choices — `Spent / Feeling Good / Powered Up` — clearly and
-  prominently at rest while the factual receipt plays. Energy is the main invitation because it is
-  closer to RunState's identity and can immediately inform the reflection.
+  prominently at rest while the factual receipt plays. Energy is the main invitation and selects
+  the immediate post-run response.
 - Keep only Effort collapsed behind the quieter `EFFORT +` action. Tapping it reveals
   `Smooth / Working / Heavy / Empty tank`, either inline or in a lightweight sheet. After selection,
   it may return to a compact confirmation such as `EFFORT · HEAVY`.
@@ -53,11 +53,10 @@ more likely to be intentional than values entered only to dismiss a prompt. The 
 should test whether visible Energy feels inviting rather than mandatory and whether the quieter
 Effort action remains discoverable.
 
-### Two-stage Run Complete response — August 16, 2026
+### Preconstructed Energy response family — August 20, 2026
 
 **STATUS: CURRENT DIRECTION, NOT BUILT.** Run Complete now separates immediate confirmation from the
-contextual reflection so the reply stays close to the finish without making Energy or Effort
-mandatory.
+contextual reflection and gives Energy and Effort different responsibilities.
 
 1. Ending the run first completes a durable local save. The app may say `Run saved` only after that
    succeeds. On mobile, `saved` means recoverable on the phone; it must not imply that cloud sync has
@@ -67,19 +66,22 @@ mandatory.
    reflection and does not require a generative-model call.
 3. Post-run Energy choices are clearly visible during that receipt. `EFFORT +` remains available
    with lower prominence. Either value, both values, or neither may be entered.
-4. The contextual reflection is requested a natural beat after the runner stops adding values. If
-   the runner adds nothing, a longer fallback still requests the reflection so every saved run gets
-   one. **No fixed number of seconds is specified.** The prototype must find the timing by testing
-   the real stop-breathe-look-tap moment.
-5. The reflection uses the Energy and Effort values present when its request begins. It is created
-   once and never regenerated. Values entered afterward still save to the run and remain useful for
-   future patterns and comparisons, but they do not rewrite that run's reflection.
-6. Effort may change the reflection when it genuinely changes the run's story. RunState does not
-   promise a more unique reply merely because Effort was entered.
+4. After save succeeds, RunState silently prepares four contextual responses from one shared factual
+   and evidentiary foundation: `Spent`, `Feeling Good`, `Powered Up`, and no selection.
+5. Choosing Energy selects its prepared response. If no Energy is chosen, a longer
+   prototype-tuned fallback selects the no-selection response. Only that response is revealed,
+   spoken and stored; it is never regenerated.
+6. The candidates may differ in interpretation, emphasis, structure, persona use, opening, middle
+   or close. They must keep objective run and music facts consistent, but they are not restricted to
+   swapping one sentence or changing only the ending.
+7. Effort does not modify the immediate response. Whenever it is entered, it saves as longitudinal
+   evidence for future comparisons, Quiet Gains, runner learning, RunStyle or Run Rhythm analysis,
+   and accurate references to past effort in later messages.
 
-This makes run persistence and reflection generation separate mobile operations. Saving the run
-must not depend on the AI call, and the factual receipt fills the immediate emotional moment while
-the optional input window and reflection request complete.
+This makes run persistence and response preparation separate mobile operations. Saving the run must
+not depend on the AI call, and the factual receipt fills the immediate emotional moment while the
+Energy response family is prepared. A late Energy answer still saves but does not replace the
+response already committed to the run.
 
 **Deeper Run Analysis remains an exploration, not a prerequisite.** A runner may later be offered a
 reversible choice for more analysis — possibly during onboarding and again after the app has shown
@@ -92,12 +94,12 @@ brainstorm. Runner-reported Effort remains exactly that: a runner report.
 
 **Still open for the Run Complete design pass:** final group label, inline versus lightweight-sheet
 presentation, exact visual hierarchy and motion, prototype-tuned timing for the input window and
-fallback, and how discoverability/response quality will be tested. The late-input behavior is no
-longer open: late values save for future learning and never regenerate the visible reflection.
+no-selection fallback, the visible response-preparation state, and how discoverability/response
+quality will be tested. The four-branch behavior and Effort's longitudinal role are not open.
 
-**Out of scope for this screen pass:** rewriting or recalibrating the reflection itself. Run Complete
-decides where and when the existing response appears and which optional values reach it; reply craft
-remains in the separate AI and music-response lane.
+**Out of scope for this screen pass:** writing or recalibrating the four candidate responses. Run
+Complete decides where and when the selected response appears; response craft and four-candidate
+evaluation remain in the separate AI and music-response lane.
 
 ## The gap
 

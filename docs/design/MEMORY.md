@@ -9,7 +9,7 @@ Index only. One line per file — detail lives in the file. Keep it that way.
 | Item | Unlocks when | Detail lives in |
 | --- | --- | --- |
 | **Progressive-input ladder is partially resolved** — shoe search/add/select/mileage now has a Start-screen home; route, surface and company remain open | **NEXT UI PASS** | `design_shoe_selection.md` + `design_state_scan.md` |
-| Run Complete screen — visible Energy choices, quieter `EFFORT +`, immediate durable-save receipt and one-time input-aware reflection behavior are bounded; exact layout and timing still need the pass | After remaining State Scan planning | `design_effort_cost.md` + `design_run_response_system.md` + `ui_phase_handoff.md` |
+| Run Complete screen — after durable save and the factual receipt, RunState prepares `Spent / Feeling Good / Powered Up / no selection` response candidates from one factual foundation; Energy selects the immediate response, while quieter `EFFORT +` stores longitudinal evidence only. Exact layout, motion and fallback timing still need the pass | After remaining State Scan planning | `design_run_response_system.md` + `design_effort_cost.md` + `ui_phase_handoff.md` |
 | Log History refinement / QA pass — empty states, `REPLY | SPLITS` expanded-record mockup, `REPLAY` decision, dawn-vs-sun glyphs | After Run Complete; before Foundation Review | `ui_phase_handoff.md` §4 |
 | **Core Running Foundation Review** — one question: is record → preserve → understand → manage → use-later ready for a real interface | After the rough screens and Log History refinement | `project_current_state.md` |
 | **Music feature inventory and prioritization** — review the full music layer before choosing what to design or build next; RunStyle Sound is one candidate, not the predetermined next screen | After Foundation Review | `design_music_selection_system.md` + `music_feature_register.md` |
@@ -83,12 +83,13 @@ Claude Code if needed · Manley decides.
   recency and confidence.
 - [RunStyle V1](design_runstyle_v1.md) — BUILT + VERIFIED. Local deterministic profile, never sent
   to the AI.
-- [Effort cost](design_effort_cost.md) — console collector BUILT; future mobile Energy/Effort input
-  is now bounded as visible Energy choices plus quieter optional `EFFORT +` on Run Complete. Quiet
-  Gains remains the main unlock.
+- [Effort cost](design_effort_cost.md) — console collector BUILT; future mobile Run Complete uses
+  visible Energy to select the immediate prepared response and quieter optional `EFFORT +` as
+  longitudinal evidence. Quiet Gains remains the main unlock.
 - [Weather cleanup](design_weather_cleanup.md) — SHIPPED. Persistence fix, forecast API,
   WeatherService.
-- [Post-run response system](design_run_response_system.md) — locked response and Run Style logic.
+- [Post-run response system](design_run_response_system.md) — canonical mobile response-family
+  contract plus the shipped console response and RunStyle rules.
 
 ## Music Intelligence — stopped at a stable direction, August 3 2026
 

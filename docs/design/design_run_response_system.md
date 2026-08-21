@@ -7,28 +7,65 @@ metadata:
 
 Every successfully saved run gets a contextual response. No exceptions.
 
-## Mobile Run Complete delivery contract — August 16, 2026
+## Mobile Run Complete delivery contract — updated August 20, 2026
 
-The future mobile flow preserves the immediate post-run moment without making subjective input a
-gate:
+**STATUS: CURRENT MOBILE DIRECTION, NOT BUILT.** This contract governs the future mobile flow. The
+shipped console agent still uses the implementation described later in this file.
 
-- The run is durably saved locally before any success language or reflection request. `Run saved`
-  means the phone can recover the run; it does not claim that server sync has finished.
-- Metrics appear immediately with a short audible factual receipt built from saved run facts. That
-  receipt is deterministic confirmation, not the contextual AI reflection.
-- All three post-run Energy choices are visible and prominent while the receipt plays. Effort stays
-  behind a quieter `EFFORT +` action. Either, both or neither may be recorded.
-- The reflection request begins a natural beat after the runner stops adding values, with a longer
-  fallback when no value is entered. Exact timing is a prototype decision, not a fixed duration in
-  this contract.
-- The request snapshots whatever Energy and Effort exist at that moment. Later answers still save
-  and feed future patterns and comparisons, but the reflection is never regenerated.
-- No answer is required to receive a reflection. The existing rule at the top of this file still
-  holds for every successfully saved run.
+### Sequence
 
-The mobile API must therefore support durable run saving and contextual-response generation as
-separate operations. AI or speech failure must never undo or block the saved run; the existing local
-fallback principle still applies.
+1. The run is durably saved locally before any success language or response preparation. `Run
+   saved` means the phone can recover the run; it does not claim that server sync has finished.
+2. Metrics appear immediately with a short audible factual receipt built from saved run facts. That
+   receipt is deterministic confirmation, not the contextual reflection.
+3. All three post-run Energy choices are visible and prominent while the receipt plays. Effort stays
+   behind a quieter `EFFORT +` action. Either, both or neither may be recorded.
+4. While the runner sees the choices, RunState silently prepares a four-response Energy family from
+   one shared factual and evidentiary foundation: `Spent`, `Feeling Good`, `Powered Up`, and a
+   first-class no-selection response.
+5. Choosing Energy selects its prepared response. If the runner chooses nothing, a prototype-tuned
+   fallback selects the no-selection response. Only the selected response is revealed, spoken and
+   stored in Log History; the unused candidates disappear.
+6. A late Energy answer still saves for future learning but never replaces the response already
+   committed to that run. No answer is required to receive a response.
+
+### Preconstructed Energy response family — LOCKED DIRECTION
+
+The four candidates share the same saved run facts, key moments and approved music/persona evidence,
+but they are **not** restrained variations of one template. Energy may change the interpretation,
+emphasis, structure, persona use, opening, middle or close. The differing material does not have to
+sit at the end. The branches represent alternative conditional truths; they are not claims that are
+meant to be simultaneously true.
+
+The creative boundary is deliberately narrow:
+
+- objective run and music facts remain consistent across all four candidates;
+- each Energy candidate must honor its named state without turning that state into a grade of the
+  run;
+- no candidate may invent a run event, song event or other concrete evidence; and
+- the no-selection candidate uses only known evidence and never calls attention to a skipped answer.
+
+Within that boundary, the responses are allowed to diverge creatively. Evaluation should inspect
+all four candidates side by side for factual consistency and judge each one for creative quality.
+
+### Effort has a separate mobile job — LOCKED DIRECTION
+
+`Smooth / Working / Heavy / Empty tank` remains optional and is still captured behind `EFFORT +`,
+but it does **not** select, modify or regenerate the immediate post-run response. Effort is stored as
+longitudinal evidence: it can support future comparable-run messages, Quiet Gains, runner learning,
+RunStyle or Run Rhythm analysis, and a later response that accurately references how a past run
+landed. Any cross-run or pattern claim still has to meet the applicable evidence threshold.
+
+This is the product division: **Energy helps RunState speak to this run immediately. Effort helps
+RunState understand the runner across runs.**
+
+### Processing consequence
+
+Durable run saving and response preparation remain separate operations. The response family may
+begin only after local save succeeds; AI or speech failure must never undo or block the saved run.
+Exact fallback timing and the visible preparation state belong to the Run Complete prototype. The
+implementation may prepare the family in one structured request or another measured form, but the
+runner-facing behavior above is the contract.
 
 **Canonical energy labels (harvested July 7, 2026 from archived ENERGY_STATE_DESIGN.md):**
 
@@ -55,7 +92,7 @@ remains UI work and does not alter these stored meanings. Decision record:
 - LOW → HIGH energy lift always adds a second line on top of the main message
 - Never mention below-average performance — stay quiet if numbers are down
 
-**Current implementation:**
+**Current console implementation:**
 - `RunAgent.buildRunResponse(Run)` is the public entry point (single Run argument — no avgPace
   or avgDistance params; those rolling-average inputs were removed with Comparison Repair V1)
 - Tries Anthropic API first (claude-haiku-4-5-20251001); 5-second connect timeout on the shared
