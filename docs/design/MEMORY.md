@@ -41,8 +41,8 @@ Claude Code if needed · Manley decides.
   Written plainly. Read this, not the file below.
 - [Start and Active Run](design_start_active_run.md) — HISTORY. The August 13 version. Kept for the
   reasoning that still holds; its visual description does not.
-- **[Public design preview](design_preview_build.md)** — the two hosted screens, how to update them,
-  and what testing on a real phone surfaced.
+- **[Public design preview](design_preview_build.md)** — the hosted Start and Run Complete-to-Log
+  History journey, how to update them, and what testing on a real phone surfaced.
 - [Shoe selection and mileage](design_shoe_selection.md) — accepted `Add Shoes` prototype,
   Start-screen selection, automatic completed-run mileage contract, and pending recoverable Undo.
 - [State Scan](design_state_scan.md) — pre-run energy is three optional LOW/MODERATE/HIGH tiles on

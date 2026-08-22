@@ -1,6 +1,6 @@
 ---
 name: design-preview-build
-description: "The public hosted design preview - what is live, where, how to update it, and what putting it on a real phone taught us. August 19 2026."
+description: "The public hosted design preview - what is live, where, how to update it, and what putting it on a real phone taught us. Updated August 22 2026."
 metadata:
   type: project
 status: LIVE - a real public URL. Contents are early prototypes and are expected to be replaced.
@@ -8,8 +8,9 @@ status: LIVE - a real public URL. Contents are early prototypes and are expected
 
 # The public design preview
 
-**What this is:** two RunState screens hosted on the open web so someone with no context can open a
-link on their phone and see the work. Built August 16–19, 2026, as a public phone-review surface.
+**What this is:** two RunState prototype entries hosted on the open web so someone with no context
+can open a link on their phone and see the work. Built August 16–22, 2026, as a public phone-review
+surface.
 
 **These are prototypes, not the app.** Everything on them uses example data. They will be replaced
 as the design continues, and that's expected — this file describes what's live now, not a target to
@@ -26,7 +27,11 @@ Hosted with GitHub Pages.
 | --- | --- | --- |
 | Landing | `manley-codes.github.io/runstate-preview/` | Dark page, two cards, one line of framing. `index.html` |
 | Start a run | `.../start.html` | Start Run V7 |
-| Log history | `.../log.html` | Log History, City dawn background |
+| Finish a run | `.../complete.html` | Run Complete through the stored Log History record |
+
+The landing page now presents the pair as **Start a run** and **Finish a run**. The earlier
+standalone `log.html` remains hosted so previously shared links do not break, but the landing page
+no longer promotes it.
 
 **How to update a screen:** upload a new file with the same name, replacing the old one. The URL
 never changes, so any link already shared keeps working.
@@ -57,7 +62,20 @@ cold viewer's thirty seconds work:
 
 ---
 
-## The Log screen preview
+## The Run Complete and Log History preview — August 22
+
+`complete.html` is one self-contained prototype with one phone shell. Run Complete and Log History
+are two views inside that shell rather than separate phone displays. It demonstrates save-first
+completion, optional Energy and Effort, immediate Energy absorption into the visualizer, reflection
+arrival, failure and retry paths, and opening the exact stored record in Log History.
+
+The public landing page's second card was changed from **Log history** to **Finish a run** and now
+links to this combined journey. The source and runnable export are also preserved in the main
+project under `prototypes/run-complete-log-history/`.
+
+---
+
+## The earlier standalone Log screen preview
 
 Log History, with the **City dawn** background.
 
@@ -114,7 +132,7 @@ desktop alone would have caught none of this.
 who lands on a bare preview sees two screens and no engineering; a visitor who lands on the repo
 sees the tests, the decisions and the design record, and can click through to see it move.
 
-**Still to do:** put the preview link at the top of the main repo's `README.md`. Not done yet.
+The preview link is present near the top of the main repository's `README.md`.
 
 **Also stale:** `README.md` in the preview repo still describes the older single-screen setup, from
 before the Start screen and the landing page existed.

@@ -40,7 +40,8 @@ code.
   square into the visualizer and the selected reflection arrives from that motion. No Energy uses a
   quiet fallback window; Effort uses a lightweight sheet and may be entered late. Save/reflection
   failures, retry, reload and single-shell Log History continuity are settled in the prototype. The
-  built console flow remains unchanged. See `design_run_response_system.md` and
+  combined journey is published in the public design preview as **Finish a run**. The built console
+  flow remains unchanged. See `design_run_response_system.md` and
   `design_effort_cost.md`.
 - The next task is the narrow Core Running Foundation Review and mobile data contracts. Its output is
   a short gap list, not a new feature inventory. Android fixture work follows that review.
