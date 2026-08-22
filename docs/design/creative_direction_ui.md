@@ -170,7 +170,7 @@ fitness software.
 shift with the season, giving several successful directions a purposeful home rather than forcing
 one palette to carry the entire year. Possible references include ACG Frost for winter, Court Sage
 for spring, Adventure × ACG Frost for summer, and Sonny or King for autumn. This is not a locked
-decision or an AfroTech requirement; it is a future theming possibility to revisit after the core
+decision or a showcase requirement; it is a future theming possibility to revisit after the core
 journey is stable.
 
 ### August 13 working proof — Start to Active Run

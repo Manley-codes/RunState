@@ -7,10 +7,11 @@ metadata:
 
 Every successfully saved run gets a contextual response. No exceptions.
 
-## Mobile Run Complete delivery contract — updated August 20, 2026
+## Mobile Run Complete delivery contract — prototype-validated August 22, 2026
 
-**STATUS: CURRENT MOBILE DIRECTION, NOT BUILT.** This contract governs the future mobile flow. The
-shipped console agent still uses the implementation described later in this file.
+**STATUS: CURRENT MOBILE DIRECTION, VALIDATED IN THE INTERACTIVE PROTOTYPE, NOT BUILT.** This
+contract governs the future mobile flow. The shipped console agent still uses the implementation
+described later in this file.
 
 ### Sequence
 
@@ -19,15 +20,20 @@ shipped console agent still uses the implementation described later in this file
 2. Metrics appear immediately with a short audible factual receipt built from saved run facts. That
    receipt is deterministic confirmation, not the contextual reflection.
 3. All three post-run Energy choices are visible and prominent while the receipt plays. Effort stays
-   behind a quieter `EFFORT +` action. Either, both or neither may be recorded.
+   behind a quieter `EFFORT +` action that opens a dismissible lightweight sheet. Either, both or
+   neither may be recorded.
 4. While the runner sees the choices, RunState silently prepares a four-response Energy family from
    one shared factual and evidentiary foundation: `Spent`, `Feeling Good`, `Powered Up`, and a
    first-class no-selection response.
-5. Choosing Energy selects its prepared response. If the runner chooses nothing, a prototype-tuned
-   fallback selects the no-selection response. Only the selected response is revealed, spoken and
-   stored in Log History; the unused candidates disappear.
-6. A late Energy answer still saves for future learning but never replaces the response already
-   committed to that run. No answer is required to receive a response.
+5. Choosing Energy immediately sends that choice into the visualizer. The selected post-run state
+   lands beside the pre-run state, and its prepared reflection arrives directly out of the same
+   choreography; there is no additional waiting period after the absorption completes.
+6. If the runner chooses no Energy, a quiet window of approximately six seconds after the factual
+   receipt selects the no-selection response. Opening the Effort sheet holds that path while the
+   runner is interacting. No countdown or `Skip` button is shown.
+7. Only the selected response is revealed, spoken and stored in Log History; the unused candidates
+   disappear. A late Energy answer still saves for future learning but never replaces the response
+   already committed to that run. No answer is required to receive a response.
 
 ### Preconstructed Energy response family — LOCKED DIRECTION
 
@@ -59,13 +65,31 @@ landed. Any cross-run or pattern claim still has to meet the applicable evidence
 This is the product division: **Energy helps RunState speak to this run immediately. Effort helps
 RunState understand the runner across runs.**
 
+### Prototype-validated delivery states
+
+- The deterministic factual receipt is spoken once after save succeeds. The fixture wording is:
+  `Run saved. 4.2 miles in 38 minutes, 17 seconds.`
+- `EFFORT +` opens a dismissible lightweight bottom sheet containing `Smooth / Working / Heavy /
+  Empty Tank`. A choice returns to a compact state such as `EFFORT · HEAVY`. No group label is used.
+- Effort stays available after the reflection arrives. Late Effort saves without changing,
+  regenerating or replaying the reflection.
+- Save failure keeps the metrics visible, with `RUN NOT SAVED` and `RETRY SAVE`; Energy, Effort and
+  reflection remain locked until retry succeeds.
+- Reflection failure preserves `RUN SAVED` and offers `REFLECTION UNAVAILABLE`, `RETRY REFLECTION`
+  and `VIEW IN LOG HISTORY →`. Retrying reflection never saves or duplicates the run again.
+- Run Complete and RunState Log History are separate views inside one permanent phone shell. History
+  reads the same stored run record and exact reflection text. Back restores the completed screen
+  without saving, rebuilding, replaying speech or resetting inputs.
+- The reflection speaks once when it arrives. Entering History does not speak it again; `REPLAY` is
+  deliberate.
+
 ### Processing consequence
 
 Durable run saving and response preparation remain separate operations. The response family may
 begin only after local save succeeds; AI or speech failure must never undo or block the saved run.
-Exact fallback timing and the visible preparation state belong to the Run Complete prototype. The
-implementation may prepare the family in one structured request or another measured form, but the
-runner-facing behavior above is the contract.
+The implementation may prepare the family in one structured request or another measured form, but
+the runner-facing behavior above is the contract. A visible `BUILDING REFLECTION` state is needed
+only when the selected response is not ready when its reveal is due.
 
 **Canonical energy labels (harvested July 7, 2026 from archived ENERGY_STATE_DESIGN.md):**
 

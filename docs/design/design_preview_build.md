@@ -9,8 +9,7 @@ status: LIVE - a real public URL. Contents are early prototypes and are expected
 # The public design preview
 
 **What this is:** two RunState screens hosted on the open web so someone with no context can open a
-link on their phone and see the work. Built August 16–19, 2026, with AfroTech in November as the
-reason it exists.
+link on their phone and see the work. Built August 16–19, 2026, as a public phone-review surface.
 
 **These are prototypes, not the app.** Everything on them uses example data. They will be replaced
 as the design continues, and that's expected — this file describes what's live now, not a target to

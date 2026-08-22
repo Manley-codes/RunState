@@ -1,11 +1,11 @@
 ---
 name: ui-phase-handoff
-description: State of the UI design phase through August 13 2026. Log History and Start/Active Run have stable foundations; records the process, decisions, backend requirements, and current queue.
+description: State of the UI design phase through August 22 2026. Start, Active Run, Run Complete and Log History have stable prototype foundations; records the process, decisions, backend requirements, and current queue.
 metadata:
   type: project
 ---
 
-# UI phase — handoff, updated August 13 2026
+# UI phase — handoff, updated August 22 2026
 
 Written because the session that produced this got very long. Everything needed to continue is here.
 Amended August 7 2026: interaction behavior, `Share` status, the song-location requirement, the
@@ -26,6 +26,10 @@ preview itself is documented in `design_preview_build.md`. Section 7's rule abou
 was narrowed after it was being applied more broadly than intended. The mobile post-run contract was
 also refined: RunState prepares four Energy-conditioned responses after durable save; Energy selects
 the immediate response, while Effort is stored for longitudinal learning rather than changing it.
+Amended August 22 2026: the Run Complete pass was exercised through happy, no-selection, late-input,
+save-failure, reflection-failure, retry, reload, History and Back paths. Energy absorption now leads
+directly into reflection arrival; Effort uses a lightweight sheet; and Run Complete and Log History
+occupy one permanent phone shell backed by one stored run record.
 
 ---
 
@@ -39,9 +43,15 @@ foundations.** Neither is production mobile code. **The Start screen's current b
 `design_start_run_v7.md`** — `design_start_active_run.md` describes the August 13 version and is now
 history. The optional energy rules still live in `design_state_scan.md`.
 
+**Run Complete now also has a stable, tested prototype contract.** It saves before success language,
+absorbs a chosen Energy state into the visualizer and reveals the matching reflection from that same
+motion, keeps Effort separate and editable, preserves the run through reflection failure, and moves
+to Log History inside one fixed phone shell. Canonical behavior lives in
+`design_run_response_system.md` and `design_effort_cost.md`.
+
 **Both screens are now publicly hosted** at `manley-codes.github.io/runstate-preview`, built
-August 16–19 with AfroTech in November as the reason. What's live, how to update it, and what
-testing on a real phone surfaced are all in `design_preview_build.md`.
+August 16–19 as a public phone-review surface. What's live, how to update it, and what testing on a
+real phone surfaced are all in `design_preview_build.md`.
 
 **`RunState - LogPhase2.html` and `RunState - logphase1.html` in the repo root are NOT the current
 state.** They are snapshots from part-way through, kept as history. The current exports are the
@@ -369,13 +379,13 @@ above.
 **For current Start behavior read `design_start_run_v7.md`**, not `design_start_active_run.md` and
 not the older State Scan notes.
 
-1. **Progressive-input ladder planning.** The shoe slice now has an accepted interactive foundation:
+1. **Progressive-input ladder planning — partially complete and deferred.** The shoe slice now has
+   an accepted interactive foundation:
    `Add Shoes` search, saved/add/select behavior, Start-screen confirmation, and per-shoe mileage.
    `design_shoe_selection.md` is canonical; image cleanup and the accepted recoverable Undo removal
-   remain. Continue with route, then decide where surface and run company are asked, suggested,
-   prefilled and corrected. The route icon is still an entry point, not the answer.
-2. **Run Complete rough-screen pass.** A Claude Design mockup exists but has not been through this
-   process. The August 16 correction partly supersedes the August 14 addition pattern: all three
+   remain. Route, surface and run company return in a later input pass; they do not block the
+   Foundation Review. The route icon is still an entry point, not the answer.
+2. **Completed August 22 — Run Complete rough-screen pass.** All three
    Energy choices are visible and prominent at rest, while Effort alone stays behind the quieter
    `EFFORT +` action. Either, both or neither may be recorded; selecting Energy never opens Effort;
    and ignoring them stores unknown without a `Skip` action. The response contract is also settled:
@@ -386,10 +396,12 @@ not the older State Scan notes.
    spoken and stored. The candidates may differ creatively in interpretation, emphasis and
    structure; they are not restricted to changing the ending. Effort does not change or regenerate
    the immediate response. It saves for future comparisons, Quiet Gains, runner learning, RunStyle
-   or Run Rhythm analysis, and accurate historical references in later messages. `ADD TO THIS RUN`
-   is no longer a settled group label now that only one input is collapsed. Exact layout, motion,
-   group label, discoverability, preparation state and fallback timing are found in this prototype
-   pass. Canonical detail lives in `design_run_response_system.md` and `design_effort_cost.md`.
+   or Run Rhythm analysis, and accurate historical references in later messages. No group label is
+   used. Choosing Energy immediately sends its square into the visualizer and the selected reflection
+   arrives directly from that choreography. No Energy uses a quiet fallback window; Effort opens in
+   a lightweight sheet and may be saved late without regeneration. Save and reflection failure,
+   retry, reload, History continuity and Back restoration all passed the final sweep. Canonical
+   detail lives in `design_run_response_system.md` and `design_effort_cost.md`.
    Writing and evaluating the four candidate responses remains in the separate AI/music-response
    lane; this pass decides how the selected response appears.
 3. **Log History refinement pass.** Resolve the cold-start and empty-filter states, mock the expanded
@@ -397,7 +409,7 @@ not the older State Scan notes.
    interaction is designed; its real split-and-song implementation still waits for the required
    telemetry.
 
-**Then the Core Running Foundation Review.** One question only: is the central journey — record a run,
+**Next: the Core Running Foundation Review.** One question only: is the central journey — record a run,
 preserve it safely, understand it, manage it, use it later — credible and structurally ready for a
 real interface? Output is a short gap list, not a feature hunt. **"Manage" is the known thin spot:
 there is no edit or delete for a logged run anywhere in the code.** That's ordinary CRUD against a

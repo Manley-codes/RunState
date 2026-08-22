@@ -8,10 +8,9 @@ Index only. One line per file — detail lives in the file. Keep it that way.
 
 | Item | Unlocks when | Detail lives in |
 | --- | --- | --- |
-| **Progressive-input ladder is partially resolved** — shoe search/add/select/mileage now has a Start-screen home; route, surface and company remain open | **NEXT UI PASS** | `design_shoe_selection.md` + `design_state_scan.md` |
-| Run Complete screen — after durable save and the factual receipt, RunState prepares `Spent / Feeling Good / Powered Up / no selection` response candidates from one factual foundation; Energy selects the immediate response, while quieter `EFFORT +` stores longitudinal evidence only. Exact layout, motion and fallback timing still need the pass | After remaining State Scan planning | `design_run_response_system.md` + `design_effort_cost.md` + `ui_phase_handoff.md` |
-| Log History refinement / QA pass — empty states, `REPLY | SPLITS` expanded-record mockup, `REPLAY` decision, dawn-vs-sun glyphs | After Run Complete; before Foundation Review | `ui_phase_handoff.md` §4 |
-| **Core Running Foundation Review** — one question: is record → preserve → understand → manage → use-later ready for a real interface | After the rough screens and Log History refinement | `project_current_state.md` |
+| **Progressive-input ladder is partially resolved** — shoe search/add/select/mileage now has a Start-screen home; route, surface and company remain open | Deferred; does not block Foundation Review | `design_shoe_selection.md` + `design_state_scan.md` |
+| Log History refinement / QA pass — empty states, `REPLY | SPLITS` expanded-record mockup, `REPLAY` decision, dawn-vs-sun glyphs. This is later refinement, not a blocker for the narrow Foundation Review | After Foundation Review or when polish resumes | `ui_phase_handoff.md` §4 |
+| **Core Running Foundation Review** — one question: is record → preserve → understand → manage → use-later ready for a real interface | **NEXT** — Run Complete prototype pass is complete | `project_current_state.md` |
 | **Music feature inventory and prioritization** — review the full music layer before choosing what to design or build next; RunStyle Sound is one candidate, not the predetermined next screen | After Foundation Review | `design_music_selection_system.md` + `music_feature_register.md` |
 | RunStyle V2 strategy review — Manley's replacement direction | After rough screens exist | `idea_organization_analysis.md` |
 | **Edit / delete a logged run** — the known hole. No UPDATE or DELETE exists; INSERT and SELECT do | Any time, doesn't queue | `ui_phase_handoff.md` |
@@ -36,7 +35,7 @@ Claude Code if needed · Manley decides.
 ## Current work
 
 - **[UI phase handoff](ui_phase_handoff.md)** — ⭐ **START HERE.** State of the UI phase, the accepted
-  1.66-second Log quick peek, settled Log decisions, current queue, and surfaced backend gaps.
+  Run Complete flow, Log decisions, current queue, and surfaced backend gaps.
 - **[Start Run V7](design_start_run_v7.md)** — ⭐ what the Start screen actually does now: map
   foundation, RunStyle card, energy absorbed into the ring, map-becomes-timer collapse, hold to end.
   Written plainly. Read this, not the file below.
@@ -88,8 +87,8 @@ Claude Code if needed · Manley decides.
   longitudinal evidence. Quiet Gains remains the main unlock.
 - [Weather cleanup](design_weather_cleanup.md) — SHIPPED. Persistence fix, forecast API,
   WeatherService.
-- [Post-run response system](design_run_response_system.md) — canonical mobile response-family
-  contract plus the shipped console response and RunStyle rules.
+- [Post-run response system](design_run_response_system.md) — prototype-validated mobile
+  response-family and delivery contract plus the shipped console response and RunStyle rules.
 
 ## Music Intelligence — stopped at a stable direction, August 3 2026
 

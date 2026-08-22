@@ -5,11 +5,11 @@ metadata:
   type: project
 ---
 
-As of August 16, 2026, the implemented app remains a working Java console app named **RunState**.
+As of August 22, 2026, the implemented app remains a working Java console app named **RunState**.
 The mobile screens discussed below are interactive design prototypes, not production UI or tracker
 code.
 
-## Current UI resume point — August 14, 2026
+## Current UI resume point — August 22, 2026
 
 - Log History has a stable design foundation. Its most-recent-record quick peek was completed and
   accepted August 13: approximately 1.66 seconds of total visible expansion-and-collapse motion,
@@ -27,7 +27,8 @@ code.
 - Log History voice playback now has a successful six-persona Edge prototype for smooth, human
   delivery. It remains a testing surface, not a selected production TTS engine or bundle of reusable
   voice assets; details and open dependencies live in `ui_phase_handoff.md`.
-- The future mobile Run Complete direction shows all three post-run Energy choices prominently and
+- The mobile Run Complete direction now has a stable, fully exercised interactive prototype. It
+  shows all three post-run Energy choices prominently and
   keeps Effort behind a quieter `EFFORT +` action rather than using sequential required questions.
   Either, both or neither may be recorded; ignored values remain unknown. After durable local save,
   metrics and a short factual audio confirmation appear while RunState prepares four responses from
@@ -35,13 +36,14 @@ code.
   the one immediate response that is revealed and stored; the candidates may differ creatively in
   interpretation and structure, not only in their ending. Effort does not change that response. It
   is stored for future comparisons, Quiet Gains, runner learning, RunStyle or Run Rhythm analysis,
-  and accurate references to past effort in later messages. Exact fallback timing is left to the
-  prototype. The built console flow remains unchanged. See `design_run_response_system.md` and
+  and accurate references to past effort in later messages. Choosing Energy immediately sends its
+  square into the visualizer and the selected reflection arrives from that motion. No Energy uses a
+  quiet fallback window; Effort uses a lightweight sheet and may be entered late. Save/reflection
+  failures, retry, reload and single-shell Log History continuity are settled in the prototype. The
+  built console flow remains unchanged. See `design_run_response_system.md` and
   `design_effort_cost.md`.
-- The current queue is: finish the remaining progressive-input ladder (route, surface and company)
-  → Run Complete → Log History refinement → Core Running Foundation Review → music feature
-  inventory and prioritization. RunStyle Sound is one music candidate, not the predetermined next
-  screen.
+- The next task is the narrow Core Running Foundation Review and mobile data contracts. Its output is
+  a short gap list, not a new feature inventory. Android fixture work follows that review.
 - No mobile implementation, GPS tracking, BPM source, music-provider integration, or active-session
   persistence has been authorized or built by this design work.
 

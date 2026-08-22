@@ -16,11 +16,11 @@ design_comparison_logic_fix.md, which consumes this effort data.
 From the Codex RPE session. Direction approved, built as specified (with the Option A setter
 correction noted under Key changes).
 
-## Current mobile Run Complete direction — updated August 20, 2026
+## Current mobile Run Complete direction — prototype-validated August 22, 2026
 
-**STATUS: CURRENT UI DIRECTION, NOT BUILT.** This section governs the future mobile Run Complete
-screen. The console record below remains accurate history, but its sequential prompts are not the
-mobile interaction to reproduce.
+**STATUS: CURRENT UI DIRECTION, VALIDATED IN THE INTERACTIVE PROTOTYPE, NOT BUILT.** This section
+governs the future mobile Run Complete screen. The console record below remains accurate history,
+but its sequential prompts are not the mobile interaction to reproduce.
 
 The goal is to preserve two useful subjective signals without making the runner feel interviewed.
 Energy and effort remain separate because they answer different things:
@@ -36,12 +36,10 @@ same prominence or the same job:
 - Show all three post-run Energy choices — `Spent / Feeling Good / Powered Up` — clearly and
   prominently at rest while the factual receipt plays. Energy is the main invitation and selects
   the immediate post-run response.
-- Keep only Effort collapsed behind the quieter `EFFORT +` action. Tapping it reveals
-  `Smooth / Working / Heavy / Empty tank`, either inline or in a lightweight sheet. After selection,
-  it may return to a compact confirmation such as `EFFORT · HEAVY`.
-- The earlier working group label `ADD TO THIS RUN` is no longer a given. It made sense around two
-  collapsed additions; with only Effort behind `+`, whether the screen still needs a group label is
-  open for the Run Complete pass.
+- Keep only Effort collapsed behind the quieter `EFFORT +` action. Tapping it opens a dismissible
+  lightweight bottom sheet containing `Smooth / Working / Heavy / Empty Tank`. After selection it
+  returns to a compact confirmation such as `EFFORT · HEAVY`.
+- No group label is used. `EFFORT +` is quiet but independently readable without `ADD TO THIS RUN`.
 - Either value, both values, or neither may be recorded. Ignoring them stores `unknown`/`null`;
   never infer an answer, silently default one, or convert absence into a middle value.
 - No `Skip` button is needed because continuing without choosing is the skip.
@@ -68,9 +66,11 @@ contextual reflection and gives Energy and Effort different responsibilities.
    with lower prominence. Either value, both values, or neither may be entered.
 4. After save succeeds, RunState silently prepares four contextual responses from one shared factual
    and evidentiary foundation: `Spent`, `Feeling Good`, `Powered Up`, and no selection.
-5. Choosing Energy selects its prepared response. If no Energy is chosen, a longer
-   prototype-tuned fallback selects the no-selection response. Only that response is revealed,
-   spoken and stored; it is never regenerated.
+5. Choosing Energy immediately sends the selected square into the visualizer. The selected state
+   lands beside the pre-run state, and its prepared response arrives directly from that motion with
+   no additional delay. If no Energy is chosen, a quiet window of approximately six seconds after
+   the factual receipt selects the no-selection response. Only that response is revealed, spoken
+   and stored; it is never regenerated.
 6. The candidates may differ in interpretation, emphasis, structure, persona use, opening, middle
    or close. They must keep objective run and music facts consistent, but they are not restricted to
    swapping one sentence or changing only the ending.
@@ -92,10 +92,12 @@ individually skippable whether or not that broader mode ever exists.
 feature direction. Do not create an estimated-effort field, fallback or roadmap item from the
 brainstorm. Runner-reported Effort remains exactly that: a runner report.
 
-**Still open for the Run Complete design pass:** final group label, inline versus lightweight-sheet
-presentation, exact visual hierarchy and motion, prototype-tuned timing for the input window and
-no-selection fallback, the visible response-preparation state, and how discoverability/response
-quality will be tested. The four-branch behavior and Effort's longitudinal role are not open.
+**Run Complete pass result:** the prototype settled the earlier open interaction questions. There is
+no group label; Effort uses a dismissible lightweight bottom sheet; Energy absorption and reflection
+arrival form one continuous motion; the no-selection path waits naturally without a countdown; and
+late Effort remains editable without changing or replaying the reflection. A visible preparation
+state appears only when the selected response is not ready when its reveal is due. The four-branch
+behavior and Effort's longitudinal role remain unchanged.
 
 **Out of scope for this screen pass:** writing or recalibrating the four candidate responses. Run
 Complete decides where and when the selected response appears; response craft and four-candidate
