@@ -73,6 +73,10 @@ The public landing page's second card was changed from **Log history** to **Fini
 links to this combined journey. The source and runnable export are also preserved in the main
 project under `prototypes/run-complete-log-history/`.
 
+The public phone-review export keeps only a quiet **Reset prototype** action beneath the phone.
+Failure-injection and stored-run controls remain in the editable `.dc.html` source for QA and are
+not exposed in the public preview.
+
 ---
 
 ## The earlier standalone Log screen preview
