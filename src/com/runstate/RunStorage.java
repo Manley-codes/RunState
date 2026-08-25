@@ -89,10 +89,12 @@ public class RunStorage {
                 "temperature, apparent_temperature, weather_condition, effort_level) " +
                 "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
 
+        int generatedRunId;
+
         // try-with-resources automatically closes the connection and statement
         // when the block ends, even if an error occurs.
         try (Connection conn = connectionProvider.getConnection();
-             PreparedStatement stmt = conn.prepareStatement(sql)) {
+             PreparedStatement stmt = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
 
             stmt.setObject(1, run.getDate());
             stmt.setString(2, null);
@@ -121,12 +123,117 @@ public class RunStorage {
             // Store the effort enum constant name ("LOW_COST", "MAX_COST", ...), or null if skipped.
             stmt.setString(19, run.getEffortLevel() != null ? run.getEffortLevel().name() : null);
 
-            stmt.executeUpdate();
+            int affectedRows = stmt.executeUpdate();
+            if (affectedRows != 1) {
+                throw new SQLException(
+                        "Expected one inserted run row but database reported " + affectedRows);
+            }
+
+            try (ResultSet generatedKeys = stmt.getGeneratedKeys()) {
+                if (generatedKeys == null || !generatedKeys.next()) {
+                    throw new SQLException("Database did not return a generated run ID");
+                }
+
+                long generatedKey = generatedKeys.getLong(1);
+                if (generatedKeys.wasNull()
+                        || generatedKey <= 0
+                        || generatedKey > Integer.MAX_VALUE) {
+                    throw new SQLException("Database returned an invalid generated run ID");
+                }
+
+                generatedRunId = (int) generatedKey;
+            }
 
         } catch (SQLException e) {
             // Wrap the low-level cause in our domain exception. The caller can no longer
             // continue as if the save succeeded — the compiler won't let it.
             throw new RunStorageException("Could not save run", e);
+        }
+
+        // Keep the Run unchanged throughout every failure path. The ID is assigned only
+        // after the insert, generated-key validation, and resource cleanup all succeed.
+        run.assignGeneratedRunId(generatedRunId);
+    }
+
+    /*
+     * Updates the two optional post-run feedback answers for one saved run.
+     * Exactly one affected row means success; zero means the ID was not found.
+     */
+    public static boolean updateRunFeedback(
+            int runId, EnergyLevel postRunEnergy, EffortLevel effortLevel)
+            throws RunStorageException {
+        return updateRunFeedback(
+                runId, postRunEnergy, effortLevel, RunStorage::getConnection);
+    }
+
+    // Package-private worker: tests inject a connection without touching live MySQL.
+    static boolean updateRunFeedback(
+            int runId, EnergyLevel postRunEnergy, EffortLevel effortLevel,
+            ConnectionProvider connectionProvider) throws RunStorageException {
+        String sql = "UPDATE runs SET post_run_energy = ?, effort_level = ? WHERE run_id = ?";
+
+        try (Connection conn = connectionProvider.getConnection();
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
+
+            if (postRunEnergy == null) {
+                stmt.setNull(1, Types.VARCHAR);
+            } else {
+                stmt.setString(1, postRunEnergy.name());
+            }
+
+            if (effortLevel == null) {
+                stmt.setNull(2, Types.VARCHAR);
+            } else {
+                stmt.setString(2, effortLevel.name());
+            }
+
+            stmt.setInt(3, runId);
+
+            int affectedRows = stmt.executeUpdate();
+            if (affectedRows == 0) {
+                return false;
+            }
+            if (affectedRows != 1) {
+                throw new SQLException(
+                        "Expected at most one updated run row but database reported " + affectedRows);
+            }
+            return true;
+
+        } catch (SQLException e) {
+            throw new RunStorageException("Could not update run feedback", e);
+        }
+    }
+
+    /*
+     * Deletes one saved run by database identity.
+     * Exactly one affected row means success; zero means the ID was not found.
+     */
+    public static boolean deleteRun(int runId) throws RunStorageException {
+        return deleteRun(runId, RunStorage::getConnection);
+    }
+
+    // Package-private worker: tests inject a connection without touching live MySQL.
+    static boolean deleteRun(int runId, ConnectionProvider connectionProvider)
+            throws RunStorageException {
+        String sql = "DELETE FROM runs WHERE run_id = ?";
+
+        try (Connection conn = connectionProvider.getConnection();
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
+
+            stmt.setInt(1, runId);
+
+            int affectedRows = stmt.executeUpdate();
+            if (affectedRows == 0) {
+                return false;
+            }
+            if (affectedRows != 1) {
+                throw new SQLException(
+                        "Expected at most one deleted run row but database reported " + affectedRows);
+            }
+            return true;
+
+        } catch (SQLException e) {
+            throw new RunStorageException("Could not delete run", e);
         }
     }
 

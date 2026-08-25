@@ -3,8 +3,12 @@ package com.runstate;
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Statement;
+import java.sql.Types;
 import java.time.LocalDate;
 import java.util.HashMap;
 import java.util.List;
@@ -21,15 +25,16 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 
 /*
- * Storage-failure tests for RunStorage.
+ * Storage behavior and failure tests for RunStorage.
  *
  * These exercise the "honest failure" contract added in this feature: when the
- * database cannot be reached, saveRun/loadRuns must THROW a RunStorageException
- * (preserving the underlying SQLException as the cause), never swallow the error
- * and return normally.
+ * database cannot be reached, each storage operation must THROW a
+ * RunStorageException (preserving the underlying SQLException as the cause),
+ * never swallow the error and return normally. Generated IDs and affected-row
+ * results are exercised through the same no-database boundary.
  *
  * The key that makes this testable without a live MySQL is the injectable seam:
- * both methods have a package-private overload that takes a ConnectionProvider.
+ * the storage methods have package-private overloads that take a ConnectionProvider.
  * Because this test lives in the same package (com.runstate), it can reach that
  * overload and hand in a provider that fails on purpose. No database is touched.
  */
@@ -55,6 +60,120 @@ public class RunStorageTest {
                 null, null,
                 RunContext.EMPTY, null, null
         );
+    }
+
+    /*
+     * A recording JDBC test double for save/update/delete.
+     *
+     * Connection and PreparedStatement are large interfaces, so dynamic proxies let the
+     * tests implement only the calls RunStorage actually makes. The recorded SQL and
+     * parameter maps prove what would be sent to MySQL, while configured row counts and
+     * SQLExceptions exercise success, missing-ID, and failure paths without a database.
+     */
+    private static final class RecordingJdbc {
+        private final Map<Integer, Object> parameters = new HashMap<>();
+        private final Map<Integer, Integer> nullSqlTypes = new HashMap<>();
+
+        private String preparedSql;
+        private Integer generatedKeysFlag;
+        private int affectedRows = 1;
+        private boolean generatedKeyAvailable = true;
+        private long generatedKey = 42L;
+        private SQLException executeFailure;
+        private SQLException generatedKeyReadFailure;
+
+        RunStorage.ConnectionProvider provider() {
+            return this::connection;
+        }
+
+        private Connection connection() {
+            return (Connection) Proxy.newProxyInstance(
+                    RunStorageTest.class.getClassLoader(),
+                    new Class<?>[]{Connection.class},
+                    (proxy, method, args) -> {
+                        switch (method.getName()) {
+                            case "prepareStatement":
+                                preparedSql = (String) args[0];
+                                if (args.length == 2 && args[1] instanceof Integer) {
+                                    generatedKeysFlag = (Integer) args[1];
+                                }
+                                return preparedStatement();
+                            case "close":
+                                return null;
+                            default:
+                                throw unexpectedJdbcCall(method);
+                        }
+                    });
+        }
+
+        private PreparedStatement preparedStatement() {
+            return (PreparedStatement) Proxy.newProxyInstance(
+                    RunStorageTest.class.getClassLoader(),
+                    new Class<?>[]{PreparedStatement.class},
+                    (proxy, method, args) -> {
+                        switch (method.getName()) {
+                            case "setString":
+                            case "setObject":
+                            case "setDouble":
+                            case "setInt":
+                                parameters.put((Integer) args[0], args[1]);
+                                return null;
+                            case "setNull":
+                                parameters.put((Integer) args[0], null);
+                                nullSqlTypes.put((Integer) args[0], (Integer) args[1]);
+                                return null;
+                            case "executeUpdate":
+                                if (executeFailure != null) {
+                                    throw executeFailure;
+                                }
+                                return affectedRows;
+                            case "getGeneratedKeys":
+                                return generatedKeys();
+                            case "close":
+                                return null;
+                            default:
+                                throw unexpectedJdbcCall(method);
+                        }
+                    });
+        }
+
+        private ResultSet generatedKeys() {
+            return (ResultSet) Proxy.newProxyInstance(
+                    RunStorageTest.class.getClassLoader(),
+                    new Class<?>[]{ResultSet.class},
+                    new InvocationHandler() {
+                        private boolean advanced;
+
+                        @Override
+                        public Object invoke(Object proxy, Method method, Object[] args)
+                                throws SQLException {
+                            switch (method.getName()) {
+                                case "next":
+                                    if (advanced) {
+                                        return false;
+                                    }
+                                    advanced = true;
+                                    return generatedKeyAvailable;
+                                case "getLong":
+                                    if (generatedKeyReadFailure != null) {
+                                        throw generatedKeyReadFailure;
+                                    }
+                                    return generatedKey;
+                                case "wasNull":
+                                    return false;
+                                case "close":
+                                    return null;
+                                default:
+                                    throw unexpectedJdbcCall(method);
+                            }
+                        }
+                    });
+        }
+
+        private static UnsupportedOperationException unexpectedJdbcCall(Method method) {
+            return new UnsupportedOperationException(
+                    "Unexpected JDBC call in test double: " + method.getName());
+        }
     }
 
     // --- Load failures -------------------------------------------------------
@@ -94,7 +213,48 @@ public class RunStorageTest {
         assertSame(SIMULATED_DB_ERROR, thrown.getCause());
     }
 
-    // --- Save failures -------------------------------------------------------
+    // --- Save generated IDs and failures ------------------------------------
+
+    @Test
+    void saveRun_whenInsertSucceeds_assignsGeneratedIdAndRequestsGeneratedKeys()
+            throws Exception {
+        RecordingJdbc jdbc = new RecordingJdbc();
+        jdbc.generatedKey = 87L;
+        Run run = sampleRun();
+
+        RunStorage.saveRun(run, jdbc.provider());
+
+        assertEquals(87, run.getRunId());
+        assertEquals(Statement.RETURN_GENERATED_KEYS, jdbc.generatedKeysFlag);
+        assertTrue(jdbc.preparedSql.startsWith("INSERT INTO runs"));
+    }
+
+    @Test
+    void saveRun_whenGeneratedKeyIsMissing_throwsAndLeavesOriginalIdUnchanged() {
+        RecordingJdbc jdbc = new RecordingJdbc();
+        jdbc.generatedKeyAvailable = false;
+        Run run = sampleRun();
+
+        RunStorageException thrown = assertThrows(RunStorageException.class,
+                () -> RunStorage.saveRun(run, jdbc.provider()));
+
+        assertEquals(1, run.getRunId());
+        assertTrue(thrown.getCause() instanceof SQLException);
+    }
+
+    @Test
+    void saveRun_whenGeneratedKeyCannotBeRead_preservesCauseAndLeavesOriginalIdUnchanged() {
+        RecordingJdbc jdbc = new RecordingJdbc();
+        SQLException keyFailure = new SQLException("simulated generated-key read failure");
+        jdbc.generatedKeyReadFailure = keyFailure;
+        Run run = sampleRun();
+
+        RunStorageException thrown = assertThrows(RunStorageException.class,
+                () -> RunStorage.saveRun(run, jdbc.provider()));
+
+        assertSame(keyFailure, thrown.getCause());
+        assertEquals(1, run.getRunId());
+    }
 
     @Test
     void saveRun_whenConnectionFails_throwsRunStorageException() {
@@ -109,6 +269,130 @@ public class RunStorageTest {
         RunStorageException thrown = assertThrows(RunStorageException.class,
                 () -> RunStorage.saveRun(sampleRun(), FAILING_PROVIDER));
         assertSame(SIMULATED_DB_ERROR, thrown.getCause());
+    }
+
+    @Test
+    void saveRun_whenStatementExecutionFails_preservesSqlExceptionAsCause() {
+        RecordingJdbc jdbc = new RecordingJdbc();
+        SQLException executeFailure = new SQLException("simulated insert failure");
+        jdbc.executeFailure = executeFailure;
+        Run run = sampleRun();
+
+        RunStorageException thrown = assertThrows(RunStorageException.class,
+                () -> RunStorage.saveRun(run, jdbc.provider()));
+
+        assertSame(executeFailure, thrown.getCause());
+        assertEquals(1, run.getRunId());
+    }
+
+    // --- Update post-run feedback -------------------------------------------
+
+    @Test
+    void updateRunFeedback_whenOneRowMatches_bindsEnergyEffortAndRunId() throws Exception {
+        RecordingJdbc jdbc = new RecordingJdbc();
+
+        boolean updated = RunStorage.updateRunFeedback(
+                73, EnergyLevel.HIGH, EffortLevel.HIGH_COST, jdbc.provider());
+
+        assertTrue(updated);
+        assertEquals(
+                "UPDATE runs SET post_run_energy = ?, effort_level = ? WHERE run_id = ?",
+                jdbc.preparedSql);
+        assertEquals("HIGH", jdbc.parameters.get(1));
+        assertEquals("HIGH_COST", jdbc.parameters.get(2));
+        assertEquals(73, jdbc.parameters.get(3));
+    }
+
+    @Test
+    void updateRunFeedback_whenAnswersAreCleared_explicitlyBindsSqlNulls() throws Exception {
+        RecordingJdbc jdbc = new RecordingJdbc();
+
+        boolean updated = RunStorage.updateRunFeedback(73, null, null, jdbc.provider());
+
+        assertTrue(updated);
+        assertTrue(jdbc.parameters.containsKey(1));
+        assertTrue(jdbc.parameters.containsKey(2));
+        assertNull(jdbc.parameters.get(1));
+        assertNull(jdbc.parameters.get(2));
+        assertEquals(Types.VARCHAR, jdbc.nullSqlTypes.get(1));
+        assertEquals(Types.VARCHAR, jdbc.nullSqlTypes.get(2));
+        assertEquals(73, jdbc.parameters.get(3));
+    }
+
+    @Test
+    void updateRunFeedback_whenNoRowMatches_returnsFalse() throws Exception {
+        RecordingJdbc jdbc = new RecordingJdbc();
+        jdbc.affectedRows = 0;
+
+        boolean updated = RunStorage.updateRunFeedback(
+                404, EnergyLevel.MODERATE, EffortLevel.MODERATE_COST, jdbc.provider());
+
+        assertFalse(updated);
+    }
+
+    @Test
+    void updateRunFeedback_whenConnectionFails_preservesSqlExceptionAsCause() {
+        RunStorageException thrown = assertThrows(RunStorageException.class,
+                () -> RunStorage.updateRunFeedback(
+                        73, EnergyLevel.HIGH, EffortLevel.HIGH_COST, FAILING_PROVIDER));
+
+        assertSame(SIMULATED_DB_ERROR, thrown.getCause());
+    }
+
+    @Test
+    void updateRunFeedback_whenStatementExecutionFails_preservesSqlExceptionAsCause() {
+        RecordingJdbc jdbc = new RecordingJdbc();
+        SQLException executeFailure = new SQLException("simulated update failure");
+        jdbc.executeFailure = executeFailure;
+
+        RunStorageException thrown = assertThrows(RunStorageException.class,
+                () -> RunStorage.updateRunFeedback(
+                        73, EnergyLevel.HIGH, EffortLevel.HIGH_COST, jdbc.provider()));
+
+        assertSame(executeFailure, thrown.getCause());
+    }
+
+    // --- Delete saved run ----------------------------------------------------
+
+    @Test
+    void deleteRun_whenOneRowMatches_bindsRunIdAndReturnsTrue() throws Exception {
+        RecordingJdbc jdbc = new RecordingJdbc();
+
+        boolean deleted = RunStorage.deleteRun(73, jdbc.provider());
+
+        assertTrue(deleted);
+        assertEquals("DELETE FROM runs WHERE run_id = ?", jdbc.preparedSql);
+        assertEquals(73, jdbc.parameters.get(1));
+    }
+
+    @Test
+    void deleteRun_whenNoRowMatches_returnsFalse() throws Exception {
+        RecordingJdbc jdbc = new RecordingJdbc();
+        jdbc.affectedRows = 0;
+
+        boolean deleted = RunStorage.deleteRun(404, jdbc.provider());
+
+        assertFalse(deleted);
+    }
+
+    @Test
+    void deleteRun_whenConnectionFails_preservesSqlExceptionAsCause() {
+        RunStorageException thrown = assertThrows(RunStorageException.class,
+                () -> RunStorage.deleteRun(73, FAILING_PROVIDER));
+
+        assertSame(SIMULATED_DB_ERROR, thrown.getCause());
+    }
+
+    @Test
+    void deleteRun_whenStatementExecutionFails_preservesSqlExceptionAsCause() {
+        RecordingJdbc jdbc = new RecordingJdbc();
+        SQLException executeFailure = new SQLException("simulated delete failure");
+        jdbc.executeFailure = executeFailure;
+
+        RunStorageException thrown = assertThrows(RunStorageException.class,
+                () -> RunStorage.deleteRun(73, jdbc.provider()));
+
+        assertSame(executeFailure, thrown.getCause());
     }
 
     // --- Fake ResultSet ------------------------------------------------------

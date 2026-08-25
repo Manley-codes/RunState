@@ -164,6 +164,18 @@ public class Run {
         return date;
     }
 
+    // Returns the database identity for this run.
+    public int getRunId() {
+        return runId;
+    }
+
+    // Storage calls this only after MySQL confirms a successful insert and returns
+    // a valid generated key. Package-private keeps ID mutation inside com.runstate
+    // instead of exposing a public setter to every caller.
+    void assignGeneratedRunId(int runId) {
+        this.runId = runId;
+    }
+
     // This method lets other classes read the route name.
     public String getRouteName() {
         return routeName;
