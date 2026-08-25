@@ -5,7 +5,7 @@ metadata:
   type: project
 ---
 
-As of August 22, 2026, the implemented app remains a working Java console app named **RunState**.
+As of August 25, 2026, the implemented app remains a working Java console app named **RunState**.
 The mobile screens discussed below are interactive design prototypes, not production UI or tracker
 code.
 
@@ -43,6 +43,13 @@ code.
   combined journey is published in the public design preview as **Finish a run**. The built console
   flow remains unchanged. See `design_run_response_system.md` and
   `design_effort_cost.md`.
+- Saved-run management Pass 1 is implemented and verified in the Java storage layer. A successful
+  insert now assigns MySQL's generated `run_id` to the `Run` only after exactly one row and a valid
+  key are confirmed. `RunStorage` can update post-run Energy and Effort together or delete one run
+  by ID; zero affected rows means the ID is missing, while SQL/consistency failures remain checked
+  `RunStorageException`s with their causes preserved. JDBC test doubles cover the behavior without
+  touching live MySQL, and the complete Maven suite passes with 396 tests. This is foundation only:
+  no History selection interface, `Runner` history mutation, PR recalculation, or full editor exists.
 - The next task is the narrow Core Running Foundation Review and mobile data contracts. Its output is
   a short gap list, not a new feature inventory. Android fixture work follows that review.
 - No mobile implementation, GPS tracking, BPM source, music-provider integration, or active-session

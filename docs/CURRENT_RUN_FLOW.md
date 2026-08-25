@@ -1,9 +1,9 @@
 # RunState Current Run Flow
 
 **Status:** Current Java console behavior — all four audit gaps resolved
-**Last verified:** July 25, 2026
-**Code baseline:** `9548fc4` (last behavior-changing sprint commit)
-**Test suite:** 77 passing
+**Last verified:** August 25, 2026
+**Code baseline:** Saved-Run Management Pass 1 (August 25, 2026)
+**Test suite:** 396 passing
 
 ## Purpose and scope
 
@@ -41,7 +41,8 @@ that allows logging to continue.
 
 1. Saved history must load completely before the menu opens. RunState must never
    silently treat an unconfirmed or partial load as empty history.
-2. A newly entered run is not considered logged until MySQL confirms the save.
+2. A newly entered run is not considered logged until MySQL confirms exactly one inserted row and
+   returns a valid generated `run_id`; only then is that ID assigned to the in-memory `Run`.
 3. PR calculation, PR announcements, the post-run response, and RunStyle happen only
    after that confirmed save.
 4. A save failure prints a recovery receipt — including recorded run context — and ends
@@ -73,6 +74,10 @@ is not RunState's complete product or engineering backlog.
   exact run-time weather because RunState does not yet have real timestamps.
 - MySQL is the console app's only durable copy. A mobile phase will require a separate
   local-first pending/synced design.
+- The storage layer can update post-run Energy and Effort together or delete one saved run by
+  `run_id`. One affected row means success; zero means the ID is missing; SQL or impossible
+  multi-row results throw `RunStorageException`. No console/History management interface calls
+  these operations yet.
 - Stored enum text must match an enum constant exactly. RunState never trims, re-cases,
   guesses, or defaults a stored value: text that is not a real constant means the history
   itself is corrupted, and RunState says so rather than inventing a value that would

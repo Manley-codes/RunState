@@ -197,12 +197,12 @@
 
   <rect class="node node-save" x="555" y="1100" width="230" height="60" rx="10"/>
   <text class="node-title" x="670" y="1125" text-anchor="middle">Save complete run</text>
-  <text class="node-copy" x="670" y="1147" text-anchor="middle">MySQL is today’s durable copy</text>
+  <text class="node-copy" x="670" y="1147" text-anchor="middle">insert + generated run ID</text>
   <path class="flow-line" d="M670 1160 V1177" marker-end="url(#arrow)"/>
 
   <polygon class="decision" points="670,1177 775,1220 670,1263 565,1220"/>
   <text class="decision-title" x="670" y="1215" text-anchor="middle">Save confirmed?</text>
-  <text class="decision-copy" x="670" y="1235" text-anchor="middle">durability gate</text>
+  <text class="decision-copy" x="670" y="1235" text-anchor="middle">one row + valid key</text>
 
   <path class="flow-line" d="M565 1220 H465" marker-end="url(#arrow)"/>
   <text class="branch-label" x="520" y="1209" text-anchor="middle">YES</text>

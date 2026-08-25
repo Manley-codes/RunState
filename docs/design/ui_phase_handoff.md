@@ -1,11 +1,11 @@
 ---
 name: ui-phase-handoff
-description: State of the UI design phase through August 22 2026. Start, Active Run, Run Complete and Log History have stable prototype foundations; records the process, decisions, backend requirements, and current queue.
+description: State of the UI design phase through August 25 2026. Start, Active Run, Run Complete and Log History have stable prototype foundations; records the process, decisions, backend requirements, and current queue.
 metadata:
   type: project
 ---
 
-# UI phase — handoff, updated August 22 2026
+# UI phase — handoff, updated August 25 2026
 
 Written because the session that produced this got very long. Everything needed to continue is here.
 Amended August 7 2026: interaction behavior, `Share` status, the song-location requirement, the
@@ -30,6 +30,8 @@ Amended August 22 2026: the Run Complete pass was exercised through happy, no-se
 save-failure, reflection-failure, retry, reload, History and Back paths. Energy absorption now leads
 directly into reflection arrival; Effort uses a lightweight sheet; and Run Complete and Log History
 occupy one permanent phone shell backed by one stored run record.
+Amended August 25 2026: saved-run management Pass 1 added the Java storage foundation described in
+section 6. No History selection or editing interface was added.
 
 ---
 
@@ -411,9 +413,12 @@ not the older State Scan notes.
 
 **Next: the Core Running Foundation Review.** One question only: is the central journey — record a run,
 preserve it safely, understand it, manage it, use it later — credible and structurally ready for a
-real interface? Output is a short gap list, not a feature hunt. **"Manage" is the known thin spot:
-there is no edit or delete for a logged run anywhere in the code.** That's ordinary CRUD against a
-table where INSERT and SELECT already exist — the smallest item on any list, just never written.
+real interface? Output is a short gap list, not a feature hunt. **"Manage" remains the known thin
+spot at the product level.** Saved-run management Pass 1 now gives every newly inserted `Run` its
+generated database ID and adds narrow storage operations to update post-run Energy/Effort together
+or delete by ID. Missing IDs are distinct from storage failures. There is still no History selection
+interface, `Runner` history mutation, PR recalculation after edits/deletes, or full run editor; those
+remain separate later passes rather than being implied by this storage foundation.
 
 **After the Foundation Review: music feature inventory and prioritization.** Review the full music
 layer before choosing what to design or build next. RunStyle Sound remains a valid candidate — its
