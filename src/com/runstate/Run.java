@@ -254,6 +254,14 @@ public class Run {
         return fastestAveragePaceRecord;
     }
 
+    // Clears both historical PR labels before Runner silently rebuilds them after
+    // a saved run is deleted. Package-private keeps this narrow reset inside the
+    // model/storage orchestration package instead of exposing public PR mutation.
+    void clearPersonalRecordFlags() {
+        longestDistanceRecord = false;
+        fastestAveragePaceRecord = false;
+    }
+
     // This method returns text for any personal records earned by this run.
     public String getPersonalRecordSummary() {
 

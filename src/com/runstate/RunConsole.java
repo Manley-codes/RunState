@@ -21,8 +21,14 @@ public class RunConsole {
 
     // Connects the console to one runner and prepares keyboard input.
     public RunConsole(Runner runner) {
+        this(runner, new Scanner(System.in));
+    }
+
+    // Test seam: accepts a caller-owned Scanner so console flows can be exercised
+    // without replacing the process-wide System.in stream.
+    RunConsole(Runner runner, Scanner scanner) {
         this.runner = runner;
-        this.scanner = new Scanner(System.in);
+        this.scanner = scanner;
     }
 
     // Repeats the main menu until option 4 changes running to false.
@@ -46,8 +52,11 @@ public class RunConsole {
                     }
                     break;
                 case 2:
-                    // Displays every run currently stored for this runner.
-                    runner.displayRunHistory();
+                    // History also owns the saved-run management path. A false result
+                    // means MySQL and memory may disagree, so the session must end.
+                    if (!manageRunHistory()) {
+                        running = false;
+                    }
                     break;
                 case 3:
                     // Displays this runner's current distance and pace records.
@@ -177,9 +186,258 @@ public class RunConsole {
         RunStorage.saveRun(run);
     }
 
+    // Delegates keep saved-run management testable without touching live MySQL.
+    boolean updateRunFeedback(
+            int runId, EnergyLevel postRunEnergy, EffortLevel effortLevel)
+            throws RunStorageException {
+        return RunStorage.updateRunFeedback(runId, postRunEnergy, effortLevel);
+    }
+
+    boolean deleteRun(int runId) throws RunStorageException {
+        return RunStorage.deleteRun(runId);
+    }
+
     // Delegates so the regression test can inject a sentinel without the Anthropic API.
     String buildRunResponse(Run run) {
         return RunAgent.buildRunResponse(run);
+    }
+
+    // Displays saved history and lets the runner select a real database Run ID.
+    // true returns safely to the main menu; false ends the console session because
+    // a storage result made the in-memory History untrustworthy.
+    boolean manageRunHistory() {
+        while (true) {
+            runner.displayRunHistory();
+
+            // Empty History has nothing to select and returns without reading input.
+            if (runner.getRunHistory().isEmpty()) {
+                return true;
+            }
+
+            System.out.println();
+            System.out.println("0. Back to Main Menu");
+            int runId = readRunIdChoice();
+            if (runId == 0) {
+                return true;
+            }
+
+            Run selectedRun = runner.findRunById(runId);
+            if (selectedRun == null) {
+                // This ID was never found in memory, so storage must not be called.
+                System.out.println("No saved run has Run ID " + runId + ".");
+                System.out.println("Choose another Run ID, or enter 0 to go back.");
+                System.out.println();
+                continue;
+            }
+
+            if (!manageSelectedRun(selectedRun)) {
+                return false;
+            }
+        }
+    }
+
+    // Keeps the runner on one saved record until Back or a confirmed deletion.
+    private boolean manageSelectedRun(Run run) {
+        while (true) {
+            displaySelectedRun(run);
+            System.out.println("1. Update post-run Energy");
+            System.out.println("2. Update Effort");
+            System.out.println("3. Delete Run");
+            System.out.println("4. Back to Run History");
+
+            int choice = readWholeNumber("Choose an action: ", 1, 4);
+            System.out.println();
+
+            switch (choice) {
+                case 1:
+                    if (!updateSelectedEnergy(run)) {
+                        return false;
+                    }
+                    break;
+                case 2:
+                    if (!updateSelectedEffort(run)) {
+                        return false;
+                    }
+                    break;
+                case 3:
+                    if (!deleteSelectedRun(run)) {
+                        return false;
+                    }
+                    // A confirmed successful delete returns to History. A canceled
+                    // delete leaves the Run in memory, so remain on this record.
+                    if (runner.findRunById(run.getRunId()) == null) {
+                        return true;
+                    }
+                    break;
+                case 4:
+                    return true;
+                default:
+                    // readWholeNumber prevents unsupported choices.
+                    break;
+            }
+        }
+    }
+
+    // Persists the proposed Energy together with the Run's existing Effort, then
+    // changes memory only after MySQL confirms exactly one matching row.
+    private boolean updateSelectedEnergy(Run run) {
+        System.out.println("Update post-run Energy");
+        System.out.println("1. Clear saved Energy");
+        System.out.println("2. Spent");
+        System.out.println("3. Feeling Good");
+        System.out.println("4. Powered Up");
+        System.out.println("5. Cancel");
+
+        int choice = readWholeNumber("Choose Energy: ", 1, 5);
+        if (choice == 5) {
+            System.out.println("Energy update canceled.");
+            System.out.println();
+            return true;
+        }
+
+        EnergyLevel updatedEnergy;
+        switch (choice) {
+            case 2:
+                updatedEnergy = EnergyLevel.LOW;
+                break;
+            case 3:
+                updatedEnergy = EnergyLevel.MODERATE;
+                break;
+            case 4:
+                updatedEnergy = EnergyLevel.HIGH;
+                break;
+            default:
+                updatedEnergy = null;
+                break;
+        }
+
+        try {
+            if (!updateRunFeedback(
+                    run.getRunId(), updatedEnergy, run.getEffortLevel())) {
+                printMissingSavedRunFailure(run.getRunId());
+                return false;
+            }
+        } catch (RunStorageException e) {
+            printSavedRunStorageFailure("updated", e);
+            return false;
+        }
+
+        run.setPostRunEnergy(updatedEnergy);
+        System.out.println("Post-run Energy updated.");
+        System.out.println();
+        return true;
+    }
+
+    // Persists the proposed Effort together with the Run's existing Energy, then
+    // changes memory only after MySQL confirms exactly one matching row.
+    private boolean updateSelectedEffort(Run run) {
+        System.out.println("Update Effort");
+        System.out.println("1. Clear saved Effort");
+        System.out.println("2. Smooth");
+        System.out.println("3. Working");
+        System.out.println("4. Heavy");
+        System.out.println("5. Empty Tank");
+        System.out.println("6. Cancel");
+
+        int choice = readWholeNumber("Choose Effort: ", 1, 6);
+        if (choice == 6) {
+            System.out.println("Effort update canceled.");
+            System.out.println();
+            return true;
+        }
+
+        EffortLevel updatedEffort;
+        switch (choice) {
+            case 2:
+                updatedEffort = EffortLevel.LOW_COST;
+                break;
+            case 3:
+                updatedEffort = EffortLevel.MODERATE_COST;
+                break;
+            case 4:
+                updatedEffort = EffortLevel.HIGH_COST;
+                break;
+            case 5:
+                updatedEffort = EffortLevel.MAX_COST;
+                break;
+            default:
+                updatedEffort = null;
+                break;
+        }
+
+        try {
+            if (!updateRunFeedback(
+                    run.getRunId(), run.getPostRunEnergy(), updatedEffort)) {
+                printMissingSavedRunFailure(run.getRunId());
+                return false;
+            }
+        } catch (RunStorageException e) {
+            printSavedRunStorageFailure("updated", e);
+            return false;
+        }
+
+        run.setEffortLevel(updatedEffort);
+        System.out.println("Effort updated.");
+        System.out.println();
+        return true;
+    }
+
+    // Requires a second explicit choice, calls MySQL first, and removes from
+    // in-memory History only after MySQL confirms the deletion.
+    private boolean deleteSelectedRun(Run run) {
+        System.out.println("Delete Run");
+        displaySelectedRun(run);
+        System.out.println("1. Delete Run");
+        System.out.println("2. Cancel");
+
+        int confirmation = readWholeNumber("Choose: ", 1, 2);
+        if (confirmation == 2) {
+            System.out.println("Delete canceled.");
+            System.out.println();
+            return true;
+        }
+
+        try {
+            if (!deleteRun(run.getRunId())) {
+                printMissingSavedRunFailure(run.getRunId());
+                return false;
+            }
+        } catch (RunStorageException e) {
+            printSavedRunStorageFailure("deleted", e);
+            return false;
+        }
+
+        runner.removeRunById(run.getRunId());
+        System.out.println("Run ID " + run.getRunId() + " deleted.");
+        System.out.println();
+        return true;
+    }
+
+    // Keeps the database identity visually separate from Run.getRunSummary(), which
+    // is also used before a newly logged Run has received its generated ID.
+    private void displaySelectedRun(Run run) {
+        System.out.println("Run ID: " + run.getRunId());
+        System.out.println(run.getRunSummary());
+        System.out.println();
+    }
+
+    private void printMissingSavedRunFailure(int runId) {
+        System.out.println();
+        System.out.println("Run ID " + runId + " no longer exists in MySQL.");
+        System.out.println("Run History may be stale.");
+        System.out.println("Restart RunState before managing saved runs again.");
+    }
+
+    private void printSavedRunStorageFailure(String action, RunStorageException e) {
+        System.out.println();
+        System.out.println("RunState could not confirm that this saved run was " + action + ".");
+        System.out.println("Run History may be stale.");
+        System.out.println("Restart RunState before managing saved runs again.");
+        System.out.println();
+
+        Throwable cause = e.getCause();
+        String details = cause != null ? cause.getMessage() : e.getMessage();
+        System.out.println("Details: " + details);
     }
 
     // Prints the save-failure recovery receipt (spec wording). The temporary run is still
@@ -406,6 +664,24 @@ public class RunConsole {
             case 1: return MusicMode.MUSIC;
             case 2: return MusicMode.NO_MUSIC;
             default: return null;  // 0 = Skip
+        }
+    }
+
+    // Run IDs are database-generated and have no useful upper menu bound. Zero is
+    // reserved for Back; negative values and non-numbers are rejected locally.
+    private int readRunIdChoice() {
+        while (true) {
+            System.out.print("Select a Run ID: ");
+            String input = scanner.nextLine().trim();
+            try {
+                int runId = Integer.parseInt(input);
+                if (runId >= 0) {
+                    return runId;
+                }
+            } catch (NumberFormatException exception) {
+                // The shared message below handles non-numbers and out-of-range integers.
+            }
+            System.out.println("Enter 0 or a saved Run ID.");
         }
     }
 

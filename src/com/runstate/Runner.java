@@ -97,6 +97,32 @@ public class Runner {
         return List.copyOf(runHistory);
     }
 
+    // Finds the saved Run with this database ID, or null when this in-memory
+    // history has no match. Package-private keeps History selection orchestration
+    // inside com.runstate without widening Runner's public API.
+    Run findRunById(int runId) {
+        for (Run run : runHistory) {
+            if (run.getRunId() == runId) {
+                return run;
+            }
+        }
+        return null;
+    }
+
+    // Removes one saved Run with this database ID, then silently rebuilds the
+    // remaining historical PR flags. Storage must confirm deletion before the
+    // console calls this in-memory method.
+    boolean removeRunById(int runId) {
+        for (int index = 0; index < runHistory.size(); index++) {
+            if (runHistory.get(index).getRunId() == runId) {
+                runHistory.remove(index);
+                rebuildPersonalRecordFlags();
+                return true;
+            }
+        }
+        return false;
+    }
+
     // Returns a RunStyle announcement for this run, or null when nothing new should be
     // announced. All the detection logic now lives in RunStyleService (SRP, like
     // ComparisonService) — Runner just hands it this run plus the full history and relays
@@ -144,6 +170,24 @@ public class Runner {
         // sort compares two Run dates at a time and places earlier dates first.
         runHistory.sort((firstRun, secondRun) ->
                 firstRun.getDate().compareTo(secondRun.getDate()));
+    }
+
+    // Replays the remaining runs from oldest to newest through the existing PR
+    // rules. The date sort is stable, so same-day runs keep their established list
+    // order. Passing false to storeRun prevents historical PR announcements.
+    private void rebuildPersonalRecordFlags() {
+        ArrayList<Run> remainingRuns = new ArrayList<>(runHistory);
+        remainingRuns.sort((firstRun, secondRun) ->
+                firstRun.getDate().compareTo(secondRun.getDate()));
+
+        for (Run run : remainingRuns) {
+            run.clearPersonalRecordFlags();
+        }
+
+        runHistory.clear();
+        for (Run run : remainingRuns) {
+            storeRun(run, false);
+        }
     }
 
     // Checks whether the new run is longer than every previous run in the history.
@@ -207,7 +251,9 @@ public class Runner {
             // Get the run stored at the current index.
             Run run = runHistory.get(i);
 
-            // Display a short summary of the current run.
+            // Display the real database ID with the current run's short summary.
+            System.out.println();
+            System.out.println("Run ID: " + run.getRunId());
             System.out.println(run.getRunSummary());
         }
     }
