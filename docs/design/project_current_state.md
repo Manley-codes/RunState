@@ -43,13 +43,14 @@ code.
   combined journey is published in the public design preview as **Finish a run**. The built console
   flow remains unchanged. See `design_run_response_system.md` and
   `design_effort_cost.md`.
-- Saved-run management Pass 1 is implemented and verified in the Java storage layer. A successful
-  insert now assigns MySQL's generated `run_id` to the `Run` only after exactly one row and a valid
-  key are confirmed. `RunStorage` can update post-run Energy and Effort together or delete one run
-  by ID; zero affected rows means the ID is missing, while SQL/consistency failures remain checked
-  `RunStorageException`s with their causes preserved. JDBC test doubles cover the behavior without
-  touching live MySQL, and the complete Maven suite passes with 396 tests. This is foundation only:
-  no History selection interface, `Runner` history mutation, PR recalculation, or full editor exists.
+- Saved-run management Pass 2 is implemented and verified as a user-facing Java console path through
+  View Run History. History displays real database IDs, accepts ID selection and Back, and exposes
+  post-run Energy/Effort updates plus confirmed deletion. Storage is called before memory changes;
+  missing IDs and storage failures leave in-memory history untouched, explain that History may be
+  stale, and end the console session. Deletion silently rebuilds historical PR flags in stable
+  chronological order without AI, reflection, PR announcements, or RunStyle work. The complete
+  Maven suite passes with 418 tests. A full editor for distance, route, date, weather, music, or
+  other fields remains intentionally out of scope.
 - The next task is the narrow Core Running Foundation Review and mobile data contracts. Its output is
   a short gap list, not a new feature inventory. Android fixture work follows that review.
 - No mobile implementation, GPS tracking, BPM source, music-provider integration, or active-session

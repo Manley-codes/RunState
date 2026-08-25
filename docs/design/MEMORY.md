@@ -13,7 +13,7 @@ Index only. One line per file — detail lives in the file. Keep it that way.
 | **Core Running Foundation Review** — one question: is record → preserve → understand → manage → use-later ready for a real interface | **NEXT** — Run Complete prototype pass is complete | `project_current_state.md` |
 | **Music feature inventory and prioritization** — review the full music layer before choosing what to design or build next; RunStyle Sound is one candidate, not the predetermined next screen | After Foundation Review | `design_music_selection_system.md` + `music_feature_register.md` |
 | RunStyle V2 strategy review — Manley's replacement direction | After rough screens exist | `idea_organization_analysis.md` |
-| **Saved-run management UI / wiring** — storage now assigns real generated IDs and supports feedback UPDATE + DELETE by ID; no History selection interface or Runner orchestration exists yet | Next saved-run management pass; doesn't queue | `ui_phase_handoff.md` |
+| **Full run editing beyond feedback** — History now supports post-run Energy/Effort updates and deletion by ID; distance, route, date, weather, music, and other field editing remains intentionally out of scope | Later product review | `ui_phase_handoff.md` |
 | Does a RunStyle summary recompute from history, or read a stored insight log? | Before any summary surface is designed | `adr_001_runstyle_surfacing.md` |
 | What counts as a PR — the term covers several achievements | Before the PRs filter ships | `ui_phase_handoff.md` |
 | **Log History empty states** — two of them: a rich cold-start preview, and a minimal empty-filter state. Metrics panel has the same cold-start hole | Has to exist before the screen ships | `ui_phase_handoff.md` §4 |

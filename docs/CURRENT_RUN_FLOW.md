@@ -2,17 +2,17 @@
 
 **Status:** Current Java console behavior — all four audit gaps resolved
 **Last verified:** August 25, 2026
-**Code baseline:** Saved-Run Management Pass 1 (August 25, 2026)
-**Test suite:** 396 passing
+**Code baseline:** Saved-Run Management Pass 2 (August 25, 2026)
+**Test suite:** 418 passing
 
 ## Purpose and scope
 
 This document is the durable map of how RunState currently handles one completed run.
 It is an **as-is flow**, not a future architecture diagram.
 
-The main path follows one **Log Run** cycle. Other menu choices are not expanded; the
-Run History annotation records that saved context appears in its compact summaries. The
-final node states the return to the menu instead of drawing a long loop across the diagram.
+The main path follows one **Log Run** cycle. The **View Run History** path is also expanded through
+saved-run management; the final nodes state return to the main menu or session end instead of drawing
+long loops across the diagram.
 
 Included:
 
@@ -20,6 +20,7 @@ Included:
 - Pre-run state, run details, optional context, post-run energy, and effort
 - Daily-mean weather lookup for the logged date
 - MySQL loading and saving
+- History selection, post-run feedback updates, and confirmed deletion by database Run ID
 - Personal-record confirmation, the post-run response, and RunStyle analysis
 - Current failure behavior and the regression protections for previously identified gaps
 
@@ -51,6 +52,9 @@ that allows logging to continue.
    not determine whether the run itself was durably recorded.
 6. Surface, shoes, company, music, and weather describe associations only. They never
    create or strengthen a primary RunStyle.
+7. History management calls MySQL before changing memory. A missing ID or storage failure leaves
+   in-memory History unchanged, explains that it may be stale, gives restart guidance, and ends the
+   console session. A confirmed delete silently rebuilds remaining PR flags chronologically.
 
 ## Resolved flow-audit record
 
@@ -76,8 +80,8 @@ is not RunState's complete product or engineering backlog.
   local-first pending/synced design.
 - The storage layer can update post-run Energy and Effort together or delete one saved run by
   `run_id`. One affected row means success; zero means the ID is missing; SQL or impossible
-  multi-row results throw `RunStorageException`. No console/History management interface calls
-  these operations yet.
+  multi-row results throw `RunStorageException`. The Java console now calls these operations from
+  View Run History, while editing other run fields remains out of scope.
 - Stored enum text must match an enum constant exactly. RunState never trims, re-cases,
   guesses, or defaults a stored value: text that is not a real constant means the history
   itself is corrupted, and RunState says so rather than inventing a value that would
@@ -95,6 +99,7 @@ affects any of these boundaries:
 - what counts as a durably logged run
 - PR, post-run response, or RunStyle ordering
 - history or recovery-receipt display
+- History management storage ordering, stale-history failure handling, or silent PR rebuilding
 - the transition from manual console logging to automatic/mobile capture
 
 Future-state mobile behavior should receive its own diagram until it replaces this

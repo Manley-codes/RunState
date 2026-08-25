@@ -30,8 +30,10 @@ Amended August 22 2026: the Run Complete pass was exercised through happy, no-se
 save-failure, reflection-failure, retry, reload, History and Back paths. Energy absorption now leads
 directly into reflection arrival; Effort uses a lightweight sheet; and Run Complete and Log History
 occupy one permanent phone shell backed by one stored run record.
-Amended August 25 2026: saved-run management Pass 1 added the Java storage foundation described in
-section 6. No History selection or editing interface was added.
+Amended August 25 2026: saved-run management Pass 2 made the Java console path usable through
+View Run History. It supports real-ID selection, post-run Energy/Effort updates, confirmed deletion,
+stale-History failure handling, and silent PR rebuilds. The mobile History interface remains a
+prototype, and no full editor for other run fields was added.
 
 ---
 
@@ -413,12 +415,12 @@ not the older State Scan notes.
 
 **Next: the Core Running Foundation Review.** One question only: is the central journey — record a run,
 preserve it safely, understand it, manage it, use it later — credible and structurally ready for a
-real interface? Output is a short gap list, not a feature hunt. **"Manage" remains the known thin
-spot at the product level.** Saved-run management Pass 1 now gives every newly inserted `Run` its
-generated database ID and adds narrow storage operations to update post-run Energy/Effort together
-or delete by ID. Missing IDs are distinct from storage failures. There is still no History selection
-interface, `Runner` history mutation, PR recalculation after edits/deletes, or full run editor; those
-remain separate later passes rather than being implied by this storage foundation.
+real interface? Output is a short gap list, not a feature hunt. **Saved-run management is now usable
+in the Java console through View Run History.** It displays database IDs, updates post-run Energy or
+Effort after storage confirmation, confirms deletion, and silently rebuilds PR flags after a delete.
+Missing IDs and storage failures leave memory unchanged and end the session with restart guidance.
+The mobile History interface remains a prototype, and a full editor for distance, route, date,
+weather, music, or other fields remains a separate later decision.
 
 **After the Foundation Review: music feature inventory and prioritization.** Review the full music
 layer before choosing what to design or build next. RunStyle Sound remains a valid candidate — its

@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1120" height="1600" viewBox="0 0 1120 1600" role="img" aria-labelledby="title desc">
   <title id="title">RunState current console flow</title>
-  <desc id="desc">Four lanes show the runner, RunState console, storage and services, and insights from startup through a durably saved run. All audit findings documented below are now resolved.</desc>
+  <desc id="desc">Four lanes show the runner, RunState console, storage and services, and insights from startup through a durably saved run. The View Run History management path covers feedback updates and confirmed deletion.</desc>
   <style>
     :root {
       color-scheme: light dark;
@@ -87,6 +87,7 @@
   <text class="phase-label" x="16" y="902">03 · REFLECTION</text>
   <text class="phase-label" x="16" y="1097">04 · DURABLE SAVE</text>
   <text class="phase-label" x="16" y="1402">05 · MEANING</text>
+  <text class="phase-label" x="835" y="550">HISTORY MANAGEMENT</text>
 
   <rect class="node" x="235" y="96" width="230" height="58" rx="10"/>
   <text class="node-title" x="350" y="121" text-anchor="middle">App starts</text>
@@ -138,6 +139,41 @@
   <text class="node-title" x="350" y="470" text-anchor="middle">Main menu opens</text>
   <text class="node-copy" x="350" y="492" text-anchor="middle">Log · History · PRs · Exit</text>
   <text class="node-copy" x="482" y="522" text-anchor="end">History: compact context when recorded</text>
+
+  <path class="flow-line" d="M465 475 H820 V600 H850" marker-end="url(#arrow)"/>
+  <text class="branch-label" x="700" y="492" text-anchor="middle">HISTORY</text>
+  <rect class="node" x="850" y="570" width="240" height="60" rx="10"/>
+  <text class="node-title" x="970" y="595" text-anchor="middle">View Run History</text>
+  <text class="node-copy" x="970" y="617" text-anchor="middle">real IDs · 0 returns</text>
+  <path class="flow-line" d="M970 630 V650" marker-end="url(#arrow)"/>
+
+  <rect class="node" x="850" y="650" width="240" height="72" rx="10"/>
+  <text class="node-title" x="970" y="675" text-anchor="middle">Select saved Run</text>
+  <text class="node-copy" x="970" y="697" text-anchor="middle">invalid ID stays local</text>
+  <text class="node-copy" x="970" y="713" text-anchor="middle">then show its actions</text>
+  <path class="flow-line" d="M970 722 V750" marker-end="url(#arrow)"/>
+
+  <rect class="node" x="850" y="750" width="240" height="72" rx="10"/>
+  <text class="node-title" x="970" y="775" text-anchor="middle">Record actions</text>
+  <text class="node-copy" x="970" y="797" text-anchor="middle">Energy · Effort · Delete · Back</text>
+  <path class="save-line" d="M850 786 H785" marker-end="url(#arrow)"/>
+
+  <rect class="node node-save" x="555" y="730" width="230" height="110" rx="10"/>
+  <text class="node-title" x="670" y="755" text-anchor="middle">Persist selected change</text>
+  <text class="node-copy" x="670" y="777" text-anchor="middle">MySQL first</text>
+  <text class="node-copy" x="670" y="797" text-anchor="middle">Energy/Effort or delete</text>
+  <text class="node-copy" x="670" y="817" text-anchor="middle">false/exception → stale + restart</text>
+  <path class="flow-line" d="M670 840 V890 H850" marker-end="url(#arrow)"/>
+
+  <rect class="node node-success" x="850" y="850" width="240" height="80" rx="10"/>
+  <text class="node-title" x="970" y="875" text-anchor="middle">Apply in memory</text>
+  <text class="node-copy" x="970" y="897" text-anchor="middle">only after true · remove/rebuild</text>
+  <text class="node-copy" x="970" y="913" text-anchor="middle">PRs silently · no AI/RunStyle</text>
+  <path class="flow-line" d="M970 930 V960" marker-end="url(#arrow)"/>
+
+  <rect class="node" x="850" y="960" width="240" height="60" rx="10"/>
+  <text class="node-title" x="970" y="985" text-anchor="middle">Return to History</text>
+  <text class="node-copy" x="970" y="1007" text-anchor="middle">Back returns to main menu</text>
 
   <path class="stop-line" d="M670 444 V457" marker-end="url(#stop-arrow)"/>
   <text class="branch-label stop-text" x="685" y="454">NO</text>
