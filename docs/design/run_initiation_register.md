@@ -243,6 +243,31 @@ this lifecycle.
 
 ---
 
+## Local-first run identity and synchronization — DEFAULT
+
+**Approved August 25, 2026. Future-mobile contract only; nothing is implemented.** When a session
+enters Running, the phone generates one permanent UUID. That identity stays with the same run
+through pause, recovery, completion, feedback updates and deletion. A recovered or retried run must
+never receive a second identity. The server may keep an internal database key, but the phone and
+server use this UUID as the run's stable external identity and duplicate-safe synchronization key.
+
+Active sessions remain local in the first mobile foundation. After completion, the run carries one
+of four synchronization states:
+
+- **`PENDING_CREATE`** — durably saved on the phone; server creation is not yet confirmed.
+- **`SYNCED`** — the server has confirmed the current stored version.
+- **`PENDING_UPDATE`** — a locally edited synced run still needs its change confirmed.
+- **`PENDING_DELETE`** — locally deleted and hidden, but retained as a small deletion marker until
+  the server confirms removal so an old server copy cannot reappear.
+
+Local storage always changes first; network work follows. Repeating an operation with the same UUID
+must confirm or update that run rather than insert a duplicate. A network error leaves the operation
+pending with retry information; it does not erase the run or become a permanent end state. `Run
+saved` means durable on the phone, not synchronized. Retry scheduling, multi-device conflicts,
+accounts and server implementation remain later decisions.
+
+---
+
 ## Session orchestration — DEFAULT
 
 On entering Running — by manual start now or confirmed detection later — restore any trusted

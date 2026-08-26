@@ -76,8 +76,10 @@ is not RunState's complete product or engineering backlog.
   pending answer; Log Run then asks for starting energy during capture.
 - Weather is the **daily mean for the entered run date and runner location**. It is not
   exact run-time weather because RunState does not yet have real timestamps.
-- MySQL is the console app's only durable copy. A mobile phase will require a separate
-  local-first pending/synced design.
+- MySQL is the console app's only durable copy. The future-mobile local-first contract is now
+  approved but not implemented: the phone generates a permanent run UUID and uses `PENDING_CREATE`,
+  `SYNCED`, `PENDING_UPDATE`, or `PENDING_DELETE`. Canonical detail lives in
+  `design/run_initiation_register.md`.
 - The storage layer can update post-run Energy and Effort together or delete one saved run by
   `run_id`. One affected row means success; zero means the ID is missing; SQL or impossible
   multi-row results throw `RunStorageException`. The Java console now calls these operations from

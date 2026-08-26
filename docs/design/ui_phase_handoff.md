@@ -417,9 +417,10 @@ not the older State Scan notes.
 preserve it safely, understand it, manage it, use it later — is credible in the completed-run
 console, with four bounded gaps identified before mobile contracts. The comparison-trust gap is now
 fixed: same-route runs must also pass the existing distance band. The active-session lifecycle,
-recovery and timestamp contract is now approved but not implemented. The remaining contract gaps
-are local-first identity/sync and a durable selected-reflection record. **Saved-run management is
-usable in the Java console through View Run History.** It
+recovery and timestamp contract is approved but not implemented. The phone-generated UUID and four
+local-first synchronization states are also approved but not implemented. The remaining foundation
+contract gap is a durable selected-reflection record. **Saved-run management is usable in the Java
+console through View Run History.** It
 displays database IDs, updates post-run Energy or Effort after storage confirmation, confirms
 deletion, and silently rebuilds PR flags after a delete.
 Missing IDs and storage failures leave memory unchanged and end the session with restart guidance.
