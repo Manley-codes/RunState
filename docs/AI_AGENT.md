@@ -288,10 +288,10 @@ selective posture. The stage changes search posture, never truth standards — u
 interpretation remains unsupported at both stages. The prompt instructs the model
 never to reveal or hint at the label, and never to characterize the runner from it.
 
-The comparison lines are produced by `ComparisonService` (route-first / distance-fallback
-candidate selection → separate energy and effort pools → per-pool median and count →
-positive-signal derivation with negative pre-filter → per-signal evidence count and confidence
-tier). `RunAgent.formatComparison()` formats what survives. The old blended 20-run rolling
+The comparison lines are produced by `ComparisonService` (same-route runs inside the distance
+band first, then similar-distance fallback → separate energy and effort pools → per-pool median
+and count → positive-signal derivation with negative pre-filter → per-signal evidence count and
+confidence tier). `RunAgent.formatComparison()` formats what survives. The old blended 20-run rolling
 average was removed because it mixed easy/long/tempo/sprint runs and manufactured misleading
 labels.
 

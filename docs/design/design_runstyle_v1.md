@@ -100,6 +100,9 @@ gaps. This must be deterministic.
 - **Strict candidates:** previous runs within 180 days; similar distance ALWAYS
   required using `max(0.5 mi, 20%)`; prefer same route + similar distance, then
   same surface + similar distance, then similar distance; cap 10.
+- **August 25 foundation refinement:** the general `ComparisonService.analyze()` path now also
+  rejects same-route runs outside that distance band. Its fallback remains any similar-distance
+  run; the stricter RunStyle ordering above is unchanged.
 - **New `RunStyleService.analyze(current, history)`** returning immutable
   `RunStyleInsight`. `Runner.detectRunStyle(Run)` delegates to it; **remove the
   avgPace/avgDistance params and the faster-AND-farther logic.**

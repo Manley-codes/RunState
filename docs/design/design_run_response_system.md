@@ -124,7 +124,8 @@ remains UI work and does not alter these stored meanings. Decision record:
 - Falls back silently to `buildFallbackResponse()` on any failure — the app never breaks because
   the API is down or the key is unset
 - Candidate-based comparison lookup runs locally before the API call; `ComparisonService.analyze()`
-  selects up to 10 comparable runs (route-first / distance-fallback, 180-day window), forms
+  selects up to 10 comparable runs (same route within the distance band first, then
+  similar-distance fallback, 180-day window), forms
   separate energy and effort pools, and returns only positive/explanatory signals — each with
   its own evidence count and confidence tier. Nothing from below-average runs reaches the prompt.
 - Response is generated only after the run is durably saved; the `saveAndCompleteRun` boundary

@@ -83,8 +83,9 @@ public class ComparisonService {
     }
 
     // Picks the previous runs worth comparing against: recent, and matched by route
-    // first (route implicitly controls terrain, which we have no elevation data for),
-    // falling back to similar distance when the current run has no shared route.
+    // within the same distance band first. Route controls terrain while distance keeps
+    // the amount of running comparable. If none qualify, fall back to similar-distance
+    // runs on any route.
     private static List<Run> selectCandidates(Run current, List<Run> history) {
         // First narrow to previous runs inside the recency window.
         List<Run> recentPrevious = new ArrayList<>();
@@ -96,17 +97,19 @@ public class ComparisonService {
 
         List<Run> matches = new ArrayList<>();
 
-        // Preferred: same route as the current run.
+        // Preferred: same route and similar distance as the current run.
         String currentRoute = normalizeRoute(current.getRouteName());
         if (currentRoute != null) {
             for (Run past : recentPrevious) {
-                if (currentRoute.equals(normalizeRoute(past.getRouteName()))) {
+                if (currentRoute.equals(normalizeRoute(past.getRouteName()))
+                        && similarDistance(current, past)) {
                     matches.add(past);
                 }
             }
         }
 
-        // Fallback: similar distance, used when there's no route or no route match.
+        // Fallback: similar distance on any route, used when no same-route run also
+        // falls inside the distance band.
         if (matches.isEmpty()) {
             for (Run past : recentPrevious) {
                 if (similarDistance(current, past)) {

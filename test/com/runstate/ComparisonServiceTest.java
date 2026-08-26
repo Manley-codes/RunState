@@ -110,11 +110,38 @@ public class ComparisonServiceTest {
     }
 
     @Test
-    void prefersSameRouteOverSimilarDistance() {
-        // Arrange: current run on Cedar Trail at 3.0 mi. History has three same-route
-        // runs at clearly DIFFERENT distances (6/7/8 mi — outside the distance band),
-        // plus two different-route runs at the SAME 3.0 mi (which distance-matching
-        // would otherwise catch). Route matching should win, selecting only the three.
+    void prefersSameRouteWithinDistanceBandOverOtherRoutes() {
+        // Arrange: current run on Cedar Trail at 3.0 mi. Two same-route runs are inside
+        // the distance band and one is clearly outside it. Two different-route runs are
+        // also inside the band. Route matching should win, but only for comparable lengths.
+        LocalDate today = date("2026-06-01");
+        Run current = run(today, "Cedar Trail", 3.0, 27.0,
+                EnergyLevel.LOW, EnergyLevel.HIGH, null);
+        Run sameRouteA = run(today.minusDays(1), "Cedar Trail", 3.2, 28.8,
+                EnergyLevel.MODERATE, EnergyLevel.MODERATE, null);
+        Run sameRouteB = run(today.minusDays(2), "Cedar Trail", 2.8, 25.2,
+                EnergyLevel.MODERATE, EnergyLevel.MODERATE, null);
+        Run sameRouteFar = run(today.minusDays(3), "Cedar Trail", 8.0, 72.0,
+                EnergyLevel.MODERATE, EnergyLevel.MODERATE, null);
+        Run otherRouteSameDistanceA = run(today.minusDays(4), "River Loop", 3.0, 27.0,
+                EnergyLevel.MODERATE, EnergyLevel.MODERATE, null);
+        Run otherRouteSameDistanceB = run(today.minusDays(5), "River Loop", 3.0, 27.0,
+                EnergyLevel.MODERATE, EnergyLevel.MODERATE, null);
+        List<Run> history = List.of(sameRouteA, sameRouteB, sameRouteFar,
+                otherRouteSameDistanceA, otherRouteSameDistanceB);
+
+        // Act
+        ComparisonInsight insight = ComparisonService.analyze(current, history);
+
+        // Assert: only the two same-route runs inside the band are selected.
+        assertEquals(2, insight.getOutcomes().get(0).getEvidenceCount());
+        assertEquals("same route", insight.getBasis());
+    }
+
+    @Test
+    void fallsBackToSimilarDistanceWhenSameRouteRunsAreOutsideDistanceBand() {
+        // Arrange: the same-route history is 6/7/8 miles, so none is comparable to
+        // today's 3 miles. Two other-route runs are inside the distance band.
         LocalDate today = date("2026-06-01");
         Run current = run(today, "Cedar Trail", 3.0, 27.0,
                 EnergyLevel.LOW, EnergyLevel.HIGH, null);
@@ -124,19 +151,19 @@ public class ComparisonServiceTest {
                 EnergyLevel.MODERATE, EnergyLevel.MODERATE, null);
         Run sameRouteC = run(today.minusDays(3), "Cedar Trail", 8.0, 72.0,
                 EnergyLevel.MODERATE, EnergyLevel.MODERATE, null);
-        Run otherRouteSameDistanceA = run(today.minusDays(4), "River Loop", 3.0, 27.0,
+        Run nearDistanceA = run(today.minusDays(4), "River Loop", 3.2, 28.8,
                 EnergyLevel.MODERATE, EnergyLevel.MODERATE, null);
-        Run otherRouteSameDistanceB = run(today.minusDays(5), "River Loop", 3.0, 27.0,
+        Run nearDistanceB = run(today.minusDays(5), "Park Loop", 2.8, 25.2,
                 EnergyLevel.MODERATE, EnergyLevel.MODERATE, null);
-        List<Run> history = List.of(sameRouteA, sameRouteB, sameRouteC,
-                otherRouteSameDistanceA, otherRouteSameDistanceB);
+        List<Run> history = List.of(
+                sameRouteA, sameRouteB, sameRouteC, nearDistanceA, nearDistanceB);
 
         // Act
         ComparisonInsight insight = ComparisonService.analyze(current, history);
 
-        // Assert: exactly the three same-route runs, and the basis says so.
-        assertEquals(3, insight.getOutcomes().get(0).getEvidenceCount());
-        assertEquals("same route", insight.getBasis());
+        // Assert: the far same-route runs are excluded and the distance fallback is used.
+        assertEquals(2, insight.getOutcomes().get(0).getEvidenceCount());
+        assertEquals("similar distance", insight.getBasis());
     }
 
     @Test

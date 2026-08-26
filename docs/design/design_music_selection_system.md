@@ -133,10 +133,10 @@ song for the **reply**, not for playback)* · **37** now-playing strip · **38**
 
 Built for other purposes, structurally the same. **Extend rather than rebuild.**
 
-**Candidate-based comparison** (`ComparisonService`) — 180-day window, cap of ten, route-first
-with distance fallback, median aggregation, and separate evidence pools per signal. Given a
-run, it finds comparable runs. Song selection needs precisely that move: *find runs like this
-one, look at what played.*
+**Candidate-based comparison** (`ComparisonService`) — 180-day window, cap of ten, same-route
+runs inside the distance band first with similar-distance fallback, median aggregation, and
+separate evidence pools per signal. Given a run, it finds comparable runs. Song selection needs
+precisely that move: *find runs like this one, look at what played.*
 
 **Confidence thresholds** (`RunStyleService`) — a descriptive minimum of three supporting runs;
 comparative minimums of five with, five without, an 80% support rate, and a 30-point lead. A

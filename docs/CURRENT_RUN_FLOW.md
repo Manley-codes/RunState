@@ -2,8 +2,8 @@
 
 **Status:** Current Java console behavior — all four audit gaps resolved
 **Last verified:** August 25, 2026
-**Code baseline:** Saved-Run Management Pass 2 (August 25, 2026)
-**Test suite:** 418 passing
+**Code baseline:** Saved-Run Management Pass 2 + comparison distance guard (August 25, 2026)
+**Test suite:** 419 passing
 
 ## Purpose and scope
 

@@ -413,10 +413,13 @@ not the older State Scan notes.
    interaction is designed; its real split-and-song implementation still waits for the required
    telemetry.
 
-**Next: the Core Running Foundation Review.** One question only: is the central journey — record a run,
-preserve it safely, understand it, manage it, use it later — credible and structurally ready for a
-real interface? Output is a short gap list, not a feature hunt. **Saved-run management is now usable
-in the Java console through View Run History.** It displays database IDs, updates post-run Energy or
+**Core Running Foundation Review completed August 25.** The central journey — record a run,
+preserve it safely, understand it, manage it, use it later — is credible in the completed-run
+console, with four bounded gaps identified before mobile contracts. The comparison-trust gap is now
+fixed: same-route runs must also pass the existing distance band. The remaining gaps are durable
+active-session timestamps/state, local-first identity/sync, and a durable selected-reflection
+record. **Saved-run management is usable in the Java console through View Run History.** It
+displays database IDs, updates post-run Energy or
 Effort after storage confirmation, confirms deletion, and silently rebuilds PR flags after a delete.
 Missing IDs and storage failures leave memory unchanged and end the session with restart guidance.
 The mobile History interface remains a prototype, and a full editor for distance, route, date,

@@ -49,10 +49,13 @@ code.
   missing IDs and storage failures leave in-memory history untouched, explain that History may be
   stale, and end the console session. Deletion silently rebuilds historical PR flags in stable
   chronological order without AI, reflection, PR announcements, or RunStyle work. The complete
-  Maven suite passes with 418 tests. A full editor for distance, route, date, weather, music, or
+  Maven suite passes with 419 tests. A full editor for distance, route, date, weather, music, or
   other fields remains intentionally out of scope.
-- The next task is the narrow Core Running Foundation Review and mobile data contracts. Its output is
-  a short gap list, not a new feature inventory. Android fixture work follows that review.
+- The narrow Core Running Foundation Review is complete. It confirmed the completed-run console
+  journey and identified four bounded gaps before mobile: comparison trust, durable active-session
+  timestamps/state, local-first identity/sync, and a durable selected-reflection record. The
+  comparison gap is now fixed and verified. The other three remain prerequisites before a mobile
+  build, not authorization to start them; the next roadmap lane still requires Manley's choice.
 - No mobile implementation, GPS tracking, BPM source, music-provider integration, or active-session
   persistence has been authorized or built by this design work.
 
@@ -63,7 +66,7 @@ code.
 - Phase 4: AI agent — `RunAgent.java` replaces `buildRunResponse()` with Anthropic API call (claude-haiku-4-5-20251001). Fallback to hardcoded logic on any failure. Gson added for JSON parsing. `Run.java` has `getRunner()` getter added.
 - Phase 5 (Steps 1–2): AI context expansion — music context (manual input) + weather (Open-Meteo, `WeatherData` value object, persisted at log time). Built June 26; weather cleanup + TX→Texas fix shipped July 6–7, 2026.
 - Effort Cost V1: post-run "How did that run land?" input — `EffortLevel` enum (Smooth/Working/Heavy/Empty tank + internal RPE ranges), persisted at log time, shown in run history and fed to the agent (prompt line + SYSTEM_PROMPT rule + offline fallback). Built July 8–9, 2026 (collector commit 8981b48 + display/agent follow-up).
-- Comparison Repair V1: candidate-based run comparison (`ComparisonService` + `ComparisonInsight`) — 180-day/cap-10 selection (route-first, distance-fallback), median aggregation, four positive signals behind a negative pre-filter, and July 25 signal-specific energy/effort evidence pools and confidence — replaces the blended 20-run rolling-average flaw in the AI prompt + fallback. `detectRunStyle()` was later replaced by RunStyle V1. Built July 9 and refined July 25, 2026.
+- Comparison Repair V1: candidate-based run comparison (`ComparisonService` + `ComparisonInsight`) — 180-day/cap-10 selection (same route within the distance band first, then similar-distance fallback), median aggregation, four positive signals behind a negative pre-filter, and July 25 signal-specific energy/effort evidence pools and confidence — replaces the blended 20-run rolling-average flaw in the AI prompt + fallback. `detectRunStyle()` was later replaced by RunStyle V1. Built July 9, refined July 25, and given the shared-route distance guard August 25, 2026.
 
 **Rename completed June 22, 2026:**
 - Package renamed from `com.runclubapp` to `com.runstate` — all 7 source files updated

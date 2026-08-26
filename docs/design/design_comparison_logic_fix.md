@@ -7,7 +7,8 @@ metadata:
 
 **STATUS: V1 BUILT AND SHIPPED.**
 - Paths 1 and 2 — shipped July 9, 2026 as a new `ComparisonService` + `ComparisonInsight` pair:
-  180-day / cap-10 candidate selection (route-first, distance-fallback), median aggregation, and
+  180-day / cap-10 candidate selection (same route within the distance band first, then
+  similar-distance fallback), median aggregation, and
   four positive signals (State Lift, Quiet Gain, Same-Cost/Better, Demand Explained) behind a
   negative pre-filter. `RunAgent.buildUserMessage` + the fallback now consume it; rolling-average
   lines/flags removed; SYSTEM_PROMPT "Using history" rule updated.
@@ -16,6 +17,9 @@ metadata:
   profile; `Runner.detectRunStyle(Run)` now delegates to `RunStyleService`.
 - Task 2 (Pre-Music Integrity Sprint, July 25, 2026) extended the comparison contract with
   signal-specific evidence and confidence — see the as-built section below.
+- The Core Running Foundation Review refinement (August 25, 2026) closed a trust gap: a shared
+  route no longer makes substantially different run lengths comparable. Same-route candidates
+  must also pass the existing distance band; otherwise selection falls back to similar distance.
 
 The plan below is kept as the historical build record.
 
@@ -94,11 +98,12 @@ Summarizes evidence for RunAgent; all selection/aggregation logic lives here, NO
 **Candidate selection (per current run):**
 - Previous runs only (exclude current). **Recency: last 180 days, capped at the 10 most
   recent matches** (Manley, July 7 2026).
-- Prefer same route when present. Route matching normalizes first: trim + case-fold
-  ("Cedar Trail " == "cedar trail"). Fuzzy matching out of scope V1. Rationale note:
-  same-route implicitly controls terrain/hills — RunState has no elevation data.
-- Fallback: similar distance within `max(0.5 mi, 20% of current distance)` — sanity-check
-  this band against the real runs table during build; adjust if typical runs find <2 candidates.
+- Prefer runs on the same route that also fall within
+  `max(0.5 mi, 20% of current distance)`. Route matching normalizes first: trim + case-fold
+  ("Cedar Trail " == "cedar trail"). Fuzzy matching remains out of scope. Route controls
+  terrain/hills while the distance guard keeps the amount of running comparable.
+- If no same-route run passes that band, fall back to every recent run inside the same distance
+  band regardless of route.
 - Pre-run energy is not a candidate-selection filter in the shipped V1. State Lift instead
   uses the energy-complete subset after route/distance selection. Never infer Run Type.
 - Legacy NULL-effort rows participate in state/distance/route signals, not effort signals.
@@ -150,11 +155,14 @@ route case/whitespace variants match; NULL-effort rows join non-effort signals o
 older than 180 days excluded; cap-10 respected; fallback works with ANTHROPIC_API_KEY unset;
 legacy rows load.
 
-**Verified tests (July 25, 2026, 17 tests in `ComparisonServiceTest`):** candidate selection
-(recency window, cap-10, route-first, distance fallback), median aggregation (odd/even, outlier
-resistance), negative pre-filter (lower lift and unexplained higher effort filtered; explained
-PR effort allowed), separate energy and effort pools, pool-isolation (each signal's count and
-median from its own pool), confidence tier boundaries at 1, 2, 5, and 8 runs.
+**Verified tests (updated August 25, 2026, 18 tests in `ComparisonServiceTest`):** candidate
+selection (recency window, cap-10, same-route plus distance guard, distance fallback), median
+aggregation (odd/even, outlier resistance), negative pre-filter (lower lift and unexplained higher
+effort filtered; explained PR effort allowed), separate energy and effort pools, pool-isolation
+(each signal's count and median from its own pool), confidence tier boundaries at 1, 2, 5, and 8
+runs. The new regression
+proves that 6–8-mile runs on the same named route cannot support a 3-mile comparison; the
+similar-distance fallback is used instead. Full Maven result: 419 tests, no failures or errors.
 
 ---
 
@@ -168,7 +176,8 @@ and the AI both see which signals have strong backing and which are tentative.
 - `energyPool` — candidates where both pre- and post-run energy are recorded. Backs State Lift only.
 - `effortPool` — candidates where effort is recorded. Backs Quiet Gain, Same-Cost/Better, and Demand Explained.
 
-Each pool is formed after candidate selection (route-first / distance-fallback, 180-day / cap-10).
+Each pool is formed after candidate selection (same route within the distance band first, then
+similar-distance fallback, 180-day / cap-10).
 A candidate missing the required field is silently excluded from that pool without affecting others.
 
 **Per-signal contract:**
