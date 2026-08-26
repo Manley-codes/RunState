@@ -35,6 +35,29 @@ described later in this file.
    disappear. A late Energy answer still saves for future learning but never replaces the response
    already committed to that run. No answer is required to receive a response.
 
+### Durable selected-reflection record — DEFAULT
+
+**Approved August 25, 2026. Future-mobile contract only; nothing is implemented.** Each completed
+run may own exactly one selected reflection linked by the run's permanent UUID. Treat it as a
+one-to-one child of the run; whether it eventually uses fields on the run or a separate local table
+is an implementation decision.
+
+The reflection has three states:
+
+- **`PENDING`** — the run is safe, but its reflection is still being prepared or selected.
+- **`READY`** — store the selected branch (`Spent`, `Feeling Good`, `Powered Up`, or no selection),
+  the exact final text, and when it became final.
+- **`FAILED`** — the run remains safe; only reflection preparation failed. Retry moves this same
+  record back to `PENDING` and never saves or duplicates the run.
+
+`PENDING → READY` is the normal path; `PENDING → FAILED → PENDING` is the retry path. Once `READY`,
+the selected text is permanent for that historical run. Late Energy or Effort saves as future
+evidence without replacing it. History reads the stored text exactly and never regenerates on open
+or reload. Unused candidates are discarded. If the app closes while `PENDING`, it may continue the
+same reflection work against the same saved run. Deleting the run removes its reflection through
+the same local and synchronization lifecycle so no orphaned reply remains. Speech audio does not
+need persistence; it may be produced later from the exact stored text.
+
 ### Preconstructed Energy response family — LOCKED DIRECTION
 
 The four candidates share the same saved run facts, key moments and approved music/persona evidence,

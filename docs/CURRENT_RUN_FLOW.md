@@ -80,6 +80,10 @@ is not RunState's complete product or engineering backlog.
   approved but not implemented: the phone generates a permanent run UUID and uses `PENDING_CREATE`,
   `SYNCED`, `PENDING_UPDATE`, or `PENDING_DELETE`. Canonical detail lives in
   `design/run_initiation_register.md`.
+- The console prints its generated response once and does not persist it. The future-mobile
+  one-to-one selected-reflection contract is approved but not implemented: `PENDING`, `READY`, or
+  `FAILED`, with exact `READY` text preserved in History. Canonical detail lives in
+  `design/design_run_response_system.md`.
 - The storage layer can update post-run Energy and Effort together or delete one saved run by
   `run_id`. One affected row means success; zero means the ID is missing; SQL or impossible
   multi-row results throw `RunStorageException`. The Java console now calls these operations from

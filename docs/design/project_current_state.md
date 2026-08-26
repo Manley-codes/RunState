@@ -23,7 +23,8 @@ code.
   recoverable Undo that preserves past-run history. See `design_shoe_selection.md`.
 - Current active-run behavior includes pace, BPM, and elapsed time inside the circular instrument;
   large distance below; a live now-playing/current-run strip; and one Pause control. Pressing Pause
-  reveals Stop and Play. Play resumes run tracking; Stop ends it. Stop confirmation is not decided.
+  reveals Stop and Play. Play resumes run tracking; a 1.5-second hold on Stop ends it and serves as
+  the confirmation.
 - Log History voice playback now has a successful six-persona Edge prototype for smooth, human
   delivery. It remains a testing surface, not a selected production TTS engine or bundle of reusable
   voice assets; details and open dependencies live in `ui_phase_handoff.md`.
@@ -57,8 +58,10 @@ code.
   comparison gap is fixed and verified. The active-session lifecycle, recovery and timestamp
   contract is approved and recorded in `run_initiation_register.md`, but not implemented. The
   phone-generated UUID and `PENDING_CREATE` / `SYNCED` / `PENDING_UPDATE` / `PENDING_DELETE`
-  local-first contract is also approved there and not implemented. The durable selected-reflection
-  contract remains before a mobile build; the next roadmap lane still requires Manley's choice.
+  local-first contract is also approved there and not implemented. The one-to-one selected
+  reflection with `PENDING` / `READY` / `FAILED` is approved in `design_run_response_system.md` and
+  not implemented. All four review findings now have either a verified fix or an approved contract;
+  the next roadmap lane still requires Manley's choice.
 - No mobile implementation, GPS tracking, BPM source, music-provider integration, or active-session
   persistence has been authorized or built by this design work.
 

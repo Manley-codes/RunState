@@ -348,7 +348,7 @@ Not blocking; revisit later.
 | **Active run session states** — countdown, running, paused, resumed, stopped | Lifecycle, recovery and timestamp contract approved August 25; no mobile implementation exists. Countdown creates no session; Running persists immediately; Paused remains durable; resume is an action; hold-to-end completes. Recovery restores only through the last trustworthy checkpoint. Canonical contract: `run_initiation_register.md`. |
 | **Live now-playing metadata and music-reactive visualizer** | Prototype only. Needs music-provider/playback integration and a defined no-music state; must fail independently of core tracking. |
 | **Natural reflection speech** | The Edge-based six-voice selector is a successful design prototype, not a production TTS choice. Provider/platform voice availability, licensing, cost, offline behavior, accessibility controls, and cross-device consistency remain open. **Cross-device inconsistency is now observed rather than anticipated** — see §3. A production version cannot rely on browser speech synthesis; it needs either the platform's own speech system, which exposes better voices than the web layer does, or audio from a hosted text-to-speech provider. That choice is a real architecture decision with cost, licensing and offline consequences, not a settings tweak. |
-| **Run Complete save / response separation** | Mobile must save the run durably before saying `Run saved`, then show metrics with a deterministic factual audio receipt. After save, it prepares four responses from one factual foundation: `Spent`, `Feeling Good`, `Powered Up`, and no selection. Energy selects the one immediate response that is revealed and stored. Effort does not change it; Effort persists for future comparisons, Quiet Gains and longitudinal learning. `Saved` means durable on-device storage, not completed cloud sync. |
+| **Run Complete save / response separation** | Mobile must save the run durably before saying `Run saved`, then show metrics with a deterministic factual audio receipt. After save, it prepares four responses from one factual foundation: `Spent`, `Feeling Good`, `Powered Up`, and no selection. Energy selects the one immediate response that is revealed and stored. The approved one-to-one reflection record uses `PENDING`, `READY`, or `FAILED`; exact `READY` text is permanent in History, retry never resaves the run, and deletion removes both. Effort does not change it; Effort persists for future comparisons, Quiet Gains and longitudinal learning. `Saved` means durable on-device storage, not completed cloud sync. |
 
 **Already available and used correctly:** distance, duration, pace, route name, surface, shoes, run
 company, weather condition, temperature, pre- and post-run energy, effort.
@@ -418,9 +418,10 @@ preserve it safely, understand it, manage it, use it later — is credible in th
 console, with four bounded gaps identified before mobile contracts. The comparison-trust gap is now
 fixed: same-route runs must also pass the existing distance band. The active-session lifecycle,
 recovery and timestamp contract is approved but not implemented. The phone-generated UUID and four
-local-first synchronization states are also approved but not implemented. The remaining foundation
-contract gap is a durable selected-reflection record. **Saved-run management is usable in the Java
-console through View Run History.** It
+local-first synchronization states are also approved but not implemented. The one-to-one selected
+reflection and its `PENDING` / `READY` / `FAILED` lifecycle are now approved but not implemented.
+All four review findings therefore have a verified fix or approved contract. **Saved-run management
+is usable in the Java console through View Run History.** It
 displays database IDs, updates post-run Energy or Effort after storage confirmation, confirms
 deletion, and silently rebuilds PR flags after a delete.
 Missing IDs and storage failures leave memory unchanged and end the session with restart guidance.
