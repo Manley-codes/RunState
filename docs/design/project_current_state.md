@@ -54,8 +54,10 @@ code.
 - The narrow Core Running Foundation Review is complete. It confirmed the completed-run console
   journey and identified four bounded gaps before mobile: comparison trust, durable active-session
   timestamps/state, local-first identity/sync, and a durable selected-reflection record. The
-  comparison gap is now fixed and verified. The other three remain prerequisites before a mobile
-  build, not authorization to start them; the next roadmap lane still requires Manley's choice.
+  comparison gap is fixed and verified. The active-session lifecycle, recovery and timestamp
+  contract is approved and recorded in `run_initiation_register.md`, but not implemented. Local-first
+  identity/sync and durable selected-reflection contracts remain before a mobile build; the next
+  roadmap lane still requires Manley's choice.
 - No mobile implementation, GPS tracking, BPM source, music-provider integration, or active-session
   persistence has been authorized or built by this design work.
 

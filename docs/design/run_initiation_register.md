@@ -212,11 +212,43 @@ friction, not turning RunState into a social network or run-club platform.
 
 ---
 
+## Core run-session lifecycle and time contract — DEFAULT
+
+**Approved August 25, 2026. Future-mobile contract only; nothing is implemented.** This contract
+starts when a run becomes official. The experimental Armed and Watching detection states above stay
+separate and do not create a run.
+
+`No session → Countdown → Running ⇄ Paused → Completed`
+
+- **No session** — preparation only; nothing has been recorded.
+- **Countdown** — a visual transition. The official run has not started and no session is saved.
+- **Running** — the run officially begins. Persist the local session immediately.
+- **Paused** — keep the same session saved, but stop adding active running time.
+- **Completed** — the hold-to-end action finishes; durably save the completed run before success
+  language. Resume is an action from Paused to Running, not its own state.
+
+**Recovery is behavior, not another stored state.** If startup finds the same unfinished session in
+Running or Paused, RunState restores only information confirmed through its last durable checkpoint.
+It must not invent distance or active time for an uncertain gap. The runner may continue that same
+session or end and save it; neither path creates a duplicate. Discard remains an explicit open
+decision tied to accidental starts and must never happen silently. The local identity format is a
+separate contract still to be decided.
+
+**Time contract:** store the official start, optional finish, timezone at the start, every pause and
+resume transition, and the last durable checkpoint. Elapsed time is start-to-finish including
+pauses. Active duration includes only Running intervals and is the duration used for pace. The
+visible timer is calculated from this stored timeline; it is not the source of truth. Future
+confirmed detection may supply a buffered estimated takeoff as the official start without changing
+this lifecycle.
+
+---
+
 ## Session orchestration — DEFAULT
 
-On confirmation: restore the estimated start time and buffered segment, begin the timer and route
-recording, persist a local session record immediately so a crash cannot erase the start, play a
-restrained audio or haptic confirmation, begin the selected music if ready and permitted, attach
+On entering Running — by manual start now or confirmed detection later — restore any trusted
+buffered beginning, begin the timer and route recording, persist the local session immediately so a
+crash cannot erase the start, play a restrained audio or haptic confirmation, begin the selected
+music if ready and permitted, attach
 prepared context, and switch from detection sampling to run-tracking sampling.
 
 **Critical-path rule — PRINCIPLE.** Timer, route recording, session persistence, and manual control

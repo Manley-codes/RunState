@@ -345,7 +345,7 @@ Not blocking; revisit later.
 | **PR categories** — for the PRs filter and marker | Personal records exist in the console; categories aren't defined |
 | **Structured song playback history** — every song title plus when it started and stopped during the run | Not collected. Does not require GPS and can exist earlier; it becomes distance-aware only when joined to run timing/GPS telemetry |
 | **Song location** — the `SONG DETECTED — MILE 2.4` stamp, and the split-music view | **Not collected, not needed now, and parked for the mobile/GPS phase.** The mile marker requires a playback timestamp joined to time-aligned cumulative-distance/GPS telemetry; stored splits are not a prerequisite. An earlier non-GPS form could be time-based once playback and run-start timestamps exist. |
-| **Active run session states** — countdown, running, paused, resumed, stopped | Not present in the console flow. The mobile tracker needs a durable local session state machine. Current UI behavior: Pause reveals Stop and Play; Play resumes; Stop ends. Stop confirmation is not yet decided. |
+| **Active run session states** — countdown, running, paused, resumed, stopped | Lifecycle, recovery and timestamp contract approved August 25; no mobile implementation exists. Countdown creates no session; Running persists immediately; Paused remains durable; resume is an action; hold-to-end completes. Recovery restores only through the last trustworthy checkpoint. Canonical contract: `run_initiation_register.md`. |
 | **Live now-playing metadata and music-reactive visualizer** | Prototype only. Needs music-provider/playback integration and a defined no-music state; must fail independently of core tracking. |
 | **Natural reflection speech** | The Edge-based six-voice selector is a successful design prototype, not a production TTS choice. Provider/platform voice availability, licensing, cost, offline behavior, accessibility controls, and cross-device consistency remain open. **Cross-device inconsistency is now observed rather than anticipated** — see §3. A production version cannot rely on browser speech synthesis; it needs either the platform's own speech system, which exposes better voices than the web layer does, or audio from a hosted text-to-speech provider. That choice is a real architecture decision with cost, licensing and offline consequences, not a settings tweak. |
 | **Run Complete save / response separation** | Mobile must save the run durably before saying `Run saved`, then show metrics with a deterministic factual audio receipt. After save, it prepares four responses from one factual foundation: `Spent`, `Feeling Good`, `Powered Up`, and no selection. Energy selects the one immediate response that is revealed and stored. Effort does not change it; Effort persists for future comparisons, Quiet Gains and longitudinal learning. `Saved` means durable on-device storage, not completed cloud sync. |
@@ -416,11 +416,12 @@ not the older State Scan notes.
 **Core Running Foundation Review completed August 25.** The central journey — record a run,
 preserve it safely, understand it, manage it, use it later — is credible in the completed-run
 console, with four bounded gaps identified before mobile contracts. The comparison-trust gap is now
-fixed: same-route runs must also pass the existing distance band. The remaining gaps are durable
-active-session timestamps/state, local-first identity/sync, and a durable selected-reflection
-record. **Saved-run management is usable in the Java console through View Run History.** It
-displays database IDs, updates post-run Energy or
-Effort after storage confirmation, confirms deletion, and silently rebuilds PR flags after a delete.
+fixed: same-route runs must also pass the existing distance band. The active-session lifecycle,
+recovery and timestamp contract is now approved but not implemented. The remaining contract gaps
+are local-first identity/sync and a durable selected-reflection record. **Saved-run management is
+usable in the Java console through View Run History.** It
+displays database IDs, updates post-run Energy or Effort after storage confirmation, confirms
+deletion, and silently rebuilds PR flags after a delete.
 Missing IDs and storage failures leave memory unchanged and end the session with restart guidance.
 The mobile History interface remains a prototype, and a full editor for distance, route, date,
 weather, music, or other fields remains a separate later decision.
