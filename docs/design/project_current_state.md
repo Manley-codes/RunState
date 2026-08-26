@@ -5,7 +5,7 @@ metadata:
   type: project
 ---
 
-As of August 25, 2026, the implemented app remains a working Java console app named **RunState**.
+As of August 26, 2026, the implemented app remains a working Java console app named **RunState**.
 The mobile screens discussed below are interactive design prototypes, not production UI or tracker
 code.
 
@@ -61,7 +61,16 @@ code.
   local-first contract is also approved there and not implemented. The one-to-one selected
   reflection with `PENDING` / `READY` / `FAILED` is approved in `design_run_response_system.md` and
   not implemented. All four review findings now have either a verified fix or an approved contract;
-  the next roadmap lane still requires Manley's choice.
+  that review is closed.
+- The music feature inventory and prioritization review is complete. It separates the music
+  evidence-and-feedback foundation from later playlist selection, live support and expression
+  surfaces. A provider-neutral structured song-history contract is approved in
+  `design_music_selection_system.md`: actual playback, RunState's decisions and optional whole-run
+  Taste / Run fit feedback remain distinct under the permanent run UUID, with honest partial and
+  unknown states. Current console behavior remains the manual music state plus optional free-text
+  note. No provider, schema, API, screen, automatic capture, Java or mobile implementation is
+  authorized by the contract; the next bounded implementation or proof slice still requires
+  Manley's choice.
 - No mobile implementation, GPS tracking, BPM source, music-provider integration, or active-session
   persistence has been authorized or built by this design work.
 

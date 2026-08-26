@@ -428,11 +428,13 @@ Missing IDs and storage failures leave memory unchanged and end the session with
 The mobile History interface remains a prototype, and a full editor for distance, route, date,
 weather, music, or other fields remains a separate later decision.
 
-**After the Foundation Review: music feature inventory and prioritization.** Review the full music
-layer before choosing what to design or build next. RunStyle Sound remains a valid candidate — its
-personal view and shareable card are recorded in `music_feature_register.md` — but it is not the
-automatic next screen. Use `design_music_selection_system.md` to separate features that improve
-song selection from reflection, record-keeping and expression ideas before prioritizing them.
+**Music feature inventory and prioritization completed August 26.** The review separated the
+evidence-and-feedback foundation from later song selection, live support, record-keeping and
+expression surfaces. The provider-neutral structured song-history contract is now approved in
+`design_music_selection_system.md`: actual playback, RunState choices and optional whole-run Taste /
+Run fit feedback remain distinct under the permanent run UUID. Nothing is implemented by that
+decision. RunStyle Sound remains a valid later candidate, not the automatic next screen; the next
+bounded implementation or proof slice still requires Manley's choice.
 
 **How screens drive code.** The gap table in section 5 is the mechanism. Screens expose what the
 backend can't deliver, those become requirements, the foundation gets fixed, screens refine, and only

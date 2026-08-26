@@ -47,7 +47,7 @@ Numbers refer to the August 16 2026 music inventory. Status vocabulary matches
 
 | # | Item | Status |
 | --- | --- | --- |
-| 12 | **Structured song history** | Buildable in the console today. Nothing below works without it |
+| 12 | **Structured song history** | Provider-neutral conceptual contract approved August 26, 2026; not implemented. Nothing below works without it |
 | 18 | Relationship web | ARCHITECTURE — songs connected to effort, weather, energy, finishes |
 | 31 | Skip detection | The live negative signal. Spotify does not expose skips; needs first-party playback |
 | 41 | All-day listening profile | Heaviest privacy item in the project; needs its own consent tier |
@@ -85,19 +85,19 @@ QUEUE_NEXT. RunState never cuts a song.
 
 | # | Item | Status |
 | --- | --- | --- |
-| 26 | Taste vs run impact | EXPERIMENT. Two separate questions: did you like the songs, and did they fit this run |
+| 26 | Taste vs run fit | DEFAULT minimum contract approved; the collection and prompting experience remains an experiment |
 
-> ⚠️ **This layer is one item deep, and it is the weak point of the whole system.**
+> ⚠️ **This layer is still the easiest part of the system to lose.**
 >
 > The register already says why: *"Everything else in the music layer is the app talking. This
 > is the app listening. The trust ledger cannot earn roles without it."*
 >
 > A selection system with no feedback path makes picks and never learns whether they landed. It
 > would guess forever with no correction, which makes *"as accurately as possible"*
-> unachievable by construction. It is also the layer most likely to be dropped — least
-> enjoyable to build, and the only one that asks the runner for something.
+> unachievable by construction.
 >
-> **Do not let this layer stay at one item without a deliberate decision.**
+> **The August 26 contract now protects the minimum: optional, separate whole-run Taste and Run fit
+> evidence. How and when to collect it remains open.**
 
 ### 6. Proof — how Manley can tell it works
 
@@ -151,30 +151,117 @@ Both are already covered by tests.
 
 Not a roadmap. This is what the dependencies allow.
 
-1. **Structured song history (#12)** — the whole system's floor. Console-buildable today, in
-   Java and MySQL. Eight items sit behind it.
-2. **Trust ledger (#13)** — the first thing history makes possible, and the piece that makes
-   selection personal rather than generic.
-3. **The decision simulator (#28)** — prove the choices feel intelligent before paying for any
+1. **Structured song history (#12)** — the whole system's floor. Its conceptual contract is
+   approved below, but no console, database, provider or mobile implementation is authorized.
+   Eight items sit behind it.
+2. **Minimum feedback support (#26)** — preserve the optional whole-run Taste and Run fit signals
+   alongside the history so the learning loop is not retrofitted later. The collection surface can
+   still wait.
+3. **Trust ledger (#13)** — the first judgment history and feedback make possible, and the piece
+   that makes selection personal rather than generic.
+4. **The decision simulator (#28)** — prove the choices feel intelligent before paying for any
    provider integration. Both source documents recommended this independently.
-4. **Feedback (#26)** — must not be deferred indefinitely; see the warning in layer 5.
 5. Everything else follows playback access and the mobile client.
 
-**Note on what #12 must store.** Manley confirmed on August 16 that the finished app both
-**chooses and watches** — it constructs playlists and queues songs, *and* observes what
-actually played. Structured song history therefore needs room for two kinds of record: what
-played and when, and what the app chose, why, and whether the runner accepted it. Building only
-the first means retrofitting the second, and schema is the one thing in this project that is
-genuinely expensive to change later.
+## Structured song-history contract — DEFAULT
+
+**Approved August 26, 2026. Conceptual only; nothing here authorizes implementation.** The
+finished app both **chooses and watches**: it may prepare or queue music, and it observes what
+actually played. Those are related but different facts and must never be collapsed into one
+generic fact.
+
+### One run owns the history
+
+- Music history for a recorded run belongs to that run's permanent phone-generated UUID. It does
+  not invent a second run identity.
+- It follows the parent run's local-first recovery, deletion and synchronization lifecycle. A
+  music-capture or music-sync failure never blocks timing, completing or saving the run.
+- Trustworthy playback observations and RunState decisions become durable locally as the run
+  happens; Run Complete is not their first save point.
+- Recovery continues the same run-owned history from its last durable observations. Uncertain gaps
+  remain gaps rather than being backfilled as if capture had continued.
+- Deleting the run removes its music history through the same local-first deletion lifecycle so
+  music records cannot remain orphaned or reappear after synchronization.
+- The existing high-level distinction remains honest: `MUSIC`, `NO_MUSIC`, and not recorded are
+  different states. An empty detailed history never silently means no music.
+
+### What actually played
+
+For each playback occurrence that can be supported by evidence, preserve enough information to
+answer two questions later: **what was it, and when did it overlap this run?** Conceptually that
+means:
+
+- a provider-neutral identity reference when one exists, plus a title/artist display snapshot so
+  History remains understandable if the provider is later unavailable;
+- provenance and confidence for the identity rather than treating manual text, device observation
+  and a provider event as equally exact;
+- overall capture coverage so a partial, unavailable, unauthorized or unknown record is never
+  presented as the run's complete soundtrack;
+- its known start and end position on the run timeline, including honest partial or unknown
+  boundaries; and
+- a separate occurrence when the same track plays again later in the run.
+
+Timing is part of structured history, not an optional enhancement. Exact timestamp representation
+and precision remain implementation decisions. A current free-text music note remains valid partial
+evidence; it must not be silently parsed into exact tracks or playback times.
+
+### What RunState decided
+
+Keep RunState's own music decisions separate from observed playback. Preserve, when applicable:
+
+- what it decided to leave, present, place or queue, and when;
+- the intended role or moment;
+- the reason, evidence strength and which decision rules were active at the time; and
+- whether the choice was presented, accepted, declined or left without a trustworthy outcome.
+
+A choice does not prove the song played. Playback does not prove the runner accepted or liked the
+choice. Link the two only when actual evidence supports that connection. This record exists so the
+decision simulator and later learning can be judged honestly after rules change.
+
+### Minimum feedback the history must support
+
+The minimum is one optional whole-run music-feedback record with two independent answers:
+
+| Signal | Runner-facing meaning | Minimum stored meanings |
+| --- | --- | --- |
+| **Taste** | How did you like the music? | Liked it / It was okay / Not for me / Unknown |
+| **Run fit** | How did the music land in this run? | It felt right / Some fit and some did not / It felt wrong for this run / No clear effect / Unknown |
+
+These phrases define the minimum meanings, not final UI copy, enum names or database values.
+
+Either answer, both or neither may be recorded. No answer means `Unknown`, never the middle choice or
+`No clear effect`. A no-music run is not applicable, not negative feedback. Skips, saves, Energy,
+Effort, pace and completion remain separate evidence and never silently fill either answer.
+
+This is whole-run feedback, not a requirement to grade every track. It may be added later without
+regenerating the run's stored reflection. The collection surface, selective prompting policy and
+any future track-level feedback remain later decisions.
+
+### Truth and privacy boundaries
+
+- Partial observations stay partial. Known identity with unknown timing is still useful, but it
+  cannot support mile, split, opener, closer or complete-soundtrack claims.
+- Raw playback, decisions and runner feedback are evidence. Track roles, relationship patterns and
+  trust are later derived judgments that still must clear the existing confidence thresholds.
+- Store no song audio, lyrics or provider credentials in run music history.
+- This contract chooses no provider and approves no transfer of playback history, provider
+  metadata or feedback to Anthropic or any other service. Any future transfer requires its own
+  consent and privacy decision.
+
+### Deliberately not decided here
+
+No table, class, API payload, provider, identity-resolution algorithm, exact timestamp format,
+screen, prompt timing, playlist logic or synchronization payload is selected. This contract also
+does not replace the console's current free-text note or authorize automatic music capture. How
+long to retain a prepared music choice when no run ever starts also remains a later decision.
 
 ---
 
 ## Open questions
 
-1. Does the feedback layer (#26) get a second mechanism, or does one deliberately suffice?
-2. What exactly counts as structured song history — title and artist only, or timestamps too?
-   (Also open in `music_feature_register.md` §8.)
-3. Does the decision simulator run before or after the trust ledger exists? It is more useful
+1. How and when should the optional whole-run feedback be collected, and does track-level feedback
+   ever earn a separate mechanism?
+2. Does the decision simulator run before or after the trust ledger exists? It is more useful
    after, but it is cheaper before.
-4. `Settle / Hold / Build` was the intended internal axis feeding layer 3. Manley set it aside
+3. `Settle / Hold / Build` was the intended internal axis feeding layer 3. Manley set it aside
    on August 16. If assembly is built without it, what supplies run intent?

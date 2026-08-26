@@ -95,6 +95,17 @@ Use many signals. Don't overreact and don't pretend certainty.
 
 ## 3. Named features
 
+### Structured song history — DEFAULT FOUNDATION *(contract approved August 26, 2026)*
+
+The provider-neutral conceptual contract now lives in `design_music_selection_system.md`. It keeps
+three kinds of evidence distinct under the permanent run UUID: what actually played and when, what
+RunState chose and why, and the runner's optional whole-run Taste / Run fit feedback. Unknown or
+partial evidence stays unknown or partial; a recommendation never proves playback, and playback
+never proves acceptance.
+
+The contract approves no provider, schema, API, screen, playlist logic, automatic capture or Java
+implementation. The console's current free-text music note remains current behavior.
+
 ### I Need a Push — EXPERIMENT, leading *(recovered July 9)*
 
 **Approved boundary:** *"I Need a Push" is a runner support request, not a playlist mode.* It
@@ -380,10 +391,17 @@ insight log). RunStyle Sound inherits that open question.
 *Needs:* structured song history, enough run history to clear the confidence thresholds, and a
 decided RunStyle summary surface.
 
-### Playlist grading — taste versus run impact — EXPERIMENT
+### Music feedback — taste versus run fit — DEFAULT MINIMUM; richer grading EXPERIMENT
+
+**Approved minimum beneath this experiment.** Structured song history must support two independent,
+optional whole-run answers: Taste and Run fit. Either, both or neither may be recorded; no answer is
+unknown, while an explicit "No clear effect" remains real feedback. These are domain meanings, not
+locked UI wording. The canonical contract is in `design_music_selection_system.md`.
+
+The richer playlist-specific direction below remains experimental.
 
 **The reframe that makes it work:** do not ask the runner to grade *how well the AI understood their
-taste.* Ask **how the playlist affected the run.** Those sound similar and are completely different
+taste.* Ask **how the playlist fit the run.** Those sound similar and are completely different
 questions. Grading the AI's understanding makes the AI the subject; grading the run keeps the runner
 the subject — the same principle behind rejecting audible restraint.
 
@@ -391,8 +409,11 @@ the subject — the same principle behind rejecting audible restraint.
 
 | Dimension | Question | Example answers |
 | --- | --- | --- |
-| **Taste** | Did you like the songs? | Loved them / they were okay / didn't like them. Plus passive signals: saves, replays, skips, artist and genre preference |
-| **Run impact** | Did it fit or affect this run? | Energized me / matched my pace / steadied me / calmed me / distracted me / no effect / wrong timing |
+| **Taste** | Did you like the songs? | Loved them / they were okay / didn't like them |
+| **Run fit** | Did it fit this run? | It felt right / some fit and some did not / it felt wrong / no clear effect. Richer later tags may include energized, steadied, calmed, distracted or wrong timing |
+
+Passive signals such as saves, replays and skips remain separate evidence. They do not silently
+become the runner's explicit Taste or Run fit answer.
 
 The separation exists because a runner can love a song and admit *"it's terrible for my tempo
 runs"* — or the opposite, *"I don't normally listen to this, but somehow it pushed me during the
@@ -418,7 +439,8 @@ talking. This is the app **listening**. The trust ledger cannot earn roles witho
 trust are what make any of this personal rather than generic. It is the first feature that lets the
 system learn whether its own recommendations are working.
 
-*Needs:* playlist generation to exist, plus structured song history to attach feedback to.
+The minimum feedback can describe any completed run with music. Richer feedback specifically about
+a RunState-generated playlist still needs playlist generation. Track-level grading remains later.
 
 ### Trust ledger + track roles — EXPERIMENT
 
@@ -589,9 +611,11 @@ The point of this section is that nothing here quietly becomes "later" without b
 
 **Buildable in the console today**
 
-- **Structured song history.** Replace or supplement the free-text music note with structured
-  track data. Unlocks the trust ledger, split context, the relationship web, and every pattern
-  feature. Smallest change with the largest downstream effect.
+- **Structured song-history fixtures or manual representation.** The provider-neutral conceptual
+  contract is approved and unlocks the trust ledger, split context, relationship web and later
+  pattern features. Real automatic playback observation is not console capability, and no current
+  implementation is authorized. The contract deliberately does not decide whether or how the
+  existing free-text music note changes.
 - **The music decision simulator.** Both source documents independently recommended it: *print the
   music decision instead of changing songs.* Proves whether the decision feels intelligent without
   GPS, OAuth, mobile lifecycle, or playback control. Already in the build-order rule.
@@ -635,8 +659,9 @@ app feel crowded.
    recommended shape is axis-internal with no prompt; see that entry.
 2. **Songs a runner makes their own** — whether this becomes a feature, a trust-ledger dimension, or
    just the framing of the Soundtrack Log.
-2. Does the trust ledger need manual tagging at the start, given thin streaming metadata?
-3. What counts as structured song history — title and artist only, or more?
-4. Deep Run Crate's name collides with the possible community "running crates" concept.
-5. How does I Need a Push sit alongside the state-aware reflection and run-comparison systems? Left
+3. Does the trust ledger need manual tagging at the start, given thin streaming metadata?
+4. How and when should optional whole-run music feedback be collected, and does track-level
+   feedback ever earn a separate mechanism?
+5. Deep Run Crate's name collides with the possible community "running crates" concept.
+6. How does I Need a Push sit alongside the state-aware reflection and run-comparison systems? Left
    deliberately open on July 9.
