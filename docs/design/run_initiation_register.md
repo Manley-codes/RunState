@@ -232,7 +232,7 @@ Running or Paused, RunState restores only information confirmed through its last
 It must not invent distance or active time for an uncertain gap. The runner may continue that same
 session or end and save it; neither path creates a duplicate. Discard remains an explicit open
 decision tied to accidental starts and must never happen silently. The local identity format is a
-separate contract still to be decided.
+separate contract defined immediately below.
 
 **Time contract:** store the official start, optional finish, timezone at the start, every pause and
 resume transition, and the last durable checkpoint. Elapsed time is start-to-finish including
@@ -268,6 +268,110 @@ accounts and server implementation remain later decisions.
 
 ---
 
+## Mobile foundation architecture boundary — DEFAULT
+
+**Approved August 26, 2026. This closes the mobile architecture decision needed before fixture
+work; it does not create an Android project or authorize implementation.**
+
+- Build Android first with Kotlin and native Android UI/platform services.
+- Room is the authoritative on-phone store. The interface observes durable state; it does not own
+  the run clock or keep the only copy of an active run.
+- A foreground service owns the active Running/Paused session, its timer, GPS capture and durable
+  checkpoints so navigation or screen recreation cannot end the run.
+- Local save is the source of truth. The minimum server boundary handles reflection generation and
+  later duplicate-safe synchronization; it is not required for timing or completing a run.
+- Provider and model credentials remain off the phone.
+- Run saving and reflection generation remain separate operations. A reflection failure never
+  rolls back or weakens a saved run.
+- Android platform text-to-speech is the first-demonstration speech source for the factual receipt
+  and exact stored reflection text. If it is unavailable or disabled, text remains sufficient and
+  the run continues; hosted or persona-specific speech remains a later evaluation.
+- Full RunStyle calculation stays local and is not sent to the reflection model.
+- The production reflection model is selected through bounded quality and trust testing. The model
+  used to help write code is not automatically the model used inside RunState.
+
+Accounts, multi-device conflict resolution, broad cloud history and provider integration remain
+outside this foundation.
+
+---
+
+## Time-aligned run telemetry and completed-run contract — DEFAULT
+
+**Approved August 26, 2026. Future-mobile contract only; nothing is implemented.** GPS points,
+automatic splits and song-play events use the same permanent run UUID and the same saved run
+timeline. No subsystem invents its own version of when the run happened.
+
+### Location observations
+
+Each durable location observation preserves enough source evidence to explain the route later:
+
+- the permanent run UUID and stable order within that run;
+- when the platform observed the point, plus a monotonic ordering/time marker when available;
+- latitude, longitude and reported accuracy; and
+- optional platform-provided altitude, speed or bearing when available. Missing values remain
+  unknown rather than becoming zero.
+
+Only observations received while the session is `Running` may add route distance. `Paused`
+intervals remain part of elapsed time but add no active time, route distance or split progress.
+Every observation keeps whether it was accepted for route/distance use; rejected or uncertain
+points never silently influence the displayed run. Exact GPS-jump thresholds are a Phase 4
+implementation-and-field-test decision, not part of this contract.
+
+Observations become durable locally in bounded checkpoints while the run is active. Recovery
+continues the same ordered stream under the same run UUID from the last trustworthy checkpoint.
+Duplicate delivery or retry must not create a second point. GPS gaps remain gaps: RunState never
+invents coordinates or claims a precise path through an unobserved interval. The completed run
+records whether telemetry was complete, partial or unavailable so later screens and evidence can
+stay honest.
+
+### Distance, pace and automatic splits
+
+- Total distance is derived from accepted Running observations. The visible distance counter is a
+  view of that saved evidence, not a separate source of truth.
+- Average pace uses active duration and accepted distance. Elapsed duration remains available
+  separately and includes pauses.
+- Splits are automatic running data, not music data. They are derived from the accepted cumulative
+  distance timeline in the runner's selected mile or kilometer unit.
+- Each full split preserves its distance boundary, boundary time on the shared run timeline, active
+  duration, pace and derivation version. Completion also preserves the final partial split; a run
+  shorter than one unit therefore still has one partial split.
+- The finalized split snapshot used by History and reflection evidence is stored with the completed
+  run. Future algorithm changes do not silently rewrite an old run. Any later repair or
+  recalculation must be explicit and versioned.
+- Split calculation is derived local work. Failure to prepare it never unsaves the run; it retries
+  from the same durable accepted points without duplicating the run. If the GPS evidence is too
+  incomplete, splits are unavailable rather than fabricated.
+
+Song location is derived only when a trustworthy song interval overlaps this same run timeline.
+One song may span several splits and one split may contain several songs. A missing or partial GPS
+or music timeline cannot support a precise mile claim.
+
+### The completed run
+
+Completing a run changes the existing durable session to `Completed`; it does not copy it into a
+new record or generate a new UUID. Before `Run saved`, the phone must be able to recover:
+
+- the UUID, official start, finish, start timezone, pause intervals, elapsed duration and active
+  duration;
+- accepted distance, average pace when measurable, display unit and telemetry coverage;
+- durable location observations and the finalized-or-retryable split result;
+- captured run context such as route, surface, company, shoes and weather when known;
+- optional pre/post Energy and Effort, preserving unknown when unanswered;
+- structured music history when available; and
+- local synchronization state.
+
+The selected reflection remains a separate one-to-one child prepared only after this local save.
+Late Energy, Effort or music feedback updates the same UUID and may mark the run pending update, but
+never regenerates a `READY` reflection. Deleting the parent run removes its owned telemetry, splits,
+music history and reflection through the same local-first deletion lifecycle.
+
+A run may complete with partial GPS or unavailable music. Those limitations reduce which claims
+RunState may make; they do not erase an otherwise trustworthy run. `Run saved` means this local
+completed-run composition is durable, not that every optional enrichment exists or cloud sync has
+finished.
+
+---
+
 ## Session orchestration — DEFAULT
 
 On entering Running — by manual start now or confirmed detection later — restore any trusted
@@ -295,11 +399,10 @@ independently.**
 
 1. The simplest name for the armed mode — Prepare to Detect, Ready for Run, Prepare to Run, or
    something else.
-2. Whether to target one mobile platform first to reduce background-behavior uncertainty.
-3. Which outdoor starts define initial scope: solo, run-club, trail, track, or a subset.
-4. How long the armed window stays active, and whether the runner chooses or accepts a default.
-5. Traffic-light stops shortly after takeoff — flagged by Manley as needing real review.
-6. Whether Prepare to Detect is a RunState feature or the product's new center. Manley's position,
+2. Which outdoor starts define initial scope: solo, run-club, trail, track, or a subset.
+3. How long the armed window stays active, and whether the runner chooses or accepts a default.
+4. Traffic-light stops shortly after takeoff — flagged by Manley as needing real review.
+5. Whether Prepare to Detect is a RunState feature or the product's new center. Manley's position,
    August 2026: **let it play out naturally rather than deciding now.** Noted because the source
    strategy's final recommendation reads as the second, which would displace *log a run → track how
    you felt → learn something meaningful* as the core.

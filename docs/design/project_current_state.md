@@ -9,7 +9,7 @@ As of August 26, 2026, the implemented app remains a working Java console app na
 The mobile screens discussed below are interactive design prototypes, not production UI or tracker
 code.
 
-## Current UI resume point — August 22, 2026
+## Current delivery resume point — August 26, 2026
 
 - Log History has a stable design foundation. Its most-recent-record quick peek was completed and
   accepted August 13: approximately 1.66 seconds of total visible expansion-and-collapse motion,
@@ -21,10 +21,11 @@ code.
   behavior, selected-shoe confirmation and displayed mileage. Automatic exactly-once mileage remains
   a production requirement, some shoe images need later cutout cleanup, and removal is changing to a
   recoverable Undo that preserves past-run history. See `design_shoe_selection.md`.
-- Current active-run behavior includes pace, BPM, and elapsed time inside the circular instrument;
+- The active-run prototype includes pace, BPM, and elapsed time inside the circular instrument;
   large distance below; a live now-playing/current-run strip; and one Pause control. Pressing Pause
   reveals Stop and Play. Play resumes run tracking; a 1.5-second hold on Stop ends it and serves as
-  the confirmation.
+  the confirmation. For the first real demonstration, BPM is omitted unless a separately approved
+  real sensor source exists; fixture BPM must never masquerade as a live measurement.
 - Log History voice playback now has a successful six-persona Edge prototype for smooth, human
   delivery. It remains a testing surface, not a selected production TTS engine or bundle of reusable
   voice assets; details and open dependencies live in `ui_phase_handoff.md`.
@@ -69,8 +70,17 @@ code.
   Taste / Run fit feedback remain distinct under the permanent run UUID, with honest partial and
   unknown states. Current console behavior remains the manual music state plus optional free-text
   note. No provider, schema, API, screen, automatic capture, Java or mobile implementation is
-  authorized by the contract; the next bounded implementation or proof slice still requires
-  Manley's choice.
+  authorized by that contract.
+- The broader mobile technical-contract gate is now also complete. `run_initiation_register.md`
+  defines the shared timeline for accepted GPS observations, active-time distance and pace,
+  automatic full and partial splits, partial/unavailable telemetry, and the completed-run
+  composition under the permanent UUID. It also locks the first implementation boundary: native
+  Android/Kotlin, Room as the on-phone source of truth, a foreground service for active sessions,
+  and a minimal server for reflection plus later sync with credentials off-device. Saving and
+  reflection remain separate; full RunStyle stays local. These are approved contracts, not code.
+- **Next delivery task:** build the native Android fixture journey from Start through durable Log
+  History and prove it survives reopening before introducing GPS or provider integration. Remaining
+  Log History polish, further music intelligence and RunStyle V2 stay behind that foundation.
 - No mobile implementation, GPS tracking, BPM source, music-provider integration, or active-session
   persistence has been authorized or built by this design work.
 
@@ -224,15 +234,16 @@ the authoritative August 13 UI resume point and queue are at the top of this fil
   it later) credible and structurally ready for a real interface? "Manage" (edit/delete a
   logged run) is the known thin spot. Output is a short gap list, not a feature hunt; "add
   every feature Strava has" is explicitly out.
-- The rough-screen/Foundation loop is now underway. Follow the current queue at the top of this file
-  and use `creative_direction_ui.md` for visual direction. Let the Start/Active Run, history, and
-  post-run reply screens expose backend payloads. If Music Intelligence evaluation resumes, retain
-  its separate approval gate above rather than inserting it ahead of the UI queue.
-- Then: design/migrate the Spring Boot API from those screen contracts.
-- Then: build the mobile client and GPS/automatic-tracking layer against Spring Boot.
-  The GPS phase delivers time-aligned run telemetry, and automatic splits are built there
-  as a **general running capability** (one shared system; run screens and music intelligence
-  both consume it — full decision record in parked_feature_ideas.md, July 26, 2026 entry).
+- **Superseded delivery order, August 26:** do not insert a standalone Spring Boot migration or
+  more rough-screen work before the mobile foundation. Build the native Android/Kotlin journey
+  first with Room and fixture data, then add foreground-service GPS. Introduce only the minimal
+  server boundary when reflection generation needs it; later sync may extend that seam. If Music
+  Intelligence evaluation resumes, retain its separate approval gate rather than inserting it
+  ahead of the mobile journey.
+- The GPS phase delivers the approved time-aligned run telemetry, and automatic splits are built
+  there as a **general running capability** shared by run screens and music intelligence. Canonical
+  contract: `run_initiation_register.md`; historical decision record:
+  `parked_feature_ideas.md`.
 - Spotify integration and live-DJ behavior remain later possibilities with separate legal,
   privacy, provider, and platform dependencies.
 

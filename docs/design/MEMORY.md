@@ -9,9 +9,9 @@ Index only. One line per file — detail lives in the file. Keep it that way.
 | Item | Unlocks when | Detail lives in |
 | --- | --- | --- |
 | **Progressive-input ladder is partially resolved** — shoe search/add/select/mileage now has a Start-screen home; route, surface and company remain open | Deferred; does not block Foundation Review | `design_shoe_selection.md` + `design_state_scan.md` |
-| Log History refinement / QA pass — empty states, `REPLY | SPLITS` expanded-record mockup, `REPLAY` decision, dawn-vs-sun glyphs. This is later refinement, not a blocker for the narrow Foundation Review | After Foundation Review or when polish resumes | `ui_phase_handoff.md` §4 |
-| **Core Running Foundation Review** — completed; comparison trust is fixed; lifecycle/recovery/time, phone-UUID/local-first-sync, and durable selected-reflection contracts are approved; none is mobile code yet | No open foundation decision; choose the next roadmap lane | `project_current_state.md` + `run_initiation_register.md` + `design_run_response_system.md` |
-| **Music feature inventory and prioritization** — completed August 26; the music ideas now resolve into an evidence-and-feedback foundation before selection, live support or expression surfaces | Choose the next bounded implementation or proof slice separately | `design_music_selection_system.md` + `music_feature_register.md` |
+| Log History refinement / QA pass — empty states, `REPLY | SPLITS` expanded-record mockup, `REPLAY` decision, dawn-vs-sun glyphs. Later polish, not a prerequisite for the Android fixture foundation | After the Android fixture journey is durable | `ui_phase_handoff.md` §4 |
+| **Core Running Foundation Review** — the narrow review is completed; the adjacent mobile architecture, location-point, split and completed-run contracts were also approved August 26; none is Android code yet | **Next: native Android fixture journey with Room** | `project_current_state.md` + `run_initiation_register.md` + `design_run_response_system.md` |
+| **Music feature inventory and prioritization** — completed August 26; the music ideas resolve into an evidence-and-feedback foundation before selection, live support or expression surfaces | Defer further music work behind the Android fixture journey | `design_music_selection_system.md` + `music_feature_register.md` |
 | RunStyle V2 strategy review — Manley's replacement direction | After rough screens exist | `idea_organization_analysis.md` |
 | **Full run editing beyond feedback** — History now supports post-run Energy/Effort updates and deletion by ID; distance, route, date, weather, music, and other field editing remains intentionally out of scope | Later product review | `ui_phase_handoff.md` |
 | Does a RunStyle summary recompute from history, or read a stored insight log? | Before any summary surface is designed | `adr_001_runstyle_surfacing.md` |
@@ -19,9 +19,9 @@ Index only. One line per file — detail lives in the file. Keep it that way.
 | **Log History empty states** — two of them: a rich cold-start preview, and a minimal empty-filter state. Metrics panel has the same cold-start hole | Has to exist before the screen ships | `ui_phase_handoff.md` §4 |
 | **Future Run Suggestions needs a ruling** — parked against the scope-watch resistance to proactive coaching nudges | Before any pre-run suggestion is designed | `parked_feature_ideas.md` |
 | Settle / Hold / Build — NEEDS REVIEW, recommended shape is axis-internal with no prompt | Manley deciding | `music_feature_register.md` |
-| **Structured song history** — provider-neutral conceptual contract approved: actual playback, RunState decisions and optional whole-run Taste / Run fit feedback stay distinct under the permanent run UUID; nothing is implemented | Before trust-ledger, simulator or music-selection implementation | `design_music_selection_system.md` + `music_feature_register.md` |
+| **Structured song history** — provider-neutral conceptual contract approved: actual playback, RunState decisions and optional whole-run Taste / Run fit feedback stay distinct under the permanent run UUID; nothing is implemented | Fixture history in the Android journey; real observation after the mobile feasibility test | `design_music_selection_system.md` + `music_feature_register.md` |
 | Music final 36-output evaluation — never run, all gates stand | If music resumes | `music_intelligence_v1_evaluation.md` |
-| **Backend gaps the log screen surfaced** — start time, BPM, splits, rolling-pace comparison | Mobile phase, except start time | `ui_phase_handoff.md` §5 |
+| **Backend gaps the log screen surfaced** — start time, location points and splits now have mobile contracts; BPM is omitted unless a real source is separately approved; rolling-pace display remains later | Android implementation, except the deferred display items | `ui_phase_handoff.md` §5 + `run_initiation_register.md` |
 | Parked non-music ideas — Top Run Highlights, support messages, body feedback, context fields. Automatic splits is ACCEPTED/LATER, not parked | Each entry names its own unlock | `parked_feature_ideas.md` |
 
 ⚠️ **Nothing visual is locked.** Read the open-mind section at the top of `creative_direction_ui.md`
@@ -60,8 +60,9 @@ Claude Code if needed · Manley decides.
   Read this before sequencing any music work.
 - [Music feature register](music_feature_register.md) — named music decisions, each with a status and
   an execution path.
-- [Run initiation register](run_initiation_register.md) — Prepare to Detect, provisional detection,
-  at-home vs at-trail flows. All needs mobile.
+- [Run initiation register](run_initiation_register.md) — mobile lifecycle/time, permanent UUID,
+  Android/Room/foreground-service boundary, GPS/splits/completed-run contract, plus later detection
+  experiments.
 - [ADR-001 — RunStyle surfacing](adr_001_runstyle_surfacing.md) — the multi-card destination is
   rejected; RunStyle is a background engine.
 

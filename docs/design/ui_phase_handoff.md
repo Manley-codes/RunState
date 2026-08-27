@@ -337,31 +337,45 @@ Not blocking; revisit later.
 
 | Needed by the screen | Status |
 | --- | --- |
-| **Run start time** — time-of-day run labels, any displayed time | Fields and columns exist; `RunConsole` writes `null`. Needs a prompt, or arrives free on mobile |
-| **Heart rate / BPM** — shown in the metrics panel | Not collected. Mobile phase |
-| **Splits** — required by the split-music view | Not collected. Mobile/GPS phase |
+| **Run start time** — time-of-day run labels, any displayed time | Mobile lifecycle/time contract approved; the official start and timezone become durable when `Running` begins. Console still writes `null` |
+| **Timestamped location points** — route, distance and pace source | Mobile telemetry contract approved August 26; each point belongs to the permanent run UUID with time/order, coordinates, accuracy and acceptance evidence. Not implemented |
+| **Heart rate / BPM** — shown in the metrics panel | Not part of the required first demonstration. Omit it from a real run unless an explicitly approved real sensor source exists; Phase 3 fixture data must never be presented as live measurement |
+| **Splits** — required by the split-music view | Mobile contract approved August 26; automatic full mile/km splits plus the final partial split derive from accepted GPS and active time, then freeze as a versioned completed-run snapshot. Not implemented |
 | **Rolling pace comparison** — the reply says *"eleven seconds under your rolling pace"* | Removed as a comparison baseline in July. Manley: it returns as an app-visible stat; whether it returns as a *comparison* is decided at redesign |
 | **Monthly aggregates** — month header totals | Derivable from stored runs; nothing new needed |
 | **PR categories** — for the PRs filter and marker | Personal records exist in the console; categories aren't defined |
-| **Structured song playback history** — every song title plus when it started and stopped during the run | Not collected. Does not require GPS and can exist earlier; it becomes distance-aware only when joined to run timing/GPS telemetry |
-| **Song location** — the `SONG DETECTED — MILE 2.4` stamp, and the split-music view | **Not collected, not needed now, and parked for the mobile/GPS phase.** The mile marker requires a playback timestamp joined to time-aligned cumulative-distance/GPS telemetry; stored splits are not a prerequisite. An earlier non-GPS form could be time-based once playback and run-start timestamps exist. |
+| **Structured song playback history** — every song title plus when it started and stopped during the run | Provider-neutral contract approved August 26; actual playback and RunState decisions remain separate under the permanent run UUID. Real observation still waits for the mobile feasibility test |
+| **Song location** — the `SONG DETECTED — MILE 2.4` stamp, and the split-music view | Derived only when trustworthy playback and accepted GPS overlap on the shared run timeline. One song may span several splits and one split may contain several songs. Hide precise location when either timeline is partial |
 | **Active run session states** — countdown, running, paused, resumed, stopped | Lifecycle, recovery and timestamp contract approved August 25; no mobile implementation exists. Countdown creates no session; Running persists immediately; Paused remains durable; resume is an action; hold-to-end completes. Recovery restores only through the last trustworthy checkpoint. Canonical contract: `run_initiation_register.md`. |
 | **Live now-playing metadata and music-reactive visualizer** | Prototype only. Needs music-provider/playback integration and a defined no-music state; must fail independently of core tracking. |
-| **Natural reflection speech** | The Edge-based six-voice selector is a successful design prototype, not a production TTS choice. Provider/platform voice availability, licensing, cost, offline behavior, accessibility controls, and cross-device consistency remain open. **Cross-device inconsistency is now observed rather than anticipated** — see §3. A production version cannot rely on browser speech synthesis; it needs either the platform's own speech system, which exposes better voices than the web layer does, or audio from a hosted text-to-speech provider. That choice is a real architecture decision with cost, licensing and offline consequences, not a settings tweak. |
+| **Natural reflection speech** | The Edge six-voice selector remains prototype evidence, not a production engine. Android platform text-to-speech is the first-demonstration source for the factual receipt and exact stored reflection text; unavailable or disabled speech falls back to text without affecting the run. Hosted or persona-specific speech remains later |
 | **Run Complete save / response separation** | Mobile must save the run durably before saying `Run saved`, then show metrics with a deterministic factual audio receipt. After save, it prepares four responses from one factual foundation: `Spent`, `Feeling Good`, `Powered Up`, and no selection. Energy selects the one immediate response that is revealed and stored. The approved one-to-one reflection record uses `PENDING`, `READY`, or `FAILED`; exact `READY` text is permanent in History, retry never resaves the run, and deletion removes both. Effort does not change it; Effort persists for future comparisons, Quiet Gains and longitudinal learning. `Saved` means durable on-device storage, not completed cloud sync. |
 
 **Already available and used correctly:** distance, duration, pace, route name, surface, shoes, run
 company, weather condition, temperature, pre- and post-run energy, effort.
 
+**First-demonstration source rule — approved August 26.** Every visible value must be one of three
+things: real and traceable to saved input, explicitly controlled/fixture-backed, or omitted. Fixture
+data is appropriate while building the Phase 3 journey but must never masquerade as live data in a
+real-run demonstration. The map may use controlled imagery; seeded history and the small music /
+artist-evidence catalog may be disclosed fixtures. BPM is omitted unless a real source is approved.
+Now-playing metadata is real only when the mobile observation test supports it; otherwise show an
+honest unavailable/no-metadata state. The ring may express known app states, but it must not claim
+audio reactivity without a real signal. Weather is shown only when a real fetch succeeds and is
+identified as contextual weather, not a phone sensor. External queue control may be simulated only
+as an explicitly disclosed fallback. Speech reads saved facts or exact stored reflection text;
+voice styling never changes the facts.
+
 ---
 
 ## 6. What comes next
 
-**Roadmap position:** the earlier music lane is at a stable stopping point. The immediate product
-sequence is the remaining rough screens, then the Core Running Foundation Review, then a full music
-feature inventory and prioritization before choosing the next music surface. RunStyle Sound is one
-candidate in that later review, not a predetermined rough screen. RunStyle V2 review, screen
-finalisation, Spring Boot from the screen contracts, and mobile/GPS remain later work.
+**Roadmap position, August 26:** the narrow Core Running Foundation Review, music inventory, and
+mobile architecture / telemetry / completed-run contracts are complete at the decision level. None
+of that is Android implementation. The next delivery lane is the native Android fixture journey:
+Start → Countdown → Running/Paused → Run Complete → Log History, durable in Room after reopening.
+Remaining Log History polish, RunStyle V2, provider depth and other screen refinement must not be
+inserted ahead of that foundation.
 
 **Immediate sequence — one small pass at a time**
 
@@ -408,10 +422,10 @@ not the older State Scan notes.
    detail lives in `design_run_response_system.md` and `design_effort_cost.md`.
    Writing and evaluating the four candidate responses remains in the separate AI/music-response
    lane; this pass decides how the selected response appears.
-3. **Log History refinement pass.** Resolve the cold-start and empty-filter states, mock the expanded
-   record's `REPLY | SPLITS` states, and revisit the remaining row/glyph QA. This is when the expanded
-   interaction is designed; its real split-and-song implementation still waits for the required
-   telemetry.
+3. **Log History refinement pass — deferred behind the Android fixture journey.** Cold-start and
+   empty-filter states, expanded `REPLY | SPLITS`, `REPLAY` and remaining row/glyph QA are later
+   polish. The accepted History foundation is sufficient to begin implementation; the real split
+   and song data sources are now contracted but not built.
 
 **Core Running Foundation Review completed August 25.** The central journey — record a run,
 preserve it safely, understand it, manage it, use it later — is credible in the completed-run
@@ -434,11 +448,13 @@ expression surfaces. The provider-neutral structured song-history contract is no
 `design_music_selection_system.md`: actual playback, RunState choices and optional whole-run Taste /
 Run fit feedback remain distinct under the permanent run UUID. Nothing is implemented by that
 decision. RunStyle Sound remains a valid later candidate, not the automatic next screen; the next
-bounded implementation or proof slice still requires Manley's choice.
+music implementation or proof slice remains deferred behind the Android fixture foundation.
 
 **How screens drive code.** The gap table in section 5 is the mechanism. Screens expose what the
-backend can't deliver, those become requirements, the foundation gets fixed, screens refine, and only
-then do API contracts lock. Spring Boot gets designed **from** the screen payloads, not before them.
+current system cannot deliver, and those become traceable requirements. The August 26 delivery
+boundary now starts with native Android/Kotlin, Room and the foreground-service session foundation.
+A minimal server is introduced when reflection generation needs it and may later grow a sync seam;
+there is no standalone Spring Boot migration ahead of the Android fixture journey.
 
 ---
 

@@ -47,7 +47,7 @@ causal claims; persistent pain → professional. HEAVY health-data weight: joins
 privacy/legal feature map (project_current_state.md) the moment it's considered.
 Explicitly labeled low priority right now.
 
-## Automatic splits / time-aligned telemetry — ACCEPTED/LATER, general running capability (July 26, 2026)
+## Automatic splits / time-aligned telemetry — CONTRACT APPROVED/LATER, general running capability
 
 **Status: accepted for the mobile/GPS phase — not parked, not music-only.** Decision made
 July 26, 2026 (Codex analysis + Claude review, confirmed by Manley): automatic mile/km
@@ -63,12 +63,13 @@ intelligence. Music must never build its own separate split system; advanced mus
 shared telemetry. Label for those music ideas: "requires time-aligned telemetry" (more
 precise than "requires splits" — splits are one derived summary of telemetry).
 
-**Nothing is built now.** Console era: do not build or manually collect splits; keep pace
-math centralized so the one-pace-per-run assumption stays easy to change. Design decisions
-deferred until real GPS/provider data exists (UI → Spring Boot → mobile phases): mile vs km
-boundaries, moving vs elapsed time, pause handling, partial final split, storage/recalc,
-display. Timestamped location + playback data is also a privacy/data-contract decision —
-belongs to the standing privacy/security/legal milestone when designed.
+**The provider-neutral mobile contract was approved August 26, 2026; nothing is built.** Canonical
+detail now lives in `run_initiation_register.md`. In short: location observations and music use one
+saved run timeline; only accepted Running points add distance; active time excludes pauses; full
+mile/km splits plus the final partial split are stored as a versioned completed-run snapshot; and
+missing telemetry produces unavailable evidence rather than invented detail. Exact GPS filtering,
+Room schema, UI presentation and provider implementation remain later. Timestamped location and
+playback data still belong to the standing privacy/security/legal milestone before release.
 
 ## Small context fields (capture-when-natural)
 
