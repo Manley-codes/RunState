@@ -1,0 +1,44 @@
+package com.runstate.mobile.run
+
+/**
+ * A closed list of stages in RunState's run journey.
+ *
+ * "Closed list" means the app must use one of these known choices.
+ * It cannot quietly invent another session stage elsewhere.
+ */
+enum class RunSessionState {
+    NO_SESSION, // The runner is preparing; nothing has been saved.
+    COUNTDOWN,  // A visual transition only; there is still no saved run.
+    RUNNING,    // The official run now exists and must be saved.
+    PAUSED,     // The same run exists, but active run time is not increasing.
+    COMPLETED   // The run has ended and must remain durably saved.
+}
+
+/**
+ * Controls how the run journey is allowed to change state.
+ *
+ * Other code may ask this class for its current state, but state changes
+ * must pass through the controlled functions defined inside this class.
+ */
+class RunSessionStateMachine {
+
+    // `var` means this value may change. Every new machine starts with no session.
+    var state: RunSessionState = RunSessionState.NO_SESSION
+
+        // Other code can read `state`, but only this class can change it.
+        private set
+
+    /**
+     * Moves the journey into its visual countdown stage.
+     */
+    fun beginCountdown() {
+
+        // `check` stops an illegal move and provides a useful error message.
+        check(state == RunSessionState.NO_SESSION) {
+            "Countdown can only begin when no run session exists."
+        }
+
+        // The safety check passed, so this is now a legal state change.
+        state = RunSessionState.COUNTDOWN
+    }
+}
