@@ -5,17 +5,26 @@ metadata:
   type: project
 ---
 
-As of August 26, 2026, the implemented app remains a working Java console app named **RunState**.
-The mobile screens discussed below are interactive design prototypes, not production UI or tracker
-code.
+As of August 29, 2026, RunState remains one product and one Git repository with two implementation
+areas: the intact working Java/Maven console application and an early native Android/Kotlin/Compose
+foundation under `android/`. The mobile screens discussed below remain interactive design
+prototypes; the Android application does not yet implement that designed journey.
 
-## Current delivery resume point — August 26, 2026
+## Current delivery resume point — August 29, 2026
+
+- **Phase 3 Android implementation is now in progress.** Commit `ea43335` added the minimal Android
+  shell and one static Compose screen, verified by building, installing and launching it on the
+  Medium Phone emulator. Commits `93bacb9` and `505c89e` added an isolated in-memory
+  `RunSessionStateMachine`: its enum names all five approved states, while its implemented behavior
+  currently covers only guarded `NO_SESSION → COUNTDOWN → RUNNING` transitions. Four local JUnit
+  tests pass, including rejection of repeated countdown and skipping directly to Running. This
+  state machine is not connected to the Compose screen and does not yet save anything.
 
 - Log History has a stable design foundation. Its most-recent-record quick peek was completed and
   accepted August 13: approximately 1.66 seconds of total visible expansion-and-collapse motion,
   with only about 0.10 seconds held fully open. Exact timing lives in `ui_phase_handoff.md`.
 - The optional pre-run energy and Start-to-Active Run pass is stable enough to leave for now. Its
-  canonical record is `design_start_active_run.md`; energy-domain details are in
+  current canonical record is `design_start_run_v7.md`; energy-domain details are in
   `design_state_scan.md`.
 - The shoe control now has an accepted `Add Shoes` prototype with live search, saved/add/select
   behavior, selected-shoe confirmation and displayed mileage. Automatic exactly-once mileage remains
@@ -57,7 +66,9 @@ code.
   journey and identified four bounded gaps before mobile: comparison trust, durable active-session
   timestamps/state, local-first identity/sync, and a durable selected-reflection record. The
   comparison gap is fixed and verified. The active-session lifecycle, recovery and timestamp
-  contract is approved and recorded in `run_initiation_register.md`, but not implemented. The
+  contract is approved and recorded in `run_initiation_register.md`. Its first two ordering rules
+  now exist in the isolated Android state machine, but persistence, timestamps and recovery remain
+  unimplemented. The
   phone-generated UUID and `PENDING_CREATE` / `SYNCED` / `PENDING_UPDATE` / `PENDING_DELETE`
   local-first contract is also approved there and not implemented. The one-to-one selected
   reflection with `PENDING` / `READY` / `FAILED` is approved in `design_run_response_system.md` and
@@ -77,12 +88,17 @@ code.
   composition under the permanent UUID. It also locks the first implementation boundary: native
   Android/Kotlin, Room as the on-phone source of truth, a foreground service for active sessions,
   and a minimal server for reflection plus later sync with credentials off-device. Saving and
-  reflection remain separate; full RunStyle stays local. These are approved contracts, not code.
-- **Next delivery task:** build the native Android fixture journey from Start through durable Log
-  History and prove it survives reopening before introducing GPS or provider integration. Remaining
-  Log History polish, further music intelligence and RunStyle V2 stay behind that foundation.
-- No mobile implementation, GPS tracking, BPM source, music-provider integration, or active-session
-  persistence has been authorized or built by this design work.
+  reflection remain separate; full RunStyle stays local. The Android shell and first state-order
+  rules now exist, while Room, the foreground service and the rest of this architecture remain
+  approved contracts rather than implemented behavior.
+- **Next delivery task:** continue the lifecycle rules in small tested slices, then introduce the
+  Room-backed session boundary required before the visible app may claim that a run is Running.
+  After that, continue toward the durable fixture journey through Log History and prove it survives
+  reopening before introducing GPS or provider integration. Remaining Log History polish, further
+  music intelligence and RunStyle V2 stay behind that foundation.
+- No GPS tracking, BPM source, music-provider integration, active-session persistence, recovery,
+  foreground service, or Reflection Engine has been built. The current Android screen is static,
+  and its in-memory state rules are not connected to the interface.
 
 **Completed phases:**
 - Phase 1: Console app — energy system, opening prompt, post-run responses, rolling averages

@@ -214,9 +214,13 @@ friction, not turning RunState into a social network or run-club platform.
 
 ## Core run-session lifecycle and time contract — DEFAULT
 
-**Approved August 25, 2026. Future-mobile contract only; nothing is implemented.** This contract
-starts when a run becomes official. The experimental Armed and Watching detection states above stay
-separate and do not create a run.
+**Approved August 25, 2026; implementation status updated August 29.** The Android foundation now
+contains the five-state enum and guarded in-memory `NO_SESSION → COUNTDOWN → RUNNING` ordering rules,
+verified by four local unit tests. It is not connected to the screen or durable storage. In
+particular, the current `startRun()` method changes only an in-memory state value; it does not yet
+fulfill the requirement to save a real Running session. This contract starts when a run becomes
+official. The experimental Armed and Watching detection states above stay separate and do not create
+a run.
 
 `No session → Countdown → Running ⇄ Paused → Completed`
 
@@ -270,8 +274,11 @@ accounts and server implementation remain later decisions.
 
 ## Mobile foundation architecture boundary — DEFAULT
 
-**Approved August 26, 2026. This closes the mobile architecture decision needed before fixture
-work; it does not create an Android project or authorize implementation.**
+**Approved August 26, 2026; implementation status updated August 29.** This decision established the
+Android-first direction. Implementation later began after separate explicit approval. The
+Android/Kotlin/Compose project now exists, but only as a static shell plus isolated in-memory
+state-order rules. Room, the foreground service, durable active sessions, recovery, telemetry and
+the server boundary remain unimplemented.
 
 - Build Android first with Kotlin and native Android UI/platform services.
 - Room is the authoritative on-phone store. The interface observes durable state; it does not own
