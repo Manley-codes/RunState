@@ -46,4 +46,41 @@ class RunSessionStateMachineTest {
         // Confirm that the rejected request did not corrupt or change the state.
         assertEquals(RunSessionState.COUNTDOWN, machine.state)
     }
+
+    /**
+     * Proves that the run may enter RUNNING after the countdown.
+     *
+     * This checks only the transition rule. It does not save a Room record yet.
+     */
+    @Test
+    fun `start run moves from countdown to running`() {
+
+        // Arrange: create a machine and move through the required countdown stage.
+        val machine = RunSessionStateMachine()
+        machine.beginCountdown()
+
+        // Act: begin the official run.
+        machine.startRun()
+
+        // Assert: verify that the state is now RUNNING.
+        assertEquals(RunSessionState.RUNNING, machine.state)
+    }
+
+    /**
+     * Proves that a run cannot skip directly from NO_SESSION to RUNNING.
+     */
+    @Test
+    fun `start run cannot skip countdown`() {
+
+        // Arrange: create a fresh machine that is still in NO_SESSION.
+        val machine = RunSessionStateMachine()
+
+        // Act and Assert: starting a run without countdown must be rejected.
+        assertThrows(IllegalStateException::class.java) {
+            machine.startRun()
+        }
+
+        // Confirm that the rejected request left the original state unchanged.
+        assertEquals(RunSessionState.NO_SESSION, machine.state)
+    }
 }

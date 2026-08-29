@@ -41,4 +41,21 @@ class RunSessionStateMachine {
         // The safety check passed, so this is now a legal state change.
         state = RunSessionState.COUNTDOWN
     }
+
+    /**
+     * Moves the journey from the visual countdown into the official Running state.
+     *
+     * This state machine validates only the legal order. Future production code
+     * must create the Room-backed session before showing RUNNING on the screen.
+     */
+    fun startRun() {
+
+        // A real run may begin only after the countdown stage.
+        check(state == RunSessionState.COUNTDOWN) {
+            "A run can only start after the countdown."
+        }
+
+        // The transition is legal, so the rule state may now become RUNNING.
+        state = RunSessionState.RUNNING
+    }
 }
