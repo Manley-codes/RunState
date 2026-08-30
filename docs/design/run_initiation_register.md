@@ -215,10 +215,11 @@ friction, not turning RunState into a social network or run-club platform.
 ## Core run-session lifecycle and time contract — DEFAULT
 
 **Approved August 25, 2026; implementation status updated August 29.** The Android foundation now
-contains the five-state enum and guarded in-memory `NO_SESSION → COUNTDOWN → RUNNING` ordering rules,
-verified by four local unit tests. It is not connected to the screen or durable storage. In
-particular, the current `startRun()` method changes only an in-memory state value; it does not yet
-fulfill the requirement to save a real Running session. This contract starts when a run becomes
+contains the five-state enum and guarded in-memory
+`NO_SESSION → COUNTDOWN → RUNNING → PAUSED` ordering rules, verified by eight local unit tests. It is
+not connected to the screen or durable storage. In particular, the current `startRun()` and
+`pauseRun()` methods change only an in-memory state value; they do not yet fulfill the requirements
+to save the real Running session or its pause timeline. This contract starts when a run becomes
 official. The experimental Armed and Watching detection states above stay separate and do not create
 a run.
 

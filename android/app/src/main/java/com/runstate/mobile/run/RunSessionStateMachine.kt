@@ -58,4 +58,15 @@ class RunSessionStateMachine {
         // The transition is legal, so the rule state may now become RUNNING.
         state = RunSessionState.RUNNING
     }
+
+    /**
+     * Pauses the active run without ending its session.
+     */
+    fun pauseRun() {
+        check(state == RunSessionState.RUNNING) {
+            "A run can only be paused while it is running."
+        }
+
+        state = RunSessionState.PAUSED
+    }
 }

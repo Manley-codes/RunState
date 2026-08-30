@@ -83,4 +83,76 @@ class RunSessionStateMachineTest {
         // Confirm that the rejected request left the original state unchanged.
         assertEquals(RunSessionState.NO_SESSION, machine.state)
     }
+
+    /**
+     * Proves that an active run may move into PAUSED.
+     */
+    @Test
+    fun `pause run moves from running to paused`() {
+        // Arrange: reach RUNNING through the required legal path.
+        val machine = RunSessionStateMachine()
+        machine.beginCountdown()
+        machine.startRun()
+
+        // Act: pause the active run.
+        machine.pauseRun()
+
+        // Assert: confirm that the state changed to PAUSED.
+        assertEquals(RunSessionState.PAUSED, machine.state)
+    }
+
+    /**
+     * Proves that the visual countdown cannot be paused.
+     */
+    @Test
+    fun `pause run cannot happen during countdown`() {
+        // Arrange: begin the countdown without starting the official run.
+        val machine = RunSessionStateMachine()
+        machine.beginCountdown()
+
+        // Act and Assert: pausing during countdown must be rejected.
+        assertThrows(IllegalStateException::class.java) {
+            machine.pauseRun()
+        }
+
+        // The rejected request must leave the countdown unchanged.
+        assertEquals(RunSessionState.COUNTDOWN, machine.state)
+    }
+
+    /**
+     * Proves that pausing is rejected when no run session exists.
+     */
+    @Test
+    fun `pause run cannot happen when no session exists`() {
+        // Arrange: a new machine begins in NO_SESSION.
+        val machine = RunSessionStateMachine()
+
+        // Act and Assert: pausing must throw an IllegalStateException.
+        assertThrows(IllegalStateException::class.java) {
+            machine.pauseRun()
+        }
+
+        // The rejected request must not change the original state.
+        assertEquals(RunSessionState.NO_SESSION, machine.state)
+    }
+
+    /**
+     * Proves that an already paused run cannot be paused again.
+     */
+    @Test
+    fun `pause run cannot happen twice`() {
+        // Arrange: legally reach PAUSED.
+        val machine = RunSessionStateMachine()
+        machine.beginCountdown()
+        machine.startRun()
+        machine.pauseRun()
+
+        // Act and Assert: a second pause request must be rejected.
+        assertThrows(IllegalStateException::class.java) {
+            machine.pauseRun()
+        }
+
+        // The rejected request must leave the run paused.
+        assertEquals(RunSessionState.PAUSED, machine.state)
+    }
 }
