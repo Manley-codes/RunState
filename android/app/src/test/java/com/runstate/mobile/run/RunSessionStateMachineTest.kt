@@ -155,4 +155,76 @@ class RunSessionStateMachineTest {
         // The rejected request must leave the run paused.
         assertEquals(RunSessionState.PAUSED, machine.state)
     }
+
+    /**
+     * Proves that a paused run may return to RUNNING.
+     */
+    @Test
+    fun `resume run moves from paused to running`() {
+        // Arrange: legally reach PAUSED.
+        val machine = RunSessionStateMachine()
+        machine.beginCountdown()
+        machine.startRun()
+        machine.pauseRun()
+
+        // Act: resume the same run.
+        machine.resumeRun()
+
+        // Assert: the session is active again.
+        assertEquals(RunSessionState.RUNNING, machine.state)
+    }
+
+    /**
+     * Proves that resuming is rejected when no run session exists.
+     */
+    @Test
+    fun `resume run cannot happen when no session exists`() {
+        // Arrange: a new machine begins in NO_SESSION.
+        val machine = RunSessionStateMachine()
+
+        // Act and Assert: there is no run available to resume.
+        assertThrows(IllegalStateException::class.java) {
+            machine.resumeRun()
+        }
+
+        // The rejected request must preserve the original state.
+        assertEquals(RunSessionState.NO_SESSION, machine.state)
+    }
+
+    /**
+     * Proves that the visual countdown cannot be resumed.
+     */
+    @Test
+    fun `resume run cannot happen during countdown`() {
+        // Arrange: begin the countdown without starting the official run.
+        val machine = RunSessionStateMachine()
+        machine.beginCountdown()
+
+        // Act and Assert: there is no paused run to resume.
+        assertThrows(IllegalStateException::class.java) {
+            machine.resumeRun()
+        }
+
+        // The rejected request must leave the countdown unchanged.
+        assertEquals(RunSessionState.COUNTDOWN, machine.state)
+    }
+
+    /**
+     * Proves that an active run cannot be resumed again.
+     */
+    @Test
+    fun `resume run cannot happen while already running`() {
+        // Arrange: legally reach RUNNING.
+        val machine = RunSessionStateMachine()
+        machine.beginCountdown()
+        machine.startRun()
+
+        // Act and Assert: an active run is not available to resume.
+        assertThrows(IllegalStateException::class.java) {
+            machine.resumeRun()
+        }
+
+        // The rejected request must leave the run active.
+        assertEquals(RunSessionState.RUNNING, machine.state)
+    }
 }

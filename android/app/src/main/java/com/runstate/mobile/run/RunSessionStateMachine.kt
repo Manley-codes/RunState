@@ -69,4 +69,15 @@ class RunSessionStateMachine {
 
         state = RunSessionState.PAUSED
     }
+
+    /**
+     * Resumes the paused run without creating a new session.
+     */
+    fun resumeRun() {
+        check(state == RunSessionState.PAUSED) {
+            "A run can only be resumed while it is paused."
+        }
+
+        state = RunSessionState.RUNNING
+    }
 }

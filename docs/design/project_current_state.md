@@ -5,21 +5,21 @@ metadata:
   type: project
 ---
 
-As of August 29, 2026, RunState remains one product and one Git repository with two implementation
+As of August 30, 2026, RunState remains one product and one Git repository with two implementation
 areas: the intact working Java/Maven console application and an early native Android/Kotlin/Compose
 foundation under `android/`. The mobile screens discussed below remain interactive design
 prototypes; the Android application does not yet implement that designed journey.
 
-## Current delivery resume point — August 29, 2026
+## Current delivery resume point — August 30, 2026
 
 - **Phase 3 Android implementation is now in progress.** Commit `ea43335` added the minimal Android
   shell and one static Compose screen, verified by building, installing and launching it on the
   Medium Phone emulator. Commits `93bacb9` and `505c89e` established an isolated in-memory
   `RunSessionStateMachine`; its enum names all five approved states, and its implemented behavior now
-  covers guarded `NO_SESSION → COUNTDOWN → RUNNING → PAUSED` transitions. Eight local JUnit tests
-  pass, including rejection of repeated countdown, skipping directly to Running, pausing before
-  Running and pausing twice. This state machine is not connected to the Compose screen and does not
-  yet save anything.
+  covers guarded `NO_SESSION → COUNTDOWN → RUNNING ⇄ PAUSED` transitions. Twelve local JUnit tests
+  pass, including rejection of repeated countdown, skipping directly to Running, invalid pause
+  attempts and resume attempts outside Paused. This state machine is not connected to the Compose
+  screen and does not yet save anything.
 
 - Log History has a stable design foundation. Its most-recent-record quick peek was completed and
   accepted August 13: approximately 1.66 seconds of total visible expansion-and-collapse motion,
@@ -67,8 +67,8 @@ prototypes; the Android application does not yet implement that designed journey
   journey and identified four bounded gaps before mobile: comparison trust, durable active-session
   timestamps/state, local-first identity/sync, and a durable selected-reflection record. The
   comparison gap is fixed and verified. The active-session lifecycle, recovery and timestamp
-  contract is approved and recorded in `run_initiation_register.md`. Its first three transitions,
-  through Paused, now exist in the isolated Android state machine, but persistence, timestamps and
+  contract is approved and recorded in `run_initiation_register.md`. Its lifecycle rules through
+  pause and resume now exist in the isolated Android state machine, but persistence, timestamps and
   recovery remain unimplemented. The
   phone-generated UUID and `PENDING_CREATE` / `SYNCED` / `PENDING_UPDATE` / `PENDING_DELETE`
   local-first contract is also approved there and not implemented. The one-to-one selected
