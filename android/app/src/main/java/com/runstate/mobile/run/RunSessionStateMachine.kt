@@ -80,4 +80,15 @@ class RunSessionStateMachine {
 
         state = RunSessionState.RUNNING
     }
+
+    /**
+     * Completes the paused run after the runner confirms the hold-to-end action.
+     */
+    fun completeRun() {
+        check(state == RunSessionState.PAUSED) {
+            "A run can only be completed while it is paused."
+        }
+
+        state = RunSessionState.COMPLETED
+    }
 }

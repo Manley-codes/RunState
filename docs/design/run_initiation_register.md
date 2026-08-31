@@ -216,12 +216,12 @@ friction, not turning RunState into a social network or run-club platform.
 
 **Approved August 25, 2026; implementation status updated August 30.** The Android foundation now
 contains the five-state enum and guarded in-memory
-`NO_SESSION → COUNTDOWN → RUNNING ⇄ PAUSED` ordering rules, verified by twelve local unit tests. It
-is not connected to the screen or durable storage. In particular, the current `startRun()`,
-`pauseRun()` and `resumeRun()` methods change only an in-memory state value; they do not yet fulfill
-the requirements to save the real Running session or its pause/resume timeline. This contract starts
-when a run becomes official. The experimental Armed and Watching detection states above stay
-separate and do not create a run.
+`NO_SESSION → COUNTDOWN → RUNNING ⇄ PAUSED → COMPLETED` ordering rules, verified by seventeen local
+unit tests. It is not connected to the screen or durable storage. In particular, the current
+`startRun()`, `pauseRun()`, `resumeRun()` and `completeRun()` methods change only an in-memory state
+value; they do not yet fulfill the requirements to save the real Running session, its pause/resume
+timeline or the completed record. This contract starts when a run becomes official. The experimental
+Armed and Watching detection states above stay separate and do not create a run.
 
 `No session → Countdown → Running ⇄ Paused → Completed`
 

@@ -16,10 +16,10 @@ prototypes; the Android application does not yet implement that designed journey
   shell and one static Compose screen, verified by building, installing and launching it on the
   Medium Phone emulator. Commits `93bacb9` and `505c89e` established an isolated in-memory
   `RunSessionStateMachine`; its enum names all five approved states, and its implemented behavior now
-  covers guarded `NO_SESSION → COUNTDOWN → RUNNING ⇄ PAUSED` transitions. Twelve local JUnit tests
-  pass, including rejection of repeated countdown, skipping directly to Running, invalid pause
-  attempts and resume attempts outside Paused. This state machine is not connected to the Compose
-  screen and does not yet save anything.
+  covers guarded `NO_SESSION → COUNTDOWN → RUNNING ⇄ PAUSED → COMPLETED` transitions. Seventeen local
+  JUnit tests pass, including rejection of repeated countdown, skipping directly to Running, invalid
+  pause/resume attempts, completing before Paused and completing twice. This state machine is not
+  connected to the Compose screen and does not yet save anything.
 
 - Log History has a stable design foundation. Its most-recent-record quick peek was completed and
   accepted August 13: approximately 1.66 seconds of total visible expansion-and-collapse motion,
@@ -67,9 +67,9 @@ prototypes; the Android application does not yet implement that designed journey
   journey and identified four bounded gaps before mobile: comparison trust, durable active-session
   timestamps/state, local-first identity/sync, and a durable selected-reflection record. The
   comparison gap is fixed and verified. The active-session lifecycle, recovery and timestamp
-  contract is approved and recorded in `run_initiation_register.md`. Its lifecycle rules through
-  pause and resume now exist in the isolated Android state machine, but persistence, timestamps and
-  recovery remain unimplemented. The
+  contract is approved and recorded in `run_initiation_register.md`. Its full in-memory state
+  ordering through Completed now exists in the isolated Android state machine, but persistence,
+  timestamps and recovery remain unimplemented. The
   phone-generated UUID and `PENDING_CREATE` / `SYNCED` / `PENDING_UPDATE` / `PENDING_DELETE`
   local-first contract is also approved there and not implemented. The one-to-one selected
   reflection with `PENDING` / `READY` / `FAILED` is approved in `design_run_response_system.md` and
@@ -89,11 +89,11 @@ prototypes; the Android application does not yet implement that designed journey
   composition under the permanent UUID. It also locks the first implementation boundary: native
   Android/Kotlin, Room as the on-phone source of truth, a foreground service for active sessions,
   and a minimal server for reflection plus later sync with credentials off-device. Saving and
-  reflection remain separate; full RunStyle stays local. The Android shell and first state-order
-  rules now exist, while Room, the foreground service and the rest of this architecture remain
-  approved contracts rather than implemented behavior.
-- **Next delivery task:** continue the lifecycle rules in small tested slices, then introduce the
-  Room-backed session boundary required before the visible app may claim that a run is Running.
+  reflection remain separate; full RunStyle stays local. The Android shell and full in-memory
+  session-state ordering now exist, while Room, the foreground service and the rest of this
+  architecture remain approved contracts rather than implemented behavior.
+- **Next delivery task:** introduce stable run identity and the Room-backed session boundary required
+  before the visible app may claim that a run is Running.
   After that, continue toward the durable fixture journey through Log History and prove it survives
   reopening before introducing GPS or provider integration. Remaining Log History polish, further
   music intelligence and RunStyle V2 stay behind that foundation.

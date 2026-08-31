@@ -227,4 +227,97 @@ class RunSessionStateMachineTest {
         // The rejected request must leave the run active.
         assertEquals(RunSessionState.RUNNING, machine.state)
     }
+
+    /**
+     * Proves that a paused run may enter COMPLETED.
+     */
+    @Test
+    fun `complete run moves from paused to completed`() {
+        // Arrange: legally reach PAUSED.
+        val machine = RunSessionStateMachine()
+        machine.beginCountdown()
+        machine.startRun()
+        machine.pauseRun()
+
+        // Act: finish the paused run.
+        machine.completeRun()
+
+        // Assert: the run lifecycle has ended.
+        assertEquals(RunSessionState.COMPLETED, machine.state)
+    }
+
+    /**
+     * Proves that completion is rejected when no run session exists.
+     */
+    @Test
+    fun `complete run cannot happen when no session exists`() {
+        // Arrange: a new machine begins in NO_SESSION.
+        val machine = RunSessionStateMachine()
+
+        // Act and Assert: there is no run available to complete.
+        assertThrows(IllegalStateException::class.java) {
+            machine.completeRun()
+        }
+
+        // The rejected request must preserve the original state.
+        assertEquals(RunSessionState.NO_SESSION, machine.state)
+    }
+
+    /**
+     * Proves that the visual countdown cannot be completed.
+     */
+    @Test
+    fun `complete run cannot happen during countdown`() {
+        // Arrange: begin the countdown without starting the official run.
+        val machine = RunSessionStateMachine()
+        machine.beginCountdown()
+
+        // Act and Assert: there is no official run to complete.
+        assertThrows(IllegalStateException::class.java) {
+            machine.completeRun()
+        }
+
+        // The rejected request must leave the countdown unchanged.
+        assertEquals(RunSessionState.COUNTDOWN, machine.state)
+    }
+
+    /**
+     * Proves that an active run must be paused before completion.
+     */
+    @Test
+    fun `complete run cannot happen while running`() {
+        // Arrange: legally reach RUNNING.
+        val machine = RunSessionStateMachine()
+        machine.beginCountdown()
+        machine.startRun()
+
+        // Act and Assert: completion must wait for the paused state.
+        assertThrows(IllegalStateException::class.java) {
+            machine.completeRun()
+        }
+
+        // The rejected request must leave the run active.
+        assertEquals(RunSessionState.RUNNING, machine.state)
+    }
+
+    /**
+     * Proves that a completed run cannot be completed again.
+     */
+    @Test
+    fun `complete run cannot happen twice`() {
+        // Arrange: legally complete the run.
+        val machine = RunSessionStateMachine()
+        machine.beginCountdown()
+        machine.startRun()
+        machine.pauseRun()
+        machine.completeRun()
+
+        // Act and Assert: a second completion request must be rejected.
+        assertThrows(IllegalStateException::class.java) {
+            machine.completeRun()
+        }
+
+        // The rejected request must leave the run completed.
+        assertEquals(RunSessionState.COMPLETED, machine.state)
+    }
 }
