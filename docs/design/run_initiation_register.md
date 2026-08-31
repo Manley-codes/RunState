@@ -68,6 +68,21 @@ configuration, expected route or recognized start area, likely shoes and run typ
 settings and headphone state, a chosen or generated music session, cached weather and offline-safe
 session metadata, and the smallest useful pre-run message.
 
+### Forgotten-headphones reminder — EXPERIMENT *(added August 31, 2026)*
+
+Based on Manley's experience of leaving for a run without the headphones he intended to bring,
+RunState may use the explicitly entered preparation or armed window to notice that the runner's
+expected headphones are not connected or otherwise visible through permitted device signals. When
+that happens, it may give one gentle reminder before departure when possible: *Headphones aren't
+connected — do you have them?*
+
+This is an absence-and-uncertainty inference only. RunState may know that expected headphones do not
+appear connected; it does not know whether they are at home, in a car, in a bag or somewhere else,
+and must never claim their location. The check is optional, dismissible and limited to the
+runner-initiated preparation window. It never blocks manual start, detection, tracking, intentional
+silence or a run without headphones. Exact platform signals and feasibility remain a later mobile
+test rather than a promise of reliable object tracking.
+
 ### Three ways to start — EXPERIMENT *(added August 4, 2026)*
 
 The runner chooses how the run begins:

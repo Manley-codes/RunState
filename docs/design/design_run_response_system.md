@@ -106,6 +106,21 @@ RunState understand the runner across runs.**
 - The reflection speaks once when it arrives. Entering History does not speak it again; `REPLAY` is
   deliberate.
 
+### Post-run voice contrast — DIRECTION, NOT YET PROTOTYPED *(added August 31, 2026)*
+
+Keep the deterministic factual receipt neutral, familiar and consistent. Give the selected
+contextual reflection — especially the API-generated unique reply — the more characterful personal
+delivery through a clearly different voice, cadence or both. The voice still reads the exact stored
+text and never changes, embellishes or overrides its facts.
+
+This contrast belongs only to the saved post-run reflection. It does not define live-run
+interruptions, milestone cues, coaching, alerts or navigation speech; those remain separate ideas
+with different timing and safety constraints. The direction came from a run during which Manley was
+using Strava, Nike Run Club and adidas Running at the same time: one app appeared to switch from its
+usual factual voice to a markedly different voice after final save, possibly with an Australian
+accent. The source app and accent are unconfirmed, so neither the provider nor a particular accent
+is locked by this observation.
+
 ### Processing consequence
 
 Durable run saving and response preparation remain separate operations. The response family may
