@@ -246,6 +246,22 @@ visible timer is calculated from this stored timeline; it is not the source of t
 confirmed detection may supply a buffered estimated takeoff as the official start without changing
 this lifecycle.
 
+**Stored time format — added August 31, 2026.** Every calendar timestamp named in that contract —
+the official start, the optional finish, each pause and resume transition, and each durable
+checkpoint — is stored as epoch milliseconds. The timezone at the official start is stored
+separately as an IANA zone ID such as `America/Chicago`. Historical time-of-day labels must be
+rendered from the run's own stored start timezone, never from the device's current timezone: a run
+that was a morning run in Houston stays a morning run when the phone later travels or its zone
+setting changes.
+
+**Monotonic timing is boot-scoped — added August 31, 2026.** Monotonic values, taken from the
+platform's steadily increasing since-boot clock, are valid only within the same device boot and must
+never be compared across a device restart. They may sharpen ordering and elapsed measurement inside
+one live session, but they are not a durable record of when anything happened. Durable recovery
+therefore anchors to the saved epoch-based checkpoints rather than to any monotonic value, and the
+no-invention rule above applies across the gap: neither distance nor active duration may be
+manufactured for an interval the checkpoints do not cover.
+
 ---
 
 ## Local-first run identity and synchronization — DEFAULT
@@ -255,6 +271,14 @@ enters Running, the phone generates one permanent UUID. That identity stays with
 through pause, recovery, completion, feedback updates and deletion. A recovered or retried run must
 never receive a second identity. The server may keep an internal database key, but the phone and
 server use this UUID as the run's stable external identity and duplicate-safe synchronization key.
+
+**The UUID is the Room primary key — added August 31, 2026.** On Android that permanent
+phone-generated UUID is the primary key of the run row itself. Do not introduce a separate
+auto-generated numeric Room identity beside it: a second identity would give one run two names, and
+reopen precisely the duplication and mismatch problems the UUID exists to prevent. One run is one
+run row. Telemetry points, splits, structured music history and the selected reflection stay owned
+child records that reference that UUID rather than being folded into it. This governs the Android
+store only; the Java console's existing MySQL `run_id` is a separate system and is unaffected.
 
 Active sessions remain local in the first mobile foundation. After completion, the run carries one
 of four synchronization states:
@@ -275,11 +299,16 @@ accounts and server implementation remain later decisions.
 
 ## Mobile foundation architecture boundary — DEFAULT
 
-**Approved August 26, 2026; implementation status updated August 29.** This decision established the
-Android-first direction. Implementation later began after separate explicit approval. The
-Android/Kotlin/Compose project now exists, but only as a static shell plus isolated in-memory
-state-order rules. Room, the foreground service, durable active sessions, recovery, telemetry and
-the server boundary remain unimplemented.
+**Approved August 26, 2026; implementation status updated August 31, 2026.** This decision
+established the Android-first direction. Implementation later began after separate explicit
+approval. The Android/Kotlin/Compose project exists as a static shell plus isolated in-memory
+state-order rules, and its build is now prepared for persistence: Room 2.8.4 and KSP are configured,
+Room schema export is configured to `android/app/schemas`, and a separate Android CI job runs the
+JVM unit tests and a debug build on every push and pull request. All three are verified.
+
+**Room is configured, not used.** No Room entity, no DAO, no `@Database` class and no durable active
+session exist yet. Nothing is stored on the phone. The foreground service, recovery, telemetry and
+the server boundary also remain unimplemented.
 
 - Build Android first with Kotlin and native Android UI/platform services.
 - Room is the authoritative on-phone store. The interface observes durable state; it does not own
@@ -297,6 +326,13 @@ the server boundary remain unimplemented.
 - Full RunStyle calculation stays local and is not sent to the reflection model.
 - The production reflection model is selected through bounded quality and trust testing. The model
   used to help write code is not automatically the model used inside RunState.
+
+**Database versioning — added August 31, 2026.** Android database version 1 is the initial baseline.
+Exported Room schemas are preserved in the repository as the record of what each version looked
+like, and every future version increment requires an explicit written migration. Destructive
+migration must not be used as a shortcut: dropping and rebuilding the database would silently erase
+recorded runs, which contradicts the local-save-is-the-source-of-truth rule above. `android/app/schemas`
+does not exist yet and stays empty until the first `@Database` class generates the version-1 schema.
 
 Accounts, multi-device conflict resolution, broad cloud history and provider integration remain
 outside this foundation.

@@ -5,12 +5,12 @@ metadata:
   type: project
 ---
 
-As of August 30, 2026, RunState remains one product and one Git repository with two implementation
+As of August 31, 2026, RunState remains one product and one Git repository with two implementation
 areas: the intact working Java/Maven console application and an early native Android/Kotlin/Compose
 foundation under `android/`. The mobile screens discussed below remain interactive design
 prototypes; the Android application does not yet implement that designed journey.
 
-## Current delivery resume point — August 30, 2026
+## Current delivery resume point — August 31, 2026
 
 - **Phase 3 Android implementation is now in progress.** Commit `ea43335` added the minimal Android
   shell and one static Compose screen, verified by building, installing and launching it on the
@@ -20,6 +20,15 @@ prototypes; the Android application does not yet implement that designed journey
   JUnit tests pass, including rejection of repeated countdown, skipping directly to Running, invalid
   pause/resume attempts, completing before Paused and completing twice. This state machine is not
   connected to the Compose screen and does not yet save anything.
+
+- **Android persistence and CI are configured, not used.** Commits `a8eb2b9` and `cb2ad10` wired
+  Room 2.8.4 and KSP into the Android build and configured Room schema export to
+  `android/app/schemas`; commit `dd55dc4` added a separate GitHub Actions job that runs the Android
+  JVM unit tests and a debug build alongside the existing Maven job. All three are verified. No Room
+  entity, DAO or `@Database` class exists yet, and no active-session persistence or recovery
+  behavior has been written — so `android/app/schemas` is still empty and nothing is stored on the
+  phone. Android database version 1 will be the initial baseline; canonical detail lives in
+  `run_initiation_register.md`.
 
 - Log History has a stable design foundation. Its most-recent-record quick peek was completed and
   accepted August 13: approximately 1.66 seconds of total visible expansion-and-collapse motion,
