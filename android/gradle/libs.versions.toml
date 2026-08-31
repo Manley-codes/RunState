@@ -33,4 +33,5 @@ androidx-compose-material3 = { group = "androidx.compose.material3", name = "mat
 ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }
 android-application = { id = "com.android.application", version.ref = "agp" }
 kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
+androidx-room = { id = "androidx.room", version.ref = "room" }
 
