@@ -1,0 +1,55 @@
+{
+  "formatVersion": 1,
+  "database": {
+    "version": 1,
+    "identityHash": "8a5097fd4b5535ed76e5511611f94171",
+    "entities": [
+      {
+        "tableName": "runs",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`run_id` TEXT NOT NULL, `state` TEXT NOT NULL, `official_start_epoch_millis` INTEGER NOT NULL, `start_timezone_id` TEXT NOT NULL, `last_checkpoint_epoch_millis` INTEGER NOT NULL, PRIMARY KEY(`run_id`))",
+        "fields": [
+          {
+            "fieldPath": "runId",
+            "columnName": "run_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "state",
+            "columnName": "state",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "officialStartEpochMillis",
+            "columnName": "official_start_epoch_millis",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "startTimezoneId",
+            "columnName": "start_timezone_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastCheckpointEpochMillis",
+            "columnName": "last_checkpoint_epoch_millis",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "run_id"
+          ]
+        }
+      }
+    ],
+    "setupQueries": [
+      "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '8a5097fd4b5535ed76e5511611f94171')"
+    ]
+  }
+}

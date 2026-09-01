@@ -229,14 +229,15 @@ friction, not turning RunState into a social network or run-club platform.
 
 ## Core run-session lifecycle and time contract — DEFAULT
 
-**Approved August 25, 2026; implementation status updated August 30.** The Android foundation now
+**Approved August 25, 2026; implementation status updated September 1.** The Android foundation now
 contains the five-state enum and guarded in-memory
-`NO_SESSION → COUNTDOWN → RUNNING ⇄ PAUSED → COMPLETED` ordering rules, verified by seventeen local
-unit tests. It is not connected to the screen or durable storage. In particular, the current
-`startRun()`, `pauseRun()`, `resumeRun()` and `completeRun()` methods change only an in-memory state
-value; they do not yet fulfill the requirements to save the real Running session, its pause/resume
-timeline or the completed record. This contract starts when a run becomes official. The experimental
-Armed and Watching detection states above stay separate and do not create a run.
+`NO_SESSION → COUNTDOWN → RUNNING ⇄ PAUSED → COMPLETED` ordering rules. The transition into Running
+now has a durable Room boundary: the prepared initial row is saved before the in-memory machine moves
+from Countdown to Running, and a failed insert leaves it in Countdown. The screen is not connected,
+and `pauseRun()`, `resumeRun()` and `completeRun()` still change only an in-memory state value; the
+pause/resume timeline, later checkpoints and completed record are not durable yet. This contract
+starts when a run becomes official. The experimental Armed and Watching detection states above stay
+separate and do not create a run.
 
 `No session → Countdown → Running ⇄ Paused → Completed`
 
@@ -281,11 +282,13 @@ manufactured for an interval the checkpoints do not cover.
 
 ## Local-first run identity and synchronization — DEFAULT
 
-**Approved August 25, 2026. Future-mobile contract only; nothing is implemented.** When a session
-enters Running, the phone generates one permanent UUID. That identity stays with the same run
-through pause, recovery, completion, feedback updates and deletion. A recovered or retried run must
-never receive a second identity. The server may keep an internal database key, but the phone and
-server use this UUID as the run's stable external identity and duplicate-safe synchronization key.
+**Approved August 25, 2026; first local identity boundary implemented September 1.** The Room run
+row now requires canonical lowercase UUID text and uses it directly as the primary key. The initial
+Running insert accepts the already-prepared identity rather than generating or replacing it, and a
+duplicate UUID aborts without overwriting the original row. Production generation, preserving the
+same identity through later updates and recovery, and all synchronization behavior remain to be
+implemented. The server may keep an internal database key, but the phone and server use this UUID as
+the run's stable external identity and duplicate-safe synchronization key.
 
 **The UUID is the Room primary key — added August 31, 2026.** On Android that permanent
 phone-generated UUID is the primary key of the run row itself. Do not introduce a separate
@@ -314,16 +317,23 @@ accounts and server implementation remain later decisions.
 
 ## Mobile foundation architecture boundary — DEFAULT
 
-**Approved August 26, 2026; implementation status updated August 31, 2026.** This decision
+**Approved August 26, 2026; implementation status updated September 1, 2026.** This decision
 established the Android-first direction. Implementation later began after separate explicit
 approval. The Android/Kotlin/Compose project exists as a static shell plus isolated in-memory
-state-order rules, and its build is now prepared for persistence: Room 2.8.4 and KSP are configured,
-Room schema export is configured to `android/app/schemas`, and a separate Android CI job runs the
-JVM unit tests and a debug build on every push and pull request. All three are verified.
+state-order rules. Room 2.8.4 and KSP now back a version-1 `runs` table, DAO and `@Database` class,
+with its schema exported to `android/app/schemas`. A separate Android CI job runs the JVM tests,
+assembles the debug app and compiles the instrumented-test APK on every push and pull request; it does
+not run an emulator. Verification passed with 35 JVM tests and 3 local emulator tests.
 
-**Room is configured, not used.** No Room entity, no DAO, no `@Database` class and no durable active
-session exist yet. Nothing is stored on the phone. The foreground service, recovery, telemetry and
-the server boundary also remain unimplemented.
+**The initial Running row is durable; the full active session is not.** The row uses canonical UUID
+text as its primary key and stores the official-start epoch milliseconds, IANA start timezone and an
+initial checkpoint equal to the start. Storage succeeds before the in-memory transition to Running.
+A mutex prevents overlapping starts through one shared `RunSessionStarter`, duplicate UUIDs are
+rejected without replacement, and the stored row survives closing and rebuilding the Room database
+instance. Production wiring must still provide one active-session owner. Cancellation between the
+successful insert and in-memory transition remains a recovery concern. Pause/resume/completion
+updates, active-row discovery, relaunch or process-death recovery, the foreground service, telemetry
+and the server boundary remain unimplemented. The Java console and MySQL database are unaffected.
 
 - Build Android first with Kotlin and native Android UI/platform services.
 - Room is the authoritative on-phone store. The interface observes durable state; it does not own
@@ -346,8 +356,8 @@ the server boundary also remain unimplemented.
 Exported Room schemas are preserved in the repository as the record of what each version looked
 like, and every future version increment requires an explicit written migration. Destructive
 migration must not be used as a shortcut: dropping and rebuilding the database would silently erase
-recorded runs, which contradicts the local-save-is-the-source-of-truth rule above. `android/app/schemas`
-does not exist yet and stays empty until the first `@Database` class generates the version-1 schema.
+recorded runs, which contradicts the local-save-is-the-source-of-truth rule above. The generated
+version-1 schema now exists under `android/app/schemas` and is preserved as the migration baseline.
 
 Accounts, multi-device conflict resolution, broad cloud history and provider integration remain
 outside this foundation.

@@ -5,12 +5,12 @@ metadata:
   type: project
 ---
 
-As of August 31, 2026, RunState remains one product and one Git repository with two implementation
+As of September 1, 2026, RunState remains one product and one Git repository with two implementation
 areas: the intact working Java/Maven console application and an early native Android/Kotlin/Compose
 foundation under `android/`. The mobile screens discussed below remain interactive design
 prototypes; the Android application does not yet implement that designed journey.
 
-## Current delivery resume point — August 31, 2026
+## Current delivery resume point — September 1, 2026
 
 - **Phase 3 Android implementation is now in progress.** Commit `ea43335` added the minimal Android
   shell and one static Compose screen, verified by building, installing and launching it on the
@@ -19,16 +19,22 @@ prototypes; the Android application does not yet implement that designed journey
   covers guarded `NO_SESSION → COUNTDOWN → RUNNING ⇄ PAUSED → COMPLETED` transitions. Seventeen local
   JUnit tests pass, including rejection of repeated countdown, skipping directly to Running, invalid
   pause/resume attempts, completing before Paused and completing twice. This state machine is not
-  connected to the Compose screen and does not yet save anything.
+  connected to the Compose screen. Its transition into Running now has a separate durable boundary
+  described below; later transitions still change only memory.
 
-- **Android persistence and CI are configured, not used.** Commits `a8eb2b9` and `cb2ad10` wired
-  Room 2.8.4 and KSP into the Android build and configured Room schema export to
-  `android/app/schemas`; commit `dd55dc4` added a separate GitHub Actions job that runs the Android
-  JVM unit tests and a debug build alongside the existing Maven job. All three are verified. No Room
-  entity, DAO or `@Database` class exists yet, and no active-session persistence or recovery
-  behavior has been written — so `android/app/schemas` is still empty and nothing is stored on the
-  phone. Android database version 1 will be the initial baseline; canonical detail lives in
-  `run_initiation_register.md`.
+- **The first Android Room persistence boundary is implemented and verified.** Room database version
+  1 now contains a `runs` table whose canonical UUID text is the primary key. Its first row represents
+  the initial Running moment and stores the official-start epoch milliseconds, the run's IANA start
+  timezone and an initial checkpoint equal to the official start. `RunSessionStarter` validates the
+  prepared row, writes it before advancing the in-memory machine to Running and leaves the machine in
+  Countdown if storage fails. A mutex prevents overlapping calls through the same shared starter
+  from saving two runs; application wiring must eventually provide that single active-session owner.
+  Room rejects a duplicate UUID without replacing the original row, and a file-backed emulator test
+  proves a run survives closing and rebuilding the database instance. The version-1 schema is
+  exported under `android/app/schemas`. The Android CI job now runs JVM tests, assembles the debug app
+  and compiles the instrumented-test APK; it does not run an emulator. Verification passed with 35
+  JVM tests and 3 local emulator tests. No AndroidX Startup pin or deprecated compile-time-R-class
+  workaround remains. Canonical detail lives in `run_initiation_register.md`.
 
 - Log History has a stable design foundation. Its most-recent-record quick peek was completed and
   accepted August 13: approximately 1.66 seconds of total visible expansion-and-collapse motion,
@@ -77,10 +83,11 @@ prototypes; the Android application does not yet implement that designed journey
   timestamps/state, local-first identity/sync, and a durable selected-reflection record. The
   comparison gap is fixed and verified. The active-session lifecycle, recovery and timestamp
   contract is approved and recorded in `run_initiation_register.md`. Its full in-memory state
-  ordering through Completed now exists in the isolated Android state machine, but persistence,
-  timestamps and recovery remain unimplemented. The
-  phone-generated UUID and `PENDING_CREATE` / `SYNCED` / `PENDING_UPDATE` / `PENDING_DELETE`
-  local-first contract is also approved there and not implemented. The one-to-one selected
+  ordering through Completed now exists in the isolated Android state machine. The permanent UUID,
+  official-start timestamp, start timezone, initial checkpoint and save-before-Running boundary are
+  now implemented in Room; later pause/resume/checkpoint/completion updates and recovery remain
+  unimplemented. The `PENDING_CREATE` / `SYNCED` / `PENDING_UPDATE` / `PENDING_DELETE` local-first
+  synchronization states remain approved there and not implemented. The one-to-one selected
   reflection with `PENDING` / `READY` / `FAILED` is approved in `design_run_response_system.md` and
   not implemented. All four review findings now have either a verified fix or an approved contract;
   that review is closed.
@@ -99,16 +106,17 @@ prototypes; the Android application does not yet implement that designed journey
   Android/Kotlin, Room as the on-phone source of truth, a foreground service for active sessions,
   and a minimal server for reflection plus later sync with credentials off-device. Saving and
   reflection remain separate; full RunStyle stays local. The Android shell and full in-memory
-  session-state ordering now exist, while Room, the foreground service and the rest of this
-  architecture remain approved contracts rather than implemented behavior.
-- **Next delivery task:** introduce stable run identity and the Room-backed session boundary required
-  before the visible app may claim that a run is Running.
-  After that, continue toward the durable fixture journey through Log History and prove it survives
-  reopening before introducing GPS or provider integration. Remaining Log History polish, further
-  music intelligence and RunStyle V2 stay behind that foundation.
-- No GPS tracking, BPM source, music-provider integration, active-session persistence, recovery,
-  foreground service, or Reflection Engine has been built. The current Android screen is static,
-  and its in-memory state rules are not connected to the interface.
+  session-state ordering and the first Room-backed Running boundary now exist. The foreground service,
+  recovery, later durable lifecycle transitions and the rest of this architecture remain approved
+  contracts rather than implemented behavior.
+- **Next delivery planning step:** extend the same saved run through later lifecycle updates and
+  recovery on the way toward the durable fixture journey through Log History. The exact bounded slice
+  still needs to be agreed before implementation. GPS and provider integration remain behind that
+  foundation, as do remaining Log History polish, further music intelligence and RunStyle V2.
+- No GPS tracking, BPM source, music-provider integration, durable pause/resume/completion updates,
+  active-row discovery, relaunch or process-death recovery, foreground service, synchronization, or
+  Reflection Engine has been built. The current Android screen is static and is not connected to the
+  state machine or Room.
 
 **Completed phases:**
 - Phase 1: Console app — energy system, opening prompt, post-run responses, rolling averages
