@@ -1,6 +1,6 @@
 package com.runstate.mobile.run
 
-import com.runstate.mobile.data.local.RunDao
+import com.runstate.mobile.data.local.FakeRunDao
 import com.runstate.mobile.data.local.RunEntity
 import com.runstate.mobile.data.local.StoredRunState
 import kotlinx.coroutines.CompletableDeferred
@@ -17,38 +17,12 @@ import org.junit.Test
 /**
  * Checks the save-before-RUNNING boundary without a phone, an emulator or a database.
  *
- * The DAO is replaced by a fake so the tests can watch exactly when the insert happens,
- * force it to fail, and hold it open while another caller tries to start.
+ * The DAO is replaced by [FakeRunDao] so the tests can watch exactly when the insert
+ * happens, force it to fail, and hold it open while another caller tries to start. That
+ * fake is a shared file rather than a class nested here, because implementing the DAO
+ * grew past what belongs inside one test.
  */
 class RunSessionStarterTest {
-
-    /**
-     * A stand-in for the real Room DAO.
-     *
-     * It records what it was handed, can be told to fail, and can run a callback at the
-     * moment of insert. That callback is a suspending function so a test can park the
-     * insert mid-flight and let another coroutine run while the write is unfinished.
-     */
-    private class FakeRunDao : RunDao {
-
-        /** Every row the starter handed over, in order. */
-        val inserted = mutableListOf<RunEntity>()
-
-        /** When set, the insert throws this instead of storing anything. */
-        var failWith: Exception? = null
-
-        /** Runs at the start of the insert, before success or failure is decided. */
-        var duringInsert: (suspend () -> Unit)? = null
-
-        override suspend fun insert(run: RunEntity) {
-            duringInsert?.invoke()
-            failWith?.let { throw it }
-            inserted += run
-        }
-
-        override suspend fun findById(runId: String): RunEntity? =
-            inserted.lastOrNull { it.runId == runId }
-    }
 
     private val officialStart = 1_756_000_000_000L
     private val firstRunId = "0f6a2c1e-9d43-4b7a-9c21-7b5e8a4d1f30"

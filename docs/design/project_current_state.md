@@ -5,12 +5,12 @@ metadata:
   type: project
 ---
 
-As of September 1, 2026, RunState remains one product and one Git repository with two implementation
+As of September 4, 2026, RunState remains one product and one Git repository with two implementation
 areas: the intact working Java/Maven console application and an early native Android/Kotlin/Compose
 foundation under `android/`. The mobile screens discussed below remain interactive design
 prototypes; the Android application does not yet implement that designed journey.
 
-## Current delivery resume point — September 1, 2026
+## Current delivery resume point — September 4, 2026
 
 - **Phase 3 Android implementation is now in progress.** Commit `ea43335` added the minimal Android
   shell and one static Compose screen, verified by building, installing and launching it on the
@@ -19,22 +19,21 @@ prototypes; the Android application does not yet implement that designed journey
   covers guarded `NO_SESSION → COUNTDOWN → RUNNING ⇄ PAUSED → COMPLETED` transitions. Seventeen local
   JUnit tests pass, including rejection of repeated countdown, skipping directly to Running, invalid
   pause/resume attempts, completing before Paused and completing twice. This state machine is not
-  connected to the Compose screen. Its transition into Running now has a separate durable boundary
-  described below; later transitions still change only memory.
+  connected to the Compose screen. The Room data layer now implements the same durable lifecycle,
+  but an active-session owner has not yet joined storage changes to these in-memory transitions.
 
-- **The first Android Room persistence boundary is implemented and verified.** Room database version
-  1 now contains a `runs` table whose canonical UUID text is the primary key. Its first row represents
-  the initial Running moment and stores the official-start epoch milliseconds, the run's IANA start
-  timezone and an initial checkpoint equal to the official start. `RunSessionStarter` validates the
-  prepared row, writes it before advancing the in-memory machine to Running and leaves the machine in
-  Countdown if storage fails. A mutex prevents overlapping calls through the same shared starter
-  from saving two runs; application wiring must eventually provide that single active-session owner.
-  Room rejects a duplicate UUID without replacing the original row, and a file-backed emulator test
-  proves a run survives closing and rebuilding the database instance. The version-1 schema is
-  exported under `android/app/schemas`. The Android CI job now runs JVM tests, assembles the debug app
-  and compiles the instrumented-test APK; it does not run an emulator. Verification passed with 35
-  JVM tests and 3 local emulator tests. No AndroidX Startup pin or deprecated compile-time-R-class
-  workaround remains. Canonical detail lives in `run_initiation_register.md`.
+- **Android Room version 2 now preserves the same run through its durable lifecycle.** The canonical
+  UUID remains the `runs` primary key. `RunSessionStarter` still saves the prepared initial Running
+  row before advancing memory; transactional DAO operations now update that row through pause,
+  resume and completion while ordered `run_transitions` children preserve each pause/resume moment.
+  Completion records the finish and final checkpoint without creating a second run or a duplicate
+  completion event. A hand-written additive migration preserves version-1 Running, Paused and
+  Completed rows without inventing missing history, and the version-1 schema remains byte-identical
+  beside the generated version-2 schema. Real-database tests prove rollback after a child-write
+  failure and persistence after closing and reopening the database. Verification passes with 40 JVM
+  tests and 18 local emulator tests. The Room migration-test runtime requires the existing
+  serialization library to resolve at 1.8.1; no AndroidX Startup pin or deprecated
+  compile-time-R-class workaround remains. Canonical detail lives in `run_initiation_register.md`.
 
 - Log History has a stable design foundation. Its most-recent-record quick peek was completed and
   accepted August 13: approximately 1.66 seconds of total visible expansion-and-collapse motion,
@@ -84,9 +83,10 @@ prototypes; the Android application does not yet implement that designed journey
   comparison gap is fixed and verified. The active-session lifecycle, recovery and timestamp
   contract is approved and recorded in `run_initiation_register.md`. Its full in-memory state
   ordering through Completed now exists in the isolated Android state machine. The permanent UUID,
-  official-start timestamp, start timezone, initial checkpoint and save-before-Running boundary are
-  now implemented in Room; later pause/resume/checkpoint/completion updates and recovery remain
-  unimplemented. The `PENDING_CREATE` / `SYNCED` / `PENDING_UPDATE` / `PENDING_DELETE` local-first
+  official-start timestamp, start timezone, save-before-Running boundary, ordered pause/resume
+  history, later checkpoints and completion finish are now implemented in Room. Active-session
+  ownership and recovery remain unimplemented. The `PENDING_CREATE` / `SYNCED` / `PENDING_UPDATE` /
+  `PENDING_DELETE` local-first
   synchronization states remain approved there and not implemented. The one-to-one selected
   reflection with `PENDING` / `READY` / `FAILED` is approved in `design_run_response_system.md` and
   not implemented. All four review findings now have either a verified fix or an approved contract;
@@ -105,18 +105,18 @@ prototypes; the Android application does not yet implement that designed journey
   composition under the permanent UUID. It also locks the first implementation boundary: native
   Android/Kotlin, Room as the on-phone source of truth, a foreground service for active sessions,
   and a minimal server for reflection plus later sync with credentials off-device. Saving and
-  reflection remain separate; full RunStyle stays local. The Android shell and full in-memory
-  session-state ordering and the first Room-backed Running boundary now exist. The foreground service,
-  recovery, later durable lifecycle transitions and the rest of this architecture remain approved
-  contracts rather than implemented behavior.
-- **Next delivery planning step:** extend the same saved run through later lifecycle updates and
-  recovery on the way toward the durable fixture journey through Log History. The exact bounded slice
-  still needs to be agreed before implementation. GPS and provider integration remain behind that
-  foundation, as do remaining Log History polish, further music intelligence and RunStyle V2.
-- No GPS tracking, BPM source, music-provider integration, durable pause/resume/completion updates,
-  active-row discovery, relaunch or process-death recovery, foreground service, synchronization, or
-  Reflection Engine has been built. The current Android screen is static and is not connected to the
-  state machine or Room.
+  reflection remain separate; full RunStyle stays local. The Android shell, full in-memory
+  session-state ordering and Room-backed durable lifecycle now exist. The foreground service,
+  recovery, session ownership and the rest of this architecture remain approved contracts rather
+  than implemented behavior.
+- **Next delivery planning step:** give one active-session owner the permanent UUID and make it
+  coordinate the durable pause/resume/completion operations with the state machine. Active-row
+  discovery and relaunch recovery follow that boundary on the way toward the durable fixture journey
+  through Log History. GPS and provider integration remain behind that foundation, as do remaining
+  Log History polish, further music intelligence and RunStyle V2.
+- No GPS tracking, BPM source, music-provider integration, active-session owner, active-row discovery,
+  relaunch or process-death recovery, foreground service, synchronization, or Reflection Engine has
+  been built. The current Android screen is static and is not connected to the state machine or Room.
 
 **Completed phases:**
 - Phase 1: Console app — energy system, opening prompt, post-run responses, rolling averages

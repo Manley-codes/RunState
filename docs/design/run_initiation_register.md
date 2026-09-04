@@ -229,15 +229,15 @@ friction, not turning RunState into a social network or run-club platform.
 
 ## Core run-session lifecycle and time contract — DEFAULT
 
-**Approved August 25, 2026; implementation status updated September 1.** The Android foundation now
+**Approved August 25, 2026; implementation status updated September 4.** The Android foundation now
 contains the five-state enum and guarded in-memory
-`NO_SESSION → COUNTDOWN → RUNNING ⇄ PAUSED → COMPLETED` ordering rules. The transition into Running
-now has a durable Room boundary: the prepared initial row is saved before the in-memory machine moves
-from Countdown to Running, and a failed insert leaves it in Countdown. The screen is not connected,
-and `pauseRun()`, `resumeRun()` and `completeRun()` still change only an in-memory state value; the
-pause/resume timeline, later checkpoints and completed record are not durable yet. This contract
-starts when a run becomes official. The experimental Armed and Watching detection states above stay
-separate and do not create a run.
+`NO_SESSION → COUNTDOWN → RUNNING ⇄ PAUSED → COMPLETED` ordering rules. Room version 2 separately
+implements the durable side of that same lifecycle: the initial row is saved before Running, pause
+and resume update that row and append ordered child events, and completion updates the same row with
+its finish and final checkpoint. Each later change is one database transaction, so a failed child
+write rolls back the parent update. The state machine and Room operations are not yet joined by an
+active-session owner or connected to the screen. This contract starts when a run becomes official.
+The experimental Armed and Watching detection states above stay separate and do not create a run.
 
 `No session → Countdown → Running ⇄ Paused → Completed`
 
@@ -282,13 +282,14 @@ manufactured for an interval the checkpoints do not cover.
 
 ## Local-first run identity and synchronization — DEFAULT
 
-**Approved August 25, 2026; first local identity boundary implemented September 1.** The Room run
-row now requires canonical lowercase UUID text and uses it directly as the primary key. The initial
-Running insert accepts the already-prepared identity rather than generating or replacing it, and a
-duplicate UUID aborts without overwriting the original row. Production generation, preserving the
-same identity through later updates and recovery, and all synchronization behavior remain to be
-implemented. The server may keep an internal database key, but the phone and server use this UUID as
-the run's stable external identity and duplicate-safe synchronization key.
+**Approved August 25, 2026; local identity implementation updated September 4.** The Room run row
+requires canonical lowercase UUID text and uses it directly as the primary key. The initial Running
+insert accepts the already-prepared identity rather than generating or replacing it, a duplicate
+UUID aborts without overwriting the original row, and durable pause, resume and completion operations
+update that same UUID instead of creating another run. Production generation, active-session
+ownership, recovery and all synchronization behavior remain to be implemented. The server may keep
+an internal database key, but the phone and server use this UUID as the run's stable external
+identity and duplicate-safe synchronization key.
 
 **The UUID is the Room primary key — added August 31, 2026.** On Android that permanent
 phone-generated UUID is the primary key of the run row itself. Do not introduce a separate
@@ -317,23 +318,26 @@ accounts and server implementation remain later decisions.
 
 ## Mobile foundation architecture boundary — DEFAULT
 
-**Approved August 26, 2026; implementation status updated September 1, 2026.** This decision
+**Approved August 26, 2026; implementation status updated September 4, 2026.** This decision
 established the Android-first direction. Implementation later began after separate explicit
 approval. The Android/Kotlin/Compose project exists as a static shell plus isolated in-memory
-state-order rules. Room 2.8.4 and KSP now back a version-1 `runs` table, DAO and `@Database` class,
-with its schema exported to `android/app/schemas`. A separate Android CI job runs the JVM tests,
-assembles the debug app and compiles the instrumented-test APK on every push and pull request; it does
-not run an emulator. Verification passed with 35 JVM tests and 3 local emulator tests.
+state-order rules. Room 2.8.4 and KSP now back a version-2 database with the parent `runs` table and
+ordered `run_transitions` children; both schemas are exported under `android/app/schemas`. A separate
+Android CI job runs the JVM tests, assembles the debug app and compiles the instrumented-test APK on
+every push and pull request; it does not run an emulator. Verification passed with 40 JVM tests and
+18 local emulator tests.
 
-**The initial Running row is durable; the full active session is not.** The row uses canonical UUID
-text as its primary key and stores the official-start epoch milliseconds, IANA start timezone and an
-initial checkpoint equal to the start. Storage succeeds before the in-memory transition to Running.
-A mutex prevents overlapping starts through one shared `RunSessionStarter`, duplicate UUIDs are
-rejected without replacement, and the stored row survives closing and rebuilding the Room database
-instance. Production wiring must still provide one active-session owner. Cancellation between the
-successful insert and in-memory transition remains a recovery concern. Pause/resume/completion
-updates, active-row discovery, relaunch or process-death recovery, the foreground service, telemetry
-and the server boundary remain unimplemented. The Java console and MySQL database are unaffected.
+**The run lifecycle is durable at the data layer; the active session is not wired yet.** The parent
+row uses canonical UUID text as its primary key and stores the official start, IANA start timezone,
+latest checkpoint and optional finish. Pause and resume append sequence-ordered child rows while
+updating the parent state; completion writes a finish only on a Completed row and creates no duplicate
+run or completion event. Room transactions prevent half-saved lifecycle changes, and the explicit
+version-1-to-2 migration preserves old rows without inventing finish times or transition history.
+Production wiring must still provide one active-session owner and register `MIGRATION_1_2` when its
+database builder is introduced. Cancellation between the successful initial insert and in-memory
+transition remains a recovery concern. Active-row discovery, relaunch or process-death recovery, the
+foreground service, telemetry and the server boundary remain unimplemented. The Java console and
+MySQL database are unaffected.
 
 - Build Android first with Kotlin and native Android UI/platform services.
 - Room is the authoritative on-phone store. The interface observes durable state; it does not own
@@ -352,12 +356,14 @@ and the server boundary remain unimplemented. The Java console and MySQL databas
 - The production reflection model is selected through bounded quality and trust testing. The model
   used to help write code is not automatically the model used inside RunState.
 
-**Database versioning — added August 31, 2026.** Android database version 1 is the initial baseline.
+**Database versioning — added August 31; implementation updated September 4, 2026.** Android database
+version 1 remains the initial baseline, and version 2 adds the optional finish plus ordered pause and
+resume history through the explicit `MIGRATION_1_2` migration.
 Exported Room schemas are preserved in the repository as the record of what each version looked
 like, and every future version increment requires an explicit written migration. Destructive
 migration must not be used as a shortcut: dropping and rebuilding the database would silently erase
 recorded runs, which contradicts the local-save-is-the-source-of-truth rule above. The generated
-version-1 schema now exists under `android/app/schemas` and is preserved as the migration baseline.
+version-1 schema is preserved byte-for-byte beside version 2 under `android/app/schemas`.
 
 Accounts, multi-device conflict resolution, broad cloud history and provider integration remain
 outside this foundation.

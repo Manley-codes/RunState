@@ -31,11 +31,9 @@ enum class StoredRunState {
 /**
  * One saved run.
  *
- * PAUSED, COMPLETED and the checkpoint field exist in version 1 even though this
- * slice only ever writes an initial RUNNING row. They are part of the same run's
- * life, not separate records: a pause, a completion and every durable checkpoint
- * update the row this insert creates. Leaving them out of version 1 would mean a
- * schema migration for behavior that is already an agreed part of the contract.
+ * PAUSED, COMPLETED and the checkpoint are states of this same row, not separate
+ * records: a pause, a resume, a completion and every durable checkpoint update the row
+ * the initial insert creates. One run is one run row for its whole life.
  *
  * Both text fields are validated at construction and both report the same way, with
  * [IllegalArgumentException] and a message naming the bad value. Storing an identity
@@ -81,7 +79,29 @@ data class RunEntity(
      * because nothing past the start has been confirmed yet.
      */
     @ColumnInfo(name = "last_checkpoint_epoch_millis")
-    val lastCheckpointEpochMillis: Long
+    val lastCheckpointEpochMillis: Long,
+
+    /**
+     * When the run ended, as epoch milliseconds, or null while it has not ended.
+     *
+     * Nullable and defaulted, so every version-1 call site keeps compiling unchanged.
+     *
+     * The nullability is a compatibility requirement, not convenience. Version 1 had no
+     * finish column at all, so a row inserted directly as COMPLETED under version 1 has
+     * no finish time anywhere to recover, and the migration is forbidden to invent one.
+     * A constructor rule demanding a finish on every COMPLETED row would therefore make
+     * that real, already-stored row unreadable: the app would crash reading its own
+     * history rather than admit that one old value is unknown.
+     *
+     * The requirement belongs to the write path instead. Every new completion in
+     * [RunDao] writes a non-null finish inside its transaction, so null marks an
+     * inherited unknown rather than a shape today's code is allowed to produce.
+     *
+     * Declared last so the column the migration appends with ALTER TABLE sits in the
+     * same position as the one Room generates for a fresh version-2 database.
+     */
+    @ColumnInfo(name = "finish_epoch_millis")
+    val finishEpochMillis: Long? = null
 ) {
     init {
 
@@ -95,6 +115,26 @@ data class RunEntity(
         // production creator must supply the phone's actual zone id.
         require(isResolvableZoneId(startTimezoneId)) {
             "A run's start timezone must be a resolvable zone id: $startTimezoneId"
+        }
+
+        if (finishEpochMillis != null) {
+
+            // A finish on a run that has not ended is not missing information, it is
+            // contradictory information: the row would claim the run is still going and
+            // that it already ended. Null is tolerated because it is honest about a gap
+            // version 1 could not record; a finish on a live run is refused because
+            // nothing legitimate can produce one.
+            require(state == StoredRunState.COMPLETED) {
+                "Only a COMPLETED run may have a finish time, but this run is $state."
+            }
+
+            // A run that ended before it began is not a recoverable record. No migrated
+            // row can trip this: the new column is created empty and only new
+            // completions ever fill it.
+            require(finishEpochMillis >= officialStartEpochMillis) {
+                "A run's finish cannot precede its official start: " +
+                    "$finishEpochMillis is before $officialStartEpochMillis"
+            }
         }
     }
 }

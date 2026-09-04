@@ -42,6 +42,18 @@ room {
 }
 
 dependencies {
+
+    // Room 2.8.4 reads the exported schema JSON during migration tests using kotlinx
+    // serialization 1.8.1, but AGP resolves the androidTest classpath consistently with
+    // the app classpath, where Lifecycle pulls serialization 1.7.3. Room's serializers
+    // then meet a runtime too old to satisfy them and every migration test dies with
+    // AbstractMethodError. Raising the version everywhere keeps the two classpaths on
+    // one runtime. This is a constraint, not a dependency: nothing new is added to the
+    // app, an existing transitive library simply resolves to the version Room needs.
+    constraints {
+        implementation(libs.kotlinx.serialization.core)
+    }
+
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.compose.material3)
@@ -58,6 +70,7 @@ dependencies {
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
     androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation(libs.androidx.junit)
+    androidTestImplementation(libs.androidx.room.testing)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
     debugImplementation(libs.androidx.compose.ui.tooling)
 }
