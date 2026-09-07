@@ -64,6 +64,27 @@ open class FakeRunDao : RunDao() {
 
     override suspend fun countRuns(): Int = inserted.size
 
+    /**
+     * Mirrors the real discovery query: filter to the two supplied states, then order
+     * by official start with the UUID breaking ties.
+     *
+     * Only the protected query is overridden. The public `findActiveRuns` wrapper is
+     * inherited unchanged, so JVM tests exercise the same "which states count as
+     * active" decision production uses rather than a second copy of it that could drift.
+     *
+     * `filter` and `sortedWith` both build a new list, so [inserted] is neither
+     * reordered nor otherwise touched. A discovery that rearranged the fake's own
+     * storage would be a write, and this operation performs none.
+     */
+    override suspend fun selectRunsInStates(
+        runningState: StoredRunState,
+        pausedState: StoredRunState
+    ): List<RunEntity> = inserted
+        .filter { it.state == runningState || it.state == pausedState }
+        .sortedWith(
+            compareBy({ it.officialStartEpochMillis }, { it.runId })
+        )
+
     override suspend fun applyStateChange(
         runId: String,
         expectedState: StoredRunState,

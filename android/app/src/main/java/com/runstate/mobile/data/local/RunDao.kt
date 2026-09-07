@@ -10,9 +10,13 @@ import androidx.room.Transaction
  * The queries this slice is allowed to make against the run tables.
  *
  * Deliberately narrow: creating the initial run row, reading one run back by its
- * permanent UUID, and durably moving that same run through pause, resume and
- * completion. Listing, recovery, active-run discovery and synchronization are separate
- * contracts and are not opened here.
+ * permanent UUID, durably moving that same run through pause, resume and completion,
+ * and reading back every run that has not ended. General listing, History queries and
+ * synchronization are separate contracts and are not opened here.
+ *
+ * Discovery is a read. [findActiveRuns] reports what storage holds; deciding what to do
+ * about it — adopting one run, or refusing to guess when there is more than one — is
+ * recovery, and recovery is a separate slice that does not exist yet.
  *
  * This is an abstract class because the lifecycle operations below are not single
  * statements. Each one reads, checks and then writes two tables inside one
@@ -63,6 +67,49 @@ abstract class RunDao {
      */
     @Query("SELECT COUNT(*) FROM runs")
     abstract suspend fun countRuns(): Int
+
+    /**
+     * Every stored run that has not ended, oldest start first.
+     *
+     * A run is active when storage holds it as RUNNING or PAUSED. Both are returned,
+     * because a paused run is just as unfinished as a running one — the runner stopped
+     * at a crossing, the app was killed, and that run still needs recovering. COMPLETED
+     * rows are excluded: they are history, and history is never a recovery candidate.
+     *
+     * ## Why a list, and not one row
+     *
+     * A `LIMIT 1` or a single nullable result would be the convenient shape, and it
+     * would be wrong. It cannot tell "one active run" apart from "several active runs,
+     * and here is one of them" — so the single situation that most needs attention, a
+     * durable state that should be impossible, would arrive looking exactly like the
+     * healthy case. A list keeps the three answers distinct: empty means nothing to
+     * recover, one means one candidate, and more than one means the stored state is
+     * inconsistent and must be surfaced rather than quietly resolved.
+     *
+     * ## What the ordering is and is not
+     *
+     * Rows come back oldest official start first, with canonical UUID text breaking
+     * ties so the order is total rather than merely mostly-defined. Two runs can share
+     * a start millisecond, and SQLite has no defined answer for equal sort keys, so
+     * without the second column the same data could come back in a different order on
+     * a different day and a failing report would be unreproducible.
+     *
+     * That ordering exists for stable evidence and diagnostics. It is emphatically not
+     * a ranking, and being first here confers nothing: it does not make a row the one
+     * to adopt, and recovery must not read "first" as "chosen". When this returns more
+     * than one row, the answer is to refuse and report, not to take the oldest.
+     *
+     * ## Read-only
+     *
+     * This selects and returns. It does not repair, delete, complete, deduplicate or
+     * mark anything, and it must not grow the ability to. Interpreting the result
+     * belongs to the later recovery slice.
+     */
+    suspend fun findActiveRuns(): List<RunEntity> =
+        selectRunsInStates(
+            runningState = StoredRunState.RUNNING,
+            pausedState = StoredRunState.PAUSED
+        )
 
     /**
      * Durably pauses a run that storage still believes is RUNNING.
@@ -261,6 +308,36 @@ abstract class RunDao {
         completedState: StoredRunState,
         finishEpochMillis: Long
     ): Int
+
+    /**
+     * Reads every run stored in either of the two states it is given.
+     *
+     * The states arrive as bound parameters rather than as literal text in the SQL, for
+     * the same reason [applyCompletion] takes its completed state as one: the stored
+     * spelling then always comes from [StoredRunState] itself and cannot drift from it.
+     * Writing `state = 'RUNNING'` here would put a copy of that name in a string the
+     * compiler never checks, and renaming the constant would leave the query silently
+     * matching nothing.
+     *
+     * Two scalar parameters rather than a list, because scalar enum binding is already
+     * compiled and proven throughout this DAO, and this needs exactly two.
+     *
+     * It is protected because the answer to "which states count as active" belongs to
+     * this DAO and not to its callers. [findActiveRuns] supplies both constants, so a
+     * caller cannot ask for COMPLETED rows through this door and cannot accidentally
+     * narrow discovery to only the running half.
+     */
+    @Query(
+        """
+        SELECT * FROM runs
+        WHERE state = :runningState OR state = :pausedState
+        ORDER BY official_start_epoch_millis ASC, run_id ASC
+        """
+    )
+    protected abstract suspend fun selectRunsInStates(
+        runningState: StoredRunState,
+        pausedState: StoredRunState
+    ): List<RunEntity>
 
     /** The highest sequence number this run has used, or null if it has no events. */
     @Query("SELECT MAX(sequence_number) FROM run_transitions WHERE run_id = :runId")
