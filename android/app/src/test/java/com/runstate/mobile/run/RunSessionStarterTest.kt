@@ -61,7 +61,14 @@ class RunSessionStarterTest {
     }
 
     /**
-     * Proves the session becomes official once the row is safely stored.
+     * Proves the session becomes official once the row is safely stored, and that the
+     * returned owner is bound to that same run rather than to a copy of it.
+     *
+     * The last assertion is the ownership transfer itself. Pausing through the owner
+     * moves the machine this test handed the starter, which is only possible if the
+     * starter passed its own machine along instead of creating a second one. A second
+     * machine would give one run two in-memory states, and they would drift apart the
+     * first time anything read the wrong one.
      */
     @Test
     fun `session is running after a successful insert`() {
@@ -69,13 +76,23 @@ class RunSessionStarterTest {
         // Arrange
         val machine = countdownMachine()
         val dao = FakeRunDao()
+        val prepared = preparedRun()
 
         // Act
-        runBlocking { RunSessionStarter(machine, dao).start(preparedRun()) }
+        val owner = runBlocking { RunSessionStarter(machine, dao).start(prepared) }
 
         // Assert: exactly one row stored, and the run is now running.
         assertEquals(1, dao.inserted.size)
         assertEquals(RunSessionState.RUNNING, machine.state)
+
+        // Assert: the owner carries the prepared run's own UUID, not a new one.
+        assertEquals(prepared.runId, owner.runId)
+        assertEquals(RunSessionState.RUNNING, owner.state)
+
+        // Assert: the owner drives the very machine the starter was given.
+        runBlocking { owner.pause(officialStart + 60_000L) }
+        assertEquals(RunSessionState.PAUSED, machine.state)
+        assertEquals(RunSessionState.PAUSED, owner.state)
     }
 
     /**

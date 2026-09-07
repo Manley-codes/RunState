@@ -31,6 +31,25 @@ open class FakeRunDao : RunDao() {
     /** Runs at the start of [insert], before success or failure is decided. */
     var duringInsert: (suspend () -> Unit)? = null
 
+    /**
+     * Runs at the start of [applyStateChange], before the stored row is touched.
+     *
+     * The pause and resume equivalent of [duringInsert]: it lets a test observe what
+     * the rest of the app believes while a durable write is underway, or park the write
+     * open while another caller tries the same operation. All four hooks below default
+     * to null, so a fake that sets none behaves exactly as it always has.
+     */
+    var duringStateChange: (suspend () -> Unit)? = null
+
+    /** When set, [applyStateChange] throws this instead of changing anything. */
+    var failStateChangeWith: Exception? = null
+
+    /** Runs at the start of [applyCompletion], before the stored row is touched. */
+    var duringCompletion: (suspend () -> Unit)? = null
+
+    /** When set, [applyCompletion] throws this instead of changing anything. */
+    var failCompletionWith: Exception? = null
+
     override suspend fun insert(run: RunEntity) {
         duringInsert?.invoke()
         failWith?.let { throw it }
@@ -50,11 +69,21 @@ open class FakeRunDao : RunDao() {
         expectedState: StoredRunState,
         newState: StoredRunState,
         occurredAtEpochMillis: Long
-    ): Int = updateMatchingRun(runId, expectedState, occurredAtEpochMillis) { stored ->
-        stored.copy(
-            state = newState,
-            lastCheckpointEpochMillis = occurredAtEpochMillis
-        )
+    ): Int {
+
+        // Both hooks run before the row is changed, so a forced failure leaves storage
+        // exactly as the inherited orchestration found it. The inherited `pauseRun` and
+        // `resumeRun` still do their own reading, checking and event insertion around
+        // this call; only the write itself is instrumented.
+        duringStateChange?.invoke()
+        failStateChangeWith?.let { throw it }
+
+        return updateMatchingRun(runId, expectedState, occurredAtEpochMillis) { stored ->
+            stored.copy(
+                state = newState,
+                lastCheckpointEpochMillis = occurredAtEpochMillis
+            )
+        }
     }
 
     override suspend fun applyCompletion(
@@ -62,12 +91,17 @@ open class FakeRunDao : RunDao() {
         expectedState: StoredRunState,
         completedState: StoredRunState,
         finishEpochMillis: Long
-    ): Int = updateMatchingRun(runId, expectedState, finishEpochMillis) { stored ->
-        stored.copy(
-            state = completedState,
-            lastCheckpointEpochMillis = finishEpochMillis,
-            finishEpochMillis = finishEpochMillis
-        )
+    ): Int {
+        duringCompletion?.invoke()
+        failCompletionWith?.let { throw it }
+
+        return updateMatchingRun(runId, expectedState, finishEpochMillis) { stored ->
+            stored.copy(
+                state = completedState,
+                lastCheckpointEpochMillis = finishEpochMillis,
+                finishEpochMillis = finishEpochMillis
+            )
+        }
     }
 
     override suspend fun highestSequenceNumber(runId: String): Int? =

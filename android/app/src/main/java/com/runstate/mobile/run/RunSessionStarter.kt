@@ -41,7 +41,8 @@ class RunSessionStarter(
     private val startLock = Mutex()
 
     /**
-     * Saves the prepared run and then moves the session into RUNNING.
+     * Saves the prepared run, moves the session into RUNNING, and hands back the one
+     * object that owns the run from then on.
      *
      * [preparedRun] is inserted exactly as given. Its UUID and official start are
      * chosen before this call and are never regenerated here, so a retry after a
@@ -50,6 +51,8 @@ class RunSessionStarter(
      * A storage failure is allowed to propagate. Nothing is caught and nothing is
      * rolled back, because the state machine has not moved yet: the session is still
      * in COUNTDOWN, which is the honest description of a run that never got saved.
+     * No owner is returned in that case — an owner exists only for a run that is both
+     * stored and running.
      *
      * Known gap, deliberately left open: cancellation between the durable insert and
      * the in-memory transition leaves a saved active row behind that this object no
@@ -58,11 +61,17 @@ class RunSessionStarter(
      * service owning the session and recovery adopting an already-saved active run at
      * startup; both are later work.
      *
+     * @return the [ActiveRunSession] that owns this run for the rest of its life. It is
+     *   bound to [preparedRun]'s UUID, and it is given this starter's own state machine
+     *   and DAO rather than new ones, so the run has exactly one in-memory state and
+     *   one route to storage. The caller that built this starter still holds that same
+     *   machine and can mutate it directly; making the owner the only route to it is
+     *   deferred.
      * @throws IllegalStateException if the session is not in COUNTDOWN — including
      *   when a concurrent caller already started the run — or if the prepared row does
      *   not describe the initial RUNNING moment. Nothing is inserted in either case.
      */
-    suspend fun start(preparedRun: RunEntity) {
+    suspend fun start(preparedRun: RunEntity): ActiveRunSession =
         startLock.withLock {
 
             // Countdown is the only stage a run may officially begin from. Checking
@@ -90,6 +99,15 @@ class RunSessionStarter(
 
             // The run is on disk, so it may now officially be running.
             stateMachine.startRun()
+
+            // Built last, and still inside the lock, so an owner can never be handed
+            // out for a run that is not both stored and running. It receives the same
+            // machine and the same DAO this starter used, because a second machine
+            // would give one run two disagreeing in-memory states.
+            ActiveRunSession(
+                runId = preparedRun.runId,
+                stateMachine = stateMachine,
+                runDao = runDao
+            )
         }
-    }
 }
