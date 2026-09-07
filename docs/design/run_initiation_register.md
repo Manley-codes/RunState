@@ -229,14 +229,16 @@ friction, not turning RunState into a social network or run-club platform.
 
 ## Core run-session lifecycle and time contract — DEFAULT
 
-**Approved August 25, 2026; implementation status updated September 4.** The Android foundation now
+**Approved August 25, 2026; implementation status updated September 6.** The Android foundation now
 contains the five-state enum and guarded in-memory
-`NO_SESSION → COUNTDOWN → RUNNING ⇄ PAUSED → COMPLETED` ordering rules. Room version 2 separately
-implements the durable side of that same lifecycle: the initial row is saved before Running, pause
-and resume update that row and append ordered child events, and completion updates the same row with
-its finish and final checkpoint. Each later change is one database transaction, so a failed child
-write rolls back the parent update. The state machine and Room operations are not yet joined by an
-active-session owner or connected to the screen. This contract starts when a run becomes official.
+`NO_SESSION → COUNTDOWN → RUNNING ⇄ PAUSED → COMPLETED` ordering rules. Room version 2 implements the
+durable side of that same lifecycle: the initial row is saved before Running, pause and resume update
+that row and append ordered child events, and completion updates the same row with its finish and
+final checkpoint. Each later change is one database transaction, so a failed child write rolls back
+the parent update. `RunSessionStarter` now returns one UUID-bound `ActiveRunSession` that serializes
+pause/resume/completion, writes Room first and advances the same in-memory machine only after storage
+succeeds. The owner and Room remain unconnected to the screen. This contract starts when a run
+becomes official.
 The experimental Armed and Watching detection states above stay separate and do not create a run.
 
 `No session → Countdown → Running ⇄ Paused → Completed`
@@ -318,26 +320,28 @@ accounts and server implementation remain later decisions.
 
 ## Mobile foundation architecture boundary — DEFAULT
 
-**Approved August 26, 2026; implementation status updated September 4, 2026.** This decision
+**Approved August 26, 2026; implementation status updated September 6, 2026.** This decision
 established the Android-first direction. Implementation later began after separate explicit
 approval. The Android/Kotlin/Compose project exists as a static shell plus isolated in-memory
 state-order rules. Room 2.8.4 and KSP now back a version-2 database with the parent `runs` table and
 ordered `run_transitions` children; both schemas are exported under `android/app/schemas`. A separate
 Android CI job runs the JVM tests, assembles the debug app and compiles the instrumented-test APK on
-every push and pull request; it does not run an emulator. Verification passed with 40 JVM tests and
-18 local emulator tests.
+every push and pull request; it does not run an emulator. Verification passed with 47 JVM tests and
+19 local emulator tests.
 
-**The run lifecycle is durable at the data layer; the active session is not wired yet.** The parent
-row uses canonical UUID text as its primary key and stores the official start, IANA start timezone,
+**The durable lifecycle and its in-memory rules now meet in one active-session type.** The parent row
+uses canonical UUID text as its primary key and stores the official start, IANA start timezone,
 latest checkpoint and optional finish. Pause and resume append sequence-ordered child rows while
 updating the parent state; completion writes a finish only on a Completed row and creates no duplicate
 run or completion event. Room transactions prevent half-saved lifecycle changes, and the explicit
 version-1-to-2 migration preserves old rows without inventing finish times or transition history.
-Production wiring must still provide one active-session owner and register `MIGRATION_1_2` when its
-database builder is introduced. Cancellation between the successful initial insert and in-memory
-transition remains a recovery concern. Active-row discovery, relaunch or process-death recovery, the
-foreground service, telemetry and the server boundary remain unimplemented. The Java console and
-MySQL database are unaffected.
+`ActiveRunSession` owns one immutable UUID, holds one per-instance lifecycle mutex and never caches a
+row; every action validates memory, updates Room and only then advances the same state machine.
+Production wiring must still guarantee exactly one owner and register `MIGRATION_1_2` when its
+database builder is introduced. Cancellation after a successful durable write but before its
+in-memory transition remains a recovery concern. Active-row discovery, relaunch or process-death
+recovery, the foreground service, telemetry and the server boundary remain unimplemented. The Java
+console and MySQL database are unaffected.
 
 - Build Android first with Kotlin and native Android UI/platform services.
 - Room is the authoritative on-phone store. The interface observes durable state; it does not own

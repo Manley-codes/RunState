@@ -18,21 +18,22 @@ prototypes; the Android application does not yet implement that designed journey
   `RunSessionStateMachine`; its enum names all five approved states, and its implemented behavior now
   covers guarded `NO_SESSION → COUNTDOWN → RUNNING ⇄ PAUSED → COMPLETED` transitions. Seventeen local
   JUnit tests pass, including rejection of repeated countdown, skipping directly to Running, invalid
-  pause/resume attempts, completing before Paused and completing twice. This state machine is not
-  connected to the Compose screen. The Room data layer now implements the same durable lifecycle,
-  but an active-session owner has not yet joined storage changes to these in-memory transitions.
+  pause/resume attempts, completing before Paused and completing twice. Commit `360294a` added the
+  UUID-bound `ActiveRunSession`, which now coordinates the Room pause/resume/completion operations
+  with that same machine using storage-first ordering. Neither is connected to the Compose screen.
 
 - **Android Room version 2 now preserves the same run through its durable lifecycle.** The canonical
-  UUID remains the `runs` primary key. `RunSessionStarter` still saves the prepared initial Running
-  row before advancing memory; transactional DAO operations now update that row through pause,
-  resume and completion while ordered `run_transitions` children preserve each pause/resume moment.
-  Completion records the finish and final checkpoint without creating a second run or a duplicate
-  completion event. A hand-written additive migration preserves version-1 Running, Paused and
-  Completed rows without inventing missing history, and the version-1 schema remains byte-identical
-  beside the generated version-2 schema. Real-database tests prove rollback after a child-write
-  failure and persistence after closing and reopening the database. Verification passes with 40 JVM
-  tests and 18 local emulator tests. The Room migration-test runtime requires the existing
-  serialization library to resolve at 1.8.1; no AndroidX Startup pin or deprecated
+  UUID remains the `runs` primary key. `RunSessionStarter` saves the prepared initial Running row
+  before advancing memory and returns an `ActiveRunSession` bound to the same UUID, machine and DAO.
+  That owner serializes pause, resume and completion, writes each change through the transactional
+  DAO first, and advances memory only after storage succeeds. Ordered `run_transitions` children
+  preserve each pause/resume moment; completion records the finish and final checkpoint without
+  creating a second run or duplicate completion event. A hand-written additive migration preserves
+  version-1 Running, Paused and Completed rows without inventing missing history, and the version-1
+  schema remains byte-identical beside the generated version-2 schema. Real-database tests prove
+  rollback, persistence after reopen and the full starter-to-owner lifecycle bridge. Verification
+  passes with 47 JVM tests and 19 local emulator tests. The Room migration-test runtime requires the
+  existing serialization library to resolve at 1.8.1; no AndroidX Startup pin or deprecated
   compile-time-R-class workaround remains. Canonical detail lives in `run_initiation_register.md`.
 
 - Log History has a stable design foundation. Its most-recent-record quick peek was completed and
@@ -84,8 +85,9 @@ prototypes; the Android application does not yet implement that designed journey
   contract is approved and recorded in `run_initiation_register.md`. Its full in-memory state
   ordering through Completed now exists in the isolated Android state machine. The permanent UUID,
   official-start timestamp, start timezone, save-before-Running boundary, ordered pause/resume
-  history, later checkpoints and completion finish are now implemented in Room. Active-session
-  ownership and recovery remain unimplemented. The `PENDING_CREATE` / `SYNCED` / `PENDING_UPDATE` /
+  history, later checkpoints and completion finish are now implemented in Room, and one
+  `ActiveRunSession` coordinates those durable changes with the in-memory machine. Active-row
+  discovery and recovery remain unimplemented. The `PENDING_CREATE` / `SYNCED` / `PENDING_UPDATE` /
   `PENDING_DELETE` local-first
   synchronization states remain approved there and not implemented. The one-to-one selected
   reflection with `PENDING` / `READY` / `FAILED` is approved in `design_run_response_system.md` and
@@ -106,17 +108,16 @@ prototypes; the Android application does not yet implement that designed journey
   Android/Kotlin, Room as the on-phone source of truth, a foreground service for active sessions,
   and a minimal server for reflection plus later sync with credentials off-device. Saving and
   reflection remain separate; full RunStyle stays local. The Android shell, full in-memory
-  session-state ordering and Room-backed durable lifecycle now exist. The foreground service,
-  recovery, session ownership and the rest of this architecture remain approved contracts rather
-  than implemented behavior.
-- **Next delivery planning step:** give one active-session owner the permanent UUID and make it
-  coordinate the durable pause/resume/completion operations with the state machine. Active-row
-  discovery and relaunch recovery follow that boundary on the way toward the durable fixture journey
+  session-state ordering, Room-backed durable lifecycle and UUID-bound active-session coordinator now
+  exist. The foreground service, recovery and the rest of this architecture remain approved contracts
+  rather than implemented behavior.
+- **Next delivery planning step:** add active-row discovery, then let relaunch recovery reconstruct
+  the one active owner from durable Running or Paused state on the way toward the fixture journey
   through Log History. GPS and provider integration remain behind that foundation, as do remaining
   Log History polish, further music intelligence and RunStyle V2.
-- No GPS tracking, BPM source, music-provider integration, active-session owner, active-row discovery,
-  relaunch or process-death recovery, foreground service, synchronization, or Reflection Engine has
-  been built. The current Android screen is static and is not connected to the state machine or Room.
+- No GPS tracking, BPM source, music-provider integration, active-row discovery, relaunch or
+  process-death recovery, foreground service, synchronization, or Reflection Engine has been built.
+  The current Android screen is static and is not connected to the state machine, owner or Room.
 
 **Completed phases:**
 - Phase 1: Console app — energy system, opening prompt, post-run responses, rolling averages
