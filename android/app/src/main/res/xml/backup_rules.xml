@@ -1,13 +1,28 @@
 <?xml version="1.0" encoding="utf-8"?><!--
-   Sample backup rules file; uncomment and customize as necessary.
+   RunState excludes its Room database from every backup and transfer channel.
+
+   This is a deliberate, temporary policy, not a claim that the data is unimportant.
+   A restored copy of runstate.db would arrive on a device as a snapshot of whatever
+   was last backed up, and the app has no way to reconcile that with anything: there is
+   no server synchronization and no restore handling. Device transfer could also leave
+   the same permanent run UUIDs on two phones whose copies can then diverge. Until the
+   app can identify and reconcile those copies, restoring either would make its
+   local-first record ambiguous.
+
+   The exclusion covers the whole database domain rather than the single runstate.db
+   file. SQLite writes -wal and -shm sidecar files beside the database, and backing one
+   of those up independently of the main file would restore a torn set that matches no
+   moment the database was actually in.
+
+   allowBackup stays true. Preferences and other future app data remain eligible; only
+   the database domain is withheld, and only until server sync and safe restore handling
+   exist to make a restored run meaningful.
+
+   This file is what Android 11 (API 30) and lower read. Android 12 (API 31) and higher
+   read data_extraction_rules.xml instead, so both files must carry the same exclusion.
+   minSdk here is 26, so both are genuinely in play.
    See https://developer.android.com/guide/topics/data/autobackup
-   for details.
-   Note: This file is ignored for devices older than API 31
-   See https://developer.android.com/about/versions/12/backup-restore
 -->
 <full-backup-content>
-    <!--
-   <include domain="sharedpref" path="."/>
-   <exclude domain="sharedpref" path="device.xml"/>
--->
+    <exclude domain="database" path="." />
 </full-backup-content>

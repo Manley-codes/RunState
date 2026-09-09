@@ -1,19 +1,27 @@
 <?xml version="1.0" encoding="utf-8"?><!--
-   Sample data extraction rules file; uncomment and customize as necessary.
+   RunState excludes its Room database from cloud backup and from device-to-device
+   transfer, for the reasons recorded in backup_rules.xml.
+
+   The two channels are listed separately and deliberately. They are independent: a
+   rule under cloud-backup says nothing about device-transfer, so an exclusion that
+   appeared in only one of them would still hand the database to the other. Both are
+   withheld, because a directly transferred run is exactly as unreconcilable as a
+   restored one while no synchronization or restore handling exists.
+
+   The whole database domain is excluded rather than just runstate.db, so the -wal and
+   -shm sidecar files cannot travel independently of the database they belong to.
+
+   allowBackup stays true, and this exclusion is temporary.
+
+   This file is what Android 12 (API 31) and higher read; Android 11 (API 30) and lower
+   read backup_rules.xml.
    See https://developer.android.com/about/versions/12/backup-restore#xml-changes
-   for details.
 -->
 <data-extraction-rules>
     <cloud-backup>
-        <!-- TODO: Use <include> and <exclude> to control what is backed up.
-        <include .../>
-        <exclude .../>
-        -->
+        <exclude domain="database" path="." />
     </cloud-backup>
-    <!--
     <device-transfer>
-        <include .../>
-        <exclude .../>
+        <exclude domain="database" path="." />
     </device-transfer>
-    -->
 </data-extraction-rules>

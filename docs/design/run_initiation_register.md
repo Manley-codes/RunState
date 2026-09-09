@@ -341,7 +341,7 @@ state-order rules. Room 2.8.4 and KSP now back a version-2 database with the par
 ordered `run_transitions` children; both schemas are exported under `android/app/schemas`. A separate
 Android CI job runs the JVM tests, assembles the debug app and compiles the instrumented-test APK on
 every push and pull request; it does not run an emulator. Verification passed with 69 JVM tests and
-23 local emulator tests.
+25 local emulator tests.
 
 **The durable lifecycle and its in-memory rules now meet in one active-session type.** The parent row
 uses canonical UUID text as its primary key and stores the official start, IANA start timezone,
@@ -351,13 +351,15 @@ run or completion event. Room transactions prevent half-saved lifecycle changes,
 version-1-to-2 migration preserves old rows without inventing finish times or transition history.
 `ActiveRunSession` owns one immutable UUID, holds one per-instance lifecycle mutex and never caches a
 row; every action validates memory, updates Room and only then advances the same state machine.
-Production wiring must still guarantee exactly one owner and register `MIGRATION_1_2` when its
-database builder is introduced. Cancellation after a successful durable write but before its
-in-memory transition remains a recovery concern. Active-row discovery reports all Running and Paused
-candidates without mutating them, and the isolated recovery core can rebuild one fresh owner or
-refuse an inconsistent multiple-row result. No production database builder or startup call site uses
-that core yet; real relaunch/process-death recovery, the foreground service, telemetry and the server
-boundary remain unimplemented. The Java
+`RunStateApplication` now holds one lazy Room instance per app process, and the centralized
+production builder explicitly registers `MIGRATION_1_2`; the production database is temporarily
+excluded from cloud backup and device transfer until synchronization and safe restore handling
+exist. Production wiring must still guarantee exactly one active-run owner. Cancellation after a
+successful durable write but before its in-memory transition remains a recovery concern. Active-row
+discovery reports all Running and Paused candidates without mutating them, and the isolated recovery
+core can rebuild one fresh owner or refuse an inconsistent multiple-row result. No startup call site
+uses that core yet; real relaunch/process-death recovery, the foreground service, telemetry and the
+server boundary remain unimplemented. The Java
 console and MySQL database are unaffected.
 
 - Build Android first with Kotlin and native Android UI/platform services.
