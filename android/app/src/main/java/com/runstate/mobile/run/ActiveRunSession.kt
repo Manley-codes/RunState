@@ -54,8 +54,9 @@ import kotlinx.coroutines.sync.withLock
  * memory temporarily behind storage: the pause is durable, but this object still says
  * RUNNING. `NonCancellable`, an automatic retry or a compensating write would each hide
  * that rather than resolve it, and a compensating write would additionally undo a fact
- * the phone has already durably recorded. Recovery — reading the stored run back and
- * restoring memory from it — is the next slice, and it is the correct answer.
+ * the phone has already durably recorded. [ActiveRunRecovery] can rebuild fresh memory
+ * from that durable state, but nothing invokes it at application startup yet. Until
+ * that wiring exists, this drift remains a production recovery concern.
  *
  * ## Not yet a UI model
  *
@@ -89,12 +90,34 @@ class ActiveRunSession internal constructor(
 
     init {
 
-        // An owner only exists for a run that is already official and live. Accepting a
-        // machine in any other state would let this object be built for a run that was
-        // never saved, or adopt one from PAUSED — and adopting is recovery, which has
-        // to read storage rather than trust whatever it was handed.
-        check(stateMachine.state == RunSessionState.RUNNING) {
-            "An active run session can only own a run that is already RUNNING."
+        // An owner only exists for a run that is already official and unfinished, and
+        // there are now two honest ways to reach that. A normal start comes through
+        // [RunSessionStarter] and always arrives RUNNING, because the row it just wrote
+        // is a running row. Recovery may arrive RUNNING or PAUSED — but only because
+        // [ActiveRunRecovery] read that state out of storage first and restored the
+        // machine to match it. PAUSED is accepted here as a recovered fact, never as a
+        // state this object is willing to assume on its own.
+        //
+        // The other three stay refused for the same reason as before. NO_SESSION and
+        // COUNTDOWN mean no run row exists yet, so there is nothing to own, and
+        // COMPLETED means the run is over and has no remaining lifecycle to run.
+        //
+        // What does not change is that the owner still caches only [runId]. Recovery
+        // hands the entity it read to its own caller, not to this object: a row held in
+        // here would go stale the first time Room updated it, which is the same reason
+        // the normal path caches nothing either.
+        //
+        // Two legitimate creation paths do create one obligation for later production
+        // wiring: they must never both produce an owner for the same run. Two owners
+        // would hold two unrelated mutexes and two in-memory states over one row, which
+        // is precisely the split this class exists to prevent. Single ownership is the
+        // rule; enforcing it belongs to the startup wiring that does not exist yet.
+        check(
+            stateMachine.state == RunSessionState.RUNNING ||
+                stateMachine.state == RunSessionState.PAUSED
+        ) {
+            "An active run session can only own a run that is RUNNING or PAUSED, but " +
+                "this machine is ${stateMachine.state}."
         }
     }
 

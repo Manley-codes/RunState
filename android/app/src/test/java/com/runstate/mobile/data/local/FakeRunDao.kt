@@ -50,6 +50,19 @@ open class FakeRunDao : RunDao() {
     /** When set, [applyCompletion] throws this instead of changing anything. */
     var failCompletionWith: Exception? = null
 
+    /**
+     * How many times the discovery query has actually been reached.
+     *
+     * Recovery's contract includes when it does *not* query — a machine that already
+     * owns a session must be refused before storage is touched. A count is the only way
+     * to tell "asked and got nothing back" apart from "never asked", because both leave
+     * the fake looking identical afterwards.
+     */
+    var discoveryQueryCalls = 0
+
+    /** When set, the discovery query throws this instead of returning rows. */
+    var failDiscoveryWith: Exception? = null
+
     override suspend fun insert(run: RunEntity) {
         duringInsert?.invoke()
         failWith?.let { throw it }
@@ -75,15 +88,33 @@ open class FakeRunDao : RunDao() {
      * `filter` and `sortedWith` both build a new list, so [inserted] is neither
      * reordered nor otherwise touched. A discovery that rearranged the fake's own
      * storage would be a write, and this operation performs none.
+     *
+     * The counter and the injectable failure both live here, inside the one protected
+     * override, so they see exactly what production sees: the count rises only when the
+     * query is genuinely reached through the inherited `findActiveRuns` wrapper, and the
+     * injected exception is thrown unchanged rather than wrapped or translated.
+     *
+     * There is deliberately no hook for making this return a COMPLETED row. The real
+     * query cannot match one, so a fake that could would be teaching tests behavior the
+     * phone does not have.
      */
     override suspend fun selectRunsInStates(
         runningState: StoredRunState,
         pausedState: StoredRunState
-    ): List<RunEntity> = inserted
-        .filter { it.state == runningState || it.state == pausedState }
-        .sortedWith(
-            compareBy({ it.officialStartEpochMillis }, { it.runId })
-        )
+    ): List<RunEntity> {
+
+        // Counted before the failure check, because a query that was asked and then
+        // failed was still asked. Counting after would make a failing discovery look
+        // like one that never happened.
+        discoveryQueryCalls++
+        failDiscoveryWith?.let { throw it }
+
+        return inserted
+            .filter { it.state == runningState || it.state == pausedState }
+            .sortedWith(
+                compareBy({ it.officialStartEpochMillis }, { it.runId })
+            )
+    }
 
     override suspend fun applyStateChange(
         runId: String,

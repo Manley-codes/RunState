@@ -14,9 +14,10 @@ import androidx.room.Transaction
  * and reading back every run that has not ended. General listing, History queries and
  * synchronization are separate contracts and are not opened here.
  *
- * Discovery is a read. [findActiveRuns] reports what storage holds; deciding what to do
- * about it — adopting one run, or refusing to guess when there is more than one — is
- * recovery, and recovery is a separate slice that does not exist yet.
+ * Discovery is a read. [findActiveRuns] reports what storage holds; the recovery core
+ * decides whether there is no run to restore, one run to adopt, or an inconsistency it
+ * must refuse to guess through. Production startup wiring for that recovery remains
+ * separate and does not exist yet.
  *
  * This is an abstract class because the lifecycle operations below are not single
  * statements. Each one reads, checks and then writes two tables inside one

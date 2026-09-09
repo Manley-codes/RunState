@@ -392,4 +392,90 @@ class ActiveRunSessionTest {
         assertEquals(FIRST_PAUSE, stored.lastCheckpointEpochMillis)
         assertEquals(RunSessionState.PAUSED, owner.state)
     }
+
+    /**
+     * Proves recovery may create an owner over a genuinely paused run.
+     *
+     * The tests above all reach their owner through [RunSessionStarter], which can only
+     * ever produce a RUNNING one. These four go at the constructor guard directly,
+     * because recovery is the second creation path and it arrives with the machine
+     * already restored — a state the start boundary can never hand over.
+     *
+     * The paused row is stored first on purpose. An owner built over a machine that
+     * merely claims PAUSED, with nothing behind it, would be an illustration of the
+     * mistake rather than of the case being allowed: PAUSED is accepted here only
+     * because it is a fact read out of storage.
+     */
+    @Test
+    fun `a recovered paused owner is accepted`() {
+
+        // Arrange: storage holds a paused run, and a fresh machine is restored to match.
+        val dao = FakeRunDao()
+        runBlocking {
+            dao.insert(preparedRun())
+            dao.pauseRun(RUN_ID, FIRST_PAUSE)
+        }
+        val machine = RunSessionStateMachine().apply { restorePaused() }
+
+        // Act: adopt the stored run directly, the way recovery does.
+        val owner = ActiveRunSession(RUN_ID, machine, dao)
+
+        // Assert: the owner is bound to that run and reports the recovered state.
+        assertEquals(RUN_ID, owner.runId)
+        assertEquals(RunSessionState.PAUSED, owner.state)
+        assertEquals(StoredRunState.PAUSED, storedRun(dao).state)
+    }
+
+    /**
+     * Proves an owner cannot exist for a session that owns no run.
+     */
+    @Test
+    fun `an owner is rejected when the machine has no session`() {
+
+        // Arrange: a fresh machine, which has no run behind it at all.
+        val dao = FakeRunDao()
+        val machine = RunSessionStateMachine()
+
+        // Act and Assert: there is nothing to own, so construction must fail.
+        assertThrows(IllegalStateException::class.java) {
+            ActiveRunSession(RUN_ID, machine, dao)
+        }
+    }
+
+    /**
+     * Proves an owner cannot exist before the run has officially started.
+     */
+    @Test
+    fun `an owner is rejected during the countdown`() {
+
+        // Arrange: a countdown, which has saved no run row yet.
+        val dao = FakeRunDao()
+        val machine = RunSessionStateMachine().apply { beginCountdown() }
+
+        // Act and Assert: an owner for an unsaved run must be refused.
+        assertThrows(IllegalStateException::class.java) {
+            ActiveRunSession(RUN_ID, machine, dao)
+        }
+    }
+
+    /**
+     * Proves a finished run is not given a new owner.
+     */
+    @Test
+    fun `an owner is rejected for a completed run`() {
+
+        // Arrange: a machine whose run has already ended.
+        val dao = FakeRunDao()
+        val machine = RunSessionStateMachine().apply {
+            beginCountdown()
+            startRun()
+            pauseRun()
+            completeRun()
+        }
+
+        // Act and Assert: a completed run has no lifecycle left to own.
+        assertThrows(IllegalStateException::class.java) {
+            ActiveRunSession(RUN_ID, machine, dao)
+        }
+    }
 }

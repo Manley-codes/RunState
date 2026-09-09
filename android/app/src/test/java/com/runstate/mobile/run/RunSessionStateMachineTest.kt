@@ -320,4 +320,199 @@ class RunSessionStateMachineTest {
         // The rejected request must leave the run completed.
         assertEquals(RunSessionState.COMPLETED, machine.state)
     }
+
+    /**
+     * Proves a fresh machine can adopt a run storage still holds as running.
+     *
+     * The absence of a countdown here is the point. Recovery does not act out the
+     * stages a run has already been through; it lands on the state storage reports.
+     */
+    @Test
+    fun `restore running moves from no session to running`() {
+        // Arrange: a brand-new machine, exactly as a restarted process would build it.
+        val machine = RunSessionStateMachine()
+
+        // Act: adopt a run that storage says is still running.
+        machine.restoreRunning()
+
+        // Assert: the machine is active without any countdown having happened.
+        assertEquals(RunSessionState.RUNNING, machine.state)
+    }
+
+    /**
+     * Proves a fresh machine can adopt a run storage still holds as paused.
+     *
+     * PAUSED is reached directly, not by restoring to RUNNING and then pausing. A
+     * synthetic pause would invent an event the run never had.
+     */
+    @Test
+    fun `restore paused moves from no session to paused`() {
+        // Arrange: a brand-new machine.
+        val machine = RunSessionStateMachine()
+
+        // Act: adopt a run that storage says is paused.
+        machine.restorePaused()
+
+        // Assert: the machine is paused, having never been running in this process.
+        assertEquals(RunSessionState.PAUSED, machine.state)
+    }
+
+    /**
+     * Proves a machine already in the countdown cannot be handed a recovered run.
+     */
+    @Test
+    fun `restore running is rejected during countdown`() {
+        // Arrange: a machine that has already begun preparing a new run.
+        val machine = RunSessionStateMachine()
+        machine.beginCountdown()
+
+        // Act and Assert: restoring over a countdown must be rejected.
+        assertThrows(IllegalStateException::class.java) {
+            machine.restoreRunning()
+        }
+
+        // The rejected request must leave the countdown unchanged.
+        assertEquals(RunSessionState.COUNTDOWN, machine.state)
+    }
+
+    /**
+     * Proves a machine that already owns an active run cannot be restored over.
+     */
+    @Test
+    fun `restore running is rejected while already running`() {
+        // Arrange: legally reach RUNNING.
+        val machine = RunSessionStateMachine()
+        machine.beginCountdown()
+        machine.startRun()
+
+        // Act and Assert: this machine already owns a run, so adoption is refused.
+        assertThrows(IllegalStateException::class.java) {
+            machine.restoreRunning()
+        }
+
+        // The rejected request must leave the live run untouched.
+        assertEquals(RunSessionState.RUNNING, machine.state)
+    }
+
+    /**
+     * Proves a paused run cannot be silently replaced by a restored running one.
+     */
+    @Test
+    fun `restore running is rejected while paused`() {
+        // Arrange: legally reach PAUSED.
+        val machine = RunSessionStateMachine()
+        machine.beginCountdown()
+        machine.startRun()
+        machine.pauseRun()
+
+        // Act and Assert: restoring would overwrite a run this machine already owns.
+        assertThrows(IllegalStateException::class.java) {
+            machine.restoreRunning()
+        }
+
+        // The rejected request must leave the run paused.
+        assertEquals(RunSessionState.PAUSED, machine.state)
+    }
+
+    /**
+     * Proves a finished session cannot be reopened by restoring a run into it.
+     */
+    @Test
+    fun `restore running is rejected after completion`() {
+        // Arrange: legally complete the run.
+        val machine = RunSessionStateMachine()
+        machine.beginCountdown()
+        machine.startRun()
+        machine.pauseRun()
+        machine.completeRun()
+
+        // Act and Assert: a used machine is not a fresh one, so adoption is refused.
+        assertThrows(IllegalStateException::class.java) {
+            machine.restoreRunning()
+        }
+
+        // The rejected request must leave the run completed.
+        assertEquals(RunSessionState.COMPLETED, machine.state)
+    }
+
+    /**
+     * Proves a machine already in the countdown cannot be handed a recovered pause.
+     */
+    @Test
+    fun `restore paused is rejected during countdown`() {
+        // Arrange: a machine that has already begun preparing a new run.
+        val machine = RunSessionStateMachine()
+        machine.beginCountdown()
+
+        // Act and Assert: restoring over a countdown must be rejected.
+        assertThrows(IllegalStateException::class.java) {
+            machine.restorePaused()
+        }
+
+        // The rejected request must leave the countdown unchanged.
+        assertEquals(RunSessionState.COUNTDOWN, machine.state)
+    }
+
+    /**
+     * Proves a live run cannot be turned into a paused one by restoration.
+     */
+    @Test
+    fun `restore paused is rejected while already running`() {
+        // Arrange: legally reach RUNNING.
+        val machine = RunSessionStateMachine()
+        machine.beginCountdown()
+        machine.startRun()
+
+        // Act and Assert: this machine already owns a run, so adoption is refused.
+        assertThrows(IllegalStateException::class.java) {
+            machine.restorePaused()
+        }
+
+        // The rejected request must leave the run active.
+        assertEquals(RunSessionState.RUNNING, machine.state)
+    }
+
+    /**
+     * Proves a machine already owning a paused run refuses a second one.
+     *
+     * The states match, which is exactly why this has to be refused: agreeing on the
+     * stage says nothing about whether it is the same run.
+     */
+    @Test
+    fun `restore paused is rejected while already paused`() {
+        // Arrange: legally reach PAUSED.
+        val machine = RunSessionStateMachine()
+        machine.beginCountdown()
+        machine.startRun()
+        machine.pauseRun()
+
+        // Act and Assert: owning a paused run does not make adopting another one legal.
+        assertThrows(IllegalStateException::class.java) {
+            machine.restorePaused()
+        }
+
+        // The rejected request must leave the run paused.
+        assertEquals(RunSessionState.PAUSED, machine.state)
+    }
+
+    /**
+     * Proves a finished session cannot be reopened by restoring a pause into it.
+     */
+    @Test
+    fun `restore paused is rejected after completion`() {
+        // Arrange: legally complete the run.
+        val machine = RunSessionStateMachine()
+        machine.beginCountdown()
+        machine.startRun()
+        machine.pauseRun()
+        machine.completeRun()
+
+        // Act and Assert: a used machine is not a fresh one, so adoption is refused.
+        assertThrows(IllegalStateException::class.java) {
+            machine.restorePaused()
+        }
+
+        // The rejected request must leave the run completed.
+        assertEquals(RunSessionState.COMPLETED, machine.state)
+    }
 }
