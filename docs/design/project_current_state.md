@@ -5,12 +5,12 @@ metadata:
   type: project
 ---
 
-As of September 4, 2026, RunState remains one product and one Git repository with two implementation
+As of September 9, 2026, RunState remains one product and one Git repository with two implementation
 areas: the intact working Java/Maven console application and an early native Android/Kotlin/Compose
 foundation under `android/`. The mobile screens discussed below remain interactive design
 prototypes; the Android application does not yet implement that designed journey.
 
-## Current delivery resume point — September 4, 2026
+## Current delivery resume point — September 9, 2026
 
 - **Phase 3 Android implementation is now in progress.** Commit `ea43335` added the minimal Android
   shell and one static Compose screen, verified by building, installing and launching it on the
@@ -31,9 +31,11 @@ prototypes; the Android application does not yet implement that designed journey
   creating a second run or duplicate completion event. A hand-written additive migration preserves
   version-1 Running, Paused and Completed rows without inventing missing history, and the version-1
   schema remains byte-identical beside the generated version-2 schema. Real-database tests prove
-  rollback, persistence after reopen and the full starter-to-owner lifecycle bridge. Verification
-  passes with 47 JVM tests and 19 local emulator tests. The Room migration-test runtime requires the
-  existing serialization library to resolve at 1.8.1; no AndroidX Startup pin or deprecated
+  rollback, persistence after reopen and the full starter-to-owner lifecycle bridge. Commit
+  `e77c65b` added read-only active-row discovery: it returns every Running or Paused row, excludes
+  completed history, and orders candidates by official start then UUID without choosing or changing
+  one. Verification passes with 48 JVM tests and 22 local emulator tests. The Room migration-test
+  runtime requires the existing serialization library to resolve at 1.8.1; no AndroidX Startup pin or deprecated
   compile-time-R-class workaround remains. Canonical detail lives in `run_initiation_register.md`.
 
 - Log History has a stable design foundation. Its most-recent-record quick peek was completed and
@@ -86,8 +88,9 @@ prototypes; the Android application does not yet implement that designed journey
   ordering through Completed now exists in the isolated Android state machine. The permanent UUID,
   official-start timestamp, start timezone, save-before-Running boundary, ordered pause/resume
   history, later checkpoints and completion finish are now implemented in Room, and one
-  `ActiveRunSession` coordinates those durable changes with the in-memory machine. Active-row
-  discovery and recovery remain unimplemented. The `PENDING_CREATE` / `SYNCED` / `PENDING_UPDATE` /
+  `ActiveRunSession` coordinates those durable changes with the in-memory machine. Read-only
+  active-row discovery is implemented; interpreting its zero, one or many results during recovery
+  remains unimplemented. The `PENDING_CREATE` / `SYNCED` / `PENDING_UPDATE` /
   `PENDING_DELETE` local-first
   synchronization states remain approved there and not implemented. The one-to-one selected
   reflection with `PENDING` / `READY` / `FAILED` is approved in `design_run_response_system.md` and
@@ -108,14 +111,14 @@ prototypes; the Android application does not yet implement that designed journey
   Android/Kotlin, Room as the on-phone source of truth, a foreground service for active sessions,
   and a minimal server for reflection plus later sync with credentials off-device. Saving and
   reflection remain separate; full RunStyle stays local. The Android shell, full in-memory
-  session-state ordering, Room-backed durable lifecycle and UUID-bound active-session coordinator now
-  exist. The foreground service, recovery and the rest of this architecture remain approved contracts
-  rather than implemented behavior.
-- **Next delivery planning step:** add active-row discovery, then let relaunch recovery reconstruct
-  the one active owner from durable Running or Paused state on the way toward the fixture journey
-  through Log History. GPS and provider integration remain behind that foundation, as do remaining
+  session-state ordering, Room-backed durable lifecycle, UUID-bound active-session coordinator and
+  active-row discovery now exist. The foreground service, recovery and the rest of this architecture
+  remain approved contracts rather than implemented behavior.
+- **Next delivery planning step:** let relaunch recovery interpret the complete discovery result and
+  reconstruct the one active owner from a durable Running or Paused row on the way toward the
+  fixture journey through Log History. GPS and provider integration remain behind that foundation, as do remaining
   Log History polish, further music intelligence and RunStyle V2.
-- No GPS tracking, BPM source, music-provider integration, active-row discovery, relaunch or
+- No GPS tracking, BPM source, music-provider integration, relaunch or
   process-death recovery, foreground service, synchronization, or Reflection Engine has been built.
   The current Android screen is static and is not connected to the state machine, owner or Room.
 

@@ -213,7 +213,7 @@ The prototype exposes requirements. It doesn't satisfy them.
 | BPM | Sensor or health-platform integration; not collected |
 | Music-reactive ring | Real playback signal and a permission strategy |
 | Live song, artist, album | Music-provider integration |
-| Pause / resume / stop states | Lifecycle, recovery and timestamp contract approved; mobile implementation not built |
+| Pause / resume / stop states | Android state machine, Room lifecycle, UUID-bound owner and active-row discovery are built; relaunch recovery, foreground-service ownership and UI wiring remain |
 | Shoe mileage | Design accepted; exactly-once completed-run mileage not implemented |
 | RunStyle card content | Needs a query for *last run at this route/place*; the data exists |
 | Early-stoppage detection | Nothing built |
