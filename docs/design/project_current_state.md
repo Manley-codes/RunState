@@ -16,7 +16,7 @@ prototypes; the Android application does not yet implement that designed journey
   shell and one static Compose screen, verified by building, installing and launching it on the
   Medium Phone emulator. Commits `93bacb9` and `505c89e` established an isolated in-memory
   `RunSessionStateMachine`; its enum names all five approved states, and its implemented behavior now
-  covers guarded `NO_SESSION → COUNTDOWN → RUNNING ⇄ PAUSED → COMPLETED` transitions. Seventeen local
+  covers guarded `NO_SESSION → COUNTDOWN → RUNNING ⇄ PAUSED → COMPLETED` transitions. Twenty-seven local
   JUnit tests pass, including rejection of repeated countdown, skipping directly to Running, invalid
   pause/resume attempts, completing before Paused and completing twice. Commit `360294a` added the
   UUID-bound `ActiveRunSession`, which now coordinates the Room pause/resume/completion operations
@@ -34,9 +34,13 @@ prototypes; the Android application does not yet implement that designed journey
   rollback, persistence after reopen and the full starter-to-owner lifecycle bridge. Commit
   `e77c65b` added read-only active-row discovery: it returns every Running or Paused row, excludes
   completed history, and orders candidates by official start then UUID without choosing or changing
-  one. Verification passes with 48 JVM tests and 22 local emulator tests. The Room migration-test
-  runtime requires the existing serialization library to resolve at 1.8.1; no AndroidX Startup pin or deprecated
-  compile-time-R-class workaround remains. Canonical detail lives in `run_initiation_register.md`.
+  one. Commit `99d3432` added the isolated recovery core: it distinguishes zero, one and many active
+  rows, restores a fresh machine directly from exactly one Running or Paused row, and returns one
+  owner without changing storage. A reopened-Room test proves reconstruction from the database file,
+  not Android process death. Verification passes with 69 JVM tests and 23 local emulator tests. The
+  Room migration-test runtime requires the existing serialization library to resolve at 1.8.1; no
+  AndroidX Startup pin or deprecated compile-time-R-class workaround remains. Canonical detail lives
+  in `run_initiation_register.md`.
 
 - Log History has a stable design foundation. Its most-recent-record quick peek was completed and
   accepted August 13: approximately 1.66 seconds of total visible expansion-and-collapse motion,
@@ -89,8 +93,8 @@ prototypes; the Android application does not yet implement that designed journey
   official-start timestamp, start timezone, save-before-Running boundary, ordered pause/resume
   history, later checkpoints and completion finish are now implemented in Room, and one
   `ActiveRunSession` coordinates those durable changes with the in-memory machine. Read-only
-  active-row discovery is implemented; interpreting its zero, one or many results during recovery
-  remains unimplemented. The `PENDING_CREATE` / `SYNCED` / `PENDING_UPDATE` /
+  active-row discovery and the isolated zero/one/many recovery decision are implemented; production
+  startup does not invoke them yet. The `PENDING_CREATE` / `SYNCED` / `PENDING_UPDATE` /
   `PENDING_DELETE` local-first
   synchronization states remain approved there and not implemented. The one-to-one selected
   reflection with `PENDING` / `READY` / `FAILED` is approved in `design_run_response_system.md` and
@@ -111,14 +115,15 @@ prototypes; the Android application does not yet implement that designed journey
   Android/Kotlin, Room as the on-phone source of truth, a foreground service for active sessions,
   and a minimal server for reflection plus later sync with credentials off-device. Saving and
   reflection remain separate; full RunStyle stays local. The Android shell, full in-memory
-  session-state ordering, Room-backed durable lifecycle, UUID-bound active-session coordinator and
-  active-row discovery now exist. The foreground service, recovery and the rest of this architecture
-  remain approved contracts rather than implemented behavior.
-- **Next delivery planning step:** let relaunch recovery interpret the complete discovery result and
-  reconstruct the one active owner from a durable Running or Paused row on the way toward the
-  fixture journey through Log History. GPS and provider integration remain behind that foundation, as do remaining
-  Log History polish, further music intelligence and RunStyle V2.
-- No GPS tracking, BPM source, music-provider integration, relaunch or
+  session-state ordering, Room-backed durable lifecycle, UUID-bound active-session coordinator,
+  active-row discovery and isolated recovery core now exist. The foreground service, production
+  startup/ownership wiring and the rest of this architecture remain approved contracts rather than
+  implemented behavior.
+- **Next delivery planning step:** define one production Room database and startup ownership boundary
+  that runs recovery before a new countdown/start can create another owner, on the way toward the
+  fixture journey through Log History. GPS and provider integration remain behind that foundation,
+  as do remaining Log History polish, further music intelligence and RunStyle V2.
+- No GPS tracking, BPM source, music-provider integration, production relaunch or
   process-death recovery, foreground service, synchronization, or Reflection Engine has been built.
   The current Android screen is static and is not connected to the state machine, owner or Room.
 

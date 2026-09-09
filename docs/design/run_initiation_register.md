@@ -237,9 +237,11 @@ that row and append ordered child events, and completion updates the same row wi
 final checkpoint. Each later change is one database transaction, so a failed child write rolls back
 the parent update. `RunSessionStarter` now returns one UUID-bound `ActiveRunSession` that serializes
 pause/resume/completion, writes Room first and advances the same in-memory machine only after storage
-succeeds. Read-only discovery now returns every stored Running or Paused row in deterministic order
-without selecting or changing one; interpreting that complete result remains recovery work. The
-owner and Room remain unconnected to the screen. This contract starts when a run
+succeeds. Read-only discovery returns every stored Running or Paused row in deterministic order
+without selecting or changing one. The isolated recovery core now distinguishes zero, one and many
+candidates, restores a fresh machine directly from exactly one row, and returns a UUID-bound owner
+without writing to storage. Production startup does not invoke it yet. The owner and Room remain
+unconnected to the screen. This contract starts when a run
 becomes official.
 The experimental Armed and Watching detection states above stay separate and do not create a run.
 
@@ -258,6 +260,15 @@ It must not invent distance or active time for an uncertain gap. The runner may 
 session or end and save it; neither path creates a duplicate. Discard remains an explicit open
 decision tied to accidental starts and must never happen silently. The local identity format is a
 separate contract defined immediately below.
+
+**Recovery core — implemented September 9, 2026.** `ActiveRunRecovery` queries discovery once. Zero
+rows leaves a fresh machine at No session; exactly one Running or Paused row restores the machine
+directly and returns the same recovery-time snapshot plus one UUID-bound `ActiveRunSession`; more
+than one returns the complete ordered evidence and refuses to choose. Recovery itself never edits
+the database or fabricates missing transition history. The reopened-Room test uses a new database
+instance and state machine, proving reconstruction from a persisted file, but the Android process
+never dies. Production database construction, recovery-before-start coordination and an actual
+startup call site remain separate work.
 
 **Time contract:** store the official start, optional finish, timezone at the start, every pause and
 resume transition, and the last durable checkpoint. Elapsed time is start-to-finish including
@@ -290,9 +301,9 @@ manufactured for an interval the checkpoints do not cover.
 requires canonical lowercase UUID text and uses it directly as the primary key. The initial Running
 insert accepts the already-prepared identity rather than generating or replacing it, a duplicate
 UUID aborts without overwriting the original row, and durable pause, resume and completion operations
-update that same UUID instead of creating another run. Active-session ownership and read-only
-discovery are implemented. Production generation, recovery and all synchronization behavior remain
-to be implemented. The server may keep
+update that same UUID instead of creating another run. Active-session ownership, read-only discovery
+and the isolated recovery core are implemented. Production generation, startup recovery wiring and
+all synchronization behavior remain to be implemented. The server may keep
 an internal database key, but the phone and server use this UUID as the run's stable external
 identity and duplicate-safe synchronization key.
 
@@ -329,8 +340,8 @@ approval. The Android/Kotlin/Compose project exists as a static shell plus isola
 state-order rules. Room 2.8.4 and KSP now back a version-2 database with the parent `runs` table and
 ordered `run_transitions` children; both schemas are exported under `android/app/schemas`. A separate
 Android CI job runs the JVM tests, assembles the debug app and compiles the instrumented-test APK on
-every push and pull request; it does not run an emulator. Verification passed with 48 JVM tests and
-22 local emulator tests.
+every push and pull request; it does not run an emulator. Verification passed with 69 JVM tests and
+23 local emulator tests.
 
 **The durable lifecycle and its in-memory rules now meet in one active-session type.** The parent row
 uses canonical UUID text as its primary key and stores the official start, IANA start timezone,
@@ -342,9 +353,11 @@ version-1-to-2 migration preserves old rows without inventing finish times or tr
 row; every action validates memory, updates Room and only then advances the same state machine.
 Production wiring must still guarantee exactly one owner and register `MIGRATION_1_2` when its
 database builder is introduced. Cancellation after a successful durable write but before its
-in-memory transition remains a recovery concern. Active-row discovery now reports all Running and
-Paused candidates without mutating them; relaunch or process-death recovery, the foreground service,
-telemetry and the server boundary remain unimplemented. The Java
+in-memory transition remains a recovery concern. Active-row discovery reports all Running and Paused
+candidates without mutating them, and the isolated recovery core can rebuild one fresh owner or
+refuse an inconsistent multiple-row result. No production database builder or startup call site uses
+that core yet; real relaunch/process-death recovery, the foreground service, telemetry and the server
+boundary remain unimplemented. The Java
 console and MySQL database are unaffected.
 
 - Build Android first with Kotlin and native Android UI/platform services.

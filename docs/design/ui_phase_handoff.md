@@ -346,7 +346,7 @@ Not blocking; revisit later.
 | **PR categories** — for the PRs filter and marker | Personal records exist in the console; categories aren't defined |
 | **Structured song playback history** — every song title plus when it started and stopped during the run | Provider-neutral contract approved August 26; actual playback and RunState decisions remain separate under the permanent run UUID. Real observation still waits for the mobile feasibility test |
 | **Song location** — the `SONG DETECTED — MILE 2.4` stamp, and the split-music view | Derived only when trustworthy playback and accepted GPS overlap on the shared run timeline. One song may span several splits and one split may contain several songs. Hide precise location when either timeline is partial |
-| **Active run session states** — countdown, running, paused, resumed, stopped | Lifecycle, recovery and timestamp contract approved August 25. Android now has the full in-memory ordering, Room-backed start/pause/resume/completion, one UUID-bound active owner and read-only active-row discovery. It remains disconnected from the UI, and relaunch recovery plus foreground-service ownership are not built. Countdown creates no session; Running persists immediately; Paused remains durable; resume is an action; hold-to-end completes. Recovery restores only through the last trustworthy checkpoint. Canonical contract: `run_initiation_register.md`. |
+| **Active run session states** — countdown, running, paused, resumed, stopped | Lifecycle, recovery and timestamp contract approved August 25. Android now has the full in-memory ordering, Room-backed start/pause/resume/completion, one UUID-bound active owner, read-only discovery and an isolated recovery core that restores exactly one Running or Paused row without guessing or writing. It remains disconnected from the UI, and production startup recovery plus foreground-service ownership are not built. Countdown creates no session; Running persists immediately; Paused remains durable; resume is an action; hold-to-end completes. Recovery restores only through the last trustworthy checkpoint. Canonical contract: `run_initiation_register.md`. |
 | **Live now-playing metadata and music-reactive visualizer** | Prototype only. Needs music-provider/playback integration and a defined no-music state; must fail independently of core tracking. |
 | **Natural reflection speech** | The Edge six-voice selector remains prototype evidence, not a production engine. Android platform text-to-speech is the first-demonstration source for the factual receipt and exact stored reflection text; unavailable or disabled speech falls back to text without affecting the run. Hosted or persona-specific speech remains later |
 | **Run Complete save / response separation** | Mobile must save the run durably before saying `Run saved`, then show metrics with a deterministic factual audio receipt. After save, it prepares four responses from one factual foundation: `Spent`, `Feeling Good`, `Powered Up`, and no selection. Energy selects the one immediate response that is revealed and stored. The approved one-to-one reflection record uses `PENDING`, `READY`, or `FAILED`; exact `READY` text is permanent in History, retry never resaves the run, and deletion removes both. Effort does not change it; Effort persists for future comparisons, Quiet Gains and longitudinal learning. `Saved` means durable on-device storage, not completed cloud sync. |
@@ -372,8 +372,9 @@ voice styling never changes the facts.
 
 **Roadmap position, September 9:** the narrow Core Running Foundation Review, music inventory, and
 mobile architecture / telemetry / completed-run contracts are complete at the decision level. The
-Android foundation now implements the state machine, Room lifecycle, active owner and active-row
-discovery; relaunch recovery is next. The current delivery lane remains the native Android fixture journey:
+Android foundation now implements the state machine, Room lifecycle, active owner, active-row
+discovery and isolated recovery core; production database/startup ownership is next. The current
+delivery lane remains the native Android fixture journey:
 Start → Countdown → Running/Paused → Run Complete → Log History, durable in Room after reopening.
 Remaining Log History polish, RunStyle V2, provider depth and other screen refinement must not be
 inserted ahead of that foundation.
@@ -432,8 +433,9 @@ not the older State Scan notes.
 preserve it safely, understand it, manage it, use it later — is credible in the completed-run
 console, with four bounded gaps identified before mobile contracts. The comparison-trust gap is now
 fixed: same-route runs must also pass the existing distance band. The active-session lifecycle and
-timestamp contract now have an Android state machine, Room-backed lifecycle, UUID-bound owner and
-active-row discovery; relaunch recovery remains unimplemented. The phone-generated UUID is now the
+timestamp contract now have an Android state machine, Room-backed lifecycle, UUID-bound owner,
+active-row discovery and an isolated recovery core; production startup does not invoke recovery yet.
+The phone-generated UUID is now the
 Room primary key, while the four local-first synchronization states remain approved but not
 implemented. The one-to-one selected
 reflection and its `PENDING` / `READY` / `FAILED` lifecycle are now approved but not implemented.
