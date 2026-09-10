@@ -19,8 +19,17 @@ import kotlinx.coroutines.sync.withLock
  * storage exists, and this class does not change that — it wraps the machine rather
  * than modifying it. The machine also stays synchronous and unaware of coroutines;
  * all waiting happens here.
+ *
+ * ## Who builds one
+ *
+ * Production has exactly one, owned by [RunSessionCoordinator], which builds a starter
+ * per run cycle over that cycle's machine and only calls it while holding its own lock.
+ * The constructor is internal so nothing outside this module can assemble a second
+ * unmanaged one, but code inside the module still can, and the tests deliberately do.
+ * That is the honest limit of what visibility buys here: single ownership in production
+ * depends on callers going through the coordinator, not on the compiler.
  */
-class RunSessionStarter(
+class RunSessionStarter internal constructor(
     private val stateMachine: RunSessionStateMachine,
     private val runDao: RunDao
 ) {
@@ -34,9 +43,12 @@ class RunSessionStarter(
      * UUIDs. Holding the lock across the whole operation means the second caller reads
      * the state the first one left behind.
      *
-     * The lock covers calls made through THIS starter instance. Production wiring must
-     * therefore give the active-session owner one shared starter: separate instances
-     * would hold separate mutexes and protect nothing from each other.
+     * The lock covers calls made through THIS starter instance, so separate instances
+     * would hold separate mutexes and protect nothing from each other. In production
+     * that is settled by [RunSessionCoordinator] holding the only starter and calling it
+     * under its own lock — two different mutexes, always taken coordinator-first. This
+     * one is not thereby redundant: it stays the defense for any caller inside the module
+     * that holds a starter directly.
      */
     private val startLock = Mutex()
 
@@ -57,9 +69,10 @@ class RunSessionStarter(
      * Known gap, deliberately left open: cancellation between the durable insert and
      * the in-memory transition leaves a saved active row behind that this object no
      * longer knows about. `NonCancellable` is not used here, because papering over it
-     * would hide the case rather than resolve it. The real answer is the foreground
-     * service owning the session and recovery adopting an already-saved active run at
-     * startup; both are later work.
+     * would hide the case rather than resolve it. [RunSessionCoordinator] does not close
+     * it either — cancellation before the owner is published back leaves the same orphan,
+     * which the next process's recovery can adopt but the current one cannot rediscover.
+     * The foreground service owning the live session is still later work.
      *
      * @return the [ActiveRunSession] that owns this run for the rest of its life. It is
      *   bound to [preparedRun]'s UUID, and it is given this starter's own state machine

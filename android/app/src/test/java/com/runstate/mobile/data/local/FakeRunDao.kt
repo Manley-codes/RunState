@@ -63,6 +63,18 @@ open class FakeRunDao : RunDao() {
     /** When set, the discovery query throws this instead of returning rows. */
     var failDiscoveryWith: Exception? = null
 
+    /**
+     * Runs when the discovery query is reached, before it returns rows or throws.
+     *
+     * The discovery equivalent of [duringInsert], and it exists for one job the others
+     * cannot do: parking recovery mid-query so a test can check whether a competing
+     * countdown or start managed to cross the coordinator's lock while recovery was still
+     * in flight. Suspending here holds the coordinator lock open for as long as the test
+     * wants, which is what makes the ordering observable rather than merely inferred from
+     * whatever the final state happens to be.
+     */
+    var duringDiscovery: (suspend () -> Unit)? = null
+
     override suspend fun insert(run: RunEntity) {
         duringInsert?.invoke()
         failWith?.let { throw it }
@@ -107,6 +119,11 @@ open class FakeRunDao : RunDao() {
         // failed was still asked. Counting after would make a failing discovery look
         // like one that never happened.
         discoveryQueryCalls++
+
+        // Before the rows and before the failure, so a parked test observes a query that
+        // has genuinely begun and a forced failure still happens with the hook honored.
+        duringDiscovery?.invoke()
+
         failDiscoveryWith?.let { throw it }
 
         return inserted

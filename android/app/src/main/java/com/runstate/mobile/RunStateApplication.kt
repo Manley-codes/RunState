@@ -3,14 +3,17 @@ package com.runstate.mobile
 import android.app.Application
 import com.runstate.mobile.data.local.RunStateDatabase
 import com.runstate.mobile.data.local.buildRunStateDatabase
+import com.runstate.mobile.run.RunSessionCoordinator
 
 /**
- * The process-scoped home of the one run database.
+ * The composition root: one database and one run coordinator, for the process.
  *
  * Android creates exactly one Application instance per app process and keeps it for the
- * life of that process, which makes it the natural place to answer "how long does the
- * database live". Everything below is about that single question; no run logic, no
- * recovery and no startup work belongs here.
+ * life of that process, which makes it the natural place to answer "how long does this
+ * live". That is the only question it answers. It holds the two process-scoped objects
+ * and wires them together; it does not run recovery, decide admission, or do any run
+ * logic itself. [RunSessionCoordinator] owns all of that, and it does nothing at all
+ * until something explicitly calls it.
  *
  * ## Why one instance matters, and what it does not settle
  *
@@ -30,8 +33,13 @@ import com.runstate.mobile.data.local.buildRunStateDatabase
  * not establish one active-run owner. Two `ActiveRunSession` objects over the same run,
  * even sharing this exact database, hold two unrelated mutexes and two independent state
  * machines, and would drift apart while every individual write remained perfectly legal.
- * Single ownership — and running recovery before a new start can create a second owner —
- * is separate wiring that does not exist yet.
+ * That is what [runSessionCoordinator] is for: one gate, holding one owner, running
+ * recovery before any start is admitted. It is held here rather than built per caller for
+ * the same reason the database is — a second coordinator would be a second gate, and two
+ * gates guard nothing.
+ *
+ * What that does *not* mean is that the app's journey is wired. Nothing here calls the
+ * coordinator, and no Activity or service uses it yet.
  *
  * ## Two constraints on future work
  *
@@ -44,9 +52,11 @@ import com.runstate.mobile.data.local.buildRunStateDatabase
  *
  * **[onCreate] is deliberately not overridden.** This class is instantiated during
  * instrumented tests too, so anything done at startup is done before every emulator test,
- * on the main thread, whether that test needs it or not. Opening a database there would
- * also mean a query on the main thread. Startup therefore stays empty and the cost is
- * deferred to [database]'s first real use.
+ * on the main thread, whether that test needs it or not. Running recovery there would mean
+ * a database query on the main thread before any test that never wanted one. Startup
+ * therefore stays empty: both properties below are lazy, and
+ * [RunSessionCoordinator.initialize] is never called automatically. Deciding when
+ * recovery runs belongs to the startup slice that will call it deliberately.
  */
 class RunStateApplication : Application() {
 
@@ -65,4 +75,26 @@ class RunStateApplication : Application() {
      * inside the module rather than an external caller.
      */
     internal val database: RunStateDatabase by lazy { buildRunStateDatabase(this) }
+
+    /**
+     * The one admission gate for runs in this process.
+     *
+     * Built over [database]'s DAO rather than a database or DAO of its own, so the
+     * coordinator, recovery and every run it admits all reach storage the same way.
+     * Touching this constructs the Room instance and obtains its DAO; Room opens the file
+     * on the first real query. The property is lazy so neither object exists until a caller
+     * needs the admission boundary, and nothing calls it during startup.
+     *
+     * The default synchronized `lazy` matters here for the same reason it does above, and
+     * more sharply: two coordinators would be two independent gates, each with its own
+     * lock and its own idea of which run is live, and the whole point of the class is
+     * that there is exactly one.
+     *
+     * Constructing it runs no recovery and touches no rows. [RunSessionCoordinator]
+     * starts in `NotAttempted` and does nothing until something calls
+     * [RunSessionCoordinator.initialize].
+     */
+    internal val runSessionCoordinator: RunSessionCoordinator by lazy {
+        RunSessionCoordinator(database.runDao())
+    }
 }

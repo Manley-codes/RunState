@@ -83,27 +83,29 @@ sealed interface ActiveRunRecoveryResult {
  * action the runner takes afterwards through the returned owner. Everything this class
  * changes is in memory, and only the state machine it was handed.
  *
+ * ## Where the missing lock now lives
+ *
+ * Two limitations recorded here were about ordering, and [RunSessionCoordinator] now
+ * answers both. The NO_SESSION precondition below is still only a check — it reports what
+ * the machine held at the instant it was asked and reserves nothing — and [recover] still
+ * suspends at the query, so a countdown could in principle interleave with it. What
+ * changed is that the coordinator holds one lock across recovery, admission and start,
+ * so a start arriving mid-recovery waits rather than interleaving. That lock is
+ * deliberately not moved in here: recovery is one decision, and a mutex inside it could
+ * only protect this call rather than the sequence the ordering problem actually spans.
+ *
  * ## Known limitations, deliberately left open
  *
- * - **Nothing calls this yet.** There is no app-startup wiring and no production
- *   `Room.databaseBuilder`, so recovery runs in tests and nowhere else. This slice
- *   proves the decision logic; making it actually happen when the app launches is
- *   separate work.
- * - **The NO_SESSION precondition is a check, not a lock.** It reports that the machine
- *   owned nothing at the instant it was asked. It does not reserve the machine, and
- *   nothing stops another caller mutating it a moment later.
- * - **[recover] suspends at the query.** Between the precondition and the restoration
- *   there is a real suspension point, so a countdown or a start racing recovery could
- *   interleave with it. Future startup wiring has to make recovery finish before any
- *   start is possible — most likely by sharing one lock with [RunSessionStarter], which
- *   is deferred along with the singleton owner wiring that would guarantee one owner
- *   per run.
+ * - **No Android entry point calls initialization yet.** A production database builder
+ *   now exists and the coordinator now sequences recovery against starting, but no
+ *   Activity, service or bootstrap invokes it, so recovery still runs in tests and
+ *   nowhere else. Making it happen when the app launches is separate work.
  * - **This is not process death.** Restoring from a stored row proves the decision
  *   logic and, in the instrumented test, proves a run survives a closed and reopened
  *   database file. Neither one is the Android system killing the app and rebuilding it,
  *   and no test here claims to be.
  */
-class ActiveRunRecovery(
+class ActiveRunRecovery internal constructor(
     private val stateMachine: RunSessionStateMachine,
     private val runDao: RunDao
 ) {

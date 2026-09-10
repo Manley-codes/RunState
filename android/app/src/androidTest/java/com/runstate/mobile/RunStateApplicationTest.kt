@@ -49,4 +49,29 @@ class RunStateApplicationTest {
         // Assert: one instance, not two equal-looking ones.
         assertSame(first, second)
     }
+
+    /**
+     * Proves the process gets one admission gate, not one per caller.
+     *
+     * The same substitution risk as above, with a sharper consequence. Two coordinators
+     * would each hold their own lock, their own state machine and their own idea of which
+     * run is live — so both could admit a start, and the single-owner rule the whole
+     * session design rests on would be gone while every individual write still succeeded.
+     *
+     * This asks for the coordinator only. It does not call `initialize()`, so no recovery
+     * runs and no query is issued here.
+     */
+    @Test
+    fun theCoordinatorPropertyReturnsOneInstancePerProcess() {
+
+        // Arrange: the real Application instance Android built for this test process.
+        val application = ApplicationProvider.getApplicationContext<RunStateApplication>()
+
+        // Act: ask twice.
+        val first = application.runSessionCoordinator
+        val second = application.runSessionCoordinator
+
+        // Assert: one gate, not two.
+        assertSame(first, second)
+    }
 }
