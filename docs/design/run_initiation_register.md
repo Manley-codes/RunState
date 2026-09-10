@@ -240,8 +240,10 @@ pause/resume/completion, writes Room first and advances the same in-memory machi
 succeeds. Read-only discovery returns every stored Running or Paused row in deterministic order
 without selecting or changing one. The isolated recovery core now distinguishes zero, one and many
 candidates, restores a fresh machine directly from exactly one row, and returns a UUID-bound owner
-without writing to storage. Production startup does not invoke it yet. The owner and Room remain
-unconnected to the screen. This contract starts when a run
+without writing to storage. One process-scoped coordinator now runs that recovery before admitting
+countdown/start, retains the one live owner, blocks inconsistent storage and retires a completed
+cycle when the next countdown begins. No Android entry point invokes the coordinator yet, and the
+owner and Room remain unconnected to the screen. This contract starts when a run
 becomes official.
 The experimental Armed and Watching detection states above stay separate and do not create a run.
 
@@ -267,8 +269,8 @@ directly and returns the same recovery-time snapshot plus one UUID-bound `Active
 than one returns the complete ordered evidence and refuses to choose. Recovery itself never edits
 the database or fabricates missing transition history. The reopened-Room test uses a new database
 instance and state machine, proving reconstruction from a persisted file, but the Android process
-never dies. Production database construction, recovery-before-start coordination and an actual
-startup call site remain separate work.
+never dies. Production database construction and recovery-before-start coordination now exist; an
+actual Android startup call site remains separate work.
 
 **Time contract:** store the official start, optional finish, timezone at the start, every pause and
 resume transition, and the last durable checkpoint. Elapsed time is start-to-finish including
@@ -301,9 +303,10 @@ manufactured for an interval the checkpoints do not cover.
 requires canonical lowercase UUID text and uses it directly as the primary key. The initial Running
 insert accepts the already-prepared identity rather than generating or replacing it, a duplicate
 UUID aborts without overwriting the original row, and durable pause, resume and completion operations
-update that same UUID instead of creating another run. Active-session ownership, read-only discovery
-and the isolated recovery core are implemented. Production generation, startup recovery wiring and
-all synchronization behavior remain to be implemented. The server may keep
+update that same UUID instead of creating another run. Active-session ownership, read-only discovery,
+the isolated recovery core and its process-scoped admission coordinator are implemented. Production
+UUID generation, the Android initialization call site and all synchronization behavior remain to be
+implemented. The server may keep
 an internal database key, but the phone and server use this UUID as the run's stable external
 identity and duplicate-safe synchronization key.
 
@@ -340,8 +343,8 @@ approval. The Android/Kotlin/Compose project exists as a static shell plus isola
 state-order rules. Room 2.8.4 and KSP now back a version-2 database with the parent `runs` table and
 ordered `run_transitions` children; both schemas are exported under `android/app/schemas`. A separate
 Android CI job runs the JVM tests, assembles the debug app and compiles the instrumented-test APK on
-every push and pull request; it does not run an emulator. Verification passed with 69 JVM tests and
-25 local emulator tests.
+every push and pull request; it does not run an emulator. Verification passed with 81 JVM tests and
+26 local emulator tests.
 
 **The durable lifecycle and its in-memory rules now meet in one active-session type.** The parent row
 uses canonical UUID text as its primary key and stores the official start, IANA start timezone,
@@ -354,19 +357,21 @@ row; every action validates memory, updates Room and only then advances the same
 `RunStateApplication` now holds one lazy Room instance per app process, and the centralized
 production builder explicitly registers `MIGRATION_1_2`; the production database is temporarily
 excluded from cloud backup and device transfer until synchronization and safe restore handling
-exist. Production wiring must still guarantee exactly one active-run owner. Cancellation after a
-successful durable write but before its in-memory transition remains a recovery concern. Active-row
-discovery reports all Running and Paused candidates without mutating them, and the isolated recovery
-core can rebuild one fresh owner or refuse an inconsistent multiple-row result. No startup call site
-uses that core yet; real relaunch/process-death recovery, the foreground service, telemetry and the
-server boundary remain unimplemented. The Java
+exist. `RunSessionCoordinator` now provides one process-scoped admission and identity gate: it runs
+recovery before countdown/start, retains the exact recovered or newly started owner, blocks an
+inconsistent multiple-row result and replaces a completed run cycle only when the next countdown
+begins. Cancellation after a successful durable write but before its in-memory transition remains a
+recovery concern. No Android startup call site uses the coordinator yet; real
+relaunch/process-death recovery, the foreground service, telemetry and the server boundary remain
+unimplemented. The Java
 console and MySQL database are unaffected.
 
 - Build Android first with Kotlin and native Android UI/platform services.
 - Room is the authoritative on-phone store. The interface observes durable state; it does not own
   the run clock or keep the only copy of an active run.
-- A foreground service owns the active Running/Paused session, its timer, GPS capture and durable
-  checkpoints so navigation or screen recreation cannot end the run.
+- The process-scoped coordinator owns admission and run identity. A foreground service owns active
+  execution and lifetime — timer, GPS capture, notification and durable checkpoints — so navigation
+  or screen recreation cannot end the run.
 - Local save is the source of truth. The minimum server boundary handles reflection generation and
   later duplicate-safe synchronization; it is not required for timing or completing a run.
 - Provider and model credentials remain off the phone.
