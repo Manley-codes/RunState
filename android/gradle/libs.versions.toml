@@ -5,7 +5,13 @@ agp = "9.3.2"
 coreKtx = "1.10.1"
 junit = "4.13.2"
 junitVersion = "1.1.5"
-espressoCore = "3.5.1"
+
+# Compose UI tests wait for idle through Espresso, and Espresso 3.5.1 reaches
+# android.hardware.input.InputManager.getInstance() by reflection. That method is gone on
+# modern Android, so on the API 37 emulator every Compose test died with NoSuchMethodException
+# before it could assert anything. 3.7.0 removed that reflection. Test-only: espresso-core is
+# androidTestImplementation, so nothing in the shipped APK changes.
+espressoCore = "3.7.0"
 lifecycleRuntimeKtx = "2.6.1"
 activityCompose = "1.8.0"
 kotlin = "2.2.10"

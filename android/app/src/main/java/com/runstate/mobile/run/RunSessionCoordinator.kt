@@ -115,12 +115,13 @@ internal sealed interface RunAdmission {
  * order and no way to build a cycle. The starter's lock is not redundant — it remains the
  * defense for any caller holding a starter directly.
  *
- * ## What this does not yet establish
+ * ## Who calls it, and what that does not yet cover
  *
- * **Nothing in the app calls it.** No Activity, no service and no bootstrap uses this
- * coordinator, so the production journey is not wired and no runner is protected by it
- * yet. It enforces the boundary for callers that go through it, and that is a real but
- * bounded claim.
+ * `MainActivity` now initializes this coordinator and drives the visible journey through
+ * it, so the Initializing → Ready → Countdown → Cancel path is genuinely coordinator-backed
+ * rather than a screen acting on its own. What is not yet wired is everything past the
+ * countdown: nothing calls [start], so no run becomes official through this path, and
+ * there is still no foreground service holding a live run.
  *
  * **It is not the only way to build these pieces.** [RunSessionStarter] and
  * [ActiveRunRecovery] have internal constructors, which stops code outside this module
@@ -360,7 +361,7 @@ internal class RunSessionCoordinator(private val runDao: RunDao) {
                 "A countdown cannot begin while a run is ${session.state}."
             }
 
-            retireCompletedCycle()
+            beginFreshCycle()
         }
 
         // Left to the machine's own guard rather than pre-checked here, so a second
@@ -369,21 +370,72 @@ internal class RunSessionCoordinator(private val runDao: RunDao) {
     }
 
     /**
-     * Replaces the finished cycle with a fresh one.
+     * Abandons a countdown, returning the coordinator to a fresh NO_SESSION cycle.
      *
-     * Retirement happens at this boundary and nowhere else. Doing it inside [start] would
-     * mean a coordinator that had answered [RunAdmission.ReadyForCountdown] was still
-     * holding a completed owner with no countdown underway, and doing it inside
-     * [admission] would make a report mutate what it reports on. Here it is tied to the
-     * one moment a new cycle genuinely begins.
+     * The exit that entering COUNTDOWN requires. A countdown is the one stage the runner
+     * can be in with nothing durable behind it — no row, no UUID, no owner — so backing
+     * out of it has to be possible and has to cost nothing. Without this, tapping Start
+     * would strand the coordinator: COUNTDOWN has no legal transition back to NO_SESSION,
+     * so the only ways forward would be starting a run the runner no longer wants or
+     * killing the process.
      *
-     * The old machine is discarded, never reset. A COMPLETED machine has no legal way
-     * back to NO_SESSION and must not be given one: a reset would make "this run ended"
-     * a reversible claim, and every rule the machine enforces depends on it not being.
-     * The completed [ActiveRunSession] handed to earlier callers keeps pointing at that
-     * retired machine and correctly keeps reporting COMPLETED forever.
+     * Nothing is read from or written to the database. There is nothing to undo, because
+     * a countdown never stored anything in the first place — which is exactly why this
+     * can be offered as a plain cancel rather than as a discard with consequences.
+     *
+     * A call outside COUNTDOWN fails rather than quietly doing nothing. Silently
+     * succeeding would let a stray cancel look identical to a real one and, worse, would
+     * make "cancel" a way to discard a machine that might be holding something.
+     *
+     * @throws IllegalStateException if recovery has not completed, if storage is blocked,
+     *   if a session is held, or if no countdown is underway. Nothing changes in any of
+     *   those cases.
      */
-    private fun retireCompletedCycle() {
+    suspend fun cancelCountdown() = coordinatorLock.withLock {
+        check(initializationStatus == InitializationStatus.Completed) {
+            "A countdown cannot be cancelled before recovery has completed."
+        }
+
+        check(inconsistentActiveRuns.isEmpty()) {
+            "A countdown cannot be cancelled while storage holds " +
+                "${inconsistentActiveRuns.size} unfinished runs."
+        }
+
+        // A live or finished run is not a countdown, and cancelling must never become a
+        // way to drop an owner this coordinator is responsible for.
+        check(activeSession == null) {
+            "A countdown cannot be cancelled while this coordinator owns a run."
+        }
+
+        check(stateMachine.state == RunSessionState.COUNTDOWN) {
+            "A countdown can only be cancelled while one is underway, but this " +
+                "coordinator is ${stateMachine.state}."
+        }
+
+        beginFreshCycle()
+    }
+
+    /**
+     * Discards the current cycle and installs a fresh machine and starter.
+     *
+     * One helper for both exits from a cycle — a completed run being retired before the
+     * next countdown, and a countdown being cancelled — because the replacement itself is
+     * the same operation and a second copy of it could drift. What differs is when it is
+     * allowed, and that stays with each caller, where the rules belong.
+     *
+     * Cycle replacement happens only at those two boundaries. Doing it inside [start]
+     * would mean a coordinator that had answered [RunAdmission.ReadyForCountdown] was
+     * still holding a completed owner with no countdown underway, and doing it inside
+     * [admission] would make a report mutate what it reports on.
+     *
+     * The old machine is discarded, never reset. Neither COMPLETED nor COUNTDOWN has a
+     * legal transition back to NO_SESSION and neither may be given one: a reset would
+     * make "this run ended" a reversible claim, and every rule the machine enforces
+     * depends on it not being. A completed [ActiveRunSession] handed to earlier callers
+     * keeps pointing at its retired machine and correctly keeps reporting COMPLETED
+     * forever.
+     */
+    private fun beginFreshCycle() {
         activeSession = null
         stateMachine = RunSessionStateMachine()
 

@@ -482,4 +482,130 @@ class RunSessionCoordinatorTest {
         assertEquals(RunSessionState.RUNNING, session.state)
         assertEquals(1, dao.inserted.size)
     }
+
+    /**
+     * Proves a countdown can be backed out of, at no cost and with nothing stored.
+     *
+     * This is the exit that entering COUNTDOWN requires. The machine has no legal move
+     * from COUNTDOWN back to NO_SESSION, so without cancellation a runner who tapped Start
+     * by accident could only start a run they did not want or kill the app.
+     *
+     * The storage assertions are the other half. A countdown never wrote anything, so
+     * cancelling it has nothing to undo — which is precisely why it can be offered as a
+     * plain Cancel rather than as a discard with consequences.
+     */
+    @Test
+    fun `cancelling a countdown returns to ready and writes nothing`() {
+
+        // Arrange: an initialized coordinator with a countdown underway.
+        val dao = FakeRunDao()
+        val coordinator = RunSessionCoordinator(dao)
+        runBlocking {
+            coordinator.initialize()
+            coordinator.beginCountdown()
+        }
+        assertEquals(
+            RunAdmission.CountdownInProgress,
+            runBlocking { coordinator.admission() }
+        )
+        val discoveriesBeforeCancel = dao.discoveryQueryCalls
+
+        // Act
+        runBlocking { coordinator.cancelCountdown() }
+
+        // Assert: back to the state a countdown began from.
+        assertEquals(
+            RunAdmission.ReadyForCountdown,
+            runBlocking { coordinator.admission() }
+        )
+
+        // Assert: nothing was written, and nothing was read either.
+        assertTrue("Cancelling wrote a run: ${dao.inserted}", dao.inserted.isEmpty())
+        assertTrue(
+            "Cancelling wrote a transition: ${dao.transitions}",
+            dao.transitions.isEmpty()
+        )
+        assertEquals(0, runBlocking { dao.countRuns() })
+        assertEquals(discoveriesBeforeCancel, dao.discoveryQueryCalls)
+
+        // Assert: the fresh cycle is genuinely usable, not merely reported as ready.
+        val session = runBlocking {
+            coordinator.beginCountdown()
+            coordinator.start(preparedRun())
+        }
+        assertEquals(RunSessionState.RUNNING, session.state)
+        assertEquals(1, dao.inserted.size)
+    }
+
+    /**
+     * Proves cancelling with no countdown underway fails instead of quietly succeeding.
+     *
+     * Silently doing nothing would make a stray cancel indistinguishable from a real one,
+     * and would leave "cancel" available as a way to discard a cycle that might be holding
+     * something.
+     */
+    @Test
+    fun `cancelling without a countdown is refused`() {
+
+        // Arrange: initialized, ready, but no countdown.
+        val dao = FakeRunDao()
+        val coordinator = RunSessionCoordinator(dao)
+        runBlocking { coordinator.initialize() }
+
+        // Act and Assert
+        assertThrows(IllegalStateException::class.java) {
+            runBlocking { coordinator.cancelCountdown() }
+        }
+
+        // Assert: nothing changed, and a countdown is still available.
+        assertEquals(
+            RunAdmission.ReadyForCountdown,
+            runBlocking { coordinator.admission() }
+        )
+        assertTrue(dao.inserted.isEmpty())
+
+        // Act and Assert: refused before initialization for the same reason.
+        val uninitialized = RunSessionCoordinator(FakeRunDao())
+        assertThrows(IllegalStateException::class.java) {
+            runBlocking { uninitialized.cancelCountdown() }
+        }
+    }
+
+    /**
+     * Proves cancelling cannot be used to drop a run this coordinator owns.
+     *
+     * A live run is not a countdown, and cancellation must never become a quiet way to let
+     * go of an owner while its run is still stored as unfinished.
+     */
+    @Test
+    fun `cancelling while a run is held is refused`() {
+
+        // Arrange: one run genuinely underway.
+        val dao = FakeRunDao()
+        val coordinator = RunSessionCoordinator(dao)
+        val session = runBlocking {
+            coordinator.initialize()
+            coordinator.beginCountdown()
+            coordinator.start(preparedRun())
+        }
+
+        // Act and Assert: refused while RUNNING.
+        assertThrows(IllegalStateException::class.java) {
+            runBlocking { coordinator.cancelCountdown() }
+        }
+
+        // Act and Assert: still refused while PAUSED.
+        runBlocking { session.pause(FIRST_PAUSE) }
+        assertThrows(IllegalStateException::class.java) {
+            runBlocking { coordinator.cancelCountdown() }
+        }
+
+        // Assert: the run is untouched and still owned by the same object.
+        assertEquals(RunSessionState.PAUSED, session.state)
+        assertSame(
+            session,
+            (runBlocking { coordinator.admission() } as RunAdmission.RunInProgress).session
+        )
+        assertEquals(1, dao.inserted.size)
+    }
 }

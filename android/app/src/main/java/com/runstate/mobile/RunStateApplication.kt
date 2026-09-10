@@ -38,8 +38,9 @@ import com.runstate.mobile.run.RunSessionCoordinator
  * the same reason the database is — a second coordinator would be a second gate, and two
  * gates guard nothing.
  *
- * What that does *not* mean is that the app's journey is wired. Nothing here calls the
- * coordinator, and no Activity or service uses it yet.
+ * `MainActivity` now takes that coordinator and drives the visible journey through it.
+ * What is still missing is a foreground service holding a live run, and any path that
+ * makes a run official — nothing calls [RunSessionCoordinator.start] yet.
  *
  * ## Two constraints on future work
  *
@@ -54,9 +55,10 @@ import com.runstate.mobile.run.RunSessionCoordinator
  * instrumented tests too, so anything done at startup is done before every emulator test,
  * on the main thread, whether that test needs it or not. Running recovery there would mean
  * a database query on the main thread before any test that never wanted one. Startup
- * therefore stays empty: both properties below are lazy, and
- * [RunSessionCoordinator.initialize] is never called automatically. Deciding when
- * recovery runs belongs to the startup slice that will call it deliberately.
+ * therefore stays empty: both properties below are lazy, and nothing in this class calls
+ * [RunSessionCoordinator.initialize]. Recovery is invoked deliberately by `MainActivity`,
+ * from a composition coroutine rather than from application startup, so it never runs on
+ * the main thread and never runs for a test that had no use for it.
  */
 class RunStateApplication : Application() {
 
@@ -83,7 +85,8 @@ class RunStateApplication : Application() {
      * coordinator, recovery and every run it admits all reach storage the same way.
      * Touching this constructs the Room instance and obtains its DAO; Room opens the file
      * on the first real query. The property is lazy so neither object exists until a caller
-     * needs the admission boundary, and nothing calls it during startup.
+     * needs the admission boundary — which is now `MainActivity`, on its first composition,
+     * rather than anything in this class during startup.
      *
      * The default synchronized `lazy` matters here for the same reason it does above, and
      * more sharply: two coordinators would be two independent gates, each with its own
