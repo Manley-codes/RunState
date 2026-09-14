@@ -229,7 +229,7 @@ friction, not turning RunState into a social network or run-club platform.
 
 ## Core run-session lifecycle and time contract — DEFAULT
 
-**Approved August 25, 2026; implementation status updated September 9.** The Android foundation now
+**Approved August 25, 2026; implementation status updated September 13.** The Android foundation now
 contains the five-state enum and guarded in-memory
 `NO_SESSION → COUNTDOWN → RUNNING ⇄ PAUSED → COMPLETED` ordering rules. Room version 2 implements the
 durable side of that same lifecycle: the initial row is saved before Running, pause and resume update
@@ -242,9 +242,11 @@ without selecting or changing one. The isolated recovery core now distinguishes 
 candidates, restores a fresh machine directly from exactly one row, and returns a UUID-bound owner
 without writing to storage. One process-scoped coordinator now runs that recovery before admitting
 countdown/start, retains the one live owner, blocks inconsistent storage and retires a completed
-cycle when the next countdown begins. No Android entry point invokes the coordinator yet, and the
-owner and Room remain unconnected to the screen. This contract starts when a run
-becomes official.
+cycle when the next countdown begins. MainActivity now invokes recovery and renders the coordinator's
+admission answer before offering Start. Start enters the real Countdown state; Cancel and Android Back
+discard that unsaved cycle by replacing its machine and starter, with no Room write. The screen can
+report a recovered Running or Paused owner but cannot operate it yet, and it does not yet make a run
+official. This contract starts when a run becomes official.
 The experimental Armed and Watching detection states above stay separate and do not create a run.
 
 `No session → Countdown → Running ⇄ Paused → Completed`
@@ -269,8 +271,8 @@ directly and returns the same recovery-time snapshot plus one UUID-bound `Active
 than one returns the complete ordered evidence and refuses to choose. Recovery itself never edits
 the database or fabricates missing transition history. The reopened-Room test uses a new database
 instance and state machine, proving reconstruction from a persisted file, but the Android process
-never dies. Production database construction and recovery-before-start coordination now exist; an
-actual Android startup call site remains separate work.
+never dies. Production database construction, recovery-before-start coordination and the Android
+startup call site now exist; genuine process-death verification remains separate work.
 
 **Time contract:** store the official start, optional finish, timezone at the start, every pause and
 resume transition, and the last durable checkpoint. Elapsed time is start-to-finish including
@@ -337,14 +339,15 @@ accounts and server implementation remain later decisions.
 
 ## Mobile foundation architecture boundary — DEFAULT
 
-**Approved August 26, 2026; implementation status updated September 9, 2026.** This decision
+**Approved August 26, 2026; implementation status updated September 13, 2026.** This decision
 established the Android-first direction. Implementation later began after separate explicit
-approval. The Android/Kotlin/Compose project exists as a static shell plus isolated in-memory
-state-order rules. Room 2.8.4 and KSP now back a version-2 database with the parent `runs` table and
-ordered `run_transitions` children; both schemas are exported under `android/app/schemas`. A separate
+approval. The Android/Kotlin/Compose project now has a minimal coordinator-backed Start/Countdown
+boundary plus isolated in-memory state-order rules. Room 2.8.4 and KSP back a version-2 database with
+the parent `runs` table and ordered `run_transitions` children; both schemas are exported under
+`android/app/schemas`. A separate
 Android CI job runs the JVM tests, assembles the debug app and compiles the instrumented-test APK on
-every push and pull request; it does not run an emulator. Verification passed with 81 JVM tests and
-26 local emulator tests.
+every push and pull request; it does not run an emulator. Verification passed with 91 JVM tests and
+34 local emulator tests.
 
 **The durable lifecycle and its in-memory rules now meet in one active-session type.** The parent row
 uses canonical UUID text as its primary key and stores the official start, IANA start timezone,
@@ -360,10 +363,11 @@ excluded from cloud backup and device transfer until synchronization and safe re
 exist. `RunSessionCoordinator` now provides one process-scoped admission and identity gate: it runs
 recovery before countdown/start, retains the exact recovered or newly started owner, blocks an
 inconsistent multiple-row result and replaces a completed run cycle only when the next countdown
-begins. Cancellation after a successful durable write but before its in-memory transition remains a
-recovery concern. No Android startup call site uses the coordinator yet; real
-relaunch/process-death recovery, the foreground service, telemetry and the server boundary remain
-unimplemented. The Java
+begins. MainActivity now uses that coordinator to initialize recovery and render Ready, Countdown,
+active, failed and blocked admission states. Start currently opens only the non-durable Countdown;
+no official run is created until the next slice. Cancellation after a successful durable write but
+before its in-memory transition remains a recovery concern. Real relaunch/process-death recovery,
+the foreground service, telemetry and the server boundary remain unimplemented. The Java
 console and MySQL database are unaffected.
 
 - Build Android first with Kotlin and native Android UI/platform services.

@@ -5,22 +5,28 @@ metadata:
   type: project
 ---
 
-As of September 9, 2026, RunState remains one product and one Git repository with two implementation
+As of September 13, 2026, RunState remains one product and one Git repository with two implementation
 areas: the intact working Java/Maven console application and an early native Android/Kotlin/Compose
-foundation under `android/`. The mobile screens discussed below remain interactive design
-prototypes; the Android application does not yet implement that designed journey.
+foundation under `android/`. The Android application now begins the real journey through a minimal
+coordinator-backed Start and Countdown boundary; the richer mobile screens discussed below remain
+interactive design prototypes rather than the implemented interface.
 
-## Current delivery resume point — September 9, 2026
+## Current delivery resume point — September 13, 2026
 
 - **Phase 3 Android implementation is now in progress.** Commit `ea43335` added the minimal Android
-  shell and one static Compose screen, verified by building, installing and launching it on the
-  Medium Phone emulator. Commits `93bacb9` and `505c89e` established an isolated in-memory
+  shell and its original static Compose screen, verified by building, installing and launching it
+  on the Medium Phone emulator. Commits `93bacb9` and `505c89e` established an isolated in-memory
   `RunSessionStateMachine`; its enum names all five approved states, and its implemented behavior now
   covers guarded `NO_SESSION → COUNTDOWN → RUNNING ⇄ PAUSED → COMPLETED` transitions. Twenty-seven local
   JUnit tests pass, including rejection of repeated countdown, skipping directly to Running, invalid
   pause/resume attempts, completing before Paused and completing twice. Commit `360294a` added the
   UUID-bound `ActiveRunSession`, which now coordinates the Room pause/resume/completion operations
-  with that same machine using storage-first ordering. Neither is connected to the Compose screen.
+  with that same machine using storage-first ordering. Commit `0d9f0d2` replaced the static screen
+  with the first coordinator-backed Compose boundary: startup initializes recovery, Ready exposes
+  Start, Start enters the real non-durable Countdown state, and Cancel or Android Back safely returns
+  to Ready without writing a run. Activity recreation re-reads the process-scoped coordinator, so a
+  same-process countdown survives rotation. Running/Paused, initialization-failure and inconsistent-
+  storage states render honestly, but active-run controls and official run creation are not wired yet.
 
 - **Android Room version 2 now preserves the same run through its durable lifecycle.** The canonical
   UUID remains the `runs` primary key. `RunSessionStarter` saves the prepared initial Running row
@@ -40,9 +46,10 @@ prototypes; the Android application does not yet implement that designed journey
   not Android process death. Production now has one process-scoped Room instance and one
   `RunSessionCoordinator`: it serializes initialization/recovery against countdown and start,
   retains the one live owner, blocks inconsistent storage and retires a completed cycle when the
-  next countdown begins. No Android entry point invokes it yet. Verification passes with 81 JVM
-  tests and 26 local emulator tests. The Room migration-test runtime requires the existing
-  serialization library to resolve at 1.8.1; no AndroidX Startup pin or deprecated
+  next countdown begins. MainActivity now invokes it and maps its admission answer into the visible
+  screen. Verification passes with 91 JVM tests and 34 local emulator tests. The Room migration-test
+  runtime requires the existing serialization library to resolve at 1.8.1, and Compose tests on the
+  API 37 emulator require the test-only Espresso 3.7.0; no AndroidX Startup pin or deprecated
   compile-time-R-class workaround remains. Canonical detail lives in
   `run_initiation_register.md`.
 
@@ -99,7 +106,8 @@ prototypes; the Android application does not yet implement that designed journey
   `ActiveRunSession` coordinates those durable changes with the in-memory machine. Read-only
   active-row discovery and the isolated zero/one/many recovery decision are implemented. One
   process-scoped coordinator now owns admission and identity, orders recovery before countdown/start
-  and preserves the one returned owner; production startup still does not invoke it. The
+  and preserves the one returned owner. MainActivity now invokes recovery and displays the resulting
+  admission state before offering Start. The
   `PENDING_CREATE` / `SYNCED` / `PENDING_UPDATE` /
   `PENDING_DELETE` local-first
   synchronization states remain approved there and not implemented. The one-to-one selected
@@ -122,16 +130,17 @@ prototypes; the Android application does not yet implement that designed journey
   and a minimal server for reflection plus later sync with credentials off-device. Saving and
   reflection remain separate; full RunStyle stays local. The Android shell, full in-memory
   session-state ordering, Room-backed durable lifecycle, UUID-bound active-session owner,
-  active-row discovery, recovery core, production database and process-scoped admission coordinator
-  now exist. The foreground service, actual startup invocation and the rest of this architecture
-  remain approved contracts rather than implemented behavior.
-- **Next delivery planning step:** connect coordinator initialization to the Android entry path and
-  begin the visible fixture journey through Start, Countdown, Running/Paused, Run Complete and Log
-  History. GPS and provider integration remain behind that foundation, as do remaining Log History
+  active-row discovery, recovery core, production database, process-scoped admission coordinator and
+  startup invocation now exist. The foreground service and the rest of this architecture remain
+  approved contracts rather than implemented behavior.
+- **Next delivery planning step:** advance the visible fixture journey from the real Countdown state
+  into an officially started, durably stored run, then add Running/Paused controls, Run Complete and
+  Log History. GPS and provider integration remain behind that foundation, as do remaining Log History
   polish, further music intelligence and RunStyle V2.
 - No GPS tracking, BPM source, music-provider integration, production relaunch or
   process-death recovery, foreground service, synchronization, or Reflection Engine has been built.
-  The current Android screen is static and is not connected to the state machine, owner or Room.
+  The current Android screen reaches initialization, Ready and Countdown through the coordinator but
+  does not yet create an official run or operate the retained active owner.
 
 **Completed phases:**
 - Phase 1: Console app — energy system, opening prompt, post-run responses, rolling averages
