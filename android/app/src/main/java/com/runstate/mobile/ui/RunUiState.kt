@@ -2,6 +2,7 @@ package com.runstate.mobile.ui
 
 import com.runstate.mobile.run.InitializationStatus
 import com.runstate.mobile.run.RunAdmission
+import com.runstate.mobile.run.RunJourneySnapshot
 import com.runstate.mobile.run.RunSessionState
 
 /**
@@ -67,12 +68,20 @@ internal enum class RunUiState {
  * situation, so `NotInitialized` alone cannot tell "still working on it" apart from "it
  * failed" — the difference between those two screens is a spinner and a retry button.
  *
+ * It takes a [RunJourneySnapshot] rather than the two values separately so the pair can
+ * only arrive the way the coordinator produced it — read together, under one lock — and
+ * never as two answers a caller fetched at two different moments.
+ *
  * Combinations the coordinator cannot produce are raised rather than resolved. Choosing
  * the nearest ordinary screen would turn an internal defect into a Start button offered
  * over a database the app has already refused to interpret, which is a worse outcome than
  * a crash a test can catch.
  */
-internal fun runUiStateFor(
+internal fun runUiStateFor(snapshot: RunJourneySnapshot): RunUiState =
+    mapJourney(snapshot.initializationStatus, snapshot.admission)
+
+/** The mapping itself, over the two values [runUiStateFor] unpacked from one snapshot. */
+private fun mapJourney(
     initializationStatus: InitializationStatus,
     admission: RunAdmission
 ): RunUiState = when (initializationStatus) {

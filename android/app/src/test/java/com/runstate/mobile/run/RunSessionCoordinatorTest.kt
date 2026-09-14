@@ -3,12 +3,24 @@ package com.runstate.mobile.run
 import com.runstate.mobile.data.local.FakeRunDao
 import com.runstate.mobile.data.local.RunEntity
 import com.runstate.mobile.data.local.StoredRunState
+import java.time.Clock
+import java.time.Instant
+import java.time.ZoneId
+import java.time.ZoneOffset
+import java.util.UUID
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Deferred
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
@@ -21,10 +33,21 @@ import org.junit.Test
  * `ActiveRunRecoveryTest`, the save-before-RUNNING boundary in `RunSessionStarterTest`,
  * and the durable lifecycle in `ActiveRunSessionTest`. What only shows up here is the
  * ordering between them — that recovery runs before anything may start, that exactly one
- * owner is ever held, and that a finished run is retired rather than reset.
+ * owner is ever held, that a finished run is retired rather than reset, and that an official
+ * start belongs to the application rather than to whoever asked for it.
  *
- * [FakeRunDao] is used because these tests need to force discovery to fail and to park it
- * mid-query, which is about the coordinator's sequencing rather than about SQLite.
+ * [FakeRunDao] is used because these tests need to force discovery and inserts to fail and
+ * to park them mid-call, which is about the coordinator's sequencing rather than SQLite.
+ *
+ * ## The application scope used here
+ *
+ * Every coordinator gets its own `SupervisorJob` scope on `Dispatchers.Unconfined`. That is
+ * the test stand-in for the process scope, chosen for determinism rather than speed: an
+ * attempt starts running on the requesting thread until its first real suspension, and
+ * resumes on whichever thread releases it — which in these tests is always the one test
+ * thread. Nothing depends on a delay or a background thread. Crucially the scope's job is
+ * not the caller's, so cancelling a caller cannot reach the attempt unless the coordinator
+ * wrongly ran it in the caller.
  */
 class RunSessionCoordinatorTest {
 
@@ -41,6 +64,50 @@ class RunSessionCoordinatorTest {
         const val RUN_ID = "0f6a2c1e-9d43-4b7a-9c21-7b5e8a4d1f30"
         const val SECOND_RUN_ID = "c4e1b8a2-7d35-4f61-8b0c-2a9e6d4f13b7"
         const val THIRD_RUN_ID = "1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d"
+
+        const val START_ZONE = "America/Chicago"
+    }
+
+    /** A wall clock a test can move forward, so a retry can prove it did not re-read it. */
+    private class SettableClock(var nowMillis: Long) : Clock() {
+        override fun getZone(): ZoneId = ZoneOffset.UTC
+        override fun withZone(zone: ZoneId): Clock = this
+        override fun instant(): Instant = Instant.ofEpochMilli(nowMillis)
+    }
+
+    /**
+     * One coordinator plus every source it was built from.
+     *
+     * The identities are handed out in order, and [identitiesIssued] counts them. That
+     * count is how the tests tell "reused the prepared row" apart from "prepared a new one
+     * that happened to look similar".
+     */
+    private class Fixture(val dao: FakeRunDao = FakeRunDao()) {
+        val clock = SettableClock(OFFICIAL_START)
+        private val identities = ArrayDeque(listOf(RUN_ID, SECOND_RUN_ID, THIRD_RUN_ID))
+        var identitiesIssued = 0
+            private set
+
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
+
+        val coordinator = RunSessionCoordinator(
+            runDao = dao,
+            preparedRunFactory = PreparedRunFactory(
+                clock = clock,
+                zoneIdSupplier = { ZoneId.of(START_ZONE) },
+                uuidSupplier = {
+                    identitiesIssued++
+                    UUID.fromString(identities.removeFirst())
+                }
+            ),
+            applicationScope = scope
+        )
+
+        /** Requests the official start and waits for its owner. */
+        suspend fun startRun(): ActiveRunSession = coordinator.requestStart().await()
+
+        /** The coordinator's current admission, read without recovery. */
+        fun admission(): RunAdmission = runBlocking { coordinator.journeySnapshot() }.admission
     }
 
     /** The row a real countdown hands over: RUNNING, checkpoint at the official start. */
@@ -51,9 +118,26 @@ class RunSessionCoordinatorTest {
         runId = runId,
         state = StoredRunState.RUNNING,
         officialStartEpochMillis = officialStart,
-        startTimezoneId = "America/Chicago",
+        startTimezoneId = START_ZONE,
         lastCheckpointEpochMillis = officialStart
     )
+
+    /**
+     * The exact throwable an attempt failed with.
+     *
+     * Read through a completion handler rather than by catching `await()`, because
+     * coroutine stack-trace recovery may rethrow a copy from `await()`; the handler receives
+     * the original, which is what "unchanged" has to be checked against.
+     */
+    private fun failureOf(attempt: Deferred<*>): Throwable? {
+        var cause: Throwable? = null
+        attempt.invokeOnCompletion { cause = it }
+        return cause
+    }
+
+    // ---------------------------------------------------------------------------------
+    // Initialization and snapshots
+    // ---------------------------------------------------------------------------------
 
     /**
      * Proves an empty database admits a countdown and holds no run.
@@ -62,49 +146,49 @@ class RunSessionCoordinatorTest {
     fun `initialization with no active rows is ready for a countdown`() {
 
         // Arrange: nothing unfinished on disk.
-        val dao = FakeRunDao()
-        val coordinator = RunSessionCoordinator(dao)
+        val fixture = Fixture()
 
         // Act
-        val status = runBlocking { coordinator.initialize() }
+        val snapshot = runBlocking { fixture.coordinator.initialize() }
 
         // Assert: recovery reached a decision, and the decision was "nothing to adopt".
-        assertEquals(InitializationStatus.Completed, status)
         assertEquals(
-            RunAdmission.ReadyForCountdown,
-            runBlocking { coordinator.admission() }
+            RunJourneySnapshot(
+                InitializationStatus.Completed,
+                RunAdmission.ReadyForCountdown
+            ),
+            snapshot
         )
-        assertEquals(1, dao.discoveryQueryCalls)
+        assertEquals(RunAdmission.ReadyForCountdown, fixture.admission())
+        assertEquals(1, fixture.dao.discoveryQueryCalls)
     }
 
     /**
-     * Proves a single unfinished run is adopted and reported as still in progress.
+     * Proves a single unfinished run is adopted and reported as still in progress, in the
+     * very snapshot initialization returns.
      */
     @Test
     fun `initialization with one active row reports the recovered run in progress`() {
 
         // Arrange: one run the phone was still in the middle of.
-        val dao = FakeRunDao()
-        runBlocking { dao.insert(preparedRun()) }
-        val coordinator = RunSessionCoordinator(dao)
+        val fixture = Fixture()
+        runBlocking { fixture.dao.insert(preparedRun()) }
 
         // Act
-        val status = runBlocking { coordinator.initialize() }
+        val snapshot = runBlocking { fixture.coordinator.initialize() }
 
-        // Assert
-        assertEquals(InitializationStatus.Completed, status)
-        val admission = runBlocking { coordinator.admission() }
-        val inProgress = admission as RunAdmission.RunInProgress
+        // Assert: the returned pair already reflects the adoption it just applied.
+        assertEquals(InitializationStatus.Completed, snapshot.initializationStatus)
+        val inProgress = snapshot.admission as RunAdmission.RunInProgress
 
         // Assert: the owner is bound to the stored run, and it is live.
         assertEquals(RUN_ID, inProgress.session.runId)
         assertEquals(RunSessionState.RUNNING, inProgress.session.state)
 
         // Assert: the same owner every time, never a fresh one per question.
-        val secondAdmission = runBlocking { coordinator.admission() }
         assertSame(
             inProgress.session,
-            (secondAdmission as RunAdmission.RunInProgress).session
+            (fixture.admission() as RunAdmission.RunInProgress).session
         )
     }
 
@@ -118,24 +202,22 @@ class RunSessionCoordinatorTest {
     fun `initialization with multiple active rows is blocked by inconsistent storage`() {
 
         // Arrange: two live runs at once, inserted in the wrong order on purpose.
-        val dao = FakeRunDao()
+        val fixture = Fixture()
         val earlierRun = preparedRun()
         val laterRun = preparedRun(SECOND_RUN_ID, SECOND_START)
         runBlocking {
-            dao.insert(laterRun)
-            dao.insert(earlierRun)
+            fixture.dao.insert(laterRun)
+            fixture.dao.insert(earlierRun)
         }
-        val coordinator = RunSessionCoordinator(dao)
 
         // Act
-        val status = runBlocking { coordinator.initialize() }
+        val snapshot = runBlocking { fixture.coordinator.initialize() }
 
         // Assert: reaching a refusal is still reaching a decision.
-        assertEquals(InitializationStatus.Completed, status)
+        assertEquals(InitializationStatus.Completed, snapshot.initializationStatus)
 
         // Assert: every candidate, in discovery order, with nothing adopted.
-        val blocked = runBlocking { coordinator.admission() }
-            as RunAdmission.BlockedByInconsistentStorage
+        val blocked = snapshot.admission as RunAdmission.BlockedByInconsistentStorage
         assertEquals(listOf(earlierRun, laterRun), blocked.activeRuns)
     }
 
@@ -146,24 +228,19 @@ class RunSessionCoordinatorTest {
     fun `a discovery failure fails initialization and admits nothing`() {
 
         // Arrange: a live run on disk that discovery cannot reach.
-        val dao = FakeRunDao()
-        runBlocking { dao.insert(preparedRun()) }
+        val fixture = Fixture()
+        runBlocking { fixture.dao.insert(preparedRun()) }
         val failure = IllegalStateException("disk unavailable")
-        dao.failDiscoveryWith = failure
-        val coordinator = RunSessionCoordinator(dao)
+        fixture.dao.failDiscoveryWith = failure
 
         // Act
-        val status = runBlocking { coordinator.initialize() }
+        val snapshot = runBlocking { fixture.coordinator.initialize() }
 
-        // Assert: the exact cause is carried, unwrapped.
-        val failed = status as InitializationStatus.Failed
+        // Assert: the exact cause is carried, unwrapped, beside an admission of nothing.
+        val failed = snapshot.initializationStatus as InitializationStatus.Failed
         assertSame(failure, failed.cause)
-
-        // Assert: a failed attempt admits nothing, because what storage holds is unknown.
-        assertEquals(
-            RunAdmission.NotInitialized,
-            runBlocking { coordinator.admission() }
-        )
+        assertEquals(RunAdmission.NotInitialized, snapshot.admission)
+        assertEquals(RunAdmission.NotInitialized, fixture.admission())
     }
 
     /**
@@ -176,23 +253,27 @@ class RunSessionCoordinatorTest {
     fun `initialization retries after a failure and can then complete`() {
 
         // Arrange: discovery fails once.
-        val dao = FakeRunDao()
-        dao.failDiscoveryWith = IllegalStateException("disk unavailable")
-        val coordinator = RunSessionCoordinator(dao)
-        assertTrue(runBlocking { coordinator.initialize() } is InitializationStatus.Failed)
-        assertEquals(1, dao.discoveryQueryCalls)
+        val fixture = Fixture()
+        fixture.dao.failDiscoveryWith = IllegalStateException("disk unavailable")
+        assertTrue(
+            runBlocking { fixture.coordinator.initialize() }.initializationStatus
+                is InitializationStatus.Failed
+        )
+        assertEquals(1, fixture.dao.discoveryQueryCalls)
 
         // Act: the database becomes readable and the caller tries again.
-        dao.failDiscoveryWith = null
-        val status = runBlocking { coordinator.initialize() }
+        fixture.dao.failDiscoveryWith = null
+        val snapshot = runBlocking { fixture.coordinator.initialize() }
 
         // Assert: a real second query, and a real completion this time.
-        assertEquals(InitializationStatus.Completed, status)
-        assertEquals(2, dao.discoveryQueryCalls)
         assertEquals(
-            RunAdmission.ReadyForCountdown,
-            runBlocking { coordinator.admission() }
+            RunJourneySnapshot(
+                InitializationStatus.Completed,
+                RunAdmission.ReadyForCountdown
+            ),
+            snapshot
         )
+        assertEquals(2, fixture.dao.discoveryQueryCalls)
     }
 
     /**
@@ -205,21 +286,115 @@ class RunSessionCoordinatorTest {
     fun `initialization after success is idempotent and does not query again`() {
 
         // Arrange: one successful initialization.
-        val dao = FakeRunDao()
-        val coordinator = RunSessionCoordinator(dao)
-        assertEquals(
-            InitializationStatus.Completed,
-            runBlocking { coordinator.initialize() }
-        )
-        assertEquals(1, dao.discoveryQueryCalls)
+        val fixture = Fixture()
+        val first = runBlocking { fixture.coordinator.initialize() }
+        assertEquals(InitializationStatus.Completed, first.initializationStatus)
+        assertEquals(1, fixture.dao.discoveryQueryCalls)
 
         // Act
-        val status = runBlocking { coordinator.initialize() }
+        val second = runBlocking { fixture.coordinator.initialize() }
 
         // Assert: same answer, no second query.
-        assertEquals(InitializationStatus.Completed, status)
-        assertEquals(1, dao.discoveryQueryCalls)
+        assertEquals(first, second)
+        assertEquals(1, fixture.dao.discoveryQueryCalls)
     }
+
+    /**
+     * Proves a snapshot requested mid-recovery cannot see recovery half-applied.
+     *
+     * Recovery is parked inside discovery, holding the lock, and a snapshot is requested
+     * UNDISPATCHED so it runs until it can go no further. If the two values were read
+     * outside the lock, or at two moments, the snapshot could return `NotAttempted`
+     * beside a live run, or `Completed` beside no run. Instead it waits, then returns the
+     * one pair recovery left behind.
+     */
+    @Test
+    fun `a snapshot during initialization waits and is internally consistent`() {
+
+        // Arrange: one live run on disk, and a discovery that parks.
+        val fixture = Fixture()
+        runBlocking { fixture.dao.insert(preparedRun()) }
+        val discoveryReached = CompletableDeferred<Unit>()
+        val releaseDiscovery = CompletableDeferred<Unit>()
+        fixture.dao.duringDiscovery = {
+            discoveryReached.complete(Unit)
+            releaseDiscovery.await()
+        }
+
+        runBlocking {
+
+            // Act: recovery parks holding the lock.
+            val initialization = CompletableDeferred<RunJourneySnapshot>()
+            launch { initialization.complete(fixture.coordinator.initialize()) }
+            discoveryReached.await()
+
+            // Act: a read arrives mid-recovery.
+            var observed: RunJourneySnapshot? = null
+            val reader = launch(start = CoroutineStart.UNDISPATCHED) {
+                observed = fixture.coordinator.journeySnapshot()
+            }
+
+            // Assert: the read cannot get past the lock while recovery is unapplied.
+            assertFalse(reader.isCompleted)
+            assertNull(observed)
+
+            // Act: recovery finishes.
+            releaseDiscovery.complete(Unit)
+            reader.join()
+
+            // Assert: both callers saw the same adopted owner, with Completed beside it.
+            val fromInitialize = initialization.await()
+            val fromReader = checkNotNull(observed)
+            assertEquals(InitializationStatus.Completed, fromReader.initializationStatus)
+            assertSame(
+                (fromInitialize.admission as RunAdmission.RunInProgress).session,
+                (fromReader.admission as RunAdmission.RunInProgress).session
+            )
+        }
+    }
+
+    /**
+     * Proves reading a snapshot never initializes, retries or writes.
+     *
+     * The row on disk is the discriminator: had the read triggered recovery, it would have
+     * been adopted and reported as a run in progress, and the query count would have moved.
+     */
+    @Test
+    fun `journey snapshot performs no recovery and no storage write`() {
+
+        // Arrange: a live run on disk, and a coordinator nobody has initialized.
+        val fixture = Fixture()
+        runBlocking { fixture.dao.insert(preparedRun()) }
+        val storedBefore = fixture.dao.inserted.toList()
+
+        // Act
+        val beforeInitialization = runBlocking { fixture.coordinator.journeySnapshot() }
+
+        // Assert: honestly uninitialized, with storage neither read nor written.
+        assertEquals(
+            RunJourneySnapshot(InitializationStatus.NotAttempted, RunAdmission.NotInitialized),
+            beforeInitialization
+        )
+        assertEquals(0, fixture.dao.discoveryQueryCalls)
+        assertEquals(storedBefore, fixture.dao.inserted)
+
+        // Act: a failed initialization, then a read.
+        fixture.dao.failDiscoveryWith = IllegalStateException("disk unavailable")
+        runBlocking { fixture.coordinator.initialize() }
+        fixture.dao.failDiscoveryWith = null
+        val afterFailure = runBlocking { fixture.coordinator.journeySnapshot() }
+
+        // Assert: a read after failure is not a retry.
+        assertTrue(afterFailure.initializationStatus is InitializationStatus.Failed)
+        assertEquals(RunAdmission.NotInitialized, afterFailure.admission)
+        assertEquals(1, fixture.dao.discoveryQueryCalls)
+        assertEquals(storedBefore, fixture.dao.inserted)
+        assertTrue(fixture.dao.transitions.isEmpty())
+    }
+
+    // ---------------------------------------------------------------------------------
+    // Admission refusals
+    // ---------------------------------------------------------------------------------
 
     /**
      * Proves nothing can start before recovery has established what storage holds.
@@ -231,20 +406,42 @@ class RunSessionCoordinatorTest {
     fun `start before initialization is refused and writes nothing`() {
 
         // Arrange: a coordinator nobody has initialized.
-        val dao = FakeRunDao()
-        val coordinator = RunSessionCoordinator(dao)
+        val fixture = Fixture()
 
         // Act and Assert
         assertThrows(IllegalStateException::class.java) {
-            runBlocking { coordinator.start(preparedRun()) }
+            runBlocking { fixture.coordinator.requestStart() }
         }
 
-        // Assert: storage was never touched, and no countdown was opened either.
-        assertTrue(dao.inserted.isEmpty())
-        assertEquals(0, dao.discoveryQueryCalls)
+        // Assert: storage was never touched, nothing was prepared, and no countdown was
+        // opened either.
+        assertTrue(fixture.dao.inserted.isEmpty())
+        assertEquals(0, fixture.dao.discoveryQueryCalls)
+        assertEquals(0, fixture.identitiesIssued)
         assertThrows(IllegalStateException::class.java) {
-            runBlocking { coordinator.beginCountdown() }
+            runBlocking { fixture.coordinator.beginCountdown() }
         }
+    }
+
+    /**
+     * Proves a start request outside a countdown is refused without preparing a run.
+     */
+    @Test
+    fun `start without a countdown is refused and prepares nothing`() {
+
+        // Arrange: initialized and ready, but no countdown.
+        val fixture = Fixture()
+        runBlocking { fixture.coordinator.initialize() }
+
+        // Act and Assert
+        assertThrows(IllegalStateException::class.java) {
+            runBlocking { fixture.coordinator.requestStart() }
+        }
+
+        // Assert: no identity was consumed, nothing stored, still ready.
+        assertEquals(0, fixture.identitiesIssued)
+        assertTrue(fixture.dao.inserted.isEmpty())
+        assertEquals(RunAdmission.ReadyForCountdown, fixture.admission())
     }
 
     /**
@@ -254,30 +451,30 @@ class RunSessionCoordinatorTest {
     fun `a second start while a run is held is refused and stores no second row`() {
 
         // Arrange: one run genuinely started through the coordinator.
-        val dao = FakeRunDao()
-        val coordinator = RunSessionCoordinator(dao)
+        val fixture = Fixture()
         val session = runBlocking {
-            coordinator.initialize()
-            coordinator.beginCountdown()
-            coordinator.start(preparedRun())
+            fixture.coordinator.initialize()
+            fixture.coordinator.beginCountdown()
+            fixture.startRun()
         }
 
         // Act and Assert: a second start is refused while that run is RUNNING.
+        fixture.clock.nowMillis = SECOND_START
         assertThrows(IllegalStateException::class.java) {
-            runBlocking { coordinator.start(preparedRun(SECOND_RUN_ID, SECOND_START)) }
+            runBlocking { fixture.coordinator.requestStart() }
         }
 
         // Act and Assert: pausing changes nothing about admission.
         runBlocking { session.pause(FIRST_PAUSE) }
         assertThrows(IllegalStateException::class.java) {
-            runBlocking { coordinator.start(preparedRun(SECOND_RUN_ID, SECOND_START)) }
+            runBlocking { fixture.coordinator.requestStart() }
         }
 
-        // Assert: still exactly one stored run, and still the same owner.
-        assertEquals(1, dao.inserted.size)
-        assertEquals(RUN_ID, dao.inserted.single().runId)
-        val admission = runBlocking { coordinator.admission() }
-        assertSame(session, (admission as RunAdmission.RunInProgress).session)
+        // Assert: still exactly one stored run, one identity used, and the same owner.
+        assertEquals(1, fixture.dao.inserted.size)
+        assertEquals(RUN_ID, fixture.dao.inserted.single().runId)
+        assertEquals(1, fixture.identitiesIssued)
+        assertSame(session, (fixture.admission() as RunAdmission.RunInProgress).session)
         assertEquals(RunSessionState.PAUSED, session.state)
     }
 
@@ -288,34 +485,437 @@ class RunSessionCoordinatorTest {
     fun `start while blocked by inconsistent storage is refused and changes nothing`() {
 
         // Arrange: two live runs, so the coordinator refuses to interpret storage.
-        val dao = FakeRunDao()
+        val fixture = Fixture()
         val earlierRun = preparedRun()
         val laterRun = preparedRun(SECOND_RUN_ID, SECOND_START)
         runBlocking {
-            dao.insert(earlierRun)
-            dao.insert(laterRun)
+            fixture.dao.insert(earlierRun)
+            fixture.dao.insert(laterRun)
         }
-        val coordinator = RunSessionCoordinator(dao)
-        runBlocking { coordinator.initialize() }
-        val storedBefore = dao.inserted.toList()
+        runBlocking { fixture.coordinator.initialize() }
+        val storedBefore = fixture.dao.inserted.toList()
 
         // Act and Assert: neither a countdown nor a start is admitted.
         assertThrows(IllegalStateException::class.java) {
-            runBlocking { coordinator.beginCountdown() }
+            runBlocking { fixture.coordinator.beginCountdown() }
         }
         assertThrows(IllegalStateException::class.java) {
-            runBlocking { coordinator.start(preparedRun(THIRD_RUN_ID, SECOND_START)) }
+            runBlocking { fixture.coordinator.requestStart() }
         }
 
-        // Assert: no third row was written and the two candidates are untouched.
-        assertEquals(storedBefore, dao.inserted)
-        assertEquals(2, dao.inserted.size)
+        // Assert: no third row was written, nothing prepared, candidates untouched.
+        assertEquals(storedBefore, fixture.dao.inserted)
+        assertEquals(2, fixture.dao.inserted.size)
+        assertEquals(0, fixture.identitiesIssued)
 
         // Assert: the evidence is still reported whole, in the same order.
-        val blocked = runBlocking { coordinator.admission() }
-            as RunAdmission.BlockedByInconsistentStorage
+        val blocked = fixture.admission() as RunAdmission.BlockedByInconsistentStorage
         assertEquals(listOf(earlierRun, laterRun), blocked.activeRuns)
     }
+
+    // ---------------------------------------------------------------------------------
+    // Official start
+    // ---------------------------------------------------------------------------------
+
+    /**
+     * Proves one successful start stores exactly the prepared row and publishes the exact
+     * owner the attempt returned.
+     */
+    @Test
+    fun `a successful start stores one prepared row and publishes the exact owner`() {
+
+        // Arrange: a countdown underway.
+        val fixture = Fixture()
+        runBlocking {
+            fixture.coordinator.initialize()
+            fixture.coordinator.beginCountdown()
+        }
+
+        // Act
+        val session = runBlocking { fixture.startRun() }
+
+        // Assert: exactly the row the factory built from the fixed sources.
+        assertEquals(listOf(preparedRun()), fixture.dao.inserted)
+        assertEquals(1, fixture.identitiesIssued)
+
+        // Assert: the coordinator holds the very object the caller received.
+        val snapshot = runBlocking { fixture.coordinator.journeySnapshot() }
+        assertEquals(InitializationStatus.Completed, snapshot.initializationStatus)
+        assertSame(session, (snapshot.admission as RunAdmission.RunInProgress).session)
+        assertEquals(RunSessionState.RUNNING, session.state)
+    }
+
+    /**
+     * Proves overlapping requests share one attempt rather than racing two inserts.
+     *
+     * The first insert is parked, so the first attempt is provably still underway when the
+     * second request arrives. Two requests launched from separate coroutines must receive
+     * the identical [Deferred] — not an equal one — and only one identity may be consumed.
+     */
+    @Test
+    fun `overlapping start requests receive the same attempt`() {
+
+        // Arrange: a countdown, and an insert that parks.
+        val fixture = Fixture()
+        runBlocking {
+            fixture.coordinator.initialize()
+            fixture.coordinator.beginCountdown()
+        }
+        val insertReached = CompletableDeferred<Unit>()
+        val releaseInsert = CompletableDeferred<Unit>()
+        fixture.dao.duringInsert = {
+            insertReached.complete(Unit)
+            releaseInsert.await()
+        }
+
+        runBlocking {
+
+            // Act: the first request, whose insert parks.
+            val firstRequest = CompletableDeferred<Deferred<ActiveRunSession>>()
+            launch(start = CoroutineStart.UNDISPATCHED) {
+                firstRequest.complete(fixture.coordinator.requestStart())
+            }
+            insertReached.await()
+
+            // Act: a second request from another coroutine while the insert is parked.
+            val secondRequest = CompletableDeferred<Deferred<ActiveRunSession>>()
+            launch(start = CoroutineStart.UNDISPATCHED) {
+                secondRequest.complete(fixture.coordinator.requestStart())
+            }
+
+            // Assert: one attempt object, still running, one identity, nothing stored yet.
+            val first = firstRequest.await()
+            assertSame(first, secondRequest.await())
+            assertTrue(first.isActive)
+            assertEquals(1, fixture.identitiesIssued)
+            assertTrue(fixture.dao.inserted.isEmpty())
+
+            // Assert: while it runs, the journey reports the countdown boundary.
+            assertEquals(RunAdmission.CountdownInProgress, fixture.admission())
+
+            // Act: let the insert finish.
+            releaseInsert.complete(Unit)
+            val session = first.await()
+
+            // Assert: one row, one owner.
+            assertEquals(listOf(preparedRun()), fixture.dao.inserted)
+            assertSame(session, (fixture.admission() as RunAdmission.RunInProgress).session)
+        }
+    }
+
+    /**
+     * Proves the attempt belongs to the application, not to the coroutine awaiting it.
+     *
+     * The caller is cancelled while the insert is parked. If the coordinator had run the
+     * insert in the caller's own scope, that cancellation would have cancelled the attempt
+     * too: it would no longer be active, no row would ever be written and no owner would be
+     * published. Instead the attempt is still active after the caller is gone, and once
+     * released it stores the run and the coordinator owns it — with nobody awaiting it.
+     */
+    @Test
+    fun `cancelling the awaiting caller does not cancel the start`() {
+
+        // Arrange: a countdown, and an insert that parks.
+        val fixture = Fixture()
+        runBlocking {
+            fixture.coordinator.initialize()
+            fixture.coordinator.beginCountdown()
+        }
+        val insertReached = CompletableDeferred<Unit>()
+        val releaseInsert = CompletableDeferred<Unit>()
+        fixture.dao.duringInsert = {
+            insertReached.complete(Unit)
+            releaseInsert.await()
+        }
+
+        runBlocking {
+
+            // Act: a caller requests the start and waits on it; the insert parks.
+            val caller = launch(start = CoroutineStart.UNDISPATCHED) {
+                fixture.startRun()
+            }
+            insertReached.await()
+            val attempt = fixture.coordinator.requestStart()
+
+            // Act: the screen goes away.
+            caller.cancel()
+            caller.join()
+
+            // Assert: the caller is gone, but the attempt is not.
+            assertTrue(caller.isCancelled)
+            assertTrue("The start was cancelled with its caller.", attempt.isActive)
+            assertTrue(fixture.dao.inserted.isEmpty())
+
+            // Act: storage finishes, with nobody waiting.
+            releaseInsert.complete(Unit)
+
+            // Assert: the attempt completed normally, stored the run and published it.
+            assertTrue(attempt.isCompleted)
+            assertFalse(attempt.isCancelled)
+            assertNull(failureOf(attempt))
+            assertEquals(listOf(preparedRun()), fixture.dao.inserted)
+            val owner = (fixture.admission() as RunAdmission.RunInProgress).session
+            assertSame(attempt.await(), owner)
+            assertEquals(RunSessionState.RUNNING, owner.state)
+        }
+    }
+
+    /**
+     * Proves a failed insert leaves the runner in the countdown with no owner.
+     */
+    @Test
+    fun `an insert failure leaves the countdown with no owner`() {
+
+        // Arrange: a countdown, and storage that refuses the insert.
+        val fixture = Fixture()
+        runBlocking {
+            fixture.coordinator.initialize()
+            fixture.coordinator.beginCountdown()
+        }
+        val failure = IllegalStateException("disk full")
+        fixture.dao.failWith = failure
+
+        // Act
+        val attempt = runBlocking { fixture.coordinator.requestStart() }
+
+        // Assert: the attempt failed with exactly storage's exception. (`isCancelled` is
+        // not checked: kotlinx reports true for any exceptional completion, failure
+        // included. The identity of the cause is the precise check.)
+        assertTrue(attempt.isCompleted)
+        assertSame(failure, failureOf(attempt))
+        assertThrows(IllegalStateException::class.java) {
+            runBlocking { attempt.await() }
+        }
+
+        // Assert: nothing stored, no owner, still a countdown.
+        assertTrue(fixture.dao.inserted.isEmpty())
+        assertEquals(
+            RunJourneySnapshot(
+                InitializationStatus.Completed,
+                RunAdmission.CountdownInProgress
+            ),
+            runBlocking { fixture.coordinator.journeySnapshot() }
+        )
+
+        // Assert: the reservation was released, so the countdown can be cancelled again.
+        runBlocking { fixture.coordinator.cancelCountdown() }
+        assertEquals(RunAdmission.ReadyForCountdown, fixture.admission())
+    }
+
+    /**
+     * Proves a retry after failure is the same run, not a second one.
+     *
+     * Between the attempts the clock moves on and the identity source has another UUID
+     * ready. A retry that asked the factory again would pick up both, so the stored row
+     * matching the *first* moment and identity is what proves the prepared row was reused.
+     */
+    @Test
+    fun `a retry after failure reuses the exact prepared run`() {
+
+        // Arrange: a countdown whose first insert fails.
+        val fixture = Fixture()
+        runBlocking {
+            fixture.coordinator.initialize()
+            fixture.coordinator.beginCountdown()
+        }
+        fixture.dao.failWith = IllegalStateException("disk full")
+        val failed = runBlocking { fixture.coordinator.requestStart() }
+        assertTrue(failureOf(failed) is IllegalStateException)
+
+        // Arrange: storage recovers, and time passes before the runner retries.
+        fixture.dao.failWith = null
+        fixture.clock.nowMillis = SECOND_START
+
+        // Act
+        val retry = runBlocking { fixture.coordinator.requestStart() }
+        val session = runBlocking { retry.await() }
+
+        // Assert: a new attempt object, but the same run — first UUID, first start.
+        assertFalse(retry === failed)
+        assertEquals(RUN_ID, session.runId)
+        assertEquals(listOf(preparedRun()), fixture.dao.inserted)
+        assertEquals(1, fixture.identitiesIssued)
+        assertSame(session, (fixture.admission() as RunAdmission.RunInProgress).session)
+    }
+
+    /**
+     * Proves cancelling after a failed start discards that run's prepared identity.
+     *
+     * The next cycle receiving the next UUID and the new clock reading is the evidence. Had
+     * the old row survived the cancel, the later run would have been stored under the
+     * abandoned identity and the stale start time.
+     */
+    @Test
+    fun `cancel after a failed start clears the prepared run`() {
+
+        // Arrange: a failed start in the first countdown.
+        val fixture = Fixture()
+        runBlocking {
+            fixture.coordinator.initialize()
+            fixture.coordinator.beginCountdown()
+        }
+        fixture.dao.failWith = IllegalStateException("disk full")
+        runBlocking { fixture.coordinator.requestStart() }
+
+        // Act: the runner backs out, storage recovers, and later starts again.
+        runBlocking { fixture.coordinator.cancelCountdown() }
+        assertEquals(RunAdmission.ReadyForCountdown, fixture.admission())
+        fixture.dao.failWith = null
+        fixture.clock.nowMillis = SECOND_START
+        val session = runBlocking {
+            fixture.coordinator.beginCountdown()
+            fixture.startRun()
+        }
+
+        // Assert: a new identity and start time, and only that one run stored.
+        assertEquals(SECOND_RUN_ID, session.runId)
+        assertEquals(listOf(preparedRun(SECOND_RUN_ID, SECOND_START)), fixture.dao.inserted)
+        assertEquals(2, fixture.identitiesIssued)
+    }
+
+    /**
+     * Proves a countdown cannot be cancelled, or replaced, while its start is underway.
+     *
+     * With the insert parked the machine is still COUNTDOWN and no owner is held — exactly
+     * the conditions under which a cancel used to be allowed. Only the reservation refuses
+     * it. Had the cancel gone through, the parked insert would have landed afterwards over a
+     * machine the coordinator had already discarded.
+     */
+    @Test
+    fun `cancel and a new countdown are refused while a start is underway`() {
+
+        // Arrange: a countdown, and an insert that parks.
+        val fixture = Fixture()
+        runBlocking {
+            fixture.coordinator.initialize()
+            fixture.coordinator.beginCountdown()
+        }
+        val insertReached = CompletableDeferred<Unit>()
+        val releaseInsert = CompletableDeferred<Unit>()
+        fixture.dao.duringInsert = {
+            insertReached.complete(Unit)
+            releaseInsert.await()
+        }
+
+        runBlocking {
+            val attempt = fixture.coordinator.requestStart()
+            insertReached.await()
+
+            // Act and Assert: neither exit from the cycle is admitted.
+            assertThrows(IllegalStateException::class.java) {
+                runBlocking { fixture.coordinator.cancelCountdown() }
+            }
+            assertThrows(IllegalStateException::class.java) {
+                runBlocking { fixture.coordinator.beginCountdown() }
+            }
+
+            // Assert: the attempt was untouched by either refusal.
+            assertTrue(attempt.isActive)
+            assertSame(attempt, fixture.coordinator.requestStart())
+            assertEquals(RunAdmission.CountdownInProgress, fixture.admission())
+
+            // Act: the insert lands.
+            releaseInsert.complete(Unit)
+            val session = attempt.await()
+
+            // Assert: the owner is live over the cycle the coordinator still holds, so the
+            // run can be taken through to completion and the next cycle begun normally.
+            assertSame(session, (fixture.admission() as RunAdmission.RunInProgress).session)
+            session.pause(FIRST_PAUSE)
+            session.complete(FIRST_FINISH)
+            assertEquals(RunAdmission.ReadyForCountdown, fixture.admission())
+            assertEquals(1, fixture.dao.inserted.size)
+        }
+    }
+
+    /**
+     * Proves a successful start clears the prepared intention.
+     *
+     * After the run completes, the next cycle must receive a new identity. Had the used row
+     * been kept, the next start would try to insert the finished run's UUID again.
+     */
+    @Test
+    fun `a successful start clears the prepared run for the next cycle`() {
+
+        // Arrange: one full run, taken all the way to completion.
+        val fixture = Fixture()
+        val firstSession = runBlocking {
+            fixture.coordinator.initialize()
+            fixture.coordinator.beginCountdown()
+            fixture.startRun().also {
+                it.pause(FIRST_PAUSE)
+                it.complete(FIRST_FINISH)
+            }
+        }
+
+        // Act: the next run.
+        fixture.clock.nowMillis = SECOND_START
+        val secondSession = runBlocking {
+            fixture.coordinator.beginCountdown()
+            fixture.startRun()
+        }
+
+        // Assert: a fresh identity and start, and both runs stored once each.
+        assertEquals(SECOND_RUN_ID, secondSession.runId)
+        assertEquals(RUN_ID, firstSession.runId)
+        assertEquals(2, fixture.identitiesIssued)
+        assertEquals(
+            preparedRun(SECOND_RUN_ID, SECOND_START),
+            fixture.dao.inserted.last()
+        )
+        assertEquals(listOf(RUN_ID, SECOND_RUN_ID), fixture.dao.inserted.map { it.runId })
+    }
+
+    /**
+     * Proves cancellation of the attempt itself is not treated as an ordinary failure.
+     *
+     * Only the application scope can cancel an attempt, and production never does. If it
+     * happens anyway, whether the insert landed is unknown, so the coordinator must not
+     * release the reservation as if storage had refused — that would let Cancel discard a
+     * cycle, or a retry race, over a run that might already be stored. It stays refused.
+     */
+    @Test
+    fun `a cancelled attempt is not recorded as a failure and admits nothing further`() {
+
+        // Arrange: a countdown, and an insert that parks.
+        val fixture = Fixture()
+        runBlocking {
+            fixture.coordinator.initialize()
+            fixture.coordinator.beginCountdown()
+        }
+        val insertReached = CompletableDeferred<Unit>()
+        fixture.dao.duringInsert = {
+            insertReached.complete(Unit)
+            CompletableDeferred<Unit>().await()
+        }
+
+        runBlocking {
+            val attempt = fixture.coordinator.requestStart()
+            insertReached.await()
+
+            // Act: the application scope itself is cancelled mid-insert.
+            fixture.scope.cancel()
+            attempt.join()
+
+            // Assert: cancelled, not failed with an ordinary exception.
+            assertTrue(failureOf(attempt) is CancellationException)
+
+            // Assert: no retry, no cancel and no new countdown are admitted.
+            assertThrows(IllegalStateException::class.java) {
+                runBlocking { fixture.coordinator.requestStart() }
+            }
+            assertThrows(IllegalStateException::class.java) {
+                runBlocking { fixture.coordinator.cancelCountdown() }
+            }
+            assertEquals(RunAdmission.CountdownInProgress, fixture.admission())
+            assertEquals(1, fixture.identitiesIssued)
+            assertTrue(fixture.dao.inserted.isEmpty())
+        }
+    }
+
+    // ---------------------------------------------------------------------------------
+    // Cycles and countdown cancellation
+    // ---------------------------------------------------------------------------------
 
     /**
      * Proves a finished run is retired at the next countdown so another run can begin.
@@ -328,19 +928,18 @@ class RunSessionCoordinatorTest {
     fun `a completed run is retired and the next countdown starts a new run`() {
 
         // Arrange: one full run, taken all the way to completion.
-        val dao = FakeRunDao()
-        val coordinator = RunSessionCoordinator(dao)
+        val fixture = Fixture()
         val firstSession = runBlocking {
-            coordinator.initialize()
-            coordinator.beginCountdown()
+            fixture.coordinator.initialize()
+            fixture.coordinator.beginCountdown()
 
             // Assert: a countdown is underway and no run is official yet.
             assertEquals(
                 RunAdmission.CountdownInProgress,
-                coordinator.admission()
+                fixture.coordinator.journeySnapshot().admission
             )
 
-            val session = coordinator.start(preparedRun())
+            val session = fixture.startRun()
             session.pause(FIRST_PAUSE)
             session.complete(FIRST_FINISH)
             session
@@ -348,15 +947,13 @@ class RunSessionCoordinatorTest {
 
         // Assert: a completed cycle no longer blocks the next one.
         assertEquals(RunSessionState.COMPLETED, firstSession.state)
-        assertEquals(
-            RunAdmission.ReadyForCountdown,
-            runBlocking { coordinator.admission() }
-        )
+        assertEquals(RunAdmission.ReadyForCountdown, fixture.admission())
 
         // Act: the next countdown retires the finished cycle, and a new run begins.
+        fixture.clock.nowMillis = SECOND_START
         val secondSession = runBlocking {
-            coordinator.beginCountdown()
-            coordinator.start(preparedRun(SECOND_RUN_ID, SECOND_START))
+            fixture.coordinator.beginCountdown()
+            fixture.startRun()
         }
 
         // Assert: two distinct runs, and the finished one stayed finished.
@@ -365,12 +962,14 @@ class RunSessionCoordinatorTest {
         assertEquals(RunSessionState.COMPLETED, firstSession.state)
 
         // Assert: the coordinator now owns the second run, not the first.
-        val admission = runBlocking { coordinator.admission() }
-        assertSame(secondSession, (admission as RunAdmission.RunInProgress).session)
+        assertSame(
+            secondSession,
+            (fixture.admission() as RunAdmission.RunInProgress).session
+        )
 
         // Assert: both runs are stored, each written once.
-        assertEquals(2, dao.inserted.size)
-        assertEquals(listOf(RUN_ID, SECOND_RUN_ID), dao.inserted.map { it.runId })
+        assertEquals(2, fixture.dao.inserted.size)
+        assertEquals(listOf(RUN_ID, SECOND_RUN_ID), fixture.dao.inserted.map { it.runId })
     }
 
     /**
@@ -391,11 +990,10 @@ class RunSessionCoordinatorTest {
     fun `recovery completes before a competing countdown and start reach storage`() {
 
         // Arrange: a DAO whose discovery parks until this test releases it.
-        val dao = FakeRunDao()
-        val coordinator = RunSessionCoordinator(dao)
+        val fixture = Fixture()
         val discoveryReached = CompletableDeferred<Unit>()
         val releaseDiscovery = CompletableDeferred<Unit>()
-        dao.duringDiscovery = {
+        fixture.dao.duringDiscovery = {
             discoveryReached.complete(Unit)
             releaseDiscovery.await()
         }
@@ -408,15 +1006,15 @@ class RunSessionCoordinatorTest {
             // Act: initialization runs until it is parked inside discovery, holding the
             // coordinator lock.
             val initialization = launch {
-                coordinator.initialize()
+                fixture.coordinator.initialize()
                 completionOrder += "initialization"
             }
             discoveryReached.await()
 
             // Act: a countdown and start arrive while recovery is still in flight.
             val competingStart = launch(start = CoroutineStart.UNDISPATCHED) {
-                coordinator.beginCountdown()
-                coordinator.start(preparedRun())
+                fixture.coordinator.beginCountdown()
+                fixture.startRun()
                 completionOrder += "start"
             }
 
@@ -427,8 +1025,8 @@ class RunSessionCoordinatorTest {
                 competingStart.isCompleted
             )
             assertTrue(
-                "No run may reach storage before recovery finishes: ${dao.inserted}",
-                dao.inserted.isEmpty()
+                "No run may reach storage before recovery finishes: ${fixture.dao.inserted}",
+                fixture.dao.inserted.isEmpty()
             )
             assertTrue(completionOrder.isEmpty())
 
@@ -442,11 +1040,13 @@ class RunSessionCoordinatorTest {
         assertEquals(listOf("initialization", "start"), completionOrder)
 
         // Assert: the run that was waiting did eventually start, exactly once.
-        assertEquals(1, dao.inserted.size)
-        assertEquals(RUN_ID, dao.inserted.single().runId)
-        val admission = runBlocking { coordinator.admission() }
-        assertEquals(RUN_ID, (admission as RunAdmission.RunInProgress).session.runId)
-        assertEquals(1, dao.discoveryQueryCalls)
+        assertEquals(1, fixture.dao.inserted.size)
+        assertEquals(RUN_ID, fixture.dao.inserted.single().runId)
+        assertEquals(
+            RUN_ID,
+            (fixture.admission() as RunAdmission.RunInProgress).session.runId
+        )
+        assertEquals(1, fixture.dao.discoveryQueryCalls)
     }
 
     /**
@@ -460,27 +1060,25 @@ class RunSessionCoordinatorTest {
     fun `initialization during a live run stays completed without querying again`() {
 
         // Arrange: an initialized coordinator with one run underway.
-        val dao = FakeRunDao()
-        val coordinator = RunSessionCoordinator(dao)
+        val fixture = Fixture()
         val session = runBlocking {
-            coordinator.initialize()
-            coordinator.beginCountdown()
-            coordinator.start(preparedRun())
+            fixture.coordinator.initialize()
+            fixture.coordinator.beginCountdown()
+            fixture.startRun()
         }
-        assertEquals(1, dao.discoveryQueryCalls)
+        assertEquals(1, fixture.dao.discoveryQueryCalls)
 
         // Act
-        val status = runBlocking { coordinator.initialize() }
+        val snapshot = runBlocking { fixture.coordinator.initialize() }
 
         // Assert: still completed, and storage was not asked a second time.
-        assertEquals(InitializationStatus.Completed, status)
-        assertEquals(1, dao.discoveryQueryCalls)
+        assertEquals(InitializationStatus.Completed, snapshot.initializationStatus)
+        assertEquals(1, fixture.dao.discoveryQueryCalls)
 
         // Assert: the same live run, still owned by the same object.
-        val admission = runBlocking { coordinator.admission() }
-        assertSame(session, (admission as RunAdmission.RunInProgress).session)
+        assertSame(session, (snapshot.admission as RunAdmission.RunInProgress).session)
         assertEquals(RunSessionState.RUNNING, session.state)
-        assertEquals(1, dao.inserted.size)
+        assertEquals(1, fixture.dao.inserted.size)
     }
 
     /**
@@ -498,43 +1096,36 @@ class RunSessionCoordinatorTest {
     fun `cancelling a countdown returns to ready and writes nothing`() {
 
         // Arrange: an initialized coordinator with a countdown underway.
-        val dao = FakeRunDao()
-        val coordinator = RunSessionCoordinator(dao)
+        val fixture = Fixture()
         runBlocking {
-            coordinator.initialize()
-            coordinator.beginCountdown()
+            fixture.coordinator.initialize()
+            fixture.coordinator.beginCountdown()
         }
-        assertEquals(
-            RunAdmission.CountdownInProgress,
-            runBlocking { coordinator.admission() }
-        )
-        val discoveriesBeforeCancel = dao.discoveryQueryCalls
+        assertEquals(RunAdmission.CountdownInProgress, fixture.admission())
+        val discoveriesBeforeCancel = fixture.dao.discoveryQueryCalls
 
         // Act
-        runBlocking { coordinator.cancelCountdown() }
+        runBlocking { fixture.coordinator.cancelCountdown() }
 
         // Assert: back to the state a countdown began from.
-        assertEquals(
-            RunAdmission.ReadyForCountdown,
-            runBlocking { coordinator.admission() }
-        )
+        assertEquals(RunAdmission.ReadyForCountdown, fixture.admission())
 
         // Assert: nothing was written, and nothing was read either.
-        assertTrue("Cancelling wrote a run: ${dao.inserted}", dao.inserted.isEmpty())
+        assertTrue("Cancelling wrote a run: ${fixture.dao.inserted}", fixture.dao.inserted.isEmpty())
         assertTrue(
-            "Cancelling wrote a transition: ${dao.transitions}",
-            dao.transitions.isEmpty()
+            "Cancelling wrote a transition: ${fixture.dao.transitions}",
+            fixture.dao.transitions.isEmpty()
         )
-        assertEquals(0, runBlocking { dao.countRuns() })
-        assertEquals(discoveriesBeforeCancel, dao.discoveryQueryCalls)
+        assertEquals(0, runBlocking { fixture.dao.countRuns() })
+        assertEquals(discoveriesBeforeCancel, fixture.dao.discoveryQueryCalls)
 
         // Assert: the fresh cycle is genuinely usable, not merely reported as ready.
         val session = runBlocking {
-            coordinator.beginCountdown()
-            coordinator.start(preparedRun())
+            fixture.coordinator.beginCountdown()
+            fixture.startRun()
         }
         assertEquals(RunSessionState.RUNNING, session.state)
-        assertEquals(1, dao.inserted.size)
+        assertEquals(1, fixture.dao.inserted.size)
     }
 
     /**
@@ -548,26 +1139,22 @@ class RunSessionCoordinatorTest {
     fun `cancelling without a countdown is refused`() {
 
         // Arrange: initialized, ready, but no countdown.
-        val dao = FakeRunDao()
-        val coordinator = RunSessionCoordinator(dao)
-        runBlocking { coordinator.initialize() }
+        val fixture = Fixture()
+        runBlocking { fixture.coordinator.initialize() }
 
         // Act and Assert
         assertThrows(IllegalStateException::class.java) {
-            runBlocking { coordinator.cancelCountdown() }
+            runBlocking { fixture.coordinator.cancelCountdown() }
         }
 
         // Assert: nothing changed, and a countdown is still available.
-        assertEquals(
-            RunAdmission.ReadyForCountdown,
-            runBlocking { coordinator.admission() }
-        )
-        assertTrue(dao.inserted.isEmpty())
+        assertEquals(RunAdmission.ReadyForCountdown, fixture.admission())
+        assertTrue(fixture.dao.inserted.isEmpty())
 
         // Act and Assert: refused before initialization for the same reason.
-        val uninitialized = RunSessionCoordinator(FakeRunDao())
+        val uninitialized = Fixture()
         assertThrows(IllegalStateException::class.java) {
-            runBlocking { uninitialized.cancelCountdown() }
+            runBlocking { uninitialized.coordinator.cancelCountdown() }
         }
     }
 
@@ -581,31 +1168,27 @@ class RunSessionCoordinatorTest {
     fun `cancelling while a run is held is refused`() {
 
         // Arrange: one run genuinely underway.
-        val dao = FakeRunDao()
-        val coordinator = RunSessionCoordinator(dao)
+        val fixture = Fixture()
         val session = runBlocking {
-            coordinator.initialize()
-            coordinator.beginCountdown()
-            coordinator.start(preparedRun())
+            fixture.coordinator.initialize()
+            fixture.coordinator.beginCountdown()
+            fixture.startRun()
         }
 
         // Act and Assert: refused while RUNNING.
         assertThrows(IllegalStateException::class.java) {
-            runBlocking { coordinator.cancelCountdown() }
+            runBlocking { fixture.coordinator.cancelCountdown() }
         }
 
         // Act and Assert: still refused while PAUSED.
         runBlocking { session.pause(FIRST_PAUSE) }
         assertThrows(IllegalStateException::class.java) {
-            runBlocking { coordinator.cancelCountdown() }
+            runBlocking { fixture.coordinator.cancelCountdown() }
         }
 
         // Assert: the run is untouched and still owned by the same object.
         assertEquals(RunSessionState.PAUSED, session.state)
-        assertSame(
-            session,
-            (runBlocking { coordinator.admission() } as RunAdmission.RunInProgress).session
-        )
-        assertEquals(1, dao.inserted.size)
+        assertSame(session, (fixture.admission() as RunAdmission.RunInProgress).session)
+        assertEquals(1, fixture.dao.inserted.size)
     }
 }

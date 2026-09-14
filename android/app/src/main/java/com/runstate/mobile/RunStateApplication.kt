@@ -3,7 +3,14 @@ package com.runstate.mobile
 import android.app.Application
 import com.runstate.mobile.data.local.RunStateDatabase
 import com.runstate.mobile.data.local.buildRunStateDatabase
+import com.runstate.mobile.run.PreparedRunFactory
 import com.runstate.mobile.run.RunSessionCoordinator
+import java.time.Clock
+import java.time.ZoneId
+import java.util.UUID
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 
 /**
  * The composition root: one database and one run coordinator, for the process.
@@ -39,8 +46,8 @@ import com.runstate.mobile.run.RunSessionCoordinator
  * gates guard nothing.
  *
  * `MainActivity` now takes that coordinator and drives the visible journey through it.
- * What is still missing is a foreground service holding a live run, and any path that
- * makes a run official — nothing calls [RunSessionCoordinator.start] yet.
+ * What is still missing is a foreground service holding a live run, and a visible path that
+ * makes a run official — nothing in the UI calls [RunSessionCoordinator.requestStart] yet.
  *
  * ## Two constraints on future work
  *
@@ -79,6 +86,37 @@ class RunStateApplication : Application() {
     internal val database: RunStateDatabase by lazy { buildRunStateDatabase(this) }
 
     /**
+     * The one wall clock run timestamps are read from in this process.
+     *
+     * Shared rather than created per use so every recorded moment of a run — its official
+     * start now, and its pause, resume and completion once those are wired — comes from the
+     * same source, and a test double can replace all of them at once. UTC because only the
+     * instant is ever read; the zone a run began in is a separate fact, captured by
+     * [PreparedRunFactory] from the phone's current setting.
+     */
+    internal val clock: Clock = Clock.systemUTC()
+
+    /**
+     * The scope for work that must outlive any screen.
+     *
+     * An official start runs here rather than in an Activity's scope, so rotating the phone
+     * or leaving the screen cancels only the screen's waiting, never the insert. It is never
+     * cancelled: it lives exactly as long as this process does.
+     *
+     * - `SupervisorJob` so one failed start is reported through its own result instead of
+     *   cancelling the scope — and with it every later start in the process.
+     * - `Dispatchers.Main.immediate` because the coordinator's results are consumed by the
+     *   UI, and Room's suspending DAO methods already move their own I/O off the main
+     *   thread. `immediate` skips a pointless re-dispatch when the caller is already there.
+     *
+     * Lazy, like the properties around it, so application startup does not touch the main
+     * dispatcher for a test that never asks for a coordinator.
+     */
+    internal val applicationScope: CoroutineScope by lazy {
+        CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    }
+
+    /**
      * The one admission gate for runs in this process.
      *
      * Built over [database]'s DAO rather than a database or DAO of its own, so the
@@ -98,6 +136,17 @@ class RunStateApplication : Application() {
      * [RunSessionCoordinator.initialize].
      */
     internal val runSessionCoordinator: RunSessionCoordinator by lazy {
-        RunSessionCoordinator(database.runDao())
+        RunSessionCoordinator(
+            runDao = database.runDao(),
+
+            // The phone's zone is read when each run is prepared, not captured here, so a
+            // run records the zone it actually began in.
+            preparedRunFactory = PreparedRunFactory(
+                clock = clock,
+                zoneIdSupplier = ZoneId::systemDefault,
+                uuidSupplier = UUID::randomUUID
+            ),
+            applicationScope = applicationScope
+        )
     }
 }

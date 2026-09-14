@@ -3,6 +3,9 @@ package com.runstate.mobile.run
 import com.runstate.mobile.data.local.RunDao
 import com.runstate.mobile.data.local.RunEntity
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Deferred
+import kotlinx.coroutines.async
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
@@ -81,6 +84,21 @@ internal sealed interface RunAdmission {
 }
 
 /**
+ * Both coordinator answers, read at one moment.
+ *
+ * The screen needs both values — [InitializationStatus] separates a spinner from a retry
+ * button, [RunAdmission] says what may happen next — and they are only meaningful together
+ * if nothing changed between reading them. Asking for them in two separate calls released
+ * the coordinator lock in between, so a recovery or an action could land in the gap and
+ * produce a pair no single moment ever held. Producing them together inside one lock
+ * acquisition makes that pairing impossible rather than unlikely.
+ */
+internal data class RunJourneySnapshot(
+    val initializationStatus: InitializationStatus,
+    val admission: RunAdmission
+)
+
+/**
  * The one gate a run has to pass through to begin, for the life of the process.
  *
  * Every piece it coordinates already refuses to guess on its own, and each was built
@@ -110,43 +128,67 @@ internal sealed interface RunAdmission {
  * on it happen inside one held lock, so a start arriving mid-recovery waits and then sees
  * the state recovery left behind rather than a stale one.
  *
- * [RunSessionStarter] keeps its own separate start mutex. Two different locks, always
- * taken coordinator-first and never the same mutex twice, so there is one acquisition
- * order and no way to build a cycle. The starter's lock is not redundant — it remains the
- * defense for any caller holding a starter directly.
+ * The official start is the one deliberate exception, and it is replaced by a reservation
+ * rather than left open — see [requestStart]. The Room insert runs outside this lock so
+ * that a second request can still get in and receive the attempt already underway.
+ *
+ * [RunSessionStarter] keeps its own separate start mutex. It is never taken while this
+ * coordinator's lock is held, so there is no acquisition order to get wrong and no way to
+ * build a cycle. The starter's lock is not redundant — it remains the defense for any
+ * caller holding a starter directly.
+ *
+ * ## The official start belongs to the process, not to a screen
+ *
+ * A screen asks for the start and may wait for it, but it does not own the work. The
+ * attempt runs in the application-owned [applicationScope], so a rotation, a back gesture
+ * or a destroyed Activity cancels only the screen's *waiting*, never the insert itself.
+ * That is what stops a run from being half-made — durably stored, but abandoned before
+ * anyone took ownership of it — merely because the UI that asked went away.
  *
  * ## Who calls it, and what that does not yet cover
  *
- * `MainActivity` now initializes this coordinator and drives the visible journey through
- * it, so the Initializing → Ready → Countdown → Cancel path is genuinely coordinator-backed
+ * `MainActivity` initializes this coordinator and drives the visible journey through it,
+ * so the Initializing → Ready → Countdown → Cancel path is genuinely coordinator-backed
  * rather than a screen acting on its own. What is not yet wired is everything past the
- * countdown: nothing calls [start], so no run becomes official through this path, and
- * there is still no foreground service holding a live run.
+ * countdown: nothing in the UI calls [requestStart] yet, so no run becomes official through
+ * the visible journey, and there is still no foreground service holding a live run.
  *
  * **It is not the only way to build these pieces.** [RunSessionStarter] and
  * [ActiveRunRecovery] have internal constructors, which stops code outside this module
  * from assembling a second unmanaged owner but not code inside it — the tests do exactly
- * that on purpose. Single ownership in production depends on the upcoming UI and
- * bootstrap slice using this coordinator exclusively.
+ * that on purpose. Single ownership in production depends on the UI and bootstrap using
+ * this coordinator exclusively.
  *
- * **The starter's cancellation gap survives here.** If a coroutine is cancelled after
- * [RunSessionStarter] has durably inserted the run but before the new owner is published
- * back to this coordinator, storage holds an active row this process does not hold an
- * owner for. The next process's [initialize] will find and adopt it, but this process
- * cannot rediscover it on its own. That is left honestly open: `NonCancellable`, a
- * compensating delete or a second speculative recovery pass would each hide the case
- * rather than resolve it, and a compensating write would erase a run the phone has
- * already durably recorded.
+ * **One cancellation gap is still left honestly open.** [applicationScope] is never
+ * cancelled in production, so the start attempt always gets to publish its result. If that
+ * scope ever were cancelled mid-attempt, the attempt could not reacquire the lock to
+ * release its reservation, and `NonCancellable` is deliberately not used to force it. The
+ * coordinator then refuses every further start and cancel in this process rather than
+ * guess whether the insert landed; the next process's [initialize] finds the truth in
+ * storage. A compensating delete or a speculative recovery pass would each hide the case
+ * rather than resolve it, and a compensating write could erase a run the phone has already
+ * durably recorded.
+ *
+ * @property runDao the one route to storage for recovery and every run admitted.
+ * @property preparedRunFactory the only place a run's UUID, official start and zone are
+ *   decided. Injected so no coordinator method reaches for a random UUID or a system clock.
+ * @property applicationScope the process-lifetime scope an official start runs in. It must
+ *   outlive every screen, and it should use a `SupervisorJob` so one failed start does not
+ *   cancel the scope for every later one.
  */
-internal class RunSessionCoordinator(private val runDao: RunDao) {
+internal class RunSessionCoordinator(
+    private val runDao: RunDao,
+    private val preparedRunFactory: PreparedRunFactory,
+    private val applicationScope: CoroutineScope
+) {
 
     /**
      * Serializes every admission decision and every act taken on one.
      *
-     * Held across the whole of [initialize], [admission], [beginCountdown] and [start],
-     * because in each of them the state read at the start has to still be true at the
-     * end. A lock released between the check and the act would leave exactly the gap
-     * recovery already documented.
+     * Held across the whole of [initialize], [journeySnapshot], [beginCountdown] and
+     * [cancelCountdown], because in each of them the state read at the start has to still
+     * be true at the end. [requestStart] holds it for its decision and again for its
+     * result, but not across the insert between them; [startReserved] covers that gap.
      */
     private val coordinatorLock = Mutex()
 
@@ -172,7 +214,30 @@ internal class RunSessionCoordinator(private val runDao: RunDao) {
     private var initializationStatus: InitializationStatus = InitializationStatus.NotAttempted
 
     /**
-     * Runs recovery once, and records what it found.
+     * The row this cycle's official start will insert, once one has been requested.
+     *
+     * Created on the first [requestStart] and then kept, so a failed insert is retried with
+     * the exact same UUID, start, zone and checkpoint. Cleared when the start succeeds, or
+     * when the cycle is discarded — at which point the runner's intention to start *that*
+     * run is gone and the next cycle deserves a new identity.
+     */
+    private var preparedRun: RunEntity? = null
+
+    /** The official start attempt currently underway, or null when none is. */
+    private var pendingStart: Deferred<ActiveRunSession>? = null
+
+    /**
+     * True from the moment a start is admitted until its result has been applied.
+     *
+     * This is what stands in for the lock while the insert runs without it. While it is
+     * set, the current machine and starter are spoken for: nothing may cancel the countdown,
+     * begin another one, or read the machine as if its state were settled — it may already
+     * be RUNNING with the owner not yet published.
+     */
+    private var startReserved = false
+
+    /**
+     * Runs recovery once, records what it found, and reports the result.
      *
      * Safe to call repeatedly. After a completed attempt this returns immediately without
      * touching Room, so a caller that cannot easily tell whether startup already ran may
@@ -180,19 +245,21 @@ internal class RunSessionCoordinator(private val runDao: RunDao) {
      * After a failure it genuinely retries, because a failure is usually the database
      * being briefly unavailable rather than a permanent verdict.
      *
-     * @return [InitializationStatus.Completed] when recovery reached a decision — including
+     * @return a [RunJourneySnapshot] taken inside the same lock acquisition that applied
+     *   recovery, so the admission it reports is the one this attempt produced. Its status
+     *   is [InitializationStatus.Completed] when recovery reached a decision — including
      *   deciding the database is inconsistent — or [InitializationStatus.Failed] carrying
      *   the exact cause when it could not.
      * @throws CancellationException if the caller is cancelled, which leaves the attempt
      *   retryable rather than recording it as a failure.
      */
-    suspend fun initialize(): InitializationStatus = coordinatorLock.withLock {
+    suspend fun initialize(): RunJourneySnapshot = coordinatorLock.withLock {
 
         // An attempt that already reached a decision is not repeated. Querying again
         // could return a different database than the one this process built its whole
         // in-memory picture from.
         if (initializationStatus == InitializationStatus.Completed) {
-            return@withLock InitializationStatus.Completed
+            return@withLock snapshotUnderLock()
         }
 
         // A retry starts from a clean attempt rather than from the previous verdict, so
@@ -224,7 +291,7 @@ internal class RunSessionCoordinator(private val runDao: RunDao) {
 
             // Reported, not thrown, and never dressed up as a completed attempt: the
             // caller has to be able to tell an empty database from an unreadable one.
-            return@withLock failed
+            return@withLock snapshotUnderLock()
         }
 
         when (result) {
@@ -253,11 +320,15 @@ internal class RunSessionCoordinator(private val runDao: RunDao) {
         // Written last, on purpose. Completed is the promise that the result above has
         // already been applied, so it must never be observable before that is true.
         initializationStatus = InitializationStatus.Completed
-        InitializationStatus.Completed
+        snapshotUnderLock()
     }
 
     /**
-     * Reports what the runner may do, as of the moment the lock was held.
+     * Reports both coordinator answers, as of the moment the lock was held.
+     *
+     * A pure read: no recovery is attempted and nothing is written, whatever the current
+     * status. A coordinator that has not initialized reports that honestly rather than
+     * initializing as a side effect of being asked.
      *
      * One conservative case is worth naming. [ActiveRunSession.state] is read here but is
      * protected by the session's own mutex rather than this one, so a completion running
@@ -267,8 +338,13 @@ internal class RunSessionCoordinator(private val runDao: RunDao) {
      * completion to Room before advancing its machine, so COMPLETED is never visible here
      * until the run is durably finished.
      */
-    suspend fun admission(): RunAdmission = coordinatorLock.withLock {
-        when (initializationStatus) {
+    suspend fun journeySnapshot(): RunJourneySnapshot = coordinatorLock.withLock {
+        snapshotUnderLock()
+    }
+
+    /** Both answers from the current fields. Only ever called with [coordinatorLock] held. */
+    private fun snapshotUnderLock(): RunJourneySnapshot {
+        val admission = when (initializationStatus) {
 
             // Both mean the same thing to a caller: recovery has not established what
             // storage holds, so admitting a run could start a second live one.
@@ -277,6 +353,8 @@ internal class RunSessionCoordinator(private val runDao: RunDao) {
 
             is InitializationStatus.Completed -> admissionAfterInitialization()
         }
+
+        return RunJourneySnapshot(initializationStatus, admission)
     }
 
     /**
@@ -298,6 +376,16 @@ internal class RunSessionCoordinator(private val runDao: RunDao) {
             }
 
             return RunAdmission.BlockedByInconsistentStorage(inconsistentActiveRuns)
+        }
+
+        if (startReserved) {
+
+            // The insert is running outside the lock. The machine may still be COUNTDOWN,
+            // or may already be RUNNING with its owner not yet published back here, and
+            // reading it now would report that second moment as an impossible state. Until
+            // the result is applied, the conservative answer is the boundary the start
+            // began from: no run is owned yet, and nothing new may be admitted.
+            return RunAdmission.CountdownInProgress
         }
 
         val session = activeSession
@@ -340,8 +428,8 @@ internal class RunSessionCoordinator(private val runDao: RunDao) {
      * Opens the countdown for the next run, retiring a finished cycle if one is held.
      *
      * @throws IllegalStateException if recovery has not completed, if storage is blocked,
-     *   if a run is still live, or if a countdown is already underway. Nothing changes in
-     *   any of those cases.
+     *   if an official start is underway, if a run is still live, or if a countdown is
+     *   already underway. Nothing changes in any of those cases.
      */
     suspend fun beginCountdown() = coordinatorLock.withLock {
         check(initializationStatus == InitializationStatus.Completed) {
@@ -351,6 +439,12 @@ internal class RunSessionCoordinator(private val runDao: RunDao) {
         check(inconsistentActiveRuns.isEmpty()) {
             "A countdown cannot begin while storage holds " +
                 "${inconsistentActiveRuns.size} unfinished runs."
+        }
+
+        // Named explicitly rather than left to the machine, which may be mid-change while
+        // the insert runs and would refuse for a misleading reason.
+        check(!startReserved) {
+            "A countdown cannot begin while an official start is underway."
         }
 
         val session = activeSession
@@ -387,9 +481,13 @@ internal class RunSessionCoordinator(private val runDao: RunDao) {
      * succeeding would let a stray cancel look identical to a real one and, worse, would
      * make "cancel" a way to discard a machine that might be holding something.
      *
+     * A cancel after a *failed* start is still a plain cancel: the insert never landed, so
+     * the retained prepared row is discarded along with the cycle. A cancel while a start
+     * is still underway is refused — see below.
+     *
      * @throws IllegalStateException if recovery has not completed, if storage is blocked,
-     *   if a session is held, or if no countdown is underway. Nothing changes in any of
-     *   those cases.
+     *   if an official start is underway, if a session is held, or if no countdown is
+     *   underway. Nothing changes in any of those cases.
      */
     suspend fun cancelCountdown() = coordinatorLock.withLock {
         check(initializationStatus == InitializationStatus.Completed) {
@@ -399,6 +497,15 @@ internal class RunSessionCoordinator(private val runDao: RunDao) {
         check(inconsistentActiveRuns.isEmpty()) {
             "A countdown cannot be cancelled while storage holds " +
                 "${inconsistentActiveRuns.size} unfinished runs."
+        }
+
+        // The start attempt captured this cycle's starter and machine and is using them
+        // outside the lock right now. Replacing them would let that insert land and publish
+        // an owner over a machine this coordinator had already thrown away — a stored,
+        // running run with nothing tracking it. The insert may well succeed, so the cancel
+        // is refused rather than raced; the caller learns the outcome from the start.
+        check(!startReserved) {
+            "A countdown cannot be cancelled while an official start is underway."
         }
 
         // A live or finished run is not a countdown, and cancelling must never become a
@@ -423,10 +530,14 @@ internal class RunSessionCoordinator(private val runDao: RunDao) {
      * the same operation and a second copy of it could drift. What differs is when it is
      * allowed, and that stays with each caller, where the rules belong.
      *
-     * Cycle replacement happens only at those two boundaries. Doing it inside [start]
-     * would mean a coordinator that had answered [RunAdmission.ReadyForCountdown] was
-     * still holding a completed owner with no countdown underway, and doing it inside
-     * [admission] would make a report mutate what it reports on.
+     * Cycle replacement happens only at those two boundaries. Doing it inside
+     * [requestStart] would mean a coordinator that had answered
+     * [RunAdmission.ReadyForCountdown] was still holding a completed owner with no
+     * countdown underway, and doing it inside [journeySnapshot] would make a report mutate
+     * what it reports on.
+     *
+     * The prepared row goes with the cycle. It described the run *this* cycle was about to
+     * make official; a later cycle is a new decision to run and gets a new identity.
      *
      * The old machine is discarded, never reset. Neither COMPLETED nor COUNTDOWN has a
      * legal transition back to NO_SESSION and neither may be given one: a reset would
@@ -436,6 +547,7 @@ internal class RunSessionCoordinator(private val runDao: RunDao) {
      * forever.
      */
     private fun beginFreshCycle() {
+        preparedRun = null
         activeSession = null
         stateMachine = RunSessionStateMachine()
 
@@ -445,19 +557,47 @@ internal class RunSessionCoordinator(private val runDao: RunDao) {
     }
 
     /**
-     * Makes the prepared run official and retains its one owner.
+     * Asks for the countdown to become one official, durably stored run.
      *
-     * The insert happens through [RunSessionStarter] while this coordinator's lock is
-     * still held, so the durable write and the publication of the owner are one
-     * indivisible step from any other caller's point of view.
+     * The work happens in [applicationScope], not in the caller. The caller receives the
+     * attempt as a [Deferred] it may await, and cancelling that caller cancels only its
+     * waiting: the insert carries on, and its owner is still published here. That matters
+     * because a screen can disappear at any moment, and a run that reached storage must
+     * never be left without the one object responsible for it.
      *
-     * @return the exact [ActiveRunSession] the starter produced. It is not re-wrapped and
-     *   not rebuilt; the object the caller receives is the object this coordinator holds.
+     * ## Three steps, and why the lock is released in the middle
+     *
+     * 1. **Decide, under the lock.** Validate, create or reuse the prepared row, set
+     *    [startReserved], capture this cycle's starter, launch the attempt and retain it.
+     * 2. **Insert, outside the lock.** [RunSessionStarter.start] writes the row and moves
+     *    the captured machine to RUNNING.
+     * 3. **Apply the result, under the lock again.** Publish the owner on success, or keep
+     *    the prepared row on failure; either way release the reservation.
+     *
+     * Holding the lock across step 2 would be simpler and wrong: a second request would
+     * wait at the lock for the whole insert and could never see — or reuse — the attempt
+     * already running. The reservation keeps the one guarantee the lock used to provide:
+     * nobody replaces the machine and starter the attempt captured while it is using them.
+     *
+     * ## Repeated requests
+     *
+     * - While an attempt is active, every request returns that exact [Deferred]. No second
+     *   row is prepared and no second insert begins.
+     * - After a failed attempt, the next explicit request starts a new attempt with the
+     *   *same* prepared row — same UUID, start, zone and checkpoint — so retrying can only
+     *   ever produce one stored run.
+     * - After a successful one, the prepared row is cleared and an owner exists, so a
+     *   further request is refused as a start over a live run.
+     *
+     * @return the attempt, owned by [applicationScope]. It completes with the exact
+     *   [ActiveRunSession] the starter produced and this coordinator retains, or fails with
+     *   the starter's exception unchanged, leaving the countdown intact with no owner.
      * @throws IllegalStateException if recovery has not completed, if storage is blocked,
-     *   if an owner is already held, or if no countdown is underway. A storage failure
-     *   inside the starter propagates unchanged and leaves the countdown intact.
+     *   if an owner is already held, if no countdown is underway, or if an earlier attempt
+     *   was interrupted without reporting its result. Nothing is prepared or launched in
+     *   any of those cases.
      */
-    suspend fun start(preparedRun: RunEntity): ActiveRunSession = coordinatorLock.withLock {
+    suspend fun requestStart(): Deferred<ActiveRunSession> = coordinatorLock.withLock {
         check(initializationStatus == InitializationStatus.Completed) {
             "A run cannot start before recovery has completed."
         }
@@ -465,6 +605,25 @@ internal class RunSessionCoordinator(private val runDao: RunDao) {
         check(inconsistentActiveRuns.isEmpty()) {
             "A run cannot start while storage holds " +
                 "${inconsistentActiveRuns.size} unfinished runs."
+        }
+
+        if (startReserved) {
+            val attempt = checkNotNull(pendingStart) {
+                "A start is reserved, but no attempt is retained."
+            }
+
+            // Only a normal success or an ordinary failure release the reservation, and
+            // both do so before the attempt completes. A reserved attempt that has already
+            // completed was therefore cancelled or died with an Error before it could say
+            // whether the insert landed, and handing it out would pass that uncertainty to
+            // a caller as if it were a result.
+            check(attempt.isActive) {
+                "An earlier start was interrupted before reporting whether the run was " +
+                    "stored; this process cannot safely start another."
+            }
+
+            // The same attempt, not a second one: a double tap is one run.
+            return@withLock attempt
         }
 
         // Checked before the countdown state, because "a run is already live" is the more
@@ -478,14 +637,72 @@ internal class RunSessionCoordinator(private val runDao: RunDao) {
                 "${stateMachine.state}."
         }
 
-        // The starter keeps its own lock and its own checks. This is the second holder of
-        // an uncontended lock rather than a duplicated guard: taken in one order, always
-        // coordinator-first.
-        val session = starter.start(preparedRun)
+        // Reused after a failure, created only the first time. This is the whole of retry
+        // identity: the UUID and official start are decided once per cycle.
+        val row = preparedRun ?: preparedRunFactory.create().also { preparedRun = it }
 
-        // Retained inside the same lock the insert happened under, so no other caller can
-        // observe a stored running run that this coordinator does not yet own.
-        activeSession = session
-        session
+        // Reserved before anything is launched, so there is no moment at which an attempt
+        // exists and the cycle is not yet protected.
+        startReserved = true
+
+        // Read now, under the lock that protects the field. The attempt runs later on
+        // another coroutine without the lock, so it is handed the starter rather than
+        // reading the field itself.
+        val cycleStarter = starter
+
+        val attempt = applicationScope.async {
+            runStartAttempt(cycleStarter, row)
+        }
+        pendingStart = attempt
+        attempt
+    }
+
+    /**
+     * Steps 2 and 3 of [requestStart]: the insert, then the result applied under the lock.
+     *
+     * Runs as the body of the application-scope attempt, never in the requesting caller.
+     */
+    private suspend fun runStartAttempt(
+        cycleStarter: RunSessionStarter,
+        row: RunEntity
+    ): ActiveRunSession {
+        val session = try {
+
+            // Outside the coordinator lock on purpose; the reservation guards the cycle.
+            cycleStarter.start(row)
+        } catch (cancellation: CancellationException) {
+
+            // Not a verdict about storage. The insert may or may not have landed, so
+            // nothing is recorded and the reservation is not released as if it had failed.
+            // See the class notes on the gap this leaves if the application scope is ever
+            // cancelled.
+            throw cancellation
+        } catch (failure: Exception) {
+            coordinatorLock.withLock {
+
+                // The prepared row is deliberately kept. The machine never left COUNTDOWN,
+                // because the starter advances it only after a successful insert, so the
+                // runner is still in the countdown and a retry is the same run.
+                pendingStart = null
+                startReserved = false
+            }
+
+            // Rethrown unchanged, so whoever awaits sees exactly what storage raised.
+            throw failure
+        }
+
+        coordinatorLock.withLock {
+
+            // The exact owner the starter built, over the machine this cycle still holds.
+            activeSession = session
+
+            // The intention has become a run. Keeping the row would let a later cycle
+            // mistake it for a start still waiting to happen.
+            preparedRun = null
+            pendingStart = null
+            startReserved = false
+        }
+
+        return session
     }
 }

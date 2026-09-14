@@ -64,6 +64,10 @@ dependencies {
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.room.runtime)
 
+    // Used directly for the application scope's main dispatcher, so declared rather than
+    // left to arrive through Compose and Lifecycle.
+    implementation(libs.kotlinx.coroutines.android)
+
     ksp(libs.androidx.room.compiler)
     testImplementation(libs.junit)
     androidTestImplementation(platform(libs.androidx.compose.bom))

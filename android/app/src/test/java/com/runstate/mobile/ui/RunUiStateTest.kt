@@ -4,9 +4,18 @@ import com.runstate.mobile.data.local.FakeRunDao
 import com.runstate.mobile.data.local.RunEntity
 import com.runstate.mobile.data.local.StoredRunState
 import com.runstate.mobile.run.ActiveRunSession
-import com.runstate.mobile.run.InitializationStatus
+import com.runstate.mobile.run.PreparedRunFactory
 import com.runstate.mobile.run.RunAdmission
 import com.runstate.mobile.run.RunSessionCoordinator
+import java.time.Clock
+import java.time.Instant
+import java.time.ZoneId
+import java.time.ZoneOffset
+import java.util.UUID
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Test
@@ -15,8 +24,8 @@ import org.junit.Test
  * Checks the translation from what the coordinator knows to what the screen shows.
  *
  * The mapping is pure, so all seven screens can be decided here on the JVM rather than on
- * an emulator. What is being checked is the translation itself — that the two coordinator
- * answers together pick exactly one screen, and that nothing about a run leaks through it.
+ * an emulator. What is being checked is the translation itself — that one coordinator
+ * snapshot picks exactly one screen, and that nothing about a run leaks through it.
  *
  * The inputs are built through a real [RunSessionCoordinator] over [FakeRunDao] rather
  * than hand-assembled. A hand-built [RunAdmission.RunInProgress] would need an
@@ -46,9 +55,20 @@ class RunUiStateTest {
         lastCheckpointEpochMillis = officialStart
     )
 
-    /** Maps whatever the coordinator currently reports, the way the screen does. */
+    /** A coordinator whose official start is fixed to [preparedRun]'s identity and time. */
+    private fun coordinatorOver(dao: FakeRunDao = FakeRunDao()) = RunSessionCoordinator(
+        runDao = dao,
+        preparedRunFactory = PreparedRunFactory(
+            clock = Clock.fixed(Instant.ofEpochMilli(OFFICIAL_START), ZoneOffset.UTC),
+            zoneIdSupplier = { ZoneId.of("America/Chicago") },
+            uuidSupplier = { UUID.fromString(RUN_ID) }
+        ),
+        applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
+    )
+
+    /** Maps whatever the coordinator currently reports, the way first load does. */
     private fun uiStateOf(coordinator: RunSessionCoordinator): RunUiState = runBlocking {
-        runUiStateFor(coordinator.initialize(), coordinator.admission())
+        runUiStateFor(coordinator.initialize())
     }
 
     /**
@@ -58,15 +78,12 @@ class RunUiStateTest {
     fun `not attempted maps to initializing`() {
 
         // Arrange: a coordinator nobody has initialized.
-        val coordinator = RunSessionCoordinator(FakeRunDao())
+        val coordinator = coordinatorOver()
 
-        // Act and Assert: both answers are read before any initialize call.
+        // Act and Assert: the snapshot is read without any initialize call.
         assertEquals(
             RunUiState.Initializing,
-            runUiStateFor(
-                InitializationStatus.NotAttempted,
-                runBlocking { coordinator.admission() }
-            )
+            runUiStateFor(runBlocking { coordinator.journeySnapshot() })
         )
     }
 
@@ -82,7 +99,7 @@ class RunUiStateTest {
         // Arrange: discovery cannot read storage.
         val dao = FakeRunDao()
         dao.failDiscoveryWith = IllegalStateException("disk unavailable")
-        val coordinator = RunSessionCoordinator(dao)
+        val coordinator = coordinatorOver(dao)
 
         // Act and Assert
         assertEquals(RunUiState.InitializationFailed, uiStateOf(coordinator))
@@ -95,7 +112,7 @@ class RunUiStateTest {
     fun `completed with nothing to recover maps to ready to start`() {
 
         // Arrange
-        val coordinator = RunSessionCoordinator(FakeRunDao())
+        val coordinator = coordinatorOver()
 
         // Act and Assert
         assertEquals(RunUiState.ReadyToStart, uiStateOf(coordinator))
@@ -108,14 +125,47 @@ class RunUiStateTest {
     fun `completed with a countdown underway maps to countdown`() {
 
         // Arrange
-        val coordinator = RunSessionCoordinator(FakeRunDao())
+        val coordinator = coordinatorOver()
         runBlocking {
             coordinator.initialize()
             coordinator.beginCountdown()
         }
 
         // Act and Assert
-        assertEquals(RunUiState.Countdown, uiStateOf(coordinator))
+        assertEquals(
+            RunUiState.Countdown,
+            runUiStateFor(runBlocking { coordinator.journeySnapshot() })
+        )
+    }
+
+    /**
+     * Proves an official start still underway keeps the countdown screen.
+     *
+     * The run is not owned yet, so nothing may claim it is running — and nothing may offer
+     * Start either. The conservative screen is the one the start began from.
+     */
+    @Test
+    fun `a start still underway maps to countdown`() {
+
+        // Arrange: a countdown whose insert parks.
+        val dao = FakeRunDao()
+        val releaseInsert = CompletableDeferred<Unit>()
+        dao.duringInsert = { releaseInsert.await() }
+        val coordinator = coordinatorOver(dao)
+
+        runBlocking {
+            coordinator.initialize()
+            coordinator.beginCountdown()
+            val attempt = coordinator.requestStart()
+
+            // Act and Assert: mid-insert.
+            assertEquals(RunUiState.Countdown, runUiStateFor(coordinator.journeySnapshot()))
+
+            // Act and Assert: once published, the same run is shown as running.
+            releaseInsert.complete(Unit)
+            attempt.await()
+            assertEquals(RunUiState.ActiveRunning, runUiStateFor(coordinator.journeySnapshot()))
+        }
     }
 
     /**
@@ -131,7 +181,7 @@ class RunUiStateTest {
         // Arrange: one unfinished run on disk, adopted at initialization.
         val dao = FakeRunDao()
         runBlocking { dao.insert(preparedRun()) }
-        val coordinator = RunSessionCoordinator(dao)
+        val coordinator = coordinatorOver(dao)
 
         // Act and Assert
         assertEquals(RunUiState.ActiveRunning, uiStateOf(coordinator))
@@ -144,12 +194,11 @@ class RunUiStateTest {
     fun `completed with a paused run maps to active paused`() {
 
         // Arrange: a run started here and then genuinely paused.
-        val dao = FakeRunDao()
-        val coordinator = RunSessionCoordinator(dao)
+        val coordinator = coordinatorOver()
         runBlocking {
             coordinator.initialize()
             coordinator.beginCountdown()
-            coordinator.start(preparedRun()).pause(FIRST_PAUSE)
+            coordinator.requestStart().await().pause(FIRST_PAUSE)
         }
 
         // Act and Assert
@@ -168,7 +217,7 @@ class RunUiStateTest {
             dao.insert(preparedRun())
             dao.insert(preparedRun(SECOND_RUN_ID, SECOND_START))
         }
-        val coordinator = RunSessionCoordinator(dao)
+        val coordinator = coordinatorOver(dao)
 
         // Act and Assert
         assertEquals(RunUiState.StorageInconsistent, uiStateOf(coordinator))

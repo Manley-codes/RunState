@@ -71,6 +71,14 @@ class MainActivity : ComponentActivity() {
  * [RunUiState.Initializing] and asks again. That costs nothing, because [
  * RunSessionCoordinator.initialize] returns immediately after a completed attempt without
  * touching Room.
+ *
+ * ## Which read each path uses
+ *
+ * First load and Try Again call [RunSessionCoordinator.initialize], because both genuinely
+ * mean "establish what storage holds" — and after a failure, retrying is the point. After
+ * Start or Cancel, recovery is already settled, so the screen uses
+ * [RunSessionCoordinator.journeySnapshot], which only reads. Either way the screen receives
+ * one snapshot taken under one lock, never a status and an admission read separately.
  */
 @Composable
 private fun RunJourneyRoot(
@@ -93,7 +101,7 @@ private fun RunJourneyRoot(
     // re-runs only if it were ever given a different one. Cancellation when the Activity
     // goes away propagates normally; nothing here is made uncancellable.
     LaunchedEffect(coordinator) {
-        uiState = readJourneyState(coordinator)
+        uiState = runUiStateFor(coordinator.initialize())
     }
 
     // Every action follows the same shape: refuse to overlap, do the coordinator call,
@@ -119,15 +127,15 @@ private fun RunJourneyRoot(
 
                 // Entering the countdown is the whole of Start in this slice. No run is
                 // made official: no UUID, no timestamps, no row, and no call to
-                // `coordinator.start`.
+                // `coordinator.requestStart`.
                 coordinator.beginCountdown()
-                uiState = readJourneyState(coordinator)
+                uiState = runUiStateFor(coordinator.journeySnapshot())
             }
         },
         onCancelCountdown = {
             runGuarded {
                 coordinator.cancelCountdown()
-                uiState = readJourneyState(coordinator)
+                uiState = runUiStateFor(coordinator.journeySnapshot())
             }
         },
         onRetry = {
@@ -137,28 +145,10 @@ private fun RunJourneyRoot(
             // attempt looking unpressed.
             uiState = RunUiState.Initializing
             runGuarded {
-                uiState = readJourneyState(coordinator)
+                uiState = runUiStateFor(coordinator.initialize())
             }
         },
         actionsEnabled = !actionInFlight,
         modifier = modifier
     )
-}
-
-/**
- * Asks the coordinator both questions and maps the pair into one screen.
- *
- * [RunSessionCoordinator.initialize] is called on every refresh rather than only the first
- * one, and that is deliberate on both paths it serves. After a completed attempt it
- * returns `Completed` immediately without querying Room, so using it as the way to read
- * the current status is free. After a failed one it performs a genuine retry, which is
- * exactly what the retry button means. One helper therefore covers first load, retry, and
- * the refresh after a countdown begins or is cancelled, with no branch that could answer
- * differently.
- */
-private suspend fun readJourneyState(coordinator: RunSessionCoordinator): RunUiState {
-    val initializationStatus = coordinator.initialize()
-    val admission = coordinator.admission()
-
-    return runUiStateFor(initializationStatus, admission)
 }
