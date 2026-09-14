@@ -122,4 +122,33 @@ class PreparedRunFactoryTest {
         assertEquals("America/Chicago", first.startTimezoneId)
         assertEquals(OFFICIAL_START, first.officialStartEpochMillis)
     }
+
+    /**
+     * Proves lifecycle time is read live from the very clock the start row uses.
+     *
+     * The clock moves between reads, so a factory that cached its first reading, or read a
+     * different clock, would return the wrong value.
+     */
+    @Test
+    fun `now reads the injected clock at that moment`() {
+
+        // Arrange
+        var now = OFFICIAL_START
+        val factory = PreparedRunFactory(
+            clock = object : Clock() {
+                override fun getZone(): ZoneId = ZoneOffset.UTC
+                override fun withZone(zone: ZoneId): Clock = this
+                override fun instant(): Instant = Instant.ofEpochMilli(now)
+            },
+            zoneIdSupplier = { ZoneId.of("America/Chicago") },
+            uuidSupplier = { UUID.fromString(RUN_ID) }
+        )
+
+        // Act and Assert: the start row and the first reading agree.
+        assertEquals(factory.create().officialStartEpochMillis, factory.nowEpochMillis())
+
+        // Act and Assert: a later reading follows the clock.
+        now = OFFICIAL_START + 60_000L
+        assertEquals(OFFICIAL_START + 60_000L, factory.nowEpochMillis())
+    }
 }

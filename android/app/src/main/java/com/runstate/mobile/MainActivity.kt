@@ -15,11 +15,17 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.lifecycle.Lifecycle
+import com.runstate.mobile.run.RunActionKind
 import com.runstate.mobile.run.RunSessionCoordinator
 import com.runstate.mobile.ui.RunStateScreen
+import com.runstate.mobile.ui.RunUiModel
 import com.runstate.mobile.ui.RunUiState
-import com.runstate.mobile.ui.runUiStateFor
+import com.runstate.mobile.ui.rememberLifecycleCountdown
+import com.runstate.mobile.ui.runUiModelFor
 import com.runstate.mobile.ui.theme.RunStateTheme
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.launch
 
 /**
@@ -28,7 +34,7 @@ import kotlinx.coroutines.launch
  * The coordinator is taken from [RunStateApplication] rather than built here. An Activity
  * is recreated on every rotation and can exist more than once, so a coordinator owned by
  * one would be a new gate each time — and a second gate guards nothing. Taking the
- * process-scoped one is what makes a countdown survive rotation: the Activity's memory is
+ * process-scoped one is what makes a run survive rotation: the Activity's memory is
  * thrown away, the coordinator's is not.
  */
 class MainActivity : ComponentActivity() {
@@ -46,6 +52,10 @@ class MainActivity : ComponentActivity() {
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
                     RunJourneyRoot(
                         coordinator = coordinator,
+
+                        // The Activity's own lifecycle gates the countdown, so nothing counts
+                        // down — and no run is started — while the app is in the background.
+                        lifecycle = lifecycle,
                         modifier = Modifier.padding(innerPadding)
                     )
                 }
@@ -59,54 +69,68 @@ class MainActivity : ComponentActivity() {
  *
  * This is the stateful half of the split. It owns the coroutine work and the presentation
  * state; [RunStateScreen] owns neither and decides nothing. What it deliberately does not
- * own is the truth about the run — every answer below comes from the coordinator, and the
- * only thing kept here is the most recent one.
+ * own is the truth about the run — every answer below comes from the coordinator — nor any
+ * durable write: starts and lifecycle actions run in the application scope, and this only
+ * waits for them.
  *
  * ## Why nothing is saved across recreation
  *
- * There is no `rememberSaveable` here, and there must not be. A saved [RunUiState] would
- * be a copy of a decision the coordinator made earlier, restored without asking whether it
- * is still true — so a run completed by something else, or an inconsistency that appeared
- * since, would be painted over with a stale screen. On recreation this starts at
- * [RunUiState.Initializing] and asks again. That costs nothing, because [
- * RunSessionCoordinator.initialize] returns immediately after a completed attempt without
- * touching Room.
+ * There is no `rememberSaveable` here, and there must not be. A saved [RunUiModel] would be
+ * a copy of a decision the coordinator made earlier, restored without asking whether it is
+ * still true. On recreation this starts at [RunUiState.Initializing] and asks again. That
+ * costs nothing, because [RunSessionCoordinator.initialize] returns immediately after a
+ * completed attempt without touching Room.
  *
- * ## Which read each path uses
+ * ## Waiting without owning
  *
- * First load and Try Again call [RunSessionCoordinator.initialize], because both genuinely
- * mean "establish what storage holds" — and after a failure, retrying is the point. After
- * Start or Cancel, recovery is already settled, so the screen uses
- * [RunSessionCoordinator.journeySnapshot], which only reads. Either way the screen receives
- * one snapshot taken under one lock, never a status and an admission read separately.
+ * Every durable request follows one shape: ask, refresh at once so the busy state is
+ * visible, await the returned work, then refresh again. The await belongs to this
+ * composition and is cancelled with it; the work does not and is not. If this composition
+ * arrives while work is already underway — a rotation mid-save — it waits for that work
+ * through [RunSessionCoordinator.awaitReservedWork] rather than asking for it again.
  */
 @Composable
-private fun RunJourneyRoot(
+internal fun RunJourneyRoot(
     coordinator: RunSessionCoordinator,
+    lifecycle: Lifecycle,
     modifier: Modifier = Modifier
 ) {
 
     // The last answer the coordinator gave, and nothing more. `remember` rather than
     // `rememberSaveable` for the reason above.
-    var uiState by remember { mutableStateOf(RunUiState.Initializing) }
+    var model by remember { mutableStateOf(RunUiModel(RunUiState.Initializing)) }
 
-    // Presentation-only, and not a run state. It exists so a double-tapped Start or a
-    // Cancel raced with the back gesture cannot become two requests. The coordinator would
-    // refuse the second one anyway; this stops the screen from asking.
+    // Presentation-only, and not a run state. It exists so a double tap, or a Cancel raced
+    // with the countdown reaching zero, cannot become two requests from this screen. The
+    // coordinator remains the final backstop against duplicates.
     var actionInFlight by remember { mutableStateOf(false) }
 
     val scope = rememberCoroutineScope()
+
+    suspend fun refresh() {
+        model = runUiModelFor(coordinator.journeySnapshot())
+    }
 
     // Keyed on the coordinator, so this runs once per composition of this screen and
     // re-runs only if it were ever given a different one. Cancellation when the Activity
     // goes away propagates normally; nothing here is made uncancellable.
     LaunchedEffect(coordinator) {
-        uiState = runUiStateFor(coordinator.initialize())
+        model = runUiModelFor(coordinator.initialize())
     }
 
-    // Every action follows the same shape: refuse to overlap, do the coordinator call,
-    // then re-read. The `finally` releases the guard even if the call throws or the
-    // composition is cancelled mid-flight.
+    // Reattaches to durable work this composition did not ask for, such as a start that was
+    // still saving when the phone rotated. Harmless when this composition did ask: both
+    // waiters simply refresh once the work reports.
+    val waitingOnReservedWork = model.state == RunUiState.StartingRun || model.actionInProgress
+    LaunchedEffect(waitingOnReservedWork) {
+        if (waitingOnReservedWork) {
+            coordinator.awaitReservedWork()
+            refresh()
+        }
+    }
+
+    // Refuse to overlap, run the request, and always release the guard — even if the call
+    // throws or this composition is cancelled mid-flight.
     val runGuarded: (suspend () -> Unit) -> Unit = { action ->
         if (!actionInFlight) {
             actionInFlight = true
@@ -120,32 +144,76 @@ private fun RunJourneyRoot(
         }
     }
 
+    // The one shape every durable request takes. Ordinary failures are not thrown on,
+    // because the coordinator already records them and the refreshed snapshot shows them;
+    // cancellation is rethrown, because it is this composition going away, not a result.
+    suspend fun awaitDurable(request: suspend () -> Deferred<*>) {
+        try {
+            val work = request()
+            refresh()
+            work.await()
+        } catch (cancellation: CancellationException) {
+            throw cancellation
+        } catch (reportedBySnapshot: Exception) {
+            // Deliberately not rethrown: the refresh below shows what the coordinator recorded.
+        }
+        refresh()
+    }
+
+    val countdownDigit = rememberLifecycleCountdown(
+        active = model.state == RunUiState.Countdown,
+        lifecycle = lifecycle,
+        onFinished = {
+
+            // The countdown only reaches here while the Activity is STARTED. If a Cancel is
+            // already in flight, the guard drops this start, and the cancel wins.
+            runGuarded { awaitDurable { coordinator.requestStart() } }
+        }
+    )
+
+    val requestAction: (RunActionKind) -> Unit = { kind ->
+        runGuarded { awaitDurable { coordinator.requestAction(kind) } }
+    }
+
     RunStateScreen(
-        uiState = uiState,
+        model = model,
+        countdownDigit = countdownDigit,
         onStart = {
             runGuarded {
-
-                // Entering the countdown is the whole of Start in this slice. No run is
-                // made official: no UUID, no timestamps, no row, and no call to
-                // `coordinator.requestStart`.
                 coordinator.beginCountdown()
-                uiState = runUiStateFor(coordinator.journeySnapshot())
+                refresh()
             }
         },
         onCancelCountdown = {
             runGuarded {
                 coordinator.cancelCountdown()
-                uiState = runUiStateFor(coordinator.journeySnapshot())
+                refresh()
             }
         },
-        onRetry = {
+        onRetryInitialization = {
 
             // Moved back to Initializing before the work starts, so the retry button is
             // gone the instant it is pressed rather than sitting there through the
             // attempt looking unpressed.
-            uiState = RunUiState.Initializing
+            model = RunUiModel(RunUiState.Initializing)
             runGuarded {
-                uiState = runUiStateFor(coordinator.initialize())
+                model = runUiModelFor(coordinator.initialize())
+            }
+        },
+        onRetryStart = {
+
+            // The same prepared run: the coordinator reuses its UUID and official start.
+            runGuarded { awaitDurable { coordinator.requestStart() } }
+        },
+        onPause = { requestAction(RunActionKind.PAUSE) },
+        onResume = { requestAction(RunActionKind.RESUME) },
+        onStop = { requestAction(RunActionKind.COMPLETE) },
+        onStartAnother = {
+            runGuarded {
+
+                // Retires the completed cycle and opens a fresh countdown.
+                coordinator.beginCountdown()
+                refresh()
             }
         },
         actionsEnabled = !actionInFlight,

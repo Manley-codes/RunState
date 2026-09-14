@@ -72,6 +72,19 @@ internal sealed interface RunAdmission {
     ) : RunAdmission
 
     /**
+     * This cycle's run has durably finished, and nothing new has begun yet.
+     *
+     * Distinct from [ReadyForCountdown] because the runner is owed a truthful "saved"
+     * before being offered another start. The next countdown still retires this cycle,
+     * exactly as it did when a completed owner was reported as ready.
+     *
+     * @property session the completed owner, still pointing at its finished machine.
+     */
+    data class RunCompleted(
+        val session: ActiveRunSession
+    ) : RunAdmission
+
+    /**
      * Storage holds more than one unfinished run, so nothing may start.
      *
      * @property activeRuns every candidate, in the order discovery returned them.
@@ -92,11 +105,49 @@ internal sealed interface RunAdmission {
  * the coordinator lock in between, so a recovery or an action could land in the gap and
  * produce a pair no single moment ever held. Producing them together inside one lock
  * acquisition makes that pairing impossible rather than unlikely.
+ *
+ * The same reasoning covers the three progress fields. Whether a start or a lifecycle action
+ * is still writing, or last failed, is only meaningful beside the admission it belongs to,
+ * so they are read in the same lock acquisition rather than asked for separately.
+ *
+ * @property startAttemptPhase whether this cycle's official start is writing or last failed.
+ * @property reservedAction the lifecycle action whose durable write is underway, if any.
+ * @property lastActionFailed the most recent lifecycle action that storage refused, kept
+ *   until a later action succeeds.
  */
 internal data class RunJourneySnapshot(
     val initializationStatus: InitializationStatus,
-    val admission: RunAdmission
+    val admission: RunAdmission,
+    val startAttemptPhase: StartAttemptPhase = StartAttemptPhase.None,
+    val reservedAction: RunActionKind? = null,
+    val lastActionFailed: RunActionKind? = null
 )
+
+/**
+ * Where this cycle's official start stands, separately from what the runner may do.
+ *
+ * Kept apart from [RunAdmission] for the same reason [InitializationStatus] is: while a start
+ * is writing, or after it failed, the runner is still in the countdown as far as admission is
+ * concerned. What differs is what the screen may honestly say about it.
+ */
+internal enum class StartAttemptPhase {
+
+    /** No start is underway and the last one did not fail. */
+    None,
+
+    /** The start's insert is running in the application scope. */
+    InProgress,
+
+    /** The last start attempt failed with an ordinary exception; the prepared row is kept. */
+    Failed
+}
+
+/** The three durable lifecycle actions a live run can be asked to take. */
+internal enum class RunActionKind {
+    PAUSE,
+    RESUME,
+    COMPLETE
+}
 
 /**
  * The one gate a run has to pass through to begin, for the life of the process.
@@ -116,9 +167,12 @@ internal data class RunJourneySnapshot(
  * notification, screen-off behavior and keeping the process alive belong to the
  * foreground service that does not exist yet, and that service will *consume* this
  * coordinator rather than replace it: it will ask admission, hold the owner it is given,
- * and run the lifecycle through that owner exactly as any other caller would. Pause,
- * resume and complete are deliberately not routed through here — they stay on
- * [ActiveRunSession], which already serializes them and already writes durably first.
+ * and run the lifecycle through this coordinator exactly as any other caller would.
+ *
+ * Pause, resume and complete are requested here — see [requestAction] — but still
+ * *performed* by [ActiveRunSession], which serializes them and writes durably first. What
+ * the coordinator adds is ownership of the write by the process rather than the screen, one
+ * reservation at a time, and honest reporting of a write still in flight or refused.
  *
  * ## One lock, held across the decision and the act
  *
@@ -147,11 +201,10 @@ internal data class RunJourneySnapshot(
  *
  * ## Who calls it, and what that does not yet cover
  *
- * `MainActivity` initializes this coordinator and drives the visible journey through it,
- * so the Initializing → Ready → Countdown → Cancel path is genuinely coordinator-backed
- * rather than a screen acting on its own. What is not yet wired is everything past the
- * countdown: nothing in the UI calls [requestStart] yet, so no run becomes official through
- * the visible journey, and there is still no foreground service holding a live run.
+ * `MainActivity` initializes this coordinator and drives the whole visible fixture journey
+ * through it: countdown, official start, pause, resume, hold-to-stop completion and the next
+ * countdown. What is not yet wired is a foreground service holding a live run, so a run
+ * survives only as long as this process does, plus whatever recovery rebuilds from storage.
  *
  * **It is not the only way to build these pieces.** [RunSessionStarter] and
  * [ActiveRunRecovery] have internal constructors, which stops code outside this module
@@ -160,19 +213,20 @@ internal data class RunJourneySnapshot(
  * this coordinator exclusively.
  *
  * **One cancellation gap is still left honestly open.** [applicationScope] is never
- * cancelled in production, so the start attempt always gets to publish its result. If that
- * scope ever were cancelled mid-attempt, the attempt could not reacquire the lock to
+ * cancelled in production, so a start or lifecycle action always gets to publish its result.
+ * If that scope ever were cancelled mid-write, the work could not reacquire the lock to
  * release its reservation, and `NonCancellable` is deliberately not used to force it. The
- * coordinator then refuses every further start and cancel in this process rather than
- * guess whether the insert landed; the next process's [initialize] finds the truth in
- * storage. A compensating delete or a speculative recovery pass would each hide the case
+ * coordinator then refuses every further start and cancel — or every further lifecycle
+ * action — in this process rather than guess whether the write landed; the next process's
+ * [initialize] finds the truth in storage. A compensating delete or a speculative recovery pass would each hide the case
  * rather than resolve it, and a compensating write could erase a run the phone has already
  * durably recorded.
  *
  * @property runDao the one route to storage for recovery and every run admitted.
  * @property preparedRunFactory the only place a run's UUID, official start and zone are
- *   decided. Injected so no coordinator method reaches for a random UUID or a system clock.
- * @property applicationScope the process-lifetime scope an official start runs in. It must
+ *   decided, and the clock lifecycle timestamps are read from. Injected so no coordinator
+ *   method reaches for a random UUID or a system clock.
+ * @property applicationScope the process-lifetime scope every durable write runs in. It must
  *   outlive every screen, and it should use a `SupervisorJob` so one failed start does not
  *   cancel the scope for every later one.
  */
@@ -187,8 +241,9 @@ internal class RunSessionCoordinator(
      *
      * Held across the whole of [initialize], [journeySnapshot], [beginCountdown] and
      * [cancelCountdown], because in each of them the state read at the start has to still
-     * be true at the end. [requestStart] holds it for its decision and again for its
-     * result, but not across the insert between them; [startReserved] covers that gap.
+     * be true at the end. [requestStart] and [requestAction] hold it for their decision and
+     * again for their result, but not across the write between them; [startReserved] and
+     * [reservedAction] cover that gap.
      */
     private val coordinatorLock = Mutex()
 
@@ -235,6 +290,30 @@ internal class RunSessionCoordinator(
      * be RUNNING with the owner not yet published.
      */
     private var startReserved = false
+
+    /**
+     * True when this cycle's last start attempt failed with an ordinary exception.
+     *
+     * Held here rather than by whoever awaited the attempt, so a screen that was rotated or
+     * destroyed while the insert ran still learns it failed. Cleared when a genuine retry
+     * begins, when the start succeeds, and when the cycle is discarded.
+     */
+    private var startFailed = false
+
+    /** The lifecycle action write currently underway, or null when none is. */
+    private var pendingAction: Deferred<Unit>? = null
+
+    /**
+     * Which lifecycle action is writing, from admission until its result is applied.
+     *
+     * The action counterpart of [startReserved]: while set, the session may already have
+     * advanced in memory with its write not yet reported here, so reporting uses the state
+     * that was visible before the action began.
+     */
+    private var reservedAction: RunActionKind? = null
+
+    /** The last lifecycle action storage refused, kept until a later action succeeds. */
+    private var lastActionFailed: RunActionKind? = null
 
     /**
      * Runs recovery once, records what it found, and reports the result.
@@ -331,12 +410,13 @@ internal class RunSessionCoordinator(
      * initializing as a side effect of being asked.
      *
      * One conservative case is worth naming. [ActiveRunSession.state] is read here but is
-     * protected by the session's own mutex rather than this one, so a completion running
-     * concurrently can be observed mid-flight and answered [RunAdmission.RunInProgress]
-     * when it is about to become [RunAdmission.ReadyForCountdown]. That direction is the
-     * safe one and it is momentary. The reverse cannot happen: the session writes the
-     * completion to Room before advancing its machine, so COMPLETED is never visible here
-     * until the run is durably finished.
+     * protected by the session's own mutex rather than this one. For actions requested
+     * through [requestAction] that no longer matters: while one is reserved, the admission
+     * stays [RunAdmission.RunInProgress] and [RunJourneySnapshot.reservedAction] tells the
+     * reader which pre-action state to show, even if the session has already advanced. Only
+     * a caller driving the session directly, outside this coordinator, can still be observed
+     * mid-flight — and even then COMPLETED is never visible before Room has it, because the
+     * session writes first.
      */
     suspend fun journeySnapshot(): RunJourneySnapshot = coordinatorLock.withLock {
         snapshotUnderLock()
@@ -354,7 +434,19 @@ internal class RunSessionCoordinator(
             is InitializationStatus.Completed -> admissionAfterInitialization()
         }
 
-        return RunJourneySnapshot(initializationStatus, admission)
+        val startAttemptPhase = when {
+            startReserved -> StartAttemptPhase.InProgress
+            startFailed -> StartAttemptPhase.Failed
+            else -> StartAttemptPhase.None
+        }
+
+        return RunJourneySnapshot(
+            initializationStatus = initializationStatus,
+            admission = admission,
+            startAttemptPhase = startAttemptPhase,
+            reservedAction = reservedAction,
+            lastActionFailed = lastActionFailed
+        )
     }
 
     /**
@@ -390,6 +482,15 @@ internal class RunSessionCoordinator(
 
         val session = activeSession
         if (session != null) {
+
+            if (reservedAction != null) {
+
+                // The write is still running outside the lock. The session may already say
+                // PAUSED or even COMPLETED, but nothing is reported as having happened until
+                // its result is applied here, so the run is still simply in progress.
+                return RunAdmission.RunInProgress(session)
+            }
+
             return when (session.state) {
 
                 RunSessionState.RUNNING,
@@ -398,7 +499,7 @@ internal class RunSessionCoordinator(
                 // The cycle is over but not yet retired. Retirement is deliberately not
                 // done here — reporting is not the place to mutate — so the completed
                 // machine is swapped out when the next countdown actually begins.
-                RunSessionState.COMPLETED -> RunAdmission.ReadyForCountdown
+                RunSessionState.COMPLETED -> RunAdmission.RunCompleted(session)
 
                 // An owner cannot exist for either of these: its own constructor refuses
                 // them, so seeing one means the machine was mutated outside this lock.
@@ -428,8 +529,8 @@ internal class RunSessionCoordinator(
      * Opens the countdown for the next run, retiring a finished cycle if one is held.
      *
      * @throws IllegalStateException if recovery has not completed, if storage is blocked,
-     *   if an official start is underway, if a run is still live, or if a countdown is
-     *   already underway. Nothing changes in any of those cases.
+     *   if an official start or lifecycle action is underway, if a run is still live, or if
+     *   a countdown is already underway. Nothing changes in any of those cases.
      */
     suspend fun beginCountdown() = coordinatorLock.withLock {
         check(initializationStatus == InitializationStatus.Completed) {
@@ -445,6 +546,12 @@ internal class RunSessionCoordinator(
         // the insert runs and would refuse for a misleading reason.
         check(!startReserved) {
             "A countdown cannot begin while an official start is underway."
+        }
+
+        // A completion still writing may already show COMPLETED in memory. Retiring the
+        // cycle then would discard the owner before its result had been applied.
+        check(reservedAction == null) {
+            "A countdown cannot begin while a $reservedAction is still being saved."
         }
 
         val session = activeSession
@@ -548,6 +655,8 @@ internal class RunSessionCoordinator(
      */
     private fun beginFreshCycle() {
         preparedRun = null
+        startFailed = false
+        lastActionFailed = null
         activeSession = null
         stateMachine = RunSessionStateMachine()
 
@@ -642,8 +751,10 @@ internal class RunSessionCoordinator(
         val row = preparedRun ?: preparedRunFactory.create().also { preparedRun = it }
 
         // Reserved before anything is launched, so there is no moment at which an attempt
-        // exists and the cycle is not yet protected.
+        // exists and the cycle is not yet protected. A previous failure is cleared here,
+        // because this is the genuine retry it was waiting for.
         startReserved = true
+        startFailed = false
 
         // Read now, under the lock that protects the field. The attempt runs later on
         // another coroutine without the lock, so it is handed the starter rather than
@@ -685,6 +796,9 @@ internal class RunSessionCoordinator(
                 // runner is still in the countdown and a retry is the same run.
                 pendingStart = null
                 startReserved = false
+
+                // Recorded here, not by the caller, so it outlives whoever was waiting.
+                startFailed = true
             }
 
             // Rethrown unchanged, so whoever awaits sees exactly what storage raised.
@@ -701,8 +815,152 @@ internal class RunSessionCoordinator(
             preparedRun = null
             pendingStart = null
             startReserved = false
+            startFailed = false
         }
 
         return session
+    }
+
+    /**
+     * Asks the live run to pause, resume or complete, as work the process owns.
+     *
+     * The same three-step shape as [requestStart], for the same reason: a screen may ask and
+     * wait, but a rotation or a destroyed Activity must cancel only its waiting, never a
+     * write that may already have reached Room.
+     *
+     * 1. **Decide, under the lock.** Validate, capture the timestamp from the shared clock,
+     *    capture the session, reserve the action, launch and retain the work.
+     * 2. **Write, outside the lock.** [ActiveRunSession] writes Room first and advances its
+     *    machine only after that succeeds.
+     * 3. **Apply the result, under the lock again.** Release the reservation; on success
+     *    clear any earlier failure, on ordinary failure record this one.
+     *
+     * ## One reservation at a time
+     *
+     * - While an action is reserved, a request for the *same* action returns that exact
+     *   [Deferred]: a double tap on Pause is one pause.
+     * - A *different* action is refused while one is reserved. Resume cannot be admitted
+     *   against a pause whose outcome is still unknown.
+     * - The reservation is checked before legality on purpose. Mid-write, the session may
+     *   already say PAUSED, and a duplicate pause must still receive the attempt underway
+     *   rather than be refused as a pause of a paused run.
+     *
+     * @return the write, owned by [applicationScope]. It completes normally once storage and
+     *   memory agree, or fails with the session's exception unchanged.
+     * @throws IllegalStateException if recovery has not completed, if storage is blocked, if
+     *   no live run is held, if the action is not legal from the run's current state, if a
+     *   different action is reserved, or if an earlier action was interrupted without
+     *   reporting its result. Nothing is launched in any of those cases.
+     */
+    suspend fun requestAction(kind: RunActionKind): Deferred<Unit> = coordinatorLock.withLock {
+        check(initializationStatus == InitializationStatus.Completed) {
+            "A run action cannot be taken before recovery has completed."
+        }
+
+        check(inconsistentActiveRuns.isEmpty()) {
+            "A run action cannot be taken while storage holds " +
+                "${inconsistentActiveRuns.size} unfinished runs."
+        }
+
+        val session = checkNotNull(activeSession) {
+            "A run action needs a live run, but this coordinator holds none."
+        }
+
+        val reserved = reservedAction
+        if (reserved != null) {
+            val attempt = checkNotNull(pendingAction) {
+                "A $reserved is reserved, but no attempt is retained."
+            }
+
+            // As with a start: only a released reservation means the write reported its
+            // result. A reserved attempt that has already completed was cancelled before it
+            // could say whether the write landed, and nothing may be stacked on that.
+            check(attempt.isActive) {
+                "An earlier $reserved was interrupted before reporting whether it was " +
+                    "saved; this process cannot safely take another run action."
+            }
+
+            check(reserved == kind) {
+                "A $kind cannot begin while a $reserved is still being saved."
+            }
+
+            return@withLock attempt
+        }
+
+        val requiredState = when (kind) {
+            RunActionKind.PAUSE -> RunSessionState.RUNNING
+            RunActionKind.RESUME,
+            RunActionKind.COMPLETE -> RunSessionState.PAUSED
+        }
+        check(session.state == requiredState) {
+            "A $kind needs a $requiredState run, but this run is ${session.state}."
+        }
+
+        // Read once, here, from the same clock the official start came from. A retry after
+        // a failure is a new request and reads it again: the runner pressed at a new moment.
+        val occurredAt = preparedRunFactory.nowEpochMillis()
+
+        // Reserved before launch, for the same reason as a start.
+        reservedAction = kind
+
+        val attempt = applicationScope.async {
+            runLifecycleAction(session, kind, occurredAt)
+        }
+        pendingAction = attempt
+        attempt
+    }
+
+    /**
+     * Steps 2 and 3 of [requestAction]: the write, then the result applied under the lock.
+     *
+     * Runs as the body of the application-scope work, never in the requesting caller.
+     */
+    private suspend fun runLifecycleAction(
+        session: ActiveRunSession,
+        kind: RunActionKind,
+        occurredAt: Long
+    ) {
+        try {
+            when (kind) {
+                RunActionKind.PAUSE -> session.pause(occurredAt)
+                RunActionKind.RESUME -> session.resume(occurredAt)
+                RunActionKind.COMPLETE -> session.complete(occurredAt)
+            }
+        } catch (cancellation: CancellationException) {
+
+            // Not a verdict about storage, so not recorded as a failure, and the
+            // reservation is deliberately left in place. See the class notes.
+            throw cancellation
+        } catch (failure: Exception) {
+            coordinatorLock.withLock {
+
+                // The session left its machine where it was, because it advances only after
+                // a successful write, so the reported state is still the surviving one.
+                pendingAction = null
+                reservedAction = null
+                lastActionFailed = kind
+            }
+
+            throw failure
+        }
+
+        coordinatorLock.withLock {
+            pendingAction = null
+            reservedAction = null
+            lastActionFailed = null
+        }
+    }
+
+    /**
+     * Waits for whichever durable write is currently reserved, without starting anything.
+     *
+     * For a screen that arrives while a start or action is already underway — after a
+     * rotation, say — and needs to know when to ask for a fresh snapshot. It never retries,
+     * never throws the work's own failure, and returns at once when nothing is reserved; the
+     * outcome is read from [journeySnapshot] afterwards, like every other outcome.
+     */
+    suspend fun awaitReservedWork() {
+        val work = coordinatorLock.withLock { pendingStart ?: pendingAction }
+        work?.join()
     }
 }

@@ -62,4 +62,13 @@ internal class PreparedRunFactory(
             finishEpochMillis = null
         )
     }
+
+    /**
+     * The current instant from the same clock the official start is read from.
+     *
+     * Pause, resume and completion timestamps come through here rather than from a second
+     * clock inside [RunSessionCoordinator], so every moment of one run is measured by one
+     * source and a test that fixes this clock fixes all of them.
+     */
+    internal fun nowEpochMillis(): Long = clock.millis()
 }

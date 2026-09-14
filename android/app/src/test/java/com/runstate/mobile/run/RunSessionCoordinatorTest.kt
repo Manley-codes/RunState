@@ -2,6 +2,7 @@ package com.runstate.mobile.run
 
 import com.runstate.mobile.data.local.FakeRunDao
 import com.runstate.mobile.data.local.RunEntity
+import com.runstate.mobile.data.local.RunTransitionType
 import com.runstate.mobile.data.local.StoredRunState
 import java.time.Clock
 import java.time.Instant
@@ -687,12 +688,13 @@ class RunSessionCoordinatorTest {
             runBlocking { attempt.await() }
         }
 
-        // Assert: nothing stored, no owner, still a countdown.
+        // Assert: nothing stored, no owner, still a countdown — whose start is reported failed.
         assertTrue(fixture.dao.inserted.isEmpty())
         assertEquals(
             RunJourneySnapshot(
                 InitializationStatus.Completed,
-                RunAdmission.CountdownInProgress
+                RunAdmission.CountdownInProgress,
+                StartAttemptPhase.Failed
             ),
             runBlocking { fixture.coordinator.journeySnapshot() }
         )
@@ -823,7 +825,7 @@ class RunSessionCoordinatorTest {
             assertSame(session, (fixture.admission() as RunAdmission.RunInProgress).session)
             session.pause(FIRST_PAUSE)
             session.complete(FIRST_FINISH)
-            assertEquals(RunAdmission.ReadyForCountdown, fixture.admission())
+            assertEquals(RunAdmission.RunCompleted(session), fixture.admission())
             assertEquals(1, fixture.dao.inserted.size)
         }
     }
@@ -945,9 +947,9 @@ class RunSessionCoordinatorTest {
             session
         }
 
-        // Assert: a completed cycle no longer blocks the next one.
+        // Assert: a completed cycle is reported as such, holding the finished owner.
         assertEquals(RunSessionState.COMPLETED, firstSession.state)
-        assertEquals(RunAdmission.ReadyForCountdown, fixture.admission())
+        assertEquals(RunAdmission.RunCompleted(firstSession), fixture.admission())
 
         // Act: the next countdown retires the finished cycle, and a new run begins.
         fixture.clock.nowMillis = SECOND_START
@@ -1190,5 +1192,612 @@ class RunSessionCoordinatorTest {
         assertEquals(RunSessionState.PAUSED, session.state)
         assertSame(session, (fixture.admission() as RunAdmission.RunInProgress).session)
         assertEquals(1, fixture.dao.inserted.size)
+    }
+
+    // ---------------------------------------------------------------------------------
+    // Start attempt reporting
+    // ---------------------------------------------------------------------------------
+
+    /**
+     * Proves a start still writing is reported as in progress, and stops being so once its
+     * owner is published.
+     */
+    @Test
+    fun `a reserved start reports in progress`() {
+
+        // Arrange: a countdown, and an insert that parks.
+        val fixture = Fixture()
+        runBlocking {
+            fixture.coordinator.initialize()
+            fixture.coordinator.beginCountdown()
+        }
+        val releaseInsert = CompletableDeferred<Unit>()
+        fixture.dao.duringInsert = { releaseInsert.await() }
+
+        runBlocking {
+
+            // Act
+            val attempt = fixture.coordinator.requestStart()
+
+            // Assert: still a countdown to admission, but visibly a start underway.
+            val during = fixture.coordinator.journeySnapshot()
+            assertEquals(RunAdmission.CountdownInProgress, during.admission)
+            assertEquals(StartAttemptPhase.InProgress, during.startAttemptPhase)
+
+            // Act: the insert lands.
+            releaseInsert.complete(Unit)
+            attempt.await()
+
+            // Assert: the phase is gone once the owner is published.
+            val after = fixture.coordinator.journeySnapshot()
+            assertEquals(StartAttemptPhase.None, after.startAttemptPhase)
+            assertTrue(after.admission is RunAdmission.RunInProgress)
+        }
+    }
+
+    /**
+     * Proves an ordinary insert failure is reported as a failed start beside the countdown.
+     */
+    @Test
+    fun `an ordinary start failure reports failed`() {
+
+        // Arrange: a countdown, and storage that refuses the insert.
+        val fixture = Fixture()
+        runBlocking {
+            fixture.coordinator.initialize()
+            fixture.coordinator.beginCountdown()
+        }
+        fixture.dao.failWith = IllegalStateException("disk full")
+
+        // Act
+        runBlocking { fixture.coordinator.requestStart() }
+
+        // Assert
+        val snapshot = runBlocking { fixture.coordinator.journeySnapshot() }
+        assertEquals(StartAttemptPhase.Failed, snapshot.startAttemptPhase)
+        assertEquals(RunAdmission.CountdownInProgress, snapshot.admission)
+    }
+
+    /**
+     * Proves a cancelled attempt is never relabelled as a failed one.
+     *
+     * The insert may have landed, so the reservation stays and the start is still reported
+     * as in progress rather than as something the runner could retry.
+     */
+    @Test
+    fun `a cancelled start is not reported as failed`() {
+
+        // Arrange: a countdown, and an insert that never returns.
+        val fixture = Fixture()
+        runBlocking {
+            fixture.coordinator.initialize()
+            fixture.coordinator.beginCountdown()
+        }
+        fixture.dao.duringInsert = { CompletableDeferred<Unit>().await() }
+
+        runBlocking {
+            val attempt = fixture.coordinator.requestStart()
+
+            // Act: the application scope itself is cancelled mid-insert.
+            fixture.scope.cancel()
+            attempt.join()
+
+            // Assert
+            assertEquals(
+                StartAttemptPhase.InProgress,
+                fixture.coordinator.journeySnapshot().startAttemptPhase
+            )
+        }
+    }
+
+    /**
+     * Proves a failure is held by the coordinator, not by whoever was waiting.
+     *
+     * The waiting caller is cancelled while the insert is parked — the screen went away — and
+     * only then does storage refuse. A failure recorded by the caller would be lost with it.
+     */
+    @Test
+    fun `start failure remains reportable after the awaiting caller is cancelled`() {
+
+        // Arrange: a countdown, and an insert that parks.
+        val fixture = Fixture()
+        runBlocking {
+            fixture.coordinator.initialize()
+            fixture.coordinator.beginCountdown()
+        }
+        val insertReached = CompletableDeferred<Unit>()
+        val releaseInsert = CompletableDeferred<Unit>()
+        fixture.dao.duringInsert = {
+            insertReached.complete(Unit)
+            releaseInsert.await()
+        }
+
+        runBlocking {
+
+            // Act: a caller waits on the start, then goes away.
+            val caller = launch(start = CoroutineStart.UNDISPATCHED) { fixture.startRun() }
+            insertReached.await()
+            caller.cancel()
+            caller.join()
+
+            // Act: storage refuses, with nobody waiting.
+            fixture.dao.failWith = IllegalStateException("disk full")
+            releaseInsert.complete(Unit)
+
+            // Assert: the failure is still there for whoever asks next.
+            val snapshot = fixture.coordinator.journeySnapshot()
+            assertEquals(StartAttemptPhase.Failed, snapshot.startAttemptPhase)
+            assertEquals(RunAdmission.CountdownInProgress, snapshot.admission)
+            assertTrue(fixture.dao.inserted.isEmpty())
+        }
+    }
+
+    /**
+     * Proves a retry clears the failure as it begins, and stores the first prepared run.
+     *
+     * The retry's insert is parked so the cleared phase can be seen while it runs. Between
+     * attempts the clock moves and a new identity is waiting, so the stored row matching the
+     * first moment, zone and identity is what proves reuse.
+     */
+    @Test
+    fun `a retry clears the failure and reuses the exact prepared identity and timestamps`() {
+
+        // Arrange: a first attempt that fails.
+        val fixture = Fixture()
+        runBlocking {
+            fixture.coordinator.initialize()
+            fixture.coordinator.beginCountdown()
+        }
+        fixture.dao.failWith = IllegalStateException("disk full")
+        runBlocking { fixture.coordinator.requestStart() }
+        assertEquals(
+            StartAttemptPhase.Failed,
+            runBlocking { fixture.coordinator.journeySnapshot() }.startAttemptPhase
+        )
+
+        // Arrange: storage recovers, time passes, and the retry's insert parks.
+        fixture.dao.failWith = null
+        fixture.clock.nowMillis = SECOND_START
+        val releaseInsert = CompletableDeferred<Unit>()
+        fixture.dao.duringInsert = { releaseInsert.await() }
+
+        runBlocking {
+
+            // Act
+            val retry = fixture.coordinator.requestStart()
+
+            // Assert: the failure is cleared the moment the genuine retry begins.
+            assertEquals(
+                StartAttemptPhase.InProgress,
+                fixture.coordinator.journeySnapshot().startAttemptPhase
+            )
+
+            releaseInsert.complete(Unit)
+            retry.await()
+
+            // Assert: the first run's exact row — UUID, start, zone and checkpoint.
+            assertEquals(listOf(preparedRun()), fixture.dao.inserted)
+            assertEquals(1, fixture.identitiesIssued)
+            assertEquals(
+                StartAttemptPhase.None,
+                fixture.coordinator.journeySnapshot().startAttemptPhase
+            )
+        }
+    }
+
+    // ---------------------------------------------------------------------------------
+    // Lifecycle actions
+    // ---------------------------------------------------------------------------------
+
+    /** Initializes, counts down and starts, returning the owner the coordinator holds. */
+    private fun startedRun(fixture: Fixture): ActiveRunSession = runBlocking {
+        fixture.coordinator.initialize()
+        fixture.coordinator.beginCountdown()
+        fixture.startRun()
+    }
+
+    /**
+     * Proves Pause, Resume and Complete through the coordinator reach a reported completion.
+     */
+    @Test
+    fun `successful completion through the coordinator reports run completed`() {
+
+        // Arrange
+        val fixture = Fixture()
+        val session = startedRun(fixture)
+
+        // Act
+        runBlocking {
+            fixture.coordinator.requestAction(RunActionKind.PAUSE).await()
+            fixture.coordinator.requestAction(RunActionKind.COMPLETE).await()
+        }
+
+        // Assert: completed, with nothing reserved and no failure left over.
+        val snapshot = runBlocking { fixture.coordinator.journeySnapshot() }
+        assertEquals(RunAdmission.RunCompleted(session), snapshot.admission)
+        assertNull(snapshot.reservedAction)
+        assertNull(snapshot.lastActionFailed)
+        assertEquals(StoredRunState.COMPLETED, fixture.dao.inserted.single().state)
+    }
+
+    /**
+     * Proves the next countdown retires a completed cycle into a fresh machine.
+     */
+    @Test
+    fun `beginning another countdown retires the completed cycle`() {
+
+        // Arrange: a run completed through the coordinator.
+        val fixture = Fixture()
+        val first = startedRun(fixture)
+        runBlocking {
+            fixture.coordinator.requestAction(RunActionKind.PAUSE).await()
+            fixture.coordinator.requestAction(RunActionKind.COMPLETE).await()
+        }
+
+        // Act
+        runBlocking { fixture.coordinator.beginCountdown() }
+
+        // Assert: a plain countdown, with the finished owner released and still finished.
+        assertEquals(
+            RunJourneySnapshot(InitializationStatus.Completed, RunAdmission.CountdownInProgress),
+            runBlocking { fixture.coordinator.journeySnapshot() }
+        )
+        assertEquals(RunSessionState.COMPLETED, first.state)
+
+        // Assert: the fresh machine takes a new run with a new identity.
+        fixture.clock.nowMillis = SECOND_START
+        val second = runBlocking { fixture.startRun() }
+        assertEquals(SECOND_RUN_ID, second.runId)
+        assertEquals(RunSessionState.RUNNING, second.state)
+    }
+
+    /**
+     * Proves a repeated request for the action already writing is that same write.
+     */
+    @Test
+    fun `duplicate same-kind lifecycle actions return the exact same deferred`() {
+
+        // Arrange: a live run whose pause write parks.
+        val fixture = Fixture()
+        startedRun(fixture)
+        val releaseWrite = CompletableDeferred<Unit>()
+        fixture.dao.duringStateChange = { releaseWrite.await() }
+
+        runBlocking {
+
+            // Act
+            val first = fixture.coordinator.requestAction(RunActionKind.PAUSE)
+            val second = fixture.coordinator.requestAction(RunActionKind.PAUSE)
+
+            // Assert: one write object, still underway, and reported as reserved.
+            assertSame(first, second)
+            assertTrue(first.isActive)
+            assertEquals(
+                RunActionKind.PAUSE,
+                fixture.coordinator.journeySnapshot().reservedAction
+            )
+
+            // Act
+            releaseWrite.complete(Unit)
+            first.await()
+
+            // Assert: exactly one pause recorded.
+            assertEquals(
+                listOf(RunTransitionType.PAUSE),
+                fixture.dao.transitions.map { it.transitionType }
+            )
+        }
+    }
+
+    /**
+     * Proves a different action is refused while another is still writing.
+     */
+    @Test
+    fun `a different lifecycle action is refused while one is reserved`() {
+
+        // Arrange: a paused run whose resume write parks.
+        val fixture = Fixture()
+        startedRun(fixture)
+        runBlocking { fixture.coordinator.requestAction(RunActionKind.PAUSE).await() }
+        val releaseWrite = CompletableDeferred<Unit>()
+        fixture.dao.duringStateChange = { releaseWrite.await() }
+
+        runBlocking {
+            val resume = fixture.coordinator.requestAction(RunActionKind.RESUME)
+
+            // Act and Assert: Complete is legal from PAUSED, but not over a pending resume.
+            assertThrows(IllegalStateException::class.java) {
+                runBlocking { fixture.coordinator.requestAction(RunActionKind.COMPLETE) }
+            }
+
+            // Act and Assert: nor may the next countdown retire the cycle underneath it.
+            assertThrows(IllegalStateException::class.java) {
+                runBlocking { fixture.coordinator.beginCountdown() }
+            }
+
+            // Assert: the resume was untouched and completes normally.
+            assertTrue(resume.isActive)
+            releaseWrite.complete(Unit)
+            resume.await()
+            assertNull(fixture.coordinator.journeySnapshot().reservedAction)
+            assertEquals(2, fixture.dao.transitions.size)
+        }
+    }
+
+    /**
+     * Proves actions are refused when they are not legal for the run's current state, or
+     * when there is no run to act on.
+     */
+    @Test
+    fun `illegal lifecycle actions are refused and launch nothing`() {
+
+        // Arrange and Act and Assert: nothing initialized.
+        val uninitialized = Fixture()
+        assertThrows(IllegalStateException::class.java) {
+            runBlocking { uninitialized.coordinator.requestAction(RunActionKind.PAUSE) }
+        }
+
+        // Arrange: initialized, but no run.
+        val fixture = Fixture()
+        runBlocking { fixture.coordinator.initialize() }
+        assertThrows(IllegalStateException::class.java) {
+            runBlocking { fixture.coordinator.requestAction(RunActionKind.PAUSE) }
+        }
+
+        // Arrange: a running run.
+        runBlocking {
+            fixture.coordinator.beginCountdown()
+            fixture.startRun()
+        }
+
+        // Act and Assert: neither resume nor complete is legal from RUNNING.
+        assertThrows(IllegalStateException::class.java) {
+            runBlocking { fixture.coordinator.requestAction(RunActionKind.RESUME) }
+        }
+        assertThrows(IllegalStateException::class.java) {
+            runBlocking { fixture.coordinator.requestAction(RunActionKind.COMPLETE) }
+        }
+
+        // Assert: nothing was written, reserved or marked failed.
+        assertTrue(fixture.dao.transitions.isEmpty())
+        val snapshot = runBlocking { fixture.coordinator.journeySnapshot() }
+        assertNull(snapshot.reservedAction)
+        assertNull(snapshot.lastActionFailed)
+    }
+
+    /**
+     * Proves an action belongs to the application, not to the coroutine awaiting it.
+     */
+    @Test
+    fun `cancelling a caller awaiting an action does not cancel the action`() {
+
+        // Arrange: a live run whose pause write parks.
+        val fixture = Fixture()
+        val session = startedRun(fixture)
+        val writeReached = CompletableDeferred<Unit>()
+        val releaseWrite = CompletableDeferred<Unit>()
+        fixture.dao.duringStateChange = {
+            writeReached.complete(Unit)
+            releaseWrite.await()
+        }
+
+        runBlocking {
+
+            // Act: a caller waits on the pause; the write parks; the caller goes away.
+            val caller = launch(start = CoroutineStart.UNDISPATCHED) {
+                fixture.coordinator.requestAction(RunActionKind.PAUSE).await()
+            }
+            writeReached.await()
+            val action = fixture.coordinator.requestAction(RunActionKind.PAUSE)
+            caller.cancel()
+            caller.join()
+
+            // Assert: the caller is gone, but the write is not.
+            assertTrue(caller.isCancelled)
+            assertTrue("The action was cancelled with its caller.", action.isActive)
+
+            // Act: storage finishes, with nobody waiting.
+            releaseWrite.complete(Unit)
+
+            // Assert: completed normally, durably paused, reservation released.
+            assertTrue(action.isCompleted)
+            assertNull(failureOf(action))
+            assertEquals(RunSessionState.PAUSED, session.state)
+            assertEquals(StoredRunState.PAUSED, fixture.dao.inserted.single().state)
+            assertNull(fixture.coordinator.journeySnapshot().reservedAction)
+        }
+    }
+
+    /**
+     * Proves a refused write is retained for reporting beside the run's surviving state.
+     */
+    @Test
+    fun `an ordinary action failure is retained in the snapshot`() {
+
+        // Arrange: a live run whose pause storage refuses.
+        val fixture = Fixture()
+        val session = startedRun(fixture)
+        val failure = IllegalStateException("disk full")
+        fixture.dao.failStateChangeWith = failure
+
+        // Act
+        val action = runBlocking { fixture.coordinator.requestAction(RunActionKind.PAUSE) }
+
+        // Assert: failed with storage's exact exception.
+        assertTrue(action.isCompleted)
+        assertSame(failure, failureOf(action))
+
+        // Assert: still running, nothing reserved, and the failed action is named.
+        val snapshot = runBlocking { fixture.coordinator.journeySnapshot() }
+        assertEquals(RunAdmission.RunInProgress(session), snapshot.admission)
+        assertEquals(RunSessionState.RUNNING, session.state)
+        assertNull(snapshot.reservedAction)
+        assertEquals(RunActionKind.PAUSE, snapshot.lastActionFailed)
+        assertTrue(fixture.dao.transitions.isEmpty())
+    }
+
+    /**
+     * Proves a successful retry of the refused action clears the failure.
+     */
+    @Test
+    fun `a successful retry clears the action failure`() {
+
+        // Arrange: one refused pause.
+        val fixture = Fixture()
+        val session = startedRun(fixture)
+        fixture.dao.failStateChangeWith = IllegalStateException("disk full")
+        runBlocking { fixture.coordinator.requestAction(RunActionKind.PAUSE) }
+
+        // Act: storage recovers and the runner tries again.
+        fixture.dao.failStateChangeWith = null
+        runBlocking { fixture.coordinator.requestAction(RunActionKind.PAUSE).await() }
+
+        // Assert
+        val snapshot = runBlocking { fixture.coordinator.journeySnapshot() }
+        assertNull(snapshot.lastActionFailed)
+        assertNull(snapshot.reservedAction)
+        assertEquals(RunSessionState.PAUSED, session.state)
+        assertEquals(1, fixture.dao.transitions.size)
+    }
+
+    /**
+     * Proves every lifecycle timestamp is read from the one clock the start came from.
+     *
+     * The clock is moved to a distinct value before each request, so a coordinator reading any
+     * other source — or reading this one at the wrong moment — would store a different number.
+     */
+    @Test
+    fun `lifecycle timestamps come from the shared clock`() {
+
+        // Arrange
+        val fixture = Fixture()
+        startedRun(fixture)
+        val resumeAt = FIRST_PAUSE + 30_000L
+        val secondPauseAt = FIRST_PAUSE + 45_000L
+
+        // Act
+        runBlocking {
+            fixture.clock.nowMillis = FIRST_PAUSE
+            fixture.coordinator.requestAction(RunActionKind.PAUSE).await()
+            fixture.clock.nowMillis = resumeAt
+            fixture.coordinator.requestAction(RunActionKind.RESUME).await()
+            fixture.clock.nowMillis = secondPauseAt
+            fixture.coordinator.requestAction(RunActionKind.PAUSE).await()
+            fixture.clock.nowMillis = FIRST_FINISH
+            fixture.coordinator.requestAction(RunActionKind.COMPLETE).await()
+        }
+
+        // Assert
+        assertEquals(
+            listOf(FIRST_PAUSE, resumeAt, secondPauseAt),
+            fixture.dao.transitions.map { it.occurredAtEpochMillis }
+        )
+        val stored = fixture.dao.inserted.single()
+        assertEquals(OFFICIAL_START, stored.officialStartEpochMillis)
+        assertEquals(FIRST_FINISH, stored.finishEpochMillis)
+        assertEquals(FIRST_FINISH, stored.lastCheckpointEpochMillis)
+    }
+
+    /**
+     * Proves a completion still writing is reported as a reserved action over a run in
+     * progress, never as a completed run.
+     */
+    @Test
+    fun `a pending completion is not reported as completed`() {
+
+        // Arrange: a paused run whose completion write parks.
+        val fixture = Fixture()
+        val session = startedRun(fixture)
+        runBlocking { fixture.coordinator.requestAction(RunActionKind.PAUSE).await() }
+        val releaseWrite = CompletableDeferred<Unit>()
+        fixture.dao.duringCompletion = { releaseWrite.await() }
+
+        runBlocking {
+
+            // Act
+            val complete = fixture.coordinator.requestAction(RunActionKind.COMPLETE)
+
+            // Assert: reserved, and still merely in progress.
+            val during = fixture.coordinator.journeySnapshot()
+            assertEquals(RunAdmission.RunInProgress(session), during.admission)
+            assertEquals(RunActionKind.COMPLETE, during.reservedAction)
+
+            // Act
+            releaseWrite.complete(Unit)
+            complete.await()
+
+            // Assert: completed only once the reservation is released.
+            val after = fixture.coordinator.journeySnapshot()
+            assertEquals(RunAdmission.RunCompleted(session), after.admission)
+            assertNull(after.reservedAction)
+        }
+    }
+
+    /**
+     * Proves a cancelled action is neither a failure nor released, and blocks further actions.
+     */
+    @Test
+    fun `a cancelled action is not recorded as a failure and admits no further action`() {
+
+        // Arrange: a live run whose pause write never returns.
+        val fixture = Fixture()
+        startedRun(fixture)
+        fixture.dao.duringStateChange = { CompletableDeferred<Unit>().await() }
+
+        runBlocking {
+            val action = fixture.coordinator.requestAction(RunActionKind.PAUSE)
+
+            // Act: the application scope itself is cancelled mid-write.
+            fixture.scope.cancel()
+            action.join()
+
+            // Assert: cancelled, not an ordinary failure, and still reserved.
+            assertTrue(failureOf(action) is CancellationException)
+            val snapshot = fixture.coordinator.journeySnapshot()
+            assertEquals(RunActionKind.PAUSE, snapshot.reservedAction)
+            assertNull(snapshot.lastActionFailed)
+
+            // Assert: neither a repeat nor a different action is admitted.
+            assertThrows(IllegalStateException::class.java) {
+                runBlocking { fixture.coordinator.requestAction(RunActionKind.PAUSE) }
+            }
+            assertTrue(fixture.dao.transitions.isEmpty())
+        }
+    }
+
+    /**
+     * Proves waiting for reserved work waits without starting or retrying anything.
+     */
+    @Test
+    fun `awaiting reserved work waits for the write and starts nothing`() {
+
+        // Arrange: nothing reserved returns immediately.
+        val fixture = Fixture()
+        val session = startedRun(fixture)
+        runBlocking { fixture.coordinator.awaitReservedWork() }
+
+        // Arrange: a pause write that parks.
+        val releaseWrite = CompletableDeferred<Unit>()
+        fixture.dao.duringStateChange = { releaseWrite.await() }
+
+        runBlocking {
+            fixture.coordinator.requestAction(RunActionKind.PAUSE)
+
+            // Act: a waiter arrives mid-write.
+            val waiter = launch(start = CoroutineStart.UNDISPATCHED) {
+                fixture.coordinator.awaitReservedWork()
+            }
+
+            // Assert: it waits.
+            assertFalse(waiter.isCompleted)
+
+            // Act
+            releaseWrite.complete(Unit)
+            waiter.join()
+
+            // Assert: exactly the one requested pause happened.
+            assertEquals(RunSessionState.PAUSED, session.state)
+            assertEquals(1, fixture.dao.transitions.size)
+        }
     }
 }
