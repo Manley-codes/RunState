@@ -100,6 +100,16 @@ Two things that follow from it, also his:
 - Claude Code: default owner of coding, verification against real files, and execution after each bounded approval
 - Manley: routine Git work, approval at each step, and final product decisions
 - Always bring Cowork plans to Claude Code for verification before touching any code
+- During the complex Android foundation, Codex and the implementation agents may lead the technical
+  sequencing so Manley does not have to track every internal detail. That changes when work reaches
+  music behavior or reflection responses: pause before planning or implementing those product
+  decisions and bring Manley back in as an active collaborator. Work through the evidence, response
+  style, voice, creative behavior and tradeoffs with him one decision at a time; do not let an agent
+  silently settle those parts on his behalf.
+- Explicitly warn Manley before the first task that requires a physical Android phone. The current
+  emulator-only fixture journey does not require one. The planned trigger is Phase 4's real outdoor
+  GPS and music-observation feasibility work; if phone access has not been arranged, pause before
+  that task rather than discovering the requirement during implementation.
 
 **On response length:**
 - Never dump a full multi-section design plan in one response — that removes the user from the process
