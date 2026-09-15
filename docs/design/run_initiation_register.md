@@ -431,6 +431,26 @@ invents coordinates or claims a precise path through an unobserved interval. The
 records whether telemetry was complete, partial or unavailable so later screens and evidence can
 stay honest.
 
+### Automatic pause during an active run — EXPERIMENT *(added September 14, 2026)*
+
+This is separate from automatic start detection. It applies only after a run is already official
+and `Running`: if the runner stops for a sustained period without pressing Pause or Stop, RunState
+may eventually recognize the stop and pause active time for them. Manual Pause and Resume remain
+the dependable controls and must always stay available.
+
+The first implementation must be observation-only. After foreground-service GPS and timestamped
+location capture are reliable, record candidate stop and restart moments without changing the run,
+then compare them with what actually happened on outdoor runs. Only evidence that survives that
+field testing may create the same durable `Paused` transition used by a manual pause. One low-speed
+or inaccurate GPS sample is never enough.
+
+False-pause cases matter as much as successful detection: traffic lights, crowded takeoffs, steep
+hills, intentional walk intervals, GPS loss or drift, tunnels, and a runner briefly standing still
+must not be treated as interchangeable. Automatic resume is part of the same later design decision;
+the app must not leave someone unknowingly paused after movement returns. Exact thresholds, whether
+the feature is opt-in or a default, and its audio/haptic confirmation remain Phase 4 physical-phone
+experiments rather than current promises.
+
 ### Distance, pace and automatic splits
 
 - Total distance is derived from accepted Running observations. The visible distance counter is a
