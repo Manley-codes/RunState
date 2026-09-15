@@ -5,6 +5,8 @@ import com.runstate.mobile.data.local.FinalRunMetrics
 import com.runstate.mobile.data.local.MetricSource
 import com.runstate.mobile.data.local.RunDao
 import com.runstate.mobile.data.local.RunEntity
+import com.runstate.mobile.data.local.RunTransitionEntity
+import com.runstate.mobile.data.local.StoredRunState
 import com.runstate.mobile.data.local.TelemetryCoverage
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -269,6 +271,15 @@ internal class RunSessionCoordinator(
     /** The one live owner, or null when no run is live in this cycle. */
     private var activeSession: ActiveRunSession? = null
 
+    /** The current run facts used for metrics, updated only after durable actions succeed. */
+    private var metricRun: RunEntity? = null
+
+    /** Ordered transition history, loaded once and invalidated after pause or resume. */
+    private var metricTransitions: List<RunTransitionEntity>? = null
+
+    /** Last live answer, used only to stop wall-clock correction making the display retreat. */
+    private var lastPublishedMetrics: RunMetrics? = null
+
     /** Candidates from a refused multi-row database. Non-empty means nothing may start. */
     private var inconsistentActiveRuns: List<RunEntity> = emptyList()
 
@@ -374,6 +385,7 @@ internal class RunSessionCoordinator(
             initializationStatus = failed
             activeSession = null
             inconsistentActiveRuns = emptyList()
+            clearMetricState()
 
             // Reported, not thrown, and never dressed up as a completed attempt: the
             // caller has to be able to tell an empty database from an unreadable one.
@@ -384,6 +396,7 @@ internal class RunSessionCoordinator(
             is ActiveRunRecoveryResult.NothingToRecover -> {
                 activeSession = null
                 inconsistentActiveRuns = emptyList()
+                clearMetricState()
             }
 
             is ActiveRunRecoveryResult.Recovered -> {
@@ -392,6 +405,9 @@ internal class RunSessionCoordinator(
                 // Rebuilding one here would be a second owner over the same run.
                 activeSession = result.session
                 inconsistentActiveRuns = emptyList()
+                metricRun = result.runAtRecovery
+                metricTransitions = null
+                lastPublishedMetrics = null
             }
 
             is ActiveRunRecoveryResult.InconsistentActiveRuns -> {
@@ -400,6 +416,7 @@ internal class RunSessionCoordinator(
                 // is left exactly as found for whatever repair path is written later.
                 activeSession = null
                 inconsistentActiveRuns = result.activeRuns
+                clearMetricState()
             }
         }
 
@@ -427,6 +444,111 @@ internal class RunSessionCoordinator(
      */
     suspend fun journeySnapshot(): RunJourneySnapshot = coordinatorLock.withLock {
         snapshotUnderLock()
+    }
+
+    /**
+     * Returns runner-facing metrics for the one run this coordinator currently owns.
+     *
+     * This is separate from [journeySnapshot] because admission does not need to be polled
+     * once a second. The first call for a recovered run reads its ordered transitions from
+     * Room; later ticks reuse that immutable list. A successful pause or resume invalidates
+     * it, so the next call reads the one newly durable history before caching again. No tick
+     * writes storage, and no UUID, entity or session crosses the boundary.
+     *
+     * @return null when no run is owned or when its metric evidence cannot be read. The run
+     *   journey remains usable; the screen reports metrics as unavailable rather than zero.
+     */
+    suspend fun runMetrics(): RunMetrics? = coordinatorLock.withLock {
+        if (initializationStatus != InitializationStatus.Completed) return@withLock null
+        if (inconsistentActiveRuns.isNotEmpty()) return@withLock null
+
+        val session = activeSession ?: return@withLock null
+        val run = checkNotNull(metricRun) {
+            "A run is owned, but its metric facts were not retained."
+        }
+        check(run.runId == session.runId) {
+            "The metric facts belong to ${run.runId}, but the owner is ${session.runId}."
+        }
+
+        val transitions = if (run.transitionHistoryComplete == true) {
+            metricTransitions ?: try {
+                runDao.transitionsFor(run.runId).toList().also { metricTransitions = it }
+            } catch (cancellation: CancellationException) {
+                throw cancellation
+            } catch (unavailable: Exception) {
+                return@withLock null
+            }
+        } else {
+            emptyList()
+        }
+
+        val nowEpochMillis = preparedRunFactory.nowEpochMillis()
+        val elapsedMillis = checkNotNull(
+            RunTimeline.elapsedMillis(
+                officialStartEpochMillis = run.officialStartEpochMillis,
+                finishEpochMillis = run.finishEpochMillis,
+                currentState = run.state,
+                nowEpochMillis = nowEpochMillis
+            )
+        ) {
+            "The owned completed run has no durable finish time."
+        }
+        val activeMillis = RunTimeline.activeMillis(
+            officialStartEpochMillis = run.officialStartEpochMillis,
+            finishEpochMillis = run.finishEpochMillis,
+            currentState = run.state,
+            transitions = transitions,
+            nowEpochMillis = nowEpochMillis,
+            historyCoverage = if (run.transitionHistoryComplete == true) {
+                TransitionHistoryCoverage.COMPLETE
+            } else {
+                TransitionHistoryCoverage.INCOMPLETE
+            }
+        )
+
+        val rawMetrics = when (run.state) {
+            StoredRunState.RUNNING,
+            StoredRunState.PAUSED -> {
+                val distance = activeMillis?.let(fixtureDistanceCalculator::distanceMetersAt)
+                RunMetrics(
+                    elapsedMillis = elapsedMillis,
+                    activeMillis = activeMillis,
+                    distanceMeters = distance,
+                    paceSecondsPerMeter = RunTimeline.averagePaceSecondsPerMeter(
+                        activeDurationMillis = activeMillis,
+                        distanceMeters = distance
+                    ),
+                    displayUnit = DistanceUnit.MILES,
+                    source = MetricSource.FIXTURE,
+                    coverage = if (distance == null) {
+                        TelemetryCoverage.UNAVAILABLE
+                    } else {
+                        TelemetryCoverage.COMPLETE
+                    }
+                )
+            }
+
+            StoredRunState.COMPLETED -> RunMetrics(
+                elapsedMillis = elapsedMillis,
+                activeMillis = activeMillis,
+                distanceMeters = run.finalDistanceMeters,
+                paceSecondsPerMeter = RunTimeline.averagePaceSecondsPerMeter(
+                    activeDurationMillis = activeMillis,
+                    distanceMeters = run.finalDistanceMeters
+                ),
+                displayUnit = run.displayDistanceUnit ?: DistanceUnit.MILES,
+                source = run.metricSource,
+                coverage = run.telemetryCoverage ?: TelemetryCoverage.UNAVAILABLE
+            )
+        }
+
+        val published = if (run.state == StoredRunState.COMPLETED) {
+            rawMetrics
+        } else {
+            liveMetricsWithMonotonicFloor(rawMetrics)
+        }
+        lastPublishedMetrics = published
+        published
     }
 
     /** Both answers from the current fields. Only ever called with [coordinatorLock] held. */
@@ -665,6 +787,7 @@ internal class RunSessionCoordinator(
         startFailed = false
         lastActionFailed = null
         activeSession = null
+        clearMetricState()
         stateMachine = RunSessionStateMachine()
 
         // Rebuilt with the new machine. A starter left pointing at the retired one would
@@ -816,6 +939,9 @@ internal class RunSessionCoordinator(
 
             // The exact owner the starter built, over the machine this cycle still holds.
             activeSession = session
+            metricRun = row
+            metricTransitions = emptyList()
+            lastPublishedMetrics = null
 
             // The intention has become a run. Keeping the row would let a later cycle
             // mistake it for a start still waiting to happen.
@@ -927,14 +1053,19 @@ internal class RunSessionCoordinator(
         kind: RunActionKind,
         occurredAt: Long
     ) {
+        var completionMetrics: FinalRunMetrics? = null
         try {
             when (kind) {
                 RunActionKind.PAUSE -> session.pause(occurredAt)
                 RunActionKind.RESUME -> session.resume(occurredAt)
-                RunActionKind.COMPLETE -> session.complete(
-                    finishEpochMillis = occurredAt,
-                    finalMetrics = fixtureMetricsForCompletion(session.runId, occurredAt)
-                )
+                RunActionKind.COMPLETE -> {
+                    val metrics = fixtureMetricsForCompletion(session.runId, occurredAt)
+                    session.complete(
+                        finishEpochMillis = occurredAt,
+                        finalMetrics = metrics
+                    )
+                    completionMetrics = metrics
+                }
             }
         } catch (cancellation: CancellationException) {
 
@@ -955,10 +1086,91 @@ internal class RunSessionCoordinator(
         }
 
         coordinatorLock.withLock {
+            applyMetricActionSuccessLocked(
+                runId = session.runId,
+                kind = kind,
+                occurredAt = occurredAt,
+                completionMetrics = completionMetrics
+            )
             pendingAction = null
             reservedAction = null
             lastActionFailed = null
         }
+    }
+
+    /** Mirrors a successful durable action into the coordinator's read-only metric cache. */
+    private fun applyMetricActionSuccessLocked(
+        runId: String,
+        kind: RunActionKind,
+        occurredAt: Long,
+        completionMetrics: FinalRunMetrics?
+    ) {
+        val run = checkNotNull(metricRun) {
+            "A $kind succeeded for $runId, but no metric facts are retained."
+        }
+        check(run.runId == runId) {
+            "A $kind succeeded for $runId while metrics belong to ${run.runId}."
+        }
+
+        metricRun = when (kind) {
+            RunActionKind.PAUSE -> run.copy(
+                state = StoredRunState.PAUSED,
+                lastCheckpointEpochMillis = occurredAt
+            )
+
+            RunActionKind.RESUME -> run.copy(
+                state = StoredRunState.RUNNING,
+                lastCheckpointEpochMillis = occurredAt
+            )
+
+            RunActionKind.COMPLETE -> {
+                val metrics = checkNotNull(completionMetrics) {
+                    "Completion succeeded without the metrics written beside it."
+                }
+                run.copy(
+                    state = StoredRunState.COMPLETED,
+                    lastCheckpointEpochMillis = occurredAt,
+                    finishEpochMillis = occurredAt,
+                    finalDistanceMeters = metrics.distanceMeters,
+                    metricSource = metrics.source,
+                    telemetryCoverage = metrics.coverage,
+                    displayDistanceUnit = metrics.displayUnit
+                )
+            }
+        }
+
+        if (kind == RunActionKind.PAUSE || kind == RunActionKind.RESUME) {
+            metricTransitions = null
+        }
+    }
+
+    /** Applies a process-local display floor without changing any durable run fact. */
+    private fun liveMetricsWithMonotonicFloor(current: RunMetrics): RunMetrics {
+        val previous = lastPublishedMetrics ?: return current
+        val elapsed = maxOf(previous.elapsedMillis, current.elapsedMillis)
+        val active = current.activeMillis?.let { currentActive ->
+            maxOf(previous.activeMillis ?: currentActive, currentActive)
+        }
+        val distance = current.distanceMeters?.let { currentDistance ->
+            maxOf(previous.distanceMeters ?: currentDistance, currentDistance)
+        }
+
+        return current.copy(
+            elapsedMillis = elapsed,
+            activeMillis = active,
+            distanceMeters = distance,
+            paceSecondsPerMeter = RunTimeline.averagePaceSecondsPerMeter(
+                activeDurationMillis = active,
+                distanceMeters = distance
+            )
+        )
+    }
+
+    /** Drops every cached fact when no run from the previous cycle remains owned. */
+    private fun clearMetricState() {
+        metricRun = null
+        metricTransitions = null
+        lastPublishedMetrics = null
     }
 
     /**

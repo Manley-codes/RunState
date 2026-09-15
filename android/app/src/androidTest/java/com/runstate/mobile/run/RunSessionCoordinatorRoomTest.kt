@@ -186,10 +186,22 @@ class RunSessionCoordinatorRoomTest {
 
         clock.nowMillis = FINISH
         val recoveredCoordinator = coordinator(clock)
-        runBlocking {
+        val recoveredMetrics = runBlocking {
             recoveredCoordinator.initialize()
+            val metrics = recoveredCoordinator.runMetrics()
+                ?: throw AssertionError("The recovered run did not expose metrics.")
             recoveredCoordinator.requestAction(RunActionKind.COMPLETE).await()
+            metrics
         }
+
+        // The reopened process rebuilds honest live values from the stored row and history.
+        assertEquals(240_000L, recoveredMetrics.elapsedMillis)
+        assertEquals(60_000L, recoveredMetrics.activeMillis)
+        assertEquals(180.0, recoveredMetrics.distanceMeters!!, 0.0)
+        assertEquals(1.0 / 3.0, recoveredMetrics.paceSecondsPerMeter!!, 0.0)
+        assertEquals(MetricSource.FIXTURE, recoveredMetrics.source)
+        assertEquals(TelemetryCoverage.COMPLETE, recoveredMetrics.coverage)
+        assertEquals(DistanceUnit.MILES, recoveredMetrics.displayUnit)
 
         val restored = runBlocking { database.runDao().findById(RUN_ID) }
             ?: throw AssertionError("The recovered run is not stored.")

@@ -18,10 +18,13 @@ import androidx.compose.ui.Modifier
 import androidx.lifecycle.Lifecycle
 import com.runstate.mobile.run.RunActionKind
 import com.runstate.mobile.run.RunSessionCoordinator
+import com.runstate.mobile.ui.RunMetricsDisplay
+import com.runstate.mobile.ui.RunMetricsTicker
 import com.runstate.mobile.ui.RunStateScreen
 import com.runstate.mobile.ui.RunUiModel
 import com.runstate.mobile.ui.RunUiState
 import com.runstate.mobile.ui.rememberLifecycleCountdown
+import com.runstate.mobile.ui.runMetricsDisplayFor
 import com.runstate.mobile.ui.runUiModelFor
 import com.runstate.mobile.ui.theme.RunStateTheme
 import kotlinx.coroutines.CancellationException
@@ -100,6 +103,10 @@ internal fun RunJourneyRoot(
     // `rememberSaveable` for the reason above.
     var model by remember { mutableStateOf(RunUiModel(RunUiState.Initializing)) }
 
+    // A formatted answer, not a timer or a run owner. Rotation discards it and asks the
+    // process coordinator again, just as it does for the journey model.
+    var metrics by remember { mutableStateOf<RunMetricsDisplay?>(null) }
+
     // Presentation-only, and not a run state. It exists so a double tap, or a Cancel raced
     // with the countdown reaching zero, cannot become two requests from this screen. The
     // coordinator remains the final backstop against duplicates.
@@ -109,6 +116,7 @@ internal fun RunJourneyRoot(
 
     suspend fun refresh() {
         model = runUiModelFor(coordinator.journeySnapshot())
+        metrics = coordinator.runMetrics()?.let(::runMetricsDisplayFor)
     }
 
     // Keyed on the coordinator, so this runs once per composition of this screen and
@@ -116,6 +124,7 @@ internal fun RunJourneyRoot(
     // goes away propagates normally; nothing here is made uncancellable.
     LaunchedEffect(coordinator) {
         model = runUiModelFor(coordinator.initialize())
+        metrics = coordinator.runMetrics()?.let(::runMetricsDisplayFor)
     }
 
     // Reattaches to durable work this composition did not ask for, such as a start that was
@@ -127,6 +136,17 @@ internal fun RunJourneyRoot(
             coordinator.awaitReservedWork()
             refresh()
         }
+    }
+
+    // Live fixture values refresh once per second only while this screen is visible and a
+    // run state is settled. During Paused, elapsed keeps growing while active time and
+    // distance stay frozen. Saved no longer ticks, and a pending action freezes the last
+    // truthful display until storage reports back.
+    val metricsTicking = (
+        model.state == RunUiState.ActiveRunning || model.state == RunUiState.ActivePaused
+    ) && !model.actionInProgress
+    RunMetricsTicker(active = metricsTicking, lifecycle = lifecycle) {
+        metrics = coordinator.runMetrics()?.let(::runMetricsDisplayFor)
     }
 
     // Refuse to overlap, run the request, and always release the guard — even if the call
@@ -177,6 +197,7 @@ internal fun RunJourneyRoot(
 
     RunStateScreen(
         model = model,
+        metrics = metrics,
         countdownDigit = countdownDigit,
         onStart = {
             runGuarded {
@@ -196,8 +217,10 @@ internal fun RunJourneyRoot(
             // gone the instant it is pressed rather than sitting there through the
             // attempt looking unpressed.
             model = RunUiModel(RunUiState.Initializing)
+            metrics = null
             runGuarded {
                 model = runUiModelFor(coordinator.initialize())
+                metrics = coordinator.runMetrics()?.let(::runMetricsDisplayFor)
             }
         },
         onRetryStart = {

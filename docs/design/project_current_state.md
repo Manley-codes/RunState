@@ -5,13 +5,14 @@ metadata:
   type: project
 ---
 
-As of September 14, 2026, RunState remains one product and one Git repository with two implementation
+As of September 15, 2026, RunState remains one product and one Git repository with two implementation
 areas: the intact working Java/Maven console application and a native Android/Kotlin/Compose journey
 under `android/`. The Android application now completes the durable fixture lifecycle from a visible
-countdown through Running, Paused and Saved; richer metrics, music, reflection, Run Complete and Log
-History remain interactive design prototypes rather than the implemented interface.
+countdown through Running, Paused and Saved and displays controlled fixture elapsed/active time,
+distance and average pace; music, reflection, Run Complete and Log History remain interactive design
+prototypes rather than the implemented interface.
 
-## Current delivery resume point — September 14, 2026
+## Current delivery resume point — September 15, 2026
 
 - **Phase 3 Android implementation is in progress, with the durable visible lifecycle complete.**
   Commit `a3f423b` added the process-owned official-start foundation, and commit `a01f2fb` connected
@@ -25,15 +26,18 @@ History remain interactive design prototypes rather than the implemented interfa
   process-scoped truth after Activity recreation. This is still a functional fixture interface, not
   the final Start/Active/Run Complete visual design.
 
-- **Android Room version 2 now preserves the same run through its durable lifecycle.** The canonical
+- **Android Room version 3 now preserves the same run through its durable lifecycle and final metric
+  provenance.** The canonical
   UUID remains the `runs` primary key. `RunSessionStarter` saves the prepared initial Running row
   before advancing memory and returns an `ActiveRunSession` bound to the same UUID, machine and DAO.
   That owner serializes pause, resume and completion, writes each change through the transactional
   DAO first, and advances memory only after storage succeeds. Ordered `run_transitions` children
   preserve each pause/resume moment; completion records the finish and final checkpoint without
-  creating a second run or duplicate completion event. A hand-written additive migration preserves
-  version-1 Running, Paused and Completed rows without inventing missing history, and the version-1
-  schema remains byte-identical beside the generated version-2 schema. Real-database tests prove
+  creating a second run or duplicate completion event. Version 3 freezes distance, source, coverage,
+  display unit and whether transition history is complete; older rows remain explicitly unknown where
+  their history cannot support an honest calculation. Hand-written additive migrations preserve
+  earlier rows without inventing missing values, and the exported version-1 and version-2 schemas
+  remain unchanged beside version 3. Real-database tests prove
   rollback, persistence after reopen and the full starter-to-owner lifecycle bridge. Commit
   `e77c65b` added read-only active-row discovery: it returns every Running or Paused row, excludes
   completed history, and orders candidates by official start then UUID without choosing or changing
@@ -45,8 +49,12 @@ History remain interactive design prototypes rather than the implemented interfa
   retains the one live owner, blocks inconsistent storage and retires a completed cycle when the
   next countdown begins. It now also owns the official-start and lifecycle-action reservations,
   keeping durable writes in the application scope and reporting the pre-action state until each
-  write succeeds. MainActivity drives that coordinator through the full fixture lifecycle.
-  Verification passes with 136 JVM tests and 48 local emulator tests. The Room migration-test
+  write succeeds. MainActivity drives that coordinator through the full fixture lifecycle. The
+  coordinator now also derives elapsed time, active time, controlled fixture distance and average
+  pace from the durable row and cached transition history. Running and Paused refresh once per
+  second only while visible; elapsed includes pauses, active time and distance freeze while paused,
+  and Saved reads the frozen final distance. Every fixture value is labeled as fixture data, never
+  GPS. Verification passes with 202 JVM tests and 59 local emulator tests. The Room migration-test
   runtime requires the existing serialization library to resolve at 1.8.1, and Compose tests on the
   API 37 emulator require the test-only Espresso 3.7.0; no AndroidX Startup pin or deprecated
   compile-time-R-class workaround remains. Canonical detail lives in
@@ -132,15 +140,15 @@ History remain interactive design prototypes rather than the implemented interfa
   active-row discovery, recovery core, production database, process-scoped admission coordinator and
   startup invocation now exist. The foreground service and the rest of this architecture remain
   approved contracts rather than implemented behavior.
-- **Next delivery planning step:** add controlled fixture metrics and fixture song/reflection data,
-  then carry the durably completed run through Run Complete into Log History. GPS and real provider
+- **Next delivery planning step:** add controlled fixture song/reflection data, then carry the
+  durably completed run through Run Complete into Log History. GPS and real provider
   integration remain behind the complete Phase 3 fixture journey, as do remaining Log History polish,
   further music intelligence and RunStyle V2.
 - No GPS tracking, BPM source, music-provider integration, production relaunch or
   process-death recovery, foreground service, synchronization, or Reflection Engine has been built.
-  The current Android screen creates and operates one real Room-backed fixture run, but it does not
-  yet collect real execution metrics or carry a completed run into the designed reflection/history
-  journey.
+  The current Android screen creates and operates one real Room-backed fixture run and displays
+  controlled fixture metrics, but it does not yet collect real GPS execution metrics or carry a
+  completed run into the designed reflection/history journey.
 
 **Completed phases:**
 - Phase 1: Console app — energy system, opening prompt, post-run responses, rolling averages

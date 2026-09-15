@@ -1845,4 +1845,155 @@ class RunSessionCoordinatorTest {
             assertEquals(1, fixture.dao.transitions.size)
         }
     }
+
+    // ---------------------------------------------------------------------------------
+    // Read-only fixture metrics
+    // ---------------------------------------------------------------------------------
+
+    /** Nothing live means there is no metric answer to invent. */
+    @Test
+    fun `metrics are absent before a run is owned`() {
+        val fixture = Fixture()
+        runBlocking { fixture.coordinator.initialize() }
+
+        assertNull(runBlocking { fixture.coordinator.runMetrics() })
+        assertEquals(0, fixture.dao.transitionQueryCalls)
+    }
+
+    /** Live values come from timestamps and the fixture calculator without querying each tick. */
+    @Test
+    fun `running metrics advance without repeated transition queries`() {
+        val fixture = Fixture()
+        startedRun(fixture)
+        val storedBeforeTicks = fixture.dao.inserted.toList()
+
+        fixture.clock.nowMillis = OFFICIAL_START + 10_000L
+        val first = runBlocking { fixture.coordinator.runMetrics() }
+            ?: throw AssertionError("Running metrics are missing.")
+        fixture.clock.nowMillis = OFFICIAL_START + 20_000L
+        val second = runBlocking { fixture.coordinator.runMetrics() }
+            ?: throw AssertionError("Later running metrics are missing.")
+
+        assertEquals(10_000L, first.elapsedMillis)
+        assertEquals(10_000L, first.activeMillis)
+        assertEquals(30.0, first.distanceMeters!!, 0.0)
+        assertEquals(1.0 / 3.0, first.paceSecondsPerMeter!!, 0.0)
+        assertEquals(20_000L, second.elapsedMillis)
+        assertEquals(20_000L, second.activeMillis)
+        assertEquals(60.0, second.distanceMeters!!, 0.0)
+        assertEquals(0, fixture.dao.transitionQueryCalls)
+        assertEquals(storedBeforeTicks, fixture.dao.inserted)
+        assertTrue(fixture.dao.transitions.isEmpty())
+    }
+
+    /** Pausing invalidates the cache once, then active time and distance stay frozen. */
+    @Test
+    fun `paused metrics freeze while elapsed time continues`() {
+        val fixture = Fixture()
+        startedRun(fixture)
+        fixture.clock.nowMillis = FIRST_PAUSE
+        runBlocking { fixture.coordinator.requestAction(RunActionKind.PAUSE).await() }
+
+        val paused = runBlocking { fixture.coordinator.runMetrics() }
+            ?: throw AssertionError("Paused metrics are missing.")
+        fixture.clock.nowMillis = FIRST_FINISH
+        val later = runBlocking { fixture.coordinator.runMetrics() }
+            ?: throw AssertionError("Later paused metrics are missing.")
+
+        assertEquals(FIRST_PAUSE - OFFICIAL_START, paused.elapsedMillis)
+        assertEquals(60_000L, paused.activeMillis)
+        assertEquals(180.0, paused.distanceMeters!!, 0.0)
+        assertEquals(FIRST_FINISH - OFFICIAL_START, later.elapsedMillis)
+        assertEquals(paused.activeMillis, later.activeMillis)
+        assertEquals(paused.distanceMeters, later.distanceMeters)
+        assertEquals(1, fixture.dao.transitionQueryCalls)
+    }
+
+    /** A recovered timeline is loaded once and then reused by later metric reads. */
+    @Test
+    fun `recovered metrics cache the ordered transition history`() {
+        val fixture = Fixture()
+        runBlocking {
+            fixture.dao.insert(preparedRun())
+            fixture.dao.pauseRun(RUN_ID, FIRST_PAUSE)
+            fixture.coordinator.initialize()
+        }
+        fixture.clock.nowMillis = FIRST_FINISH
+
+        val first = runBlocking { fixture.coordinator.runMetrics() }
+            ?: throw AssertionError("Recovered metrics are missing.")
+        val second = runBlocking { fixture.coordinator.runMetrics() }
+            ?: throw AssertionError("Cached recovered metrics are missing.")
+
+        assertEquals(60_000L, first.activeMillis)
+        assertEquals(first, second)
+        assertEquals(1, fixture.dao.transitionQueryCalls)
+    }
+
+    /** Completion switches from the live formula to the exact values stored with the finish. */
+    @Test
+    fun `completed metrics use the frozen durable distance`() {
+        val fixture = Fixture()
+        startedRun(fixture)
+        fixture.clock.nowMillis = FIRST_PAUSE
+        runBlocking { fixture.coordinator.requestAction(RunActionKind.PAUSE).await() }
+        fixture.clock.nowMillis = FIRST_FINISH
+        runBlocking { fixture.coordinator.requestAction(RunActionKind.COMPLETE).await() }
+
+        // A completed metric answer is frozen; a later wall clock cannot advance it.
+        fixture.clock.nowMillis = SECOND_START
+
+        val completed = runBlocking { fixture.coordinator.runMetrics() }
+            ?: throw AssertionError("Completed metrics are missing.")
+
+        assertEquals(120_000L, completed.elapsedMillis)
+        assertEquals(60_000L, completed.activeMillis)
+        assertEquals(180.0, completed.distanceMeters!!, 0.0)
+        assertEquals(MetricSource.FIXTURE, completed.source)
+        assertEquals(TelemetryCoverage.COMPLETE, completed.coverage)
+        assertEquals(DistanceUnit.MILES, completed.displayUnit)
+    }
+
+    /** Migrated history gaps remain unknown on the live display and never become zero. */
+    @Test
+    fun `legacy recovered metrics report active distance and pace unavailable`() {
+        val fixture = Fixture()
+        val legacyPaused = preparedRun().copy(
+            state = StoredRunState.PAUSED,
+            lastCheckpointEpochMillis = FIRST_PAUSE,
+            transitionHistoryComplete = null
+        )
+        runBlocking {
+            fixture.dao.insert(legacyPaused)
+            fixture.coordinator.initialize()
+        }
+        fixture.clock.nowMillis = FIRST_FINISH
+
+        val metrics = runBlocking { fixture.coordinator.runMetrics() }
+            ?: throw AssertionError("Legacy elapsed metrics are missing.")
+
+        assertEquals(120_000L, metrics.elapsedMillis)
+        assertNull(metrics.activeMillis)
+        assertNull(metrics.distanceMeters)
+        assertNull(metrics.paceSecondsPerMeter)
+        assertEquals(MetricSource.FIXTURE, metrics.source)
+        assertEquals(TelemetryCoverage.UNAVAILABLE, metrics.coverage)
+        assertEquals(0, fixture.dao.transitionQueryCalls)
+    }
+
+    /** A wall-clock correction cannot make a live display retreat within this process. */
+    @Test
+    fun `live metrics keep a monotonic display floor when the wall clock moves backward`() {
+        val fixture = Fixture()
+        startedRun(fixture)
+        fixture.clock.nowMillis = OFFICIAL_START + 10_000L
+        val beforeCorrection = runBlocking { fixture.coordinator.runMetrics() }!!
+
+        fixture.clock.nowMillis = OFFICIAL_START + 5_000L
+        val afterCorrection = runBlocking { fixture.coordinator.runMetrics() }!!
+
+        assertEquals(beforeCorrection.elapsedMillis, afterCorrection.elapsedMillis)
+        assertEquals(beforeCorrection.activeMillis, afterCorrection.activeMillis)
+        assertEquals(beforeCorrection.distanceMeters, afterCorrection.distanceMeters)
+    }
 }

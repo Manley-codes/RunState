@@ -25,6 +25,9 @@ open class FakeRunDao : RunDao() {
     /** Every pause or resume event recorded, in the order it received them. */
     val transitions = mutableListOf<RunTransitionEntity>()
 
+    /** How many times metric/history code has asked for one run's transitions. */
+    var transitionQueryCalls = 0
+
     /** When set, [insert] throws this instead of storing anything. */
     var failWith: Exception? = null
 
@@ -84,8 +87,10 @@ open class FakeRunDao : RunDao() {
     override suspend fun findById(runId: String): RunEntity? =
         inserted.lastOrNull { it.runId == runId }
 
-    override suspend fun transitionsFor(runId: String): List<RunTransitionEntity> =
-        transitions.filter { it.runId == runId }.sortedBy { it.sequenceNumber }
+    override suspend fun transitionsFor(runId: String): List<RunTransitionEntity> {
+        transitionQueryCalls++
+        return transitions.filter { it.runId == runId }.sortedBy { it.sequenceNumber }
+    }
 
     override suspend fun countRuns(): Int = inserted.size
 

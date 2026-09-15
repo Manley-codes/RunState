@@ -91,6 +91,7 @@ class RunStateScreenTest {
     /** Renders one screen and returns the counters its callbacks increment. */
     private fun renderScreen(
         model: RunUiModel,
+        metrics: RunMetricsDisplay? = null,
         countdownDigit: Int? = null,
         actionsEnabled: Boolean = true
     ): RecordedActions {
@@ -99,6 +100,7 @@ class RunStateScreenTest {
         composeTestRule.setContent {
             RunStateScreen(
                 model = model,
+                metrics = metrics,
                 countdownDigit = countdownDigit,
                 onStart = { actions.starts++ },
                 onCancelCountdown = { actions.cancels++ },
@@ -337,6 +339,59 @@ class RunStateScreenTest {
         assertEquals(1, actions.total)
     }
 
+    /** One reusable fixture answer for the three screens that expose run metrics. */
+    private fun fixtureMetrics() = RunMetricsDisplay(
+        elapsed = "00:02:00",
+        active = "00:01:00",
+        distance = "0.11 mi",
+        averagePace = "8:56 /mi",
+        sourceLabel = "Fixture metrics"
+    )
+
+    /** Checks the shared metric panel without installing another Compose root. */
+    private fun assertFixtureMetricsDisplayed() {
+        composeTestRule.onNodeWithText("Fixture metrics").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Elapsed").assertIsDisplayed()
+        composeTestRule.onNodeWithText("00:02:00").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Active").assertIsDisplayed()
+        composeTestRule.onNodeWithText("00:01:00").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Distance").assertIsDisplayed()
+        composeTestRule.onNodeWithText("0.11 mi").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Avg pace").assertIsDisplayed()
+        composeTestRule.onNodeWithText("8:56 /mi").assertIsDisplayed()
+    }
+
+    /** Running discloses and renders fixture metrics. */
+    @Test
+    fun runningShowsTheValuesAndFixtureDisclosure() {
+        renderScreen(model = RunUiModel(RunUiState.ActiveRunning), metrics = fixtureMetrics())
+        assertFixtureMetricsDisplayed()
+    }
+
+    /** Paused discloses and renders fixture metrics. */
+    @Test
+    fun pausedShowsTheValuesAndFixtureDisclosure() {
+        renderScreen(model = RunUiModel(RunUiState.ActivePaused), metrics = fixtureMetrics())
+        assertFixtureMetricsDisplayed()
+    }
+
+    /** Saved discloses and renders the final fixture metrics. */
+    @Test
+    fun savedShowsTheValuesAndFixtureDisclosure() {
+        renderScreen(model = RunUiModel(RunUiState.Saved), metrics = fixtureMetrics())
+        assertFixtureMetricsDisplayed()
+    }
+
+    /** A missing read is named honestly and never rendered as a zero-distance run. */
+    @Test
+    fun anUnavailableMetricReadShowsNoInventedValues() {
+        renderScreen(RunUiState.ActiveRunning)
+
+        composeTestRule.onNodeWithText("Metrics unavailable").assertIsDisplayed()
+        composeTestRule.onNodeWithText("0.00 mi").assertDoesNotExist()
+        composeTestRule.onNodeWithText("00:00:00").assertDoesNotExist()
+    }
+
     /** Proves the failure screen offers a retry and nothing that would start a run. */
     @Test
     fun initializationFailedOffersRetryAndReportsTheTap() {
@@ -409,6 +464,36 @@ class RunStateScreenTest {
     private fun moveTo(owner: TestLifecycle, state: Lifecycle.State) {
         composeTestRule.runOnUiThread { owner.registry.currentState = state }
         composeTestRule.waitForIdle()
+    }
+
+    /** Metric ticks run only while the Activity-equivalent lifecycle is visible. */
+    @Test
+    fun metricTicksStopBelowStartedAndRefreshImmediatelyOnReturn() {
+        val owner = TestLifecycle()
+        moveTo(owner, Lifecycle.State.CREATED)
+        val ticks = intArrayOf(0)
+        composeTestRule.setContent {
+            RunMetricsTicker(active = true, lifecycle = owner.lifecycle) {
+                ticks[0]++
+            }
+        }
+
+        Thread.sleep(METRIC_TICK_MILLIS + 300L)
+        composeTestRule.waitForIdle()
+        assertEquals(0, ticks[0])
+
+        moveTo(owner, Lifecycle.State.STARTED)
+        composeTestRule.waitUntil(METRIC_TICK_MILLIS) { ticks[0] >= 1 }
+        composeTestRule.waitUntil(3 * METRIC_TICK_MILLIS) { ticks[0] >= 2 }
+
+        moveTo(owner, Lifecycle.State.CREATED)
+        val stoppedAt = ticks[0]
+        Thread.sleep(METRIC_TICK_MILLIS + 300L)
+        composeTestRule.waitForIdle()
+        assertEquals(stoppedAt, ticks[0])
+
+        moveTo(owner, Lifecycle.State.STARTED)
+        composeTestRule.waitUntil(METRIC_TICK_MILLIS) { ticks[0] > stoppedAt }
     }
 
     private fun waitForDigit(text: String, timeoutMillis: Long = 2 * COUNTDOWN_STEP_MILLIS) {

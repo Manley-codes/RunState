@@ -3,7 +3,9 @@ package com.runstate.mobile.ui
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
@@ -49,6 +51,8 @@ internal const val COUNTDOWN_STEP_MILLIS = 1_000L
  * @param countdownDigit the digit to show during [RunUiState.Countdown], or null for none.
  *   Passed separately from the model because it is composition-local timing, not an answer
  *   from the coordinator.
+ * @param metrics formatted values for Running, Paused or Saved; null renders an honest
+ *   unavailable state rather than substituting zero.
  * @param actionsEnabled false while a request the caller started is still running, which
  *   is how a double tap is stopped from becoming two requests. It is presentation only — the
  *   coordinator refuses or merges a second request regardless.
@@ -56,6 +60,7 @@ internal const val COUNTDOWN_STEP_MILLIS = 1_000L
 @Composable
 internal fun RunStateScreen(
     model: RunUiModel,
+    metrics: RunMetricsDisplay? = null,
     countdownDigit: Int?,
     onStart: () -> Unit,
     onCancelCountdown: () -> Unit,
@@ -135,6 +140,7 @@ internal fun RunStateScreen(
             }
 
             RunUiState.ActiveRunning -> {
+                RunMetricsPanel(metrics)
                 ActionFailure(model.actionFailed)
                 ScreenAction(
                     label = "Pause",
@@ -144,6 +150,7 @@ internal fun RunStateScreen(
             }
 
             RunUiState.ActivePaused -> {
+                RunMetricsPanel(metrics)
                 ActionFailure(model.actionFailed)
                 ScreenAction(
                     label = "Resume",
@@ -156,11 +163,14 @@ internal fun RunStateScreen(
                 )
             }
 
-            RunUiState.Saved -> ScreenAction(
-                label = "Start another run",
-                enabled = actionsEnabled,
-                onClick = onStartAnother
-            )
+            RunUiState.Saved -> {
+                RunMetricsPanel(metrics)
+                ScreenAction(
+                    label = "Start another run",
+                    enabled = actionsEnabled,
+                    onClick = onStartAnother
+                )
+            }
 
             RunUiState.InitializationFailed -> ScreenAction(
                 label = "Try again",
@@ -174,6 +184,47 @@ internal fun RunStateScreen(
             RunUiState.StartingRun,
             RunUiState.StorageInconsistent -> Unit
         }
+    }
+}
+
+/** Plain fixture metrics for the lifecycle foundation; visual design remains separate. */
+@Composable
+private fun RunMetricsPanel(metrics: RunMetricsDisplay?) {
+    if (metrics == null) {
+        Text(
+            text = "Metrics unavailable",
+            modifier = Modifier.padding(top = 24.dp)
+        )
+        return
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 24.dp)
+    ) {
+        Text(
+            text = metrics.sourceLabel,
+            style = MaterialTheme.typography.labelMedium
+        )
+        MetricLine("Elapsed", metrics.elapsed)
+        MetricLine("Active", metrics.active)
+        MetricLine("Distance", metrics.distance)
+        MetricLine("Avg pace", metrics.averagePace)
+    }
+}
+
+/** One label/value pair, intentionally free of final visual-direction decisions. */
+@Composable
+private fun MetricLine(label: String, value: String) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 8.dp),
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Text(text = label)
+        Text(text = value)
     }
 }
 
