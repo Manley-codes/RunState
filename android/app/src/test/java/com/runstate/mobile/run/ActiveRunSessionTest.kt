@@ -1,8 +1,12 @@
 package com.runstate.mobile.run
 
+import com.runstate.mobile.data.local.DistanceUnit
 import com.runstate.mobile.data.local.FakeRunDao
+import com.runstate.mobile.data.local.FinalRunMetrics
+import com.runstate.mobile.data.local.MetricSource
 import com.runstate.mobile.data.local.RunEntity
 import com.runstate.mobile.data.local.StoredRunState
+import com.runstate.mobile.data.local.TelemetryCoverage
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.launch
@@ -37,6 +41,13 @@ class ActiveRunSessionTest {
 
         const val RUN_ID = "0f6a2c1e-9d43-4b7a-9c21-7b5e8a4d1f30"
         const val DECOY_RUN_ID = "c4e1b8a2-7d35-4f61-8b0c-2a9e6d4f13b7"
+
+        val FINAL_METRICS = FinalRunMetrics(
+            distanceMeters = 360.0,
+            source = MetricSource.FIXTURE,
+            coverage = TelemetryCoverage.COMPLETE,
+            displayUnit = DistanceUnit.MILES
+        )
     }
 
     /** The row a real countdown hands over: RUNNING, checkpoint at the official start. */
@@ -45,7 +56,8 @@ class ActiveRunSessionTest {
         state = StoredRunState.RUNNING,
         officialStartEpochMillis = OFFICIAL_START,
         startTimezoneId = "America/Chicago",
-        lastCheckpointEpochMillis = OFFICIAL_START
+        lastCheckpointEpochMillis = OFFICIAL_START,
+        transitionHistoryComplete = true
     )
 
     /**
@@ -96,7 +108,7 @@ class ActiveRunSessionTest {
             owner.pause(FIRST_PAUSE)
             owner.resume(RESUME)
             owner.pause(SECOND_PAUSE)
-            owner.complete(FINISH)
+            owner.complete(FINISH, FINAL_METRICS)
         }
 
         // Assert: every durable write began while memory still held its prior state.
@@ -117,6 +129,10 @@ class ActiveRunSessionTest {
         assertEquals(FINISH, completed.finishEpochMillis)
         assertEquals(FINISH, completed.lastCheckpointEpochMillis)
         assertEquals(OFFICIAL_START, completed.officialStartEpochMillis)
+        assertEquals(FINAL_METRICS.distanceMeters, completed.finalDistanceMeters)
+        assertEquals(FINAL_METRICS.source, completed.metricSource)
+        assertEquals(FINAL_METRICS.coverage, completed.telemetryCoverage)
+        assertEquals(FINAL_METRICS.displayUnit, completed.displayDistanceUnit)
 
         // Assert: memory agrees with storage.
         assertEquals(RunSessionState.COMPLETED, owner.state)
@@ -207,7 +223,7 @@ class ActiveRunSessionTest {
 
         // Act + assert
         val thrown = assertThrows(IllegalStateException::class.java) {
-            runBlocking { owner.complete(FINISH) }
+            runBlocking { owner.complete(FINISH, FINAL_METRICS) }
         }
         assertEquals("disk unavailable", thrown.message)
 
@@ -217,6 +233,10 @@ class ActiveRunSessionTest {
         assertEquals(StoredRunState.PAUSED, stored.state)
         assertEquals(FIRST_PAUSE, stored.lastCheckpointEpochMillis)
         assertEquals(null, stored.finishEpochMillis)
+        assertEquals(null, stored.finalDistanceMeters)
+        assertEquals(null, stored.metricSource)
+        assertEquals(null, stored.telemetryCoverage)
+        assertEquals(null, stored.displayDistanceUnit)
     }
 
     /**
@@ -241,9 +261,13 @@ class ActiveRunSessionTest {
             super.resumeRun(runId, resumedAtEpochMillis)
         }
 
-        override suspend fun completeRun(runId: String, finishEpochMillis: Long) {
+        override suspend fun completeRun(
+            runId: String,
+            finishEpochMillis: Long,
+            finalMetrics: FinalRunMetrics
+        ) {
             completeCalls++
-            super.completeRun(runId, finishEpochMillis)
+            super.completeRun(runId, finishEpochMillis, finalMetrics)
         }
     }
 
@@ -268,7 +292,7 @@ class ActiveRunSessionTest {
 
         // Act + assert: completing a run that is not paused.
         assertThrows(IllegalStateException::class.java) {
-            runBlocking { owner.complete(FINISH) }
+            runBlocking { owner.complete(FINISH, FINAL_METRICS) }
         }
 
         // Assert: storage was never asked either question.

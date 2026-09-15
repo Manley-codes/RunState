@@ -1,8 +1,12 @@
 package com.runstate.mobile.run
 
+import com.runstate.mobile.data.local.DistanceUnit
 import com.runstate.mobile.data.local.FakeRunDao
+import com.runstate.mobile.data.local.FinalRunMetrics
+import com.runstate.mobile.data.local.MetricSource
 import com.runstate.mobile.data.local.RunEntity
 import com.runstate.mobile.data.local.StoredRunState
+import com.runstate.mobile.data.local.TelemetryCoverage
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertThrows
@@ -37,6 +41,13 @@ class ActiveRunRecoveryTest {
         const val RUN_ID = "0f6a2c1e-9d43-4b7a-9c21-7b5e8a4d1f30"
         const val SECOND_RUN_ID = "c4e1b8a2-7d35-4f61-8b0c-2a9e6d4f13b7"
         const val COMPLETED_RUN_ID = "7b3d9e10-2c4f-4a86-9d05-6e8f1a2b3c4d"
+
+        val FINAL_METRICS = FinalRunMetrics(
+            distanceMeters = 180.0,
+            source = MetricSource.FIXTURE,
+            coverage = TelemetryCoverage.COMPLETE,
+            displayUnit = DistanceUnit.MILES
+        )
     }
 
     /** The row a run has while it is live: RUNNING, checkpoint at the official start. */
@@ -65,7 +76,7 @@ class ActiveRunRecoveryTest {
         runBlocking {
             dao.insert(runningRun(COMPLETED_RUN_ID))
             dao.pauseRun(COMPLETED_RUN_ID, PAUSED_AT)
-            dao.completeRun(COMPLETED_RUN_ID, PAUSED_AT + 60_000L)
+            dao.completeRun(COMPLETED_RUN_ID, PAUSED_AT + 60_000L, FINAL_METRICS)
         }
         val machine = freshMachine()
 
@@ -175,7 +186,7 @@ class ActiveRunRecoveryTest {
             dao.insert(earlierRun)
             dao.insert(runningRun(COMPLETED_RUN_ID))
             dao.pauseRun(COMPLETED_RUN_ID, PAUSED_AT)
-            dao.completeRun(COMPLETED_RUN_ID, PAUSED_AT + 60_000L)
+            dao.completeRun(COMPLETED_RUN_ID, PAUSED_AT + 60_000L, FINAL_METRICS)
         }
         val storageBefore = dao.inserted.toList()
         val machine = freshMachine()
@@ -266,7 +277,11 @@ class ActiveRunRecoveryTest {
 
             dao.insert(runningRun(COMPLETED_RUN_ID, SECOND_START))
             dao.pauseRun(COMPLETED_RUN_ID, SECOND_START + 60_000L)
-            dao.completeRun(COMPLETED_RUN_ID, SECOND_START + 120_000L)
+            dao.completeRun(
+                COMPLETED_RUN_ID,
+                SECOND_START + 120_000L,
+                FINAL_METRICS
+            )
         }
 
         // Arrange: exactly what storage looks like before recovery runs.

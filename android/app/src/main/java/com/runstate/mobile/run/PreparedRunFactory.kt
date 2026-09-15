@@ -39,7 +39,7 @@ internal class PreparedRunFactory(
 ) {
 
     /**
-     * Creates the version-2 RUNNING row for a run starting now.
+     * Creates the current RUNNING row for a run starting now.
      *
      * The clock is read once and that single value is used for both the official start and
      * the last checkpoint. Reading it twice could produce two different milliseconds, and
@@ -59,7 +59,12 @@ internal class PreparedRunFactory(
 
             // Nothing past the start has been confirmed durable yet.
             lastCheckpointEpochMillis = officialStart,
-            finishEpochMillis = null
+            finishEpochMillis = null,
+
+            // Version 3 is the first schema able to preserve this provenance. A fresh
+            // row starts with complete lifecycle evidence; migrated rows deliberately
+            // keep null because their earlier history cannot be reconstructed.
+            transitionHistoryComplete = true
         )
     }
 

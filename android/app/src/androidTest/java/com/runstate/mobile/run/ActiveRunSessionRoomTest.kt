@@ -4,9 +4,13 @@ import android.content.Context
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.runstate.mobile.data.local.DistanceUnit
+import com.runstate.mobile.data.local.FinalRunMetrics
+import com.runstate.mobile.data.local.MetricSource
 import com.runstate.mobile.data.local.RunEntity
 import com.runstate.mobile.data.local.RunStateDatabase
 import com.runstate.mobile.data.local.StoredRunState
+import com.runstate.mobile.data.local.TelemetryCoverage
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -40,6 +44,13 @@ class ActiveRunSessionRoomTest {
         const val FINISH = OFFICIAL_START + 240_000L
 
         const val RUN_ID = "0f6a2c1e-9d43-4b7a-9c21-7b5e8a4d1f30"
+
+        val FINAL_METRICS = FinalRunMetrics(
+            distanceMeters = 360.0,
+            source = MetricSource.FIXTURE,
+            coverage = TelemetryCoverage.COMPLETE,
+            displayUnit = DistanceUnit.MILES
+        )
     }
 
     private lateinit var context: Context
@@ -51,7 +62,8 @@ class ActiveRunSessionRoomTest {
         state = StoredRunState.RUNNING,
         officialStartEpochMillis = OFFICIAL_START,
         startTimezoneId = "America/Chicago",
-        lastCheckpointEpochMillis = OFFICIAL_START
+        lastCheckpointEpochMillis = OFFICIAL_START,
+        transitionHistoryComplete = true
     )
 
     @Before
@@ -87,7 +99,7 @@ class ActiveRunSessionRoomTest {
             session.pause(FIRST_PAUSE)
             session.resume(RESUME)
             session.pause(SECOND_PAUSE)
-            session.complete(FINISH)
+            session.complete(FINISH, FINAL_METRICS)
 
             session
         }
@@ -103,6 +115,10 @@ class ActiveRunSessionRoomTest {
         assertEquals(OFFICIAL_START, stored.officialStartEpochMillis)
         assertEquals(FINISH, stored.finishEpochMillis)
         assertEquals(FINISH, stored.lastCheckpointEpochMillis)
+        assertEquals(FINAL_METRICS.distanceMeters, stored.finalDistanceMeters)
+        assertEquals(FINAL_METRICS.source, stored.metricSource)
+        assertEquals(FINAL_METRICS.coverage, stored.telemetryCoverage)
+        assertEquals(FINAL_METRICS.displayUnit, stored.displayDistanceUnit)
 
         // Assert: the pauses and the resume are all there, in the order they happened.
         val history = runBlocking { dao.transitionsFor(RUN_ID) }

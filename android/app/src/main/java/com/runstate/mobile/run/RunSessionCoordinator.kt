@@ -1,7 +1,11 @@
 package com.runstate.mobile.run
 
+import com.runstate.mobile.data.local.DistanceUnit
+import com.runstate.mobile.data.local.FinalRunMetrics
+import com.runstate.mobile.data.local.MetricSource
 import com.runstate.mobile.data.local.RunDao
 import com.runstate.mobile.data.local.RunEntity
+import com.runstate.mobile.data.local.TelemetryCoverage
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
@@ -229,11 +233,14 @@ internal enum class RunActionKind {
  * @property applicationScope the process-lifetime scope every durable write runs in. It must
  *   outlive every screen, and it should use a `SupervisorJob` so one failed start does not
  *   cancel the scope for every later one.
+ * @property fixtureDistanceCalculator the deterministic Phase 3 distance calculation.
+ *   It is process-owned here so a screen never becomes the source of completed metrics.
  */
 internal class RunSessionCoordinator(
     private val runDao: RunDao,
     private val preparedRunFactory: PreparedRunFactory,
-    private val applicationScope: CoroutineScope
+    private val applicationScope: CoroutineScope,
+    private val fixtureDistanceCalculator: FixtureDistanceCalculator = FixtureDistanceCalculator()
 ) {
 
     /**
@@ -924,7 +931,10 @@ internal class RunSessionCoordinator(
             when (kind) {
                 RunActionKind.PAUSE -> session.pause(occurredAt)
                 RunActionKind.RESUME -> session.resume(occurredAt)
-                RunActionKind.COMPLETE -> session.complete(occurredAt)
+                RunActionKind.COMPLETE -> session.complete(
+                    finishEpochMillis = occurredAt,
+                    finalMetrics = fixtureMetricsForCompletion(session.runId, occurredAt)
+                )
             }
         } catch (cancellation: CancellationException) {
 
@@ -949,6 +959,49 @@ internal class RunSessionCoordinator(
             reservedAction = null
             lastActionFailed = null
         }
+    }
+
+    /**
+     * Builds the fixture metric payload that completion writes with the run's finish.
+     *
+     * A version-3 run carries an explicit true provenance marker from creation, so its
+     * durable pause/resume history may be interpreted as complete after process recovery.
+     * Older rows migrate with null. Their active duration is unknowable, so completion
+     * records the fixture source as unavailable rather than turning a missing interval
+     * into a believable distance.
+     */
+    private suspend fun fixtureMetricsForCompletion(
+        runId: String,
+        finishEpochMillis: Long
+    ): FinalRunMetrics {
+        val storedRun = checkNotNull(runDao.findById(runId)) {
+            "No run is stored under $runId, so its metrics cannot be finalized."
+        }
+
+        val activeDuration = if (storedRun.transitionHistoryComplete == true) {
+            RunTimeline.activeMillis(
+                officialStartEpochMillis = storedRun.officialStartEpochMillis,
+                finishEpochMillis = storedRun.finishEpochMillis,
+                currentState = storedRun.state,
+                transitions = runDao.transitionsFor(runId),
+                nowEpochMillis = finishEpochMillis,
+                historyCoverage = TransitionHistoryCoverage.COMPLETE
+            )
+        } else {
+            null
+        }
+
+        val distance = activeDuration?.let(fixtureDistanceCalculator::distanceMetersAt)
+        return FinalRunMetrics(
+            distanceMeters = distance,
+            source = MetricSource.FIXTURE,
+            coverage = if (distance == null) {
+                TelemetryCoverage.UNAVAILABLE
+            } else {
+                TelemetryCoverage.COMPLETE
+            },
+            displayUnit = DistanceUnit.MILES
+        )
     }
 
     /**

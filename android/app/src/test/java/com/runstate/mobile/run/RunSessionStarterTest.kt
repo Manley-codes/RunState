@@ -34,7 +34,8 @@ class RunSessionStarterTest {
         state = StoredRunState.RUNNING,
         officialStartEpochMillis = officialStart,
         startTimezoneId = "America/Chicago",
-        lastCheckpointEpochMillis = officialStart
+        lastCheckpointEpochMillis = officialStart,
+        transitionHistoryComplete = true
     )
 
     /** Puts a fresh machine into the only stage a run may start from. */
@@ -200,6 +201,21 @@ class RunSessionStarterTest {
         // Assert: nothing stored, and nothing readable back under that UUID.
         assertTrue(dao.inserted.isEmpty())
         assertNull(runBlocking { dao.findById(driftedCheckpoint.runId) })
+        assertEquals(RunSessionState.COUNTDOWN, machine.state)
+    }
+
+    /** A newly official run cannot enter storage with legacy-unknown provenance. */
+    @Test
+    fun `a prepared row without complete transition provenance is rejected`() {
+        val machine = countdownMachine()
+        val dao = FakeRunDao()
+        val unknownHistory = preparedRun().copy(transitionHistoryComplete = null)
+
+        assertThrows(IllegalStateException::class.java) {
+            runBlocking { RunSessionStarter(machine, dao).start(unknownHistory) }
+        }
+
+        assertTrue(dao.inserted.isEmpty())
         assertEquals(RunSessionState.COUNTDOWN, machine.state)
     }
 

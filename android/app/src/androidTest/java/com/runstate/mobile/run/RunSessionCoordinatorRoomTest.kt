@@ -4,9 +4,12 @@ import android.content.Context
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.runstate.mobile.data.local.DistanceUnit
+import com.runstate.mobile.data.local.MetricSource
 import com.runstate.mobile.data.local.RunStateDatabase
 import com.runstate.mobile.data.local.RunTransitionType
 import com.runstate.mobile.data.local.StoredRunState
+import com.runstate.mobile.data.local.TelemetryCoverage
 import com.runstate.mobile.ui.RunUiModel
 import com.runstate.mobile.ui.RunUiState
 import com.runstate.mobile.ui.runUiModelFor
@@ -84,6 +87,18 @@ class RunSessionCoordinatorRoomTest {
         context.deleteDatabase(DATABASE_NAME)
     }
 
+    /** Builds a coordinator over whichever database instance is current. */
+    private fun coordinator(clock: SettableClock): RunSessionCoordinator =
+        RunSessionCoordinator(
+            runDao = database.runDao(),
+            preparedRunFactory = PreparedRunFactory(
+                clock = clock,
+                zoneIdSupplier = { ZoneId.of("America/Chicago") },
+                uuidSupplier = { UUID.fromString(RUN_ID) }
+            ),
+            applicationScope = applicationScope
+        )
+
     /**
      * Proves Start, Pause, Resume, Pause and Complete through the coordinator store one
      * completed run with ordered history, and report Saved.
@@ -94,15 +109,7 @@ class RunSessionCoordinatorRoomTest {
         // Arrange
         val dao = database.runDao()
         val clock = SettableClock(OFFICIAL_START)
-        val coordinator = RunSessionCoordinator(
-            runDao = dao,
-            preparedRunFactory = PreparedRunFactory(
-                clock = clock,
-                zoneIdSupplier = { ZoneId.of("America/Chicago") },
-                uuidSupplier = { UUID.fromString(RUN_ID) }
-            ),
-            applicationScope = applicationScope
-        )
+        val coordinator = coordinator(clock)
 
         // Act: the whole journey, each durable step awaited through the coordinator.
         val finalSnapshot = runBlocking {
@@ -133,6 +140,11 @@ class RunSessionCoordinatorRoomTest {
         assertEquals(OFFICIAL_START, stored.officialStartEpochMillis)
         assertEquals(FINISH, stored.finishEpochMillis)
         assertEquals(FINISH, stored.lastCheckpointEpochMillis)
+        assertEquals(360.0, stored.finalDistanceMeters!!, 0.0)
+        assertEquals(MetricSource.FIXTURE, stored.metricSource)
+        assertEquals(TelemetryCoverage.COMPLETE, stored.telemetryCoverage)
+        assertEquals(DistanceUnit.MILES, stored.displayDistanceUnit)
+        assertEquals(true, stored.transitionHistoryComplete)
 
         // Assert: Pause, Resume, Pause — in order, once each, at the clock's readings.
         val history = runBlocking { dao.transitionsFor(RUN_ID) }
@@ -148,5 +160,43 @@ class RunSessionCoordinatorRoomTest {
 
         // Assert: the coordinator's final answer is the Saved screen.
         assertEquals(RunUiModel(RunUiState.Saved), runUiModelFor(finalSnapshot))
+    }
+
+    /**
+     * Proves provenance survives a real reopen and still permits exact finalization.
+     */
+    @Test
+    fun recoveredVersionThreeRunFinalizesTheSameFixtureDistanceAfterReopen() {
+        val clock = SettableClock(OFFICIAL_START)
+        val firstCoordinator = coordinator(clock)
+
+        runBlocking {
+            firstCoordinator.initialize()
+            firstCoordinator.beginCountdown()
+            firstCoordinator.requestStart().await()
+            clock.nowMillis = FIRST_PAUSE
+            firstCoordinator.requestAction(RunActionKind.PAUSE).await()
+        }
+
+        applicationScope.cancel()
+        database.close()
+        database = Room.databaseBuilder(context, RunStateDatabase::class.java, DATABASE_NAME)
+            .build()
+        applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+
+        clock.nowMillis = FINISH
+        val recoveredCoordinator = coordinator(clock)
+        runBlocking {
+            recoveredCoordinator.initialize()
+            recoveredCoordinator.requestAction(RunActionKind.COMPLETE).await()
+        }
+
+        val restored = runBlocking { database.runDao().findById(RUN_ID) }
+            ?: throw AssertionError("The recovered run is not stored.")
+        assertEquals(StoredRunState.COMPLETED, restored.state)
+        assertEquals(180.0, restored.finalDistanceMeters!!, 0.0)
+        assertEquals(MetricSource.FIXTURE, restored.metricSource)
+        assertEquals(TelemetryCoverage.COMPLETE, restored.telemetryCoverage)
+        assertEquals(true, restored.transitionHistoryComplete)
     }
 }

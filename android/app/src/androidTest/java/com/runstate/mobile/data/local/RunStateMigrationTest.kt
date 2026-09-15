@@ -13,23 +13,22 @@ import org.junit.Test
 import org.junit.runner.RunWith
 
 /**
- * Proves a real version-1 database becomes a version-2 database without losing or
- * inventing anything.
+ * Proves real version-1 and version-2 databases reach the current version without
+ * losing or inventing anything.
  *
  * The database here is built from the exported version-1 schema rather than from
  * today's entity classes. That is the whole point: a migration has to be tested against
  * what was actually written to phones, not against the code's current idea of a run.
  *
- * Room never finds a migration on its own, so `MIGRATION_1_2` is always handed over
- * explicitly. `runMigrationsAndValidate` then compares the migrated file against the
- * generated version-2 schema and fails on any difference — a missing column, a wrong
- * type, an absent index — so a passing test also proves the hand-written SQL and the
- * entity classes agree.
+ * Room never finds a migration on its own, so each step is handed over explicitly.
+ * `runMigrationsAndValidate` then compares the migrated file against the exported target
+ * schema and fails on any difference — a missing column, a wrong type, an absent index —
+ * so a passing test also proves the hand-written SQL and the entity classes agree.
  *
- * Those four tests check the migration itself. The last test checks something different
- * and equally necessary: that the builder the app actually ships has the migration
- * registered. A correct migration nobody registered is still a crash on the first
- * launch after an update.
+ * The direct migration tests check each step itself. The factory tests check something
+ * different and equally necessary: that the builder the app actually ships registers
+ * the complete chain. A correct migration nobody registered is still a crash on the
+ * first launch after an update.
  */
 @RunWith(AndroidJUnit4::class)
 class RunStateMigrationTest {
@@ -39,6 +38,11 @@ class RunStateMigrationTest {
 
         /** A separate file, so the direct-open test cannot inherit a migrated one. */
         const val DIRECT_OPEN_TEST_DB = "runstate-factory-open-test.db"
+
+        const val VERSION_TWO_ACTIVE_DB = "runstate-v2-active-migration-test.db"
+        const val VERSION_TWO_COMPLETED_DB = "runstate-v2-completed-migration-test.db"
+        const val VERSION_TWO_SHAPE_DB = "runstate-v2-shape-migration-test.db"
+        const val VERSION_TWO_FACTORY_DB = "runstate-v2-factory-open-test.db"
 
         const val OFFICIAL_START = 1_756_000_000_000L
         const val RUN_ID = "0f6a2c1e-9d43-4b7a-9c21-7b5e8a4d1f30"
@@ -84,6 +88,56 @@ class RunStateMigrationTest {
         }
     }
 
+    /** Creates a genuine version-2 file from the preserved exported schema. */
+    private fun createVersionTwoDatabase(
+        databaseName: String,
+        fill: SupportSQLiteDatabase.() -> Unit = {}
+    ) {
+        helper.createDatabase(databaseName, 2).apply {
+            fill()
+            close()
+        }
+    }
+
+    /** Writes the exact parent-row shape available in version 2. */
+    private fun SupportSQLiteDatabase.insertVersionTwoRun(
+        runId: String = RUN_ID,
+        state: String,
+        lastCheckpointEpochMillis: Long,
+        finishEpochMillis: Long?
+    ) {
+        execSQL(
+            """
+            INSERT INTO runs (
+                run_id, state, official_start_epoch_millis,
+                start_timezone_id, last_checkpoint_epoch_millis, finish_epoch_millis
+            ) VALUES (?, ?, ?, ?, ?, ?)
+            """.trimIndent(),
+            arrayOf<Any?>(
+                runId,
+                state,
+                OFFICIAL_START,
+                TIMEZONE_ID,
+                lastCheckpointEpochMillis,
+                finishEpochMillis
+            )
+        )
+    }
+
+    /** Runs only the new additive step and validates it against schema version 3. */
+    private fun migrateVersionTwoToThree(databaseName: String) {
+        helper.runMigrationsAndValidate(databaseName, 3, true, MIGRATION_2_3).close()
+    }
+
+    /** Every version-3 addition must remain unknown on a migrated version-2 row. */
+    private fun assertVersionThreeFieldsWereNotInvented(run: RunEntity) {
+        assertNull(run.finalDistanceMeters)
+        assertNull(run.metricSource)
+        assertNull(run.telemetryCoverage)
+        assertNull(run.displayDistanceUnit)
+        assertNull(run.transitionHistoryComplete)
+    }
+
     /**
      * Runs the migration, validates the result against the exported version-2 schema,
      * and closes the raw handle so Room can open the same file afterwards.
@@ -101,8 +155,8 @@ class RunStateMigrationTest {
      * It goes through [buildRunStateDatabase] rather than a `Room.databaseBuilder` of
      * its own so these tests exercise the builder the app actually ships, including its
      * migration list. A local copy of that builder would keep passing while production
-     * lost `.addMigrations(MIGRATION_1_2)`, which is the one omission most worth
-     * catching here.
+     * lost one of its `.addMigrations(...)` entries, which is the omission these factory
+     * tests exist to catch.
      */
     private fun openDatabaseThroughFactory(
         databaseName: String = TEST_DB
@@ -258,8 +312,8 @@ class RunStateMigrationTest {
         // Act: force the open. This is where Room migrates, or refuses to.
         val restored = runBlocking { database.runDao().findById(RUN_ID) }
 
-        // Assert: the original row survived, readable as a version-2 entity, with the
-        // finish honestly unknown rather than invented by the upgrade.
+        // Assert: the original row survived the full chain, readable as a current entity,
+        // with the finish and version-3 fields honestly unknown rather than invented.
         assertEquals(
             RunEntity(
                 runId = RUN_ID,
@@ -272,7 +326,80 @@ class RunStateMigrationTest {
             restored
         )
 
-        // Assert: the version-2 table arrived with the migration and was not seeded.
+        // Assert: the transition table arrived through the migration chain and was not seeded.
         assertTrue(runBlocking { database.runDao().transitionsFor(RUN_ID) }.isEmpty())
+    }
+
+    /** A live version-2 row survives with no invented metric or history provenance. */
+    @Test
+    fun activeVersionTwoRunMigratesToVersionThreeWithNewFieldsUnknown() {
+        createVersionTwoDatabase(VERSION_TWO_ACTIVE_DB) {
+            insertVersionTwoRun(
+                state = "RUNNING",
+                lastCheckpointEpochMillis = OFFICIAL_START,
+                finishEpochMillis = null
+            )
+        }
+
+        migrateVersionTwoToThree(VERSION_TWO_ACTIVE_DB)
+
+        val database = openDatabaseThroughFactory(VERSION_TWO_ACTIVE_DB)
+        val restored = runBlocking { database.runDao().findById(RUN_ID) }
+            ?: throw AssertionError("The migrated active run is missing.")
+        assertEquals(StoredRunState.RUNNING, restored.state)
+        assertEquals(OFFICIAL_START, restored.officialStartEpochMillis)
+        assertEquals(OFFICIAL_START, restored.lastCheckpointEpochMillis)
+        assertNull(restored.finishEpochMillis)
+        assertVersionThreeFieldsWereNotInvented(restored)
+    }
+
+    /** A completed version-2 row keeps its finish but gains no fabricated metrics. */
+    @Test
+    fun completedVersionTwoRunMigratesToVersionThreeWithNewFieldsUnknown() {
+        val finish = OFFICIAL_START + 1_800_000L
+        createVersionTwoDatabase(VERSION_TWO_COMPLETED_DB) {
+            insertVersionTwoRun(
+                state = "COMPLETED",
+                lastCheckpointEpochMillis = finish,
+                finishEpochMillis = finish
+            )
+        }
+
+        migrateVersionTwoToThree(VERSION_TWO_COMPLETED_DB)
+
+        val database = openDatabaseThroughFactory(VERSION_TWO_COMPLETED_DB)
+        val restored = runBlocking { database.runDao().findById(RUN_ID) }
+            ?: throw AssertionError("The migrated completed run is missing.")
+        assertEquals(StoredRunState.COMPLETED, restored.state)
+        assertEquals(finish, restored.finishEpochMillis)
+        assertEquals(finish, restored.lastCheckpointEpochMillis)
+        assertVersionThreeFieldsWereNotInvented(restored)
+    }
+
+    /** The five ALTER statements produce exactly the current Room schema. */
+    @Test
+    fun versionTwoToThreeMigrationMatchesTheGeneratedSchema() {
+        createVersionTwoDatabase(VERSION_TWO_SHAPE_DB)
+        migrateVersionTwoToThree(VERSION_TWO_SHAPE_DB)
+
+        val database = openDatabaseThroughFactory(VERSION_TWO_SHAPE_DB)
+        assertEquals(0, runBlocking { database.runDao().countRuns() })
+    }
+
+    /** Production registers the new migration rather than relying on test-only wiring. */
+    @Test
+    fun productionFactoryMigratesVersionTwoOnFirstUse() {
+        createVersionTwoDatabase(VERSION_TWO_FACTORY_DB) {
+            insertVersionTwoRun(
+                state = "RUNNING",
+                lastCheckpointEpochMillis = OFFICIAL_START,
+                finishEpochMillis = null
+            )
+        }
+
+        val database = openDatabaseThroughFactory(VERSION_TWO_FACTORY_DB)
+        val restored = runBlocking { database.runDao().findById(RUN_ID) }
+            ?: throw AssertionError("The production migration lost the version-2 run.")
+        assertVersionThreeFieldsWereNotInvented(restored)
     }
 }

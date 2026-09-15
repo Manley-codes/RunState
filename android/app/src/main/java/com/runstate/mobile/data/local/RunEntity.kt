@@ -28,6 +28,56 @@ enum class StoredRunState {
     COMPLETED  // The run ended and must remain durably saved.
 }
 
+/** The system that supplied a completed run's distance evidence. */
+enum class MetricSource {
+    FIXTURE,
+    GPS
+}
+
+/** How much of the intended distance evidence was available at completion. */
+enum class TelemetryCoverage {
+    COMPLETE,
+    PARTIAL,
+    UNAVAILABLE
+}
+
+/** The unit the runner saw when this completed run was finalized. */
+enum class DistanceUnit {
+    MILES,
+    KILOMETERS
+}
+
+/**
+ * Metric values that become durable in the same write that completes a run.
+ *
+ * Distance may be absent when the selected source could not produce trustworthy
+ * evidence. The other fields still describe that attempted finalization, so an
+ * unavailable measurement differs from a row created before metrics existed.
+ */
+data class FinalRunMetrics(
+    val distanceMeters: Double?,
+    val source: MetricSource,
+    val coverage: TelemetryCoverage,
+    val displayUnit: DistanceUnit
+) {
+    init {
+        require(distanceMeters == null || (distanceMeters.isFinite() && distanceMeters >= 0.0)) {
+            "Final distance must be null or a finite, non-negative value: $distanceMeters."
+        }
+
+        when (coverage) {
+            TelemetryCoverage.UNAVAILABLE -> require(distanceMeters == null) {
+                "Unavailable telemetry cannot claim a final distance."
+            }
+
+            TelemetryCoverage.COMPLETE,
+            TelemetryCoverage.PARTIAL -> require(distanceMeters != null) {
+                "$coverage telemetry must carry its measured distance."
+            }
+        }
+    }
+}
+
 /**
  * One saved run.
  *
@@ -97,11 +147,37 @@ data class RunEntity(
      * [RunDao] writes a non-null finish inside its transaction, so null marks an
      * inherited unknown rather than a shape today's code is allowed to produce.
      *
-     * Declared last so the column the migration appends with ALTER TABLE sits in the
-     * same position as the one Room generates for a fresh version-2 database.
+     * Declared immediately before the version-3 additions so the column the first
+     * migration appended remains in the same position in every later schema.
      */
     @ColumnInfo(name = "finish_epoch_millis")
-    val finishEpochMillis: Long? = null
+    val finishEpochMillis: Long? = null,
+
+    /** Distance frozen when this run completed, or null when it was unavailable. */
+    @ColumnInfo(name = "final_distance_meters")
+    val finalDistanceMeters: Double? = null,
+
+    /** Which system supplied [finalDistanceMeters], or null on a pre-version-3 row. */
+    @ColumnInfo(name = "metric_source")
+    val metricSource: MetricSource? = null,
+
+    /** Completeness of the metric evidence, or null on a pre-version-3 row. */
+    @ColumnInfo(name = "telemetry_coverage")
+    val telemetryCoverage: TelemetryCoverage? = null,
+
+    /** The runner's display unit at finalization, or null on a pre-version-3 row. */
+    @ColumnInfo(name = "display_distance_unit")
+    val displayDistanceUnit: DistanceUnit? = null,
+
+    /**
+     * Whether pause/resume history is known complete from the official start.
+     *
+     * Version-1 and version-2 rows migrate with null because their shape cannot prove
+     * that fact. Every run newly created by version 3 writes true. Keeping unknown
+     * distinct prevents recovery from deriving believable distance from missing time.
+     */
+    @ColumnInfo(name = "transition_history_complete")
+    val transitionHistoryComplete: Boolean? = null
 ) {
     init {
 
@@ -115,6 +191,49 @@ data class RunEntity(
         // production creator must supply the phone's actual zone id.
         require(isResolvableZoneId(startTimezoneId)) {
             "A run's start timezone must be a resolvable zone id: $startTimezoneId"
+        }
+
+        require(
+            finalDistanceMeters == null ||
+                (finalDistanceMeters.isFinite() && finalDistanceMeters >= 0.0)
+        ) {
+            "A run's final distance must be null or a finite, non-negative value: " +
+                "$finalDistanceMeters."
+        }
+
+        val hasAnyFinalMetric =
+            finalDistanceMeters != null ||
+            metricSource != null ||
+            telemetryCoverage != null ||
+            displayDistanceUnit != null
+
+        if (hasAnyFinalMetric) {
+            require(state == StoredRunState.COMPLETED) {
+                "Only a COMPLETED run may have finalized metrics, but this run is $state."
+            }
+
+            require(finishEpochMillis != null) {
+                "Finalized metrics require the run's durable finish time."
+            }
+
+            require(
+                metricSource != null &&
+                    telemetryCoverage != null &&
+                    displayDistanceUnit != null
+            ) {
+                "Finalized metrics require source, coverage and display unit together."
+            }
+
+            when (telemetryCoverage) {
+                TelemetryCoverage.UNAVAILABLE -> require(finalDistanceMeters == null) {
+                    "Unavailable telemetry cannot claim a final distance."
+                }
+
+                TelemetryCoverage.COMPLETE,
+                TelemetryCoverage.PARTIAL -> require(finalDistanceMeters != null) {
+                    "$telemetryCoverage telemetry must carry its measured distance."
+                }
+            }
         }
 
         if (finishEpochMillis != null) {

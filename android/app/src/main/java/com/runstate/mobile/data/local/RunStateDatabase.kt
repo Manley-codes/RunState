@@ -8,19 +8,20 @@ import androidx.room.RoomDatabase
 /**
  * The on-phone store for runs.
  *
- * Version 2 adds the run's finish time and its pause/resume history. Its exported
- * schema under `android/app/schemas` sits beside the version-1 schema, which stays
- * unchanged as the record of what the previous version looked like. Every future
- * version increment requires an explicitly written migration; destructive migration is
- * not configured here and must not be added as a shortcut, because rebuilding the
- * database would erase recorded runs and local storage is the source of truth.
+ * Version 2 adds the run's finish time and pause/resume history. Version 3 adds
+ * nullable completed-metric fields and explicit transition-history provenance. Each
+ * exported schema under `android/app/schemas` stays unchanged as the record of what
+ * that version looked like. Every future version increment requires an explicitly
+ * written migration; destructive migration is not configured here and must not be added
+ * as a shortcut, because rebuilding the database would erase recorded runs and local
+ * storage is the source of truth.
  *
  * ## One place builds this
  *
  * Production construction is centralized in [buildRunStateDatabase], which is the only
  * builder in the application. That centralization exists because Room never discovers a
- * migration on its own: a builder that omits `.addMigrations(MIGRATION_1_2)` meets a
- * version-1 database, finds no route to version 2 and throws when the file is opened.
+ * migration on its own: a builder that omits either registered migration may meet an
+ * older database, find no route to the current version and throw when the file opens.
  * With one factory, that list is written once and carried by every caller, instead of a
  * second builder appearing later and quietly shipping without it. Every future migration
  * has to be added there as well, and the factory carries them explicitly rather than
@@ -35,7 +36,7 @@ import androidx.room.RoomDatabase
  */
 @Database(
     entities = [RunEntity::class, RunTransitionEntity::class],
-    version = 2,
+    version = 3,
     exportSchema = true
 )
 abstract class RunStateDatabase : RoomDatabase() {
@@ -75,5 +76,5 @@ internal fun buildRunStateDatabase(
         RunStateDatabase::class.java,
         databaseName
     )
-        .addMigrations(MIGRATION_1_2)
+        .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
         .build()

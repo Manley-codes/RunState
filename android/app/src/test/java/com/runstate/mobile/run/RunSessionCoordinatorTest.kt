@@ -1,9 +1,13 @@
 package com.runstate.mobile.run
 
+import com.runstate.mobile.data.local.DistanceUnit
 import com.runstate.mobile.data.local.FakeRunDao
+import com.runstate.mobile.data.local.FinalRunMetrics
+import com.runstate.mobile.data.local.MetricSource
 import com.runstate.mobile.data.local.RunEntity
 import com.runstate.mobile.data.local.RunTransitionType
 import com.runstate.mobile.data.local.StoredRunState
+import com.runstate.mobile.data.local.TelemetryCoverage
 import java.time.Clock
 import java.time.Instant
 import java.time.ZoneId
@@ -67,6 +71,13 @@ class RunSessionCoordinatorTest {
         const val THIRD_RUN_ID = "1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d"
 
         const val START_ZONE = "America/Chicago"
+
+        val FINAL_METRICS = FinalRunMetrics(
+            distanceMeters = 180.0,
+            source = MetricSource.FIXTURE,
+            coverage = TelemetryCoverage.COMPLETE,
+            displayUnit = DistanceUnit.MILES
+        )
     }
 
     /** A wall clock a test can move forward, so a retry can prove it did not re-read it. */
@@ -120,7 +131,8 @@ class RunSessionCoordinatorTest {
         state = StoredRunState.RUNNING,
         officialStartEpochMillis = officialStart,
         startTimezoneId = START_ZONE,
-        lastCheckpointEpochMillis = officialStart
+        lastCheckpointEpochMillis = officialStart,
+        transitionHistoryComplete = true
     )
 
     /**
@@ -824,7 +836,7 @@ class RunSessionCoordinatorTest {
             // run can be taken through to completion and the next cycle begun normally.
             assertSame(session, (fixture.admission() as RunAdmission.RunInProgress).session)
             session.pause(FIRST_PAUSE)
-            session.complete(FIRST_FINISH)
+            session.complete(FIRST_FINISH, FINAL_METRICS)
             assertEquals(RunAdmission.RunCompleted(session), fixture.admission())
             assertEquals(1, fixture.dao.inserted.size)
         }
@@ -846,7 +858,7 @@ class RunSessionCoordinatorTest {
             fixture.coordinator.beginCountdown()
             fixture.startRun().also {
                 it.pause(FIRST_PAUSE)
-                it.complete(FIRST_FINISH)
+                it.complete(FIRST_FINISH, FINAL_METRICS)
             }
         }
 
@@ -943,7 +955,7 @@ class RunSessionCoordinatorTest {
 
             val session = fixture.startRun()
             session.pause(FIRST_PAUSE)
-            session.complete(FIRST_FINISH)
+            session.complete(FIRST_FINISH, FINAL_METRICS)
             session
         }
 
@@ -1696,6 +1708,39 @@ class RunSessionCoordinatorTest {
         assertEquals(OFFICIAL_START, stored.officialStartEpochMillis)
         assertEquals(FIRST_FINISH, stored.finishEpochMillis)
         assertEquals(FIRST_FINISH, stored.lastCheckpointEpochMillis)
+        assertEquals(225.0, stored.finalDistanceMeters!!, 0.0)
+        assertEquals(MetricSource.FIXTURE, stored.metricSource)
+        assertEquals(TelemetryCoverage.COMPLETE, stored.telemetryCoverage)
+        assertEquals(DistanceUnit.MILES, stored.displayDistanceUnit)
+        assertEquals(true, stored.transitionHistoryComplete)
+    }
+
+    /**
+     * Proves a migrated active row never turns missing pause history into distance.
+     */
+    @Test
+    fun `completion of recovered unknown history records unavailable fixture distance`() {
+        val fixture = Fixture()
+        val legacyPaused = preparedRun().copy(
+            state = StoredRunState.PAUSED,
+            lastCheckpointEpochMillis = FIRST_PAUSE,
+            transitionHistoryComplete = null
+        )
+        runBlocking { fixture.dao.insert(legacyPaused) }
+
+        runBlocking {
+            fixture.coordinator.initialize()
+            fixture.clock.nowMillis = FIRST_FINISH
+            fixture.coordinator.requestAction(RunActionKind.COMPLETE).await()
+        }
+
+        val stored = fixture.dao.inserted.single()
+        assertEquals(StoredRunState.COMPLETED, stored.state)
+        assertNull(stored.finalDistanceMeters)
+        assertEquals(MetricSource.FIXTURE, stored.metricSource)
+        assertEquals(TelemetryCoverage.UNAVAILABLE, stored.telemetryCoverage)
+        assertEquals(DistanceUnit.MILES, stored.displayDistanceUnit)
+        assertNull(stored.transitionHistoryComplete)
     }
 
     /**

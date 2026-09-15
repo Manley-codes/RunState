@@ -1,5 +1,6 @@
 package com.runstate.mobile.run
 
+import com.runstate.mobile.data.local.FinalRunMetrics
 import com.runstate.mobile.data.local.RunDao
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -54,9 +55,11 @@ import kotlinx.coroutines.sync.withLock
  * memory temporarily behind storage: the pause is durable, but this object still says
  * RUNNING. `NonCancellable`, an automatic retry or a compensating write would each hide
  * that rather than resolve it, and a compensating write would additionally undo a fact
- * the phone has already durably recorded. [ActiveRunRecovery] can rebuild fresh memory
- * from that durable state, but nothing invokes it at application startup yet. Until
- * that wiring exists, this drift remains a production recovery concern.
+ * the phone has already durably recorded. The process-scoped [RunSessionCoordinator]
+ * invokes [ActiveRunRecovery] before admitting a new run, so a fresh process rebuilds
+ * memory from that durable state. Cancellation of the application scope during a write
+ * remains deliberately unresolved inside the current process; the next process launch
+ * performs recovery instead of guessing whether the write landed.
  *
  * ## Not yet a UI model
  *
@@ -107,11 +110,10 @@ class ActiveRunSession internal constructor(
         // here would go stale the first time Room updated it, which is the same reason
         // the normal path caches nothing either.
         //
-        // Two legitimate creation paths do create one obligation for later production
-        // wiring: they must never both produce an owner for the same run. Two owners
-        // would hold two unrelated mutexes and two in-memory states over one row, which
-        // is precisely the split this class exists to prevent. Single ownership is the
-        // rule; enforcing it belongs to the startup wiring that does not exist yet.
+        // The start and recovery paths must never both produce an owner for the same run.
+        // Two owners would hold two unrelated mutexes and two in-memory states over one
+        // row, which is precisely the split this class exists to prevent. Production
+        // enforces that rule by constructing both paths inside one process coordinator.
         check(
             stateMachine.state == RunSessionState.RUNNING ||
                 stateMachine.state == RunSessionState.PAUSED
@@ -181,14 +183,17 @@ class ActiveRunSession internal constructor(
      * @throws IllegalStateException if this session is not PAUSED, or if Room refuses
      *   the completion. Nothing in memory changes in either case.
      */
-    suspend fun complete(finishEpochMillis: Long) {
+    suspend fun complete(
+        finishEpochMillis: Long,
+        finalMetrics: FinalRunMetrics
+    ) {
         sessionLock.withLock {
             check(stateMachine.state == RunSessionState.PAUSED) {
                 "A run can only be completed while it is paused, but this session is " +
                     "${stateMachine.state}."
             }
 
-            runDao.completeRun(runId, finishEpochMillis)
+            runDao.completeRun(runId, finishEpochMillis, finalMetrics)
 
             stateMachine.completeRun()
         }

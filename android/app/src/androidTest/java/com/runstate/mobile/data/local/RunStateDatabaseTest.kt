@@ -37,6 +37,13 @@ class RunStateDatabaseTest {
         const val PAUSED_AT = OFFICIAL_START + 600_000L
         const val RESUMED_AT = OFFICIAL_START + 900_000L
         const val FINISHED_AT = OFFICIAL_START + 1_800_000L
+
+        val FINAL_METRICS = FinalRunMetrics(
+            distanceMeters = 2_345.6789012345,
+            source = MetricSource.FIXTURE,
+            coverage = TelemetryCoverage.COMPLETE,
+            displayUnit = DistanceUnit.MILES
+        )
     }
 
     private lateinit var context: Context
@@ -48,7 +55,8 @@ class RunStateDatabaseTest {
         state = StoredRunState.RUNNING,
         officialStartEpochMillis = OFFICIAL_START,
         startTimezoneId = "America/Chicago",
-        lastCheckpointEpochMillis = OFFICIAL_START
+        lastCheckpointEpochMillis = OFFICIAL_START,
+        transitionHistoryComplete = true
     )
 
     private fun openDatabase(): RunStateDatabase =
@@ -340,7 +348,9 @@ class RunStateDatabaseTest {
         runBlocking { database.runDao().pauseRun(runningRun.runId, PAUSED_AT) }
 
         // Act
-        runBlocking { database.runDao().completeRun(runningRun.runId, FINISHED_AT) }
+        runBlocking {
+            database.runDao().completeRun(runningRun.runId, FINISHED_AT, FINAL_METRICS)
+        }
 
         // Assert: still one run, now ended, with a real finish rather than a null one.
         assertEquals(1, runBlocking { database.runDao().countRuns() })
@@ -350,9 +360,63 @@ class RunStateDatabaseTest {
         assertEquals(FINISHED_AT, completed.lastCheckpointEpochMillis)
         assertEquals(runningRun.runId, completed.runId)
         assertEquals(OFFICIAL_START, completed.officialStartEpochMillis)
+        assertEquals(FINAL_METRICS.distanceMeters, completed.finalDistanceMeters)
+        assertEquals(FINAL_METRICS.source, completed.metricSource)
+        assertEquals(FINAL_METRICS.coverage, completed.telemetryCoverage)
+        assertEquals(FINAL_METRICS.displayUnit, completed.displayDistanceUnit)
 
         // Assert: completion is the run's end, not an event inside it, so the history
         // still holds only the pause.
+        assertEquals(listOf("PAUSE@1"), transitionOutline())
+    }
+
+    /**
+     * Proves a storage refusal cannot leave a run completed without its final metrics.
+     *
+     * The trigger fires on the one UPDATE that carries state, finish, checkpoint and
+     * metrics. If those facts were written separately, an earlier write could survive
+     * while the metric write failed.
+     */
+    @Test
+    fun aFailedMetricCompletionLeavesTheWholeRunPaused() {
+        storeRunningRun()
+        runBlocking { database.runDao().pauseRun(runningRun.runId, PAUSED_AT) }
+        val blockingTrigger = "block_metric_completion"
+
+        try {
+            database.openHelper.writableDatabase.execSQL(
+                """
+                CREATE TRIGGER $blockingTrigger
+                BEFORE UPDATE OF final_distance_meters ON runs
+                BEGIN
+                    SELECT RAISE(ABORT, 'metric completion blocked by test');
+                END
+                """.trimIndent()
+            )
+
+            assertThrows(SQLiteException::class.java) {
+                runBlocking {
+                    database.runDao().completeRun(
+                        runningRun.runId,
+                        FINISHED_AT,
+                        FINAL_METRICS
+                    )
+                }
+            }
+        } finally {
+            database.openHelper.writableDatabase.execSQL(
+                "DROP TRIGGER IF EXISTS $blockingTrigger"
+            )
+        }
+
+        val unchanged = storedRun()
+        assertEquals(StoredRunState.PAUSED, unchanged.state)
+        assertEquals(PAUSED_AT, unchanged.lastCheckpointEpochMillis)
+        assertNull(unchanged.finishEpochMillis)
+        assertNull(unchanged.finalDistanceMeters)
+        assertNull(unchanged.metricSource)
+        assertNull(unchanged.telemetryCoverage)
+        assertNull(unchanged.displayDistanceUnit)
         assertEquals(listOf("PAUSE@1"), transitionOutline())
     }
 
@@ -428,7 +492,7 @@ class RunStateDatabaseTest {
             database.runDao().pauseRun(runningRun.runId, PAUSED_AT)
             database.runDao().resumeRun(runningRun.runId, RESUMED_AT)
             database.runDao().pauseRun(runningRun.runId, FINISHED_AT - 1_000L)
-            database.runDao().completeRun(runningRun.runId, FINISHED_AT)
+            database.runDao().completeRun(runningRun.runId, FINISHED_AT, FINAL_METRICS)
         }
 
         // Act: throw that instance away and build a new one on the same file.
@@ -440,6 +504,13 @@ class RunStateDatabaseTest {
         assertEquals(StoredRunState.COMPLETED, restored.state)
         assertEquals(FINISHED_AT, restored.finishEpochMillis)
         assertEquals(FINISHED_AT, restored.lastCheckpointEpochMillis)
+        assertEquals(
+            FINAL_METRICS.distanceMeters?.toRawBits(),
+            restored.finalDistanceMeters?.toRawBits()
+        )
+        assertEquals(FINAL_METRICS.source, restored.metricSource)
+        assertEquals(FINAL_METRICS.coverage, restored.telemetryCoverage)
+        assertEquals(FINAL_METRICS.displayUnit, restored.displayDistanceUnit)
 
         // Assert: so did the ordered history that explains the run's active time.
         assertEquals(listOf("PAUSE@1", "RESUME@2", "PAUSE@3"), transitionOutline())

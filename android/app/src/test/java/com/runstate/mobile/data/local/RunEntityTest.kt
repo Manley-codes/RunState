@@ -21,14 +21,24 @@ class RunEntityTest {
         runId: String = canonicalUuid,
         startTimezoneId: String = "America/Chicago",
         state: StoredRunState = StoredRunState.RUNNING,
-        finishEpochMillis: Long? = null
+        finishEpochMillis: Long? = null,
+        finalDistanceMeters: Double? = null,
+        metricSource: MetricSource? = null,
+        telemetryCoverage: TelemetryCoverage? = null,
+        displayDistanceUnit: DistanceUnit? = null,
+        transitionHistoryComplete: Boolean? = null
     ) = RunEntity(
         runId = runId,
         state = state,
         officialStartEpochMillis = officialStart,
         startTimezoneId = startTimezoneId,
         lastCheckpointEpochMillis = officialStart,
-        finishEpochMillis = finishEpochMillis
+        finishEpochMillis = finishEpochMillis,
+        finalDistanceMeters = finalDistanceMeters,
+        metricSource = metricSource,
+        telemetryCoverage = telemetryCoverage,
+        displayDistanceUnit = displayDistanceUnit,
+        transitionHistoryComplete = transitionHistoryComplete
     )
 
     /**
@@ -225,5 +235,109 @@ class RunEntityTest {
 
         // Assert
         assertEquals(officialStart, instantRun.finishEpochMillis)
+    }
+
+    /** A freshly created live row may certify that its transition history starts here. */
+    @Test
+    fun `a live run may carry complete transition history provenance`() {
+        assertEquals(true, runWith(transitionHistoryComplete = true).transitionHistoryComplete)
+    }
+
+    /** A completed row accepts one coherent finalized fixture-metric group. */
+    @Test
+    fun `completed fixture metrics are accepted as one group`() {
+        val completed = runWith(
+            state = StoredRunState.COMPLETED,
+            finishEpochMillis = officialStart + 60_000L,
+            finalDistanceMeters = 180.0,
+            metricSource = MetricSource.FIXTURE,
+            telemetryCoverage = TelemetryCoverage.COMPLETE,
+            displayDistanceUnit = DistanceUnit.MILES,
+            transitionHistoryComplete = true
+        )
+
+        assertEquals(180.0, completed.finalDistanceMeters!!, 0.0)
+        assertEquals(MetricSource.FIXTURE, completed.metricSource)
+        assertEquals(TelemetryCoverage.COMPLETE, completed.telemetryCoverage)
+        assertEquals(DistanceUnit.MILES, completed.displayDistanceUnit)
+    }
+
+    /** Old completed rows remain readable with every version-3 addition unknown. */
+    @Test
+    fun `a migrated completed run accepts all version three fields as null`() {
+        val migrated = runWith(state = StoredRunState.COMPLETED)
+
+        assertNull(migrated.finalDistanceMeters)
+        assertNull(migrated.metricSource)
+        assertNull(migrated.telemetryCoverage)
+        assertNull(migrated.displayDistanceUnit)
+        assertNull(migrated.transitionHistoryComplete)
+    }
+
+    /** A source without its coverage and display unit is not a finalized metric group. */
+    @Test
+    fun `partial metric metadata is rejected`() {
+        assertThrows(IllegalArgumentException::class.java) {
+            runWith(
+                state = StoredRunState.COMPLETED,
+                metricSource = MetricSource.FIXTURE
+            )
+        }
+    }
+
+    /** Final metrics describe a completed run and cannot appear on a live row. */
+    @Test
+    fun `final metrics on a live run are rejected`() {
+        assertThrows(IllegalArgumentException::class.java) {
+            runWith(
+                finalDistanceMeters = 180.0,
+                metricSource = MetricSource.FIXTURE,
+                telemetryCoverage = TelemetryCoverage.COMPLETE,
+                displayDistanceUnit = DistanceUnit.MILES
+            )
+        }
+    }
+
+    /** Metrics cannot be final when the same row cannot say when the run finished. */
+    @Test
+    fun `final metrics without a durable finish are rejected`() {
+        assertThrows(IllegalArgumentException::class.java) {
+            runWith(
+                state = StoredRunState.COMPLETED,
+                finalDistanceMeters = 180.0,
+                metricSource = MetricSource.FIXTURE,
+                telemetryCoverage = TelemetryCoverage.COMPLETE,
+                displayDistanceUnit = DistanceUnit.MILES
+            )
+        }
+    }
+
+    /** SQLite REAL values used as distance must stay finite and non-negative. */
+    @Test
+    fun `invalid final distances are rejected`() {
+        listOf(-1.0, Double.NaN, Double.POSITIVE_INFINITY).forEach { invalidDistance ->
+            assertThrows(IllegalArgumentException::class.java) {
+                runWith(
+                    state = StoredRunState.COMPLETED,
+                    finalDistanceMeters = invalidDistance,
+                    metricSource = MetricSource.FIXTURE,
+                    telemetryCoverage = TelemetryCoverage.COMPLETE,
+                    displayDistanceUnit = DistanceUnit.MILES
+                )
+            }
+        }
+    }
+
+    /** Unavailable is an honest absence, never another spelling of zero or a value. */
+    @Test
+    fun `unavailable telemetry rejects a claimed distance`() {
+        assertThrows(IllegalArgumentException::class.java) {
+            FinalRunMetrics(
+                distanceMeters = 1.0,
+                source = MetricSource.FIXTURE,
+                coverage = TelemetryCoverage.UNAVAILABLE,
+                displayUnit = DistanceUnit.MILES
+            )
+        }
     }
 }

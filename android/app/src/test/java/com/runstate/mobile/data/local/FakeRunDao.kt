@@ -159,7 +159,11 @@ open class FakeRunDao : RunDao() {
         runId: String,
         expectedState: StoredRunState,
         completedState: StoredRunState,
-        finishEpochMillis: Long
+        finishEpochMillis: Long,
+        finalDistanceMeters: Double?,
+        metricSource: MetricSource,
+        telemetryCoverage: TelemetryCoverage,
+        displayDistanceUnit: DistanceUnit
     ): Int {
         duringCompletion?.invoke()
         failCompletionWith?.let { throw it }
@@ -168,7 +172,11 @@ open class FakeRunDao : RunDao() {
             stored.copy(
                 state = completedState,
                 lastCheckpointEpochMillis = finishEpochMillis,
-                finishEpochMillis = finishEpochMillis
+                finishEpochMillis = finishEpochMillis,
+                finalDistanceMeters = finalDistanceMeters,
+                metricSource = metricSource,
+                telemetryCoverage = telemetryCoverage,
+                displayDistanceUnit = displayDistanceUnit
             )
         }
     }

@@ -51,7 +51,8 @@ class PreparedRunFactoryTest {
                 officialStartEpochMillis = OFFICIAL_START,
                 startTimezoneId = "America/Chicago",
                 lastCheckpointEpochMillis = OFFICIAL_START,
-                finishEpochMillis = null
+                finishEpochMillis = null,
+                transitionHistoryComplete = true
             ),
             row
         )

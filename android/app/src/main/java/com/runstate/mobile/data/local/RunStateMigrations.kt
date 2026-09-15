@@ -67,3 +67,32 @@ val MIGRATION_1_2 = object : Migration(1, 2) {
         )
     }
 }
+
+/**
+ * Version 2 to version 3: completed fixture metrics and timeline provenance.
+ *
+ * Every addition is nullable and has no SQLite default. Existing rows therefore keep
+ * null rather than receiving a guessed distance, source, display unit or claim that
+ * their pause/resume history is complete. New version-3 runs write provenance when
+ * they are created and finalize metrics only when completion succeeds.
+ */
+val MIGRATION_2_3 = object : Migration(2, 3) {
+
+    override fun migrate(connection: SQLiteConnection) {
+        connection.execSQL(
+            "ALTER TABLE `runs` ADD COLUMN `final_distance_meters` REAL"
+        )
+        connection.execSQL(
+            "ALTER TABLE `runs` ADD COLUMN `metric_source` TEXT"
+        )
+        connection.execSQL(
+            "ALTER TABLE `runs` ADD COLUMN `telemetry_coverage` TEXT"
+        )
+        connection.execSQL(
+            "ALTER TABLE `runs` ADD COLUMN `display_distance_unit` TEXT"
+        )
+        connection.execSQL(
+            "ALTER TABLE `runs` ADD COLUMN `transition_history_complete` INTEGER"
+        )
+    }
+}

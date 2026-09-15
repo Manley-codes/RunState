@@ -16,8 +16,8 @@ import androidx.room.Transaction
  *
  * Discovery is a read. [findActiveRuns] reports what storage holds; the recovery core
  * decides whether there is no run to restore, one run to adopt, or an inconsistency it
- * must refuse to guess through. Production startup wiring for that recovery remains
- * separate and does not exist yet.
+ * must refuse to guess through. [com.runstate.mobile.run.RunSessionCoordinator] runs that
+ * recovery before the Android journey admits a new countdown or run.
  *
  * This is an abstract class because the lifecycle operations below are not single
  * statements. Each one reads, checks and then writes two tables inside one
@@ -104,7 +104,7 @@ abstract class RunDao {
      *
      * This selects and returns. It does not repair, delete, complete, deduplicate or
      * mark anything, and it must not grow the ability to. Interpreting the result
-     * belongs to the later recovery slice.
+     * belongs to [com.runstate.mobile.run.ActiveRunRecovery].
      */
     suspend fun findActiveRuns(): List<RunEntity> =
         selectRunsInStates(
@@ -164,14 +164,22 @@ abstract class RunDao {
      *   Nothing changes in any of those cases.
      */
     @Transaction
-    open suspend fun completeRun(runId: String, finishEpochMillis: Long) {
+    open suspend fun completeRun(
+        runId: String,
+        finishEpochMillis: Long,
+        finalMetrics: FinalRunMetrics
+    ) {
         requireUpdatableRun(runId, StoredRunState.PAUSED, finishEpochMillis)
 
         val rowsUpdated = applyCompletion(
             runId = runId,
             expectedState = StoredRunState.PAUSED,
             completedState = StoredRunState.COMPLETED,
-            finishEpochMillis = finishEpochMillis
+            finishEpochMillis = finishEpochMillis,
+            finalDistanceMeters = finalMetrics.distanceMeters,
+            metricSource = finalMetrics.source,
+            telemetryCoverage = finalMetrics.coverage,
+            displayDistanceUnit = finalMetrics.displayUnit
         )
 
         requireSingleRowUpdated(rowsUpdated, runId)
@@ -287,7 +295,7 @@ abstract class RunDao {
     ): Int
 
     /**
-     * Ends a run, writing its finish and moving its checkpoint to the same instant.
+     * Ends a run, writing its finish, finalized metrics and checkpoint together.
      *
      * `completedState` is passed in rather than written as a literal so the stored text
      * always comes from the enum itself, and cannot drift from it.
@@ -297,7 +305,11 @@ abstract class RunDao {
         UPDATE runs
         SET state = :completedState,
             finish_epoch_millis = :finishEpochMillis,
-            last_checkpoint_epoch_millis = :finishEpochMillis
+            last_checkpoint_epoch_millis = :finishEpochMillis,
+            final_distance_meters = :finalDistanceMeters,
+            metric_source = :metricSource,
+            telemetry_coverage = :telemetryCoverage,
+            display_distance_unit = :displayDistanceUnit
         WHERE run_id = :runId
           AND state = :expectedState
           AND last_checkpoint_epoch_millis <= :finishEpochMillis
@@ -307,7 +319,11 @@ abstract class RunDao {
         runId: String,
         expectedState: StoredRunState,
         completedState: StoredRunState,
-        finishEpochMillis: Long
+        finishEpochMillis: Long,
+        finalDistanceMeters: Double?,
+        metricSource: MetricSource,
+        telemetryCoverage: TelemetryCoverage,
+        displayDistanceUnit: DistanceUnit
     ): Int
 
     /**

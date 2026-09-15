@@ -96,10 +96,6 @@ sealed interface ActiveRunRecoveryResult {
  *
  * ## Known limitations, deliberately left open
  *
- * - **No Android entry point calls initialization yet.** A production database builder
- *   now exists and the coordinator now sequences recovery against starting, but no
- *   Activity, service or bootstrap invokes it, so recovery still runs in tests and
- *   nowhere else. Making it happen when the app launches is separate work.
  * - **This is not process death.** Restoring from a stored row proves the decision
  *   logic and, in the instrumented test, proves a run survives a closed and reopened
  *   database file. Neither one is the Android system killing the app and rebuilding it,

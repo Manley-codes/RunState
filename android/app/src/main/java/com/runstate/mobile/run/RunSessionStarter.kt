@@ -107,6 +107,14 @@ class RunSessionStarter internal constructor(
                 "A run's initial checkpoint must equal its official start."
             }
 
+            // A current-version start must certify that lifecycle history begins here.
+            // Null is reserved for rows migrated from schemas that could not preserve
+            // that provenance; admitting one as new would make later active-time and
+            // fixture-distance calculations indistinguishable from a legacy gap.
+            check(preparedRun.transitionHistoryComplete == true) {
+                "A newly started run must have complete transition-history provenance."
+            }
+
             // Durable first: if this throws, the session stays in COUNTDOWN.
             runDao.insert(preparedRun)
 
