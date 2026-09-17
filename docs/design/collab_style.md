@@ -116,4 +116,13 @@ Two things that follow from it, also his:
 - Present ONE decision at a time, wait for confirmation, then move to the next
 - The user flagged this directly: "I'm not feeling strongly part of the project" after a wall-of-text design dump
 
+**On research and analysis — stated September 17, 2026:**
+- Organize research replies around the one to three findings most relevant to the current decision;
+  do not make every reply feel like a literature review
+- Clearly distinguish strong evidence, practitioner or product evidence, inference, and recommendation
+- Include direct links so Manley can choose where to go deeper; keep secondary details behind those
+  links unless they materially change the recommendation or he asks for a full review
+- For music/reflection work, prefer a deliberate research-and-analysis pace and the construction of a
+  reusable system over manually drafting every possible outcome variation
+
 **Why:** User explicitly stated all of these preferences. The core shift: Claude holds its own view and presents it — user decides, but always knows where Claude actually stands.

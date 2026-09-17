@@ -106,6 +106,10 @@ Claude Code if needed · Manley decides.
 - [Music ingredients](music_ingredients.md) — source material for the register. Not the place to
   look first.
 
+## Music/reflection research — resumed September 2026
+
+- [Music-aware reflection generation research](research_music_reflection_generation.md) — active source ledger, source-strength notes, shipped failure evidence and the provisional system-first direction; research only, not an implementation contract.
+
 ## Reference and parked
 
 - [Future feature decisions](parked_feature_ideas.md) — non-music parked ideas. Each entry names what
