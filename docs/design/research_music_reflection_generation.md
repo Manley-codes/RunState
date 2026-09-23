@@ -4,7 +4,7 @@ description: "Working research notebook for a grounded, music-aware reflection s
 metadata:
   type: research
   status: active-working-notebook
-  updated: 2026-09-17
+  updated: 2026-09-23
 ---
 
 # Music-aware reflection generation research
@@ -24,6 +24,79 @@ Manley's direction as of September 17, 2026:
 - Research replies should be organized and relevance-first. Lead with the few findings that matter
   now, distinguish evidence from inference, and leave full source detail behind links unless Manley
   asks to go deeper.
+
+## Working checkpoint — September 23, 2026
+
+**Working examples, not a locked prompt or final app voice.** Manley materially co-wrote these;
+their success does not establish reliable first attempts or cross-artist quality. Nothing is integrated.
+
+### Provisional listening setup and review order
+
+- **ElevenLabs:** Manley generates and auditions recordings there using his saved designed voice,
+  `1st test voice`, and **Eleven Multilingual v2**. His description: "A middle-aged African American male,
+  friendly, confident, conversational, fun, productive and motivational energy."
+- Keep voice/model/settings unchanged within a comparison; note deliberate changes. Exact slider
+  values were not captured. This is an original designed voice, not an artist clone or production choice.
+- **Read first, listen second:** Manley first reads and judges how the wording sounds to him. Then he
+  hears the **same text** in his ElevenLabs voice and gives a separate reaction. Preserve both, even
+  when delivery improves a disliked line; History also needs readable text. Unreported playback
+  feedback stays unconfirmed. Listening judgments below are Manley's reports, not assistant auditions.
+
+### Three working examples
+
+All three are **fictional**, with **"Run It Up" — Offset & Key Glock (2025)** assumed observed.
+Unreported goals, effort and music causation remain unknown. Moderate → Feeling Good and Low → Spent
+each stay at the same internal Energy level; neither establishes an energy change or effort intensity.
+
+**Ordinary afternoon run:** 2.8 miles in 30 minutes, 4:10–4:40 p.m.; Moderate → Feeling Good;
+no personal best.
+
+> Run it up then! 2.8 miles in 30 minutes, and you finished feeling good—that’s a real quality run.
+
+Manley supplied the quality-run interpretation and accepted this tightened wording. **Listening:
+unconfirmed.** Generic swagger and time-saving endings missed; he wanted meaningful recognition of
+the work and finish together. "Quality" is affirmation, not a training grade or a judgment against Spent.
+
+**New longest run:** 4.6 miles in 47 minutes, finishing at 6:55 p.m.; Moderate → Powered Up;
+the fictional history establishes a previous longest distance of 4.2 miles.
+
+> 4.6 miles—your longest run yet. You ran it up, and you finished powered up.
+
+Manley's shortened opening, retained as a complete candidate. **Listening for this edit: unconfirmed.**
+He called the longer draft close, but rejected "talk your talk tonight" as worn/corny. The opening
+already connected achievement, music and Energy; its extra closing weakened the impact.
+
+**Spent morning run:** 3.1 miles in 31 minutes on a Houston park loop, 6:12–6:43 a.m.; Low → Spent;
+no effort report or performance comparison.
+
+> Three miles before seven, on a morning you started low on energy. You put up the numbers. Now
+> you’re feeling spent—sometimes this what hard work looks like.
+
+Manley's preferred wording, conversational phrasing preserved. **He explicitly liked it in his
+ElevenLabs voice:** productivity with encouragement. Earlier reassurance implied disappointment in
+reading, though voice helped; "let those miles speak for themselves" missed in both. "Hard work" here
+recognizes the whole run, not a rule that Spent proves hard or maximum effort.
+
+### Lessons to carry forward, not mandatory templates
+
+- **Recognition over recap:** ordinary runs deserve meaning, not facts followed by generic swagger.
+- **Land quickly, as a whole:** tighten for impact and rhythm, not a fixed length or cleverness in every clause.
+- **Endings must contribute:** avoid worn catchphrases and disconnected slogans. Artist character serves the run.
+- **Respect Energy:** Spent is not disappointment; Feeling Good does not prove improvement or music causation.
+
+### Current collaboration workflow
+
+1. **Choose one question and scenario.** Establish facts and unknowns; label fiction. No new required runner questions.
+2. **Draft one or two responses.** Get first reactions before explaining the intended effect or revising.
+3. **Read, then listen in ElevenLabs.** Keep reactions separate. Hit / Close / Miss is optional; never invent a rating.
+4. **Revise the specific weakness.** Preserve facts; distinguish wording from delivery changes. Case preferences are not universal rules.
+5. **Checkpoint, then try another run.** Keep representative examples and reasons, distinguishing first attempts from co-edits. Do not require Manley to write every outcome.
+
+**Next proposed step:** agree a short working instruction brief, then test unfamiliar runs before
+co-editing. This is not authorization for code, training or paid API integration.
+
+**Keep this notebook lean:** explain scope before saving; update this checkpoint only for meaningful
+learning, not every edit. No transcript, duplicate plans or automatic promotion of preferences to rules.
 
 ## Reading priority
 
