@@ -1,11 +1,27 @@
 ---
 name: design-music-reply-style
-description: "Music reply craft reference (July 6, 2026; post-control direction added August 1, 2026; four-example calibration set implemented August 2) — subordinate to design_music_intelligence_v1.md. The implemented July 30 policy failed live quality/trust tests; the July 31 Opus control showed a reachable creative core but weak selection, compression, and trust. The revised target is creative wording that lands cleanly, music/run fusion, optional rather than mandatory techniques, separate creative/trust/readiness grading, and idea-governed compression. It is implemented and deterministically verified, but not yet validated by a fresh live diagnostic."
+description: "Historical July/August music reply craft and console calibration record. For the October 3 Android implementation, use design_run_response_system.md and the first-version baseline in research_music_reflection_generation.md; historical absolute craft tests below are not current acceptance gates."
 metadata:
   type: project
 ---
 
 # Music reply style — craft rules for the AI agent (July 6, 2026)
+
+## Current precedence — October 3, 2026
+
+For the first Android reflection feature, follow [the delivery brief](design_run_response_system.md)
+and [the current writing baseline and user feedback](research_music_reflection_generation.md).
+The July/August implementation status, console contracts and diagnostics below are history, not
+claims about the current mobile build or prerequisites to restart creative evaluation.
+
+The old **delete-the-music test** and **never state musical meaning** rule are no longer absolute
+acceptance criteria. Direct naming, a brief clear connection, character or atmosphere may work;
+music need not be indispensable to every sentence. Likewise, changing expressive register does not
+mean losing RunState's values. Preserve factual safeguards and useful craft reasoning without
+turning each example into a compulsory formula. Later prototype feedback is saved in the research
+notebook; creative approval does not certify the mockup's run facts for production reuse.
+
+## Historical craft and implementation record
 
 How the agent should reference music in post-run replies. Extends the Phase 5 Step 1
 music feature (manual input).
@@ -28,10 +44,10 @@ showed that removing the rules entirely did not fix it either. The July 31 Opus 
 produced more promising creative material but still failed its approved trust and quality bar.
 Treat this file as the evolving craft target, not as a description of observed behavior.
 
-> **Canonical authority: [`design_music_intelligence_v1.md`](design_music_intelligence_v1.md).**
+> **Historical console V1 authority: [`design_music_intelligence_v1.md`](design_music_intelligence_v1.md).**
 > Music Intelligence V1 planning is **COMPLETE and approved (July 27, 2026)**. That document
-> is the single source of truth for purpose, contracts, prompt behavior, tests, and
-> evaluation. Where this file conflicts with it, **the canonical plan wins**. This file is
+> is the source of truth for that console plan's purpose, contracts, prompt behavior, tests, and
+> evaluation. Within that historical scope, **the canonical plan wins**. This file is
 > kept for craft reasoning and history; do not implement from it directly.
 
 This document contains two distinct slices:
@@ -76,7 +92,10 @@ persona, theme, tone, or brief accurate lyric fragment — and use it inside the
 Do not routinely name the artist or song and then explain what it means. The run and music
 should feel transformed together rather than delivered as two separate topics.
 
-### Assert versus observe — refinement of August 3, 2026
+### Assert versus observe — historical refinement of August 3, 2026
+
+The absolute deletion/gloss tests in this subsection are superseded by the October 3 note above;
+the contrast remains useful craft evidence, not a universal rejection rule.
 
 The August 2 evidence produced a sharper cut than "fusion happens in a phrase." The failing
 replies **assert** what the music is and then map it onto the run. The working ones **observe**
@@ -94,6 +113,9 @@ beat may occupy its own sentence or its own line; what it may not do is announce
 gloss it. **The working test:** delete the music. If the sentence still stands, it was assertion.
 
 ### Music is a supply of language, not a subject
+
+Historical framing: the blanket "never state it" prohibition below is superseded, not the need
+for a grounded musical connection that serves the run.
 
 The model treats a song as a referent — a thing to point at — and pointing creates an obligation to
 justify the pointing, which produces the fact → bridge → gloss shape. The reframe: the title is

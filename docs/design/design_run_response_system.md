@@ -7,6 +7,83 @@ metadata:
 
 Every successfully saved run gets a contextual response. No exceptions.
 
+## First functional Android reflection version — approved direction October 3, 2026
+
+**Target: an end-to-end generated-text feature, not storage-only or a canned-response demo.** Manley
+accepted the current creative baseline for implementation and wants to improve it after the feature
+works. Keep Anthropic as the writing provider. Bring live text generation forward using explicitly
+controlled run/music inputs; real GPS and automatic playback capture are not prerequisites.
+This changes the earlier delivery order, not the factual boundaries or save-before-reflection rule.
+No code is implemented by this brief; propose and approve bounded edits before execution.
+
+### Existing integration and what changes
+
+`src/com/runstate/RunAgent.java` already calls `https://api.anthropic.com/v1/messages`, reading
+`ANTHROPIC_API_KEY` from the environment. The source currently names `claude-haiku-4-5-20251001`,
+a 256-token response budget and a five-second request timeout. These are verified code settings,
+not a new model recommendation, availability check or suitable limits for four mobile candidates.
+
+Reuse relevant provider/client lessons, not the console class wholesale. Implement a small backend
+boundary so private credentials never enter the Android app. Choose the backend stack, runtime
+configuration, bounded timeouts/output budget and local test connection in the implementation plan.
+Do not open an unauthenticated public paid-generation endpoint; public hosting is not required for
+the initial local demonstration. Recheck current official provider documentation when coding.
+
+Update the writing instructions for the mobile use case using the research note's October 3
+baseline and accepted examples. Audit rather than inherit the old 35-word cap, instruction to speak
+with unqualified authority, Effort-based immediate interpretation, and examples whose statements
+go beyond their supplied facts (e.g. a solo run does not prove an empty park). Preserve useful
+anti-invention and free-text-as-data protections. Do not change console behavior silently; identify
+any shared refactor or console prompt edit explicitly in the proposed code slice.
+
+### First-version boundary
+
+1. Android durably completes the run first. Build an immutable evidence snapshot from that saved
+   record: identity, timestamps/timezone, metrics with units and provenance, known pre-run Energy,
+   and explicitly controlled music context. Unsupported fields remain unknown. Do not send full
+   RunStyle, raw GPS history or unrelated personal data. History-based claims require supplied
+   verified comparisons; otherwise omit them.
+2. Backend calls Anthropic with versioned writing instructions and representative examples. Request
+   four explicitly keyed texts for Spent, Feeling Good, Powered Up and no selection, using one common
+   factual foundation. One structured request is the starting proposal, not four mandatory API calls.
+   Each candidate is conditional on its branch, not a claim that the runner reported all four states.
+3. Validate response structure, branch completeness and basic content constraints before accepting
+   it. Mechanical validation cannot certify subjective quality or eliminate every hallucination.
+   Malformed/empty/provider-error responses must not become READY. No automatic creative judge or
+   unbounded repair/regeneration loop in this version.
+4. Android retains the existing optional Energy selection/no-selection behavior and commits only
+   the selected branch, exact text and finalization time under the original UUID. Use the durable
+   PENDING/READY/FAILED contract below; protect against duplicate requests, stale replies and retries
+   overwriting a finalized result. Plan pending-work and selection recovery across screen recreation
+   and app restart explicitly, without claiming in-memory coroutine ownership survives process death.
+5. Show the selected text in a minimal Run Complete view and read that same text in Log History,
+   including after reopening. API failure leaves the run saved and offers bounded reflection retry,
+   never a second run save. Do not present a fallback as a successful generated reflection.
+
+**Text first is an intentional staging decision.** ElevenLabs remains the provisional audition tool;
+spoken receipt/reflection and polished animation in the full delivery contract below remain later
+unless separately scoped. Define a clear text-stage equivalent of the existing quiet no-selection
+window in the UI slice; do not invent a required new question or silently change Energy semantics.
+Optional Effort does not select/regenerate the immediate response and must not block this milestone.
+The accepted examples span different runs and are not a ready-made four-branch family for one run.
+
+### Small implementation check, not another writing campaign
+
+Reuse the existing ordinary, Spent and verified-longest cases, plus unknown/no-music and missing-input
+cases. Check all four output branches for consistent facts, appropriate Energy and no invented history.
+Use mocked provider responses for automated tests. A separately approved, bounded real Anthropic
+smoke test checks the actual integration; report its sample quality honestly, not as broad validation.
+Exercise timeout, offline/error/malformed output, retry, duplicate/stale response handling, unchanged
+saved-run counts, exact selected-text persistence and reopening History without regeneration.
+The first functional milestone is complete only when newly generated text reaches Android and the
+stored selection survives reopen. Storage tests or a backend-only success do not complete that milestone.
+
+**Keep later:** GPS/music capture, Spotify snippets, ElevenLabs API integration, new runner questions,
+fine-tuning, automatic creative grading, full visual redesign and unrestricted artist research.
+Physical Android access is required before real outdoor GPS/music-observation testing, not before
+this emulator-based generated-text version. No new 36-output gate or manually polished four-example
+family is required before implementation. This does not remove basic factual/safety acceptance checks.
+
 ## Mobile Run Complete delivery contract — prototype-validated August 22, 2026
 
 **STATUS: CURRENT MOBILE DIRECTION, VALIDATED IN THE INTERACTIVE PROTOTYPE, NOT BUILT.** This

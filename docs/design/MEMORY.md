@@ -10,7 +10,7 @@ Index only. One line per file — detail lives in the file. Keep it that way.
 | --- | --- | --- |
 | **Progressive-input ladder is partially resolved** — shoe search/add/select/mileage now has a Start-screen home; route, surface and company remain open | Deferred; does not block Foundation Review | `design_shoe_selection.md` + `design_state_scan.md` |
 | Log History refinement / QA pass — empty states, `REPLY | SPLITS` expanded-record mockup, `REPLAY` decision, dawn-vs-sun glyphs. Later polish, not a prerequisite for the Android fixture foundation | After the Android fixture journey is durable | `ui_phase_handoff.md` §4 |
-| **Android fixture journey / Phase 3** — the process-owned coordinator drives a visible 3-2-1 into one durably stored run, plus Pause, Resume, 1.5-second hold-to-stop, Saved and Start another run; Running, Paused and Saved now show explicitly labeled fixture elapsed/active time, distance and average pace; 202 JVM and 59 emulator tests pass | Add fixture song/reflection data and carry the completed run into Run Complete and Log History | `project_current_state.md` + `run_initiation_register.md` + `design_run_response_system.md` |
+| **Android journey / current priority October 3** — durable fixture lifecycle and metrics built; last documented verification: 202 JVM / 59 emulator tests. Creative baseline accepted for first implementation | Connect live Anthropic generation through a backend using controlled inputs, then preserve/display the selected reflection in Run Complete and Log History; storage alone is not the milestone | `project_current_state.md` + `design_run_response_system.md` + `run_initiation_register.md` |
 | **Music feature inventory and prioritization** — completed August 26; the music ideas resolve into an evidence-and-feedback foundation before selection, live support or expression surfaces | Defer further music work behind the Android fixture journey | `design_music_selection_system.md` + `music_feature_register.md` |
 | RunStyle V2 strategy review — Manley's replacement direction | After rough screens exist | `idea_organization_analysis.md` |
 | **Full run editing beyond feedback** — History now supports post-run Energy/Effort updates and deletion by ID; distance, route, date, weather, music, and other field editing remains intentionally out of scope | Later product review | `ui_phase_handoff.md` |
@@ -20,7 +20,7 @@ Index only. One line per file — detail lives in the file. Keep it that way.
 | **Future Run Suggestions needs a ruling** — parked against the scope-watch resistance to proactive coaching nudges | Before any pre-run suggestion is designed | `parked_feature_ideas.md` |
 | Settle / Hold / Build — NEEDS REVIEW, recommended shape is axis-internal with no prompt | Manley deciding | `music_feature_register.md` |
 | **Structured song history** — provider-neutral conceptual contract approved: actual playback, RunState decisions and optional whole-run Taste / Run fit feedback stay distinct under the permanent run UUID; nothing is implemented | Fixture history in the Android journey; real observation after the mobile feasibility test | `design_music_selection_system.md` + `music_feature_register.md` |
-| Music final 36-output evaluation — never run, all gates stand | If music resumes | `music_intelligence_v1_evaluation.md` |
+| Music historical 36-output evaluation — never run; not a prerequisite for October 3 first-version implementation | Retain as historical evidence, not a reason to restart the creative loop; use bounded implementation checks | `music_intelligence_v1_evaluation.md` + `design_run_response_system.md` |
 | **Backend gaps the log screen surfaced** — start time, location points and splits now have mobile contracts; BPM is omitted unless a real source is separately approved; rolling-pace display remains later | Android implementation, except the deferred display items | `ui_phase_handoff.md` §5 + `run_initiation_register.md` |
 | Parked non-music ideas — Top Run Highlights, support messages, body feedback, context fields. Automatic splits is ACCEPTED/LATER, not parked | Each entry names its own unlock | `parked_feature_ideas.md` |
 
@@ -108,7 +108,7 @@ Claude Code if needed · Manley decides.
 
 ## Music/reflection research — resumed September 2026
 
-- [Music-aware reflection generation research](research_music_reflection_generation.md) — active source ledger, source-strength notes, shipped failure evidence and the provisional system-first direction; research only, not an implementation contract.
+- [Music-aware reflection generation research](research_music_reflection_generation.md) — October 3: creative baseline accepted for first implementation with Anthropic; approved examples and compact writing guidance retained. End-to-end mobile generated text is next, not storage-only. General generation quality remains unproven; handoff stays in chat.
 
 ## Reference and parked
 

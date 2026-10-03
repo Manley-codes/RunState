@@ -123,6 +123,20 @@ Two things that follow from it, also his:
 - Include direct links so Manley can choose where to go deeper; keep secondary details behind those
   links unless they materially change the recommendation or he asks for a full review
 - For music/reflection work, prefer a deliberate research-and-analysis pace and the construction of a
-  reusable system over manually drafting every possible outcome variation
+  reusable system over manually drafting every possible outcome variation. This September research
+  pace is historical; the October 3 priority below governs the current milestone.
+
+**Music/reflection implementation priority — clarified October 3, 2026:**
+
+- Reach a functional foundation now; improve the creative system after it is usable in the app.
+  Do not interpret each response as permission to restart a prose-refinement or research loop.
+- Before a check, explain in plain English what it tests, what judgment is needed, and what remains
+  afterward. Agree on a bounded stopping point; related creative examples may be reviewed together.
+  "One decision at a time" does not require one reflection per turn or relax bounded code approval.
+- Make unseen work explicit: distinguish an idea, a writing experiment, a documentation edit and an
+  actual app change. State the proposed file/code scope before acting, and report what was completed.
+- Keep relevant research and representative feedback, not a transcript. Reuse existing notes;
+  preserve important limitations without creating another research gate. Manley remains the creative
+  decision-maker. Reading and listening reactions may differ and should not be merged.
 
 **Why:** User explicitly stated all of these preferences. The core shift: Claude holds its own view and presents it — user decides, but always knows where Claude actually stands.

@@ -5,14 +5,32 @@ metadata:
   type: project
 ---
 
-As of September 15, 2026, RunState remains one product and one Git repository with two implementation
+## Current priority — October 3, 2026
+
+Manley clarified that the music/reflection creative baseline is ready for a first functional
+implementation, with further refinement later. Keep Anthropic and update the older writing prompt
+and integration as needed. The next milestone is newly generated reflection text in Android from
+controlled run/music inputs, then the exact selected reflection in durable Log History. A small
+backend keeps credentials off the phone; storage is a component, not the entire deliverable.
+This intentionally moves live generation ahead of GPS and automatic music observation.
+
+The bounded implementation brief is at the top of `design_run_response_system.md`; examples,
+writing guidance and honest test limitations remain in `research_music_reflection_generation.md`.
+Do not restart the writing/research loop or the old 36-output gate before coding. Exact code slices
+still need approval. No backend, prompt code, Android reflection or History implementation was
+added during this documentation pass. The superseded storage-only handoff file was removed; the
+new-session handoff is copy-and-paste in chat. Old calendar targets below are not renewed commitments.
+
+## Implemented baseline — verified against source October 3; last full test checkpoint September 15
+
+As of the September 15, 2026 checkpoint, RunState remains one product and one Git repository with two implementation
 areas: the intact working Java/Maven console application and a native Android/Kotlin/Compose journey
 under `android/`. The Android application now completes the durable fixture lifecycle from a visible
 countdown through Running, Paused and Saved and displays controlled fixture elapsed/active time,
 distance and average pace; music, reflection, Run Complete and Log History remain interactive design
 prototypes rather than the implemented interface.
 
-## Current delivery resume point — September 15, 2026
+## Previous delivery checkpoint — September 15, 2026
 
 - **Phase 3 Android implementation is in progress, with the durable visible lifecycle complete.**
   Commit `a3f423b` added the process-owned official-start foundation, and commit `a01f2fb` connected
@@ -140,7 +158,7 @@ prototypes rather than the implemented interface.
   active-row discovery, recovery core, production database, process-scoped admission coordinator and
   startup invocation now exist. The foreground service and the rest of this architecture remain
   approved contracts rather than implemented behavior.
-- **Next delivery planning step:** add controlled fixture song/reflection data, then carry the
+- **Previous delivery planning step (superseded by the October 3 priority above):** add controlled fixture song/reflection data, then carry the
   durably completed run through Run Complete into Log History. GPS and real provider
   integration remain behind the complete Phase 3 fixture journey, as do remaining Log History polish,
   further music intelligence and RunStyle V2.
