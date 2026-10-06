@@ -17,10 +17,10 @@ This intentionally moves live generation ahead of GPS and automatic music observ
 The bounded implementation brief is at the top of `design_run_response_system.md`; examples,
 writing guidance and honest test limitations remain in `research_music_reflection_generation.md`.
 Do not restart the writing/research loop or the old 36-output gate before coding. Exact code slices
-still need approval. The contract-only backend foundation described below is now implemented; no
-endpoint, generation, Android reflection or History implementation exists yet. The superseded
-storage-only handoff file was removed; the new-session handoff is copy-and-paste in chat. Old calendar
-targets below are not renewed commitments.
+still need approval. The contract and provider-adapter foundations described below are now
+implemented; no endpoint, live generation verification, Android reflection or History implementation
+exists yet. The superseded storage-only handoff file was removed; the new-session handoff is
+copy-and-paste in chat. Old calendar targets below are not renewed commitments.
 
 ## Backend contract foundation — verified October 5, 2026
 
@@ -34,9 +34,38 @@ targets below are not renewed commitments.
   contradictions.
 - IntelliJ IDEA's bundled Maven ran the backend suite successfully: 8 tests, 0 failures, 0 errors.
   This proves the local contract rules only. It cannot prove Android saved a run.
-- Generation and Android integration remain to be built. There is no HTTP endpoint, Anthropic call,
-  writing prompt, candidate selection, recovery or reflection persistence in this slice, so the
-  reflection milestone is not complete.
+- That contract slice did not include an HTTP endpoint, Anthropic adapter, writing prompt, candidate
+  selection, recovery or reflection persistence. The adapter and prompt arrived in the next bounded
+  slice below; the reflection milestone remains incomplete.
+
+## Anthropic provider adapter foundation - verified October 5, 2026
+
+- `ReflectionProvider` now separates the app-facing generation operation from
+  `AnthropicReflectionProvider`'s transport work. The adapter reads `ANTHROPIC_API_KEY` only from the
+  backend environment, supports optional `ANTHROPIC_MODEL` configuration and redacts the key from
+  request/configuration text and reported failures.
+- Official Anthropic documentation was rechecked before implementation. The adapter uses the current
+  Messages API `output_config.format` JSON-schema shape, which supports Haiku 4.5, and starts with the
+  active pinned `claude-haiku-4-5-20251001` model. Initial limits are a 10-second connection timeout,
+  45-second request timeout and 2,048 output tokens; these are starting bounds, not measured guarantees.
+- The versioned `mobile-reflection-v1.txt` prompt carries the October 3 writing baseline and complete
+  fictional calibration facts, keeps examples separate from current evidence, treats music text as
+  data, and forbids invented history, comparisons, improvement, music causation, questions and
+  below-average commentary. The old console word cap and Effort interpretation were not copied.
+- The adapter sends only completed-run evidence, with raw units, provenance and unknown values intact;
+  request/run identifiers stay outside the provider prompt. It requests all four exact branch keys in
+  one call and accepts only an `end_turn` response containing one complete, nonblank string object.
+- Gson 2.11.0 strict parsing now rejects raw control characters, unsupported escapes and invalid
+  Unicode escapes in both the provider envelope and candidate output. Malformed syntax consistently
+  becomes typed `INVALID_RESPONSE`; duplicate-key checks, branch completeness and exact accepted text
+  remain intact.
+- Non-success status, refusal, truncation, malformed or duplicate JSON, missing/extra keys, wrong value
+  types, blank text, timeouts and connection failures become explicit failures. There is no automatic
+  retry or successful canned fallback.
+- IntelliJ IDEA's bundled Maven ran the complete backend suite successfully: 18 tests, 0 failures,
+  0 errors. Ten adapter tests used dummy configuration and simulated transport responses; no live
+  Anthropic traffic occurred. Real generation quality, credentials, network behavior and Android
+  delivery remain unverified, and this slice still does not complete the reflection milestone.
 
 ## Implemented baseline — verified against source October 3; last full test checkpoint September 15
 
