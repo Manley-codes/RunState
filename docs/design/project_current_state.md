@@ -17,18 +17,36 @@ This intentionally moves live generation ahead of GPS and automatic music observ
 The bounded implementation brief is at the top of `design_run_response_system.md`; examples,
 writing guidance and honest test limitations remain in `research_music_reflection_generation.md`.
 Do not restart the writing/research loop or the old 36-output gate before coding. Exact code slices
-still need approval. No backend, prompt code, Android reflection or History implementation was
-added during this documentation pass. The superseded storage-only handoff file was removed; the
-new-session handoff is copy-and-paste in chat. Old calendar targets below are not renewed commitments.
+still need approval. The contract-only backend foundation described below is now implemented; no
+endpoint, generation, Android reflection or History implementation exists yet. The superseded
+storage-only handoff file was removed; the new-session handoff is copy-and-paste in chat. Old calendar
+targets below are not renewed commitments.
+
+## Backend contract foundation — verified October 5, 2026
+
+- `backend/` is now a standalone Java 17/Maven project with JUnit 5. Its immutable records define
+  canonical request/run identifiers, completed-run evidence aligned with Android's timestamp,
+  timezone, raw-distance, display-unit and metric-provenance meanings, optional pre-run Energy and
+  explicitly controlled music evidence. Missing optional values remain unknown.
+- The response contract requires exact nonblank text for `spent`, `feeling_good`, `powered_up` and
+  `no_selection`; accepted text is preserved without trimming. Validation covers identifiers,
+  timestamp order, IANA timezone resolution, active duration, metric consistency and music-state
+  contradictions.
+- IntelliJ IDEA's bundled Maven ran the backend suite successfully: 8 tests, 0 failures, 0 errors.
+  This proves the local contract rules only. It cannot prove Android saved a run.
+- Generation and Android integration remain to be built. There is no HTTP endpoint, Anthropic call,
+  writing prompt, candidate selection, recovery or reflection persistence in this slice, so the
+  reflection milestone is not complete.
 
 ## Implemented baseline — verified against source October 3; last full test checkpoint September 15
 
-As of the September 15, 2026 checkpoint, RunState remains one product and one Git repository with two implementation
-areas: the intact working Java/Maven console application and a native Android/Kotlin/Compose journey
-under `android/`. The Android application now completes the durable fixture lifecycle from a visible
-countdown through Running, Paused and Saved and displays controlled fixture elapsed/active time,
-distance and average pace; music, reflection, Run Complete and Log History remain interactive design
-prototypes rather than the implemented interface.
+RunState remains one product and one Git repository with three implementation areas: the intact
+working Java/Maven console application, the native Android/Kotlin/Compose journey under `android/`,
+and the contract-only Java/Maven reflection backend under `backend/`. The Android application now
+completes the durable fixture lifecycle from a visible countdown through Running, Paused and Saved
+and displays controlled fixture elapsed/active time, distance and average pace; music, reflection,
+Run Complete and Log History remain interactive design prototypes rather than the implemented
+interface.
 
 ## Previous delivery checkpoint — September 15, 2026
 
