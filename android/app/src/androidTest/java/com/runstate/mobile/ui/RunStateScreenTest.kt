@@ -1,9 +1,12 @@
 package com.runstate.mobile.ui
 
 import androidx.activity.ComponentActivity
+import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Text
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.assertIsDisplayed
@@ -15,7 +18,10 @@ import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.LifecycleRegistry
@@ -53,7 +59,7 @@ class RunStateScreenTest {
         const val START_FAILED = "RunState couldn't save the start of your run."
         const val RUNNING = "You have a run in progress"
         const val PAUSED = "You have a paused run"
-        const val SAVED = "Run saved."
+        const val SAVED = "RUN SAVED"
         const val FAILED = "RunState couldn't get ready."
 
         const val START = "Start"
@@ -93,25 +99,36 @@ class RunStateScreenTest {
         model: RunUiModel,
         metrics: RunMetricsDisplay? = null,
         countdownDigit: Int? = null,
-        actionsEnabled: Boolean = true
+        actionsEnabled: Boolean = true,
+        modifier: Modifier = Modifier,
+        fontScale: Float? = null
     ): RecordedActions {
         val actions = RecordedActions()
 
         composeTestRule.setContent {
-            RunStateScreen(
-                model = model,
-                metrics = metrics,
-                countdownDigit = countdownDigit,
-                onStart = { actions.starts++ },
-                onCancelCountdown = { actions.cancels++ },
-                onRetryInitialization = { actions.initializationRetries++ },
-                onRetryStart = { actions.startRetries++ },
-                onPause = { actions.pauses++ },
-                onResume = { actions.resumes++ },
-                onStop = { actions.stops++ },
-                onStartAnother = { actions.startAnothers++ },
-                actionsEnabled = actionsEnabled
-            )
+            val density = LocalDensity.current
+            CompositionLocalProvider(
+                LocalDensity provides Density(
+                    density = density.density,
+                    fontScale = fontScale ?: density.fontScale
+                )
+            ) {
+                RunStateScreen(
+                    model = model,
+                    metrics = metrics,
+                    countdownDigit = countdownDigit,
+                    onStart = { actions.starts++ },
+                    onCancelCountdown = { actions.cancels++ },
+                    onRetryInitialization = { actions.initializationRetries++ },
+                    onRetryStart = { actions.startRetries++ },
+                    onPause = { actions.pauses++ },
+                    onResume = { actions.resumes++ },
+                    onStop = { actions.stops++ },
+                    onStartAnother = { actions.startAnothers++ },
+                    modifier = modifier,
+                    actionsEnabled = actionsEnabled
+                )
+            }
         }
 
         return actions
@@ -327,6 +344,7 @@ class RunStateScreenTest {
     fun savedOffersStartAnotherAndKeepsNormalBack() {
         val actions = renderScreen(RunUiState.Saved)
 
+        composeTestRule.onNodeWithTag(RUN_COMPLETE_SCREEN_TAG).assertIsDisplayed()
         composeTestRule.onNodeWithText(SAVED).assertIsDisplayed()
         composeTestRule.onNodeWithTag(HOLD_TO_STOP_TAG).assertDoesNotExist()
         assertFalse(backIsIntercepted())
@@ -375,11 +393,51 @@ class RunStateScreenTest {
         assertFixtureMetricsDisplayed()
     }
 
-    /** Saved discloses and renders the final fixture metrics. */
+    /** Saved gives the frozen metrics the dedicated Run Complete hierarchy. */
     @Test
     fun savedShowsTheValuesAndFixtureDisclosure() {
         renderScreen(model = RunUiModel(RunUiState.Saved), metrics = fixtureMetrics())
-        assertFixtureMetricsDisplayed()
+
+        composeTestRule.onNodeWithTag(RUN_COMPLETE_SCREEN_TAG).assertIsDisplayed()
+        composeTestRule.onNodeWithTag(RUN_COMPLETE_DISTANCE_TAG).assertIsDisplayed()
+        composeTestRule.onNodeWithTag(RUN_COMPLETE_VISUALIZER_TAG).assertIsDisplayed()
+        composeTestRule.onNodeWithText("FIXTURE METRICS").assertIsDisplayed()
+        composeTestRule.onNodeWithText("0.11").assertIsDisplayed()
+        composeTestRule.onNodeWithText("MI").assertIsDisplayed()
+        composeTestRule.onNodeWithText("TIME").assertIsDisplayed()
+        composeTestRule.onNodeWithText("00:02:00").assertIsDisplayed()
+        composeTestRule.onNodeWithText("PACE").assertIsDisplayed()
+        composeTestRule.onNodeWithText("8:56").assertIsDisplayed()
+        composeTestRule.onNodeWithText("/MI").assertIsDisplayed()
+        composeTestRule.onNodeWithText("ACTIVE").assertIsDisplayed()
+        composeTestRule.onNodeWithText("00:01:00").assertIsDisplayed()
+    }
+
+    /** Large type and a short viewport keep every fact scrollable and the main action usable. */
+    @Test
+    fun savedRemainsUsableWithLargeTextOnShortViewport() {
+        val actions = renderScreen(
+            model = RunUiModel(RunUiState.Saved),
+            metrics = fixtureMetrics(),
+            modifier = Modifier.size(width = 360.dp, height = 480.dp),
+            fontScale = 2f
+        )
+
+        composeTestRule.onNodeWithText("ACTIVE").performScrollTo().assertIsDisplayed()
+        composeTestRule.onNodeWithText(START_ANOTHER).assertIsDisplayed().performClick()
+
+        assertEquals(1, actions.startAnothers)
+    }
+
+    /** A completed run with no readable metrics stays visibly unknown. */
+    @Test
+    fun savedWithUnavailableMetricsInventsNoResults() {
+        renderScreen(RunUiState.Saved)
+
+        composeTestRule.onNodeWithText("METRICS UNAVAILABLE").assertIsDisplayed()
+        assertEquals(4, composeTestRule.onAllNodesWithText("—").fetchSemanticsNodes().size)
+        composeTestRule.onNodeWithText("0.00 mi").assertDoesNotExist()
+        composeTestRule.onNodeWithText("00:00:00").assertDoesNotExist()
     }
 
     /** A missing read is named honestly and never rendered as a zero-distance run. */

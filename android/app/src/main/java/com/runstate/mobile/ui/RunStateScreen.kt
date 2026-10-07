@@ -90,6 +90,18 @@ internal fun RunStateScreen(
     // reports a write still underway — the latter survives a rotation, the former does not.
     val runControlsEnabled = actionsEnabled && !model.actionInProgress
 
+    // Completion has its own full-screen hierarchy. It still receives only the same formatted
+    // saved metrics and the same callback; this branch changes presentation, not ownership.
+    if (state == RunUiState.Saved) {
+        RunCompleteScreen(
+            metrics = metrics,
+            onStartAnother = onStartAnother,
+            actionsEnabled = actionsEnabled,
+            modifier = modifier
+        )
+        return
+    }
+
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -163,14 +175,7 @@ internal fun RunStateScreen(
                 )
             }
 
-            RunUiState.Saved -> {
-                RunMetricsPanel(metrics)
-                ScreenAction(
-                    label = "Start another run",
-                    enabled = actionsEnabled,
-                    onClick = onStartAnother
-                )
-            }
+            RunUiState.Saved -> Unit // Drawn above as the dedicated Run Complete surface.
 
             RunUiState.InitializationFailed -> ScreenAction(
                 label = "Try again",
