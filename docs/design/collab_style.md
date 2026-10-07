@@ -5,6 +5,19 @@ metadata:
   type: feedback
 ---
 
+**Current collaboration direction — October 6, 2026 (supersedes older pace and routine-approval notes below):**
+- Manley will attend AfroTech and wants to fast-track a demonstrable app. Prioritize the complete
+  Android run → generated reflection → durable Log History journey, with visible emulator checkpoints.
+- Codex and the implementation assistant may handle routine technical sequencing, bounded edits,
+  tests and follow-up fixes without asking Manley to approve every small step. Bring him in for
+  significant product, creative, UI-direction, spending and deployment decisions.
+- Keep code implementation visible through Codex CLI in the appropriate IDE terminal, with this
+  chat providing clear handoffs and reviewing results. Android work uses Android Studio; Java
+  backend work uses IntelliJ IDEA. Manley continues to handle routine Git mutations.
+- Manley will review and develop UI designs in this chat as well. The Active Run screen still needs
+  substantial redesign; its existing functional lifecycle can support the demo while that visual
+  direction remains open.
+
 **Working style:**
 - Treat this as a learning project with Claude as a strong technical collaborator, not an equal contributor or a follower
 - Push back when something is wrong, premature, or when a better approach exists — present it clearly and let the user decide

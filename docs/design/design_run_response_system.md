@@ -180,8 +180,10 @@ RunState understand the runner across runs.**
 - Run Complete and RunState Log History are separate views inside one permanent phone shell. History
   reads the same stored run record and exact reflection text. Back restores the completed screen
   without saving, rebuilding, replaying speech or resetting inputs.
-- The reflection speaks once when it arrives. Entering History does not speak it again; `REPLAY` is
-  deliberate.
+- The reflection speaks when it arrives. **October 6, 2026 update:** Manley wants opening a run in
+  History to speak its stored reflection automatically as well. History must read that stored text,
+  never regenerate it. The role of `REPLAY` remains for later UI refinement. The first functional
+  Android milestone is intentionally text-first and does not yet implement speech.
 
 ### Post-run voice contrast — DIRECTION, NOT YET PROTOTYPED *(added August 31, 2026)*
 

@@ -5,7 +5,7 @@ metadata:
   type: project
 ---
 
-## Current priority — October 3, 2026
+## Current priority — October 7, 2026
 
 Manley clarified that the music/reflection creative baseline is ready for a first functional
 implementation, with further refinement later. Keep Anthropic and update the older writing prompt
@@ -16,11 +16,56 @@ This intentionally moves live generation ahead of GPS and automatic music observ
 
 The bounded implementation brief is at the top of `design_run_response_system.md`; examples,
 writing guidance and honest test limitations remain in `research_music_reflection_generation.md`.
-Do not restart the writing/research loop or the old 36-output gate before coding. Exact code slices
-still need approval. The contract and provider-adapter foundations described below are now
-implemented; no endpoint, live generation verification, Android reflection or History implementation
-exists yet. The superseded storage-only handoff file was removed; the new-session handoff is
-copy-and-paste in chat. Old calendar targets below are not renewed commitments.
+Do not restart the writing/research loop or the old 36-output gate before coding. Keep code changes
+as bounded CLI handoffs that Manley can watch. The contract and provider-adapter foundations below,
+the native Run Complete scaffold and a loopback HTTP endpoint are implemented. No live generation
+verification, Android reflection or History implementation exists yet. Old calendar targets below
+are not renewed commitments.
+
+## Local reflection API — reviewed October 7, 2026
+
+- The standalone backend now exposes `POST /api/reflections/candidates` on `127.0.0.1` using the
+  existing contract and provider adapter. It validates strict UTF-8 JSON, preserves the four exact
+  candidate texts, limits the request body to 64 KiB, returns safe error codes and coalesces
+  duplicate request IDs within one server process. The backend README documents its protocol and
+  process-local duplicate cache.
+- Eight fake-provider HTTP tests join the earlier eight contract and ten adapter tests. Maven's
+  saved reports show 26 tests with zero failures, errors or skips. The fake-server smoke check used no
+  Anthropic traffic. Android has not called the endpoint; credentials and real generation remain
+  unverified.
+- The October 7 hardening pass added an early local request guard. It accepts only `127.0.0.1`,
+  `localhost` or the emulator's `10.0.2.2` Host with the actual listening port, and rejects every
+  supplied Origin before reading the body or invoking the provider. The extra tests cover accepted
+  and rejected headers. This is a browser-origin guard, not authentication against local programs.
+  The process-local duplicate cache has no eviction or restart durability, so a later hosted service
+  needs a separate design. No paid live call has yet verified the configured Anthropic provider.
+
+## Native Run Complete visual translation — verified and top layout accepted October 6, 2026
+
+- Saved now opens a first-pass native Jetpack Compose Run Complete screen using the already saved fixture
+  distance, elapsed time, active time and pace. Unknown metrics remain visibly unavailable;
+  "Fixture metrics" identifies the controlled data. "Start another run" retains the working
+  lifecycle callback. This proves the data-to-screen route, not the generated reflection feature.
+- Manley reviewed the first emulator screenshot on October 6 and said it did not resemble his
+  `C:\Users\Owner\OneDrive\RunState UI\Production\complete.html` design. A second bounded CLI
+  pass replaced its centered metric cards and badge with the reference's offset condensed distance,
+  compact metrics, inline saved status, grid/layered background and static completion ring. The
+  updated emulator screenshot is `android/artifacts/run-complete-emulator.png`, beside the rendered
+  reference `android/artifacts/reference-run-complete.png`. Manley accepted this top layout as the
+  foundation for Energy and reflection. The lower area stays sparse because Energy, reflection and
+  History are not built.
+- The second CLI pass reported 202 JVM tests and 61 emulator tests passing after one countdown
+  timing test passed on isolated rerun. The last connected-test XML contains only that rerun, so
+  the full-suite count is a CLI report rather than independently preserved XML evidence.
+- Follow-up before shipping: darken the smallest essential metric labels and the fixture disclosure
+  for readability. The saved-data route, honest unavailable states and restart action remain intact.
+- The earlier CLI pass reported 202 JVM tests and 60 emulator tests passing. Its Medium Phone
+  walkthrough completed Start, Pause and hold Stop, then displayed the frozen fixture values.
+- The second pass made factual content scroll while keeping restart reachable, and uses a linear
+  metric layout at large system text or on narrow screens. Continue testing on the physical phone.
+- Manley expects access to a physical Android phone about a week after October 6 and plans to demo
+  on it. Continue emulator implementation now, then install and exercise the full journey on the
+  phone promptly when it arrives. The backend's demo connection method is still to be decided.
 
 ## Backend contract foundation — verified October 5, 2026
 
@@ -71,11 +116,11 @@ copy-and-paste in chat. Old calendar targets below are not renewed commitments.
 
 RunState remains one product and one Git repository with three implementation areas: the intact
 working Java/Maven console application, the native Android/Kotlin/Compose journey under `android/`,
-and the contract-only Java/Maven reflection backend under `backend/`. The Android application now
+and the local-endpoint Java/Maven reflection backend under `backend/`. The Android application now
 completes the durable fixture lifecycle from a visible countdown through Running, Paused and Saved
-and displays controlled fixture elapsed/active time, distance and average pace; music, reflection,
-Run Complete and Log History remain interactive design prototypes rather than the implemented
-interface.
+and displays controlled fixture elapsed/active time, distance and average pace. The first native Run
+Complete screen is now implemented; music, reflection and Log History remain design prototypes
+rather than implemented features.
 
 ## Previous delivery checkpoint — September 15, 2026
 

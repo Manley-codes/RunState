@@ -307,7 +307,10 @@ Not blocking; revisit later.
   better later form is on-demand, revealed from the reply when a runner wants to know what informed
   it. **That on-demand form has not been designed** and is a separate future pass.
 - **`Remove response`** remains a separate wording/behavior cleanup if the control survives; it only
-  collapses the record and does not remove anything.
+  collapses the record and does not remove anything. In the October 6 review of the supplied
+  `complete.html` export, Manley could not locate it on screen. Its visibility and intended future
+  purpose remain open; it may be a placeholder. Revisit the expanded Log History view together
+  before deciding whether the control should exist or what it should do.
 - **Dawn and sun glyphs read too similarly** at small size.
 - **`Morning run` will dominate** the label, given the run times. Milder than the `SOUNDTRACK`
   problem it replaced, and the weather glyph now carries differentiation.
