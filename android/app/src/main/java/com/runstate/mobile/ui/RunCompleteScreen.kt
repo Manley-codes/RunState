@@ -22,6 +22,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -48,6 +49,9 @@ import kotlin.math.sin
 internal const val RUN_COMPLETE_SCREEN_TAG = "runCompleteScreen"
 internal const val RUN_COMPLETE_DISTANCE_TAG = "runCompleteDistance"
 internal const val RUN_COMPLETE_VISUALIZER_TAG = "runCompleteVisualizer"
+internal const val RUN_COMPLETE_REFLECTION_TAG = "runCompleteReflection"
+internal const val RUN_COMPLETE_REFLECTION_TEXT_TAG = "runCompleteReflectionText"
+internal const val RUN_COMPLETE_REFLECTION_RETRY_TAG = "runCompleteReflectionRetry"
 
 private val CompletionInk = Color(0xFF4A5049)
 private val CompletionStrongInk = Color(0xFF353A34)
@@ -56,6 +60,13 @@ private val CompletionGreen = Color(0xFF6A7F60)
 private val CompletionBlue = Color(0xFFAFCEDA)
 private val CompletionSurfaceTop = Color(0xFFFCFCFA)
 private val CompletionSurfaceBottom = Color(0xFFF4F5F1)
+
+/** The only reflection information the completion UI is allowed to know. */
+internal sealed interface RunCompleteReflectionDisplay {
+    data object Preparing : RunCompleteReflectionDisplay
+    data class Ready(val text: String) : RunCompleteReflectionDisplay
+    data object Failed : RunCompleteReflectionDisplay
+}
 
 /**
  * Android ships a condensed sans family. Prefer it for instrument-like numbers and fall
@@ -79,6 +90,8 @@ private val CompletionNumberFont = FontFamily(
 @Composable
 internal fun RunCompleteScreen(
     metrics: RunMetricsDisplay?,
+    reflection: RunCompleteReflectionDisplay?,
+    onRetryReflection: () -> Unit,
     onStartAnother: () -> Unit,
     actionsEnabled: Boolean,
     modifier: Modifier = Modifier
@@ -113,6 +126,14 @@ internal fun RunCompleteScreen(
                 pace = pace,
                 active = metrics?.active ?: "—"
             )
+            if (reflection != null) {
+                Spacer(modifier = Modifier.height(14.dp))
+                ReflectionPanel(
+                    reflection = reflection,
+                    onRetry = onRetryReflection,
+                    retryEnabled = actionsEnabled
+                )
+            }
         }
 
         Button(
@@ -138,6 +159,103 @@ internal fun RunCompleteScreen(
                 fontWeight = FontWeight.SemiBold,
                 letterSpacing = 0.2.sp
             )
+        }
+    }
+}
+
+/**
+ * Temporary text-only reflection treatment while Energy selection is not implemented.
+ * The disclosure stays attached in every state so a fake reply cannot resemble runner data.
+ */
+@Composable
+private fun ReflectionPanel(
+    reflection: RunCompleteReflectionDisplay,
+    onRetry: () -> Unit,
+    retryEnabled: Boolean
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag(RUN_COMPLETE_REFLECTION_TAG)
+            .background(
+                color = Color.White.copy(alpha = 0.62f),
+                shape = RoundedCornerShape(22.dp)
+            )
+            .padding(horizontal = 20.dp, vertical = 18.dp)
+    ) {
+        Text(
+            text = "REFLECTION",
+            color = CompletionMutedInk,
+            fontSize = 10.sp,
+            fontWeight = FontWeight.Bold,
+            letterSpacing = 1.9.sp
+        )
+        Text(
+            text = "FAKE BACKEND · TEST DATA",
+            color = CompletionGreen,
+            fontSize = 10.sp,
+            fontWeight = FontWeight.Bold,
+            letterSpacing = 1.25.sp,
+            modifier = Modifier.padding(top = 6.dp)
+        )
+
+        when (reflection) {
+            RunCompleteReflectionDisplay.Preparing -> {
+                Text(
+                    text = "Preparing your reflection…",
+                    color = CompletionStrongInk,
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Medium,
+                    lineHeight = 27.sp,
+                    modifier = Modifier.padding(top = 18.dp)
+                )
+                Text(
+                    text = "Your run is already saved.",
+                    color = CompletionMutedInk,
+                    fontSize = 13.sp,
+                    lineHeight = 19.sp,
+                    modifier = Modifier.padding(top = 6.dp)
+                )
+            }
+
+            is RunCompleteReflectionDisplay.Ready -> Text(
+                text = reflection.text,
+                color = CompletionStrongInk,
+                fontSize = 21.sp,
+                fontWeight = FontWeight.Medium,
+                lineHeight = 29.sp,
+                modifier = Modifier
+                    .padding(top = 18.dp)
+                    .testTag(RUN_COMPLETE_REFLECTION_TEXT_TAG)
+            )
+
+            RunCompleteReflectionDisplay.Failed -> {
+                Text(
+                    text = "Reflection couldn’t be prepared.",
+                    color = CompletionStrongInk,
+                    fontSize = 19.sp,
+                    fontWeight = FontWeight.Medium,
+                    lineHeight = 26.sp,
+                    modifier = Modifier.padding(top = 18.dp)
+                )
+                Text(
+                    text = "Your saved run is unchanged. Start the local fake backend, then retry.",
+                    color = CompletionMutedInk,
+                    fontSize = 13.sp,
+                    lineHeight = 19.sp,
+                    modifier = Modifier.padding(top = 6.dp)
+                )
+                OutlinedButton(
+                    onClick = onRetry,
+                    enabled = retryEnabled,
+                    shape = RoundedCornerShape(16.dp),
+                    modifier = Modifier
+                        .padding(top = 14.dp)
+                        .testTag(RUN_COMPLETE_REFLECTION_RETRY_TAG)
+                ) {
+                    Text("Retry reflection")
+                }
+            }
         }
     }
 }
@@ -425,7 +543,7 @@ private fun CompactMetric(
     }
 }
 
-/** A neutral completion mark; static because no music or reflection state exists yet. */
+/** A neutral completion mark; static because reflection text does not imply live analysis. */
 @Composable
 private fun CompletionVisualizer(modifier: Modifier = Modifier) {
     Canvas(modifier = modifier.testTag(RUN_COMPLETE_VISUALIZER_TAG)) {

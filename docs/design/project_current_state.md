@@ -18,9 +18,10 @@ The bounded implementation brief is at the top of `design_run_response_system.md
 writing guidance and honest test limitations remain in `research_music_reflection_generation.md`.
 Do not restart the writing/research loop or the old 36-output gate before coding. Keep code changes
 as bounded CLI handoffs that Manley can watch. The contract and provider-adapter foundations below,
-the native Run Complete scaffold and a loopback HTTP endpoint are implemented. No live generation
-verification, Android reflection or History implementation exists yet. Old calendar targets below
-are not renewed commitments.
+the native Run Complete scaffold, loopback HTTP endpoint and an emulator-only fake-provider bridge
+are implemented. Energy selection, durable reflection storage, Log History, live Anthropic
+generation and physical-phone connectivity remain unbuilt. Old calendar targets below are not
+renewed commitments.
 
 ## Local reflection API — reviewed October 7, 2026
 
@@ -31,14 +32,34 @@ are not renewed commitments.
   process-local duplicate cache.
 - Eight fake-provider HTTP tests join the earlier eight contract and ten adapter tests. Maven's
   saved reports show 26 tests with zero failures, errors or skips. The fake-server smoke check used no
-  Anthropic traffic. Android has not called the endpoint; credentials and real generation remain
-  unverified.
+  Anthropic traffic. Android debug builds now call the fake endpoint through the emulator host alias;
+  credentials and real generation remain unverified.
 - The October 7 hardening pass added an early local request guard. It accepts only `127.0.0.1`,
   `localhost` or the emulator's `10.0.2.2` Host with the actual listening port, and rejects every
   supplied Origin before reading the body or invoking the provider. The extra tests cover accepted
   and rejected headers. This is a browser-origin guard, not authentication against local programs.
   The process-local duplicate cache has no eviction or restart durability, so a later hosted service
   needs a separate design. No paid live call has yet verified the configured Anthropic provider.
+
+## Android fake-reflection bridge — verified October 7, 2026
+
+- After Room durably completes a run, the debug app re-reads that row by UUID and sends raw saved
+  timestamps, timezone, metrics and provenance to the loopback-bound fake backend through
+  `10.0.2.2:8787`. Pre-run Energy and music are explicitly `UNKNOWN`; formatted screen text is not
+  used as evidence. The client validates matching identifiers and all four exact nonblank candidate
+  strings before exposing the fake `no_selection` text.
+- A process-owned coordinator starts the request outside Compose, holds the reply behind the
+  six-second Saved quiet window and prevents rotation from issuing a duplicate call. Attempt state
+  is stored per run, so a late success or failure for run A cannot replace run B's visible state.
+  Failure offers a reflection-only retry and does not save another run.
+- The panel is labeled `FAKE BACKEND · TEST DATA` and exists only in debug behavior. Release creates
+  no reflection coordinator or request attempt and keeps the existing saved metrics and working
+  `Start another run` action without fake text or Retry. Debug and release each passed 211 JVM tests;
+  32 focused Compose emulator tests passed, and the Start → Pause → hold Stop walkthrough reached
+  the exact fake reply with frozen fixture values.
+- This is a local emulator integration proof, not the reflection feature milestone. Energy
+  selection, durable reflection storage, Log History, live Anthropic generation and physical-phone
+  connectivity remain unbuilt.
 
 ## Native Run Complete visual translation — verified and top layout accepted October 6, 2026
 
@@ -52,8 +73,9 @@ are not renewed commitments.
   compact metrics, inline saved status, grid/layered background and static completion ring. The
   updated emulator screenshot is `android/artifacts/run-complete-emulator.png`, beside the rendered
   reference `android/artifacts/reference-run-complete.png`. Manley accepted this top layout as the
-  foundation for Energy and reflection. The lower area stays sparse because Energy, reflection and
-  History are not built.
+  foundation for Energy and reflection. A debug-only fake reflection panel now occupies the lower
+  area during emulator verification; the release layout remains sparse because Energy, durable
+  reflection and History are not built.
 - The second CLI pass reported 202 JVM tests and 61 emulator tests passing after one countdown
   timing test passed on isolated rerun. The last connected-test XML contains only that rerun, so
   the full-suite count is a CLI report rather than independently preserved XML evidence.
@@ -119,8 +141,9 @@ working Java/Maven console application, the native Android/Kotlin/Compose journe
 and the local-endpoint Java/Maven reflection backend under `backend/`. The Android application now
 completes the durable fixture lifecycle from a visible countdown through Running, Paused and Saved
 and displays controlled fixture elapsed/active time, distance and average pace. The first native Run
-Complete screen is now implemented; music, reflection and Log History remain design prototypes
-rather than implemented features.
+Complete screen and an emulator-only fake-backend delivery bridge are now implemented. Energy
+selection, durable reflection storage, Log History, live Anthropic generation and physical-phone
+connectivity remain design work rather than implemented features.
 
 ## Previous delivery checkpoint — September 15, 2026
 

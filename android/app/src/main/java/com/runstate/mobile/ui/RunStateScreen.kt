@@ -70,6 +70,8 @@ internal fun RunStateScreen(
     onResume: () -> Unit,
     onStop: () -> Unit,
     onStartAnother: () -> Unit,
+    reflection: RunCompleteReflectionDisplay? = null,
+    onRetryReflection: () -> Unit = {},
     modifier: Modifier = Modifier,
     actionsEnabled: Boolean = true
 ) {
@@ -95,6 +97,8 @@ internal fun RunStateScreen(
     if (state == RunUiState.Saved) {
         RunCompleteScreen(
             metrics = metrics,
+            reflection = reflection,
+            onRetryReflection = onRetryReflection,
             onStartAnother = onStartAnother,
             actionsEnabled = actionsEnabled,
             modifier = modifier

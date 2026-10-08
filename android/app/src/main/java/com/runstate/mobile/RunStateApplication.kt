@@ -3,6 +3,9 @@ package com.runstate.mobile
 import android.app.Application
 import com.runstate.mobile.data.local.RunStateDatabase
 import com.runstate.mobile.data.local.buildRunStateDatabase
+import com.runstate.mobile.reflection.LocalReflectionHttpClient
+import com.runstate.mobile.reflection.RunReflectionCoordinator
+import com.runstate.mobile.reflection.reflectionBridgeEnabledForBuild
 import com.runstate.mobile.run.PreparedRunFactory
 import com.runstate.mobile.run.RunSessionCoordinator
 import java.time.Clock
@@ -148,5 +151,24 @@ class RunStateApplication : Application() {
             ),
             applicationScope = applicationScope
         )
+    }
+
+    /**
+     * One reflection attempt owner for the process, parallel to the run coordinator.
+     *
+     * A rotation replaces the Activity but not this object, so showing Saved again cannot
+     * issue a second provider call. Release builds keep the bridge disabled; only the debug
+     * manifest grants network access to the emulator's loopback alias.
+     */
+    internal val runReflectionCoordinator: RunReflectionCoordinator? by lazy {
+        if (!reflectionBridgeEnabledForBuild()) {
+            null
+        } else {
+            RunReflectionCoordinator(
+                runDao = database.runDao(),
+                gateway = LocalReflectionHttpClient(),
+                applicationScope = applicationScope
+            )
+        }
     }
 }

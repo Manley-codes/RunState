@@ -34,6 +34,13 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
+    }
+}
+
+androidComponents {
+    beforeVariants(selector().withBuildType("release")) { variant ->
+        (variant as com.android.build.api.variant.HasUnitTestBuilder).enableUnitTest = true
     }
 }
 
@@ -67,6 +74,7 @@ dependencies {
     // Used directly for the application scope's main dispatcher, so declared rather than
     // left to arrive through Compose and Lifecycle.
     implementation(libs.kotlinx.coroutines.android)
+    implementation(libs.gson)
 
     ksp(libs.androidx.room.compiler)
     testImplementation(libs.junit)

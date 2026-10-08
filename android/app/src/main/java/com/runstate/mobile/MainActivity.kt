@@ -1,25 +1,37 @@
 package com.runstate.mobile
 
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
+import com.runstate.mobile.reflection.RunReflectionCoordinator
+import com.runstate.mobile.reflection.RunReflectionState
 import com.runstate.mobile.run.RunActionKind
+import com.runstate.mobile.run.RunAdmission
 import com.runstate.mobile.run.RunSessionCoordinator
 import com.runstate.mobile.ui.RunMetricsDisplay
 import com.runstate.mobile.ui.RunMetricsTicker
+import com.runstate.mobile.ui.RunCompleteReflectionDisplay
 import com.runstate.mobile.ui.RunStateScreen
 import com.runstate.mobile.ui.RunUiModel
 import com.runstate.mobile.ui.RunUiState
@@ -48,13 +60,16 @@ class MainActivity : ComponentActivity() {
 
         // The existing process-scoped instance. Nothing new is constructed, and no second
         // database is opened.
-        val coordinator = (application as RunStateApplication).runSessionCoordinator
+        val runStateApplication = application as RunStateApplication
+        val coordinator = runStateApplication.runSessionCoordinator
+        val reflectionCoordinator = runStateApplication.runReflectionCoordinator
 
         setContent {
             RunStateTheme {
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
                     RunJourneyRoot(
                         coordinator = coordinator,
+                        reflectionCoordinator = reflectionCoordinator,
 
                         // The Activity's own lifecycle gates the countdown, so nothing counts
                         // down — and no run is started — while the app is in the background.
@@ -95,6 +110,7 @@ class MainActivity : ComponentActivity() {
 @Composable
 internal fun RunJourneyRoot(
     coordinator: RunSessionCoordinator,
+    reflectionCoordinator: RunReflectionCoordinator?,
     lifecycle: Lifecycle,
     modifier: Modifier = Modifier
 ) {
@@ -107,6 +123,35 @@ internal fun RunJourneyRoot(
     // process coordinator again, just as it does for the journey model.
     var metrics by remember { mutableStateOf<RunMetricsDisplay?>(null) }
 
+    // Kept only in this stateful adapter. The stateless screen never receives a run UUID.
+    var completedRunId by remember { mutableStateOf<String?>(null) }
+
+    val reflectionState = reflectionCoordinator?.let { activeCoordinator ->
+        activeCoordinator.state.collectAsState().value
+    }
+    val context = LocalContext.current
+    val latestCompletedRunId by rememberUpdatedState(completedRunId)
+
+    fun localBridgePermissionGranted(): Boolean =
+        !BuildConfig.DEBUG ||
+            Build.VERSION.SDK_INT < 37 ||
+            ContextCompat.checkSelfPermission(
+                context,
+                LOCAL_NETWORK_PERMISSION
+            ) == PackageManager.PERMISSION_GRANTED
+
+    val localNetworkPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        latestCompletedRunId?.let { runId ->
+            if (granted) {
+                reflectionCoordinator?.startWhenBridgeReady(runId)
+            } else {
+                reflectionCoordinator?.onBridgeUnavailable(runId)
+            }
+        }
+    }
+
     // Presentation-only, and not a run state. It exists so a double tap, or a Cancel raced
     // with the countdown reaching zero, cannot become two requests from this screen. The
     // coordinator remains the final backstop against duplicates.
@@ -115,7 +160,9 @@ internal fun RunJourneyRoot(
     val scope = rememberCoroutineScope()
 
     suspend fun refresh() {
-        model = runUiModelFor(coordinator.journeySnapshot())
+        val snapshot = coordinator.journeySnapshot()
+        model = runUiModelFor(snapshot)
+        completedRunId = (snapshot.admission as? RunAdmission.RunCompleted)?.session?.runId
         metrics = coordinator.runMetrics()?.let(::runMetricsDisplayFor)
     }
 
@@ -123,8 +170,24 @@ internal fun RunJourneyRoot(
     // re-runs only if it were ever given a different one. Cancellation when the Activity
     // goes away propagates normally; nothing here is made uncancellable.
     LaunchedEffect(coordinator) {
-        model = runUiModelFor(coordinator.initialize())
+        val snapshot = coordinator.initialize()
+        model = runUiModelFor(snapshot)
+        completedRunId = (snapshot.admission as? RunAdmission.RunCompleted)?.session?.runId
         metrics = coordinator.runMetrics()?.let(::runMetricsDisplayFor)
+    }
+
+    // This reports visibility; the process coordinator owns the delay, Room read and call.
+    LaunchedEffect(model.state, completedRunId, reflectionCoordinator) {
+        val activeReflectionCoordinator = reflectionCoordinator ?: return@LaunchedEffect
+        if (model.state == RunUiState.Saved) {
+            completedRunId?.let { runId ->
+                val bridgeReady = localBridgePermissionGranted()
+                activeReflectionCoordinator.onSavedVisible(runId, bridgeReady)
+                if (!bridgeReady) {
+                    localNetworkPermissionLauncher.launch(LOCAL_NETWORK_PERMISSION)
+                }
+            }
+        }
     }
 
     // Reattaches to durable work this composition did not ask for, such as a start that was
@@ -195,6 +258,31 @@ internal fun RunJourneyRoot(
         runGuarded { awaitDurable { coordinator.requestAction(kind) } }
     }
 
+    val reflectionDisplay = when {
+        reflectionCoordinator == null -> null
+
+        model.state != RunUiState.Saved || completedRunId == null ->
+            RunCompleteReflectionDisplay.Preparing
+
+        else -> when (val current = reflectionState) {
+            is RunReflectionState.Ready -> if (current.runId == completedRunId) {
+                RunCompleteReflectionDisplay.Ready(current.text)
+            } else {
+                RunCompleteReflectionDisplay.Preparing
+            }
+
+            is RunReflectionState.Failed -> if (current.runId == completedRunId) {
+                RunCompleteReflectionDisplay.Failed
+            } else {
+                RunCompleteReflectionDisplay.Preparing
+            }
+
+            null,
+            RunReflectionState.Idle,
+            is RunReflectionState.Preparing -> RunCompleteReflectionDisplay.Preparing
+        }
+    }
+
     RunStateScreen(
         model = model,
         metrics = metrics,
@@ -239,7 +327,19 @@ internal fun RunJourneyRoot(
                 refresh()
             }
         },
+        reflection = reflectionDisplay,
+        onRetryReflection = {
+            completedRunId?.let { runId ->
+                if (localBridgePermissionGranted()) {
+                    reflectionCoordinator?.retry(runId)
+                } else {
+                    localNetworkPermissionLauncher.launch(LOCAL_NETWORK_PERMISSION)
+                }
+            }
+        },
         actionsEnabled = !actionInFlight,
         modifier = modifier
     )
 }
+
+private const val LOCAL_NETWORK_PERMISSION = "android.permission.ACCESS_LOCAL_NETWORK"

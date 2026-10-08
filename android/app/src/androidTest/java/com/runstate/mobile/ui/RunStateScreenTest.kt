@@ -89,9 +89,10 @@ class RunStateScreenTest {
         var resumes = 0
         var stops = 0
         var startAnothers = 0
+        var reflectionRetries = 0
 
         val total get() = starts + cancels + initializationRetries + startRetries +
-            pauses + resumes + stops + startAnothers
+            pauses + resumes + stops + startAnothers + reflectionRetries
     }
 
     /** Renders one screen and returns the counters its callbacks increment. */
@@ -101,7 +102,8 @@ class RunStateScreenTest {
         countdownDigit: Int? = null,
         actionsEnabled: Boolean = true,
         modifier: Modifier = Modifier,
-        fontScale: Float? = null
+        fontScale: Float? = null,
+        reflection: RunCompleteReflectionDisplay? = RunCompleteReflectionDisplay.Preparing
     ): RecordedActions {
         val actions = RecordedActions()
 
@@ -125,6 +127,8 @@ class RunStateScreenTest {
                     onResume = { actions.resumes++ },
                     onStop = { actions.stops++ },
                     onStartAnother = { actions.startAnothers++ },
+                    reflection = reflection,
+                    onRetryReflection = { actions.reflectionRetries++ },
                     modifier = modifier,
                     actionsEnabled = actionsEnabled
                 )
@@ -411,6 +415,66 @@ class RunStateScreenTest {
         composeTestRule.onNodeWithText("/MI").assertIsDisplayed()
         composeTestRule.onNodeWithText("ACTIVE").assertIsDisplayed()
         composeTestRule.onNodeWithText("00:01:00").assertIsDisplayed()
+    }
+
+    @Test
+    fun savedShowsTheFakeReflectionPreparingStateWithoutSkip() {
+        renderScreen(model = RunUiModel(RunUiState.Saved), metrics = fixtureMetrics())
+
+        composeTestRule.onNodeWithTag(RUN_COMPLETE_REFLECTION_TAG)
+            .performScrollTo()
+            .assertIsDisplayed()
+        composeTestRule.onNodeWithText("FAKE BACKEND · TEST DATA").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Preparing your reflection…").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Your run is already saved.").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Skip").assertDoesNotExist()
+    }
+
+    @Test
+    fun savedShowsTheExactSelectedFakeText() {
+        val exact = "  [FAKE] Exact no-selection candidate.  "
+        renderScreen(
+            model = RunUiModel(RunUiState.Saved),
+            metrics = fixtureMetrics(),
+            reflection = RunCompleteReflectionDisplay.Ready(exact)
+        )
+
+        composeTestRule.onNodeWithTag(RUN_COMPLETE_REFLECTION_TEXT_TAG)
+            .performScrollTo()
+            .assertTextEquals(exact)
+    }
+
+    @Test
+    fun failedReflectionOffersRetryWithoutReplacingStartAnother() {
+        val actions = renderScreen(
+            model = RunUiModel(RunUiState.Saved),
+            metrics = fixtureMetrics(),
+            reflection = RunCompleteReflectionDisplay.Failed
+        )
+
+        composeTestRule.onNodeWithTag(RUN_COMPLETE_REFLECTION_RETRY_TAG)
+            .performScrollTo()
+            .assertIsDisplayed()
+            .performClick()
+
+        assertEquals(1, actions.reflectionRetries)
+        assertEquals(0, actions.startAnothers)
+        composeTestRule.onNodeWithText(START_ANOTHER).assertIsDisplayed()
+    }
+
+    @Test
+    fun savedWithoutDebugBridgeShowsMetricsAndRestartButNoFakePanel() {
+        renderScreen(
+            model = RunUiModel(RunUiState.Saved),
+            metrics = fixtureMetrics(),
+            reflection = null
+        )
+
+        composeTestRule.onNodeWithTag(RUN_COMPLETE_DISTANCE_TAG).assertIsDisplayed()
+        composeTestRule.onNodeWithText(START_ANOTHER).assertIsDisplayed()
+        composeTestRule.onNodeWithTag(RUN_COMPLETE_REFLECTION_TAG).assertDoesNotExist()
+        composeTestRule.onNodeWithTag(RUN_COMPLETE_REFLECTION_RETRY_TAG).assertDoesNotExist()
+        composeTestRule.onNodeWithText("FAKE BACKEND · TEST DATA").assertDoesNotExist()
     }
 
     /** Large type and a short viewport keep every fact scrollable and the main action usable. */

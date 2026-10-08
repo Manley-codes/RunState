@@ -32,6 +32,9 @@ bin/
 ### Maven's build output folder ###
 target/
 
+### Backend-local Maven dependency cache ###
+/backend/.m2/
+
 RunState_intro.html
 docs/LEARNING_AND_COLLABORATION.md
 
