@@ -7,6 +7,7 @@ import com.runstate.reflection.ReflectionContract.CompletedRunEvidence;
 import com.runstate.reflection.ReflectionContract.DistanceUnit;
 import com.runstate.reflection.ReflectionContract.MetricSource;
 import com.runstate.reflection.ReflectionContract.MusicContext;
+import com.runstate.reflection.ReflectionContract.MusicProvenance;
 import com.runstate.reflection.ReflectionContract.MusicState;
 import com.runstate.reflection.ReflectionContract.PreRunEnergy;
 import com.runstate.reflection.ReflectionContract.RunMetricsEvidence;
@@ -32,6 +33,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ReflectionHttpServerTest {
@@ -110,6 +112,84 @@ class ReflectionHttpServerTest {
                 );
                 assertEquals(response.body(), post(server, validRequest()).body());
             }
+        }
+    }
+
+    @Test
+    void partialMusicProvenanceReachesProviderWithoutRewritingReportedIdentity() throws Exception {
+        AtomicReference<CompletedRunEvidence> captured = new AtomicReference<>();
+        JsonObject request = JsonParser.parseString(validRequest()).getAsJsonObject();
+        JsonObject music = request.getAsJsonObject("evidence").getAsJsonObject("musicContext");
+        music.addProperty("trackTitle", "  Exact reported title  ");
+        music.addProperty("artistName", "Exact reported artist");
+        music.remove("artistDescription");
+        music.addProperty("provenance", "MEDIA_SESSION_PARTIAL");
+
+        try (ReflectionHttpServer server = start(evidence -> {
+            captured.set(evidence);
+            return exactCandidates();
+        })) {
+            HttpResponse<String> response = post(server, request.toString());
+            assertAll(
+                    () -> assertEquals(200, response.statusCode()),
+                    () -> assertEquals(new MusicContext(MusicState.MUSIC,
+                            "  Exact reported title  ", "Exact reported artist", null,
+                            MusicProvenance.MEDIA_SESSION_PARTIAL), captured.get().musicContext())
+            );
+        }
+    }
+
+    @Test
+    void optionalProvenanceKeepsLegacyControlledAndUnknownRequestsCompatible() throws Exception {
+        JsonObject legacy = JsonParser.parseString(validRequest()).getAsJsonObject();
+        assertEquals(MusicProvenance.CONTROLLED, ReflectionApiJson.parseRequest(
+                legacy.toString().getBytes(StandardCharsets.UTF_8)).evidence().musicContext().provenance());
+        legacy.getAsJsonObject("evidence").getAsJsonObject("musicContext").add("provenance", null);
+        assertEquals(knownEvidence(), ReflectionApiJson.parseRequest(
+                legacy.toString().getBytes(StandardCharsets.UTF_8)).evidence());
+
+        for (String state : List.of("UNKNOWN", "NO_MUSIC")) {
+            JsonObject request = JsonParser.parseString(validRequest()).getAsJsonObject();
+            JsonObject music = new JsonObject();
+            music.addProperty("state", state);
+            music.add("provenance", null);
+            request.getAsJsonObject("evidence").add("musicContext", music);
+            MusicContext parsed = ReflectionApiJson.parseRequest(
+                    request.toString().getBytes(StandardCharsets.UTF_8)).evidence().musicContext();
+            assertAll(
+                    () -> assertEquals(MusicState.valueOf(state), parsed.state()),
+                    () -> assertNull(parsed.provenance()),
+                    () -> assertNull(parsed.trackTitle()),
+                    () -> assertNull(parsed.artistName()),
+                    () -> assertNull(parsed.artistDescription())
+            );
+        }
+    }
+
+    @Test
+    void rejectsInvalidMusicProvenanceAndPartialContextBeforeCallingProvider() throws Exception {
+        AtomicInteger calls = new AtomicInteger();
+        try (ReflectionHttpServer server = start(evidence -> {
+            calls.incrementAndGet();
+            return exactCandidates();
+        })) {
+            List<String> invalidContexts = List.of(
+                    "{\"state\":\"MUSIC\",\"provenance\":\"UNSUPPORTED\"}",
+                    "{\"state\":\"MUSIC\",\"provenance\":true}",
+                    "{\"state\":\"UNKNOWN\",\"provenance\":\"MEDIA_SESSION_PARTIAL\"}",
+                    "{\"state\":\"NO_MUSIC\",\"provenance\":\"CONTROLLED\"}",
+                    "{\"provenance\":\"CONTROLLED\"}",
+                    "{\"state\":\"MUSIC\",\"provenance\":\"MEDIA_SESSION_PARTIAL\",\"trackTitle\":\"Title\"}",
+                    "{\"state\":\"MUSIC\",\"provenance\":\"MEDIA_SESSION_PARTIAL\",\"trackTitle\":\" \" ,\"artistName\":\"Artist\"}",
+                    "{\"state\":\"MUSIC\",\"provenance\":\"MEDIA_SESSION_PARTIAL\",\"trackTitle\":\"Title\",\"artistName\":\"Artist\",\"artistDescription\":\"Inferred persona\"}",
+                    "{\"state\":\"MUSIC\",\"provenance\":\"MEDIA_SESSION_PARTIAL\",\"trackTitle\":\"Title\",\"artistName\":\"Artist\",\"lyrics\":\"Extra listening data\"}"
+            );
+            for (String invalidContext : invalidContexts) {
+                JsonObject request = JsonParser.parseString(validRequest()).getAsJsonObject();
+                request.getAsJsonObject("evidence").add("musicContext", JsonParser.parseString(invalidContext));
+                assertError(post(server, request.toString()), 400, "invalid_request");
+            }
+            assertEquals(0, calls.get());
         }
     }
 

@@ -10,6 +10,7 @@ import static com.runstate.reflection.ReflectionContract.CompletedRunEvidence;
 import static com.runstate.reflection.ReflectionContract.DistanceUnit;
 import static com.runstate.reflection.ReflectionContract.MetricSource;
 import static com.runstate.reflection.ReflectionContract.MusicContext;
+import static com.runstate.reflection.ReflectionContract.MusicProvenance;
 import static com.runstate.reflection.ReflectionContract.MusicState;
 import static com.runstate.reflection.ReflectionContract.PreRunEnergy;
 import static com.runstate.reflection.ReflectionContract.RequestIdentifiers;
@@ -140,7 +141,10 @@ class ReflectionContractTest {
 
         assertAll(
                 () -> assertEquals(MusicState.UNKNOWN, MusicContext.unknown().state()),
+                () -> assertNull(MusicContext.unknown().provenance()),
                 () -> assertEquals(MusicState.NO_MUSIC, noMusic.state()),
+                () -> assertNull(noMusic.provenance()),
+                () -> assertEquals(MusicProvenance.CONTROLLED, controlledMusic.provenance()),
                 () -> assertEquals("  exact track title  ", controlledMusic.trackTitle()),
                 () -> assertThrows(IllegalArgumentException.class,
                         () -> new MusicContext(MusicState.UNKNOWN, "Track", null, null)),
@@ -148,6 +152,37 @@ class ReflectionContractTest {
                         () -> new MusicContext(MusicState.MUSIC, " ", null, null)),
                 () -> assertThrows(IllegalArgumentException.class,
                         () -> new MusicContext(MusicState.MUSIC, null, null, "Description"))
+        );
+    }
+
+    @Test
+    void partialMediaSessionMusicRequiresIdentityWithoutInventedArtistContext() {
+        MusicContext partial = new MusicContext(
+                MusicState.MUSIC, "  Exact reported title  ", "Exact reported artist", null,
+                MusicProvenance.MEDIA_SESSION_PARTIAL
+        );
+        assertAll(
+                () -> assertEquals("  Exact reported title  ", partial.trackTitle()),
+                () -> assertEquals("Exact reported artist", partial.artistName()),
+                () -> assertNull(partial.artistDescription()),
+                () -> assertEquals(MusicProvenance.MEDIA_SESSION_PARTIAL, partial.provenance()),
+                () -> assertEquals(MusicProvenance.CONTROLLED,
+                        new MusicContext(MusicState.MUSIC, null, null, null, null).provenance()),
+                () -> assertThrows(IllegalArgumentException.class,
+                        () -> new MusicContext(MusicState.MUSIC, null, "Artist", null,
+                                MusicProvenance.MEDIA_SESSION_PARTIAL)),
+                () -> assertThrows(IllegalArgumentException.class,
+                        () -> new MusicContext(MusicState.MUSIC, "Title", " ", null,
+                                MusicProvenance.MEDIA_SESSION_PARTIAL)),
+                () -> assertThrows(IllegalArgumentException.class,
+                        () -> new MusicContext(MusicState.MUSIC, "Title", "Artist", "Inferred persona",
+                                MusicProvenance.MEDIA_SESSION_PARTIAL)),
+                () -> assertThrows(IllegalArgumentException.class,
+                        () -> new MusicContext(MusicState.UNKNOWN, null, null, null,
+                                MusicProvenance.MEDIA_SESSION_PARTIAL)),
+                () -> assertThrows(IllegalArgumentException.class,
+                        () -> new MusicContext(MusicState.NO_MUSIC, null, null, null,
+                                MusicProvenance.CONTROLLED))
         );
     }
 

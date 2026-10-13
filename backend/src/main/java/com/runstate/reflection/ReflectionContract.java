@@ -55,6 +55,12 @@ public final class ReflectionContract {
         MUSIC
     }
 
+    /** Distinguishes supplied music context from one partial device metadata report. */
+    public enum MusicProvenance {
+        CONTROLLED,
+        MEDIA_SESSION_PARTIAL
+    }
+
     /**
      * Raw completed metric evidence. Null components together mean the evidence is unknown.
      */
@@ -96,13 +102,14 @@ public final class ReflectionContract {
     }
 
     /**
-     * Explicitly controlled music evidence. Optional text is data and is preserved exactly.
+     * Music evidence with an explicit source boundary. Text is data and is preserved exactly.
      */
     public record MusicContext(
             MusicState state,
             String trackTitle,
             String artistName,
-            String artistDescription
+            String artistDescription,
+            MusicProvenance provenance
     ) {
 
         public MusicContext {
@@ -114,10 +121,32 @@ public final class ReflectionContract {
             if (state != MusicState.MUSIC) {
                 require(trackTitle == null && artistName == null && artistDescription == null,
                         state + " music context cannot include track or artist details");
+                require(provenance == null,
+                        state + " music context cannot include music provenance");
+            } else {
+                // Older controlled clients omitted this field; device observations must opt in explicitly.
+                provenance = provenance == null ? MusicProvenance.CONTROLLED : provenance;
+            }
+
+            if (provenance == MusicProvenance.MEDIA_SESSION_PARTIAL) {
+                require(trackTitle != null && artistName != null,
+                        "partial media-session music requires trackTitle and artistName");
+                require(artistDescription == null,
+                        "partial media-session music cannot include artistDescription");
             }
 
             require(artistDescription == null || artistName != null,
                     "artistDescription requires an artistName");
+        }
+
+        /** Keeps the pre-provenance controlled-music contract source compatible. */
+        public MusicContext(
+                MusicState state,
+                String trackTitle,
+                String artistName,
+                String artistDescription
+        ) {
+            this(state, trackTitle, artistName, artistDescription, null);
         }
 
         public static MusicContext unknown() {

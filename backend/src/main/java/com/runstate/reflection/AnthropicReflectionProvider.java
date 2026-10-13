@@ -13,12 +13,15 @@ import com.runstate.reflection.ReflectionContract.CandidateReflections;
 import com.runstate.reflection.ReflectionContract.CompletedRunEvidence;
 import com.runstate.reflection.ReflectionContract.MusicContext;
 import com.runstate.reflection.ReflectionContract.RunMetricsEvidence;
+import com.runstate.reflection.ReflectionContract.TelemetryCoverage;
 import com.runstate.reflection.ReflectionProvider.FailureType;
 import com.runstate.reflection.ReflectionProvider.ReflectionProviderException;
 
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.StringReader;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -26,6 +29,9 @@ import java.net.http.HttpResponse;
 import java.net.http.HttpTimeoutException;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.time.Instant;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -196,12 +202,58 @@ public final class AnthropicReflectionProvider implements ReflectionProvider {
         MusicContext music = evidence.musicContext();
         JsonObject serializedMusic = new JsonObject();
         serializedMusic.addProperty("state", music.state().name());
+        addNullableEnum(serializedMusic, "provenance", music.provenance());
         addNullableString(serializedMusic, "track_title", music.trackTitle());
         addNullableString(serializedMusic, "artist_name", music.artistName());
         addNullableString(serializedMusic, "artist_description", music.artistDescription());
         serialized.add("music_context", serializedMusic);
+        serialized.add("reflection_facts", reflectionFacts(evidence));
 
         return serialized;
+    }
+
+    /** Provider-only facts spare the language model unit arithmetic and UTC interpretation. */
+    private static JsonObject reflectionFacts(CompletedRunEvidence evidence) {
+        JsonObject facts = new JsonObject();
+        addNullableString(facts, "distance_text", reflectionDistanceText(evidence.metrics()));
+        facts.addProperty("elapsed_duration_seconds", BigDecimal.valueOf(
+                evidence.finishEpochMillis() - evidence.officialStartEpochMillis(), 3
+        ));
+        addNullableNumber(facts, "active_duration_seconds", evidence.activeDurationMillis() == null
+                ? null : BigDecimal.valueOf(evidence.activeDurationMillis(), 3));
+
+        ZoneId zone = ZoneId.of(evidence.startTimezoneId());
+        facts.addProperty("start_local_datetime", DateTimeFormatter.ISO_OFFSET_DATE_TIME.format(
+                Instant.ofEpochMilli(evidence.officialStartEpochMillis()).atZone(zone)
+        ));
+        facts.addProperty("finish_local_datetime", DateTimeFormatter.ISO_OFFSET_DATE_TIME.format(
+                Instant.ofEpochMilli(evidence.finishEpochMillis()).atZone(zone)
+        ));
+        return facts;
+    }
+
+    private static String reflectionDistanceText(RunMetricsEvidence metrics) {
+        if (metrics.distanceMeters() == null || metrics.displayUnit() == null) {
+            return null;
+        }
+        BigDecimal meters = BigDecimal.valueOf(metrics.distanceMeters());
+        BigDecimal metersPerUnit = switch (metrics.displayUnit()) {
+            case MILES -> new BigDecimal("1609.344");
+            case KILOMETERS -> new BigDecimal("1000");
+        };
+        String unit = switch (metrics.displayUnit()) {
+            case MILES -> "miles";
+            case KILOMETERS -> "kilometers";
+        };
+        String provenance = switch (metrics.source()) {
+            case FIXTURE -> " of sample distance";
+            case GPS -> metrics.coverage() == TelemetryCoverage.PARTIAL ? " recorded by partial GPS" : "";
+        };
+        // Match the native save receipt: tiny positive measurements never become a zero claim.
+        if (meters.signum() > 0 && meters.compareTo(metersPerUnit.movePointLeft(2)) < 0) {
+            return "less than 0.01 " + unit + provenance;
+        }
+        return meters.divide(metersPerUnit, 2, RoundingMode.HALF_UP).toPlainString() + " " + unit + provenance;
     }
 
     private static JsonObject candidateSchema() {

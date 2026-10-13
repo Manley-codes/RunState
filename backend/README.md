@@ -20,14 +20,21 @@ accessor methods and does not offer setters; its constructor can still reject in
 - `RequestIdentifiers` carries a canonical request UUID and the canonical Android run UUID.
 - `CompletedRunEvidence` carries completed epoch-millisecond timestamps, the IANA timezone recorded
   at the run's start, optional active duration, raw metric evidence, optional pre-run Energy, and
-  explicitly controlled music context.
+  optional music context with explicit provenance.
 - `RunMetricsEvidence` uses Android's existing meanings: distance is stored in meters, the display
   unit remains separate, and metric source and telemetry coverage describe provenance. Unknown
   metrics stay unknown; the contract does not add formatted distance or pace strings.
 - Missing pre-run Energy defaults to `UNKNOWN`, never `MODERATE`. Missing music context defaults to
   `UNKNOWN`, which stays distinct from an explicit `NO_MUSIC` value.
 - Music fields can carry controlled track, artist, and artist-description evidence when music is
-  explicitly present. Their existence does not approve any fixture, song, artist, or description.
+  explicitly present. Omitted provenance on a `MUSIC` request defaults to `CONTROLLED` for existing
+  clients. `MEDIA_SESSION_PARTIAL` requires a nonblank title and artist and prohibits an artist
+  description. `UNKNOWN` and `NO_MUSIC` prohibit music metadata and provenance.
+- The debug Android client sends `MEDIA_SESSION_PARTIAL` only when local observation and the
+  separate, off-by-default music-sharing choice were both approved for that run. It freezes one
+  eligible Spotify title and artist; this is a partial media-session report, not proof that a full
+  song was heard. Other runs send `UNKNOWN`. No audio, lyrics, notification contents, route points,
+  or listening-history list are added to the reflection request.
 - `CandidateReflections` requires nonblank text for the exact keys `spent`, `feeling_good`,
   `powered_up`, and `no_selection`. Accepted text is retained exactly rather than trimmed or
   rewritten.
@@ -48,6 +55,18 @@ Backend environment configuration:
 The initial limits are a 10-second connection timeout, a 45-second request timeout, and 2,048 output
 tokens. These are starting safety bounds, not measured latency or quality guarantees. Failures are
 reported explicitly; the adapter performs no automatic retry and returns no successful canned fallback.
+
+The provider adds `reflection_facts` to its internal writing input, calculated from the validated
+evidence: a distance phrase in the saved display unit including sample/partial-GPS provenance,
+elapsed/known active seconds, and local start/finish
+datetimes in the recorded timezone. The HTTP contract and original raw fields remain unchanged.
+Android leaves active duration unknown for partial or unavailable GPS coverage, matching History:
+complete transition records alone cannot prove active tracking across a service interruption.
+This keeps the writer from interpreting 5,000 meters as five miles or guessing local time from an
+epoch timestamp. Prompt version `mobile-reflection-v1.2` also distinguishes sample distance, partial
+GPS and unavailable metrics, and limits claims made from partial media-session reports. It may omit
+a music reference when the evidence is weak. Structured-output validation checks shape and preserves exact text;
+it does not prove every generated statement is factual or that a real GPS distance is accurate.
 
 ## Local HTTP API
 
@@ -97,7 +116,8 @@ Example request shape using controlled values:
       "state": "MUSIC",
       "trackTitle": "Controlled track",
       "artistName": "Controlled artist",
-      "artistDescription": "Controlled artist description"
+      "artistDescription": "Controlled artist description",
+      "provenance": "CONTROLLED"
     }
   }
 }
@@ -221,10 +241,20 @@ unsupported methods, and safe provider failures without contacting Anthropic.
 ## Boundary
 
 The contract can validate the evidence it receives, but it cannot prove that Android saved the run.
-Android save ordering, candidate selection, recovery, and reflection persistence remain later
-integration work. Automated tests use dummy configuration and fake or simulated provider responses;
-they make no live Anthropic request and do not verify real generation quality, credentials, external
-network behavior, or Android delivery. The server has no database, authentication, TLS, durable
-idempotency, or public-hosting configuration. The Host/Origin guard does not authenticate arbitrary
-local programs. The endpoint is implemented, but the end-to-end reflection milestone remains
-incomplete.
+The debug Android client completes locally before requesting candidates and persists the exact
+selected response. An October 13 Moto phone check delivered a newly generated Anthropic response;
+late Energy changes and History after a cold restart with the backend stopped preserved its text.
+The first generated-text/persistence milestone is exercised. A further opted-in Moto run verified
+a saved `MUSIC` / `MEDIA_SESSION_PARTIAL` snapshot with one title and artist and a real Anthropic
+response. That response did not mention the song; accepting music context does not guarantee a
+music reference. History reports the saved context without claiming a complete listening record.
+Local observation alone does not permit sharing, and existing records migrate with sharing off.
+Release builds do not call this backend.
+
+Automated tests use dummy configuration and fake or simulated provider responses; they make no
+live Anthropic request. Separate bounded live checks exercised credentials, unit/time/provenance
+grounding and phone delivery, but do not establish general generation quality. The server has no
+database, authentication, TLS, durable idempotency, or public-hosting configuration. The Host/Origin
+guard does not authenticate arbitrary local programs. The full music-aware demonstration remains
+incomplete; current verification and remaining work are recorded in
+[`project_current_state.md`](../docs/design/project_current_state.md).

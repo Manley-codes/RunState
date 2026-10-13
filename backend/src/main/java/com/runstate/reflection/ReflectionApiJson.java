@@ -13,6 +13,7 @@ import com.runstate.reflection.ReflectionContract.CompletedRunEvidence;
 import com.runstate.reflection.ReflectionContract.DistanceUnit;
 import com.runstate.reflection.ReflectionContract.MetricSource;
 import com.runstate.reflection.ReflectionContract.MusicContext;
+import com.runstate.reflection.ReflectionContract.MusicProvenance;
 import com.runstate.reflection.ReflectionContract.MusicState;
 import com.runstate.reflection.ReflectionContract.PreRunEnergy;
 import com.runstate.reflection.ReflectionContract.RequestIdentifiers;
@@ -58,7 +59,8 @@ final class ReflectionApiJson {
             "state",
             "trackTitle",
             "artistName",
-            "artistDescription"
+            "artistDescription",
+            "provenance"
     );
 
     private ReflectionApiJson() {
@@ -154,7 +156,8 @@ final class ReflectionApiJson {
                 optionalEnum(music, "state", MusicState.class),
                 optionalString(music, "trackTitle"),
                 optionalString(music, "artistName"),
-                optionalString(music, "artistDescription")
+                optionalString(music, "artistDescription"),
+                optionalEnum(music, "provenance", MusicProvenance.class)
         );
     }
 
