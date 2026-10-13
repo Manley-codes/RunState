@@ -23,7 +23,14 @@ public final class ReflectionBackendMain {
                 ? localFakeProvider()
                 : productionProvider();
 
-        try (ReflectionHttpServer server = ReflectionHttpServer.create(provider, port)) {
+        ReflectionHttpServer.GenerationMode generationMode = fakeMode
+                ? ReflectionHttpServer.GenerationMode.FAKE
+                : ReflectionHttpServer.GenerationMode.ANTHROPIC;
+        try (ReflectionHttpServer server = ReflectionHttpServer.create(
+                provider,
+                port,
+                generationMode
+        )) {
             server.start();
             Runtime.getRuntime().addShutdownHook(new Thread(
                     server::close,

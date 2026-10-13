@@ -2,7 +2,15 @@
 
 This directory is a standalone Java 17/Maven project containing the reflection contract, Anthropic
 provider adapter, and a small local HTTP server. The server binds only to `127.0.0.1`; it is not
-publicly hosted and is not connected to Android yet.
+publicly hosted. Android's debug emulator build can connect through the host alias `10.0.2.2`.
+
+For a physical Android phone connected by USB with debugging enabled, run
+`adb reverse tcp:8787 tcp:8787` from the Android Studio terminal before opening the debug app.
+The phone's debug build then connects to its own `127.0.0.1:8787`, which ADB forwards to this
+backend on the computer. Keep the backend bound to computer loopback; this route does not require
+opening port 8787 to the Wi-Fi network. The reverse mapping lasts only while the device's ADB
+connection does. Release builds do not include the reflection bridge or its network permissions.
+The Anthropic key, when live mode is used, belongs only in the computer's backend environment.
 
 Java records are used as small immutable data holders. A record exposes its values through generated
 accessor methods and does not offer setters; its constructor can still reject invalid combinations.
@@ -44,8 +52,9 @@ reported explicitly; the adapter performs no automatic retry and returns no succ
 ## Local HTTP API
 
 `POST /api/reflections/candidates` accepts one request identifier, one saved-run identifier, and one
-completed-run evidence snapshot. It returns the identifiers with the exact four texts produced by
-the configured `ReflectionProvider`.
+completed-run evidence snapshot. It returns the identifiers, a `generationMode` of `FAKE` or
+`ANTHROPIC`, and the exact four texts produced by the configured `ReflectionProvider`. The launcher
+sets the mode from its provider configuration; it is never guessed from prefixes or other text.
 
 The endpoint accepts only `application/json` request bodies up to 64 KiB. JSON must be UTF-8, use
 unique keys, stay within the documented shape, and satisfy the existing contract constructors.
@@ -100,6 +109,7 @@ Success response shape:
 {
   "requestId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
   "runId": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+  "generationMode": "ANTHROPIC",
   "candidates": {
     "spent": "Exact provider text",
     "feeling_good": "Exact provider text",
@@ -136,7 +146,8 @@ cached provider failure, use a new canonical request UUID.
 
 ## Start the local server
 
-The default mode constructs `AnthropicReflectionProvider`. Keep `ANTHROPIC_API_KEY` only in the
+The default mode constructs `AnthropicReflectionProvider` and marks successes `ANTHROPIC`.
+`--fake` selects the fixed local provider and marks successes `FAKE`. Keep `ANTHROPIC_API_KEY` only in the
 backend process environment; never put it in Android, JSON, source, or command-line arguments.
 `ANTHROPIC_MODEL` remains optional. `RUNSTATE_REFLECTION_PORT` may override the default port `8787`.
 
@@ -188,7 +199,9 @@ Invoke-RestMethod `
   -Body $body
 ```
 
-The response must contain four visibly `[FAKE]` texts. Stop the server with `Ctrl+C`.
+The response must contain `"generationMode": "FAKE"` and four visibly `[FAKE]` texts. Clients should
+use `generationMode` for labeling, not inspect or rewrite the candidate text. Stop the server with
+`Ctrl+C`.
 
 ## Run the tests
 
@@ -202,7 +215,7 @@ If Maven is not on `PATH`, use IntelliJ IDEA's Maven tool window or its bundled 
 The project can be opened independently by selecting this directory or its `pom.xml` in IntelliJ.
 
 Endpoint tests start the server on an operating-system-assigned loopback port and inject fake
-providers. They cover exact success text, invalid and oversized requests, duplicate IDs,
+providers. They cover configured generation modes, exact success text, invalid and oversized requests, duplicate IDs,
 unsupported methods, and safe provider failures without contacting Anthropic.
 
 ## Boundary

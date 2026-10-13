@@ -77,7 +77,11 @@ final class ReflectionApiJson {
         return new ApiRequest(identifiers, evidence);
     }
 
-    static String success(ApiRequest request, CandidateReflections candidates) {
+    static String success(
+            ApiRequest request,
+            CandidateReflections candidates,
+            ReflectionHttpServer.GenerationMode generationMode
+    ) {
         JsonObject candidateJson = new JsonObject();
         candidateJson.addProperty("spent", candidates.spent());
         candidateJson.addProperty("feeling_good", candidates.feeling_good());
@@ -87,6 +91,7 @@ final class ReflectionApiJson {
         JsonObject response = new JsonObject();
         response.addProperty("requestId", request.identifiers().requestId());
         response.addProperty("runId", request.identifiers().runId());
+        response.addProperty("generationMode", generationMode.name());
         response.add("candidates", candidateJson);
         return response.toString();
     }

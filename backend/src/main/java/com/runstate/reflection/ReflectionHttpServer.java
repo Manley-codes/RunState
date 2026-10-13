@@ -33,6 +33,12 @@ public final class ReflectionHttpServer implements AutoCloseable {
     public static final String CANDIDATES_PATH = "/api/reflections/candidates";
     public static final int MAX_REQUEST_BYTES = 64 * 1024;
 
+    /** Provider mode configured by the launcher, never inferred from generated text. */
+    public enum GenerationMode {
+        FAKE,
+        ANTHROPIC
+    }
+
     private static final String JSON_CONTENT_TYPE = "application/json; charset=utf-8";
     private static final int SERVER_THREADS = 8;
     private static final Set<String> ALLOWED_HOST_NAMES = Set.of(
@@ -42,13 +48,19 @@ public final class ReflectionHttpServer implements AutoCloseable {
     );
 
     private final ReflectionProvider provider;
+    private final GenerationMode generationMode;
     private final HttpServer server;
     private final ExecutorService executor;
     private final ConcurrentMap<String, RequestWork> workByRequestId = new ConcurrentHashMap<>();
     private final AtomicBoolean closed = new AtomicBoolean();
 
-    private ReflectionHttpServer(ReflectionProvider provider, int port) throws IOException {
+    private ReflectionHttpServer(
+            ReflectionProvider provider,
+            int port,
+            GenerationMode generationMode
+    ) throws IOException {
         this.provider = Objects.requireNonNull(provider, "provider");
+        this.generationMode = Objects.requireNonNull(generationMode, "generationMode");
         InetAddress loopback = InetAddress.getByName("127.0.0.1");
         this.server = HttpServer.create(new InetSocketAddress(loopback, port), 0);
         this.executor = Executors.newFixedThreadPool(
@@ -59,13 +71,22 @@ public final class ReflectionHttpServer implements AutoCloseable {
         server.createContext("/", this::handle);
     }
 
-    /** Creates a server on 127.0.0.1. Port zero asks the operating system for a free test port. */
+    /** Creates a FAKE-mode server for local tests and injected fake providers. */
     public static ReflectionHttpServer create(ReflectionProvider provider, int port)
             throws IOException {
+        return create(provider, port, GenerationMode.FAKE);
+    }
+
+    /** Creates a server on 127.0.0.1. Port zero asks the operating system for a free test port. */
+    public static ReflectionHttpServer create(
+            ReflectionProvider provider,
+            int port,
+            GenerationMode generationMode
+    ) throws IOException {
         if (port < 0 || port > 65_535) {
             throw new IllegalArgumentException("port must be between 0 and 65535");
         }
-        return new ReflectionHttpServer(provider, port);
+        return new ReflectionHttpServer(provider, port, generationMode);
     }
 
     public void start() {
@@ -209,7 +230,10 @@ public final class ReflectionHttpServer implements AutoCloseable {
     private EndpointResponse callProvider(ApiRequest request) {
         try {
             CandidateReflections candidates = provider.generate(request.evidence());
-            return new EndpointResponse(200, ReflectionApiJson.success(request, candidates));
+            return new EndpointResponse(
+                    200,
+                    ReflectionApiJson.success(request, candidates, generationMode)
+            );
         } catch (ReflectionProviderException failure) {
             return providerFailure(failure.failureType());
         } catch (RuntimeException unexpected) {

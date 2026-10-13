@@ -73,6 +73,7 @@ class ReflectionHttpServerTest {
                     () -> assertEquals("127.0.0.1", server.address().getAddress().getHostAddress()),
                     () -> assertEquals(REQUEST_ID, responseJson.get("requestId").getAsString()),
                     () -> assertEquals(RUN_ID, responseJson.get("runId").getAsString()),
+                    () -> assertEquals("FAKE", responseJson.get("generationMode").getAsString()),
                     () -> assertEquals(SPENT, candidates.get("spent").getAsString()),
                     () -> assertEquals(FEELING_GOOD, candidates.get("feeling_good").getAsString()),
                     () -> assertEquals(POWERED_UP, candidates.get("powered_up").getAsString()),
@@ -80,6 +81,35 @@ class ReflectionHttpServerTest {
                     () -> assertEquals(knownEvidence(), capturedEvidence.get()),
                     () -> assertEquals(1, calls.get())
             );
+        }
+    }
+
+    @Test
+    void successReportsConfiguredModeWithoutInspectingOrChangingCandidateText() throws Exception {
+        CandidateReflections fixed = new CandidateReflections(
+                "  [FAKE] This prefix is text, not provider configuration.  ",
+                FEELING_GOOD,
+                POWERED_UP,
+                NO_SELECTION
+        );
+        for (ReflectionHttpServer.GenerationMode mode : ReflectionHttpServer.GenerationMode.values()) {
+            // ANTHROPIC configuration is simulated here; the test makes no external call.
+            try (ReflectionHttpServer server = ReflectionHttpServer.create(evidence -> fixed, 0, mode)) {
+                server.start();
+                HttpResponse<String> response = post(server, validRequest());
+                JsonObject responseJson = JsonParser.parseString(response.body()).getAsJsonObject();
+                JsonObject candidates = responseJson.getAsJsonObject("candidates");
+
+                assertAll(
+                        () -> assertEquals(200, response.statusCode()),
+                        () -> assertEquals(mode.name(), responseJson.get("generationMode").getAsString()),
+                        () -> assertEquals(fixed.spent(), candidates.get("spent").getAsString()),
+                        () -> assertEquals(fixed.feeling_good(), candidates.get("feeling_good").getAsString()),
+                        () -> assertEquals(fixed.powered_up(), candidates.get("powered_up").getAsString()),
+                        () -> assertEquals(fixed.no_selection(), candidates.get("no_selection").getAsString())
+                );
+                assertEquals(response.body(), post(server, validRequest()).body());
+            }
         }
     }
 
