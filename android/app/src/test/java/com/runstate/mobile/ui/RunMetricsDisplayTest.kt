@@ -18,6 +18,7 @@ import com.runstate.mobile.data.local.TelemetryCoverage
 import com.runstate.mobile.run.RunMetrics
 import java.time.Instant
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Test
 
@@ -27,6 +28,33 @@ class RunMetricsDisplayTest {
     private val historyRunId = "123e4567-e89b-12d3-a456-426614174000"
     private val historyRequestId = "123e4567-e89b-12d3-a456-426614174001"
     private val historyStart = Instant.parse("2026-10-12T01:30:00Z").toEpochMilli()
+
+    @Test
+    fun `save receipt uses saved fixture facts and spoken duration units`() {
+        val run = historyRun(historyStart + 3_661_000L, 1_609.344,
+            TelemetryCoverage.COMPLETE, true)
+        assertEquals("Run saved. Fixture distance, 1 mile. Elapsed time, 1 hour, 1 minute, 1 second.",
+            savedRunReceiptFor(run))
+    }
+
+    @Test
+    fun `save receipt identifies partial gps and never invents unavailable distance`() {
+        val gps = historyRun(historyStart + 60_000L, 2_000.0,
+            TelemetryCoverage.PARTIAL, true).copy(metricSource = MetricSource.GPS,
+            displayDistanceUnit = DistanceUnit.KILOMETERS)
+        assertEquals("Run saved. Partial GPS distance, 2 kilometers. Elapsed time, 1 minute.",
+            savedRunReceiptFor(gps))
+        assertEquals("Run saved. Elapsed time, 1 minute.", savedRunReceiptFor(
+            historyRun(historyStart + 60_000L, historyComplete = false)))
+        assertEquals("Run saved.", savedRunReceiptFor(historyRun(null, historyComplete = false)))
+    }
+
+    @Test
+    fun `tiny measured receipt does not round movement to zero`() {
+        val run = historyRun(historyStart + 999L, 1.0, TelemetryCoverage.PARTIAL, true)
+        assertEquals("Run saved. Fixture distance, less than 0.01 miles. Elapsed time, 0 seconds.",
+            savedRunReceiptFor(run))
+    }
 
     @Test
     fun `history labels music as partial observations under the saved run`() {
@@ -57,9 +85,75 @@ class RunMetricsDisplayTest {
         assertEquals(true, item.musicObservationRequested)
         assertEquals(2, item.musicObservationCount)
         assertEquals("Later title — Artist · com.example.player", item.lastObservedMedia)
+        assertEquals("Music observations kept on this phone", item.reflectionMusicSummary)
         val noObservation = historyItemFor(run, emptyList(), null)
         assertEquals(0, noObservation.musicObservationCount)
         assertNull(noObservation.lastObservedMedia)
+    }
+
+    @Test
+    fun `history music context summary reads frozen evidence rather than latest local report`() {
+        val run = sharingHistoryRun()
+        val reflection = musicSnapshotReflection("""{"state":"MUSIC","trackTitle":"Original title",
+            "artistName":"Original artist","artistDescription":null,"provenance":"MEDIA_SESSION_PARTIAL"}""")
+            .copy(status = ReflectionStatus.FAILED)
+        val later = RunMusicObservationEntity(
+            runId = historyRunId, sequenceNumber = 3, observationKey = "later-local-only",
+            observedAtEpochMillis = historyStart + 2_000L, elapsedRealtimeNanos = 2_000_000_000L,
+            sourcePackage = "com.example.player", title = "Later title", artist = "Later artist",
+            playbackState = MusicPlaybackState.PAUSED, eventKind = MusicObservationKind.METADATA_CHANGED
+        )
+
+        val item = historyItemFor(run, emptyList(), reflection, listOf(later))
+        val summary = requireNotNull(item.reflectionMusicSummary)
+        assertEquals("Later title — Later artist · com.example.player", item.lastObservedMedia)
+        assertEquals("One Spotify report included in reflection context · partial", summary)
+        assertFalse(summary.contains("Original title"))
+        assertFalse(summary.contains("Later title"))
+        assertEquals(summary,
+            historyItemFor(run, emptyList(), reflection, emptyList()).reflectionMusicSummary)
+    }
+
+    @Test
+    fun `history frozen unknown context stays unknown despite local metadata`() {
+        val run = sharingHistoryRun()
+        val reflection = musicSnapshotReflection("""{"state":"UNKNOWN","trackTitle":null,
+            "artistName":null,"artistDescription":null,"provenance":null}""")
+        val observed = RunMusicObservationEntity(
+            runId = historyRunId, sequenceNumber = 1, observationKey = "local-title",
+            observedAtEpochMillis = historyStart + 1_000L, elapsedRealtimeNanos = null,
+            sourcePackage = "com.spotify.music", title = "Local title", artist = "Local artist",
+            playbackState = MusicPlaybackState.PLAYING, eventKind = MusicObservationKind.SESSION_SNAPSHOT
+        )
+
+        assertEquals("No Spotify report included in reflection context",
+            historyItemFor(run, emptyList(), reflection, listOf(observed)).reflectionMusicSummary)
+    }
+
+    @Test
+    fun `history missing or malformed music snapshot states only saved permission`() {
+        val run = sharingHistoryRun()
+        val incompleteSnapshots = listOf(
+            "not json", "{}", "{\"musicContext\":null}", "{\"musicContext\":[]}",
+            "{\"musicContext\":{\"state\":\"MUSIC\",\"provenance\":\"MEDIA_SESSION_PARTIAL\",\"trackTitle\":\"\",\"artistName\":\"Artist\"}}",
+            "{\"musicContext\":{\"state\":\"MUSIC\",\"provenance\":\"MEDIA_SESSION_PARTIAL\",\"trackTitle\":5,\"artistName\":\"Artist\"}}",
+            "{\"musicContext\":{\"state\":\"UNKNOWN\",\"trackTitle\":\"Unexpected title\"}}",
+            "{\"musicContext\":{\"state\":\"MUSIC\",\"provenance\":\"CONTROLLED\",\"trackTitle\":\"Title\",\"artistName\":\"Artist\"}}",
+            "{\"musicContext\":{\"state\":\"UNKNOWN\"}} trailing"
+        )
+        assertEquals("Music sharing allowed for this run",
+            historyItemFor(run, emptyList(), null).reflectionMusicSummary)
+        incompleteSnapshots.forEach { snapshot ->
+            val reflection = musicSnapshotReflection("{}").copy(evidenceJson = snapshot)
+            assertEquals("Music sharing allowed for this run",
+                historyItemFor(run, emptyList(), reflection).reflectionMusicSummary)
+        }
+        assertEquals("Music observations kept on this phone", historyItemFor(
+            run.copy(musicReflectionSharingAllowed = false), emptyList(), null
+        ).reflectionMusicSummary)
+        assertNull(historyItemFor(
+            run.copy(musicReflectionSharingAllowed = false, musicObservationRequested = false), emptyList(), null
+        ).reflectionMusicSummary)
     }
 
     @Test
@@ -193,6 +287,16 @@ class RunMetricsDisplayTest {
         telemetryCoverage = coverage,
         displayDistanceUnit = if (coverage == null) null else DistanceUnit.MILES,
         transitionHistoryComplete = historyComplete
+    )
+
+    private fun sharingHistoryRun() = historyRun(
+        finish = historyStart + 600_000L, historyComplete = false
+    ).copy(musicObservationRequested = true, musicReflectionSharingAllowed = true)
+
+    private fun musicSnapshotReflection(musicJson: String) = RunReflectionEntity(
+        runId = historyRunId, requestId = historyRequestId,
+        evidenceJson = "{\"musicContext\":$musicJson}",
+        selectionDeadlineEpochMillis = historyStart + 606_000L
     )
 
     @Test

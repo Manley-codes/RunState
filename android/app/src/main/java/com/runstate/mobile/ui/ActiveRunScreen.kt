@@ -137,6 +137,8 @@ internal fun ActiveRunScreen(
                         text = when {
                             !isGpsRun -> "ILLUSTRATIVE MAP · LOCATION OFF"
                             gpsServicePresent && paused -> "ILLUSTRATIVE MAP · GPS PAUSED"
+                            gpsServicePresent && metrics?.gpsDistanceAvailable != true ->
+                                "ILLUSTRATIVE MAP · GPS WAITING"
                             gpsServicePresent -> "ILLUSTRATIVE MAP · GPS RECORDING"
                             else -> "ILLUSTRATIVE MAP · GPS OFF"
                         },
@@ -162,6 +164,13 @@ internal fun ActiveRunScreen(
                 letterSpacing = 0.5.sp,
                 modifier = Modifier.padding(top = 18.dp)
             )
+            if (isGpsRun && gpsServicePresent && !paused && metrics?.gpsDistanceAvailable != true) {
+                Text(
+                    "Waiting for usable GPS movement. Distance will appear once it is recorded.",
+                    color = ActiveInk.copy(alpha = 0.75f), fontSize = 12.sp, lineHeight = 18.sp,
+                    textAlign = TextAlign.Center, modifier = Modifier.padding(top = 8.dp)
+                )
+            }
             Row(
                 modifier = Modifier
                     .fillMaxWidth()

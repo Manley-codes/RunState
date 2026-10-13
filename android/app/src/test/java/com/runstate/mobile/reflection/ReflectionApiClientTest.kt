@@ -1,6 +1,7 @@
 package com.runstate.mobile.reflection
 
 import com.google.gson.JsonObject
+import com.google.gson.GsonBuilder
 import com.runstate.mobile.data.local.*
 import org.junit.Assert.*
 import org.junit.Test
@@ -55,6 +56,43 @@ class ReflectionApiClientTest {
         )
     }
 
+    @Test fun incompleteGpsCoverageDoesNotInventActiveTimeFromCompleteTransitions() {
+        for (coverage in listOf(TelemetryCoverage.PARTIAL, TelemetryCoverage.UNAVAILABLE)) {
+            val run = completedRun().copy(
+                trackingMode = RunTrackingMode.GPS,
+                metricSource = MetricSource.GPS,
+                telemetryCoverage = coverage,
+                finalDistanceMeters = if (coverage == TelemetryCoverage.PARTIAL) 180.25 else null
+            )
+            val evidence = reflectionRequestFromSavedRun(
+                REQUEST_ID, run,
+                listOf(RunTransitionEntity(RUN_ID, 1, RunTransitionType.PAUSE, PAUSE))
+            ).evidence
+
+            assertNull(evidence.activeDurationMillis)
+            assertEquals(START, evidence.officialStartEpochMillis)
+            assertEquals(FINISH, evidence.finishEpochMillis)
+            assertEquals("GPS", evidence.metrics.source)
+            assertEquals(coverage.name, evidence.metrics.coverage)
+            assertEquals(run.finalDistanceMeters, evidence.metrics.distanceMeters)
+        }
+    }
+
+    @Test fun completeGpsCoveragePreservesKnownActiveTiming() {
+        val run = completedRun().copy(
+            trackingMode = RunTrackingMode.GPS,
+            metricSource = MetricSource.GPS
+        )
+        val evidence = reflectionRequestFromSavedRun(
+            REQUEST_ID, run,
+            listOf(RunTransitionEntity(RUN_ID, 1, RunTransitionType.PAUSE, PAUSE))
+        ).evidence
+
+        assertEquals(65_432L, evidence.activeDurationMillis)
+        assertEquals(180.25, evidence.metrics.distanceMeters!!, 0.0)
+        assertEquals("COMPLETE", evidence.metrics.coverage)
+    }
+
     @Test fun chosenPreRunEnergyComesFromTheSavedRun() {
         val evidence = reflectionRequestFromSavedRun(
             REQUEST_ID,
@@ -63,6 +101,94 @@ class ReflectionApiClientTest {
         ).evidence
 
         assertEquals("MODERATE", evidence.preRunEnergy)
+    }
+
+    @Test fun localCaptureDoesNotAuthorizeCloudMusicSharing() {
+        val observed = listOf(musicObservation())
+        listOf(
+            completedRun(), // Legacy and untouched new runs both default to no sharing.
+            completedRun().copy(musicObservationRequested = true)
+        ).forEach { run ->
+            assertEquals(
+                ReflectionMusicContext(),
+                reflectionRequestFromSavedRun(REQUEST_ID, run, completedTransitions(), observed).evidence.musicContext
+            )
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            completedRun().copy(musicReflectionSharingAllowed = true)
+        }
+    }
+
+    @Test fun approvedMusicUsesOnlyTheLatestUsableSameRunSpotifyReport() {
+        val latest = musicObservation(sequence = 3).copy(
+            title = "  Latest observed title  ", artist = "  Reported artist  "
+        )
+        val observations = listOf(
+            latest,
+            musicObservation(sequence = 4).copy(playbackState = MusicPlaybackState.PAUSED),
+            musicObservation(sequence = 5).copy(title = null),
+            musicObservation(sequence = 6).copy(sourcePackage = "other.player"),
+            musicObservation(sequence = 7).copy(observedAtEpochMillis = FINISH + 1),
+            musicObservation(sequence = 1).copy(title = "Earlier title")
+        )
+        val context = reflectionRequestFromSavedRun(
+            REQUEST_ID, sharingRun(), completedTransitions(), observations
+        ).evidence.musicContext
+
+        assertEquals(ReflectionMusicContext(
+            state = "MUSIC", trackTitle = latest.title, artistName = latest.artist,
+            provenance = "MEDIA_SESSION_PARTIAL"
+        ), context)
+        assertNull(context.artistDescription)
+    }
+
+    @Test fun missingOrIneligibleObservedMusicStaysUnknownRatherThanNoMusic() {
+        val wrongRun = "9b3d7a5c-2e41-4f68-8a90-1c2d3e4f5a6b"
+        val ineligible = listOf(
+            musicObservation().copy(runId = wrongRun),
+            musicObservation().copy(sourcePackage = "other.player"),
+            musicObservation().copy(title = null),
+            musicObservation().copy(title = "  \t"),
+            musicObservation().copy(artist = null),
+            musicObservation().copy(artist = "  \t"),
+            musicObservation().copy(observedAtEpochMillis = START - 1),
+            musicObservation().copy(observedAtEpochMillis = FINISH + 1)
+        ) + MusicPlaybackState.entries.filter { it != MusicPlaybackState.PLAYING }.map { state ->
+            musicObservation().copy(playbackState = state)
+        }
+        (listOf(emptyList<RunMusicObservationEntity>()) + ineligible.map { listOf(it) }).forEach { observations ->
+            assertEquals(
+                ReflectionMusicContext(),
+                reflectionRequestFromSavedRun(
+                    REQUEST_ID, sharingRun(), completedTransitions(), observations
+                ).evidence.musicContext
+            )
+        }
+    }
+
+    @Test fun observedMusicPayloadContainsOnlyApprovedTitleArtistAndProvenance() {
+        val request = reflectionRequestFromSavedRun(
+            REQUEST_ID, sharingRun(), completedTransitions(), listOf(musicObservation())
+        )
+        val gson = GsonBuilder().serializeNulls().create()
+        val json = gson.toJsonTree(request).asJsonObject
+        val music = json.getAsJsonObject("evidence").getAsJsonObject("musicContext")
+        assertEquals(setOf("state", "trackTitle", "artistName", "artistDescription", "provenance"), music.keySet())
+        assertEquals("Reported title", music.get("trackTitle").asString)
+        assertEquals("Reported artist", music.get("artistName").asString)
+        assertEquals("MEDIA_SESSION_PARTIAL", music.get("provenance").asString)
+        assertTrue(music.get("artistDescription").isJsonNull)
+        val serialized = gson.toJson(request)
+        listOf("sourcePackage", "observedAtEpochMillis", "elapsedRealtimeNanos", "eventKind",
+            "observationKey", "sequenceNumber", "com.spotify.music").forEach { privateField ->
+            assertFalse("Raw music field leaked: $privateField", serialized.contains(privateField))
+        }
+        val controlled = request.copy(evidence = request.evidence.copy(musicContext = ReflectionMusicContext(
+            state = "MUSIC", trackTitle = "Controlled title", artistName = "Controlled artist",
+            provenance = "CONTROLLED"
+        )))
+        assertEquals("CONTROLLED", gson.toJsonTree(controlled).asJsonObject
+            .getAsJsonObject("evidence").getAsJsonObject("musicContext").get("provenance").asString)
     }
 
     @Test fun responsePreservesExactTextAndRejectsUntrustworthyAnswers() {
@@ -150,5 +276,26 @@ class ReflectionApiClientTest {
         telemetryCoverage = TelemetryCoverage.COMPLETE,
         displayDistanceUnit = DistanceUnit.MILES,
         transitionHistoryComplete = true
+    )
+
+    private fun sharingRun() = completedRun().copy(
+        musicObservationRequested = true, musicReflectionSharingAllowed = true
+    )
+
+    private fun completedTransitions() = listOf(
+        RunTransitionEntity(RUN_ID, 1, RunTransitionType.PAUSE, PAUSE)
+    )
+
+    private fun musicObservation(sequence: Int = 1) = RunMusicObservationEntity(
+        runId = RUN_ID,
+        sequenceNumber = sequence,
+        observationKey = "fictional-observation-$sequence",
+        observedAtEpochMillis = START + 1_000L * sequence,
+        elapsedRealtimeNanos = 1_000_000L * sequence,
+        sourcePackage = "com.spotify.music",
+        title = "Reported title",
+        artist = "Reported artist",
+        playbackState = MusicPlaybackState.PLAYING,
+        eventKind = MusicObservationKind.SESSION_SNAPSHOT
     )
 }

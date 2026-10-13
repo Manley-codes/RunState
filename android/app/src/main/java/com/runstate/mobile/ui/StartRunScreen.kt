@@ -57,6 +57,7 @@ internal const val START_ENERGY_SELECTED_TAG = "startEnergySelected"
 internal const val START_ENERGY_UNDO_TAG = "startEnergyUndo"
 internal const val START_GPS_TOGGLE_TAG = "startGpsToggle"
 internal const val START_MUSIC_TOGGLE_TAG = "startMusicToggle"
+internal const val START_MUSIC_SHARING_TOGGLE_TAG = "startMusicSharingToggle"
 
 private val StartInk = Color(0xFF293326)
 private val StartForest = Color(0xFF2D3827)
@@ -83,6 +84,9 @@ internal fun StartRunScreen(
     musicSelected: Boolean = false,
     musicAccessGranted: Boolean = false,
     onToggleMusic: () -> Unit = {},
+    musicReflectionSharingAvailable: Boolean = false,
+    musicReflectionSharingSelected: Boolean = false,
+    onToggleMusicReflectionSharing: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     BoxWithConstraints(
@@ -167,7 +171,7 @@ internal fun StartRunScreen(
             ) {
                 Text(
                     text = if (gpsSelected) "Precise GPS will record this run"
-                        else "Fixture run · GPS optional",
+                        else "Sample run · GPS off",
                     color = StartInk,
                     fontSize = 11.sp,
                     fontWeight = FontWeight.SemiBold
@@ -180,7 +184,7 @@ internal fun StartRunScreen(
                         .testTag(START_GPS_TOGGLE_TAG)
                 ) {
                     Text(
-                        if (gpsSelected) "Use fixture" else "Use GPS",
+                        if (gpsSelected) "Turn GPS off" else "Turn GPS on",
                         color = StartInk,
                         fontWeight = FontWeight.Bold
                     )
@@ -237,7 +241,50 @@ internal fun StartRunScreen(
                     )
                 }
             }
-            Spacer(modifier = Modifier.height((screenHeight - 670.dp).coerceAtLeast(20.dp)))
+            val showMusicSharing = musicReflectionSharingAvailable && musicSelected && musicAccessGranted
+            if (showMusicSharing) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 8.dp)
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(StartCream.copy(alpha = 0.9f))
+                        .padding(start = 12.dp, end = 4.dp, top = 6.dp, bottom = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            "Music in reflection",
+                            color = StartInk,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Text(
+                            (if (musicReflectionSharingSelected) "On for this run. " else "Optional. ") +
+                                "Shares one reported Spotify title and artist with RunState’s backend and Anthropic. " +
+                                "Partial observation; no audio.",
+                            color = StartInk.copy(alpha = 0.78f),
+                            fontSize = 10.sp,
+                            lineHeight = 13.sp
+                        )
+                    }
+                    TextButton(
+                        onClick = onToggleMusicReflectionSharing,
+                        enabled = actionsEnabled,
+                        modifier = Modifier
+                            .heightIn(min = 48.dp)
+                            .testTag(START_MUSIC_SHARING_TOGGLE_TAG)
+                    ) {
+                        Text(
+                            if (musicReflectionSharingSelected) "Turn off" else "Include",
+                            color = StartInk,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+            }
+            val energySpacerBase = if (showMusicSharing) 750.dp else 670.dp
+            Spacer(modifier = Modifier.height((screenHeight - energySpacerBase).coerceAtLeast(20.dp)))
             PreRunEnergyChoices(
                 selected = selectedPreRunEnergy,
                 onSelect = onSelectPreRunEnergy,
@@ -248,6 +295,7 @@ internal fun StartRunScreen(
         StartFooter(
             onStart = onStart,
             enabled = actionsEnabled,
+            gpsSelected = gpsSelected,
             modifier = Modifier.align(Alignment.BottomCenter)
         )
     }
@@ -477,6 +525,7 @@ private fun EnergyTile(
 private fun StartFooter(
     onStart: () -> Unit,
     enabled: Boolean,
+    gpsSelected: Boolean,
     modifier: Modifier = Modifier
 ) {
     Box(modifier = modifier.fillMaxWidth().height(184.dp)) {
@@ -538,6 +587,15 @@ private fun StartFooter(
                     fontSize = 19.sp,
                     fontWeight = FontWeight.ExtraBold,
                     letterSpacing = 3.sp
+                )
+                Text(
+                    text = if (gpsSelected) "GPS run" else "Sample run",
+                    color = Color.White.copy(alpha = if (enabled) 0.8f else 0.48f),
+                    fontSize = 10.sp,
+                    lineHeight = 12.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    modifier = Modifier.padding(top = 2.dp)
                 )
             }
             FooterLabel("MUSIC", "OPTIONAL")

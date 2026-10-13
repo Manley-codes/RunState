@@ -15,6 +15,8 @@ import androidx.room.RoomDatabase
  * Version 6 adds a distinct run tracking mode and durable GPS observations.
  * Version 7 adds explicit per-run music observation and its partial event stream.
  * Version 8 stores optional post-run Effort without inferring answers for older runs.
+ * Version 9 starts the reflection selection window after the spoken save receipt.
+ * Version 10 records separate music-reflection sharing consent, off for every older run.
  * Each exported schema under `android/app/schemas` stays unchanged as the record of what
  * that version looked like. Every future version increment requires an explicitly
  * written migration; destructive migration is not configured here and must not be added
@@ -47,7 +49,7 @@ import androidx.room.RoomDatabase
         RunLocationPointEntity::class,
         RunMusicObservationEntity::class
     ],
-    version = 8,
+    version = 10,
     exportSchema = true
 )
 abstract class RunStateDatabase : RoomDatabase() {
@@ -95,6 +97,6 @@ internal fun buildRunStateDatabase(
     )
         .addMigrations(
             MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5,
-            MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8
+            MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10
         )
         .build()

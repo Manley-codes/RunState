@@ -211,6 +211,128 @@ class RunStateMigrationTest {
         assertNull(restored.postRunEffort)
     }
 
+    @Test
+    fun versionEightMigrationKeepsExistingReflectionWindowsAndExactReadyText() {
+        val databaseName = "runstate-v8-receipt-migration-test.db"
+        val secondRunId = "03689ffc-65d9-4907-ae77-7a17b3ad77a6"
+        val requestId = "8c405ab0-4a80-4be9-9bfb-19f2517ec2ba"
+        val deadline = OFFICIAL_START + 66_000L
+        val exactReply = "  Exact saved reply.\nWith Unicode — 🌤  "
+        helper.createDatabase(databaseName, 8).apply {
+            listOf(RUN_ID, secondRunId).forEach { runId ->
+                insertVersionTwoRun(
+                    runId = runId, state = "COMPLETED",
+                    lastCheckpointEpochMillis = OFFICIAL_START + 60_000L,
+                    finishEpochMillis = OFFICIAL_START + 60_000L
+                )
+            }
+            execSQL(
+                "INSERT INTO run_reflections (run_id, request_id, evidence_json, selection_deadline_epoch_millis, status) VALUES (?, ?, '{}', ?, 'PENDING')",
+                arrayOf<Any>(RUN_ID, requestId, deadline)
+            )
+            execSQL(
+                """
+                INSERT INTO run_reflections (
+                    run_id, request_id, evidence_json, selection_deadline_epoch_millis,
+                    status, selected_branch, text, finalized_at_epoch_millis, is_test_data
+                ) VALUES (?, ?, '{}', ?, 'READY', 'SPENT', ?, ?, 0)
+                """.trimIndent(),
+                arrayOf<Any>(secondRunId, requestId, deadline, exactReply, deadline)
+            )
+            close()
+        }
+        helper.runMigrationsAndValidate(databaseName, 9, true, MIGRATION_8_9).close()
+        val migrated = openDatabaseThroughFactory(databaseName)
+        runBlocking {
+            val pending = requireNotNull(migrated.reflectionDao().findByRunId(RUN_ID))
+            assertTrue(pending.selectionWindowStarted)
+            assertEquals(deadline, pending.selectionDeadlineEpochMillis)
+            assertEquals(ReflectionStatus.PENDING, pending.status)
+            val ready = requireNotNull(migrated.reflectionDao().findByRunId(secondRunId))
+            assertTrue(ready.selectionWindowStarted)
+            assertEquals(deadline, ready.selectionDeadlineEpochMillis)
+            assertEquals(exactReply, ready.text)
+            assertEquals(ReflectionStatus.READY, ready.status)
+            assertEquals(false, ready.isTestData)
+            assertEquals(2, migrated.runDao().countRuns())
+        }
+    }
+
+    @Test
+    fun versionNineMigrationPreservesRecordedDataWithoutGrantingMusicSharing() {
+        val databaseName = "runstate-v9-sharing-migration-test.db"
+        val secondRunId = "03689ffc-65d9-4907-ae77-7a17b3ad77a6"
+        val requestId = "8c405ab0-4a80-4be9-9bfb-19f2517ec2ba"
+        val finish = OFFICIAL_START + 60_000L
+        val exactReply = "  Exact prior reply.\nUnicode — 🌤 stays.  "
+        helper.createDatabase(databaseName, 9).apply {
+            insertVersionTwoRun(state = "COMPLETED", lastCheckpointEpochMillis = finish, finishEpochMillis = finish)
+            insertVersionTwoRun(runId = secondRunId, state = "RUNNING",
+                lastCheckpointEpochMillis = OFFICIAL_START, finishEpochMillis = null)
+            execSQL("""
+                UPDATE runs SET final_distance_meters=12.34, metric_source='GPS',
+                    telemetry_coverage='PARTIAL', display_distance_unit='MILES',
+                    transition_history_complete=1, pre_run_energy='LOW', tracking_mode='GPS',
+                    music_observation_requested=1, post_run_effort='WORKING' WHERE run_id=?
+            """.trimIndent(), arrayOf(RUN_ID))
+            execSQL("INSERT INTO run_transitions (run_id,sequence_number,transition_type,occurred_at_epoch_millis) VALUES (?,1,'PAUSE',?)",
+                arrayOf<Any>(RUN_ID, OFFICIAL_START + 30_000L))
+            execSQL("""
+                INSERT INTO run_location_points (run_id,sequence_number,observation_key,
+                    observed_at_epoch_millis,latitude,longitude,horizontal_accuracy_meters,
+                    accepted_for_distance,segment_distance_meters,cumulative_distance_meters)
+                VALUES (?,1,'anchor',?,40.0,-75.0,3.0,1,NULL,NULL),
+                       (?,2,'segment',?,40.0001,-75.0,3.0,1,12.34,12.34)
+            """.trimIndent(), arrayOf<Any>(RUN_ID, OFFICIAL_START + 1_000L, RUN_ID, OFFICIAL_START + 2_000L))
+            execSQL("""
+                INSERT INTO run_music_observations (run_id,sequence_number,observation_key,
+                    observed_at_epoch_millis,source_package,title,artist,playback_state,event_kind)
+                VALUES (?,1,'music',?,'test.player','Stored track','Stored artist','PLAYING','SESSION_SNAPSHOT')
+            """.trimIndent(), arrayOf<Any>(RUN_ID, OFFICIAL_START + 2_000L))
+            execSQL("""
+                INSERT INTO run_reflections (run_id,request_id,evidence_json,selection_deadline_epoch_millis,
+                    status,selected_branch,text,finalized_at_epoch_millis,is_test_data,selection_window_started)
+                VALUES (?,?,'{}',?,'READY','SPENT',?,?,0,1)
+            """.trimIndent(), arrayOf<Any>(RUN_ID, requestId, finish + 6_000L, exactReply, finish + 7_000L))
+            close()
+        }
+        helper.runMigrationsAndValidate(databaseName, 10, true, MIGRATION_9_10).close()
+        val migrated = openDatabaseThroughFactory(databaseName)
+        runBlocking {
+            val restored = requireNotNull(migrated.runDao().findById(RUN_ID))
+            val other = requireNotNull(migrated.runDao().findById(secondRunId))
+            assertEquals(false, restored.musicReflectionSharingAllowed)
+            assertEquals(false, other.musicReflectionSharingAllowed)
+            assertEquals(true, restored.musicObservationRequested)
+            assertEquals(false, other.musicObservationRequested)
+            assertEquals(12.34, requireNotNull(restored.finalDistanceMeters), 0.0)
+            assertEquals(RunTrackingMode.GPS, restored.trackingMode)
+            assertEquals(TelemetryCoverage.PARTIAL, restored.telemetryCoverage)
+            assertEquals(PreRunEnergy.LOW, restored.preRunEnergy)
+            assertEquals(PostRunEffort.WORKING, restored.postRunEffort)
+            assertEquals(finish, restored.finishEpochMillis)
+            assertEquals(listOf(RunTransitionEntity(RUN_ID, 1, RunTransitionType.PAUSE, OFFICIAL_START + 30_000L)),
+                migrated.runDao().transitionsFor(RUN_ID))
+            val points = migrated.locationDao().pointsFor(RUN_ID)
+            assertEquals(2, points.size)
+            assertNull(points[0].segmentDistanceMeters)
+            assertEquals(12.34, requireNotNull(points[1].segmentDistanceMeters), 0.0)
+            assertEquals(12.34, requireNotNull(points[1].cumulativeDistanceMeters), 0.0)
+            val observations = migrated.musicObservationDao().observationsFor(RUN_ID)
+            assertEquals(1, observations.size)
+            assertEquals("Stored track", observations.single().title)
+            assertEquals("Stored artist", observations.single().artist)
+            assertEquals(MusicPlaybackState.PLAYING, observations.single().playbackState)
+            val reply = requireNotNull(migrated.reflectionDao().findByRunId(RUN_ID))
+            assertEquals(requestId, reply.requestId)
+            assertEquals(exactReply, reply.text)
+            assertEquals(ReflectionStatus.READY, reply.status)
+            assertEquals(false, reply.isTestData)
+            assertEquals(true, reply.selectionWindowStarted)
+            assertEquals(2, migrated.runDao().countRuns())
+        }
+    }
+
     /**
      * Writes a run the only way version 1 could: raw SQL against the version-1 table,
      * with no finish column and no transition table in existence.
@@ -289,6 +411,7 @@ class RunStateMigrationTest {
         assertNull(run.telemetryCoverage)
         assertNull(run.displayDistanceUnit)
         assertNull(run.transitionHistoryComplete)
+        assertEquals(false, run.musicReflectionSharingAllowed)
     }
 
     /**

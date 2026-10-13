@@ -50,8 +50,12 @@ internal class PreparedRunFactory(
     fun create(
         preRunEnergy: PreRunEnergy? = null,
         trackingMode: RunTrackingMode = RunTrackingMode.FIXTURE,
-        musicObservationRequested: Boolean = false
+        musicObservationRequested: Boolean = false,
+        musicReflectionSharingAllowed: Boolean = false
     ): RunEntity {
+        require(!musicReflectionSharingAllowed || musicObservationRequested) {
+            "Music reflection sharing requires this run's music observation opt-in."
+        }
         val officialStart = clock.millis()
 
         return RunEntity(
@@ -73,7 +77,8 @@ internal class PreparedRunFactory(
             transitionHistoryComplete = true,
             preRunEnergy = preRunEnergy,
             trackingMode = trackingMode,
-            musicObservationRequested = musicObservationRequested
+            musicObservationRequested = musicObservationRequested,
+            musicReflectionSharingAllowed = musicReflectionSharingAllowed
         )
     }
 

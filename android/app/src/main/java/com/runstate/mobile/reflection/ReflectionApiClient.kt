@@ -5,9 +5,13 @@ import com.google.gson.GsonBuilder
 import com.google.gson.Strictness
 import com.google.gson.stream.JsonReader
 import com.google.gson.stream.JsonToken
+import com.runstate.mobile.data.local.MetricSource
 import com.runstate.mobile.data.local.RunEntity
+import com.runstate.mobile.data.local.RunMusicObservationEntity
 import com.runstate.mobile.data.local.RunTransitionEntity
+import com.runstate.mobile.data.local.MusicPlaybackState
 import com.runstate.mobile.data.local.StoredRunState
+import com.runstate.mobile.data.local.TelemetryCoverage
 import com.runstate.mobile.run.RunTimeline
 import com.runstate.mobile.run.TransitionHistoryCoverage
 import java.io.ByteArrayOutputStream
@@ -55,7 +59,8 @@ internal data class ReflectionMusicContext(
     val state: String = "UNKNOWN",
     val trackTitle: String? = null,
     val artistName: String? = null,
-    val artistDescription: String? = null
+    val artistDescription: String? = null,
+    val provenance: String? = null
 )
 
 /** All four candidates are validated before the no-selection branch may be displayed. */
@@ -82,7 +87,8 @@ internal fun interface ReflectionGateway {
 internal fun reflectionRequestFromSavedRun(
     requestId: String,
     run: RunEntity,
-    transitions: List<RunTransitionEntity>
+    transitions: List<RunTransitionEntity>,
+    musicObservations: List<RunMusicObservationEntity> = emptyList()
 ): ReflectionApiRequest {
     require(UUID.fromString(requestId).toString() == requestId) {
         "requestId must be canonical lowercase UUID text."
@@ -94,7 +100,11 @@ internal fun reflectionRequestFromSavedRun(
         "Reflection evidence requires a durable finish time."
     }
 
-    val activeDurationMillis = if (run.transitionHistoryComplete == true) {
+    // A GPS service gap can leave a RUNNING row and complete transition history behind.
+    // Match History's conservative timing boundary instead of counting that gap as active.
+    val activeTimingKnown = run.transitionHistoryComplete == true &&
+        (run.metricSource != MetricSource.GPS || run.telemetryCoverage == TelemetryCoverage.COMPLETE)
+    val activeDurationMillis = if (activeTimingKnown) {
         require(transitions.all { it.runId == run.runId }) {
             "Reflection history must belong to the completed run."
         }
@@ -135,8 +145,32 @@ internal fun reflectionRequestFromSavedRun(
             startTimezoneId = run.startTimezoneId,
             activeDurationMillis = activeDurationMillis,
             metrics = metrics,
-            preRunEnergy = run.preRunEnergy?.name ?: "UNKNOWN"
+            preRunEnergy = run.preRunEnergy?.name ?: "UNKNOWN",
+            musicContext = reflectionMusicContextFromSavedRun(run, finishEpochMillis, musicObservations)
         )
+    )
+}
+
+/** Sharing is separate from local capture; one reported title never proves a whole song play. */
+private fun reflectionMusicContextFromSavedRun(
+    run: RunEntity,
+    finishEpochMillis: Long,
+    observations: List<RunMusicObservationEntity>
+): ReflectionMusicContext {
+    if (!run.musicObservationRequested || !run.musicReflectionSharingAllowed) return ReflectionMusicContext()
+    val latest = observations.asSequence().filter { observation ->
+        observation.runId == run.runId &&
+            observation.sourcePackage == "com.spotify.music" &&
+            observation.playbackState == MusicPlaybackState.PLAYING &&
+            !observation.title.isNullOrBlank() && !observation.artist.isNullOrBlank() &&
+            observation.observedAtEpochMillis in run.officialStartEpochMillis..finishEpochMillis
+    }.maxByOrNull { it.sequenceNumber } ?: return ReflectionMusicContext()
+
+    return ReflectionMusicContext(
+        state = "MUSIC",
+        trackTitle = latest.title,
+        artistName = latest.artist,
+        provenance = "MEDIA_SESSION_PARTIAL"
     )
 }
 

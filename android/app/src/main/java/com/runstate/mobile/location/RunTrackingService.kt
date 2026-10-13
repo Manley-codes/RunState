@@ -112,6 +112,8 @@ internal class RunTrackingService : Service() {
                     }
                     val musicObservationRequested =
                         intent?.getBooleanExtra(EXTRA_MUSIC_OBSERVATION_REQUESTED, false) == true
+                    val musicReflectionSharingAllowed =
+                        intent?.getBooleanExtra(EXTRA_MUSIC_REFLECTION_SHARING_ALLOWED, false) == true
                     val snapshot = app.runSessionCoordinator.initialize()
                     check(snapshot.initializationStatus ==
                         com.runstate.mobile.run.InitializationStatus.Completed) {
@@ -120,7 +122,8 @@ internal class RunTrackingService : Service() {
                     app.runSessionCoordinator.requestStart(
                         energy,
                         RunTrackingMode.GPS,
-                        musicObservationRequested
+                        musicObservationRequested,
+                        musicReflectionSharingAllowed
                     ).await().runId
                 } else {
                     val idToResume = requireNotNull(existingId)
@@ -395,6 +398,7 @@ internal class RunTrackingService : Service() {
         private const val ACTION_RESUME_EXISTING = "com.runstate.mobile.action.RESUME_GPS_RUN"
         private const val EXTRA_PRE_RUN_ENERGY = "pre_run_energy"
         private const val EXTRA_MUSIC_OBSERVATION_REQUESTED = "music_observation_requested"
+        private const val EXTRA_MUSIC_REFLECTION_SHARING_ALLOWED = "music_reflection_sharing_allowed"
         private const val EXTRA_RUN_ID = "run_id"
         private const val CHANNEL_ID = "active_run_tracking"
         private const val NOTIFICATION_ID = 3207
@@ -403,12 +407,17 @@ internal class RunTrackingService : Service() {
         fun startNew(
             context: Context,
             preRunEnergy: PreRunEnergy?,
-            musicObservationRequested: Boolean = false
+            musicObservationRequested: Boolean = false,
+            musicReflectionSharingAllowed: Boolean = false
         ) {
+            require(!musicReflectionSharingAllowed || musicObservationRequested) {
+                "Music reflection sharing requires this run's music observation opt-in."
+            }
             val intent = Intent(context, RunTrackingService::class.java)
                 .setAction(ACTION_START_NEW)
                 .putExtra(EXTRA_PRE_RUN_ENERGY, preRunEnergy?.name)
                 .putExtra(EXTRA_MUSIC_OBSERVATION_REQUESTED, musicObservationRequested)
+                .putExtra(EXTRA_MUSIC_REFLECTION_SHARING_ALLOWED, musicReflectionSharingAllowed)
             ContextCompat.startForegroundService(context, intent)
         }
 

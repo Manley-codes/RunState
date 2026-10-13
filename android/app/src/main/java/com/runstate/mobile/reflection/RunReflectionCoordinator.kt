@@ -23,24 +23,31 @@ internal interface ReflectionStore {
     suspend fun find(runId: String): RunReflectionEntity?
     suspend fun all(): List<RunReflectionEntity>
     suspend fun ensure(record: RunReflectionEntity): RunReflectionEntity
-    suspend fun energy(runId: String, branch: ReflectionBranch, now: Long): RunReflectionEntity
+    suspend fun energy(runId: String, branch: ReflectionBranch, now: Long, selectionHeld: Boolean): RunReflectionEntity
     suspend fun defaultSelection(runId: String, now: Long): RunReflectionEntity
+    suspend fun beginSelectionWindow(runId: String, deadline: Long): RunReflectionEntity
     suspend fun candidates(runId: String, requestId: String, json: String, isTestData: Boolean): Boolean
     suspend fun ready(runId: String, requestId: String, branch: ReflectionBranch, text: String, now: Long): Boolean
     suspend fun fail(runId: String, requestId: String): Boolean
     suspend fun retry(runId: String, requestId: String): RunReflectionEntity?
+    suspend fun musicObservations(runId: String): List<RunMusicObservationEntity> = emptyList()
 }
 
-internal class RoomReflectionStore(private val dao: ReflectionDao) : ReflectionStore {
+internal class RoomReflectionStore(
+    private val dao: ReflectionDao,
+    private val musicDao: MusicObservationDao? = null
+) : ReflectionStore {
     override suspend fun find(runId: String) = dao.findByRunId(runId)
     override suspend fun all() = dao.all()
     override suspend fun ensure(record: RunReflectionEntity) = dao.ensurePending(record)
-    override suspend fun energy(runId: String, branch: ReflectionBranch, now: Long) = dao.recordEnergy(runId, branch, now)
+    override suspend fun energy(runId: String, branch: ReflectionBranch, now: Long, selectionHeld: Boolean) = dao.recordEnergy(runId, branch, now, selectionHeld)
     override suspend fun defaultSelection(runId: String, now: Long) = dao.selectNoSelectionIfDue(runId, now)
+    override suspend fun beginSelectionWindow(runId: String, deadline: Long) = dao.beginSelectionWindow(runId, deadline)
     override suspend fun candidates(runId: String, requestId: String, json: String, isTestData: Boolean) = dao.saveCandidates(runId, requestId, json, isTestData)
     override suspend fun ready(runId: String, requestId: String, branch: ReflectionBranch, text: String, now: Long) = dao.finalizeReady(runId, requestId, branch, text, now)
     override suspend fun fail(runId: String, requestId: String) = dao.markFailed(runId, requestId)
     override suspend fun retry(runId: String, requestId: String) = dao.retry(runId, requestId)
+    override suspend fun musicObservations(runId: String) = musicDao?.observationsFor(runId).orEmpty()
 }
 
 /**
@@ -64,6 +71,8 @@ internal class RunReflectionCoordinator(
     private val requests = mutableSetOf<String>()
     private val timers = mutableSetOf<String>()
     private val effortSheetHolds = mutableSetOf<String>()
+    // A very fast or unavailable voice engine can finish before Saved creates its row.
+    private val finishedReceipts = mutableMapOf<String, Long>()
     private var activeRunId: String? = null
     private val mutableState = MutableStateFlow<RunReflectionState>(RunReflectionState.Idle)
     val state: StateFlow<RunReflectionState> = mutableState.asStateFlow()
@@ -71,34 +80,59 @@ internal class RunReflectionCoordinator(
     /** Recover local replies without silently starting another potentially paid request. */
     suspend fun initialize() = initialization.withLock {
         if (!initialized) {
-            store.all().filter { it.status == ReflectionStatus.PENDING }.forEach { record ->
-                if (record.candidatesJson == null) store.fail(record.runId, record.requestId)
-                else mutex.withLock { finalizeIfPossible(record.runId) }
+            store.all().forEach { record ->
+                mutex.withLock {
+                    // A process restart consumes any interrupted receipt. Recover selection
+                    // locally without another audible receipt or provider request.
+                    val recovered = if (!record.selectionWindowStarted) {
+                        store.beginSelectionWindow(record.runId, nowMillis() + quietWindowMillis)
+                    } else record
+                    if (recovered.status == ReflectionStatus.PENDING) {
+                        if (recovered.candidatesJson == null) store.fail(recovered.runId, recovered.requestId)
+                        else finalizeIfPossible(recovered.runId)
+                    }
+                }
             }
             initialized = true
         }
     }
 
-    fun onSavedVisible(runId: String, bridgeReady: Boolean = true) {
+    fun onSavedVisible(
+        runId: String,
+        bridgeReady: Boolean = true,
+        awaitingReceipt: Boolean = false
+    ): Job {
         activeRunId = runId
-        applicationScope.launch {
+        return applicationScope.launch {
             try {
                 initialize()
                 mutex.withLock {
                     var record = store.find(runId)
                     if (record == null) {
                         val run = requireNotNull(runDao.findById(runId))
+                        // Read opted-in metadata only for this first durable evidence snapshot.
+                        // Later observations, retry and History cannot rewrite what was shared.
+                        val music = if (run.state == StoredRunState.COMPLETED &&
+                            run.musicObservationRequested && run.musicReflectionSharingAllowed) {
+                            try { store.musicObservations(runId) }
+                            catch (cancelled: CancellationException) { throw cancelled }
+                            catch (_: Exception) { emptyList() }
+                        } else emptyList()
                         val request = reflectionRequestFromSavedRun(
-                            requestIdSupplier().toString(), run, runDao.transitionsFor(runId))
+                            requestIdSupplier().toString(), run, runDao.transitionsFor(runId), music)
+                        val receiptFinishedAt = finishedReceipts[runId]
                         record = store.ensure(RunReflectionEntity(
                             runId = runId, requestId = request.requestId,
                             evidenceJson = gson.toJson(request.evidence),
-                            selectionDeadlineEpochMillis = nowMillis() + quietWindowMillis))
+                            selectionDeadlineEpochMillis = (receiptFinishedAt ?: nowMillis()) + quietWindowMillis,
+                            selectionWindowStarted = !awaitingReceipt || receiptFinishedAt != null))
                     }
                     finalizeIfPossible(runId)
                     publish(requireNotNull(store.find(runId)))
                     if (record.status == ReflectionStatus.PENDING) {
-                        scheduleSelection(runId, record.selectionDeadlineEpochMillis)
+                        if (record.selectionWindowStarted) {
+                            scheduleSelection(runId, record.selectionDeadlineEpochMillis)
+                        }
                         if (bridgeReady && record.candidatesJson == null) startRequest(runId)
                     }
                 }
@@ -130,16 +164,44 @@ internal class RunReflectionCoordinator(
         catch (_: Exception) { publishFailure(runId) }
     }
 
+    /** Callers that show feedback-save failures can await the real durable write. */
+    suspend fun saveEnergy(runId: String, branch: ReflectionBranch) {
+        initialize()
+        mutex.withLock {
+            store.energy(runId, branch, nowMillis(), selectionHeld = runId in effortSheetHolds)
+            finalizeIfPossible(runId)
+            publish(requireNotNull(store.find(runId)))
+        }
+    }
+
     fun selectEnergy(runId: String, branch: ReflectionBranch) = applicationScope.launch {
         try {
-            initialize()
-            mutex.withLock {
-                store.energy(runId, branch, nowMillis())
-                finalizeIfPossible(runId)
-                publish(requireNotNull(store.find(runId)))
-            }
+            saveEnergy(runId, branch)
         } catch (cancelled: CancellationException) { throw cancelled }
         catch (_: Exception) { publishFailure(runId) }
+    }
+
+    /** Start the quiet window once after receipt completion, failure or interruption. */
+    fun finishReceipt(runId: String): Job {
+        val finishedAt = nowMillis()
+        return applicationScope.launch {
+            try {
+                initialize()
+                mutex.withLock {
+                    // Keep the actual receipt completion time even if Room is delayed or
+                    // a transient write fails. A later local retry uses this same deadline.
+                    val originalFinishedAt = finishedReceipts.getOrPut(runId) { finishedAt }
+                    if (store.find(runId) == null) return@withLock
+                    val started = store.beginSelectionWindow(runId, originalFinishedAt + quietWindowMillis)
+                    finalizeIfPossible(runId)
+                    store.find(runId)?.let(::publish)
+                    if (started.status == ReflectionStatus.PENDING) {
+                        scheduleSelection(runId, started.selectionDeadlineEpochMillis)
+                    }
+                }
+            } catch (cancelled: CancellationException) { throw cancelled }
+            catch (_: Exception) { publishFailure(runId) }
+        }
     }
 
     /** Keep the quiet no-Energy path pending only while the optional Effort sheet is open. */
@@ -164,8 +226,24 @@ internal class RunReflectionCoordinator(
         try {
             initialize()
             mutex.withLock {
+                val record = store.find(runId) ?: return@withLock
+                if (!record.selectionWindowStarted) {
+                    finishedReceipts[runId]?.let { finishedAt ->
+                        store.beginSelectionWindow(runId, finishedAt + quietWindowMillis)
+                    }
+                }
+                // A failed receipt-window write may leave a PENDING cached family.
+                // Repair that local transition before considering another provider call.
+                finalizeIfPossible(runId)
+                val repaired = store.find(runId) ?: return@withLock
+                publish(repaired)
+                if (repaired.status == ReflectionStatus.READY || repaired.candidatesJson != null) {
+                    return@withLock
+                }
                 if (runId in requests) return@withLock
-                store.retry(runId, requestIdSupplier().toString()) ?: return@withLock
+                if (repaired.status == ReflectionStatus.FAILED) {
+                    store.retry(runId, requestIdSupplier().toString()) ?: return@withLock
+                }
                 startRequest(runId)
             }
         } catch (cancelled: CancellationException) { throw cancelled }
@@ -192,7 +270,9 @@ internal class RunReflectionCoordinator(
         val record = store.find(runId) ?: return
         if (record.status != ReflectionStatus.PENDING || record.candidatesJson != null || !requests.add(runId)) return
         publish(record)
-        scheduleSelection(runId, record.selectionDeadlineEpochMillis)
+        if (record.selectionWindowStarted) {
+            scheduleSelection(runId, record.selectionDeadlineEpochMillis)
+        }
         applicationScope.launch {
             try {
                 val evidence = gson.fromJson(record.evidenceJson, CompletedRunEvidence::class.java)
@@ -214,6 +294,7 @@ internal class RunReflectionCoordinator(
 
     private suspend fun finalizeIfPossible(runId: String) {
         val beforeSelection = store.find(runId) ?: return
+        if (!beforeSelection.selectionWindowStarted) return
         val record = if (runId in effortSheetHolds && beforeSelection.selectedBranch == null) {
             beforeSelection
         } else {

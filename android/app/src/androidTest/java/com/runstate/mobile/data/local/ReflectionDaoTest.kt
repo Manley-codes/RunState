@@ -54,6 +54,56 @@ class ReflectionDaoTest {
     }
 
     @Test
+    fun receiptPendingWindowSurvivesReopenAndStartsExactlyOnce() = runBlocking {
+        database.runDao().insert(completed)
+        var dao = database.reflectionDao()
+        dao.ensurePending(pending.copy(selectionWindowStarted = false))
+        assertNull(dao.selectNoSelectionIfDue(completed.runId, Long.MAX_VALUE).selectedBranch)
+        database.close()
+        database = buildRunStateDatabase(context, DATABASE_NAME)
+        dao = database.reflectionDao()
+        assertFalse(requireNotNull(dao.findByRunId(completed.runId)).selectionWindowStarted)
+
+        val newDeadline = pending.selectionDeadlineEpochMillis + 12_000L
+        val started = dao.beginSelectionWindow(completed.runId, newDeadline)
+        assertTrue(started.selectionWindowStarted)
+        assertEquals(newDeadline, started.selectionDeadlineEpochMillis)
+        assertEquals(started, dao.beginSelectionWindow(completed.runId, newDeadline + 100_000L))
+        assertNull(dao.selectNoSelectionIfDue(completed.runId, newDeadline - 1L).selectedBranch)
+        assertEquals(ReflectionBranch.NO_SELECTION,
+            dao.selectNoSelectionIfDue(completed.runId, newDeadline).selectedBranch)
+    }
+
+    @Test
+    fun receiptAcceptsEarlyEnergyButCannotFinalizeUntilDeliveryEnds() = runBlocking {
+        database.runDao().insert(completed)
+        val dao = database.reflectionDao()
+        dao.ensurePending(pending.copy(selectionWindowStarted = false))
+        val afterPlaceholderDeadline = pending.selectionDeadlineEpochMillis + 20_000L
+        val chosen = dao.recordEnergy(completed.runId, ReflectionBranch.SPENT, afterPlaceholderDeadline)
+        assertEquals(ReflectionBranch.SPENT, chosen.selectedBranch)
+        assertTrue(dao.saveCandidates(completed.runId, pending.requestId, "{}", true))
+        assertFalse(dao.finalizeReady(completed.runId, pending.requestId,
+            ReflectionBranch.SPENT, "Exact prepared reply.", afterPlaceholderDeadline))
+        dao.beginSelectionWindow(completed.runId, afterPlaceholderDeadline + 6_000L)
+        assertTrue(dao.finalizeReady(completed.runId, pending.requestId,
+            ReflectionBranch.SPENT, "Exact prepared reply.", afterPlaceholderDeadline))
+    }
+
+    @Test
+    fun effortHoldAllowsFirstEnergyAfterDeadlineWithoutReplacingAnExistingSelection() = runBlocking {
+        val dao = createPending()
+        val afterDeadline = pending.selectionDeadlineEpochMillis + 20_000L
+        val chosen = dao.recordEnergy(completed.runId, ReflectionBranch.SPENT,
+            afterDeadline, selectionHeld = true)
+        assertEquals(ReflectionBranch.SPENT, chosen.selectedBranch)
+        val later = dao.recordEnergy(completed.runId, ReflectionBranch.POWERED_UP,
+            afterDeadline + 100L, selectionHeld = true)
+        assertEquals(ReflectionBranch.SPENT, later.selectedBranch)
+        assertEquals(ReflectionBranch.POWERED_UP, later.postRunEnergy)
+    }
+
+    @Test
     fun readyTextSurvivesReopenExactlyAndUnusedCandidatesAreDiscarded() = runBlocking {
         val dao = createPending()
         val text = "  Exact reply.\nSecond line\twith Unicode — 🌤  "

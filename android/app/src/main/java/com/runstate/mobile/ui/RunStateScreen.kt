@@ -90,6 +90,9 @@ internal fun RunStateScreen(
     musicSelected: Boolean = false,
     musicAccessGranted: Boolean = false,
     onToggleMusic: () -> Unit = {},
+    musicReflectionSharingAvailable: Boolean = false,
+    musicReflectionSharingSelected: Boolean = false,
+    onToggleMusicReflectionSharing: () -> Unit = {},
     isGpsRun: Boolean = false,
     gpsServicePresent: Boolean = false,
     onResumeGpsTracking: () -> Unit = {},
@@ -157,6 +160,9 @@ internal fun RunStateScreen(
             musicSelected = musicSelected,
             musicAccessGranted = musicAccessGranted,
             onToggleMusic = onToggleMusic,
+            musicReflectionSharingAvailable = musicReflectionSharingAvailable,
+            musicReflectionSharingSelected = musicReflectionSharingSelected,
+            onToggleMusicReflectionSharing = onToggleMusicReflectionSharing,
             modifier = modifier
         )
         return

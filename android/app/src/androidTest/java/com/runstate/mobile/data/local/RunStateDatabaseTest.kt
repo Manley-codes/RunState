@@ -113,6 +113,34 @@ class RunStateDatabaseTest {
     }
 
     @Test
+    fun musicSharingConsentSurvivesLifecycleAndReopenWithoutInferringItFromObservation() = runBlocking {
+        val observationOnly = runningRun.copy(
+            runId = "03689ffc-65d9-4907-ae77-7a17b3ad77a6", musicObservationRequested = true
+        )
+        val shared = runningRun.copy(
+            runId = "8c405ab0-4a80-4be9-9bfb-19f2517ec2ba", musicObservationRequested = true,
+            musicReflectionSharingAllowed = true
+        )
+        val runs = database.runDao()
+        listOf(runningRun, observationOnly, shared).forEach { runs.insert(it) }
+        runs.pauseRun(shared.runId, PAUSED_AT)
+        runs.resumeRun(shared.runId, RESUMED_AT)
+        runs.pauseRun(shared.runId, FINISHED_AT)
+        runs.completeRun(shared.runId, FINISHED_AT, FINAL_METRICS)
+        database.close()
+        database = openDatabase()
+        val reopened = database.runDao()
+        assertEquals(false, requireNotNull(reopened.findById(runningRun.runId)).musicReflectionSharingAllowed)
+        assertEquals(observationOnly, reopened.findById(observationOnly.runId))
+        val restoredSharing = requireNotNull(reopened.findById(shared.runId))
+        assertEquals(StoredRunState.COMPLETED, restoredSharing.state)
+        assertEquals(true, restoredSharing.musicObservationRequested)
+        assertEquals(true, restoredSharing.musicReflectionSharingAllowed)
+        assertEquals(FINAL_METRICS.distanceMeters, restoredSharing.finalDistanceMeters)
+        assertEquals(3, reopened.countRuns())
+    }
+
+    @Test
     fun effortIsEditableOnlyAfterCompletionAndDoesNotChangeTheSelectedReflection() = runBlocking {
         val runs = database.runDao()
         val reflections = database.reflectionDao()

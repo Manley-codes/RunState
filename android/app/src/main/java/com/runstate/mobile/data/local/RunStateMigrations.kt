@@ -209,3 +209,21 @@ val MIGRATION_7_8 = object : Migration(7, 8) {
         connection.execSQL("ALTER TABLE `runs` ADD COLUMN `post_run_effort` TEXT")
     }
 }
+
+/** Older reflections keep their existing selection deadlines and never gain a new receipt. */
+val MIGRATION_8_9 = object : Migration(8, 9) {
+    override fun migrate(connection: SQLiteConnection) {
+        connection.execSQL(
+            "ALTER TABLE `run_reflections` ADD COLUMN `selection_window_started` INTEGER NOT NULL DEFAULT 1"
+        )
+    }
+}
+
+/** Local observation consent on older runs never becomes permission to send their music. */
+val MIGRATION_9_10 = object : Migration(9, 10) {
+    override fun migrate(connection: SQLiteConnection) {
+        connection.execSQL(
+            "ALTER TABLE `runs` ADD COLUMN `music_reflection_sharing_allowed` INTEGER NOT NULL DEFAULT 0"
+        )
+    }
+}

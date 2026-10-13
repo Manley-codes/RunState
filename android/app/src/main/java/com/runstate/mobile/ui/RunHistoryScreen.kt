@@ -1,10 +1,14 @@
 package com.runstate.mobile.ui
 
 import android.content.Context
+import android.media.AudioAttributes
+import android.media.AudioFocusRequest
+import android.media.AudioManager
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.speech.tts.TextToSpeech
+import android.speech.tts.UtteranceProgressListener
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -20,15 +24,19 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -41,31 +49,68 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.runstate.mobile.data.local.PostRunEffort
+import java.util.UUID
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.ensureActive
+import kotlin.coroutines.coroutineContext
+import com.runstate.mobile.data.local.ReflectionBranch
 
 internal const val RUN_HISTORY_SCREEN_TAG = "runHistoryScreen"
 internal const val RUN_HISTORY_ROW_TAG_PREFIX = "runHistoryRow:"
 internal const val RUN_HISTORY_REFLECTION_TAG_PREFIX = "runHistoryReflection:"
 internal const val RUN_HISTORY_RETRY_TAG_PREFIX = "runHistoryRetry:"
 internal const val RUN_HISTORY_EFFORT_TAG_PREFIX = "runHistoryEffort:"
+internal const val RUN_HISTORY_ENERGY_TAG_PREFIX = "runHistoryEnergy:"
+internal const val RUN_HISTORY_ENERGY_SHEET_TAG = "runHistoryEnergySheet"
+internal const val RUN_HISTORY_ENERGY_CHOICE_TAG_PREFIX = "runHistoryEnergyChoice:"
 
 /** Kept injectable so screen behavior can be checked without a device voice engine. */
 internal interface ReflectionSpeaker {
     fun speak(text: String)
+    fun speakReceipt(text: String, onFinished: () -> Unit) {
+        speak(text)
+        onFinished()
+    }
     fun stop()
     fun close()
 }
 
 /** Android owns the voice; the saved text remains the source for both reading and speech. */
 internal class AndroidReflectionSpeaker(context: Context) : ReflectionSpeaker {
+    private data class SpeechRequest(
+        val id: String,
+        val text: String,
+        val rate: Float,
+        val onFinished: (() -> Unit)?,
+        var submitted: Boolean = false
+    )
+
     private val mainHandler = Handler(Looper.getMainLooper())
+    private val audioManager = context.applicationContext.getSystemService(AudioManager::class.java)
+    private val speechAttributes = AudioAttributes.Builder()
+        .setUsage(AudioAttributes.USAGE_ASSISTANCE_NAVIGATION_GUIDANCE)
+        .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+        .build()
+    private val focusRequest = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK)
+        .setAudioAttributes(speechAttributes)
+        .setWillPauseWhenDucked(true)
+        .setOnAudioFocusChangeListener({ change -> if (change < 0) stop() }, mainHandler)
+        .build()
+    private var focusHeld = false
     private var engine: TextToSpeech? = null
     private var initialized = false
-    private var pendingText: String? = null
+    private var initializationFailed = false
+    private var request: SpeechRequest? = null
+    private var speechTimeout: Runnable? = null
     private var closed = false
 
     init {
@@ -75,28 +120,76 @@ internal class AndroidReflectionSpeaker(context: Context) : ReflectionSpeaker {
                 mainHandler.post {
                     if (!closed) {
                         initialized = result == TextToSpeech.SUCCESS
-                        if (initialized) speakPending() else pendingText = null
+                        initializationFailed = !initialized
+                        if (initialized) {
+                            try {
+                                engine?.setAudioAttributes(speechAttributes)
+                                engine?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
+                                    override fun onStart(utteranceId: String?) = Unit
+                                    override fun onDone(utteranceId: String?) = completeOnMain(utteranceId)
+                                    @Deprecated("Required by the Android speech listener")
+                                    override fun onError(utteranceId: String?) = completeOnMain(utteranceId)
+                                    override fun onError(utteranceId: String?, errorCode: Int) =
+                                        completeOnMain(utteranceId)
+                                    override fun onStop(utteranceId: String?, interrupted: Boolean) =
+                                        completeOnMain(utteranceId)
+                                })
+                                speakPending()
+                            } catch (_: RuntimeException) {
+                                initializationFailed = true
+                                initialized = false
+                                request?.id?.let(::finish)
+                            }
+                        } else {
+                            request?.id?.let(::finish)
+                        }
                     }
                 }
             }
         } catch (_: RuntimeException) {
+            initializationFailed = true
             // The exact saved text remains on screen if no speech engine is available.
         }
     }
 
     override fun speak(text: String) {
-        if (closed) return
-        pendingText = text
+        submit(text, rate = 0.94f, onFinished = null)
+    }
+
+    override fun speakReceipt(text: String, onFinished: () -> Unit) {
+        submit(text, rate = 1.0f, onFinished = onFinished)
+    }
+
+    private fun submit(text: String, rate: Float, onFinished: (() -> Unit)?) {
+        stop()
+        if (closed || initializationFailed || text.isBlank() ||
+            text.length > TextToSpeech.getMaxSpeechInputLength()) {
+            onFinished?.invoke()
+            return
+        }
+        val next = SpeechRequest(UUID.randomUUID().toString(), text, rate, onFinished)
+        request = next
+        // Neither an absent receipt callback nor a stalled reflection may hold delivery/audio focus forever.
+        val timeoutMillis = if (onFinished != null) 15_000L else
+            (text.length * 100L + 15_000L).coerceIn(30_000L, 600_000L)
+        speechTimeout = Runnable { if (request?.id == next.id) stop() }.also {
+            mainHandler.postDelayed(it, timeoutMillis)
+        }
         if (initialized) speakPending()
     }
 
     override fun stop() {
-        pendingText = null
+        val interrupted = request
+        request = null
+        speechTimeout?.let(mainHandler::removeCallbacks)
+        speechTimeout = null
         try {
             engine?.stop()
         } catch (_: RuntimeException) {
             // A disconnected engine must not disturb History navigation.
         }
+        releaseFocus()
+        interrupted?.onFinished?.invoke()
     }
 
     override fun close() {
@@ -112,15 +205,43 @@ internal class AndroidReflectionSpeaker(context: Context) : ReflectionSpeaker {
     }
 
     private fun speakPending() {
-        val text = pendingText ?: return
+        val current = request ?: return
         val activeEngine = engine ?: return
-        pendingText = null
-        if (text.length > TextToSpeech.getMaxSpeechInputLength()) return
+        if (current.submitted) return
+        current.submitted = true
         try {
-            activeEngine.speak(text, TextToSpeech.QUEUE_FLUSH, Bundle(), "runstate-history-reflection")
+            focusHeld = audioManager?.requestAudioFocus(focusRequest) == AudioManager.AUDIOFOCUS_REQUEST_GRANTED
+            if (!focusHeld) {
+                finish(current.id)
+                return
+            }
+            activeEngine.setSpeechRate(current.rate)
+            if (activeEngine.speak(current.text, TextToSpeech.QUEUE_FLUSH, Bundle(), current.id) ==
+                TextToSpeech.ERROR) finish(current.id)
         } catch (_: RuntimeException) {
+            finish(current.id)
             // Speech failure is independent of the saved reflection.
         }
+    }
+
+    private fun completeOnMain(utteranceId: String?) {
+        if (utteranceId != null) mainHandler.post { finish(utteranceId) }
+    }
+
+    private fun finish(utteranceId: String) {
+        val finished = request?.takeIf { it.id == utteranceId } ?: return
+        request = null
+        speechTimeout?.let(mainHandler::removeCallbacks)
+        speechTimeout = null
+        releaseFocus()
+        finished.onFinished?.invoke()
+    }
+
+    private fun releaseFocus() {
+        if (!focusHeld) return
+        focusHeld = false
+        try { audioManager?.abandonAudioFocusRequest(focusRequest) }
+        catch (_: RuntimeException) { /* Saved text stays readable if the audio service disconnects. */ }
     }
 }
 
@@ -137,8 +258,17 @@ internal data class RunHistoryItem(
     val musicObservationRequested: Boolean = false,
     val musicObservationCount: Int = 0,
     val lastObservedMedia: String? = null,
-    val effort: PostRunEffort? = null
+    val effort: PostRunEffort? = null,
+    val isGpsRun: Boolean = false,
+    val energy: ReflectionBranch? = null,
+    val reflectionMusicSummary: String? = null
 )
+
+internal sealed interface HistoryRouteDisplay {
+    data object Loading : HistoryRouteDisplay
+    data class Ready(val data: GpsRoutePreviewData) : HistoryRouteDisplay
+    data object Failed : HistoryRouteDisplay
+}
 
 /** A single expanded saved record keeps exact reflection text readable on a phone. */
 @Composable
@@ -152,16 +282,50 @@ internal fun RunHistoryScreen(
     speakerFactory: (Context) -> ReflectionSpeaker = { AndroidReflectionSpeaker(it) },
     onSelectEffort: (String, PostRunEffort?) -> Unit = { _, _ -> },
     effortSavingRunId: String? = null,
-    effortError: Pair<String, String>? = null
+    effortError: Pair<String, String>? = null,
+    onSelectEnergy: (String, ReflectionBranch) -> Unit = { _, _ -> },
+    energySavingRunId: String? = null,
+    energyError: Pair<String, String>? = null,
+    routeLoader: (suspend (String) -> GpsRoutePreviewData)? = null,
+    speechLifecycle: Lifecycle = LocalLifecycleOwner.current.lifecycle
 ) {
     var expandedRunId by rememberSaveable { mutableStateOf<String?>(null) }
     var editingEffortRunId by rememberSaveable { mutableStateOf<String?>(null) }
+    var editingEnergyRunId by rememberSaveable { mutableStateOf<String?>(null) }
     var speaker by remember { mutableStateOf<ReflectionSpeaker?>(null) }
+    var route by remember { mutableStateOf<Pair<String, HistoryRouteDisplay>?>(null) }
+    val currentRouteLoader by rememberUpdatedState(routeLoader)
     val context = LocalContext.current
 
-    DisposableEffect(Unit) {
+    val expandedGpsRun = items.firstOrNull { it.runId == expandedRunId }?.isGpsRun == true
+    LaunchedEffect(expandedRunId, expandedGpsRun) {
+        route = null
+        val id = expandedRunId ?: return@LaunchedEffect
+        if (!expandedGpsRun) return@LaunchedEffect
+        val loader = currentRouteLoader
+        if (loader == null) {
+            route = id to HistoryRouteDisplay.Failed
+            return@LaunchedEffect
+        }
+        route = id to HistoryRouteDisplay.Loading
+        try {
+            val data = loader(id)
+            coroutineContext.ensureActive()
+            route = id to HistoryRouteDisplay.Ready(data)
+        } catch (cancelled: CancellationException) { throw cancelled }
+        catch (_: Exception) { route = id to HistoryRouteDisplay.Failed }
+    }
+
+    DisposableEffect(speechLifecycle) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_PAUSE) speaker?.stop()
+        }
+        speechLifecycle.addObserver(observer)
         // Read the current speaker on exit, including one created by the last tap before recomposition.
-        onDispose { speaker?.close() }
+        onDispose {
+            speechLifecycle.removeObserver(observer)
+            speaker?.close()
+        }
     }
     LaunchedEffect(items, expandedRunId) {
         val openItem = items.firstOrNull { it.runId == expandedRunId }
@@ -174,6 +338,13 @@ internal fun RunHistoryScreen(
     LaunchedEffect(items, editingEffortRunId) {
         if (editingEffortRunId != null && items.none { it.runId == editingEffortRunId }) {
             editingEffortRunId = null
+        }
+    }
+    LaunchedEffect(items, editingEnergyRunId) {
+        if (editingEnergyRunId != null &&
+            items.firstOrNull { it.runId == editingEnergyRunId }?.reflectionStatus == null
+        ) {
+            editingEnergyRunId = null
         }
     }
 
@@ -274,7 +445,11 @@ internal fun RunHistoryScreen(
                         onRetryReflection = { onRetryReflection(item.runId) },
                         onEditEffort = { editingEffortRunId = item.runId },
                         effortSaving = effortSavingRunId == item.runId,
-                        effortError = effortError?.takeIf { it.first == item.runId }?.second
+                        effortError = effortError?.takeIf { it.first == item.runId }?.second,
+                        onEditEnergy = { editingEnergyRunId = item.runId },
+                        energySaving = energySavingRunId == item.runId,
+                        energyError = energyError?.takeIf { it.first == item.runId }?.second,
+                        route = route?.takeIf { it.first == item.runId }?.second
                     )
                 }
             }
@@ -288,6 +463,18 @@ internal fun RunHistoryScreen(
                 onSelect = { effort ->
                     editingEffortRunId = null
                     onSelectEffort(editingItem.runId, effort)
+                }
+            )
+        }
+        val editingEnergyItem = items.firstOrNull { it.runId == editingEnergyRunId }
+        if (editingEnergyItem?.reflectionStatus != null) {
+            HistoryEnergyChoiceSheet(
+                selectedEnergy = editingEnergyItem.energy,
+                enabled = energySavingRunId != editingEnergyItem.runId,
+                onDismiss = { editingEnergyRunId = null },
+                onSelect = { energy ->
+                    editingEnergyRunId = null
+                    onSelectEnergy(editingEnergyItem.runId, energy)
                 }
             )
         }
@@ -313,7 +500,11 @@ private fun HistoryRow(
     onRetryReflection: () -> Unit,
     onEditEffort: () -> Unit,
     effortSaving: Boolean,
-    effortError: String?
+    effortError: String?,
+    onEditEnergy: () -> Unit,
+    energySaving: Boolean,
+    energyError: String?,
+    route: HistoryRouteDisplay?
 ) {
     val shape = RoundedCornerShape(22.dp)
     Column(
@@ -391,6 +582,21 @@ private fun HistoryRow(
         }
         if (expanded) {
             Column(modifier = Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, bottom = 22.dp)) {
+                if (item.isGpsRun) {
+                    when (route) {
+                        is HistoryRouteDisplay.Ready -> GpsRoutePreview(route.data,
+                            Modifier.padding(top = 10.dp, bottom = 12.dp))
+                        HistoryRouteDisplay.Failed -> Text(
+                            "Recorded GPS path couldn't load. Close and reopen this run to retry.",
+                            color = CompletionMutedInk, fontSize = 12.sp, lineHeight = 18.sp,
+                            modifier = Modifier.padding(vertical = 12.dp)
+                        )
+                        HistoryRouteDisplay.Loading, null -> Text(
+                            "Loading recorded GPS path…", color = CompletionMutedInk,
+                            fontSize = 12.sp, modifier = Modifier.padding(vertical = 12.dp)
+                        )
+                    }
+                }
                 Text(
                     text = "Active time · ${item.metrics?.active ?: "—"}",
                     color = CompletionMutedInk,
@@ -407,14 +613,29 @@ private fun HistoryRow(
                         modifier = Modifier.padding(top = 12.dp)
                     )
                 }
-                if (item.energyLabel != null) {
-                    Text(
-                        text = "After run · ${item.energyLabel}",
-                        color = CompletionStrongInk,
-                        fontSize = 13.sp,
-                        lineHeight = 20.sp,
-                        modifier = Modifier.padding(top = 12.dp)
-                    )
+                if (item.reflectionStatus != null) {
+                    TextButton(
+                        onClick = onEditEnergy,
+                        enabled = !energySaving,
+                        colors = ButtonDefaults.textButtonColors(contentColor = CompletionStrongInk),
+                        contentPadding = PaddingValues(horizontal = 0.dp, vertical = 10.dp),
+                        modifier = Modifier
+                            .padding(top = 4.dp)
+                            .heightIn(min = 48.dp)
+                            .testTag(RUN_HISTORY_ENERGY_TAG_PREFIX + item.runId)
+                    ) {
+                        Text(
+                            text = item.energyLabel?.let { "After run · $it" } ?: "After run +",
+                            fontSize = 13.sp,
+                            lineHeight = 20.sp
+                        )
+                    }
+                    if (energySaving) {
+                        Text("Saving Energy…", color = CompletionMutedInk, fontSize = 12.sp)
+                    }
+                    if (energyError != null) {
+                        Text(energyError, color = CompletionStrongInk, fontSize = 12.sp, lineHeight = 18.sp)
+                    }
                 }
                 TextButton(
                     onClick = onEditEffort,
@@ -468,6 +689,15 @@ private fun HistoryRow(
                             modifier = Modifier.padding(top = 4.dp)
                         )
                     }
+                    item.reflectionMusicSummary?.let { summary ->
+                        Text(
+                            text = summary,
+                            color = CompletionMutedInk,
+                            fontSize = 11.sp,
+                            lineHeight = 17.sp,
+                            modifier = Modifier.padding(top = 6.dp)
+                        )
+                    }
                 }
                 if (item.isTestData) {
                     Text(
@@ -506,6 +736,59 @@ private fun HistoryRow(
                     ) {
                         Text("Retry reflection")
                     }
+                }
+            }
+        }
+    }
+}
+
+/** Updating historical Energy reports feedback only; opening or choosing never reads the reply. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun HistoryEnergyChoiceSheet(
+    selectedEnergy: ReflectionBranch?,
+    enabled: Boolean,
+    onDismiss: () -> Unit,
+    onSelect: (ReflectionBranch) -> Unit
+) {
+    val choices = listOf(
+        ReflectionBranch.SPENT to "Spent",
+        ReflectionBranch.FEELING_GOOD to "Feeling Good",
+        ReflectionBranch.POWERED_UP to "Powered Up"
+    )
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        containerColor = CompletionSurfaceTop,
+        modifier = Modifier.testTag(RUN_HISTORY_ENERGY_SHEET_TAG)
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(start = 24.dp, end = 24.dp, bottom = 28.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            Text(
+                text = "How did you feel after this run?",
+                color = CompletionStrongInk,
+                fontSize = 22.sp,
+                fontWeight = FontWeight.Medium,
+                modifier = Modifier.padding(bottom = 10.dp)
+            )
+            choices.forEach { (branch, label) ->
+                OutlinedButton(
+                    onClick = { onSelect(branch) },
+                    enabled = enabled,
+                    shape = RoundedCornerShape(14.dp),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = CompletionStrongInk),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 48.dp)
+                        .testTag(RUN_HISTORY_ENERGY_CHOICE_TAG_PREFIX + branch.name)
+                        .semantics { selected = branch == selectedEnergy }
+                ) {
+                    Text(
+                        text = label,
+                        fontWeight = if (branch == selectedEnergy) FontWeight.Bold else FontWeight.Normal
+                    )
                 }
             }
         }

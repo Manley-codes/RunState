@@ -12,6 +12,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
@@ -23,7 +24,9 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
@@ -33,6 +36,7 @@ import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.runstate.mobile.MainActivity
 import com.runstate.mobile.RunCompleteSpeechEffect
+import com.runstate.mobile.RunCompleteReceiptEffect
 import com.runstate.mobile.data.local.ReflectionBranch
 import com.runstate.mobile.data.local.PostRunEffort
 import com.runstate.mobile.data.local.PreRunEnergy
@@ -303,6 +307,36 @@ class RunStateScreenTest {
             .assertIsDisplayed()
     }
 
+    @Test
+    fun musicSharingRequiresObservationAccessAndASeparateChoice() {
+        var observing by mutableStateOf(false)
+        var access by mutableStateOf(false)
+        var sharingAvailable by mutableStateOf(true)
+        var sharing by mutableStateOf(false)
+        var choices = 0
+        composeTestRule.setContent {
+            StartRunScreen(
+                selectedPreRunEnergy = null, onSelectPreRunEnergy = {}, onStart = {},
+                actionsEnabled = true, onViewHistory = {}, showHistory = false,
+                musicSelected = observing, musicAccessGranted = access,
+                musicReflectionSharingAvailable = sharingAvailable,
+                musicReflectionSharingSelected = sharing,
+                onToggleMusicReflectionSharing = { choices++; sharing = !sharing }
+            )
+        }
+        composeTestRule.onNodeWithTag(START_MUSIC_SHARING_TOGGLE_TAG).assertDoesNotExist()
+        composeTestRule.runOnIdle { observing = true }
+        composeTestRule.onNodeWithTag(START_MUSIC_SHARING_TOGGLE_TAG).assertDoesNotExist()
+        composeTestRule.runOnIdle { access = true }
+        composeTestRule.onNodeWithTag(START_MUSIC_SHARING_TOGGLE_TAG).performScrollTo().performClick()
+        composeTestRule.runOnIdle { assertTrue(sharing); assertEquals(1, choices) }
+        composeTestRule.onNodeWithTag(START_MUSIC_SHARING_TOGGLE_TAG).performClick()
+        composeTestRule.runOnIdle { assertFalse(sharing); assertEquals(2, choices); access = false }
+        composeTestRule.onNodeWithTag(START_MUSIC_SHARING_TOGGLE_TAG).assertDoesNotExist()
+        composeTestRule.runOnIdle { access = true; sharingAvailable = false; sharing = true }
+        composeTestRule.onNodeWithTag(START_MUSIC_SHARING_TOGGLE_TAG).assertDoesNotExist()
+    }
+
     /** Proves a countdown shows its digit, offers a way out, and never a second Start. */
     @Test
     fun countdownShowsTheDigitAndOffersCancel() {
@@ -525,6 +559,71 @@ class RunStateScreenTest {
         composeTestRule.onNodeWithText("00:01:00").assertIsDisplayed()
     }
 
+    /** Real-phone fonts and changing timer digits must not place decoration over saved facts. */
+    @Test
+    fun savedPhoneWidthKeepsDecorationClearAndMetricLabelsOnOneLine() {
+        var metrics by mutableStateOf(fixtureMetrics().copy(
+            elapsed = "00:00:34", active = "00:00:04", distance = "0.03 mi"
+        ))
+        var fontScale by mutableStateOf(1f)
+        composeTestRule.setContent {
+            val density = LocalDensity.current
+            CompositionLocalProvider(LocalDensity provides Density(density.density, fontScale)) {
+                RunCompleteScreen(
+                    metrics = metrics,
+                    reflection = null,
+                    onRetryReflection = {},
+                    onStartAnother = {},
+                    actionsEnabled = true,
+                    modifier = Modifier.size(width = 440.dp, height = 840.dp)
+                )
+            }
+        }
+
+        fun assertFactsUncovered() {
+            val distance = composeTestRule.onNodeWithTag(RUN_COMPLETE_DISTANCE_TAG)
+                .fetchSemanticsNode().boundsInRoot
+            val compactMetrics = composeTestRule.onNodeWithTag(RUN_COMPLETE_METRICS_TAG)
+                .fetchSemanticsNode().boundsInRoot
+            val mark = composeTestRule.onNodeWithTag(RUN_COMPLETE_VISUALIZER_TAG)
+                .fetchSemanticsNode().boundsInRoot
+            assertFalse("Completion mark covers distance or its unit", mark.overlaps(distance))
+            assertFalse("Completion mark covers time, pace or active time", mark.overlaps(compactMetrics))
+            assertFalse("Distance and compact metrics overlap", distance.overlaps(compactMetrics))
+            listOf("TIME", "PACE", "ACTIVE", "MI", metrics.active).forEach { text ->
+                val layouts = mutableListOf<TextLayoutResult>()
+                composeTestRule.onNodeWithText(text).performSemanticsAction(
+                    SemanticsActions.GetTextLayoutResult
+                ) { action -> action(layouts) }
+                val layout = layouts.single()
+                assertEquals("$text wraps onto another line", 1, layout.lineCount)
+                assertEquals("$text omits characters", text.length, layout.getLineEnd(0, visibleEnd = true))
+                val characterBounds = text.indices.map(layout::getBoundingBox)
+                val textLeft = characterBounds.minOf { it.left }
+                val textRight = characterBounds.maxOf { it.right }
+                // Text semantics may reconstruct a paragraph at the parent's maximum
+                // width while retaining the measured Text size. Check every letter's
+                // bounds rather than that reconstructed paragraph's container width.
+                assertTrue(
+                    "$text letters are clipped: bounds=$textLeft..$textRight, width=${layout.size.width}, " +
+                        "paragraphWidth=${layout.multiParagraph.width}",
+                    textLeft >= 0f && textRight <= layout.size.width
+                )
+                assertFalse(
+                    "$text is clipped vertically: size=${layout.size}, paragraphHeight=${layout.multiParagraph.height}",
+                    layout.didOverflowHeight
+                )
+            }
+        }
+
+        assertFactsUncovered()
+        composeTestRule.runOnIdle {
+            metrics = metrics.copy(elapsed = "00:10:48", active = "00:08:44", distance = "12.34 mi")
+            fontScale = 1.3f
+        }
+        assertFactsUncovered()
+    }
+
     @Test
     fun savedShowsTheReflectionPreparingStateWithoutSkipOrUnconfirmedFakeLabel() {
         renderScreen(model = RunUiModel(RunUiState.Saved), metrics = fixtureMetrics())
@@ -740,6 +839,153 @@ class RunStateScreenTest {
     }
 
     @Test
+    fun expandedHistoryCanAddAndChangeEnergyWithoutReplacingOrSpeakingTheReplyAgain() {
+        val runId = "6f6a2c1e-9d43-4b7a-9c21-7b5e8a4d1f30"
+        val exact = "  Exact saved reply.\nIts spacing stays intact.  "
+        val spoken = mutableListOf<String>()
+        val selected = mutableListOf<ReflectionBranch>()
+        var retries = 0
+        val speaker = object : ReflectionSpeaker {
+            override fun speak(text: String) { spoken += text }
+            override fun stop() = Unit
+            override fun close() = Unit
+        }
+        composeTestRule.setContent {
+            var item by remember {
+                mutableStateOf(
+                    RunHistoryItem(
+                        runId = runId,
+                        dateLabel = "Oct 13, 2026",
+                        metrics = fixtureMetrics(),
+                        reflectionStatus = "READY",
+                        reflectionText = exact,
+                        energyLabel = null,
+                        isTestData = false,
+                        effort = PostRunEffort.SMOOTH
+                    )
+                )
+            }
+            RunHistoryScreen(
+                items = listOf(item),
+                onBack = {},
+                onRetryReflection = { retries++ },
+                onSelectEnergy = { selectedRunId, energy ->
+                    assertEquals(runId, selectedRunId)
+                    selected += energy
+                    item = item.copy(
+                        energy = energy,
+                        energyLabel = when (energy) {
+                            ReflectionBranch.SPENT -> "Spent"
+                            ReflectionBranch.FEELING_GOOD -> "Feeling Good"
+                            ReflectionBranch.POWERED_UP -> "Powered Up"
+                            ReflectionBranch.NO_SELECTION -> null
+                        }
+                    )
+                },
+                speakerFactory = { speaker }
+            )
+        }
+
+        composeTestRule.onNodeWithTag(RUN_HISTORY_ROW_TAG_PREFIX + runId).performClick()
+        composeTestRule.onNodeWithTag(RUN_HISTORY_ENERGY_TAG_PREFIX + runId)
+            .assertTextEquals("After run +").performClick()
+        composeTestRule.onNodeWithTag(RUN_HISTORY_ENERGY_CHOICE_TAG_PREFIX + "SPENT")
+            .assertIsDisplayed()
+        androidx.test.espresso.Espresso.pressBack()
+        composeTestRule.onNodeWithTag(RUN_HISTORY_ENERGY_SHEET_TAG).assertDoesNotExist()
+        assertTrue(selected.isEmpty())
+        composeTestRule.onNodeWithTag(RUN_HISTORY_ENERGY_TAG_PREFIX + runId)
+            .assertTextEquals("After run +").performClick()
+        composeTestRule.onNodeWithTag(RUN_HISTORY_ENERGY_CHOICE_TAG_PREFIX + "SPENT")
+            .performClick()
+        composeTestRule.onNodeWithTag(RUN_HISTORY_ENERGY_SHEET_TAG).assertDoesNotExist()
+        composeTestRule.onNodeWithTag(RUN_HISTORY_ENERGY_TAG_PREFIX + runId)
+            .assertTextEquals("After run · Spent").performClick()
+        assertTrue(
+            composeTestRule.onNodeWithTag(RUN_HISTORY_ENERGY_CHOICE_TAG_PREFIX + "SPENT")
+                .fetchSemanticsNode().config[SemanticsProperties.Selected]
+        )
+        composeTestRule.onNodeWithTag(RUN_HISTORY_ENERGY_CHOICE_TAG_PREFIX + "FEELING_GOOD")
+            .performClick()
+
+        composeTestRule.onNodeWithTag(RUN_HISTORY_ENERGY_TAG_PREFIX + runId)
+            .assertTextEquals("After run · Feeling Good")
+        composeTestRule.onNodeWithTag(RUN_HISTORY_EFFORT_TAG_PREFIX + runId)
+            .assertTextEquals("EFFORT · SMOOTH")
+        composeTestRule.onNodeWithTag(RUN_HISTORY_REFLECTION_TAG_PREFIX + runId)
+            .assertTextEquals(exact)
+        assertEquals(listOf(ReflectionBranch.SPENT, ReflectionBranch.FEELING_GOOD), selected)
+        assertEquals(listOf(exact), spoken)
+        assertEquals(0, retries)
+    }
+
+    @Test
+    fun historyEnergySaveFeedbackStaysOnItsOwnRunAndBlocksRepeatedTaps() {
+        val runId = "7f6a2c1e-9d43-4b7a-9c21-7b5e8a4d1f30"
+        val otherRunId = "8f6a2c1e-9d43-4b7a-9c21-7b5e8a4d1f30"
+        val item = RunHistoryItem(
+            runId = runId,
+            dateLabel = "Oct 13, 2026",
+            metrics = fixtureMetrics(),
+            reflectionStatus = "PENDING",
+            reflectionText = null,
+            energyLabel = "Powered Up",
+            isTestData = false,
+            energy = ReflectionBranch.POWERED_UP
+        )
+        composeTestRule.setContent {
+            RunHistoryScreen(
+                items = listOf(item, item.copy(runId = otherRunId)),
+                onBack = {},
+                onRetryReflection = {},
+                energySavingRunId = runId,
+                energyError = otherRunId to "Could not save that run's Energy."
+            )
+        }
+
+        composeTestRule.onNodeWithTag(RUN_HISTORY_ROW_TAG_PREFIX + runId).performClick()
+        composeTestRule.onNodeWithTag(RUN_HISTORY_ENERGY_TAG_PREFIX + runId)
+            .assertIsNotEnabled()
+        composeTestRule.onNodeWithText("Saving Energy…").assertExists()
+        composeTestRule.onNodeWithText("Could not save that run's Energy.").assertDoesNotExist()
+        composeTestRule.onNodeWithTag(RUN_HISTORY_ENERGY_SHEET_TAG).assertDoesNotExist()
+
+        composeTestRule.onNodeWithTag(RUN_HISTORY_ROW_TAG_PREFIX + otherRunId)
+            .performScrollTo().performClick()
+        composeTestRule.onNodeWithTag(RUN_HISTORY_ENERGY_TAG_PREFIX + otherRunId)
+            .performScrollTo().assertIsEnabled()
+        composeTestRule.onNodeWithText("Could not save that run's Energy.").assertExists()
+        composeTestRule.onNodeWithText("Saving Energy…").assertDoesNotExist()
+    }
+
+    @Test
+    fun historyWithoutAReflectionRecordDoesNotOfferEnergyEditing() {
+        val runId = "9f6a2c1e-9d43-4b7a-9c21-7b5e8a4d1f30"
+        composeTestRule.setContent {
+            RunHistoryScreen(
+                items = listOf(
+                    RunHistoryItem(
+                        runId = runId,
+                        dateLabel = "Oct 13, 2026",
+                        metrics = fixtureMetrics(),
+                        reflectionStatus = null,
+                        reflectionText = null,
+                        energyLabel = null,
+                        isTestData = false
+                    )
+                ),
+                onBack = {},
+                onRetryReflection = {}
+            )
+        }
+
+        composeTestRule.onNodeWithTag(RUN_HISTORY_ROW_TAG_PREFIX + runId).performClick()
+        composeTestRule.onNodeWithTag(RUN_HISTORY_ENERGY_TAG_PREFIX + runId).assertDoesNotExist()
+        composeTestRule.onNodeWithTag(RUN_HISTORY_ENERGY_SHEET_TAG).assertDoesNotExist()
+        composeTestRule.onNodeWithTag(RUN_HISTORY_EFFORT_TAG_PREFIX + runId).assertExists()
+    }
+
+    @Test
     fun completionSpeaksOnlyNewReadyTextAndStopsWhenItIsHidden() {
         val runId = "0f6a2c1e-9d43-4b7a-9c21-7b5e8a4d1f30"
         val exact = "  Saved words, exactly.\nSecond line.  "
@@ -789,6 +1035,166 @@ class RunStateScreenTest {
         composeTestRule.runOnIdle { includeEffect = false }
         composeTestRule.waitForIdle()
         assertEquals(1, closes)
+    }
+
+    @Test
+    fun completionReceiptFinishesBeforeReflectionAndDoesNotReplayOnReturn() {
+        val runId = "0f6a2c1e-9d43-4b7a-9c21-7b5e8a4d1f30"
+        val receipts = mutableListOf<String>()
+        val reflections = mutableListOf<String>()
+        var finishReceipt: (() -> Unit)? = null
+        var visible by mutableStateOf(true)
+        val speaker = object : ReflectionSpeaker {
+            override fun speak(text: String) { reflections += text }
+            override fun speakReceipt(text: String, onFinished: () -> Unit) {
+                receipts += text
+                finishReceipt = onFinished
+            }
+            override fun stop() = Unit
+            override fun close() = Unit
+        }
+        composeTestRule.setContent {
+            var started by remember { mutableStateOf<String?>(null) }
+            var finished by remember { mutableStateOf<String?>(null) }
+            var spoken by remember { mutableStateOf<String?>(null) }
+            RunCompleteReceiptEffect(runId, runId, "Run saved.", started, finished, visible,
+                { speaker }, { started = it }, { finished = it })
+            RunCompleteSpeechEffect(runId, runId, spoken,
+                RunReflectionState.Ready(runId, "Exact reflection."),
+                visible && finished == runId, { speaker }, { spoken = it })
+        }
+        composeTestRule.runOnIdle {
+            assertEquals(listOf("Run saved."), receipts)
+            assertTrue(reflections.isEmpty())
+            requireNotNull(finishReceipt).invoke()
+        }
+        composeTestRule.runOnIdle { assertEquals(listOf("Exact reflection."), reflections) }
+        composeTestRule.runOnIdle { visible = false }
+        composeTestRule.waitForIdle()
+        composeTestRule.runOnIdle { visible = true }
+        composeTestRule.runOnIdle {
+            assertEquals(1, receipts.size)
+            assertEquals(1, reflections.size)
+        }
+    }
+
+    @Test
+    fun restoredConsumedReceiptReleasesItsWindowWithoutRepeatingSpeech() {
+        val runId = "0f6a2c1e-9d43-4b7a-9c21-7b5e8a4d1f30"
+        val finished = mutableListOf<String>()
+        composeTestRule.setContent {
+            var finishedId by remember { mutableStateOf<String?>(null) }
+            RunCompleteReceiptEffect(runId, runId, "Run saved.", runId, finishedId, true,
+                { error("A consumed receipt must not create another voice engine.") },
+                { error("A consumed receipt must not start twice.") },
+                { finished += it; finishedId = it })
+        }
+        composeTestRule.runOnIdle { assertEquals(listOf(runId), finished) }
+    }
+
+    @Test
+    fun interruptedReceiptFinishesOnceEvenIfTheVoiceEngineReportsLate() {
+        val runId = "0f6a2c1e-9d43-4b7a-9c21-7b5e8a4d1f30"
+        val finishes = mutableListOf<String>()
+        var visible by mutableStateOf(true)
+        var lateCompletion: (() -> Unit)? = null
+        var receipts = 0
+        val speaker = object : ReflectionSpeaker {
+            override fun speak(text: String) = Unit
+            override fun speakReceipt(text: String, onFinished: () -> Unit) {
+                receipts++
+                lateCompletion = onFinished
+            }
+            override fun stop() = Unit
+            override fun close() = Unit
+        }
+        composeTestRule.setContent {
+            var started by remember { mutableStateOf<String?>(null) }
+            var finished by remember { mutableStateOf<String?>(null) }
+            RunCompleteReceiptEffect(runId, runId, "Run saved.", started, finished, visible,
+                { speaker }, { started = it }, { finishes += it; finished = it })
+        }
+        composeTestRule.runOnIdle { visible = false }
+        composeTestRule.runOnIdle {
+            requireNotNull(lateCompletion).invoke()
+            visible = true
+        }
+        composeTestRule.runOnIdle {
+            assertEquals(listOf(runId), finishes)
+            assertEquals(1, receipts)
+        }
+    }
+
+    @Test
+    fun activeGpsWaitsForRecordedMovementBeforeClaimingRecording() {
+        var measured by mutableStateOf(false)
+        composeTestRule.setContent {
+            ActiveRunScreen(false, fixtureMetrics().copy(
+                distance = if (measured) "0.03 mi" else "—",
+                sourceLabel = if (measured) "GPS metrics · partial" else "GPS distance unavailable",
+                gpsDistanceAvailable = measured), false, true, {}, {}, {},
+                isGpsRun = true, gpsServicePresent = true)
+        }
+        composeTestRule.onNodeWithText("ILLUSTRATIVE MAP · GPS WAITING").assertExists()
+        composeTestRule.onNodeWithText("ILLUSTRATIVE MAP · GPS RECORDING").assertDoesNotExist()
+        composeTestRule.runOnIdle { measured = true }
+        composeTestRule.onNodeWithText("ILLUSTRATIVE MAP · GPS RECORDING").assertExists()
+        composeTestRule.onNodeWithText("ILLUSTRATIVE MAP · GPS WAITING").assertDoesNotExist()
+    }
+
+    @Test
+    fun historyLoadsGpsPathOnlyWhenExpandedAndKeepsItDuringFeedbackChanges() {
+        val runId = "0f6a2c1e-9d43-4b7a-9c21-7b5e8a4d1f30"
+        val loads = mutableListOf<String>()
+        var energy by mutableStateOf<ReflectionBranch?>(null)
+        composeTestRule.setContent {
+            RunHistoryScreen(
+                items = listOf(RunHistoryItem(runId, "Oct 13, 2026", fixtureMetrics(),
+                    "READY", "Exact saved reflection.", null, false,
+                    isGpsRun = true, energy = energy)),
+                onBack = {}, onRetryReflection = {},
+                speakerFactory = { object : ReflectionSpeaker {
+                    override fun speak(text: String) = Unit
+                    override fun stop() = Unit
+                    override fun close() = Unit
+                } },
+                routeLoader = { id ->
+                    loads += id
+                    GpsRoutePreviewData(listOf(listOf(GpsRouteCoordinate(0.5, 0.5))), 1, 0, 0.0, 0.0)
+                }
+            )
+        }
+        composeTestRule.runOnIdle { assertTrue(loads.isEmpty()) }
+        composeTestRule.onNodeWithTag(RUN_HISTORY_ROW_TAG_PREFIX + runId).performClick()
+        composeTestRule.onNodeWithTag(GPS_ROUTE_PREVIEW_TAG).assertExists()
+        composeTestRule.onNodeWithText("Recorded GPS path · partial").assertExists()
+        composeTestRule.runOnIdle { energy = ReflectionBranch.POWERED_UP }
+        composeTestRule.runOnIdle { assertEquals(listOf(runId), loads) }
+    }
+
+    @Test
+    fun historySpeechStopsOnBackgroundAndDoesNotReplayOnResume() {
+        val runId = "0f6a2c1e-9d43-4b7a-9c21-7b5e8a4d1f30"
+        val owner = TestLifecycle()
+        moveTo(owner, Lifecycle.State.RESUMED)
+        var speeches = 0
+        var stops = 0
+        val speaker = object : ReflectionSpeaker {
+            override fun speak(text: String) { speeches++ }
+            override fun stop() { stops++ }
+            override fun close() = Unit
+        }
+        composeTestRule.setContent {
+            RunHistoryScreen(listOf(RunHistoryItem(runId, "Oct 13, 2026", fixtureMetrics(),
+                "READY", "Exact reflection.", null, false)), {}, {},
+                speakerFactory = { speaker }, speechLifecycle = owner.registry)
+        }
+        composeTestRule.onNodeWithTag(RUN_HISTORY_ROW_TAG_PREFIX + runId).performClick()
+        val beforeBackground = stops
+        moveTo(owner, Lifecycle.State.CREATED)
+        composeTestRule.runOnIdle { assertTrue(stops > beforeBackground) }
+        moveTo(owner, Lifecycle.State.RESUMED)
+        composeTestRule.runOnIdle { assertEquals(1, speeches) }
     }
 
     @Test

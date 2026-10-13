@@ -63,11 +63,15 @@ import com.runstate.mobile.ui.RunUiState
 import com.runstate.mobile.ui.rememberLifecycleCountdown
 import com.runstate.mobile.ui.runMetricsDisplayFor
 import com.runstate.mobile.ui.historyItemFor
+import com.runstate.mobile.ui.savedRunReceiptFor
+import com.runstate.mobile.ui.gpsRoutePreviewFor
 import com.runstate.mobile.ui.runUiModelFor
 import com.runstate.mobile.ui.theme.RunStateTheme
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Deferred
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.StateFlow
 
 /**
@@ -167,17 +171,24 @@ internal fun RunJourneyRoot(
     // Reopening an older Saved run never speaks merely because Room restored READY text.
     var completionSpeechEligibleRunId by rememberSaveable { mutableStateOf<String?>(null) }
     var completionSpeechSpokenRunId by rememberSaveable { mutableStateOf<String?>(null) }
+    var completionReceiptRunId by rememberSaveable { mutableStateOf<String?>(null) }
+    var completionReceiptText by rememberSaveable { mutableStateOf<String?>(null) }
+    var completionReceiptStartedRunId by rememberSaveable { mutableStateOf<String?>(null) }
+    var completionReceiptFinishedRunId by rememberSaveable { mutableStateOf<String?>(null) }
     // Retain the sheet's run ID so disposal can release its reflection hold even after
     // navigation has changed completedRunId to null or a different run.
     var effortSheetRunId by remember { mutableStateOf<String?>(null) }
     var effortSavingRunId by remember { mutableStateOf<String?>(null) }
     var effortError by remember { mutableStateOf<Pair<String, String>?>(null) }
+    var energySavingRunId by remember { mutableStateOf<String?>(null) }
+    var energyError by remember { mutableStateOf<Pair<String, String>?>(null) }
     // This is still a draft choice until the official start writes it on the run row.
     var preRunEnergy by rememberSaveable { mutableStateOf<PreRunEnergy?>(null) }
     var gpsSelected by rememberSaveable { mutableStateOf(false) }
     var gpsMessage by rememberSaveable { mutableStateOf<String?>(null) }
     var pendingGpsResumeId by rememberSaveable { mutableStateOf<String?>(null) }
     var musicSelected by rememberSaveable { mutableStateOf(false) }
+    var musicReflectionSharingSelected by rememberSaveable { mutableStateOf(false) }
     var pendingMusicAccess by rememberSaveable { mutableStateOf(false) }
     var historyItems by remember { mutableStateOf<List<RunHistoryItem>>(emptyList()) }
     var historyError by remember { mutableStateOf<String?>(null) }
@@ -242,6 +253,7 @@ internal fun RunJourneyRoot(
                 } else if (!granted) {
                     musicSelected = false
                 }
+                if (!granted) musicReflectionSharingSelected = false
             }
         }
         lifecycle.addObserver(observer)
@@ -355,6 +367,21 @@ internal fun RunJourneyRoot(
         }
     }
 
+    fun saveHistoryEnergy(runId: String, branch: ReflectionBranch) {
+        val owner = reflectionCoordinator
+        if (energySavingRunId != null) return
+        energySavingRunId = runId
+        energyError = null
+        scope.launch {
+            try {
+                if (owner != null) owner.saveEnergy(runId, branch)
+                else database.reflectionDao().recordEnergy(runId, branch, System.currentTimeMillis())
+            } catch (cancelled: CancellationException) { throw cancelled }
+            catch (_: Exception) { energyError = runId to "Energy couldn't save. Try again." }
+            finally { energySavingRunId = null }
+        }
+    }
+
     suspend fun refresh() {
         val snapshot = coordinator.journeySnapshot()
         model = runUiModelFor(snapshot)
@@ -408,7 +435,9 @@ internal fun RunJourneyRoot(
         if (model.state == RunUiState.Saved) {
             completedRunId?.let { runId ->
                 val bridgeReady = localBridgePermissionGranted()
-                activeReflectionCoordinator.onSavedVisible(runId, bridgeReady)
+                activeReflectionCoordinator.onSavedVisible(runId, bridgeReady,
+                    awaitingReceipt = completionReceiptRunId == runId &&
+                        completionReceiptFinishedRunId != runId)
                 if (!bridgeReady) {
                     permissionRunId = runId
                     permissionForRetry = false
@@ -458,11 +487,15 @@ internal fun RunJourneyRoot(
     // The one shape every durable request takes. Ordinary failures are not thrown on,
     // because the coordinator already records them and the refreshed snapshot shows them;
     // cancellation is rethrown, because it is this composition going away, not a result.
-    suspend fun awaitDurable(request: suspend () -> Deferred<*>) {
+    suspend fun awaitDurable(
+        onSuccess: suspend () -> Unit = {},
+        request: suspend () -> Deferred<*>
+    ) {
         try {
             val work = request()
             refresh()
             work.await()
+            onSuccess()
         } catch (cancellation: CancellationException) {
             throw cancellation
         } catch (reportedBySnapshot: Exception) {
@@ -482,7 +515,10 @@ internal fun RunJourneyRoot(
             if (musicSelected && !observeMusicForRun) {
                 musicSelected = false
                 musicAccessGranted = false
+                musicReflectionSharingSelected = false
             }
+            val shareMusicForRun = observeMusicForRun && reflectionCoordinator != null &&
+                musicReflectionSharingSelected
             if (gpsSelected) {
                 if (!preciseLocationReady()) {
                     gpsMessage = "Precise GPS is unavailable. Enable phone Location before starting."
@@ -494,7 +530,8 @@ internal fun RunJourneyRoot(
                     try {
                         // The visible Activity launches the foreground service before any
                         // asynchronous Room insert; that service owns this GPS start.
-                        RunTrackingService.startNew(context, preRunEnergy, observeMusicForRun)
+                        RunTrackingService.startNew(context, preRunEnergy, observeMusicForRun,
+                            shareMusicForRun)
                     } catch (_: RuntimeException) {
                         gpsMessage = "Android could not start GPS tracking. Try again while the app is open."
                         runGuarded {
@@ -508,7 +545,8 @@ internal fun RunJourneyRoot(
                     awaitDurable {
                         coordinator.requestStart(
                             preRunEnergy,
-                            musicObservationRequested = observeMusicForRun
+                            musicObservationRequested = observeMusicForRun,
+                            musicReflectionSharingAllowed = shareMusicForRun
                         )
                     }
                 }
@@ -518,10 +556,31 @@ internal fun RunJourneyRoot(
 
     val requestAction: (RunActionKind) -> Unit = { kind ->
         runGuarded {
-            awaitDurable { coordinator.requestAction(kind) }
-            if (kind == RunActionKind.COMPLETE && model.state == RunUiState.Saved) {
-                completionSpeechEligibleRunId = completedRunId
+            if (kind == RunActionKind.COMPLETE) {
+                activeRunId?.let { id ->
+                    // Reserve audible delivery before even a fast completion can expose Saved.
+                    // The receipt itself still waits for the durable COMPLETED row.
+                    completionSpeechEligibleRunId = id
+                    completionReceiptRunId = id
+                    completionReceiptText = null
+                    completionReceiptStartedRunId = null
+                    completionReceiptFinishedRunId = null
+                }
             }
+            awaitDurable(onSuccess = {
+                if (kind == RunActionKind.COMPLETE) {
+                    val saved = coordinator.journeySnapshot().admission as? RunAdmission.RunCompleted
+                    saved?.session?.runId?.let { id ->
+                        // Mark receipt ownership before refreshing Saved and launching reflection.
+                        completionSpeechEligibleRunId = id
+                        completionReceiptRunId = id
+                        completionReceiptText = try {
+                            database.runDao().findById(id)?.let(::savedRunReceiptFor)
+                        } catch (cancelled: CancellationException) { throw cancelled }
+                        catch (_: Exception) { null } ?: "Run saved."
+                    }
+                }
+            }) { coordinator.requestAction(kind) }
         }
     }
 
@@ -552,12 +611,29 @@ internal fun RunJourneyRoot(
 
     val completionVisible = model.state == RunUiState.Saved &&
         !historyVisible && voiceForeground
+    RunCompleteReceiptEffect(
+        completedRunId = completedRunId,
+        receiptRunId = completionReceiptRunId,
+        receiptText = completionReceiptText ?: completedRuns?.firstOrNull {
+            it.runId == completionReceiptRunId
+        }?.let(::savedRunReceiptFor),
+        startedRunId = completionReceiptStartedRunId,
+        finishedRunId = completionReceiptFinishedRunId,
+        completionVisible = completionVisible,
+        speakerFactory = completionSpeakerFactory,
+        onStarted = { completionReceiptStartedRunId = it },
+        onFinished = { id ->
+            if (completionReceiptRunId == id) completionReceiptFinishedRunId = id
+            reflectionCoordinator?.finishReceipt(id)
+        }
+    )
     RunCompleteSpeechEffect(
         completedRunId = completedRunId,
         eligibleRunId = completionSpeechEligibleRunId,
         spokenRunId = completionSpeechSpokenRunId,
         reflectionState = reflectionState,
-        completionVisible = completionVisible,
+        completionVisible = completionVisible && (completionReceiptRunId != completedRunId ||
+            completionReceiptFinishedRunId == completedRunId),
         speakerFactory = completionSpeakerFactory,
         onSpoken = { completionSpeechSpokenRunId = it }
     )
@@ -570,6 +646,13 @@ internal fun RunJourneyRoot(
             onSelectEffort = ::saveEffort,
             effortSavingRunId = effortSavingRunId,
             effortError = effortError,
+            onSelectEnergy = ::saveHistoryEnergy,
+            energySavingRunId = energySavingRunId,
+            energyError = energyError,
+            routeLoader = { runId ->
+                val points = database.locationDao().pointsFor(runId)
+                withContext(Dispatchers.Default) { gpsRoutePreviewFor(runId, points) }
+            },
             isLoading = completedRuns == null || storedReflections == null,
             error = historyError,
             modifier = modifier
@@ -623,13 +706,17 @@ internal fun RunJourneyRoot(
         onRetryStart = {
 
             // The same prepared run: the coordinator reuses its UUID and official start.
+            val observeMusicForRun = musicSelected && hasMusicAccess(context)
+            val shareMusicForRun = observeMusicForRun && reflectionCoordinator != null &&
+                musicReflectionSharingSelected
             if (gpsSelected) {
                 if (preciseLocationReady()) {
                     try {
                         RunTrackingService.startNew(
                             context,
                             preRunEnergy,
-                            musicSelected && hasMusicAccess(context)
+                            observeMusicForRun,
+                            shareMusicForRun
                         )
                     } catch (_: RuntimeException) {
                         gpsMessage = "Android could not restart GPS. Cancel and try again."
@@ -642,7 +729,8 @@ internal fun RunJourneyRoot(
                     awaitDurable {
                         coordinator.requestStart(
                             preRunEnergy,
-                            musicObservationRequested = musicSelected && hasMusicAccess(context)
+                            musicObservationRequested = observeMusicForRun,
+                            musicReflectionSharingAllowed = shareMusicForRun
                         )
                     }
                 }
@@ -654,12 +742,12 @@ internal fun RunJourneyRoot(
         onStartAnother = {
             runGuarded {
 
-                // Give the next run its own Start screen and optional Energy choice.
+                // Reset per-run answers; keep the explicit GPS choice for this app session.
                 coordinator.prepareAnotherRun()
                 preRunEnergy = null
-                gpsSelected = false
                 gpsMessage = null
                 musicSelected = false
+                musicReflectionSharingSelected = false
                 refresh()
             }
         },
@@ -685,14 +773,22 @@ internal fun RunJourneyRoot(
         gpsMessage = gpsMessage,
         musicSelected = musicSelected,
         musicAccessGranted = musicAccessGranted,
+        musicReflectionSharingAvailable = reflectionCoordinator != null,
+        musicReflectionSharingSelected = musicReflectionSharingSelected,
+        onToggleMusicReflectionSharing = {
+            musicReflectionSharingSelected = musicSelected && hasMusicAccess(context) &&
+                reflectionCoordinator != null && !musicReflectionSharingSelected
+        },
         onToggleMusic = {
             if (musicSelected) {
                 musicSelected = false
+                musicReflectionSharingSelected = false
             } else if (hasMusicAccess(context)) {
                 musicAccessGranted = true
                 musicSelected = true
             } else {
                 musicAccessGranted = false
+                musicReflectionSharingSelected = false
                 pendingMusicAccess = openMusicAccessSettings(context)
             }
         },
@@ -744,6 +840,72 @@ internal fun RunJourneyRoot(
         actionsEnabled = !actionInFlight,
         modifier = modifier
     )
+}
+
+/** Consume the saved receipt once; an interrupted receipt releases delivery without replay. */
+@Composable
+internal fun RunCompleteReceiptEffect(
+    completedRunId: String?,
+    receiptRunId: String?,
+    receiptText: String?,
+    startedRunId: String?,
+    finishedRunId: String?,
+    completionVisible: Boolean,
+    speakerFactory: (Context) -> ReflectionSpeaker,
+    onStarted: (String) -> Unit,
+    onFinished: (String) -> Unit
+) {
+    val context = LocalContext.current
+    var speaker by remember { mutableStateOf<ReflectionSpeaker?>(null) }
+    var activeReceiptRunId by remember { mutableStateOf<String?>(null) }
+    var locallyFinishedRunId by remember { mutableStateOf<String?>(null) }
+    val finishCallback by rememberUpdatedState(onFinished)
+
+    fun finish(id: String) {
+        if (locallyFinishedRunId == id) return
+        locallyFinishedRunId = id
+        activeReceiptRunId = null
+        speaker?.close()
+        speaker = null
+        finishCallback(id)
+    }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            val interruptedId = activeReceiptRunId
+            speaker?.close()
+            interruptedId?.let(::finish)
+        }
+    }
+    LaunchedEffect(completedRunId, receiptRunId, receiptText, finishedRunId, completionVisible) {
+        activeReceiptRunId?.takeIf { it != completedRunId }?.let(::finish)
+        val pendingId = receiptRunId?.takeIf { it != finishedRunId }
+        if (pendingId == null || completedRunId != pendingId) {
+            speaker?.stop()
+            return@LaunchedEffect
+        }
+        if (!completionVisible) {
+            speaker?.stop()
+            finish(pendingId)
+            return@LaunchedEffect
+        }
+        if (startedRunId == pendingId) {
+            // A restored consumed receipt was interrupted by recreation; never repeat it.
+            if (activeReceiptRunId == null) finish(pendingId)
+            return@LaunchedEffect
+        }
+        val text = receiptText ?: return@LaunchedEffect
+        activeReceiptRunId = pendingId
+        onStarted(pendingId)
+        try {
+            val activeSpeaker = speakerFactory(context).also { speaker = it }
+            activeSpeaker.speakReceipt(text) {
+                if (activeReceiptRunId == pendingId) finish(pendingId)
+            }
+        } catch (_: RuntimeException) {
+            finish(pendingId)
+        }
+    }
 }
 
 /** Keep speech outside the stateless screen; leaving, backgrounding or rotation closes its engine. */

@@ -13,8 +13,9 @@ enum class ReflectionBranch { SPENT, FEELING_GOOD, POWERED_UP, NO_SELECTION }
 /**
  * One durable reflection attempt and selection for a completed run.
  *
- * Evidence and the selection deadline are captured once. Retry changes the request
- * identity, never the evidence. Once READY, the selected text is permanent; later
+ * Evidence is captured once. A new run can await its save receipt before starting
+ * its selection deadline exactly once. Retry changes the request identity, never
+ * the evidence or a started window. Once READY, the selected text is permanent; later
  * Energy answers remain useful feedback without rewriting what the runner read.
  */
 @Entity(
@@ -37,7 +38,9 @@ data class RunReflectionEntity(
     @ColumnInfo(name = "candidates_json") val candidatesJson: String? = null,
     @ColumnInfo(name = "text") val text: String? = null,
     @ColumnInfo(name = "finalized_at_epoch_millis") val finalizedAtEpochMillis: Long? = null,
-    @ColumnInfo(name = "is_test_data", defaultValue = "1") val isTestData: Boolean = true
+    @ColumnInfo(name = "is_test_data", defaultValue = "1") val isTestData: Boolean = true,
+    @ColumnInfo(name = "selection_window_started", defaultValue = "1")
+    val selectionWindowStarted: Boolean = true
 ) {
     init {
         require(canonicalUuid(runId) && canonicalUuid(requestId)) {
@@ -49,6 +52,7 @@ data class RunReflectionEntity(
         }
         require(candidatesJson == null || candidatesJson.isNotBlank())
         if (status == ReflectionStatus.READY) {
+            require(selectionWindowStarted) { "A ready reflection must have left its save receipt." }
             require(selectedBranch != null && !text.isNullOrBlank() && finalizedAtEpochMillis != null) {
                 "A ready reflection requires its selected branch, exact text and finalization time."
             }

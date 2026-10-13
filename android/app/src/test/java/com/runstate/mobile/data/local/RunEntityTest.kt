@@ -27,7 +27,9 @@ class RunEntityTest {
         telemetryCoverage: TelemetryCoverage? = null,
         displayDistanceUnit: DistanceUnit? = null,
         transitionHistoryComplete: Boolean? = null,
-        postRunEffort: PostRunEffort? = null
+        postRunEffort: PostRunEffort? = null,
+        musicObservationRequested: Boolean = false,
+        musicReflectionSharingAllowed: Boolean = false
     ) = RunEntity(
         runId = runId,
         state = state,
@@ -40,7 +42,9 @@ class RunEntityTest {
         telemetryCoverage = telemetryCoverage,
         displayDistanceUnit = displayDistanceUnit,
         transitionHistoryComplete = transitionHistoryComplete,
-        postRunEffort = postRunEffort
+        postRunEffort = postRunEffort,
+        musicObservationRequested = musicObservationRequested,
+        musicReflectionSharingAllowed = musicReflectionSharingAllowed
     )
 
     /**
@@ -162,6 +166,18 @@ class RunEntityTest {
     @Test
     fun `a run with no finish defaults to an unknown finish`() {
         assertNull(runWith().finishEpochMillis)
+    }
+
+    @Test
+    fun `music sharing is separate consent and requires local observation`() {
+        assertEquals(false, runWith().musicReflectionSharingAllowed)
+        assertEquals(false, runWith(musicObservationRequested = true).musicReflectionSharingAllowed)
+        assertEquals(true, runWith(
+            musicObservationRequested = true, musicReflectionSharingAllowed = true
+        ).musicReflectionSharingAllowed)
+        assertThrows(IllegalArgumentException::class.java) {
+            runWith(musicReflectionSharingAllowed = true)
+        }
     }
 
     @Test

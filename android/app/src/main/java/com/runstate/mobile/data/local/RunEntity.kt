@@ -214,7 +214,11 @@ data class RunEntity(
 
     /** Optional runner report after save. Old runs remain unknown, never Working by default. */
     @ColumnInfo(name = "post_run_effort")
-    val postRunEffort: PostRunEffort? = null
+    val postRunEffort: PostRunEffort? = null,
+
+    /** Separate, explicit consent for this run's observed music to inform its reflection. */
+    @ColumnInfo(name = "music_reflection_sharing_allowed", defaultValue = "0")
+    val musicReflectionSharingAllowed: Boolean = false
 ) {
     init {
 
@@ -232,6 +236,9 @@ data class RunEntity(
 
         require(postRunEffort == null || state == StoredRunState.COMPLETED) {
             "Only a COMPLETED run may have post-run effort, but this run is $state."
+        }
+        require(!musicReflectionSharingAllowed || musicObservationRequested) {
+            "Music reflection sharing requires this run's music observation opt-in."
         }
 
         require(

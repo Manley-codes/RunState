@@ -11,6 +11,7 @@ import java.time.ZoneOffset
 import java.util.UUID
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertThrows
 import org.junit.Test
 
 /**
@@ -101,6 +102,23 @@ class PreparedRunFactoryTest {
             true,
             factory.create(musicObservationRequested = true).musicObservationRequested
         )
+    }
+
+    @Test
+    fun `music sharing requires its own consent and an observation opt in`() {
+        val factory = PreparedRunFactory(
+            clock = Clock.fixed(Instant.ofEpochMilli(OFFICIAL_START), ZoneOffset.UTC),
+            zoneIdSupplier = { ZoneId.of("America/Chicago") },
+            uuidSupplier = { UUID.fromString(RUN_ID) }
+        )
+        assertEquals(false, factory.create().musicReflectionSharingAllowed)
+        assertEquals(false, factory.create(musicObservationRequested = true).musicReflectionSharingAllowed)
+        assertEquals(true, factory.create(
+            musicObservationRequested = true, musicReflectionSharingAllowed = true
+        ).musicReflectionSharingAllowed)
+        assertThrows(IllegalArgumentException::class.java) {
+            factory.create(musicReflectionSharingAllowed = true)
+        }
     }
 
     /**

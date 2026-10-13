@@ -20,7 +20,7 @@ abstract class ReflectionDao {
     @Query("SELECT * FROM run_reflections ORDER BY run_id ASC")
     abstract suspend fun all(): List<RunReflectionEntity>
 
-    /** Idempotent creation: reopening a run cannot replace its evidence or its deadline. */
+    /** Idempotent creation: reopening cannot replace evidence or reset an existing window. */
     @Transaction
     open suspend fun ensurePending(entity: RunReflectionEntity): RunReflectionEntity {
         findByRunId(entity.runId)?.let { return it }
@@ -35,16 +35,18 @@ abstract class ReflectionDao {
         return entity
     }
 
-    /** First on-time Energy selects the reply; subsequent answers only update feedback. */
+    /** First on-time (or held-window) Energy selects; later answers only update feedback. */
     @Transaction
     open suspend fun recordEnergy(
         runId: String,
         branch: ReflectionBranch,
-        now: Long
+        now: Long,
+        selectionHeld: Boolean = false
     ): RunReflectionEntity {
         require(branch != ReflectionBranch.NO_SELECTION) { "Energy must name an Energy branch." }
         val stored = required(runId)
-        val selected = stored.selectedBranch ?: if (now < stored.selectionDeadlineEpochMillis) {
+        val selected = stored.selectedBranch ?: if (!stored.selectionWindowStarted ||
+            selectionHeld || now < stored.selectionDeadlineEpochMillis) {
             branch
         } else {
             ReflectionBranch.NO_SELECTION
@@ -57,8 +59,25 @@ abstract class ReflectionDao {
     @Transaction
     open suspend fun selectNoSelectionIfDue(runId: String, now: Long): RunReflectionEntity {
         val stored = required(runId)
-        if (stored.selectedBranch != null || now < stored.selectionDeadlineEpochMillis) return stored
+        if (!stored.selectionWindowStarted || stored.selectedBranch != null ||
+            now < stored.selectionDeadlineEpochMillis) return stored
         val updated = stored.copy(selectedBranch = ReflectionBranch.NO_SELECTION)
+        update(updated)
+        return updated
+    }
+
+    /** The save receipt starts this deadline once; recreation and retry cannot move it. */
+    @Transaction
+    open suspend fun beginSelectionWindow(
+        runId: String,
+        deadline: Long
+    ): RunReflectionEntity {
+        val stored = required(runId)
+        if (stored.selectionWindowStarted) return stored
+        val updated = stored.copy(
+            selectionWindowStarted = true,
+            selectionDeadlineEpochMillis = deadline
+        )
         update(updated)
         return updated
     }
@@ -89,7 +108,8 @@ abstract class ReflectionDao {
     ): Boolean {
         require(exactText.isNotBlank())
         val stored = findByRunId(runId) ?: return false
-        if (!stored.accepts(requestId) || stored.selectedBranch != branch ||
+        if (!stored.accepts(requestId) || !stored.selectionWindowStarted ||
+            stored.selectedBranch != branch ||
             stored.candidatesJson == null) return false
         update(stored.copy(
             status = ReflectionStatus.READY,

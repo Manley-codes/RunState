@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -46,6 +45,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
@@ -54,6 +54,7 @@ import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.constrainHeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.runstate.mobile.data.local.ReflectionBranch
@@ -66,6 +67,7 @@ import kotlin.math.sin
 internal const val RUN_COMPLETE_SCREEN_TAG = "runCompleteScreen"
 internal const val RUN_COMPLETE_DISTANCE_TAG = "runCompleteDistance"
 internal const val RUN_COMPLETE_VISUALIZER_TAG = "runCompleteVisualizer"
+internal const val RUN_COMPLETE_METRICS_TAG = "runCompleteMetrics"
 internal const val RUN_COMPLETE_REFLECTION_TAG = "runCompleteReflection"
 internal const val RUN_COMPLETE_REFLECTION_TEXT_TAG = "runCompleteReflectionText"
 internal const val RUN_COMPLETE_REFLECTION_RETRY_TAG = "runCompleteReflectionRetry"
@@ -622,7 +624,7 @@ private fun CompletionHero(
     }
 }
 
-/** The normal-size composition mirrors the reference's deliberate overlap and offset. */
+/** Preserve the offset composition when its measured text leaves room for the completion mark. */
 @Composable
 private fun OffsetCompletionHero(
     distance: MetricParts,
@@ -630,34 +632,65 @@ private fun OffsetCompletionHero(
     pace: MetricParts,
     active: String
 ) {
-    Box(
+    Layout(
         modifier = Modifier
             .fillMaxWidth()
-            .height(246.dp)
-    ) {
-        DistanceInstrument(
-            distance = distance,
-            modifier = Modifier
-                .align(Alignment.TopStart)
-                .padding(top = 18.dp)
+            .heightIn(min = 246.dp),
+        content = {
+            DistanceInstrument(distance = distance)
+            CompactMetrics(
+                elapsed = elapsed,
+                pace = pace,
+                active = active
+            )
+            CompletionVisualizer(modifier = Modifier.size(80.dp))
+        }
+    ) { measurables, constraints ->
+        val looseConstraints = constraints.copy(minWidth = 0, minHeight = 0)
+        val distancePlaceable = measurables[0].measure(looseConstraints)
+        // Intrinsic widths round each text run independently; leave a small amount of
+        // actual room for OEM glyph/letter-spacing rounding before measuring the rows.
+        val metricsWidth = (
+            measurables[1].maxIntrinsicWidth(looseConstraints.maxHeight) + 4.dp.roundToPx()
+        ).coerceAtMost(constraints.maxWidth)
+        val metricsPlaceable = measurables[1].measure(
+            looseConstraints.copy(minWidth = metricsWidth, maxWidth = metricsWidth)
         )
+        val markPlaceable = measurables[2].measure(looseConstraints)
+        val width = constraints.maxWidth
+        val gap = 12.dp.roundToPx()
+        val distanceY = 18.dp.roundToPx()
+        val metricsX = width - metricsPlaceable.width
+        val metricsY = if (distancePlaceable.width + gap <= metricsX) {
+            35.dp.roundToPx()
+        } else {
+            distanceY + distancePlaceable.height + gap
+        }
 
-        CompletionVisualizer(
-            modifier = Modifier
-                .align(Alignment.TopCenter)
-                .offset(x = 16.dp, y = 18.dp)
-                .size(80.dp)
+        // OEM fonts and timer digits can consume the original fixed central gap.
+        // Put decoration below the facts when it cannot fit without covering text.
+        val markFitsBetween = distancePlaceable.width + gap + markPlaceable.width + gap <= metricsX
+        val preferredMarkX = (width - markPlaceable.width) / 2 + 16.dp.roundToPx()
+        val markX = if (markFitsBetween) {
+            preferredMarkX.coerceIn(
+                distancePlaceable.width + gap,
+                metricsX - gap - markPlaceable.width
+            )
+        } else {
+            (width - markPlaceable.width) / 2
+        }
+        val factsBottom = maxOf(
+            distanceY + distancePlaceable.height,
+            metricsY + metricsPlaceable.height
         )
+        val markY = if (markFitsBetween) distanceY else factsBottom + gap
+        val height = constraints.constrainHeight(maxOf(factsBottom, markY + markPlaceable.height))
 
-        CompactMetrics(
-            elapsed = elapsed,
-            pace = pace,
-            active = active,
-            modifier = Modifier
-                .align(Alignment.TopEnd)
-                .padding(top = 35.dp)
-                .width(145.dp)
-        )
+        layout(width, height) {
+            distancePlaceable.placeRelative(0, distanceY)
+            metricsPlaceable.placeRelative(metricsX, metricsY)
+            markPlaceable.placeRelative(markX, markY)
+        }
     }
 }
 
@@ -767,7 +800,7 @@ private fun CompactMetrics(
     generousSpacing: Boolean = false
 ) {
     Column(
-        modifier = modifier,
+        modifier = modifier.testTag(RUN_COMPLETE_METRICS_TAG),
         verticalArrangement = Arrangement.spacedBy(if (generousSpacing) 14.dp else 10.dp)
     ) {
         CompactMetric(value = elapsed, label = "TIME", valueSize = 22.sp)
@@ -807,6 +840,8 @@ private fun CompactMetric(
                 fontFamily = CompletionNumberFont,
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Medium,
+                maxLines = 1,
+                softWrap = false,
                 modifier = Modifier.padding(start = 2.dp, bottom = 2.dp)
             )
         }
@@ -816,6 +851,8 @@ private fun CompactMetric(
             fontSize = 9.sp,
             fontWeight = FontWeight.SemiBold,
             letterSpacing = 1.5.sp,
+            maxLines = 1,
+            softWrap = false,
             modifier = Modifier.padding(start = 8.dp, bottom = 3.dp)
         )
     }

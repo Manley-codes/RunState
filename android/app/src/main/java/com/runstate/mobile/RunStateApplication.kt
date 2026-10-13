@@ -190,7 +190,7 @@ class RunStateApplication : Application() {
                 Build.DEVICE.startsWith("emu") || Build.HARDWARE == "ranchu"
             RunReflectionCoordinator(
                 runDao = database.runDao(),
-                store = RoomReflectionStore(database.reflectionDao()),
+                store = RoomReflectionStore(database.reflectionDao(), database.musicObservationDao()),
                 gateway = LocalReflectionHttpClient(
                     if (emulator) LOCAL_REFLECTION_ENDPOINT else PHONE_REFLECTION_ENDPOINT
                 ),

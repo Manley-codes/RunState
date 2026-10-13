@@ -901,8 +901,12 @@ internal class RunSessionCoordinator(
     suspend fun requestStart(
         preRunEnergy: PreRunEnergy? = null,
         trackingMode: RunTrackingMode = RunTrackingMode.FIXTURE,
-        musicObservationRequested: Boolean = false
+        musicObservationRequested: Boolean = false,
+        musicReflectionSharingAllowed: Boolean = false
     ): Deferred<ActiveRunSession> = coordinatorLock.withLock {
+        require(!musicReflectionSharingAllowed || musicObservationRequested) {
+            "Music reflection sharing requires this run's music observation opt-in."
+        }
         check(initializationStatus == InitializationStatus.Completed) {
             "A run cannot start before recovery has completed."
         }
@@ -947,7 +951,8 @@ internal class RunSessionCoordinator(
         val row = preparedRun ?: preparedRunFactory.create(
             preRunEnergy,
             trackingMode,
-            musicObservationRequested
+            musicObservationRequested,
+            musicReflectionSharingAllowed
         )
             .also { preparedRun = it }
 

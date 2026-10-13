@@ -6,6 +6,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.repeatOnLifecycle
+import com.google.gson.GsonBuilder
+import com.google.gson.JsonObject
+import com.google.gson.Strictness
 import com.runstate.mobile.data.local.DistanceUnit
 import com.runstate.mobile.data.local.MetricSource
 import com.runstate.mobile.data.local.PreRunEnergy
@@ -15,6 +18,7 @@ import com.runstate.mobile.data.local.RunEntity
 import com.runstate.mobile.data.local.RunMusicObservationEntity
 import com.runstate.mobile.data.local.RunReflectionEntity
 import com.runstate.mobile.data.local.RunTransitionEntity
+import com.runstate.mobile.data.local.RunTrackingMode
 import com.runstate.mobile.data.local.StoredRunState
 import com.runstate.mobile.data.local.TelemetryCoverage
 import com.runstate.mobile.run.RunMetrics
@@ -36,8 +40,42 @@ internal data class RunMetricsDisplay(
     val active: String,
     val distance: String,
     val averagePace: String,
-    val sourceLabel: String
+    val sourceLabel: String,
+    val gpsDistanceAvailable: Boolean = false
 )
+
+/** A factual confirmation from the completed row, never a generated interpretation. */
+internal fun savedRunReceiptFor(run: RunEntity): String {
+    require(run.state == StoredRunState.COMPLETED)
+    val distance = run.finalDistanceMeters?.let { meters ->
+        val (unitMeters, singular, plural) = when (run.displayDistanceUnit) {
+            DistanceUnit.MILES -> Triple(1_609.344, "mile", "miles")
+            DistanceUnit.KILOMETERS -> Triple(1_000.0, "kilometer", "kilometers")
+            null -> return@let null
+        }
+        val units = meters / unitMeters
+        val amount = if (units > 0 && units < 0.01) "less than 0.01" else
+            String.format(Locale.US, "%.2f", units).trimEnd('0').trimEnd('.')
+        val unit = if (amount == "1") singular else plural
+        val provenance = when (run.metricSource) {
+            MetricSource.FIXTURE -> "Fixture distance, "
+            MetricSource.GPS -> if (run.telemetryCoverage == TelemetryCoverage.PARTIAL)
+                "Partial GPS distance, " else ""
+            null -> return@let null
+        }
+        "$provenance$amount $unit."
+    }
+    val duration = run.finishEpochMillis?.let { finish ->
+        val seconds = (finish - run.officialStartEpochMillis).coerceAtLeast(0) / 1_000L
+        val parts = listOf(seconds / 3_600L to "hour", seconds / 60L % 60 to "minute",
+            seconds % 60 to "second").filter { it.first > 0 }
+        val words = if (parts.isEmpty()) "0 seconds" else parts.joinToString(", ") { (count, unit) ->
+            "$count $unit${if (count == 1L) "" else "s"}"
+        }
+        "Elapsed time, $words."
+    }
+    return listOfNotNull("Run saved.", distance, duration).joinToString(" ")
+}
 
 /** Converts stored-unit-independent metrics into stable runner-facing text. */
 internal fun runMetricsDisplayFor(metrics: RunMetrics): RunMetricsDisplay {
@@ -65,6 +103,7 @@ internal fun runMetricsDisplayFor(metrics: RunMetrics): RunMetricsDisplay {
         active = metrics.activeMillis?.let(::formatDuration) ?: "—",
         distance = distance,
         averagePace = averagePace,
+        gpsDistanceAvailable = metrics.source == MetricSource.GPS && metrics.distanceMeters != null,
         sourceLabel = when (metrics.source) {
             MetricSource.FIXTURE -> "Fixture metrics"
             MetricSource.GPS -> when (metrics.coverage) {
@@ -118,6 +157,8 @@ internal fun historyItemFor(
             ReflectionBranch.NO_SELECTION, null -> null
         },
         effort = run.postRunEffort,
+        energy = reflection?.postRunEnergy,
+        isGpsRun = run.trackingMode == RunTrackingMode.GPS,
         isTestData = reflection?.takeIf { it.status == ReflectionStatus.READY }?.isTestData == true,
         preRunEnergyLabel = when (run.preRunEnergy) {
             PreRunEnergy.LOW -> "Low"
@@ -130,8 +171,39 @@ internal fun historyItemFor(
         lastObservedMedia = musicObservations.maxByOrNull { it.sequenceNumber }?.let { last ->
             val label = listOfNotNull(last.title, last.artist).joinToString(" — ")
             if (label.isBlank()) last.sourcePackage else "$label · ${last.sourcePackage}"
-        }
+        },
+        reflectionMusicSummary = reflectionMusicSummaryFor(run, reflection)
     )
+}
+
+private val historyEvidenceJson = GsonBuilder().setStrictness(Strictness.STRICT).create()
+
+/** Describes saved context only; it does not claim a request succeeded or music shaped the reply. */
+private fun reflectionMusicSummaryFor(run: RunEntity, reflection: RunReflectionEntity?): String? {
+    if (!run.musicObservationRequested) return null
+    if (!run.musicReflectionSharingAllowed) return "Music observations kept on this phone"
+    val allowed = "Music sharing allowed for this run"
+    val snapshot = reflection?.evidenceJson ?: return allowed
+    val music = try {
+        val evidence = historyEvidenceJson.fromJson(snapshot, JsonObject::class.java)
+        evidence?.get("musicContext")?.takeIf { it.isJsonObject }?.asJsonObject ?: return allowed
+    } catch (_: RuntimeException) {
+        return allowed
+    }
+    fun text(name: String): String? = music.get(name)?.takeIf {
+        it.isJsonPrimitive && it.asJsonPrimitive.isString
+    }?.asString
+    fun absent(name: String): Boolean = music.get(name)?.isJsonNull != false
+
+    return when {
+        text("state") == "MUSIC" && text("provenance") == "MEDIA_SESSION_PARTIAL" &&
+            !text("trackTitle").isNullOrBlank() && !text("artistName").isNullOrBlank() &&
+            absent("artistDescription") -> "One Spotify report included in reflection context · partial"
+        text("state") == "UNKNOWN" &&
+            listOf("trackTitle", "artistName", "artistDescription", "provenance").all(::absent) ->
+            "No Spotify report included in reflection context"
+        else -> allowed
+    }
 }
 
 private fun completedHistoryMetrics(

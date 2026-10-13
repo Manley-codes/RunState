@@ -739,7 +739,8 @@ class RunSessionCoordinatorTest {
         val failed = runBlocking {
             fixture.coordinator.requestStart(
                 PreRunEnergy.HIGH,
-                musicObservationRequested = true
+                musicObservationRequested = true,
+                musicReflectionSharingAllowed = true
             )
         }
         assertTrue(failureOf(failed) is IllegalStateException)
@@ -752,7 +753,8 @@ class RunSessionCoordinatorTest {
         val retry = runBlocking {
             fixture.coordinator.requestStart(
                 PreRunEnergy.LOW,
-                musicObservationRequested = false
+                musicObservationRequested = false,
+                musicReflectionSharingAllowed = false
             )
         }
         val session = runBlocking { retry.await() }
@@ -764,13 +766,53 @@ class RunSessionCoordinatorTest {
             listOf(
                 preparedRun().copy(
                     preRunEnergy = PreRunEnergy.HIGH,
-                    musicObservationRequested = true
+                    musicObservationRequested = true,
+                    musicReflectionSharingAllowed = true
                 )
             ),
             fixture.dao.inserted
         )
         assertEquals(1, fixture.identitiesIssued)
         assertSame(session, (fixture.admission() as RunAdmission.RunInProgress).session)
+    }
+
+    @Test
+    fun `retry cannot upgrade the sharing consent captured by the first prepared row`() {
+        val fixture = Fixture()
+        runBlocking {
+            fixture.coordinator.initialize()
+            fixture.coordinator.beginCountdown()
+        }
+        fixture.dao.failWith = IllegalStateException("disk full")
+        val failed = runBlocking {
+            fixture.coordinator.requestStart(musicObservationRequested = true)
+        }
+        assertTrue(failureOf(failed) is IllegalStateException)
+        fixture.dao.failWith = null
+        fixture.clock.nowMillis = SECOND_START
+        val session = runBlocking {
+            fixture.coordinator.requestStart(
+                musicObservationRequested = true, musicReflectionSharingAllowed = true
+            ).await()
+        }
+        assertEquals(RUN_ID, session.runId)
+        assertEquals(listOf(preparedRun().copy(musicObservationRequested = true)), fixture.dao.inserted)
+        assertEquals(1, fixture.identitiesIssued)
+    }
+
+    @Test
+    fun `sharing without observation is rejected before a run identity or insert`() {
+        val fixture = Fixture()
+        runBlocking {
+            fixture.coordinator.initialize()
+            fixture.coordinator.beginCountdown()
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            runBlocking { fixture.coordinator.requestStart(musicReflectionSharingAllowed = true) }
+        }
+        assertEquals(0, fixture.identitiesIssued)
+        assertTrue(fixture.dao.inserted.isEmpty())
+        assertEquals(RunAdmission.CountdownInProgress, fixture.admission())
     }
 
     /**
