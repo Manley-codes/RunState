@@ -160,6 +160,33 @@ class RunReflectionCoordinatorTest {
         assertNull(store.rows.getValue(RUN_ID).candidatesJson)
     }
 
+    @Test fun openEffortSheetHoldsNoSelectionUntilTheRunnerLeavesIt() {
+        val store = MemoryReflectionStore()
+        var now = 100L
+        val releaseTimer = CompletableDeferred<Unit>()
+        val coordinator = RunReflectionCoordinator(
+            runDao = completedDao(),
+            store = store,
+            gateway = ReflectionGateway { candidates() },
+            applicationScope = scope(),
+            requestIdSupplier = { UUID.fromString(FIRST_REQUEST_ID) },
+            quietWindowMillis = 6_000L,
+            nowMillis = { now },
+            quietDelay = { releaseTimer.await() }
+        )
+
+        coordinator.onSavedVisible(RUN_ID)
+        coordinator.setEffortSheetOpen(RUN_ID, true)
+        now = 6_100L
+        releaseTimer.complete(Unit)
+        assertEquals(RunReflectionState.Preparing(RUN_ID), coordinator.state.value)
+        assertNull(store.rows.getValue(RUN_ID).selectedBranch)
+
+        coordinator.setEffortSheetOpen(RUN_ID, false)
+        assertEquals(RunReflectionState.Ready(RUN_ID, NO_SELECTION_TEXT), coordinator.state.value)
+        assertEquals(ReflectionBranch.NO_SELECTION, store.rows.getValue(RUN_ID).selectedBranch)
+    }
+
     @Test fun onTimeEnergyChoosesOneExactCandidateAndLateAnswerOnlyUpdatesFeedback() {
         val store = MemoryReflectionStore()
         var now = 100L

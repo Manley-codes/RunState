@@ -10,7 +10,7 @@ Index only. One line per file — detail lives in the file. Keep it that way.
 | --- | --- | --- |
 | **Progressive-input ladder is partially resolved** — shoe search/add/select/mileage now has a Start-screen home; route, surface and company remain open | Deferred; does not block Foundation Review | `design_shoe_selection.md` + `design_state_scan.md` |
 | Log History refinement / QA pass — empty states, `REPLY | SPLITS` expanded-record mockup, `REPLAY` decision, dawn-vs-sun glyphs. Later polish, not a prerequisite for the Android fixture foundation | After the Android fixture journey is durable | `ui_phase_handoff.md` §4 |
-| **Android journey / current priority October 12** — fixture run → optional before/after Energy → exact stored reflection → Log History works on the emulator, including restart and History speech. Native Start and first Active visual passes, opt-in GPS (Room v6), and opt-in media-session observation (Room v7) are built; backend mode labeling and debug USB phone routing are prepared. Live Anthropic generation, physical-phone connection, outdoor GPS accuracy and external-player music capture remain unverified. Effort and further Active refinement remain | Run controlled live generation when backend credentials are available; verify USB phone, outdoor GPS and external-player media sessions, then continue visual polish | `project_current_state.md` + `design_run_response_system.md` + `run_initiation_register.md` |
+| **Android journey / current priority October 13** — fixture run → optional before/after Energy and post-run Effort → exact stored reflection → Log History works on the emulator, including restart, History speech, and new-run arrival speech. Native Start and first Active visual passes, opt-in GPS (Room v6), opt-in media-session observation (Room v7), and Effort storage (Room v8) are built; backend mode labeling and debug USB phone routing are prepared. Live Anthropic generation, physical-phone connection, outdoor GPS accuracy and external-player music capture remain unverified. Further Active refinement remains | Run controlled live generation when backend credentials are available; verify USB phone, outdoor GPS and external-player media sessions, then continue visual polish | `project_current_state.md` + `design_run_response_system.md` + `run_initiation_register.md` |
 | **Music feature inventory and prioritization** — completed August 26; the music ideas resolve into an evidence-and-feedback foundation before selection, live support or expression surfaces | Defer further music work behind the Android fixture journey | `design_music_selection_system.md` + `music_feature_register.md` |
 | RunStyle V2 strategy review — Manley's replacement direction | After rough screens exist | `idea_organization_analysis.md` |
 | **Full run editing beyond feedback** — History now supports post-run Energy/Effort updates and deletion by ID; distance, route, date, weather, music, and other field editing remains intentionally out of scope | Later product review | `ui_phase_handoff.md` |
@@ -84,9 +84,9 @@ Claude Code if needed · Manley decides.
   recency and confidence.
 - [RunStyle V1](design_runstyle_v1.md) — BUILT + VERIFIED. Local deterministic profile, never sent
   to the AI.
-- [Effort cost](design_effort_cost.md) — console collector BUILT; future mobile Run Complete uses
+- [Effort cost](design_effort_cost.md) — console collector BUILT; mobile Run Complete now uses
   visible Energy to select the immediate prepared response and quieter optional `EFFORT +` as
-  longitudinal evidence. Quiet Gains remains the main unlock.
+  separately saved longitudinal evidence. Quiet Gains remains a later unlock.
 - [Weather cleanup](design_weather_cleanup.md) — SHIPPED. Persistence fix, forecast API,
   WeatherService.
 - [Post-run response system](design_run_response_system.md) — prototype-validated mobile

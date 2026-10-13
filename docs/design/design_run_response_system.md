@@ -184,8 +184,9 @@ RunState understand the runner across runs.**
   History to speak its stored reflection automatically as well. History must read that stored text,
   never regenerate it. The role of `REPLAY` remains for later UI refinement. As of October 12,
   opening a ready History row invokes Android speech on the exact stored text when a voice engine
-  is available. Arrival speech and the deterministic spoken receipt remain unbuilt; physical-phone
-  audio quality has not been checked.
+  is available. As of October 13, a newly completed run also speaks the exact selected reflection
+  once on arrival; reopening an older saved run stays quiet, and leaving/backgrounding stops it.
+  The deterministic spoken receipt remains unbuilt; physical-phone audio quality has not been checked.
 
 ### Post-run voice contrast — DIRECTION, NOT YET PROTOTYPED *(added August 31, 2026)*
 

@@ -117,6 +117,7 @@ internal fun historyItemFor(
             ReflectionBranch.POWERED_UP -> "Powered Up"
             ReflectionBranch.NO_SELECTION, null -> null
         },
+        effort = run.postRunEffort,
         isTestData = reflection?.takeIf { it.status == ReflectionStatus.READY }?.isTestData == true,
         preRunEnergyLabel = when (run.preRunEnergy) {
             PreRunEnergy.LOW -> "Low"

@@ -182,6 +182,35 @@ class RunStateMigrationTest {
         assertTrue(runBlocking { migrated.musicObservationDao().observationsFor(RUN_ID) }.isEmpty())
     }
 
+    @Test
+    fun versionSevenMigrationKeepsEffortUnknownOnExistingCompletedRun() {
+        val databaseName = "runstate-v7-effort-migration-test.db"
+        val finishedAt = OFFICIAL_START + 900_000L
+        helper.createDatabase(databaseName, 7).apply {
+            insertVersionTwoRun(
+                state = "COMPLETED",
+                lastCheckpointEpochMillis = finishedAt,
+                finishEpochMillis = finishedAt
+            )
+            execSQL(
+                "UPDATE runs SET pre_run_energy = 'HIGH', music_observation_requested = 1 WHERE run_id = ?",
+                arrayOf(RUN_ID)
+            )
+            close()
+        }
+
+        helper.runMigrationsAndValidate(databaseName, 8, true, MIGRATION_7_8).close()
+
+        val migrated = openDatabaseThroughFactory(databaseName)
+        val restored = runBlocking { migrated.runDao().findById(RUN_ID) }
+            ?: throw AssertionError("The version-7 completed run was lost.")
+        assertEquals(StoredRunState.COMPLETED, restored.state)
+        assertEquals(finishedAt, restored.finishEpochMillis)
+        assertEquals(PreRunEnergy.HIGH, restored.preRunEnergy)
+        assertEquals(true, restored.musicObservationRequested)
+        assertNull(restored.postRunEffort)
+    }
+
     /**
      * Writes a run the only way version 1 could: raw SQL against the version-1 table,
      * with no finish column and no transition table in existence.

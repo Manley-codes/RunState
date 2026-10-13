@@ -45,21 +45,23 @@ import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.runstate.mobile.data.local.PostRunEffort
 
 internal const val RUN_HISTORY_SCREEN_TAG = "runHistoryScreen"
 internal const val RUN_HISTORY_ROW_TAG_PREFIX = "runHistoryRow:"
 internal const val RUN_HISTORY_REFLECTION_TAG_PREFIX = "runHistoryReflection:"
 internal const val RUN_HISTORY_RETRY_TAG_PREFIX = "runHistoryRetry:"
+internal const val RUN_HISTORY_EFFORT_TAG_PREFIX = "runHistoryEffort:"
 
 /** Kept injectable so screen behavior can be checked without a device voice engine. */
-internal interface HistoryReflectionSpeaker {
+internal interface ReflectionSpeaker {
     fun speak(text: String)
     fun stop()
     fun close()
 }
 
 /** Android owns the voice; the saved text remains the source for both reading and speech. */
-private class AndroidHistoryReflectionSpeaker(context: Context) : HistoryReflectionSpeaker {
+internal class AndroidReflectionSpeaker(context: Context) : ReflectionSpeaker {
     private val mainHandler = Handler(Looper.getMainLooper())
     private var engine: TextToSpeech? = null
     private var initialized = false
@@ -134,7 +136,8 @@ internal data class RunHistoryItem(
     val preRunEnergyLabel: String? = null,
     val musicObservationRequested: Boolean = false,
     val musicObservationCount: Int = 0,
-    val lastObservedMedia: String? = null
+    val lastObservedMedia: String? = null,
+    val effort: PostRunEffort? = null
 )
 
 /** A single expanded saved record keeps exact reflection text readable on a phone. */
@@ -146,10 +149,14 @@ internal fun RunHistoryScreen(
     modifier: Modifier = Modifier,
     isLoading: Boolean = false,
     error: String? = null,
-    speakerFactory: (Context) -> HistoryReflectionSpeaker = { AndroidHistoryReflectionSpeaker(it) }
+    speakerFactory: (Context) -> ReflectionSpeaker = { AndroidReflectionSpeaker(it) },
+    onSelectEffort: (String, PostRunEffort?) -> Unit = { _, _ -> },
+    effortSavingRunId: String? = null,
+    effortError: Pair<String, String>? = null
 ) {
     var expandedRunId by rememberSaveable { mutableStateOf<String?>(null) }
-    var speaker by remember { mutableStateOf<HistoryReflectionSpeaker?>(null) }
+    var editingEffortRunId by rememberSaveable { mutableStateOf<String?>(null) }
+    var speaker by remember { mutableStateOf<ReflectionSpeaker?>(null) }
     val context = LocalContext.current
 
     DisposableEffect(Unit) {
@@ -162,6 +169,11 @@ internal fun RunHistoryScreen(
             (openItem?.reflectionStatus != "READY" || openItem?.reflectionText.isNullOrBlank())
         ) {
             speaker?.stop()
+        }
+    }
+    LaunchedEffect(items, editingEffortRunId) {
+        if (editingEffortRunId != null && items.none { it.runId == editingEffortRunId }) {
+            editingEffortRunId = null
         }
     }
 
@@ -259,10 +271,25 @@ internal fun RunHistoryScreen(
                                 }
                             }
                         },
-                        onRetryReflection = { onRetryReflection(item.runId) }
+                        onRetryReflection = { onRetryReflection(item.runId) },
+                        onEditEffort = { editingEffortRunId = item.runId },
+                        effortSaving = effortSavingRunId == item.runId,
+                        effortError = effortError?.takeIf { it.first == item.runId }?.second
                     )
                 }
             }
+        }
+        val editingItem = items.firstOrNull { it.runId == editingEffortRunId }
+        if (editingItem != null) {
+            EffortChoiceSheet(
+                selectedEffort = editingItem.effort,
+                enabled = effortSavingRunId != editingItem.runId,
+                onDismiss = { editingEffortRunId = null },
+                onSelect = { effort ->
+                    editingEffortRunId = null
+                    onSelectEffort(editingItem.runId, effort)
+                }
+            )
         }
     }
 }
@@ -283,7 +310,10 @@ private fun HistoryRow(
     item: RunHistoryItem,
     expanded: Boolean,
     onToggle: () -> Unit,
-    onRetryReflection: () -> Unit
+    onRetryReflection: () -> Unit,
+    onEditEffort: () -> Unit,
+    effortSaving: Boolean,
+    effortError: String?
 ) {
     val shape = RoundedCornerShape(22.dp)
     Column(
@@ -385,6 +415,29 @@ private fun HistoryRow(
                         lineHeight = 20.sp,
                         modifier = Modifier.padding(top = 12.dp)
                     )
+                }
+                TextButton(
+                    onClick = onEditEffort,
+                    enabled = !effortSaving,
+                    colors = ButtonDefaults.textButtonColors(contentColor = CompletionMutedInk),
+                    contentPadding = PaddingValues(horizontal = 0.dp, vertical = 10.dp),
+                    modifier = Modifier
+                        .padding(top = 4.dp)
+                        .heightIn(min = 48.dp)
+                        .testTag(RUN_HISTORY_EFFORT_TAG_PREFIX + item.runId)
+                ) {
+                    Text(
+                        text = item.effort?.let { "EFFORT · ${it.displayLabel().uppercase()}" } ?: "EFFORT +",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        letterSpacing = 1.1.sp
+                    )
+                }
+                if (effortSaving) {
+                    Text("Saving Effort…", color = CompletionMutedInk, fontSize = 12.sp)
+                }
+                if (effortError != null) {
+                    Text(effortError, color = CompletionStrongInk, fontSize = 12.sp, lineHeight = 18.sp)
                 }
                 if (item.musicObservationRequested) {
                     Text(

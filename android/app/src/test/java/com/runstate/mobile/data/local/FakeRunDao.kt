@@ -113,6 +113,17 @@ open class FakeRunDao : RunDao() {
 
     override suspend fun countRuns(): Int = inserted.size
 
+    override suspend fun updatePostRunEffortIfCompleted(
+        runId: String,
+        completedState: StoredRunState,
+        effort: PostRunEffort?
+    ): Int {
+        val index = inserted.indexOfFirst { it.runId == runId && it.state == completedState }
+        if (index < 0) return 0
+        inserted[index] = inserted[index].copy(postRunEffort = effort)
+        return 1
+    }
+
     /**
      * Mirrors the real discovery query: filter to the two supplied states, then order
      * by official start with the UUID breaking ties.

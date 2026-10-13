@@ -24,6 +24,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.repeatOnLifecycle
 import com.runstate.mobile.data.local.ReflectionBranch
+import com.runstate.mobile.data.local.PostRunEffort
 import com.runstate.mobile.data.local.PreRunEnergy
 import com.runstate.mobile.ui.theme.RunStateTheme
 import kotlinx.coroutines.CancellationException
@@ -91,7 +92,13 @@ internal fun RunStateScreen(
     onToggleMusic: () -> Unit = {},
     isGpsRun: Boolean = false,
     gpsServicePresent: Boolean = false,
-    onResumeGpsTracking: () -> Unit = {}
+    onResumeGpsTracking: () -> Unit = {},
+    selectedEffort: PostRunEffort? = null,
+    onSelectEffort: (PostRunEffort?) -> Unit = {},
+    effortEnabled: Boolean = false,
+    effortSaving: Boolean = false,
+    effortError: String? = null,
+    onEffortSheetOpenChange: (Boolean) -> Unit = {}
 ) {
     val state = model.state
 
@@ -125,7 +132,13 @@ internal fun RunStateScreen(
             energyEnabled = energyEnabled,
             isTestData = isTestData,
             onViewHistory = onViewHistory,
-            showHistory = showHistory
+            showHistory = showHistory,
+            selectedEffort = selectedEffort,
+            onSelectEffort = onSelectEffort,
+            effortEnabled = effortEnabled,
+            effortSaving = effortSaving,
+            effortError = effortError,
+            onEffortSheetOpenChange = onEffortSheetOpenChange
         )
         return
     }

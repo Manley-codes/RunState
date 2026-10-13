@@ -82,6 +82,29 @@ abstract class RunDao {
     abstract suspend fun countRuns(): Int
 
     /**
+     * Saves or clears the runner's optional Effort after a durable completion.
+     * A single conditional statement prevents an unfinished run from receiving it,
+     * including if another owner changes the row between a screen read and this call.
+     * This touches only `runs`; a selected reflection remains permanent.
+     *
+     * @return true only when the completed run was found and updated.
+     */
+    suspend fun setPostRunEffort(runId: String, effort: PostRunEffort?): Boolean =
+        updatePostRunEffortIfCompleted(runId, StoredRunState.COMPLETED, effort) == 1
+
+    @Query(
+        """
+        UPDATE runs SET post_run_effort = :effort
+        WHERE run_id = :runId AND state = :completedState
+        """
+    )
+    protected abstract suspend fun updatePostRunEffortIfCompleted(
+        runId: String,
+        completedState: StoredRunState,
+        effort: PostRunEffort?
+    ): Int
+
+    /**
      * Every stored run that has not ended, oldest start first.
      *
      * A run is active when storage holds it as RUNNING or PAUSED. Both are returned,

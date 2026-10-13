@@ -63,6 +63,7 @@ internal class RunReflectionCoordinator(
     private var initialized = false
     private val requests = mutableSetOf<String>()
     private val timers = mutableSetOf<String>()
+    private val effortSheetHolds = mutableSetOf<String>()
     private var activeRunId: String? = null
     private val mutableState = MutableStateFlow<RunReflectionState>(RunReflectionState.Idle)
     val state: StateFlow<RunReflectionState> = mutableState.asStateFlow()
@@ -141,6 +142,24 @@ internal class RunReflectionCoordinator(
         catch (_: Exception) { publishFailure(runId) }
     }
 
+    /** Keep the quiet no-Energy path pending only while the optional Effort sheet is open. */
+    fun setEffortSheetOpen(runId: String, open: Boolean) = applicationScope.launch {
+        try {
+            initialize()
+            mutex.withLock {
+                if (open) {
+                    // The sheet can open before onSavedVisible has created the pending row.
+                    effortSheetHolds.add(runId)
+                } else {
+                    effortSheetHolds.remove(runId)
+                    finalizeIfPossible(runId)
+                    store.find(runId)?.let(::publish)
+                }
+            }
+        } catch (cancelled: CancellationException) { throw cancelled }
+        catch (_: Exception) { publishFailure(runId) }
+    }
+
     fun retry(runId: String) = applicationScope.launch {
         try {
             initialize()
@@ -194,7 +213,12 @@ internal class RunReflectionCoordinator(
     }
 
     private suspend fun finalizeIfPossible(runId: String) {
-        val record = store.defaultSelection(runId, nowMillis())
+        val beforeSelection = store.find(runId) ?: return
+        val record = if (runId in effortSheetHolds && beforeSelection.selectedBranch == null) {
+            beforeSelection
+        } else {
+            store.defaultSelection(runId, nowMillis())
+        }
         if (record.status != ReflectionStatus.PENDING) return
         val branch = record.selectedBranch
         if (branch == null) {

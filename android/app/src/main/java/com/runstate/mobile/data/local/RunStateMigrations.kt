@@ -202,3 +202,10 @@ val MIGRATION_6_7 = object : Migration(6, 7) {
         )
     }
 }
+
+/** Version 8 keeps Effort unknown for runs that never had a chance to report it. */
+val MIGRATION_7_8 = object : Migration(7, 8) {
+    override fun migrate(connection: SQLiteConnection) {
+        connection.execSQL("ALTER TABLE `runs` ADD COLUMN `post_run_effort` TEXT")
+    }
+}

@@ -60,6 +60,14 @@ enum class PreRunEnergy {
     HIGH
 }
 
+/** What the completed run cost the runner; null means they did not report it. */
+enum class PostRunEffort {
+    SMOOTH,
+    WORKING,
+    HEAVY,
+    EMPTY_TANK
+}
+
 /**
  * Metric values that become durable in the same write that completes a run.
  *
@@ -202,7 +210,11 @@ data class RunEntity(
 
     /** Per-run opt-in. Old runs and new runs without a choice have no music capture. */
     @ColumnInfo(name = "music_observation_requested", defaultValue = "0")
-    val musicObservationRequested: Boolean = false
+    val musicObservationRequested: Boolean = false,
+
+    /** Optional runner report after save. Old runs remain unknown, never Working by default. */
+    @ColumnInfo(name = "post_run_effort")
+    val postRunEffort: PostRunEffort? = null
 ) {
     init {
 
@@ -216,6 +228,10 @@ data class RunEntity(
         // production creator must supply the phone's actual zone id.
         require(isResolvableZoneId(startTimezoneId)) {
             "A run's start timezone must be a resolvable zone id: $startTimezoneId"
+        }
+
+        require(postRunEffort == null || state == StoredRunState.COMPLETED) {
+            "Only a COMPLETED run may have post-run effort, but this run is $state."
         }
 
         require(

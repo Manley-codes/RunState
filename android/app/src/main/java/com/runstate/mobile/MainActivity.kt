@@ -41,6 +41,7 @@ import com.runstate.mobile.reflection.RunReflectionCoordinator
 import com.runstate.mobile.reflection.RunReflectionState
 import com.runstate.mobile.data.local.ReflectionBranch
 import com.runstate.mobile.data.local.PreRunEnergy
+import com.runstate.mobile.data.local.PostRunEffort
 import com.runstate.mobile.data.local.RunTrackingMode
 import com.runstate.mobile.data.local.RunStateDatabase
 import com.runstate.mobile.run.RunActionKind
@@ -52,6 +53,8 @@ import com.runstate.mobile.music.RunMusicNotificationListener
 import com.runstate.mobile.ui.RunMetricsDisplay
 import com.runstate.mobile.ui.RunMetricsTicker
 import com.runstate.mobile.ui.RunCompleteReflectionDisplay
+import com.runstate.mobile.ui.AndroidReflectionSpeaker
+import com.runstate.mobile.ui.ReflectionSpeaker
 import com.runstate.mobile.ui.RunHistoryItem
 import com.runstate.mobile.ui.RunHistoryScreen
 import com.runstate.mobile.ui.RunStateScreen
@@ -141,7 +144,8 @@ internal fun RunJourneyRoot(
     database: RunStateDatabase,
     trackingFlow: StateFlow<RunTrackingServiceState>,
     lifecycle: Lifecycle,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    completionSpeakerFactory: (Context) -> ReflectionSpeaker = { AndroidReflectionSpeaker(it) }
 ) {
 
     // The last answer the coordinator gave, and nothing more. `remember` rather than
@@ -159,6 +163,15 @@ internal fun RunJourneyRoot(
 
     // Navigation survives rotation; every saved value still comes from Room.
     var historyVisible by rememberSaveable { mutableStateOf(false) }
+    // Only a completion performed in this UI (or its explicit retry) earns arrival speech.
+    // Reopening an older Saved run never speaks merely because Room restored READY text.
+    var completionSpeechEligibleRunId by rememberSaveable { mutableStateOf<String?>(null) }
+    var completionSpeechSpokenRunId by rememberSaveable { mutableStateOf<String?>(null) }
+    // Retain the sheet's run ID so disposal can release its reflection hold even after
+    // navigation has changed completedRunId to null or a different run.
+    var effortSheetRunId by remember { mutableStateOf<String?>(null) }
+    var effortSavingRunId by remember { mutableStateOf<String?>(null) }
+    var effortError by remember { mutableStateOf<Pair<String, String>?>(null) }
     // This is still a draft choice until the official start writes it on the run row.
     var preRunEnergy by rememberSaveable { mutableStateOf<PreRunEnergy?>(null) }
     var gpsSelected by rememberSaveable { mutableStateOf(false) }
@@ -203,12 +216,23 @@ internal fun RunJourneyRoot(
     }
     val trackingState by trackingFlow.collectAsState()
     val context = LocalContext.current
+    var voiceForeground by remember(lifecycle) {
+        mutableStateOf(lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED))
+    }
+
     var musicAccessGranted by remember(context) { mutableStateOf(hasMusicAccess(context)) }
 
     // Notification access is granted in Android Settings, outside this Activity. Recheck
     // on return and do not retain an opt-in after the runner revokes that access.
     DisposableEffect(lifecycle, context) {
         val observer = LifecycleEventObserver { _, event ->
+            voiceForeground = lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)
+            if (event == Lifecycle.Event.ON_PAUSE) {
+                effortSheetRunId?.let { reflectionCoordinator?.setEffortSheetOpen(it, false) }
+            }
+            if (event == Lifecycle.Event.ON_RESUME) {
+                effortSheetRunId?.let { reflectionCoordinator?.setEffortSheetOpen(it, true) }
+            }
             if (event == Lifecycle.Event.ON_RESUME) {
                 val granted = hasMusicAccess(context)
                 musicAccessGranted = granted
@@ -295,6 +319,9 @@ internal fun RunJourneyRoot(
 
     fun retryReflection(runId: String) {
         if (reflectionCoordinator == null) return
+        if (!historyVisible && model.state == RunUiState.Saved && completedRunId == runId) {
+            completionSpeechEligibleRunId = runId
+        }
         if (localBridgePermissionGranted()) reflectionCoordinator.retry(runId)
         else {
             permissionRunId = runId
@@ -309,6 +336,24 @@ internal fun RunJourneyRoot(
     var actionInFlight by remember { mutableStateOf(false) }
 
     val scope = rememberCoroutineScope()
+
+    fun saveEffort(runId: String, effort: PostRunEffort?) {
+        if (effortSavingRunId != null) return
+        effortSavingRunId = runId
+        effortError = null
+        scope.launch {
+            try {
+                if (!database.runDao().setPostRunEffort(runId, effort)) {
+                    effortError = runId to "Effort couldn't save. Try again."
+                }
+            } catch (cancelled: CancellationException) { throw cancelled }
+            catch (_: Exception) {
+                effortError = runId to "Effort couldn't save. Try again."
+            } finally {
+                effortSavingRunId = null
+            }
+        }
+    }
 
     suspend fun refresh() {
         val snapshot = coordinator.journeySnapshot()
@@ -472,7 +517,12 @@ internal fun RunJourneyRoot(
     )
 
     val requestAction: (RunActionKind) -> Unit = { kind ->
-        runGuarded { awaitDurable { coordinator.requestAction(kind) } }
+        runGuarded {
+            awaitDurable { coordinator.requestAction(kind) }
+            if (kind == RunActionKind.COMPLETE && model.state == RunUiState.Saved) {
+                completionSpeechEligibleRunId = completedRunId
+            }
+        }
     }
 
     val reflectionDisplay = when {
@@ -500,11 +550,26 @@ internal fun RunJourneyRoot(
         }
     }
 
+    val completionVisible = model.state == RunUiState.Saved &&
+        !historyVisible && voiceForeground
+    RunCompleteSpeechEffect(
+        completedRunId = completedRunId,
+        eligibleRunId = completionSpeechEligibleRunId,
+        spokenRunId = completionSpeechSpokenRunId,
+        reflectionState = reflectionState,
+        completionVisible = completionVisible,
+        speakerFactory = completionSpeakerFactory,
+        onSpoken = { completionSpeechSpokenRunId = it }
+    )
+
     if (historyVisible) {
         RunHistoryScreen(
             items = historyItems,
             onBack = { historyVisible = false },
             onRetryReflection = ::retryReflection,
+            onSelectEffort = ::saveEffort,
+            effortSavingRunId = effortSavingRunId,
+            effortError = effortError,
             isLoading = completedRuns == null || storedReflections == null,
             error = historyError,
             modifier = modifier
@@ -655,6 +720,23 @@ internal fun RunJourneyRoot(
         onSelectEnergy = { branch ->
             completedRunId?.let { reflectionCoordinator?.selectEnergy(it, branch) }
         },
+        selectedEffort = completedRuns?.firstOrNull { it.runId == completedRunId }?.postRunEffort,
+        onSelectEffort = { effort -> completedRunId?.let { saveEffort(it, effort) } },
+        effortEnabled = completedRunId != null,
+        effortSaving = effortSavingRunId == completedRunId,
+        effortError = effortError?.takeIf { it.first == completedRunId }?.second,
+        onEffortSheetOpenChange = { open ->
+            if (open) {
+                completedRunId?.let { runId ->
+                    effortSheetRunId = runId
+                    reflectionCoordinator?.setEffortSheetOpen(runId, true)
+                }
+            } else {
+                val heldRunId = effortSheetRunId ?: completedRunId
+                effortSheetRunId = null
+                heldRunId?.let { reflectionCoordinator?.setEffortSheetOpen(it, false) }
+            }
+        },
         energyEnabled = reflectionCoordinator != null,
         isTestData = (activeReflection as? RunReflectionState.Ready)?.isTestData == true,
         onViewHistory = { historyVisible = true },
@@ -662,6 +744,51 @@ internal fun RunJourneyRoot(
         actionsEnabled = !actionInFlight,
         modifier = modifier
     )
+}
+
+/** Keep speech outside the stateless screen; leaving, backgrounding or rotation closes its engine. */
+@Composable
+internal fun RunCompleteSpeechEffect(
+    completedRunId: String?,
+    eligibleRunId: String?,
+    spokenRunId: String?,
+    reflectionState: RunReflectionState?,
+    completionVisible: Boolean,
+    speakerFactory: (Context) -> ReflectionSpeaker,
+    onSpoken: (String) -> Unit
+) {
+    val context = LocalContext.current
+    var speaker by remember { mutableStateOf<ReflectionSpeaker?>(null) }
+
+    DisposableEffect(Unit) {
+        onDispose { speaker?.close() }
+    }
+    LaunchedEffect(completedRunId, eligibleRunId, spokenRunId, reflectionState, completionVisible) {
+        if (!completionVisible) {
+            speaker?.stop()
+            return@LaunchedEffect
+        }
+        val exactText = readyCompletionSpeechText(
+            completedRunId, eligibleRunId, spokenRunId, reflectionState
+        ) ?: return@LaunchedEffect
+        val activeSpeaker = speaker ?: speakerFactory(context).also { speaker = it }
+        activeSpeaker.speak(exactText)
+        onSpoken(requireNotNull(completedRunId))
+    }
+}
+
+/** Speak only a newly completed run's exact selected text, once, after it becomes READY. */
+internal fun readyCompletionSpeechText(
+    completedRunId: String?,
+    eligibleRunId: String?,
+    spokenRunId: String?,
+    reflectionState: RunReflectionState?
+): String? {
+    val ready = reflectionState as? RunReflectionState.Ready ?: return null
+    return ready.text.takeIf {
+        completedRunId != null && completedRunId == eligibleRunId &&
+            ready.runId == completedRunId && spokenRunId != completedRunId
+    }
 }
 
 private const val LOCAL_NETWORK_PERMISSION = "android.permission.ACCESS_LOCAL_NETWORK"

@@ -26,7 +26,8 @@ class RunEntityTest {
         metricSource: MetricSource? = null,
         telemetryCoverage: TelemetryCoverage? = null,
         displayDistanceUnit: DistanceUnit? = null,
-        transitionHistoryComplete: Boolean? = null
+        transitionHistoryComplete: Boolean? = null,
+        postRunEffort: PostRunEffort? = null
     ) = RunEntity(
         runId = runId,
         state = state,
@@ -38,7 +39,8 @@ class RunEntityTest {
         metricSource = metricSource,
         telemetryCoverage = telemetryCoverage,
         displayDistanceUnit = displayDistanceUnit,
-        transitionHistoryComplete = transitionHistoryComplete
+        transitionHistoryComplete = transitionHistoryComplete,
+        postRunEffort = postRunEffort
     )
 
     /**
@@ -160,6 +162,21 @@ class RunEntityTest {
     @Test
     fun `a run with no finish defaults to an unknown finish`() {
         assertNull(runWith().finishEpochMillis)
+    }
+
+    @Test
+    fun `effort is unknown by default and only completed runs may carry a choice`() {
+        assertNull(runWith().postRunEffort)
+        assertEquals(
+            PostRunEffort.HEAVY,
+            runWith(state = StoredRunState.COMPLETED, postRunEffort = PostRunEffort.HEAVY)
+                .postRunEffort
+        )
+        for (unfinishedState in listOf(StoredRunState.RUNNING, StoredRunState.PAUSED)) {
+            assertThrows(IllegalArgumentException::class.java) {
+                runWith(state = unfinishedState, postRunEffort = PostRunEffort.HEAVY)
+            }
+        }
     }
 
     /**

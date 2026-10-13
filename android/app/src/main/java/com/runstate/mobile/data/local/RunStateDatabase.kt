@@ -13,8 +13,9 @@ import androidx.room.RoomDatabase
  * Version 4 adds durable reflection attempts, selection and exact finalized text.
  * Version 5 stores optional pre-run energy without assigning a value to older runs.
  * Version 6 adds a distinct run tracking mode and durable GPS observations.
- * Version 7 adds explicit per-run music observation and its partial event stream. Each
- * exported schema under `android/app/schemas` stays unchanged as the record of what
+ * Version 7 adds explicit per-run music observation and its partial event stream.
+ * Version 8 stores optional post-run Effort without inferring answers for older runs.
+ * Each exported schema under `android/app/schemas` stays unchanged as the record of what
  * that version looked like. Every future version increment requires an explicitly
  * written migration; destructive migration is not configured here and must not be added
  * as a shortcut, because rebuilding the database would erase recorded runs and local
@@ -46,7 +47,7 @@ import androidx.room.RoomDatabase
         RunLocationPointEntity::class,
         RunMusicObservationEntity::class
     ],
-    version = 7,
+    version = 8,
     exportSchema = true
 )
 abstract class RunStateDatabase : RoomDatabase() {
@@ -94,6 +95,6 @@ internal fun buildRunStateDatabase(
     )
         .addMigrations(
             MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5,
-            MIGRATION_5_6, MIGRATION_6_7
+            MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8
         )
         .build()

@@ -5,7 +5,7 @@ metadata:
   type: project
 ---
 
-## Current Android checkpoint — October 12, 2026
+## Current Android checkpoint — October 13, 2026
 
 The first native Start visual pass now uses the local `start.html` prototype's pale map image,
 floating agent card, three Energy tiles and dark curved Start footer. The map is explicitly
@@ -71,6 +71,19 @@ Energy answer updates feedback without replacing the reply. Failed generation le
 saved and offers a reflection-only retry. Room version 4 introduced reflection storage;
 version 5 preserves it while adding pre-run Energy.
 
+On Run Complete, a newly finished run now also speaks the exact selected reflection once when
+it becomes ready. Reopening an older saved run stays quiet; leaving the screen or backgrounding
+stops speech. Optional post-run Effort is a separate, quieter `EFFORT +` sheet with Smooth,
+Working, Heavy and Empty Tank. It can be changed or cleared on Run Complete or in expanded Log
+History. Room version 8 stores the answer under the completed run UUID, with older runs left
+unknown. Effort neither selects nor changes the saved reflection. Opening the sheet holds the
+quiet no-Energy selection until the runner dismisses or answers it. The factual spoken save
+receipt and a deliberate voice contrast between receipt and reflection remain future work.
+The October 13 pass passed 245 debug and 245 release JVM tests, release and instrumented-test
+APK builds, and 75 focused emulator tests across Run Complete/History, Room persistence and
+migrations. These checks exercise speech dispatch with an injected speaker; actual phone voice
+quality remains unverified. The final navigation-hold adjustment compiled and passed both JVM suites.
+
 The local backend labels each successful response `FAKE` or `ANTHROPIC`; Android uses that
 field for its test-data disclosure. The debug emulator connects through `10.0.2.2`; the debug
 phone route is prepared for USB `adb reverse` to `127.0.0.1` but has not been tested on a
@@ -86,7 +99,7 @@ immutability, History display, and reopening after process restart. Screenshot:
 **Still unverified or unbuilt:** no Anthropic key was available for a paid live generation
 check, and no physical phone was present for USB/network or outdoor GPS testing. GPS capture
 and its foreground service have passed an emulator walkthrough but still need outdoor phone field
-validation; fixture mode remains available. External music-app observation on a phone, Effort, a real route map,
+validation; fixture mode remains available. External music-app observation on a phone, a real route map,
 and further Active visual refinement are future work. Android still sends music as `UNKNOWN`, so a
 live reply cannot truthfully describe a song. The first
 functional reflection slice is implemented, but the music-aware physical-phone demo gate is

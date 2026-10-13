@@ -24,10 +24,20 @@ import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -47,6 +57,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.runstate.mobile.data.local.ReflectionBranch
+import com.runstate.mobile.data.local.PostRunEffort
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.min
@@ -59,6 +70,9 @@ internal const val RUN_COMPLETE_REFLECTION_TAG = "runCompleteReflection"
 internal const val RUN_COMPLETE_REFLECTION_TEXT_TAG = "runCompleteReflectionText"
 internal const val RUN_COMPLETE_REFLECTION_RETRY_TAG = "runCompleteReflectionRetry"
 internal const val RUN_COMPLETE_ENERGY_TAG = "runCompleteEnergy"
+internal const val RUN_COMPLETE_EFFORT_TAG = "runCompleteEffort"
+internal const val RUN_COMPLETE_EFFORT_SHEET_TAG = "runCompleteEffortSheet"
+internal const val RUN_COMPLETE_EFFORT_CHOICE_TAG_PREFIX = "runCompleteEffortChoice:"
 internal const val RUN_COMPLETE_HISTORY_TAG = "runCompleteHistory"
 
 internal val CompletionInk = Color(0xFF4A5049)
@@ -108,11 +122,25 @@ internal fun RunCompleteScreen(
     energyEnabled: Boolean = false,
     isTestData: Boolean = true,
     onViewHistory: () -> Unit = {},
-    showHistory: Boolean = false
+    showHistory: Boolean = false,
+    selectedEffort: PostRunEffort? = null,
+    onSelectEffort: (PostRunEffort?) -> Unit = {},
+    effortEnabled: Boolean = false,
+    effortSaving: Boolean = false,
+    effortError: String? = null,
+    onEffortSheetOpenChange: (Boolean) -> Unit = {}
 ) {
     val distance = splitMetric(metrics?.distance ?: "—")
     val pace = splitMetric(metrics?.averagePace ?: "—")
     val sourceLabel = metrics?.sourceLabel ?: "Metrics unavailable"
+    var effortSheetOpen by rememberSaveable { mutableStateOf(false) }
+    val currentSheetOpenChange by rememberUpdatedState(onEffortSheetOpenChange)
+
+    // Restored sheets continue holding the quiet no-Energy window after rotation.
+    LaunchedEffect(effortSheetOpen) { currentSheetOpenChange(effortSheetOpen) }
+    DisposableEffect(Unit) {
+        onDispose { currentSheetOpenChange(false) }
+    }
 
     Box(
         modifier = modifier
@@ -146,6 +174,15 @@ internal fun RunCompleteScreen(
                     onSelectEnergy = onSelectEnergy,
                     enabled = actionsEnabled,
                     reflectionFinal = reflection is RunCompleteReflectionDisplay.Ready
+                )
+            }
+            if (effortEnabled) {
+                EffortControl(
+                    selectedEffort = selectedEffort,
+                    saving = effortSaving,
+                    error = effortError,
+                    enabled = actionsEnabled,
+                    onOpen = { effortSheetOpen = true }
                 )
             }
             if (reflection != null) {
@@ -196,6 +233,115 @@ internal fun RunCompleteScreen(
                 fontWeight = FontWeight.SemiBold,
                 letterSpacing = 0.2.sp
             )
+        }
+
+        if (effortSheetOpen && effortEnabled) {
+            EffortChoiceSheet(
+                selectedEffort = selectedEffort,
+                enabled = actionsEnabled && !effortSaving,
+                onDismiss = { effortSheetOpen = false },
+                onSelect = { effort ->
+                    effortSheetOpen = false
+                    onSelectEffort(effort)
+                }
+            )
+        }
+    }
+}
+
+internal fun PostRunEffort.displayLabel(): String = when (this) {
+    PostRunEffort.SMOOTH -> "Smooth"
+    PostRunEffort.WORKING -> "Working"
+    PostRunEffort.HEAVY -> "Heavy"
+    PostRunEffort.EMPTY_TANK -> "Empty Tank"
+}
+
+/** Effort stays smaller than Energy and never implies that an answer is required. */
+@Composable
+private fun EffortControl(
+    selectedEffort: PostRunEffort?,
+    saving: Boolean,
+    error: String?,
+    enabled: Boolean,
+    onOpen: () -> Unit
+) {
+    Column(modifier = Modifier.fillMaxWidth().padding(top = 2.dp)) {
+        TextButton(
+            onClick = onOpen,
+            enabled = enabled && !saving,
+            colors = ButtonDefaults.textButtonColors(contentColor = CompletionMutedInk),
+            modifier = Modifier.heightIn(min = 48.dp).testTag(RUN_COMPLETE_EFFORT_TAG)
+        ) {
+            Text(
+                text = selectedEffort?.let { "EFFORT · ${it.displayLabel().uppercase()}" } ?: "EFFORT +",
+                fontSize = 11.sp,
+                fontWeight = FontWeight.SemiBold,
+                letterSpacing = 1.2.sp
+            )
+        }
+        if (saving) {
+            Text("Saving Effort…", color = CompletionMutedInk, fontSize = 12.sp)
+        }
+        if (error != null) {
+            Text(error, color = CompletionStrongInk, fontSize = 12.sp, lineHeight = 18.sp)
+        }
+    }
+}
+
+/** Shared by completion and expanded History; selecting only reports a value to the owner. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+internal fun EffortChoiceSheet(
+    selectedEffort: PostRunEffort?,
+    enabled: Boolean,
+    onDismiss: () -> Unit,
+    onSelect: (PostRunEffort?) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        containerColor = CompletionSurfaceTop,
+        modifier = modifier.testTag(RUN_COMPLETE_EFFORT_SHEET_TAG)
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(start = 24.dp, end = 24.dp, bottom = 28.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            Text(
+                text = "How did that run land?",
+                color = CompletionStrongInk,
+                fontSize = 22.sp,
+                fontWeight = FontWeight.Medium,
+                modifier = Modifier.padding(bottom = 10.dp)
+            )
+            PostRunEffort.entries.forEach { effort ->
+                OutlinedButton(
+                    onClick = { onSelect(effort) },
+                    enabled = enabled,
+                    shape = RoundedCornerShape(14.dp),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = CompletionStrongInk),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 48.dp)
+                        .testTag(RUN_COMPLETE_EFFORT_CHOICE_TAG_PREFIX + effort.name)
+                ) {
+                    Text(
+                        text = effort.displayLabel(),
+                        fontWeight = if (effort == selectedEffort) FontWeight.Bold else FontWeight.Normal
+                    )
+                }
+            }
+            if (selectedEffort != null) {
+                TextButton(
+                    onClick = { onSelect(null) },
+                    enabled = enabled,
+                    colors = ButtonDefaults.textButtonColors(contentColor = CompletionMutedInk),
+                    modifier = Modifier.align(Alignment.CenterHorizontally).heightIn(min = 48.dp)
+                ) {
+                    Text("Clear Effort")
+                }
+            }
         }
     }
 }

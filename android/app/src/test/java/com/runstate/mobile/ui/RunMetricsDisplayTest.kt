@@ -4,6 +4,7 @@ import com.runstate.mobile.data.local.DistanceUnit
 import com.runstate.mobile.data.local.MetricSource
 import com.runstate.mobile.data.local.MusicObservationKind
 import com.runstate.mobile.data.local.MusicPlaybackState
+import com.runstate.mobile.data.local.PostRunEffort
 import com.runstate.mobile.data.local.PreRunEnergy
 import com.runstate.mobile.data.local.ReflectionBranch
 import com.runstate.mobile.data.local.ReflectionStatus
@@ -69,7 +70,7 @@ class RunMetricsDisplayTest {
             distanceMeters = 1_609.344,
             coverage = TelemetryCoverage.COMPLETE,
             historyComplete = true
-        ).copy(preRunEnergy = PreRunEnergy.LOW)
+        ).copy(preRunEnergy = PreRunEnergy.LOW, postRunEffort = PostRunEffort.HEAVY)
         val transitions = listOf(
             RunTransitionEntity(historyRunId, 1, RunTransitionType.PAUSE, historyStart + 300_000L)
         )
@@ -95,6 +96,7 @@ class RunMetricsDisplayTest {
         assertEquals("5:00 /mi", item.metrics?.averagePace)
         assertEquals("Feeling Good", item.energyLabel)
         assertEquals("Low", item.preRunEnergyLabel)
+        assertEquals(PostRunEffort.HEAVY, item.effort)
         assertEquals("READY", item.reflectionStatus)
         assertEquals(exactText, item.reflectionText)
         assertEquals(true, item.isTestData)
@@ -112,6 +114,7 @@ class RunMetricsDisplayTest {
         assertNull(item.reflectionStatus)
         assertNull(item.energyLabel)
         assertNull(item.preRunEnergyLabel)
+        assertNull(item.effort)
         assertEquals(false, item.isTestData)
     }
 

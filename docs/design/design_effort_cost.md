@@ -18,9 +18,9 @@ correction noted under Key changes).
 
 ## Current mobile Run Complete direction — prototype-validated August 22, 2026
 
-**STATUS: CURRENT UI DIRECTION, VALIDATED IN THE INTERACTIVE PROTOTYPE, NOT BUILT.** This section
-governs the future mobile Run Complete screen. The console record below remains accurate history,
-but its sequential prompts are not the mobile interaction to reproduce.
+**STATUS: MOBILE INPUT AND STORAGE IMPLEMENTED OCTOBER 13, 2026.** This section describes the
+mobile Run Complete direction; visual and physical-phone review remain. The console record below
+remains accurate history, but its sequential prompts are not the mobile interaction to reproduce.
 
 The goal is to preserve two useful subjective signals without making the runner feel interviewed.
 Energy and effort remain separate because they answer different things:

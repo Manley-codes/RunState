@@ -32,8 +32,11 @@ import androidx.lifecycle.LifecycleRegistry
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.runstate.mobile.MainActivity
+import com.runstate.mobile.RunCompleteSpeechEffect
 import com.runstate.mobile.data.local.ReflectionBranch
+import com.runstate.mobile.data.local.PostRunEffort
 import com.runstate.mobile.data.local.PreRunEnergy
+import com.runstate.mobile.reflection.RunReflectionState
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -577,13 +580,77 @@ class RunStateScreenTest {
     }
 
     @Test
+    fun savedEffortCanBeAddedAndClearedWithoutChangingTheStoredReflection() {
+        val exact = "Exact saved reflection."
+        val choices = mutableListOf<PostRunEffort?>()
+        val sheetStates = mutableListOf<Boolean>()
+        var energySelections = 0
+        composeTestRule.setContent {
+            var selected by remember { mutableStateOf<PostRunEffort?>(null) }
+            RunCompleteScreen(
+                metrics = fixtureMetrics(),
+                reflection = RunCompleteReflectionDisplay.Ready(exact),
+                onRetryReflection = {},
+                onStartAnother = {},
+                actionsEnabled = true,
+                selectedEnergy = null,
+                onSelectEnergy = { energySelections++ },
+                energyEnabled = true,
+                selectedEffort = selected,
+                onSelectEffort = { choice ->
+                    choices += choice
+                    selected = choice
+                },
+                effortEnabled = true,
+                onEffortSheetOpenChange = { sheetStates += it }
+            )
+        }
+
+        composeTestRule.onNodeWithTag(RUN_COMPLETE_EFFORT_TAG).performScrollTo()
+            .assertTextEquals("EFFORT +").performClick()
+        composeTestRule.onNodeWithTag(RUN_COMPLETE_EFFORT_CHOICE_TAG_PREFIX + "HEAVY")
+            .performClick()
+        composeTestRule.onNodeWithTag(RUN_COMPLETE_EFFORT_TAG)
+            .assertTextEquals("EFFORT · HEAVY").performClick()
+        composeTestRule.onNodeWithText("Clear Effort").performClick()
+
+        composeTestRule.onNodeWithTag(RUN_COMPLETE_EFFORT_TAG).assertTextEquals("EFFORT +")
+        composeTestRule.onNodeWithTag(RUN_COMPLETE_REFLECTION_TEXT_TAG)
+            .performScrollTo().assertTextEquals(exact)
+        assertEquals(listOf(PostRunEffort.HEAVY, null), choices)
+        assertEquals(0, energySelections)
+        assertEquals(false, sheetStates.last())
+        assertTrue(sheetStates.count { it } >= 2)
+    }
+
+    @Test
+    fun savedEffortIsUnavailableWhileItsSaveIsPending() {
+        composeTestRule.setContent {
+            RunCompleteScreen(
+                metrics = fixtureMetrics(),
+                reflection = RunCompleteReflectionDisplay.Preparing,
+                onRetryReflection = {},
+                onStartAnother = {},
+                actionsEnabled = true,
+                selectedEffort = PostRunEffort.SMOOTH,
+                effortEnabled = true,
+                effortSaving = true
+            )
+        }
+
+        composeTestRule.onNodeWithTag(RUN_COMPLETE_EFFORT_TAG).performScrollTo()
+            .assertTextEquals("EFFORT · SMOOTH").assertIsNotEnabled()
+        composeTestRule.onNodeWithText("Saving Effort…").assertExists()
+    }
+
+    @Test
     fun historyOpensExactStoredTextWithoutRetryingGeneration() {
         val runId = "0f6a2c1e-9d43-4b7a-9c21-7b5e8a4d1f30"
         val exact = "  First line.\nSecond line with a tab\tand emoji 🌤  "
         var retries = 0
         val spoken = mutableListOf<String>()
         var stops = 0
-        val speaker = object : HistoryReflectionSpeaker {
+        val speaker = object : ReflectionSpeaker {
             override fun speak(text: String) { spoken += text }
             override fun stop() { stops++ }
             override fun close() = Unit
@@ -615,6 +682,113 @@ class RunStateScreenTest {
         assertTrue(stops > 0)
         assertEquals(listOf(exact), spoken)
         assertEquals(0, retries)
+    }
+
+    @Test
+    fun expandedHistoryCanEditEffortWithoutSpeakingTheReflectionAgain() {
+        val runId = "5f6a2c1e-9d43-4b7a-9c21-7b5e8a4d1f30"
+        val exact = "Exact saved reflection."
+        val spoken = mutableListOf<String>()
+        val selected = mutableListOf<PostRunEffort?>()
+        val speaker = object : ReflectionSpeaker {
+            override fun speak(text: String) { spoken += text }
+            override fun stop() = Unit
+            override fun close() = Unit
+        }
+        composeTestRule.setContent {
+            var item by remember {
+                mutableStateOf(
+                    RunHistoryItem(
+                        runId = runId,
+                        dateLabel = "Oct 12, 2026",
+                        metrics = fixtureMetrics(),
+                        reflectionStatus = "READY",
+                        reflectionText = exact,
+                        energyLabel = null,
+                        isTestData = false
+                    )
+                )
+            }
+            RunHistoryScreen(
+                items = listOf(item),
+                onBack = {},
+                onRetryReflection = {},
+                onSelectEffort = { selectedRunId, effort ->
+                    assertEquals(runId, selectedRunId)
+                    selected += effort
+                    item = item.copy(effort = effort)
+                },
+                speakerFactory = { speaker }
+            )
+        }
+
+        composeTestRule.onNodeWithTag(RUN_HISTORY_ROW_TAG_PREFIX + runId).performClick()
+        composeTestRule.onNodeWithTag(RUN_HISTORY_EFFORT_TAG_PREFIX + runId)
+            .assertTextEquals("EFFORT +").performClick()
+        composeTestRule.onNodeWithTag(RUN_COMPLETE_EFFORT_CHOICE_TAG_PREFIX + "WORKING")
+            .performClick()
+        composeTestRule.onNodeWithTag(RUN_HISTORY_EFFORT_TAG_PREFIX + runId)
+            .assertTextEquals("EFFORT · WORKING").performClick()
+        composeTestRule.onNodeWithText("Clear Effort").performClick()
+
+        composeTestRule.onNodeWithTag(RUN_HISTORY_EFFORT_TAG_PREFIX + runId)
+            .assertTextEquals("EFFORT +")
+        composeTestRule.onNodeWithTag(RUN_HISTORY_REFLECTION_TAG_PREFIX + runId)
+            .assertTextEquals(exact)
+        assertEquals(listOf(PostRunEffort.WORKING, null), selected)
+        assertEquals(listOf(exact), spoken)
+    }
+
+    @Test
+    fun completionSpeaksOnlyNewReadyTextAndStopsWhenItIsHidden() {
+        val runId = "0f6a2c1e-9d43-4b7a-9c21-7b5e8a4d1f30"
+        val exact = "  Saved words, exactly.\nSecond line.  "
+        val spoken = mutableListOf<String>()
+        var stops = 0
+        var closes = 0
+        val speaker = object : ReflectionSpeaker {
+            override fun speak(text: String) { spoken += text }
+            override fun stop() { stops++ }
+            override fun close() { closes++ }
+        }
+        var state by mutableStateOf<RunReflectionState>(RunReflectionState.Preparing(runId))
+        var eligibleRunId by mutableStateOf<String?>(null)
+        var spokenRunId by mutableStateOf<String?>(null)
+        var visible by mutableStateOf(true)
+        var includeEffect by mutableStateOf(true)
+
+        composeTestRule.setContent {
+            if (includeEffect) {
+                RunCompleteSpeechEffect(
+                    completedRunId = runId,
+                    eligibleRunId = eligibleRunId,
+                    spokenRunId = spokenRunId,
+                    reflectionState = state,
+                    completionVisible = visible,
+                    speakerFactory = { speaker },
+                    onSpoken = { spokenRunId = it }
+                )
+            }
+        }
+        composeTestRule.runOnIdle { state = RunReflectionState.Ready(runId, exact) }
+        composeTestRule.waitForIdle()
+        assertTrue(spoken.isEmpty()) // An old READY run does not announce itself on reopen.
+
+        composeTestRule.runOnIdle { eligibleRunId = runId }
+        composeTestRule.waitForIdle()
+        assertEquals(listOf(exact), spoken)
+        assertEquals(runId, spokenRunId)
+
+        composeTestRule.runOnIdle { visible = false }
+        composeTestRule.waitForIdle()
+        assertTrue(stops > 0)
+        composeTestRule.runOnIdle { visible = true }
+        composeTestRule.waitForIdle()
+        assertEquals(listOf(exact), spoken)
+
+        composeTestRule.runOnIdle { includeEffect = false }
+        composeTestRule.waitForIdle()
+        assertEquals(1, closes)
     }
 
     @Test

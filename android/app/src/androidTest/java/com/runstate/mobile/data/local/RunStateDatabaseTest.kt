@@ -112,6 +112,47 @@ class RunStateDatabaseTest {
         assertEquals(chosenRun, runBlocking { database.runDao().findById(chosenRun.runId) })
     }
 
+    @Test
+    fun effortIsEditableOnlyAfterCompletionAndDoesNotChangeTheSelectedReflection() = runBlocking {
+        val runs = database.runDao()
+        val reflections = database.reflectionDao()
+        runs.insert(runningRun)
+
+        assertEquals(false, runs.setPostRunEffort(runningRun.runId, PostRunEffort.HEAVY))
+        assertNull(runs.findById(runningRun.runId)?.postRunEffort)
+        runs.pauseRun(runningRun.runId, PAUSED_AT)
+        assertEquals(false, runs.setPostRunEffort(runningRun.runId, PostRunEffort.HEAVY))
+        assertNull(runs.findById(runningRun.runId)?.postRunEffort)
+
+        runs.completeRun(runningRun.runId, FINISHED_AT, FINAL_METRICS)
+        val requestId = "b38541c9-ad43-4c88-95b5-7724fbf3e155"
+        reflections.ensurePending(RunReflectionEntity(
+            runId = runningRun.runId,
+            requestId = requestId,
+            evidenceJson = "{}",
+            selectionDeadlineEpochMillis = FINISHED_AT + 6_000L
+        ))
+        reflections.recordEnergy(runningRun.runId, ReflectionBranch.SPENT, FINISHED_AT + 1_000L)
+        reflections.saveCandidates(runningRun.runId, requestId, "{\"spent\":\"exact\"}", true)
+        assertTrue(reflections.finalizeReady(
+            runningRun.runId, requestId, ReflectionBranch.SPENT,
+            "Exact saved reflection.", FINISHED_AT + 2_000L
+        ))
+        val selectedReflection = reflections.findByRunId(runningRun.runId)
+
+        assertTrue(runs.setPostRunEffort(runningRun.runId, PostRunEffort.HEAVY))
+        assertTrue(runs.setPostRunEffort(runningRun.runId, PostRunEffort.SMOOTH))
+        database.close()
+        database = openDatabase()
+        assertEquals(PostRunEffort.SMOOTH, database.runDao().findById(runningRun.runId)?.postRunEffort)
+        assertEquals(selectedReflection, database.reflectionDao().findByRunId(runningRun.runId))
+
+        assertTrue(database.runDao().setPostRunEffort(runningRun.runId, null))
+        assertNull(database.runDao().findById(runningRun.runId)?.postRunEffort)
+        assertEquals(selectedReflection, database.reflectionDao().findByRunId(runningRun.runId))
+        assertEquals(false, database.runDao().setPostRunEffort("55f2b7b7-a3b2-47b4-bb16-ff80e8739c9b", PostRunEffort.WORKING))
+    }
+
     /**
      * Proves a repeated UUID is refused instead of quietly overwriting the stored run.
      */
