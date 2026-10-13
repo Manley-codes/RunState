@@ -7,6 +7,57 @@ metadata:
 
 ## Current Android checkpoint — October 13, 2026
 
+The first functional live-reflection gate is now met: the Moto received newly generated Anthropic
+text, selected and stored it, preserved it through late Energy feedback, and reopened the exact
+text in History after a cold restart with the backend stopped. A small five-generation live check
+exposed unit/time/provenance errors; deterministic provider facts and prompt v1.1 corrected the
+controlled cases. That first gate passed 30 backend tests; the optional music extension below now
+passes 35. These are functional checks, not broad reflection-quality proof. Full captured Spotify
+history remains local; a separate approved per-run choice now permits one eligible title/artist.
+The phone also verifies saves, audible sample receipts/reflections, feedback/History, completion
+layout, GPS-choice retention and local outdoor GPS/Spotify observations. Start another run retains
+explicit GPS while clearing Energy/music; fresh launch defaults to Sample and explicit GPS-off
+remains. Debug, release and instrumented-test APK builds passed. Display-off GPS continuity,
+distance accuracy, music duck/resume and a permitted music snippet remain unverified. Temporary
+diagnostics/review files are cleaned up, no credentials were written into the project, and fake/live
+backends are stopped. The main app remains on the latest expanded History record. No further walk
+is requested this turn.
+
+**Optional music sharing — implemented and phone-checked:** Manley separately approved an
+OFF-by-default per-run choice to share one observed Spotify title/artist with the backend and
+Anthropic. Both local observation and sharing must be selected. Room v10 stores the distinct
+sharing flag; its 9→10 migration defaults every older run to false without changing existing data.
+The new run chooses the newest eligible same-run PLAYING Spotify snapshot within run bounds,
+requiring both title and artist. Its frozen context has `MEDIA_SESSION_PARTIAL` provenance and no
+artist description. Read failure or missing consent/evidence keeps music UNKNOWN. Retry reuses
+that same evidence; History never reconstructs or sends it again. Turning observation off, losing
+Android access or starting another run clears the sharing draft. The sharing control is hidden
+when the reflection bridge is unavailable.
+An actual Moto GPS run had 4:35 elapsed, unavailable distance and 135 local media observations.
+Its completion display showed 4:31 active reconstructed from lifecycle transitions, not proof of
+uninterrupted active tracking. A read-only on-phone audit confirmed frozen MUSIC/MEDIA_SESSION_PARTIAL, title and
+artist present, artist description absent, exactly five music fields, and a READY non-test reply.
+The generated reply omitted the song; context delivery does not guarantee a song reference or
+prove music affected the runner. No audio, lyrics, coordinates or listening history were shared;
+the previously approved saved-run metric evidence is unchanged. Prompt v1.2 preserves the partial
+metadata boundary. Final verification passed 35 backend tests, 280 debug and 280 release JVM tests,
+debug/release/test APK builds and 20 permanent new phone migration/database/UI checks. One
+temporary redacted diagnostic check also passed and was removed. New History context labels use
+the stored frozen evidence and avoid claiming successful transmission or song use in the wording;
+their unit checks passed. Final-APK cold-reopen on the Moto with the backend stopped retained the
+exact live reply, partial-context label, metrics, Moderate pre-run Energy and 135-observation count.
+The full reply/label fits the phone's scrollable History card. Actual audible delivery,
+music duck/resume and snippets were not verified by this music-sharing check.
+
+The final timing safeguard now sends unknown active duration for GPS evidence with PARTIAL or
+UNAVAILABLE coverage even when pause/resume history is complete, matching History/recovery's
+conservative boundary. Fixture and COMPLETE GPS still retain known active duration when their
+timeline permits it. The earlier live music request's frozen evidence and exact saved reply
+predate this correction and remain unchanged; no regeneration or additional paid call was made.
+The two timing regressions passed in the final 280-per-variant suites with zero failures/errors;
+all APK builds passed and the corrected debug APK was installed on the Moto. The only new file
+for this sharing pass is Room's required version-10 schema export; no new source file was added.
+
 The first native Start visual pass now uses the local `start.html` prototype's pale map image,
 floating agent card, three Energy tiles and dark curved Start footer. The map is explicitly
 illustrative; the place-specific RunStyle card and shoe mileage are not presented as real data.
@@ -19,7 +70,7 @@ reflection evidence and appears as "Before run" in History; post-run Energy rema
 "After run" answer. Room version 5 adds this nullable field through an explicit migration.
 The visual review image is `android/artifacts/run-start-energy-emulator.png`.
 
-Start now offers an explicit, reversible **Use GPS** choice. Fixture remains the default;
+Start now offers an explicit, reversible GPS choice through **Turn GPS on/off**. Sample remains the fresh-launch default;
 precise-location permission and enabled phone GPS are required before a GPS countdown can
 become an official run. One tracking mode is frozen with the run UUID. The map artwork remains
 an illustration even when GPS is recording; it does not draw a real route. A same-process
@@ -48,7 +99,8 @@ Room version 7 saves timestamped source-app, optional title/artist, playback-sta
 snapshots under the run UUID. Pausing detaches observation; Room refuses late callbacks and
 non-opted-in writes. Missing events mean unknown coverage, not no music; these are observations,
 not proved complete songs or accurate song start/end times. No audio, lyrics, playback control
-or provider credentials are stored, and observed music is not sent to the reflection backend.
+or provider credentials are stored. This local-observation pass did not share music; the separate
+Room v10 opt-in above now permits one eligible title/artist, with all other observations kept local.
 Expanded Log History shows the last reported media title/artist/app and event count with an
 explicit partial-evidence label, or says music is unknown when an opted-in run has no events.
 Debug and release builds passed with 241 JVM tests; 15 focused Room/migration emulator tests,
@@ -77,17 +129,62 @@ stops speech. Optional post-run Effort is a separate, quieter `EFFORT +` sheet w
 Working, Heavy and Empty Tank. It can be changed or cleared on Run Complete or in expanded Log
 History. Room version 8 stores the answer under the completed run UUID, with older runs left
 unknown. Effort neither selects nor changes the saved reflection. Opening the sheet holds the
-quiet no-Energy selection until the runner dismisses or answers it. The factual spoken save
-receipt and a deliberate voice contrast between receipt and reflection remain future work.
+quiet no-Energy selection until the runner dismisses or answers it.
 The October 13 pass passed 245 debug and 245 release JVM tests, release and instrumented-test
 APK builds, and 75 focused emulator tests across Run Complete/History, Room persistence and
 migrations. These checks exercise speech dispatch with an injected speaker; actual phone voice
 quality remains unverified. The final navigation-hold adjustment compiled and passed both JVM suites.
 
+The next October 13 delivery pass adds a deterministic spoken save receipt from the completed
+Room row. It names fixture or partial GPS distance honestly and uses saved elapsed time. A new
+reflection can prepare its candidates and accept Energy while the receipt plays, but its reveal
+waits for the receipt to finish, fail or be interrupted. The six-second no-Energy window then
+starts once. Room v9 preserves whether that window has started; older selected reflections remain
+unchanged. Reopening/rotation consumes interrupted receipts without repeating them, and explicit
+retry can repair a failed window write using cached candidates without another provider call.
+Android speech requests temporary audio focus, releases it on completion/error/stop, and has a
+bounded stalled-engine timeout. History speech now stops on backgrounding. The factual receipt
+uses normal system cadence; the reflection uses a slightly slower cadence. A distinctive custom
+voice and actual phone audio quality remain later.
+
+Expanded History also supports adding/changing post-run Energy on records that already own a
+reflection. It preserves the exact selected text and does not replay speech. This local feedback
+save also works in release builds. GPS History rows load a local recorded-path preview only when
+opened; it draws accepted anchors/segments and preserves gaps rather than connecting across them.
+The preview is explicitly partial, has no street map, and never upgrades the GPS coverage claim.
+Active now distinguishes waiting for usable GPS movement from measured GPS recording.
+Verification passed 264 debug and 264 release JVM tests, release/debug builds, 35 focused
+Room/migration/screen emulator cases, then nine screen checks after the final audio changes.
+An actual emulator walkthrough completed a fixture run, observed receipt-to-no-selection
+delivery through Android TTS, saved Effort, changed late Energy in History, and reopened those
+same values and exact text after process restart. A clean simulated GPS run recorded 0.04 mi
+across two measured sections separated by a pause. Its History preview visibly preserves the
+gap and keeps pace/active history time unknown for partial GPS. The updated review image is
+`android/artifacts/run-history-reflection-emulator.png`. This is simulated GPS and fake-backend
+verification; it does not establish outdoor accuracy, real Anthropic quality or phone audio quality.
+
 The local backend labels each successful response `FAKE` or `ANTHROPIC`; Android uses that
 field for its test-data disclosure. The debug emulator connects through `10.0.2.2`; the debug
-phone route is prepared for USB `adb reverse` to `127.0.0.1` but has not been tested on a
-physical phone. Release still makes no local backend request. The backend suite passed 27
+phone route uses USB `adb reverse` to `127.0.0.1`. An October 13 physical-phone check installed
+the debug app on Manley's Moto g play (2026), Android 16/API 36, and received fake-backend
+reflections through that route. Manley heard the factual save receipt and an Energy-selected
+reflection. A separate no-input run reached the no-selection reply automatically. Three clearly
+fixture-backed test runs survived an app update and cold restart; the latest run retained Working
+Effort, Powered Up late Energy, and its original exact no-selection text in expanded History.
+The actual device exposed decoration overlap and small metric-label clipping. Completion now
+positions decoration using measured fact bounds and keeps compact labels on one line. The final
+`RunStateScreenTest#savedPhoneWidthKeepsDecorationClearAndMetricLabelsOnOneLine` regression passed
+on the Moto with both default text and 1.3 font scale with a longer distance; debug and release
+APK builds passed. This focused correction changed only the existing
+`android/app/src/main/java/com/runstate/mobile/ui/RunCompleteScreen.kt` and
+`android/app/src/androidTest/java/com/runstate/mobile/ui/RunStateScreenTest.kt`; it added no source
+files and was not committed. Precise location while in use and active-run notifications were
+granted through Android's normal prompts. Spotify is installed, signed in and playable. Manley
+explicitly approved Android's broad notification-access grant after its scope was explained;
+RunState's access and per-run Observe music choice are enabled. This approves local observation
+only, not sending captured music to a provider. The first outdoor GPS/Spotify check is recorded
+below. Release
+still makes no local backend request. The backend suite passed 27
 tests; Android debug and release builds passed, with 241 debug JVM tests at this checkpoint. The original fixture checkpoint
 passed 29 focused database/migration and 35 focused Compose emulator tests. The GPS pass
 passed 11 focused Room/coordinator tests and its Start-screen opt-in test. A broader connected
@@ -96,16 +193,92 @@ walkthrough verified both the on-time Spent reply and the no-selection reply, la
 immutability, History display, and reopening after process restart. Screenshot:
 `android/artifacts/run-history-reflection-emulator.png`.
 
-**Still unverified or unbuilt:** no Anthropic key was available for a paid live generation
-check, and no physical phone was present for USB/network or outdoor GPS testing. GPS capture
-and its foreground service have passed an emulator walkthrough but still need outdoor phone field
-validation; fixture mode remains available. External music-app observation on a phone, a real route map,
-and further Active visual refinement are future work. Android still sends music as `UNKNOWN`, so a
-live reply cannot truthfully describe a song. The first
-functional reflection slice is implemented, but the music-aware physical-phone demo gate is
-not yet met. No work from this checkpoint was staged, committed or pushed by Codex.
+The first outdoor Moto run saved 0.18 mi (295.58 m) as partial GPS, with 5:37 elapsed and 4:47
+active time. An on-device redacted aggregate audit found 282 raw fixes: 75 accepted (two anchors
+and 73 measured segments), with 207 remaining fixes ignored within their reported uncertainty.
+The accepted segment sum and final cumulative value agree. Maximum accepted reported accuracy
+was 3.7 m; that platform estimate does not establish measured-distance accuracy. A 43.620-second
+pause and final 6.674-second pause account for the time difference. No accepted point fell outside
+Running intervals, no measured segment bridged a pause, and resume began a fresh anchor. The
+maximum fix gap without a lifecycle transition was 1.5 seconds.
+The same run retained 220 local Spotify observations and four distinct reported titles, with no
+observation outside its opted-in Running intervals or during a pause. These are partial callbacks,
+not proof of four complete songs. Captured music was never sent to the reflection backend.
+Saving while USB was disconnected preserved the run and honestly failed reflection delivery;
+reconnecting and retrying produced the stored FAKE no-selection response. The completed count
+remained four (three fixture checks and this outdoor run), without a retry duplicate.
+Manley heard the factual GPS receipt but could not confirm music ducking/resume or whether the
+original outdoor screen was locked. A separate controlled 108-second display-off check observed
+the foreground service alive and reopening retained the same run, but no GPS fixes arrived within
+that interval. Later fixes produced no measured distance and saved unavailable telemetry. This
+does not verify GPS capture with the display off.
 
-## Current priority — October 7, 2026
+The returned three-minute follow-up produced two separate completed records: a 23.817-second GPS
+run measuring 25.55 m (10 fixes, four accepted, one anchor/three segments, paused at 15.164 seconds),
+then a 186.989-second fixture run with 182.194 seconds active and no GPS points. The short GPS
+record's maximum fix gap without a pause was 1.923 seconds. It cannot establish three-minute
+locked-screen tracking. The latest sample reflection became READY/FAKE/no-selection after USB
+retry without adding another run; that audit counted seven completed records. Manley later
+confirmed ending an attempt early and starting a new run. The previous Start another run callback
+cleared the GPS draft, explaining why the new cycle used fixture mode. Inspection found no path
+that downgrades an already stored GPS run.
+Start now names the selected mode `GPS run` or `Sample run` and its action `Turn GPS on/off`.
+Only the existing `StartRunScreen.kt` changed for this clarification; debug app/test APK builds and
+the existing `startMakesGpsAnExplicitReversibleChoice` phone regression passed.
+
+A later explicitly started GPS attempt saved 157.88 m of partial distance over 702.495 seconds.
+Its on-device audit found 401 fixes, 18 accepted (five anchors/13 segments), 355 ignored within
+accuracy, 25 inaccurate rejections and three implausible-jump rejections. Segment sum and final
+cumulative distance agree, with no pause bridge or accepted distance outside Running. Its maximum
+fix gap was 149 seconds, so this does not establish display-off continuity. Two separate fixture
+attempts of 17.955 and 127.221 seconds had no GPS points. The last aggregate audit before the final
+manual proof counted ten completed records.
+The focused fix removes only the GPS-choice reset from `MainActivity.kt`'s Start another run
+callback. Per-run Energy and music still reset, fresh launch defaults to Sample, and permission
+guards/explicit GPS-off remain. The updated APK was installed without clearing data. On the Moto,
+fresh Ready showed Sample; selecting GPS and Moderate Energy led through Start, GPS waiting with
+the foreground service, Pause, hold Stop and Saved GPS-unavailable metrics (41 seconds elapsed,
+13 seconds active), followed by automatic READY/FAKE/no-selection. Start another run then retained
+GPS Ready/Turn GPS off, with Energy cleared and Observe music off; the completed GPS service had
+stopped. This successful save is an additional indoor proof after the ten-record audit; the
+database count was not audited again. Debug, release and instrumented-test APK builds passed.
+The temporary redacted audit method is entirely removed; no new source files were added and no
+further walk is requested this turn.
+
+The first paid controlled request returned all four candidates but misread 5000.25 meters as five
+miles and the local time as morning. `AnthropicReflectionProvider` now adds provider-only
+`reflection_facts`: deterministic distance text with its sample/partial-GPS qualifier, exact
+duration seconds, and ISO local dates/offsets from the recorded timezone. Raw metrics and the
+Android/HTTP contract are unchanged. Prompt v1.1 requires those facts or omission. Backend mocks
+cover both distance units, unknown/zero/tiny values, rounding, exact seconds and local daylight-saving
+transitions. After the first correction, the controlled fixture case correctly described 3.11
+sample miles and afternoon. A partial GPS case initially omitted the qualifier; embedding
+provenance in the canonical distance phrase corrected all four branches to 0.18 miles recorded by
+partial GPS and the supplied 11:25–11:30 p.m. local interval, with unknown pre-run Energy/music and
+no confident pace claim. The complete check used five live generations: four controlled calls,
+including the initial failure, and one phone request. Credentials were supplied privately to the
+backend runtime without key content, copies or persistent environment configuration in the project.
+
+The actual Moto live run had Low pre-run Energy, 1:54 elapsed/1:15 active, and unavailable GPS
+distance because it had no usable points. Selecting Feeling Good produced ANTHROPIC text without
+a fake-data label: "You started low on energy and still got out there. Finishing feeling good
+after that says something about your resilience." Late Powered Up feedback preserved that selected
+text. Expanded History showed Before Low/After Powered Up and the same reply. Force-stopping and
+cold-reopening with the backend stopped retained the exact text and feedback. The existing native
+TTS path is wired to live replies; Manley did not confirm hearing this new live check.
+The first newly generated Android text plus durable-reopen milestone is met. This does not
+establish broad quality, music-aware generation or full physical-run reliability.
+
+**Still unverified or unbuilt:** GPS distance accuracy, locked-screen point continuity,
+music-access revocation, music ducking/resume and a permitted reflection music snippet remain.
+Fixture mode is available; a real route map and further Active refinement are future work.
+Without both music flags Android still sends UNKNOWN; explicit sharing permits only one partial
+Spotify title/artist. Its use in actual reply wording and broader music-aware quality remain open.
+Temporary diagnostics and review files are cleaned up and both backends stopped;
+no keys were added to the project. No work was staged, committed or pushed, and no new source files
+were added for the phone/live corrections.
+
+## Earlier reflection priority — October 7, 2026
 
 Manley clarified that the music/reflection creative baseline is ready for a first functional
 implementation, with further refinement later. Keep Anthropic and update the older writing prompt
@@ -119,9 +292,10 @@ writing guidance and honest test limitations remain in `research_music_reflectio
 Do not restart the writing/research loop or the old 36-output gate before coding. Keep code changes
 as bounded CLI handoffs that Manley can watch. The contract and provider-adapter foundations below,
 the native Run Complete scaffold, loopback HTTP endpoint and an emulator-only fake-provider bridge
-are implemented. Energy selection, durable reflection storage, Log History, live Anthropic
-generation and physical-phone connectivity remain unbuilt. Old calendar targets below are not
-renewed commitments.
+were implemented at that earlier checkpoint. Energy selection, durable reflection storage,
+History, live Anthropic generation and physical-phone connectivity were still pending then; the
+October 13 checkpoint above records their current verification. Old calendar targets below are
+not renewed commitments.
 
 ## Local reflection API — reviewed October 7, 2026
 
@@ -133,7 +307,8 @@ renewed commitments.
 - Eight fake-provider HTTP tests join the earlier eight contract and ten adapter tests. Maven's
   saved reports show 26 tests with zero failures, errors or skips. The fake-server smoke check used no
   Anthropic traffic. Android debug builds now call the fake endpoint through the emulator host alias;
-  credentials and real generation remain unverified.
+  credentials and real generation were unverified at that October 7 checkpoint; the later live
+  milestone above supersedes that limit.
 - The October 7 hardening pass added an early local request guard. It accepts only `127.0.0.1`,
   `localhost` or the emulator's `10.0.2.2` Host with the actual listening port, and rejects every
   supplied Origin before reading the body or invoking the provider. The extra tests cover accepted
@@ -232,7 +407,8 @@ renewed commitments.
 - IntelliJ IDEA's bundled Maven ran the complete backend suite successfully: 18 tests, 0 failures,
   0 errors. Ten adapter tests used dummy configuration and simulated transport responses; no live
   Anthropic traffic occurred. Real generation quality, credentials, network behavior and Android
-  delivery remain unverified, and this slice still does not complete the reflection milestone.
+  delivery were unverified at that adapter checkpoint, which did not complete the reflection
+  milestone. The October 13 live-text and durable-reopen verification above records the later gate.
 
 ## Implemented baseline — verified against source October 3; last full test checkpoint September 15
 

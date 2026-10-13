@@ -9,6 +9,38 @@ Every successfully saved run gets a contextual response. No exceptions.
 
 ## First functional Android reflection version — approved direction October 3, 2026
 
+**October 13 checkpoint:** A newly generated Anthropic reflection reached the Moto phone and its
+exact selected text survived late Energy feedback and History after a cold restart with the backend
+stopped. The first generated-text/persistence milestone is now exercised. Live checks exposed unit
+and partial-GPS wording errors; the backend now supplies calculated distance/time/provenance facts
+with prompt version `mobile-reflection-v1.1`. The subsequent separately approved music-sharing
+pass uses v1.2 and Room v10: both OFF-by-default per-run flags allow one eligible Spotify
+title/artist with MEDIA_SESSION_PARTIAL provenance, while other observations remain local.
+An actual Moto request confirmed that frozen context and a READY live reply, which omitted the
+song. These bounded checks do not establish general writing quality, audible music handoff or
+the full music-aware demonstration. Details are in `project_current_state.md`.
+
+**October 13 optional music-input boundary:** The saved run's local observation and separate
+sharing choices must both be true. Select the newest eligible same-run PLAYING Spotify snapshot
+inside the official run bounds, with a known title and artist. Send only that one title/artist,
+MUSIC state, MEDIA_SESSION_PARTIAL provenance and a null artist description. An empty/unreadable
+capture remains UNKNOWN, never NO_MUSIC. The evidence snapshot is immutable under the UUID;
+retry reuses it and History only reads it. No audio, lyrics, notification contents, route points
+or full listening history enter this packet. This metadata cannot prove a full song, exact playback
+timing, a soundtrack or music causation, and the model may omit it. Room v10 migrates older sharing
+choices to false; draft sharing clears on observation-off, access revocation or a new run. The UI
+hides the choice when its reflection bridge is unavailable. History labels describe the frozen
+context without asserting a successful request or music use in the reply. Verification includes
+35 backend tests, 280 JVM tests per Android variant and 20 permanent phone checks; actual audible
+music delivery/snippets remain unverified.
+
+**GPS timing boundary:** For GPS PARTIAL or UNAVAILABLE coverage, new reflection evidence keeps
+active duration null even when stored transitions are complete. A reconstructed active timer
+cannot prove uninterrupted tracking; elapsed duration remains available from saved start/finish.
+Fixture and COMPLETE GPS may retain known active duration. The earlier live music check and its
+exact stored reply predate this safeguard; never rewrite that frozen evidence or regenerate its
+reply to apply it. No extra paid call was made for this correction.
+
 **Target: an end-to-end generated-text feature, not storage-only or a canned-response demo.** Manley
 accepted the current creative baseline for implementation and wants to improve it after the feature
 works. Keep Anthropic as the writing provider. Bring live text generation forward using explicitly
@@ -40,7 +72,8 @@ any shared refactor or console prompt edit explicitly in the proposed code slice
 
 1. Android durably completes the run first. Build an immutable evidence snapshot from that saved
    record: identity, timestamps/timezone, metrics with units and provenance, known pre-run Energy,
-   and explicitly controlled music context. Unsupported fields remain unknown. Do not send full
+   and explicitly controlled music context or the separately consented partial Spotify snapshot
+   defined above. Unsupported fields remain unknown. Do not send full
    RunStyle, raw GPS history or unrelated personal data. History-based claims require supplied
    verified comparisons; otherwise omit them.
 2. Backend calls Anthropic with versioned writing instructions and representative examples. Request
@@ -86,9 +119,9 @@ family is required before implementation. This does not remove basic factual/saf
 
 ## Mobile Run Complete delivery contract — prototype-validated August 22, 2026
 
-**STATUS: CURRENT MOBILE DIRECTION, VALIDATED IN THE INTERACTIVE PROTOTYPE, NOT BUILT.** This
-contract governs the future mobile flow. The shipped console agent still uses the implementation
-described later in this file.
+**STATUS: CORE NATIVE DELIVERY IMPLEMENTED OCTOBER 13, 2026; VISUAL CHOREOGRAPHY AND PHONE AUDIO
+REVIEW REMAIN.** This contract governs the mobile flow. The shipped console agent still uses the
+implementation described later in this file.
 
 ### Sequence
 
@@ -114,7 +147,7 @@ described later in this file.
 
 ### Durable selected-reflection record — DEFAULT
 
-**Approved August 25, 2026. Future-mobile contract only; nothing is implemented.** Each completed
+**Approved August 25, 2026; native Room storage implemented October 12–13.** Each completed
 run may own exactly one selected reflection linked by the run's permanent UUID. Treat it as a
 one-to-one child of the run; whether it eventually uses fields on the run or a separate local table
 is an implementation decision.
@@ -186,7 +219,11 @@ RunState understand the runner across runs.**
   opening a ready History row invokes Android speech on the exact stored text when a voice engine
   is available. As of October 13, a newly completed run also speaks the exact selected reflection
   once on arrival; reopening an older saved run stays quiet, and leaving/backgrounding stops it.
-  The deterministic spoken receipt remains unbuilt; physical-phone audio quality has not been checked.
+  The subsequent October 13 pass implements the deterministic spoken receipt from saved facts.
+  Receipt completion/failure/interruption starts the quiet window once; the reflection cannot
+  reveal or overlap that receipt. Room v9 preserves window state and recovery never replays a
+  consumed receipt. Speech requests temporary Android audio focus and returns it on completion,
+  error or stop. Physical-phone audio quality has not been checked.
 
 ### Post-run voice contrast — DIRECTION, NOT YET PROTOTYPED *(added August 31, 2026)*
 

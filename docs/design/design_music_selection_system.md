@@ -168,7 +168,9 @@ Not a roadmap. This is what the dependencies allow.
 **Approved August 26, 2026.** This remains the broader conceptual contract. An October 12
 opt-in Android first pass now stores media-session snapshots under the run UUID and labels them
 partial in History; it does not reconstruct complete song occurrences, control playback, collect
-feedback or transmit observed music to the reflection backend. The
+feedback or transmit observed music to the reflection backend. The October 13 Room v10 extension
+now implements the narrow, separately approved one-snapshot sharing exception below; the rest of
+the captured history stays local. The
 finished app both **chooses and watches**: it may prepare or queue music, and it observes what
 actually played. Those are related but different facts and must never be collapsed into one
 generic fact.
@@ -242,13 +244,35 @@ any future track-level feedback remain later decisions.
 
 ### Truth and privacy boundaries
 
+**October 13 limited sharing approval:** Manley approved a separate optional, per-run choice to
+share one observed Spotify title and artist with RunState's backend and Anthropic for a reflection.
+It is off by default, resets for the next run, and does not grant sharing for old records. The
+implementation records the choice separately from local observation and selects one eligible
+same-run PLAYING Spotify snapshot: the newest eligible event within run bounds, with both title
+and artist. Both observation and sharing flags are required. Room v10 defaults all migrated consent
+to false. Selection is frozen in the reflection evidence and reused on retry/History; unreadable
+or absent evidence remains UNKNOWN. The draft clears on observation-off, access revocation and
+each new run, and is hidden without the reflection bridge. `MEDIA_SESSION_PARTIAL` provenance limits it to reported metadata;
+it does not prove a complete song, timing, a soundtrack, or an effect on the runner. No audio,
+lyrics, notification contents, route coordinates or full listening history are included. All other
+observations remain local. Playlist decisions and snippets remain separate work.
+
+A Moto run with 135 local observations confirmed the five-field MUSIC/MEDIA_SESSION_PARTIAL
+packet with title/artist present and no artist description, and reached a READY non-test reply.
+That reply omitted the song. This verifies the limited input path, not full-song timing, song use
+in wording, music causation, audible duck/resume or snippets. New History labels describe stored
+frozen context without claiming it was sent successfully or used in the final wording.
+That saved live reply/evidence predates the final GPS timing guard and remains unchanged. New
+reflection requests omit active duration for PARTIAL/UNAVAILABLE GPS rather than treating a
+reconstructed timer as proof of uninterrupted tracking; fixture/COMPLETE GPS retain known timing.
+
 - Partial observations stay partial. Known identity with unknown timing is still useful, but it
   cannot support mile, split, opener, closer or complete-soundtrack claims.
 - Raw playback, decisions and runner feedback are evidence. Track roles, relationship patterns and
   trust are later derived judgments that still must clear the existing confidence thresholds.
 - Store no song audio, lyrics or provider credentials in run music history.
-- This contract chooses no provider and approves no transfer of playback history, provider
-  metadata or feedback to Anthropic or any other service. Any future transfer requires its own
+- Beyond the explicit October 13 one-title/artist exception, this contract approves no transfer
+  of playback history, other provider metadata or feedback. Any broader transfer requires its own
   consent and privacy decision.
 
 ### Deliberately not decided here

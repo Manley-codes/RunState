@@ -53,8 +53,9 @@ Effort action remains discoverable.
 
 ### Preconstructed Energy response family — August 20, 2026
 
-**STATUS: CURRENT DIRECTION, NOT BUILT.** Run Complete now separates immediate confirmation from the
-contextual reflection and gives Energy and Effort different responsibilities.
+**STATUS: NATIVE SELECTION, STORAGE AND BASIC SPOKEN DELIVERY IMPLEMENTED OCTOBER 13, 2026;
+ABSORPTION CHOREOGRAPHY REMAINS.** Run Complete separates immediate confirmation from the contextual
+reflection and gives Energy and Effort different responsibilities.
 
 1. Ending the run first completes a durable local save. The app may say `Run saved` only after that
    succeeds. On mobile, `saved` means recoverable on the phone; it must not imply that cloud sync has
