@@ -6,7 +6,9 @@ import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.runstate.mobile.data.local.DistanceUnit
 import com.runstate.mobile.data.local.MetricSource
+import com.runstate.mobile.data.local.RunLocationObservation
 import com.runstate.mobile.data.local.RunStateDatabase
+import com.runstate.mobile.data.local.RunTrackingMode
 import com.runstate.mobile.data.local.RunTransitionType
 import com.runstate.mobile.data.local.StoredRunState
 import com.runstate.mobile.data.local.TelemetryCoverage
@@ -96,7 +98,8 @@ class RunSessionCoordinatorRoomTest {
                 zoneIdSupplier = { ZoneId.of("America/Chicago") },
                 uuidSupplier = { UUID.fromString(RUN_ID) }
             ),
-            applicationScope = applicationScope
+            applicationScope = applicationScope,
+            locationDao = database.locationDao()
         )
 
     /**
@@ -211,4 +214,108 @@ class RunSessionCoordinatorRoomTest {
         assertEquals(TelemetryCoverage.COMPLETE, restored.telemetryCoverage)
         assertEquals(true, restored.transitionHistoryComplete)
     }
+
+    @Test
+    fun gpsRunUsesOnlyDurableLocationDistanceAtCompletion() {
+        val clock = SettableClock(OFFICIAL_START)
+        val coordinator = coordinator(clock)
+        val locationDao = database.locationDao()
+
+        runBlocking {
+            coordinator.initialize()
+            coordinator.beginCountdown()
+            coordinator.requestStart(trackingMode = RunTrackingMode.GPS).await()
+            locationDao.recordObservation(gpsObservation("anchor", OFFICIAL_START + 10_000L))
+            locationDao.recordObservation(
+                gpsObservation("segment", OFFICIAL_START + 20_000L, segmentMeters = 100.0)
+            )
+
+            val live = requireNotNull(coordinator.runMetrics())
+            assertEquals(MetricSource.GPS, live.source)
+            assertEquals(100.0, live.distanceMeters!!, 0.0)
+            assertEquals(TelemetryCoverage.PARTIAL, live.coverage)
+
+            clock.nowMillis = FIRST_PAUSE
+            coordinator.requestAction(RunActionKind.PAUSE).await()
+            clock.nowMillis = FINISH
+            coordinator.requestAction(RunActionKind.COMPLETE).await()
+        }
+
+        val stored = runBlocking { requireNotNull(database.runDao().findById(RUN_ID)) }
+        assertEquals(RunTrackingMode.GPS, stored.trackingMode)
+        assertEquals(MetricSource.GPS, stored.metricSource)
+        assertEquals(TelemetryCoverage.PARTIAL, stored.telemetryCoverage)
+        assertEquals(100.0, stored.finalDistanceMeters!!, 0.0)
+    }
+
+    @Test
+    fun gpsRunWithoutMeasuredSegmentDoesNotUseFixtureDistance() {
+        val clock = SettableClock(OFFICIAL_START)
+        val coordinator = coordinator(clock)
+
+        runBlocking {
+            coordinator.initialize()
+            coordinator.beginCountdown()
+            coordinator.requestStart(trackingMode = RunTrackingMode.GPS).await()
+            database.locationDao().recordObservation(
+                gpsObservation("anchor", OFFICIAL_START + 10_000L)
+            )
+            clock.nowMillis = FIRST_PAUSE
+            coordinator.requestAction(RunActionKind.PAUSE).await()
+            clock.nowMillis = FINISH
+            coordinator.requestAction(RunActionKind.COMPLETE).await()
+        }
+
+        val stored = runBlocking { requireNotNull(database.runDao().findById(RUN_ID)) }
+        assertEquals(MetricSource.GPS, stored.metricSource)
+        assertEquals(TelemetryCoverage.UNAVAILABLE, stored.telemetryCoverage)
+        assertEquals(null, stored.finalDistanceMeters)
+    }
+
+    @Test
+    fun recoveredRunningGpsRunKeepsDistanceButDoesNotInventActiveTime() {
+        val clock = SettableClock(OFFICIAL_START)
+        runBlocking {
+            val firstProcess = coordinator(clock)
+            firstProcess.initialize()
+            firstProcess.beginCountdown()
+            firstProcess.requestStart(trackingMode = RunTrackingMode.GPS).await()
+            database.locationDao().recordObservation(
+                gpsObservation("anchor", OFFICIAL_START + 10_000L)
+            )
+            database.locationDao().recordObservation(
+                gpsObservation("segment", OFFICIAL_START + 20_000L, segmentMeters = 100.0)
+            )
+
+            // A new coordinator models a restarted process: Room remembers the distance,
+            // but no service could have observed the entire intervening active interval.
+            clock.nowMillis = OFFICIAL_START + 100_000L
+            val recovered = coordinator(clock)
+            assertEquals(RUN_ID,
+                (recovered.initialize().admission as RunAdmission.RunInProgress).session.runId)
+            val metrics = requireNotNull(recovered.runMetrics())
+            assertEquals(null, metrics.activeMillis)
+            assertEquals(100.0, metrics.distanceMeters!!, 0.0)
+            assertEquals(TelemetryCoverage.PARTIAL, metrics.coverage)
+        }
+    }
+
+    private fun gpsObservation(
+        key: String,
+        observedAt: Long,
+        segmentMeters: Double? = null
+    ) = RunLocationObservation(
+        runId = RUN_ID,
+        observationKey = key,
+        observedAtEpochMillis = observedAt,
+        elapsedRealtimeNanos = (observedAt - OFFICIAL_START) * 1_000_000L,
+        latitude = 29.72,
+        longitude = -95.39,
+        horizontalAccuracyMeters = 5f,
+        altitudeMeters = null,
+        speedMetersPerSecond = null,
+        bearingDegrees = null,
+        acceptedForDistance = true,
+        segmentDistanceMeters = segmentMeters
+    )
 }

@@ -34,6 +34,12 @@ enum class MetricSource {
     GPS
 }
 
+/** The distance source fixed when a new run becomes official. Null marks older runs. */
+enum class RunTrackingMode {
+    FIXTURE,
+    GPS
+}
+
 /** How much of the intended distance evidence was available at completion. */
 enum class TelemetryCoverage {
     COMPLETE,
@@ -45,6 +51,13 @@ enum class TelemetryCoverage {
 enum class DistanceUnit {
     MILES,
     KILOMETERS
+}
+
+/** Energy the runner explicitly chose before starting; null means they skipped it. */
+enum class PreRunEnergy {
+    LOW,
+    MODERATE,
+    HIGH
 }
 
 /**
@@ -177,7 +190,19 @@ data class RunEntity(
      * distinct prevents recovery from deriving believable distance from missing time.
      */
     @ColumnInfo(name = "transition_history_complete")
-    val transitionHistoryComplete: Boolean? = null
+    val transitionHistoryComplete: Boolean? = null,
+
+    /** The optional Start-screen choice, fixed with the first durable RUNNING row. */
+    @ColumnInfo(name = "pre_run_energy")
+    val preRunEnergy: PreRunEnergy? = null,
+
+    /** Immutable at official start; migrated runs remain unknown rather than relabeled. */
+    @ColumnInfo(name = "tracking_mode")
+    val trackingMode: RunTrackingMode? = null,
+
+    /** Per-run opt-in. Old runs and new runs without a choice have no music capture. */
+    @ColumnInfo(name = "music_observation_requested", defaultValue = "0")
+    val musicObservationRequested: Boolean = false
 ) {
     init {
 

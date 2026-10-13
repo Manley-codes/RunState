@@ -1,8 +1,17 @@
 package com.runstate.mobile
 
+import android.Manifest
+import android.app.NotificationManager
+import android.content.ActivityNotFoundException
+import android.content.ComponentName
+import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
+import android.location.LocationManager
 import android.os.Build
 import android.os.Bundle
+import android.provider.Settings
+import androidx.activity.compose.BackHandler
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
@@ -12,6 +21,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -19,29 +29,43 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.ContextCompat
+import androidx.core.app.NotificationManagerCompat
 import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import com.runstate.mobile.reflection.RunReflectionCoordinator
 import com.runstate.mobile.reflection.RunReflectionState
+import com.runstate.mobile.data.local.ReflectionBranch
+import com.runstate.mobile.data.local.PreRunEnergy
+import com.runstate.mobile.data.local.RunTrackingMode
+import com.runstate.mobile.data.local.RunStateDatabase
 import com.runstate.mobile.run.RunActionKind
 import com.runstate.mobile.run.RunAdmission
 import com.runstate.mobile.run.RunSessionCoordinator
+import com.runstate.mobile.location.RunTrackingService
+import com.runstate.mobile.location.RunTrackingServiceState
+import com.runstate.mobile.music.RunMusicNotificationListener
 import com.runstate.mobile.ui.RunMetricsDisplay
 import com.runstate.mobile.ui.RunMetricsTicker
 import com.runstate.mobile.ui.RunCompleteReflectionDisplay
+import com.runstate.mobile.ui.RunHistoryItem
+import com.runstate.mobile.ui.RunHistoryScreen
 import com.runstate.mobile.ui.RunStateScreen
 import com.runstate.mobile.ui.RunUiModel
 import com.runstate.mobile.ui.RunUiState
 import com.runstate.mobile.ui.rememberLifecycleCountdown
 import com.runstate.mobile.ui.runMetricsDisplayFor
+import com.runstate.mobile.ui.historyItemFor
 import com.runstate.mobile.ui.runUiModelFor
 import com.runstate.mobile.ui.theme.RunStateTheme
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.StateFlow
 
 /**
  * The app's one screen, wired to the process-scoped coordinator.
@@ -63,6 +87,7 @@ class MainActivity : ComponentActivity() {
         val runStateApplication = application as RunStateApplication
         val coordinator = runStateApplication.runSessionCoordinator
         val reflectionCoordinator = runStateApplication.runReflectionCoordinator
+        val database = runStateApplication.database
 
         setContent {
             RunStateTheme {
@@ -70,6 +95,8 @@ class MainActivity : ComponentActivity() {
                     RunJourneyRoot(
                         coordinator = coordinator,
                         reflectionCoordinator = reflectionCoordinator,
+                        database = database,
+                        trackingFlow = runStateApplication.trackingServiceState,
 
                         // The Activity's own lifecycle gates the countdown, so nothing counts
                         // down — and no run is started — while the app is in the background.
@@ -93,7 +120,7 @@ class MainActivity : ComponentActivity() {
  *
  * ## Why nothing is saved across recreation
  *
- * There is no `rememberSaveable` here, and there must not be. A saved [RunUiModel] would be
+ * The [RunUiModel] is never saved with `rememberSaveable`. Saving that model would keep
  * a copy of a decision the coordinator made earlier, restored without asking whether it is
  * still true. On recreation this starts at [RunUiState.Initializing] and asks again. That
  * costs nothing, because [RunSessionCoordinator.initialize] returns immediately after a
@@ -111,6 +138,8 @@ class MainActivity : ComponentActivity() {
 internal fun RunJourneyRoot(
     coordinator: RunSessionCoordinator,
     reflectionCoordinator: RunReflectionCoordinator?,
+    database: RunStateDatabase,
+    trackingFlow: StateFlow<RunTrackingServiceState>,
     lifecycle: Lifecycle,
     modifier: Modifier = Modifier
 ) {
@@ -125,12 +154,79 @@ internal fun RunJourneyRoot(
 
     // Kept only in this stateful adapter. The stateless screen never receives a run UUID.
     var completedRunId by remember { mutableStateOf<String?>(null) }
+    var activeRunId by remember { mutableStateOf<String?>(null) }
+    var activeTrackingMode by remember { mutableStateOf<RunTrackingMode?>(null) }
+
+    // Navigation survives rotation; every saved value still comes from Room.
+    var historyVisible by rememberSaveable { mutableStateOf(false) }
+    // This is still a draft choice until the official start writes it on the run row.
+    var preRunEnergy by rememberSaveable { mutableStateOf<PreRunEnergy?>(null) }
+    var gpsSelected by rememberSaveable { mutableStateOf(false) }
+    var gpsMessage by rememberSaveable { mutableStateOf<String?>(null) }
+    var pendingGpsResumeId by rememberSaveable { mutableStateOf<String?>(null) }
+    var musicSelected by rememberSaveable { mutableStateOf(false) }
+    var pendingMusicAccess by rememberSaveable { mutableStateOf(false) }
+    var historyItems by remember { mutableStateOf<List<RunHistoryItem>>(emptyList()) }
+    var historyError by remember { mutableStateOf<String?>(null) }
+    BackHandler(historyVisible) { historyVisible = false }
+
+    val completedRuns by remember(database) { database.runDao().observeCompletedRuns() }
+        .collectAsState(initial = null)
+    val storedReflections by remember(database) { database.reflectionDao().observeAll() }
+        .collectAsState(initial = null)
+
+    LaunchedEffect(historyVisible, completedRuns, storedReflections, reflectionCoordinator) {
+        if (!historyVisible || completedRuns == null || storedReflections == null) return@LaunchedEffect
+        try {
+            // Repair older pending rows locally even when Run Complete is no longer visible.
+            // This never starts a new provider request after a process restart.
+            reflectionCoordinator?.initialize()
+            val reflectionsByRun = storedReflections.orEmpty().associateBy { it.runId }
+            historyItems = completedRuns.orEmpty().map { run ->
+                historyItemFor(
+                    run,
+                    database.runDao().transitionsFor(run.runId),
+                    reflectionsByRun[run.runId],
+                    database.musicObservationDao().observationsFor(run.runId)
+                )
+            }
+            historyError = null
+        } catch (cancelled: CancellationException) { throw cancelled }
+        catch (_: Exception) {
+            historyItems = emptyList()
+            historyError = "Log History couldn't load. Try opening it again."
+        }
+    }
 
     val reflectionState = reflectionCoordinator?.let { activeCoordinator ->
         activeCoordinator.state.collectAsState().value
     }
+    val trackingState by trackingFlow.collectAsState()
     val context = LocalContext.current
-    val latestCompletedRunId by rememberUpdatedState(completedRunId)
+    var musicAccessGranted by remember(context) { mutableStateOf(hasMusicAccess(context)) }
+
+    // Notification access is granted in Android Settings, outside this Activity. Recheck
+    // on return and do not retain an opt-in after the runner revokes that access.
+    DisposableEffect(lifecycle, context) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                val granted = hasMusicAccess(context)
+                musicAccessGranted = granted
+                if (pendingMusicAccess) {
+                    musicSelected = granted
+                    pendingMusicAccess = false
+                } else if (!granted) {
+                    musicSelected = false
+                }
+            }
+        }
+        lifecycle.addObserver(observer)
+        onDispose { lifecycle.removeObserver(observer) }
+    }
+    var permissionRunId by rememberSaveable { mutableStateOf<String?>(null) }
+    var permissionForRetry by rememberSaveable { mutableStateOf(false) }
+    val pendingPermissionRunId by rememberUpdatedState(permissionRunId)
+    val pendingPermissionForRetry by rememberUpdatedState(permissionForRetry)
 
     fun localBridgePermissionGranted(): Boolean =
         !BuildConfig.DEBUG ||
@@ -143,12 +239,67 @@ internal fun RunJourneyRoot(
     val localNetworkPermissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { granted ->
-        latestCompletedRunId?.let { runId ->
+        pendingPermissionRunId?.let { runId ->
             if (granted) {
-                reflectionCoordinator?.startWhenBridgeReady(runId)
-            } else {
+                if (pendingPermissionForRetry) reflectionCoordinator?.retry(runId)
+                else reflectionCoordinator?.onSavedVisible(runId, bridgeReady = true)
+            } else if (!pendingPermissionForRetry) {
                 reflectionCoordinator?.onBridgeUnavailable(runId)
             }
+        }
+        permissionRunId = null
+        permissionForRetry = false
+    }
+
+    fun preciseLocationReady(): Boolean =
+        ContextCompat.checkSelfPermission(
+            context,
+            Manifest.permission.ACCESS_FINE_LOCATION
+        ) == PackageManager.PERMISSION_GRANTED &&
+            context.getSystemService(LocationManager::class.java)
+                ?.isProviderEnabled(LocationManager.GPS_PROVIDER) == true
+
+    val gpsPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) {
+        if (preciseLocationReady()) {
+            val resumeId = pendingGpsResumeId
+            if (resumeId == null) {
+                gpsSelected = true
+                gpsMessage = null
+            } else {
+                try {
+                    RunTrackingService.resumeExisting(context, resumeId)
+                    gpsMessage = null
+                } catch (_: RuntimeException) {
+                    gpsMessage = "Android could not restart GPS tracking. Try again while the app is open."
+                }
+            }
+        } else {
+            gpsSelected = false
+            gpsMessage = "Precise GPS is unavailable. Enable precise location and phone Location, then try again."
+        }
+        pendingGpsResumeId = null
+    }
+
+    fun requestGpsPermissions() {
+        val permissions = mutableListOf(
+            Manifest.permission.ACCESS_COARSE_LOCATION,
+            Manifest.permission.ACCESS_FINE_LOCATION
+        )
+        if (Build.VERSION.SDK_INT >= 33) {
+            permissions += Manifest.permission.POST_NOTIFICATIONS
+        }
+        gpsPermissionLauncher.launch(permissions.toTypedArray())
+    }
+
+    fun retryReflection(runId: String) {
+        if (reflectionCoordinator == null) return
+        if (localBridgePermissionGranted()) reflectionCoordinator.retry(runId)
+        else {
+            permissionRunId = runId
+            permissionForRetry = true
+            localNetworkPermissionLauncher.launch(LOCAL_NETWORK_PERMISSION)
         }
     }
 
@@ -162,7 +313,9 @@ internal fun RunJourneyRoot(
     suspend fun refresh() {
         val snapshot = coordinator.journeySnapshot()
         model = runUiModelFor(snapshot)
+        activeRunId = (snapshot.admission as? RunAdmission.RunInProgress)?.session?.runId
         completedRunId = (snapshot.admission as? RunAdmission.RunCompleted)?.session?.runId
+        activeTrackingMode = coordinator.trackingMode()
         metrics = coordinator.runMetrics()?.let(::runMetricsDisplayFor)
     }
 
@@ -172,8 +325,36 @@ internal fun RunJourneyRoot(
     LaunchedEffect(coordinator) {
         val snapshot = coordinator.initialize()
         model = runUiModelFor(snapshot)
+        activeRunId = (snapshot.admission as? RunAdmission.RunInProgress)?.session?.runId
         completedRunId = (snapshot.admission as? RunAdmission.RunCompleted)?.session?.runId
+        activeTrackingMode = coordinator.trackingMode()
         metrics = coordinator.runMetrics()?.let(::runMetricsDisplayFor)
+    }
+
+    // Service progress survives Activity rotation. Its result prompts a fresh coordinator
+    // read; the service state itself never stands in for the durable run row.
+    LaunchedEffect(trackingState) {
+        when (val service = trackingState) {
+            RunTrackingServiceState.Idle,
+            RunTrackingServiceState.Starting -> Unit
+
+            is RunTrackingServiceState.Tracking,
+            is RunTrackingServiceState.Paused -> {
+                gpsMessage = null
+                refresh()
+            }
+
+            is RunTrackingServiceState.Failed -> {
+                gpsMessage = service.reason
+                refresh()
+                val snapshot = coordinator.journeySnapshot()
+                if (snapshot.admission == RunAdmission.CountdownInProgress &&
+                    snapshot.startAttemptPhase == com.runstate.mobile.run.StartAttemptPhase.None) {
+                    coordinator.cancelCountdown()
+                    refresh()
+                }
+            }
+        }
     }
 
     // This reports visibility; the process coordinator owns the delay, Room read and call.
@@ -184,6 +365,8 @@ internal fun RunJourneyRoot(
                 val bridgeReady = localBridgePermissionGranted()
                 activeReflectionCoordinator.onSavedVisible(runId, bridgeReady)
                 if (!bridgeReady) {
+                    permissionRunId = runId
+                    permissionForRetry = false
                     localNetworkPermissionLauncher.launch(LOCAL_NETWORK_PERMISSION)
                 }
             }
@@ -250,7 +433,41 @@ internal fun RunJourneyRoot(
 
             // The countdown only reaches here while the Activity is STARTED. If a Cancel is
             // already in flight, the guard drops this start, and the cancel wins.
-            runGuarded { awaitDurable { coordinator.requestStart() } }
+            val observeMusicForRun = musicSelected && hasMusicAccess(context)
+            if (musicSelected && !observeMusicForRun) {
+                musicSelected = false
+                musicAccessGranted = false
+            }
+            if (gpsSelected) {
+                if (!preciseLocationReady()) {
+                    gpsMessage = "Precise GPS is unavailable. Enable phone Location before starting."
+                    runGuarded {
+                        coordinator.cancelCountdown()
+                        refresh()
+                    }
+                } else {
+                    try {
+                        // The visible Activity launches the foreground service before any
+                        // asynchronous Room insert; that service owns this GPS start.
+                        RunTrackingService.startNew(context, preRunEnergy, observeMusicForRun)
+                    } catch (_: RuntimeException) {
+                        gpsMessage = "Android could not start GPS tracking. Try again while the app is open."
+                        runGuarded {
+                            coordinator.cancelCountdown()
+                            refresh()
+                        }
+                    }
+                }
+            } else {
+                runGuarded {
+                    awaitDurable {
+                        coordinator.requestStart(
+                            preRunEnergy,
+                            musicObservationRequested = observeMusicForRun
+                        )
+                    }
+                }
+            }
         }
     )
 
@@ -281,6 +498,33 @@ internal fun RunJourneyRoot(
             RunReflectionState.Idle,
             is RunReflectionState.Preparing -> RunCompleteReflectionDisplay.Preparing
         }
+    }
+
+    if (historyVisible) {
+        RunHistoryScreen(
+            items = historyItems,
+            onBack = { historyVisible = false },
+            onRetryReflection = ::retryReflection,
+            isLoading = completedRuns == null || storedReflections == null,
+            error = historyError,
+            modifier = modifier
+        )
+        return
+    }
+
+    val activeReflection = reflectionState?.takeIf { current ->
+        when (current) {
+            is RunReflectionState.Preparing -> current.runId == completedRunId
+            is RunReflectionState.Ready -> current.runId == completedRunId
+            is RunReflectionState.Failed -> current.runId == completedRunId
+            RunReflectionState.Idle -> false
+        }
+    }
+    val selectedEnergy: ReflectionBranch? = when (activeReflection) {
+        is RunReflectionState.Preparing -> activeReflection.energy
+        is RunReflectionState.Ready -> activeReflection.energy
+        is RunReflectionState.Failed -> activeReflection.energy
+        else -> null
     }
 
     RunStateScreen(
@@ -314,7 +558,30 @@ internal fun RunJourneyRoot(
         onRetryStart = {
 
             // The same prepared run: the coordinator reuses its UUID and official start.
-            runGuarded { awaitDurable { coordinator.requestStart() } }
+            if (gpsSelected) {
+                if (preciseLocationReady()) {
+                    try {
+                        RunTrackingService.startNew(
+                            context,
+                            preRunEnergy,
+                            musicSelected && hasMusicAccess(context)
+                        )
+                    } catch (_: RuntimeException) {
+                        gpsMessage = "Android could not restart GPS. Cancel and try again."
+                    }
+                } else {
+                    gpsMessage = "Precise GPS is unavailable. Cancel to return to Start."
+                }
+            } else {
+                runGuarded {
+                    awaitDurable {
+                        coordinator.requestStart(
+                            preRunEnergy,
+                            musicObservationRequested = musicSelected && hasMusicAccess(context)
+                        )
+                    }
+                }
+            }
         },
         onPause = { requestAction(RunActionKind.PAUSE) },
         onResume = { requestAction(RunActionKind.RESUME) },
@@ -322,24 +589,118 @@ internal fun RunJourneyRoot(
         onStartAnother = {
             runGuarded {
 
-                // Retires the completed cycle and opens a fresh countdown.
-                coordinator.beginCountdown()
+                // Give the next run its own Start screen and optional Energy choice.
+                coordinator.prepareAnotherRun()
+                preRunEnergy = null
+                gpsSelected = false
+                gpsMessage = null
+                musicSelected = false
                 refresh()
             }
         },
         reflection = reflectionDisplay,
         onRetryReflection = {
-            completedRunId?.let { runId ->
-                if (localBridgePermissionGranted()) {
-                    reflectionCoordinator?.retry(runId)
+            completedRunId?.let(::retryReflection)
+        },
+        selectedEnergy = selectedEnergy,
+        selectedPreRunEnergy = preRunEnergy,
+        onSelectPreRunEnergy = { preRunEnergy = it },
+        gpsSelected = gpsSelected,
+        onToggleGps = {
+            if (gpsSelected) {
+                gpsSelected = false
+                gpsMessage = null
+            } else if (preciseLocationReady()) {
+                gpsSelected = true
+                gpsMessage = null
+            } else {
+                requestGpsPermissions()
+            }
+        },
+        gpsMessage = gpsMessage,
+        musicSelected = musicSelected,
+        musicAccessGranted = musicAccessGranted,
+        onToggleMusic = {
+            if (musicSelected) {
+                musicSelected = false
+            } else if (hasMusicAccess(context)) {
+                musicAccessGranted = true
+                musicSelected = true
+            } else {
+                musicAccessGranted = false
+                pendingMusicAccess = openMusicAccessSettings(context)
+            }
+        },
+        isGpsRun = activeTrackingMode == RunTrackingMode.GPS,
+        gpsServicePresent = when (val service = trackingState) {
+            is RunTrackingServiceState.Tracking -> service.runId == activeRunId
+            is RunTrackingServiceState.Paused -> service.runId == activeRunId
+            else -> false
+        },
+        onResumeGpsTracking = {
+            activeRunId?.let { id ->
+                if (preciseLocationReady()) {
+                    try {
+                        RunTrackingService.resumeExisting(context, id)
+                        gpsMessage = null
+                    } catch (_: RuntimeException) {
+                        gpsMessage = "Android could not restart GPS tracking. Try again while the app is open."
+                    }
                 } else {
-                    localNetworkPermissionLauncher.launch(LOCAL_NETWORK_PERMISSION)
+                    pendingGpsResumeId = id
+                    requestGpsPermissions()
                 }
             }
         },
+        onSelectEnergy = { branch ->
+            completedRunId?.let { reflectionCoordinator?.selectEnergy(it, branch) }
+        },
+        energyEnabled = reflectionCoordinator != null,
+        isTestData = (activeReflection as? RunReflectionState.Ready)?.isTestData == true,
+        onViewHistory = { historyVisible = true },
+        showHistory = true,
         actionsEnabled = !actionInFlight,
         modifier = modifier
     )
 }
 
 private const val LOCAL_NETWORK_PERMISSION = "android.permission.ACCESS_LOCAL_NETWORK"
+
+private fun musicListenerComponent(context: Context): ComponentName =
+    ComponentName(context, RunMusicNotificationListener::class.java)
+
+private fun hasMusicAccess(context: Context): Boolean =
+    if (Build.VERSION.SDK_INT >= 27) {
+        context.getSystemService(NotificationManager::class.java)
+            ?.isNotificationListenerAccessGranted(musicListenerComponent(context)) == true
+    } else {
+        NotificationManagerCompat.getEnabledListenerPackages(context)
+            .contains(context.packageName)
+    }
+
+private fun openMusicAccessSettings(context: Context): Boolean {
+    if (Build.VERSION.SDK_INT >= 30) {
+        try {
+            context.startActivity(
+                Intent(Settings.ACTION_NOTIFICATION_LISTENER_DETAIL_SETTINGS)
+                    .putExtra(
+                        Settings.EXTRA_NOTIFICATION_LISTENER_COMPONENT_NAME,
+                        musicListenerComponent(context).flattenToString()
+                    )
+            )
+            return true
+        } catch (_: ActivityNotFoundException) {
+            // Some Android builds omit the per-app page; use the general list below.
+        } catch (_: SecurityException) {
+            // The general list is still worth trying.
+        }
+    }
+    return try {
+        context.startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
+        true
+    } catch (_: ActivityNotFoundException) {
+        false
+    } catch (_: SecurityException) {
+        false
+    }
+}

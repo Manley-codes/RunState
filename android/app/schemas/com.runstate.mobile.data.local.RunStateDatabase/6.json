@@ -1,0 +1,372 @@
+{
+  "formatVersion": 1,
+  "database": {
+    "version": 6,
+    "identityHash": "caea295046598ddfad57a9d79d73d593",
+    "entities": [
+      {
+        "tableName": "runs",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`run_id` TEXT NOT NULL, `state` TEXT NOT NULL, `official_start_epoch_millis` INTEGER NOT NULL, `start_timezone_id` TEXT NOT NULL, `last_checkpoint_epoch_millis` INTEGER NOT NULL, `finish_epoch_millis` INTEGER, `final_distance_meters` REAL, `metric_source` TEXT, `telemetry_coverage` TEXT, `display_distance_unit` TEXT, `transition_history_complete` INTEGER, `pre_run_energy` TEXT, `tracking_mode` TEXT, PRIMARY KEY(`run_id`))",
+        "fields": [
+          {
+            "fieldPath": "runId",
+            "columnName": "run_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "state",
+            "columnName": "state",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "officialStartEpochMillis",
+            "columnName": "official_start_epoch_millis",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "startTimezoneId",
+            "columnName": "start_timezone_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastCheckpointEpochMillis",
+            "columnName": "last_checkpoint_epoch_millis",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "finishEpochMillis",
+            "columnName": "finish_epoch_millis",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "finalDistanceMeters",
+            "columnName": "final_distance_meters",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "metricSource",
+            "columnName": "metric_source",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "telemetryCoverage",
+            "columnName": "telemetry_coverage",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "displayDistanceUnit",
+            "columnName": "display_distance_unit",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "transitionHistoryComplete",
+            "columnName": "transition_history_complete",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "preRunEnergy",
+            "columnName": "pre_run_energy",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "trackingMode",
+            "columnName": "tracking_mode",
+            "affinity": "TEXT"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "run_id"
+          ]
+        }
+      },
+      {
+        "tableName": "run_transitions",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`run_id` TEXT NOT NULL, `sequence_number` INTEGER NOT NULL, `transition_type` TEXT NOT NULL, `occurred_at_epoch_millis` INTEGER NOT NULL, PRIMARY KEY(`run_id`, `sequence_number`), FOREIGN KEY(`run_id`) REFERENCES `runs`(`run_id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "runId",
+            "columnName": "run_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sequenceNumber",
+            "columnName": "sequence_number",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "transitionType",
+            "columnName": "transition_type",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "occurredAtEpochMillis",
+            "columnName": "occurred_at_epoch_millis",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "run_id",
+            "sequence_number"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_run_transitions_run_id",
+            "unique": false,
+            "columnNames": [
+              "run_id"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_run_transitions_run_id` ON `${TABLE_NAME}` (`run_id`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "runs",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "run_id"
+            ],
+            "referencedColumns": [
+              "run_id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "run_reflections",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`run_id` TEXT NOT NULL, `request_id` TEXT NOT NULL, `evidence_json` TEXT NOT NULL, `selection_deadline_epoch_millis` INTEGER NOT NULL, `status` TEXT NOT NULL, `selected_branch` TEXT, `post_run_energy` TEXT, `candidates_json` TEXT, `text` TEXT, `finalized_at_epoch_millis` INTEGER, `is_test_data` INTEGER NOT NULL DEFAULT 1, PRIMARY KEY(`run_id`), FOREIGN KEY(`run_id`) REFERENCES `runs`(`run_id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "runId",
+            "columnName": "run_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "requestId",
+            "columnName": "request_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "evidenceJson",
+            "columnName": "evidence_json",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "selectionDeadlineEpochMillis",
+            "columnName": "selection_deadline_epoch_millis",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "status",
+            "columnName": "status",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "selectedBranch",
+            "columnName": "selected_branch",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "postRunEnergy",
+            "columnName": "post_run_energy",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "candidatesJson",
+            "columnName": "candidates_json",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "text",
+            "columnName": "text",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "finalizedAtEpochMillis",
+            "columnName": "finalized_at_epoch_millis",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "isTestData",
+            "columnName": "is_test_data",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "1"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "run_id"
+          ]
+        },
+        "foreignKeys": [
+          {
+            "table": "runs",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "run_id"
+            ],
+            "referencedColumns": [
+              "run_id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "run_location_points",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`run_id` TEXT NOT NULL, `sequence_number` INTEGER NOT NULL, `observation_key` TEXT NOT NULL, `observed_at_epoch_millis` INTEGER NOT NULL, `elapsed_realtime_nanos` INTEGER, `latitude` REAL NOT NULL, `longitude` REAL NOT NULL, `horizontal_accuracy_meters` REAL, `altitude_meters` REAL, `speed_meters_per_second` REAL, `bearing_degrees` REAL, `accepted_for_distance` INTEGER NOT NULL, `rejection_reason` TEXT, `segment_distance_meters` REAL, `cumulative_distance_meters` REAL, PRIMARY KEY(`run_id`, `sequence_number`), FOREIGN KEY(`run_id`) REFERENCES `runs`(`run_id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "runId",
+            "columnName": "run_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sequenceNumber",
+            "columnName": "sequence_number",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "observationKey",
+            "columnName": "observation_key",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "observedAtEpochMillis",
+            "columnName": "observed_at_epoch_millis",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "elapsedRealtimeNanos",
+            "columnName": "elapsed_realtime_nanos",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "latitude",
+            "columnName": "latitude",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "longitude",
+            "columnName": "longitude",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "horizontalAccuracyMeters",
+            "columnName": "horizontal_accuracy_meters",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "altitudeMeters",
+            "columnName": "altitude_meters",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "speedMetersPerSecond",
+            "columnName": "speed_meters_per_second",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "bearingDegrees",
+            "columnName": "bearing_degrees",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "acceptedForDistance",
+            "columnName": "accepted_for_distance",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "rejectionReason",
+            "columnName": "rejection_reason",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "segmentDistanceMeters",
+            "columnName": "segment_distance_meters",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "cumulativeDistanceMeters",
+            "columnName": "cumulative_distance_meters",
+            "affinity": "REAL"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "run_id",
+            "sequence_number"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_run_location_points_run_id",
+            "unique": false,
+            "columnNames": [
+              "run_id"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_run_location_points_run_id` ON `${TABLE_NAME}` (`run_id`)"
+          },
+          {
+            "name": "index_run_location_points_run_id_observation_key",
+            "unique": true,
+            "columnNames": [
+              "run_id",
+              "observation_key"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_run_location_points_run_id_observation_key` ON `${TABLE_NAME}` (`run_id`, `observation_key`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "runs",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "run_id"
+            ],
+            "referencedColumns": [
+              "run_id"
+            ]
+          }
+        ]
+      }
+    ],
+    "setupQueries": [
+      "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'caea295046598ddfad57a9d79d73d593')"
+    ]
+  }
+}

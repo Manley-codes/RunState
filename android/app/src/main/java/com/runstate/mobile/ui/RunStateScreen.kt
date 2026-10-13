@@ -3,9 +3,7 @@ package com.runstate.mobile.ui
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
@@ -25,6 +23,8 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.repeatOnLifecycle
+import com.runstate.mobile.data.local.ReflectionBranch
+import com.runstate.mobile.data.local.PreRunEnergy
 import com.runstate.mobile.ui.theme.RunStateTheme
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
@@ -46,7 +46,8 @@ internal const val COUNTDOWN_STEP_MILLIS = 1_000L
  * tells the caller a button was pressed, and the caller asks the coordinator. That is what
  * keeps the coordinator the single place where a run's rules live.
  *
- * Intentionally plain. This is the lifecycle foundation, not the Start V7 visual design.
+ * Ready, Active and Saved delegate to their dedicated visual screens. Countdown and error
+ * states retain the plain lifecycle foundation while those transitions are refined.
  *
  * @param countdownDigit the digit to show during [RunUiState.Countdown], or null for none.
  *   Passed separately from the model because it is composition-local timing, not an answer
@@ -73,7 +74,24 @@ internal fun RunStateScreen(
     reflection: RunCompleteReflectionDisplay? = null,
     onRetryReflection: () -> Unit = {},
     modifier: Modifier = Modifier,
-    actionsEnabled: Boolean = true
+    actionsEnabled: Boolean = true,
+    selectedEnergy: ReflectionBranch? = null,
+    onSelectEnergy: (ReflectionBranch) -> Unit = {},
+    energyEnabled: Boolean = false,
+    isTestData: Boolean = true,
+    onViewHistory: () -> Unit = {},
+    showHistory: Boolean = false,
+    selectedPreRunEnergy: PreRunEnergy? = null,
+    onSelectPreRunEnergy: (PreRunEnergy?) -> Unit = {},
+    gpsSelected: Boolean = false,
+    onToggleGps: () -> Unit = {},
+    gpsMessage: String? = null,
+    musicSelected: Boolean = false,
+    musicAccessGranted: Boolean = false,
+    onToggleMusic: () -> Unit = {},
+    isGpsRun: Boolean = false,
+    gpsServicePresent: Boolean = false,
+    onResumeGpsTracking: () -> Unit = {}
 ) {
     val state = model.state
 
@@ -101,6 +119,49 @@ internal fun RunStateScreen(
             onRetryReflection = onRetryReflection,
             onStartAnother = onStartAnother,
             actionsEnabled = actionsEnabled,
+            modifier = modifier,
+            selectedEnergy = selectedEnergy,
+            onSelectEnergy = onSelectEnergy,
+            energyEnabled = energyEnabled,
+            isTestData = isTestData,
+            onViewHistory = onViewHistory,
+            showHistory = showHistory
+        )
+        return
+    }
+
+    if (state == RunUiState.ReadyToStart) {
+        StartRunScreen(
+            selectedPreRunEnergy = selectedPreRunEnergy,
+            onSelectPreRunEnergy = onSelectPreRunEnergy,
+            onStart = onStart,
+            actionsEnabled = actionsEnabled,
+            onViewHistory = onViewHistory,
+            showHistory = showHistory,
+            gpsSelected = gpsSelected,
+            onToggleGps = onToggleGps,
+            gpsMessage = gpsMessage,
+            musicSelected = musicSelected,
+            musicAccessGranted = musicAccessGranted,
+            onToggleMusic = onToggleMusic,
+            modifier = modifier
+        )
+        return
+    }
+
+    if (state == RunUiState.ActiveRunning || state == RunUiState.ActivePaused) {
+        ActiveRunScreen(
+            paused = state == RunUiState.ActivePaused,
+            metrics = metrics,
+            actionFailed = model.actionFailed,
+            actionsEnabled = runControlsEnabled,
+            onPause = onPause,
+            onResume = onResume,
+            onStop = onStop,
+            isGpsRun = isGpsRun,
+            gpsServicePresent = gpsServicePresent,
+            gpsMessage = gpsMessage,
+            onResumeGpsTracking = onResumeGpsTracking,
             modifier = modifier
         )
         return
@@ -120,11 +181,7 @@ internal fun RunStateScreen(
         )
 
         when (state) {
-            RunUiState.ReadyToStart -> ScreenAction(
-                label = "Start",
-                enabled = actionsEnabled,
-                onClick = onStart
-            )
+            RunUiState.ReadyToStart -> Unit // Drawn above as the dedicated Start surface.
 
             RunUiState.Countdown -> {
                 if (countdownDigit != null) {
@@ -155,29 +212,8 @@ internal fun RunStateScreen(
                 )
             }
 
-            RunUiState.ActiveRunning -> {
-                RunMetricsPanel(metrics)
-                ActionFailure(model.actionFailed)
-                ScreenAction(
-                    label = "Pause",
-                    enabled = runControlsEnabled,
-                    onClick = onPause
-                )
-            }
-
-            RunUiState.ActivePaused -> {
-                RunMetricsPanel(metrics)
-                ActionFailure(model.actionFailed)
-                ScreenAction(
-                    label = "Resume",
-                    enabled = runControlsEnabled,
-                    onClick = onResume
-                )
-                HoldToStopButton(
-                    onHoldComplete = onStop,
-                    enabled = runControlsEnabled
-                )
-            }
+            RunUiState.ActiveRunning,
+            RunUiState.ActivePaused -> Unit // Drawn above as the dedicated Active surface.
 
             RunUiState.Saved -> Unit // Drawn above as the dedicated Run Complete surface.
 
@@ -193,47 +229,6 @@ internal fun RunStateScreen(
             RunUiState.StartingRun,
             RunUiState.StorageInconsistent -> Unit
         }
-    }
-}
-
-/** Plain fixture metrics for the lifecycle foundation; visual design remains separate. */
-@Composable
-private fun RunMetricsPanel(metrics: RunMetricsDisplay?) {
-    if (metrics == null) {
-        Text(
-            text = "Metrics unavailable",
-            modifier = Modifier.padding(top = 24.dp)
-        )
-        return
-    }
-
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(top = 24.dp)
-    ) {
-        Text(
-            text = metrics.sourceLabel,
-            style = MaterialTheme.typography.labelMedium
-        )
-        MetricLine("Elapsed", metrics.elapsed)
-        MetricLine("Active", metrics.active)
-        MetricLine("Distance", metrics.distance)
-        MetricLine("Avg pace", metrics.averagePace)
-    }
-}
-
-/** One label/value pair, intentionally free of final visual-direction decisions. */
-@Composable
-private fun MetricLine(label: String, value: String) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(top = 8.dp),
-        horizontalArrangement = Arrangement.SpaceBetween
-    ) {
-        Text(text = label)
-        Text(text = value)
     }
 }
 
@@ -266,19 +261,6 @@ private fun SecondaryAction(
         modifier = Modifier.padding(top = 12.dp)
     ) {
         Text(text = label)
-    }
-}
-
-/** The retry line, shown only when the last lifecycle write was refused. */
-@Composable
-private fun ActionFailure(failed: Boolean) {
-    if (failed) {
-        Text(
-            text = ACTION_FAILED_MESSAGE,
-            color = MaterialTheme.colorScheme.error,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.padding(top = 16.dp)
-        )
     }
 }
 

@@ -1,9 +1,14 @@
 package com.runstate.mobile
 
 import android.app.Application
+import android.os.Build
 import com.runstate.mobile.data.local.RunStateDatabase
 import com.runstate.mobile.data.local.buildRunStateDatabase
+import com.runstate.mobile.location.RunTrackingServiceState
 import com.runstate.mobile.reflection.LocalReflectionHttpClient
+import com.runstate.mobile.reflection.LOCAL_REFLECTION_ENDPOINT
+import com.runstate.mobile.reflection.PHONE_REFLECTION_ENDPOINT
+import com.runstate.mobile.reflection.RoomReflectionStore
 import com.runstate.mobile.reflection.RunReflectionCoordinator
 import com.runstate.mobile.reflection.reflectionBridgeEnabledForBuild
 import com.runstate.mobile.run.PreparedRunFactory
@@ -14,6 +19,9 @@ import java.util.UUID
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 
 /**
  * The composition root: one database and one run coordinator, for the process.
@@ -48,9 +56,8 @@ import kotlinx.coroutines.SupervisorJob
  * the same reason the database is — a second coordinator would be a second gate, and two
  * gates guard nothing.
  *
- * `MainActivity` now takes that coordinator and drives the visible journey through it.
- * What is still missing is a foreground service holding a live run, and a visible path that
- * makes a run official — nothing in the UI calls [RunSessionCoordinator.requestStart] yet.
+ * `MainActivity` drives the visible journey through the coordinator. A same-process
+ * foreground service now owns GPS run execution after the visible countdown.
  *
  * ## Two constraints on future work
  *
@@ -72,6 +79,17 @@ import kotlinx.coroutines.SupervisorJob
  */
 class RunStateApplication : Application() {
 
+    private val mutableTrackingServiceState = MutableStateFlow<RunTrackingServiceState>(
+        RunTrackingServiceState.Idle
+    )
+
+    internal val trackingServiceState: StateFlow<RunTrackingServiceState> =
+        mutableTrackingServiceState.asStateFlow()
+
+    internal fun publishTrackingServiceState(state: RunTrackingServiceState) {
+        mutableTrackingServiceState.value = state
+    }
+
     /**
      * The one database this process uses, opened the first time something asks for it.
      *
@@ -87,6 +105,7 @@ class RunStateApplication : Application() {
      * inside the module rather than an external caller.
      */
     internal val database: RunStateDatabase by lazy { buildRunStateDatabase(this) }
+
 
     /**
      * The one wall clock run timestamps are read from in this process.
@@ -141,6 +160,7 @@ class RunStateApplication : Application() {
     internal val runSessionCoordinator: RunSessionCoordinator by lazy {
         RunSessionCoordinator(
             runDao = database.runDao(),
+            locationDao = database.locationDao(),
 
             // The phone's zone is read when each run is prepared, not captured here, so a
             // run records the zone it actually began in.
@@ -164,9 +184,16 @@ class RunStateApplication : Application() {
         if (!reflectionBridgeEnabledForBuild()) {
             null
         } else {
+            // The emulator has a special route to the host. A USB-connected phone instead
+            // reaches the same loopback-only service through `adb reverse tcp:8787 tcp:8787`.
+            val emulator = Build.PRODUCT.startsWith("sdk_") ||
+                Build.DEVICE.startsWith("emu") || Build.HARDWARE == "ranchu"
             RunReflectionCoordinator(
                 runDao = database.runDao(),
-                gateway = LocalReflectionHttpClient(),
+                store = RoomReflectionStore(database.reflectionDao()),
+                gateway = LocalReflectionHttpClient(
+                    if (emulator) LOCAL_REFLECTION_ENDPOINT else PHONE_REFLECTION_ENDPOINT
+                ),
                 applicationScope = applicationScope
             )
         }

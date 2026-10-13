@@ -4,8 +4,10 @@ import com.runstate.mobile.data.local.DistanceUnit
 import com.runstate.mobile.data.local.FakeRunDao
 import com.runstate.mobile.data.local.FinalRunMetrics
 import com.runstate.mobile.data.local.MetricSource
+import com.runstate.mobile.data.local.PreRunEnergy
 import com.runstate.mobile.data.local.RunEntity
 import com.runstate.mobile.data.local.RunTransitionType
+import com.runstate.mobile.data.local.RunTrackingMode
 import com.runstate.mobile.data.local.StoredRunState
 import com.runstate.mobile.data.local.TelemetryCoverage
 import java.time.Clock
@@ -132,7 +134,8 @@ class RunSessionCoordinatorTest {
         officialStartEpochMillis = officialStart,
         startTimezoneId = START_ZONE,
         lastCheckpointEpochMillis = officialStart,
-        transitionHistoryComplete = true
+        transitionHistoryComplete = true,
+        trackingMode = RunTrackingMode.FIXTURE
     )
 
     /**
@@ -733,7 +736,12 @@ class RunSessionCoordinatorTest {
             fixture.coordinator.beginCountdown()
         }
         fixture.dao.failWith = IllegalStateException("disk full")
-        val failed = runBlocking { fixture.coordinator.requestStart() }
+        val failed = runBlocking {
+            fixture.coordinator.requestStart(
+                PreRunEnergy.HIGH,
+                musicObservationRequested = true
+            )
+        }
         assertTrue(failureOf(failed) is IllegalStateException)
 
         // Arrange: storage recovers, and time passes before the runner retries.
@@ -741,13 +749,26 @@ class RunSessionCoordinatorTest {
         fixture.clock.nowMillis = SECOND_START
 
         // Act
-        val retry = runBlocking { fixture.coordinator.requestStart() }
+        val retry = runBlocking {
+            fixture.coordinator.requestStart(
+                PreRunEnergy.LOW,
+                musicObservationRequested = false
+            )
+        }
         val session = runBlocking { retry.await() }
 
         // Assert: a new attempt object, but the same run — first UUID, first start.
         assertFalse(retry === failed)
         assertEquals(RUN_ID, session.runId)
-        assertEquals(listOf(preparedRun()), fixture.dao.inserted)
+        assertEquals(
+            listOf(
+                preparedRun().copy(
+                    preRunEnergy = PreRunEnergy.HIGH,
+                    musicObservationRequested = true
+                )
+            ),
+            fixture.dao.inserted
+        )
         assertEquals(1, fixture.identitiesIssued)
         assertSame(session, (fixture.admission() as RunAdmission.RunInProgress).session)
     }
@@ -1461,6 +1482,98 @@ class RunSessionCoordinatorTest {
         val second = runBlocking { fixture.startRun() }
         assertEquals(SECOND_RUN_ID, second.runId)
         assertEquals(RunSessionState.RUNNING, second.state)
+    }
+
+    /** Saved returns to Ready without starting a countdown or changing either stored run. */
+    @Test
+    fun `preparing another run retires only the completed cycle`() {
+        val fixture = Fixture()
+        val first = startedRun(fixture)
+        runBlocking {
+            fixture.coordinator.requestAction(RunActionKind.PAUSE).await()
+            fixture.coordinator.requestAction(RunActionKind.COMPLETE).await()
+        }
+        val storedBefore = fixture.dao.inserted.toList()
+        val transitionsBefore = fixture.dao.transitions.toList()
+        val discoveriesBefore = fixture.dao.discoveryQueryCalls
+        val identitiesBefore = fixture.identitiesIssued
+
+        runBlocking { fixture.coordinator.prepareAnotherRun() }
+
+        assertEquals(
+            RunJourneySnapshot(InitializationStatus.Completed, RunAdmission.ReadyForCountdown),
+            runBlocking { fixture.coordinator.journeySnapshot() }
+        )
+        assertEquals(RunSessionState.COMPLETED, first.state)
+        assertEquals(storedBefore, fixture.dao.inserted)
+        assertEquals(transitionsBefore, fixture.dao.transitions)
+        assertEquals(discoveriesBefore, fixture.dao.discoveryQueryCalls)
+        assertEquals(identitiesBefore, fixture.identitiesIssued)
+
+        fixture.clock.nowMillis = SECOND_START
+        val second = runBlocking {
+            fixture.coordinator.beginCountdown()
+            fixture.startRun()
+        }
+        assertEquals(SECOND_RUN_ID, second.runId)
+        assertEquals(RunSessionState.RUNNING, second.state)
+        assertEquals(RunSessionState.COMPLETED, first.state)
+    }
+
+    /** Ready, live and blocked states cannot use Saved's explicit cycle retirement. */
+    @Test
+    fun `preparing another run refuses a cycle that has not finished`() {
+        val ready = Fixture()
+        runBlocking { ready.coordinator.initialize() }
+        assertThrows(IllegalStateException::class.java) {
+            runBlocking { ready.coordinator.prepareAnotherRun() }
+        }
+        assertEquals(RunAdmission.ReadyForCountdown, ready.admission())
+
+        val live = Fixture()
+        val owner = startedRun(live)
+        val storedBefore = live.dao.inserted.toList()
+        assertThrows(IllegalStateException::class.java) {
+            runBlocking { live.coordinator.prepareAnotherRun() }
+        }
+        assertSame(owner, (live.admission() as RunAdmission.RunInProgress).session)
+        assertEquals(storedBefore, live.dao.inserted)
+
+        val blocked = Fixture()
+        runBlocking {
+            blocked.dao.insert(preparedRun())
+            blocked.dao.insert(preparedRun(SECOND_RUN_ID, SECOND_START))
+            blocked.coordinator.initialize()
+        }
+        val blockedRows = blocked.dao.inserted.toList()
+        assertThrows(IllegalStateException::class.java) {
+            runBlocking { blocked.coordinator.prepareAnotherRun() }
+        }
+        assertTrue(blocked.admission() is RunAdmission.BlockedByInconsistentStorage)
+        assertEquals(blockedRows, blocked.dao.inserted)
+    }
+
+    /** A completion still writing must not lose the owner before its result is applied. */
+    @Test
+    fun `preparing another run refuses a pending completion`() {
+        val fixture = Fixture()
+        val owner = startedRun(fixture)
+        runBlocking { fixture.coordinator.requestAction(RunActionKind.PAUSE).await() }
+        val releaseWrite = CompletableDeferred<Unit>()
+        fixture.dao.duringCompletion = { releaseWrite.await() }
+
+        runBlocking {
+            val pending = fixture.coordinator.requestAction(RunActionKind.COMPLETE)
+            assertEquals(RunActionKind.COMPLETE, fixture.coordinator.journeySnapshot().reservedAction)
+            assertThrows(IllegalStateException::class.java) {
+                runBlocking { fixture.coordinator.prepareAnotherRun() }
+            }
+            assertSame(owner, (fixture.admission() as RunAdmission.RunInProgress).session)
+
+            releaseWrite.complete(Unit)
+            pending.await()
+            assertEquals(RunAdmission.RunCompleted(owner), fixture.admission())
+        }
     }
 
     /**

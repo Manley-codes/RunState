@@ -2,10 +2,13 @@ package com.runstate.mobile.run
 
 import com.runstate.mobile.data.local.DistanceUnit
 import com.runstate.mobile.data.local.FinalRunMetrics
+import com.runstate.mobile.data.local.LocationDao
 import com.runstate.mobile.data.local.MetricSource
 import com.runstate.mobile.data.local.RunDao
 import com.runstate.mobile.data.local.RunEntity
+import com.runstate.mobile.data.local.PreRunEnergy
 import com.runstate.mobile.data.local.RunTransitionEntity
+import com.runstate.mobile.data.local.RunTrackingMode
 import com.runstate.mobile.data.local.StoredRunState
 import com.runstate.mobile.data.local.TelemetryCoverage
 import kotlinx.coroutines.CancellationException
@@ -81,8 +84,8 @@ internal sealed interface RunAdmission {
      * This cycle's run has durably finished, and nothing new has begun yet.
      *
      * Distinct from [ReadyForCountdown] because the runner is owed a truthful "saved"
-     * before being offered another start. The next countdown still retires this cycle,
-     * exactly as it did when a completed owner was reported as ready.
+     * before being offered another start. The runner may explicitly retire this cycle
+     * with [RunSessionCoordinator.prepareAnotherRun] to return to the Ready screen.
      *
      * @property session the completed owner, still pointing at its finished machine.
      */
@@ -171,7 +174,7 @@ internal enum class RunActionKind {
  * This owns two questions only: may a run begin, and which single [ActiveRunSession] is
  * the live one. It does not own the run while it happens. The timer, GPS capture, the
  * notification, screen-off behavior and keeping the process alive belong to the
- * foreground service that does not exist yet, and that service will *consume* this
+ * same-process GPS foreground service, which consumes this
  * coordinator rather than replace it: it will ask admission, hold the owner it is given,
  * and run the lifecycle through this coordinator exactly as any other caller would.
  *
@@ -209,8 +212,8 @@ internal enum class RunActionKind {
  *
  * `MainActivity` initializes this coordinator and drives the whole visible fixture journey
  * through it: countdown, official start, pause, resume, hold-to-stop completion and the next
- * countdown. What is not yet wired is a foreground service holding a live run, so a run
- * survives only as long as this process does, plus whatever recovery rebuilds from storage.
+ * countdown. A GPS service now holds live GPS collection; process recovery restores durable
+ * run identity without claiming observations from a time when that service was absent.
  *
  * **It is not the only way to build these pieces.** [RunSessionStarter] and
  * [ActiveRunRecovery] have internal constructors, which stops code outside this module
@@ -242,14 +245,15 @@ internal class RunSessionCoordinator(
     private val runDao: RunDao,
     private val preparedRunFactory: PreparedRunFactory,
     private val applicationScope: CoroutineScope,
+    private val locationDao: LocationDao? = null,
     private val fixtureDistanceCalculator: FixtureDistanceCalculator = FixtureDistanceCalculator()
 ) {
 
     /**
      * Serializes every admission decision and every act taken on one.
      *
-     * Held across the whole of [initialize], [journeySnapshot], [beginCountdown] and
-     * [cancelCountdown], because in each of them the state read at the start has to still
+     * Held across the whole of [initialize], [journeySnapshot], [beginCountdown],
+     * [prepareAnotherRun] and [cancelCountdown], because the state read at the start must still
      * be true at the end. [requestStart] and [requestAction] hold it for their decision and
      * again for their result, but not across the write between them; [startReserved] and
      * [reservedAction] cover that gap.
@@ -260,8 +264,8 @@ internal class RunSessionCoordinator(
      * The machine for the current run cycle.
      *
      * A `var` because a machine is per-cycle, not per-process: a completed one is retired
-     * and replaced when the next countdown begins. It is never reset, and it is never
-     * reused after COMPLETED.
+     * and replaced when the runner prepares another run or the next countdown begins.
+     * It is never reset, and it is never reused after COMPLETED.
      */
     private var stateMachine = RunSessionStateMachine()
 
@@ -279,6 +283,9 @@ internal class RunSessionCoordinator(
 
     /** Last live answer, used only to stop wall-clock correction making the display retreat. */
     private var lastPublishedMetrics: RunMetrics? = null
+
+    /** A recovered RUNNING GPS run has an unobserved service gap; its active time is unknown. */
+    private var recoveredGpsGap = false
 
     /** Candidates from a refused multi-row database. Non-empty means nothing may start. */
     private var inconsistentActiveRuns: List<RunEntity> = emptyList()
@@ -408,6 +415,8 @@ internal class RunSessionCoordinator(
                 metricRun = result.runAtRecovery
                 metricTransitions = null
                 lastPublishedMetrics = null
+                recoveredGpsGap = result.runAtRecovery.trackingMode == RunTrackingMode.GPS &&
+                    result.runAtRecovery.state == StoredRunState.RUNNING
             }
 
             is ActiveRunRecoveryResult.InconsistentActiveRuns -> {
@@ -444,6 +453,11 @@ internal class RunSessionCoordinator(
      */
     suspend fun journeySnapshot(): RunJourneySnapshot = coordinatorLock.withLock {
         snapshotUnderLock()
+    }
+
+    /** The immutable tracking choice on this cycle's active run, if any. */
+    suspend fun trackingMode(): RunTrackingMode? = coordinatorLock.withLock {
+        metricRun?.trackingMode
     }
 
     /**
@@ -493,7 +507,7 @@ internal class RunSessionCoordinator(
         ) {
             "The owned completed run has no durable finish time."
         }
-        val activeMillis = RunTimeline.activeMillis(
+        val timelineActiveMillis = RunTimeline.activeMillis(
             officialStartEpochMillis = run.officialStartEpochMillis,
             finishEpochMillis = run.finishEpochMillis,
             currentState = run.state,
@@ -505,23 +519,37 @@ internal class RunSessionCoordinator(
                 TransitionHistoryCoverage.INCOMPLETE
             }
         )
+        val activeMillis = if (recoveredGpsGap && run.trackingMode == RunTrackingMode.GPS) {
+            null
+        } else {
+            timelineActiveMillis
+        }
 
         val rawMetrics = when (run.state) {
             StoredRunState.RUNNING,
             StoredRunState.PAUSED -> {
-                val distance = activeMillis?.let(fixtureDistanceCalculator::distanceMetersAt)
+                val isGps = run.trackingMode == RunTrackingMode.GPS
+                val distance = if (isGps) {
+                    checkNotNull(locationDao) { "A GPS run needs its location store." }
+                        .latestMeasured(run.runId)?.cumulativeDistanceMeters
+                } else {
+                    activeMillis?.let(fixtureDistanceCalculator::distanceMetersAt)
+                }
                 RunMetrics(
                     elapsedMillis = elapsedMillis,
                     activeMillis = activeMillis,
                     distanceMeters = distance,
-                    paceSecondsPerMeter = RunTimeline.averagePaceSecondsPerMeter(
-                        activeDurationMillis = activeMillis,
-                        distanceMeters = distance
-                    ),
+                    paceSecondsPerMeter = if (isGps) null else
+                        RunTimeline.averagePaceSecondsPerMeter(
+                            activeDurationMillis = activeMillis,
+                            distanceMeters = distance
+                        ),
                     displayUnit = DistanceUnit.MILES,
-                    source = MetricSource.FIXTURE,
+                    source = if (isGps) MetricSource.GPS else MetricSource.FIXTURE,
                     coverage = if (distance == null) {
                         TelemetryCoverage.UNAVAILABLE
+                    } else if (isGps) {
+                        TelemetryCoverage.PARTIAL
                     } else {
                         TelemetryCoverage.COMPLETE
                     }
@@ -532,7 +560,10 @@ internal class RunSessionCoordinator(
                 elapsedMillis = elapsedMillis,
                 activeMillis = activeMillis,
                 distanceMeters = run.finalDistanceMeters,
-                paceSecondsPerMeter = RunTimeline.averagePaceSecondsPerMeter(
+                paceSecondsPerMeter = if (
+                    run.metricSource == MetricSource.GPS &&
+                    run.telemetryCoverage != TelemetryCoverage.COMPLETE
+                ) null else RunTimeline.averagePaceSecondsPerMeter(
                     activeDurationMillis = activeMillis,
                     distanceMeters = run.finalDistanceMeters
                 ),
@@ -700,6 +731,39 @@ internal class RunSessionCoordinator(
     }
 
     /**
+     * Retires a durably completed run and returns to the Ready screen before countdown.
+     *
+     * This is the "Start another run" action on Saved. It deliberately makes no run
+     * official and does not touch Room: the runner can choose their next pre-run inputs
+     * before pressing Start. The finished session continues to report COMPLETED to any
+     * earlier holder; the new cycle has its own NO_SESSION machine and identity.
+     *
+     * @throws IllegalStateException unless recovery completed and this coordinator owns a
+     *   finished run with no start or lifecycle write still pending. Refusal changes nothing.
+     */
+    suspend fun prepareAnotherRun() = coordinatorLock.withLock {
+        check(initializationStatus == InitializationStatus.Completed) {
+            "Another run cannot be prepared before recovery has completed."
+        }
+        check(inconsistentActiveRuns.isEmpty()) {
+            "Another run cannot be prepared while storage holds " +
+                "${inconsistentActiveRuns.size} unfinished runs."
+        }
+        check(!startReserved) {
+            "Another run cannot be prepared while an official start is underway."
+        }
+        check(reservedAction == null) {
+            "Another run cannot be prepared while a $reservedAction is still being saved."
+        }
+        val session = activeSession
+        check(session != null && session.state == RunSessionState.COMPLETED) {
+            "Another run can only be prepared after a run has finished."
+        }
+
+        beginFreshCycle()
+    }
+
+    /**
      * Abandons a countdown, returning the coordinator to a fresh NO_SESSION cycle.
      *
      * The exit that entering COUNTDOWN requires. A countdown is the one stage the runner
@@ -761,16 +825,14 @@ internal class RunSessionCoordinator(
     /**
      * Discards the current cycle and installs a fresh machine and starter.
      *
-     * One helper for both exits from a cycle — a completed run being retired before the
-     * next countdown, and a countdown being cancelled — because the replacement itself is
+     * One helper for all exits from a cycle — a completed run being retired on Saved or
+     * before the next countdown, and a countdown being cancelled — because replacement is
      * the same operation and a second copy of it could drift. What differs is when it is
      * allowed, and that stays with each caller, where the rules belong.
      *
-     * Cycle replacement happens only at those two boundaries. Doing it inside
-     * [requestStart] would mean a coordinator that had answered
-     * [RunAdmission.ReadyForCountdown] was still holding a completed owner with no
-     * countdown underway, and doing it inside [journeySnapshot] would make a report mutate
-     * what it reports on.
+     * Cycle replacement happens only at those explicit boundaries. Doing it inside
+     * [requestStart] or [journeySnapshot] would silently retire an owner while a caller
+     * was merely requesting an action or reading the journey.
      *
      * The prepared row goes with the cycle. It described the run *this* cycle was about to
      * make official; a later cycle is a new decision to run and gets a new identity.
@@ -836,7 +898,11 @@ internal class RunSessionCoordinator(
      *   was interrupted without reporting its result. Nothing is prepared or launched in
      *   any of those cases.
      */
-    suspend fun requestStart(): Deferred<ActiveRunSession> = coordinatorLock.withLock {
+    suspend fun requestStart(
+        preRunEnergy: PreRunEnergy? = null,
+        trackingMode: RunTrackingMode = RunTrackingMode.FIXTURE,
+        musicObservationRequested: Boolean = false
+    ): Deferred<ActiveRunSession> = coordinatorLock.withLock {
         check(initializationStatus == InitializationStatus.Completed) {
             "A run cannot start before recovery has completed."
         }
@@ -878,7 +944,12 @@ internal class RunSessionCoordinator(
 
         // Reused after a failure, created only the first time. This is the whole of retry
         // identity: the UUID and official start are decided once per cycle.
-        val row = preparedRun ?: preparedRunFactory.create().also { preparedRun = it }
+        val row = preparedRun ?: preparedRunFactory.create(
+            preRunEnergy,
+            trackingMode,
+            musicObservationRequested
+        )
+            .also { preparedRun = it }
 
         // Reserved before anything is launched, so there is no moment at which an attempt
         // exists and the cycle is not yet protected. A previous failure is cleared here,
@@ -942,6 +1013,7 @@ internal class RunSessionCoordinator(
             metricRun = row
             metricTransitions = emptyList()
             lastPublishedMetrics = null
+            recoveredGpsGap = false
 
             // The intention has become a run. Keeping the row would let a later cycle
             // mistake it for a start still waiting to happen.
@@ -1059,7 +1131,7 @@ internal class RunSessionCoordinator(
                 RunActionKind.PAUSE -> session.pause(occurredAt)
                 RunActionKind.RESUME -> session.resume(occurredAt)
                 RunActionKind.COMPLETE -> {
-                    val metrics = fixtureMetricsForCompletion(session.runId, occurredAt)
+                    val metrics = metricsForCompletion(session.runId, occurredAt)
                     session.complete(
                         finishEpochMillis = occurredAt,
                         finalMetrics = metrics
@@ -1159,7 +1231,10 @@ internal class RunSessionCoordinator(
             elapsedMillis = elapsed,
             activeMillis = active,
             distanceMeters = distance,
-            paceSecondsPerMeter = RunTimeline.averagePaceSecondsPerMeter(
+            paceSecondsPerMeter = if (
+                current.source == MetricSource.GPS &&
+                current.coverage != TelemetryCoverage.COMPLETE
+            ) null else RunTimeline.averagePaceSecondsPerMeter(
                 activeDurationMillis = active,
                 distanceMeters = distance
             )
@@ -1171,6 +1246,34 @@ internal class RunSessionCoordinator(
         metricRun = null
         metricTransitions = null
         lastPublishedMetrics = null
+        recoveredGpsGap = false
+    }
+
+    /** Freeze only measurements belonging to this run's immutable tracking mode. */
+    private suspend fun metricsForCompletion(
+        runId: String,
+        finishEpochMillis: Long
+    ): FinalRunMetrics {
+        val storedRun = checkNotNull(runDao.findById(runId)) {
+            "No run is stored under $runId, so its metrics cannot be finalized."
+        }
+        if (storedRun.trackingMode == RunTrackingMode.GPS) {
+            val measuredDistance = checkNotNull(locationDao) {
+                "A GPS run needs its location store."
+            }.latestMeasured(runId)?.cumulativeDistanceMeters
+            return FinalRunMetrics(
+                distanceMeters = measuredDistance,
+                source = MetricSource.GPS,
+                // Until continuity is proven, a real measurement is honestly partial.
+                coverage = if (measuredDistance == null) {
+                    TelemetryCoverage.UNAVAILABLE
+                } else {
+                    TelemetryCoverage.PARTIAL
+                },
+                displayUnit = DistanceUnit.MILES
+            )
+        }
+        return fixtureMetricsForCompletion(storedRun, finishEpochMillis)
     }
 
     /**
@@ -1183,19 +1286,15 @@ internal class RunSessionCoordinator(
      * into a believable distance.
      */
     private suspend fun fixtureMetricsForCompletion(
-        runId: String,
+        storedRun: RunEntity,
         finishEpochMillis: Long
     ): FinalRunMetrics {
-        val storedRun = checkNotNull(runDao.findById(runId)) {
-            "No run is stored under $runId, so its metrics cannot be finalized."
-        }
-
         val activeDuration = if (storedRun.transitionHistoryComplete == true) {
             RunTimeline.activeMillis(
                 officialStartEpochMillis = storedRun.officialStartEpochMillis,
                 finishEpochMillis = storedRun.finishEpochMillis,
                 currentState = storedRun.state,
-                transitions = runDao.transitionsFor(runId),
+                transitions = runDao.transitionsFor(storedRun.runId),
                 nowEpochMillis = finishEpochMillis,
                 historyCoverage = TransitionHistoryCoverage.COMPLETE
             )

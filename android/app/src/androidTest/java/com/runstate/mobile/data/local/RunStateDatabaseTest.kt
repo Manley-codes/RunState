@@ -101,6 +101,17 @@ class RunStateDatabaseTest {
         assertEquals(runningRun, restored)
     }
 
+    @Test
+    fun preRunEnergyChoiceSurvivesDatabaseReopen() {
+        val chosenRun = runningRun.copy(preRunEnergy = PreRunEnergy.HIGH)
+        runBlocking { database.runDao().insert(chosenRun) }
+
+        database.close()
+        database = openDatabase()
+
+        assertEquals(chosenRun, runBlocking { database.runDao().findById(chosenRun.runId) })
+    }
+
     /**
      * Proves a repeated UUID is refused instead of quietly overwriting the stored run.
      */

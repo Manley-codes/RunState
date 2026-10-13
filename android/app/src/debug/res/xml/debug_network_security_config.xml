@@ -4,5 +4,7 @@
     <domain-config cleartextTrafficPermitted="true">
         <!-- Android Emulator's route to services bound to the host loopback. -->
         <domain includeSubdomains="false">10.0.2.2</domain>
+        <!-- A USB-connected phone reaches host loopback through adb reverse. -->
+        <domain includeSubdomains="false">127.0.0.1</domain>
     </domain-config>
 </network-security-config>

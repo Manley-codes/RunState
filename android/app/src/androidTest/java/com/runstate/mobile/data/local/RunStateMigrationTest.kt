@@ -13,7 +13,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 
 /**
- * Proves real version-1 and version-2 databases reach the current version without
+ * Proves real version-1, version-2 and version-3 databases reach the current version without
  * losing or inventing anything.
  *
  * The database here is built from the exported version-1 schema rather than from
@@ -57,6 +57,130 @@ class RunStateMigrationTest {
 
     /** The same context the helper writes its database files under. */
     private val context = InstrumentationRegistry.getInstrumentation().targetContext
+
+    @Test
+    fun versionThreeMigrationPreservesRunsMetricsAndTransitionsWithoutInventingReflections() {
+        val databaseName = "runstate-v3-reflection-migration-test.db"
+        val finishedAt = OFFICIAL_START + 60_000
+        helper.createDatabase(databaseName, 3).apply {
+            insertVersionTwoRun(
+                state = "COMPLETED",
+                lastCheckpointEpochMillis = finishedAt,
+                finishEpochMillis = finishedAt
+            )
+            execSQL(
+                """
+                UPDATE runs SET final_distance_meters = 123.456,
+                    metric_source = 'FIXTURE', telemetry_coverage = 'PARTIAL',
+                    display_distance_unit = 'MILES', transition_history_complete = 1
+                WHERE run_id = ?
+                """.trimIndent(),
+                arrayOf(RUN_ID)
+            )
+            execSQL(
+                "INSERT INTO run_transitions (run_id, sequence_number, transition_type, occurred_at_epoch_millis) VALUES (?, 1, 'PAUSE', ?)",
+                arrayOf<Any>(RUN_ID, finishedAt)
+            )
+            close()
+        }
+        helper.runMigrationsAndValidate(databaseName, 4, true, MIGRATION_3_4).close()
+        val migrated = openDatabaseThroughFactory(databaseName)
+        runBlocking {
+            assertEquals(
+                RunEntity(
+                    runId = RUN_ID,
+                    state = StoredRunState.COMPLETED,
+                    officialStartEpochMillis = OFFICIAL_START,
+                    startTimezoneId = TIMEZONE_ID,
+                    lastCheckpointEpochMillis = finishedAt,
+                    finishEpochMillis = finishedAt,
+                    finalDistanceMeters = 123.456,
+                    metricSource = MetricSource.FIXTURE,
+                    telemetryCoverage = TelemetryCoverage.PARTIAL,
+                    displayDistanceUnit = DistanceUnit.MILES,
+                    transitionHistoryComplete = true
+                ),
+                migrated.runDao().findById(RUN_ID)
+            )
+            assertEquals(
+                listOf(RunTransitionEntity(RUN_ID, 1, RunTransitionType.PAUSE, finishedAt)),
+                migrated.runDao().transitionsFor(RUN_ID)
+            )
+            assertTrue(migrated.reflectionDao().all().isEmpty())
+            val pending = RunReflectionEntity(
+                runId = RUN_ID,
+                requestId = "03689ffc-65d9-4907-ae77-7a17b3ad77a6",
+                evidenceJson = "{}",
+                selectionDeadlineEpochMillis = finishedAt + 6_000
+            )
+            assertEquals(pending, migrated.reflectionDao().ensurePending(pending))
+        }
+    }
+
+    @Test
+    fun versionFourMigrationLeavesUnknownPreRunEnergyUnknown() {
+        val databaseName = "runstate-v4-energy-migration-test.db"
+        helper.createDatabase(databaseName, 4).apply {
+            insertVersionTwoRun(
+                state = "RUNNING",
+                lastCheckpointEpochMillis = OFFICIAL_START,
+                finishEpochMillis = null
+            )
+            close()
+        }
+
+        helper.runMigrationsAndValidate(databaseName, 5, true, MIGRATION_4_5).close()
+
+        val migrated = openDatabaseThroughFactory(databaseName)
+        val restored = runBlocking { migrated.runDao().findById(RUN_ID) }
+            ?: throw AssertionError("The version-4 run was lost.")
+        assertEquals(RUN_ID, restored.runId)
+        assertNull(restored.preRunEnergy)
+    }
+
+    @Test
+    fun versionFiveMigrationKeepsOldTrackingModeUnknownAndAddsNoGpsPoints() {
+        val databaseName = "runstate-v5-gps-migration-test.db"
+        helper.createDatabase(databaseName, 5).apply {
+            insertVersionTwoRun(
+                state = "RUNNING",
+                lastCheckpointEpochMillis = OFFICIAL_START,
+                finishEpochMillis = null
+            )
+            execSQL("UPDATE runs SET pre_run_energy = 'LOW' WHERE run_id = ?", arrayOf(RUN_ID))
+            close()
+        }
+
+        helper.runMigrationsAndValidate(databaseName, 6, true, MIGRATION_5_6).close()
+
+        val migrated = openDatabaseThroughFactory(databaseName)
+        val restored = runBlocking { migrated.runDao().findById(RUN_ID) }
+            ?: throw AssertionError("The version-5 run was lost.")
+        assertEquals(PreRunEnergy.LOW, restored.preRunEnergy)
+        assertNull(restored.trackingMode)
+        assertTrue(runBlocking { migrated.locationDao().pointsFor(RUN_ID) }.isEmpty())
+    }
+
+    @Test
+    fun versionSixMigrationDefaultsMusicObservationOffWithoutInventingEvents() {
+        val databaseName = "runstate-v6-music-migration-test.db"
+        helper.createDatabase(databaseName, 6).apply {
+            insertVersionTwoRun(
+                state = "RUNNING",
+                lastCheckpointEpochMillis = OFFICIAL_START,
+                finishEpochMillis = null
+            )
+            close()
+        }
+
+        helper.runMigrationsAndValidate(databaseName, 7, true, MIGRATION_6_7).close()
+
+        val migrated = openDatabaseThroughFactory(databaseName)
+        val restored = runBlocking { migrated.runDao().findById(RUN_ID) }
+            ?: throw AssertionError("The version-6 run was lost.")
+        assertEquals(false, restored.musicObservationRequested)
+        assertTrue(runBlocking { migrated.musicObservationDao().observationsFor(RUN_ID) }.isEmpty())
+    }
 
     /**
      * Writes a run the only way version 1 could: raw SQL against the version-1 table,

@@ -1,6 +1,8 @@
 package com.runstate.mobile.run
 
 import com.runstate.mobile.data.local.RunEntity
+import com.runstate.mobile.data.local.PreRunEnergy
+import com.runstate.mobile.data.local.RunTrackingMode
 import com.runstate.mobile.data.local.StoredRunState
 import java.time.Clock
 import java.time.ZoneId
@@ -45,7 +47,11 @@ internal class PreparedRunFactory(
      * the last checkpoint. Reading it twice could produce two different milliseconds, and
      * [RunSessionStarter] refuses any initial row whose checkpoint differs from its start.
      */
-    fun create(): RunEntity {
+    fun create(
+        preRunEnergy: PreRunEnergy? = null,
+        trackingMode: RunTrackingMode = RunTrackingMode.FIXTURE,
+        musicObservationRequested: Boolean = false
+    ): RunEntity {
         val officialStart = clock.millis()
 
         return RunEntity(
@@ -64,7 +70,10 @@ internal class PreparedRunFactory(
             // Version 3 is the first schema able to preserve this provenance. A fresh
             // row starts with complete lifecycle evidence; migrated rows deliberately
             // keep null because their earlier history cannot be reconstructed.
-            transitionHistoryComplete = true
+            transitionHistoryComplete = true,
+            preRunEnergy = preRunEnergy,
+            trackingMode = trackingMode,
+            musicObservationRequested = musicObservationRequested
         )
     }
 

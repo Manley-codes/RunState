@@ -5,6 +5,10 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Text
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
@@ -28,6 +32,8 @@ import androidx.lifecycle.LifecycleRegistry
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.runstate.mobile.MainActivity
+import com.runstate.mobile.data.local.ReflectionBranch
+import com.runstate.mobile.data.local.PreRunEnergy
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -90,6 +96,8 @@ class RunStateScreenTest {
         var stops = 0
         var startAnothers = 0
         var reflectionRetries = 0
+        val energyAnswers = mutableListOf<ReflectionBranch>()
+        var historyOpens = 0
 
         val total get() = starts + cancels + initializationRetries + startRetries +
             pauses + resumes + stops + startAnothers + reflectionRetries
@@ -103,7 +111,10 @@ class RunStateScreenTest {
         actionsEnabled: Boolean = true,
         modifier: Modifier = Modifier,
         fontScale: Float? = null,
-        reflection: RunCompleteReflectionDisplay? = RunCompleteReflectionDisplay.Preparing
+        reflection: RunCompleteReflectionDisplay? = RunCompleteReflectionDisplay.Preparing,
+        energyEnabled: Boolean = false,
+        isTestData: Boolean = false,
+        showHistory: Boolean = false
     ): RecordedActions {
         val actions = RecordedActions()
 
@@ -129,6 +140,11 @@ class RunStateScreenTest {
                     onStartAnother = { actions.startAnothers++ },
                     reflection = reflection,
                     onRetryReflection = { actions.reflectionRetries++ },
+                    onSelectEnergy = { actions.energyAnswers += it },
+                    energyEnabled = energyEnabled,
+                    isTestData = isTestData,
+                    onViewHistory = { actions.historyOpens++ },
+                    showHistory = showHistory,
                     modifier = modifier,
                     actionsEnabled = actionsEnabled
                 )
@@ -193,6 +209,95 @@ class RunStateScreenTest {
         // Assert: exactly one Start, and nothing else fired.
         assertEquals(1, actions.starts)
         assertEquals(1, actions.total)
+    }
+
+    @Test
+    fun startEnergyIsOptionalUndoableAndPassedToTheStartAction() {
+        var selectedAtStart: PreRunEnergy? = PreRunEnergy.HIGH
+        var historyOpens = 0
+        composeTestRule.setContent {
+            var selected by remember { mutableStateOf<PreRunEnergy?>(null) }
+            StartRunScreen(
+                selectedPreRunEnergy = selected,
+                onSelectPreRunEnergy = { selected = it },
+                onStart = { selectedAtStart = selected },
+                actionsEnabled = true,
+                onViewHistory = { historyOpens++ },
+                showHistory = true
+            )
+        }
+
+        composeTestRule.onNodeWithTag(START_RUN_BUTTON_TAG).performClick()
+        assertEquals(null, selectedAtStart)
+
+        composeTestRule.onNodeWithTag(START_ENERGY_LOW_TAG).performClick()
+        composeTestRule.onNodeWithTag(START_ENERGY_SELECTED_TAG).assertIsDisplayed()
+        composeTestRule.onNodeWithTag(START_ENERGY_UNDO_TAG).performClick()
+        composeTestRule.onNodeWithTag(START_ENERGY_MODERATE_TAG).performClick()
+        composeTestRule.onNodeWithTag(START_RUN_BUTTON_TAG).performClick()
+        assertEquals(PreRunEnergy.MODERATE, selectedAtStart)
+
+        composeTestRule.onNodeWithTag(START_HISTORY_TAG).performClick()
+        assertEquals(1, historyOpens)
+    }
+
+    @Test
+    fun startMakesGpsAnExplicitReversibleChoice() {
+        composeTestRule.setContent {
+            var gpsSelected by remember { mutableStateOf(false) }
+            StartRunScreen(
+                selectedPreRunEnergy = null,
+                onSelectPreRunEnergy = {},
+                onStart = {},
+                actionsEnabled = true,
+                onViewHistory = {},
+                showHistory = false,
+                gpsSelected = gpsSelected,
+                onToggleGps = { gpsSelected = !gpsSelected }
+            )
+        }
+
+        composeTestRule.onNodeWithText("ILLUSTRATIVE MAP · LOCATION OFF").assertExists()
+        composeTestRule.onNodeWithTag(START_GPS_TOGGLE_TAG).performClick()
+        composeTestRule.onNodeWithText("ILLUSTRATIVE MAP · GPS READY").assertExists()
+        composeTestRule.onNodeWithTag(START_GPS_TOGGLE_TAG).performClick()
+        composeTestRule.onNodeWithText("ILLUSTRATIVE MAP · LOCATION OFF").assertExists()
+    }
+
+    @Test
+    fun startMusicObservationIsOptionalAndReversible() {
+        var accessGranted by mutableStateOf(false)
+        composeTestRule.setContent {
+            var musicSelected by remember { mutableStateOf(false) }
+            StartRunScreen(
+                selectedPreRunEnergy = null,
+                onSelectPreRunEnergy = {},
+                onStart = {},
+                actionsEnabled = true,
+                onViewHistory = {},
+                showHistory = false,
+                musicSelected = musicSelected,
+                musicAccessGranted = accessGranted,
+                onToggleMusic = { musicSelected = !musicSelected }
+            )
+        }
+
+        composeTestRule.onNodeWithTag(START_MUSIC_TOGGLE_TAG).performScrollTo()
+        composeTestRule.onNodeWithText("Turn on").assertIsDisplayed()
+        composeTestRule.onNodeWithText(
+            "Android grants broad notification access. RunState reads media sessions only during opted-in runs."
+        ).assertIsDisplayed()
+
+        composeTestRule.onNodeWithTag(START_MUSIC_TOGGLE_TAG).performClick()
+        composeTestRule.onNodeWithText("Turn off").assertIsDisplayed()
+        composeTestRule.onNodeWithTag(START_MUSIC_TOGGLE_TAG).performClick()
+        composeTestRule.onNodeWithText("Turn on").assertIsDisplayed()
+
+        composeTestRule.runOnIdle { accessGranted = true }
+        composeTestRule.onNodeWithText(
+            "Saves media-session title, artist & app while Running. Other audio may appear."
+        )
+            .assertIsDisplayed()
     }
 
     /** Proves a countdown shows its digit, offers a way out, and never a second Start. */
@@ -418,13 +523,13 @@ class RunStateScreenTest {
     }
 
     @Test
-    fun savedShowsTheFakeReflectionPreparingStateWithoutSkip() {
+    fun savedShowsTheReflectionPreparingStateWithoutSkipOrUnconfirmedFakeLabel() {
         renderScreen(model = RunUiModel(RunUiState.Saved), metrics = fixtureMetrics())
 
         composeTestRule.onNodeWithTag(RUN_COMPLETE_REFLECTION_TAG)
             .performScrollTo()
             .assertIsDisplayed()
-        composeTestRule.onNodeWithText("FAKE BACKEND · TEST DATA").assertIsDisplayed()
+        composeTestRule.onNodeWithText("FAKE BACKEND · TEST DATA").assertDoesNotExist()
         composeTestRule.onNodeWithText("Preparing your reflection…").assertIsDisplayed()
         composeTestRule.onNodeWithText("Your run is already saved.").assertIsDisplayed()
         composeTestRule.onNodeWithText("Skip").assertDoesNotExist()
@@ -436,12 +541,114 @@ class RunStateScreenTest {
         renderScreen(
             model = RunUiModel(RunUiState.Saved),
             metrics = fixtureMetrics(),
-            reflection = RunCompleteReflectionDisplay.Ready(exact)
+            reflection = RunCompleteReflectionDisplay.Ready(exact),
+            isTestData = true
         )
 
         composeTestRule.onNodeWithTag(RUN_COMPLETE_REFLECTION_TEXT_TAG)
             .performScrollTo()
             .assertTextEquals(exact)
+    }
+
+    @Test
+    fun savedEnergyBranchesStayAvailableBesideACompletedReply() {
+        val exact = "  Exact stored reply.  "
+        val actions = renderScreen(
+            model = RunUiModel(RunUiState.Saved),
+            metrics = fixtureMetrics(),
+            reflection = RunCompleteReflectionDisplay.Ready(exact),
+            energyEnabled = true,
+            showHistory = true
+        )
+
+        listOf("SPENT", "FEELING GOOD", "POWERED UP").forEach { label ->
+            composeTestRule.onNodeWithText(label).performScrollTo().performClick()
+        }
+        assertEquals(listOf(
+            ReflectionBranch.SPENT,
+            ReflectionBranch.FEELING_GOOD,
+            ReflectionBranch.POWERED_UP
+        ), actions.energyAnswers)
+        composeTestRule.onNodeWithTag(RUN_COMPLETE_REFLECTION_TEXT_TAG)
+            .performScrollTo().assertTextEquals(exact)
+        composeTestRule.onNodeWithTag(RUN_COMPLETE_HISTORY_TAG)
+            .performScrollTo().performClick()
+        assertEquals(1, actions.historyOpens)
+    }
+
+    @Test
+    fun historyOpensExactStoredTextWithoutRetryingGeneration() {
+        val runId = "0f6a2c1e-9d43-4b7a-9c21-7b5e8a4d1f30"
+        val exact = "  First line.\nSecond line with a tab\tand emoji 🌤  "
+        var retries = 0
+        val spoken = mutableListOf<String>()
+        var stops = 0
+        val speaker = object : HistoryReflectionSpeaker {
+            override fun speak(text: String) { spoken += text }
+            override fun stop() { stops++ }
+            override fun close() = Unit
+        }
+        val item = RunHistoryItem(
+            runId = runId,
+            dateLabel = "Oct 12, 2026 · 5:39 AM",
+            metrics = fixtureMetrics(),
+            reflectionStatus = "READY",
+            reflectionText = exact,
+            energyLabel = "Spent",
+            isTestData = false
+        )
+        composeTestRule.setContent {
+            RunHistoryScreen(
+                items = listOf(item),
+                onBack = {},
+                onRetryReflection = { retries++ },
+                speakerFactory = { speaker }
+            )
+        }
+
+        composeTestRule.onNodeWithTag(RUN_HISTORY_ROW_TAG_PREFIX + runId).performClick()
+        composeTestRule.onNodeWithTag(RUN_HISTORY_REFLECTION_TAG_PREFIX + runId)
+            .assertTextEquals(exact)
+        assertEquals(listOf(exact), spoken)
+        composeTestRule.onNodeWithTag(RUN_HISTORY_RETRY_TAG_PREFIX + runId).assertDoesNotExist()
+        composeTestRule.onNodeWithTag(RUN_HISTORY_ROW_TAG_PREFIX + runId).performClick()
+        assertTrue(stops > 0)
+        assertEquals(listOf(exact), spoken)
+        assertEquals(0, retries)
+    }
+
+    @Test
+    fun historyShowsMusicAsPartialEvidenceRatherThanAFullSoundtrack() {
+        val runId = "0f6a2c1e-9d43-4b7a-9c21-7b5e8a4d1f30"
+        composeTestRule.setContent {
+            RunHistoryScreen(
+                items = listOf(
+                    RunHistoryItem(
+                        runId = runId,
+                        dateLabel = "Oct 12, 2026",
+                        metrics = fixtureMetrics(),
+                        reflectionStatus = null,
+                        reflectionText = null,
+                        energyLabel = null,
+                        isTestData = false,
+                        musicObservationRequested = true,
+                        musicObservationCount = 2,
+                        lastObservedMedia = "Later title — Artist · com.example.player"
+                    )
+                ),
+                onBack = {},
+                onRetryReflection = {}
+            )
+        }
+
+        composeTestRule.onNodeWithTag(RUN_HISTORY_ROW_TAG_PREFIX + runId).performClick()
+        composeTestRule.onNodeWithText("OBSERVED MEDIA · PARTIAL").assertExists()
+        composeTestRule.onNodeWithText(
+            "Last observed · Later title — Artist · com.example.player"
+        ).assertExists()
+        composeTestRule.onNodeWithText(
+            "2 media-session updates saved. This may not be the full soundtrack."
+        ).assertExists()
     }
 
     @Test

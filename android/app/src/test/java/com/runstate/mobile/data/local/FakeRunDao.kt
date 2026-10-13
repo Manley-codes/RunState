@@ -1,5 +1,8 @@
 package com.runstate.mobile.data.local
 
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flowOf
+
 /**
  * An in-memory stand-in for the real Room DAO, for tests that run on the JVM.
  *
@@ -86,6 +89,22 @@ open class FakeRunDao : RunDao() {
 
     override suspend fun findById(runId: String): RunEntity? =
         inserted.lastOrNull { it.runId == runId }
+
+    override fun observeRunById(runId: String): Flow<RunEntity?> =
+        flowOf(inserted.lastOrNull { it.runId == runId })
+
+    override fun observeRunsInStates(
+        runningState: StoredRunState,
+        pausedState: StoredRunState
+    ): Flow<List<RunEntity>> = flowOf(
+        inserted.filter { it.state == runningState || it.state == pausedState }
+            .sortedWith(compareBy(RunEntity::officialStartEpochMillis, RunEntity::runId))
+    )
+
+    override fun observeRunsInState(state: StoredRunState): Flow<List<RunEntity>> =
+        flowOf(inserted.filter { it.state == state }
+            .sortedWith(compareByDescending<RunEntity> { it.officialStartEpochMillis }
+                .thenBy { it.runId }))
 
     override suspend fun transitionsFor(runId: String): List<RunTransitionEntity> {
         transitionQueryCalls++

@@ -1,7 +1,9 @@
 package com.runstate.mobile.run
 
 import com.runstate.mobile.data.local.RunEntity
+import com.runstate.mobile.data.local.PreRunEnergy
 import com.runstate.mobile.data.local.StoredRunState
+import com.runstate.mobile.data.local.RunTrackingMode
 import java.time.Clock
 import java.time.Instant
 import java.time.ZoneId
@@ -52,9 +54,52 @@ class PreparedRunFactoryTest {
                 startTimezoneId = "America/Chicago",
                 lastCheckpointEpochMillis = OFFICIAL_START,
                 finishEpochMillis = null,
-                transitionHistoryComplete = true
+                transitionHistoryComplete = true,
+                trackingMode = RunTrackingMode.FIXTURE
             ),
             row
+        )
+    }
+
+    @Test
+    fun `create preserves an explicit pre run energy choice`() {
+        val factory = PreparedRunFactory(
+            clock = Clock.fixed(Instant.ofEpochMilli(OFFICIAL_START), ZoneOffset.UTC),
+            zoneIdSupplier = { ZoneId.of("America/Chicago") },
+            uuidSupplier = { UUID.fromString(RUN_ID) }
+        )
+
+        assertEquals(PreRunEnergy.HIGH, factory.create(PreRunEnergy.HIGH).preRunEnergy)
+        assertEquals(null, factory.create().preRunEnergy)
+    }
+
+    @Test
+    fun `create fixes the requested tracking mode with the first row`() {
+        val factory = PreparedRunFactory(
+            clock = Clock.fixed(Instant.ofEpochMilli(OFFICIAL_START), ZoneOffset.UTC),
+            zoneIdSupplier = { ZoneId.of("America/Chicago") },
+            uuidSupplier = { UUID.fromString(RUN_ID) }
+        )
+
+        assertEquals(RunTrackingMode.FIXTURE, factory.create().trackingMode)
+        assertEquals(
+            RunTrackingMode.GPS,
+            factory.create(trackingMode = RunTrackingMode.GPS).trackingMode
+        )
+    }
+
+    @Test
+    fun `music observation stays off unless explicitly selected for this run`() {
+        val factory = PreparedRunFactory(
+            clock = Clock.fixed(Instant.ofEpochMilli(OFFICIAL_START), ZoneOffset.UTC),
+            zoneIdSupplier = { ZoneId.of("America/Chicago") },
+            uuidSupplier = { UUID.fromString(RUN_ID) }
+        )
+
+        assertEquals(false, factory.create().musicObservationRequested)
+        assertEquals(
+            true,
+            factory.create(musicObservationRequested = true).musicObservationRequested
         )
     }
 

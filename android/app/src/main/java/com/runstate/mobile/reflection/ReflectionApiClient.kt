@@ -2,9 +2,9 @@ package com.runstate.mobile.reflection
 
 import com.google.gson.Gson
 import com.google.gson.GsonBuilder
-import com.google.gson.JsonElement
-import com.google.gson.JsonObject
-import com.google.gson.JsonParser
+import com.google.gson.Strictness
+import com.google.gson.stream.JsonReader
+import com.google.gson.stream.JsonToken
 import com.runstate.mobile.data.local.RunEntity
 import com.runstate.mobile.data.local.RunTransitionEntity
 import com.runstate.mobile.data.local.StoredRunState
@@ -12,15 +12,20 @@ import com.runstate.mobile.run.RunTimeline
 import com.runstate.mobile.run.TransitionHistoryCoverage
 import java.io.ByteArrayOutputStream
 import java.io.InputStream
+import java.io.StringReader
 import java.net.HttpURLConnection
 import java.net.URL
+import java.nio.ByteBuffer
 import java.nio.charset.StandardCharsets
+import java.nio.charset.CodingErrorAction
 import java.util.UUID
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 internal const val LOCAL_REFLECTION_ENDPOINT =
     "http://10.0.2.2:8787/api/reflections/candidates"
+internal const val PHONE_REFLECTION_ENDPOINT =
+    "http://127.0.0.1:8787/api/reflections/candidates"
 
 /** The transport request. Every value comes from one completed Room row or its history. */
 internal data class ReflectionApiRequest(
@@ -58,7 +63,8 @@ internal data class ReflectionCandidates(
     val spent: String,
     val feelingGood: String,
     val poweredUp: String,
-    val noSelection: String
+    val noSelection: String,
+    val isTestData: Boolean = true
 )
 
 /** A narrow seam that keeps HTTP out of the process-owned coordinator's tests. */
@@ -128,12 +134,13 @@ internal fun reflectionRequestFromSavedRun(
             finishEpochMillis = finishEpochMillis,
             startTimezoneId = run.startTimezoneId,
             activeDurationMillis = activeDurationMillis,
-            metrics = metrics
+            metrics = metrics,
+            preRunEnergy = run.preRunEnergy?.name ?: "UNKNOWN"
         )
     )
 }
 
-/** A small debug bridge to the loopback-bound backend through the emulator host alias. */
+/** A small debug bridge to the loopback-bound backend through emulator routing or adb reverse. */
 internal class LocalReflectionHttpClient(
     endpoint: String = LOCAL_REFLECTION_ENDPOINT,
     private val gson: Gson = GsonBuilder().serializeNulls().create()
@@ -141,10 +148,13 @@ internal class LocalReflectionHttpClient(
 
     private val endpointUrl = URL(endpoint).also { url ->
         require(url.protocol == "http") { "The local reflection endpoint must use HTTP." }
-        require(url.host == "10.0.2.2" && url.port == 8787) {
-            "The Android debug bridge may only use the emulator host alias on port 8787."
+        require(url.host in setOf("10.0.2.2", "127.0.0.1") && url.port == 8787) {
+            "The Android debug bridge may only use the local development hosts on port 8787."
         }
-        require(url.path == "/api/reflections/candidates" && url.query == null) {
+        require(
+            url.path == "/api/reflections/candidates" &&
+                url.query == null && url.ref == null && url.userInfo == null
+        ) {
             "The local reflection endpoint path is invalid."
         }
     }
@@ -157,6 +167,7 @@ internal class LocalReflectionHttpClient(
                 connection.requestMethod = "POST"
                 connection.connectTimeout = CONNECT_TIMEOUT_MILLIS
                 connection.readTimeout = READ_TIMEOUT_MILLIS
+                connection.instanceFollowRedirects = false
                 connection.doOutput = true
                 connection.setRequestProperty("Content-Type", "application/json; charset=utf-8")
                 connection.setRequestProperty("Accept", "application/json")
@@ -195,12 +206,17 @@ internal class LocalReflectionHttpClient(
             }
             output.write(buffer, 0, read)
         }
-        return output.toString(StandardCharsets.UTF_8.name())
+        return StandardCharsets.UTF_8.newDecoder()
+            .onMalformedInput(CodingErrorAction.REPORT)
+            .onUnmappableCharacter(CodingErrorAction.REPORT)
+            .decode(ByteBuffer.wrap(output.toByteArray()))
+            .toString()
     }
 
     private companion object {
         const val CONNECT_TIMEOUT_MILLIS = 3_000
-        const val READ_TIMEOUT_MILLIS = 15_000
+        // Anthropic's backend request can legitimately run for up to 45 seconds.
+        const val READ_TIMEOUT_MILLIS = 60_000
         const val MAX_RESPONSE_BYTES = 64 * 1_024
     }
 }
@@ -212,27 +228,47 @@ internal fun parseReflectionResponse(
     expectedRunId: String
 ): ReflectionCandidates {
     try {
-        val root = JsonParser.parseString(rawJson).requireObject("response")
-        root.requireExactKeys(setOf("requestId", "runId", "candidates"), "response")
-
-        val requestId = root.requireString("requestId")
-        val runId = root.requireString("runId")
-        require(requestId == expectedRequestId && runId == expectedRunId) {
-            "Reflection response identifiers do not match the request."
+        JsonReader(StringReader(rawJson)).use { reader ->
+            reader.strictness = Strictness.STRICT
+            reader.beginObject()
+            val seen = mutableSetOf<String>()
+            var requestId: String? = null
+            var runId: String? = null
+            var generationMode: String? = null
+            var candidates: ReflectionCandidates? = null
+            while (reader.hasNext()) {
+                when (val name = reader.nextName()) {
+                    "requestId" -> {
+                        requireUnique(seen, name)
+                        requestId = reader.requireString()
+                    }
+                    "runId" -> {
+                        requireUnique(seen, name)
+                        runId = reader.requireString()
+                    }
+                    "generationMode" -> {
+                        requireUnique(seen, name)
+                        generationMode = reader.requireString()
+                    }
+                    "candidates" -> {
+                        requireUnique(seen, name)
+                        candidates = reader.readCandidates()
+                    }
+                    else -> throw ReflectionBridgeException("The local reflection response was invalid.")
+                }
+            }
+            reader.endObject()
+            require(reader.peek() == JsonToken.END_DOCUMENT && seen.size == 4) {
+                "The local reflection response was invalid."
+            }
+            require(requestId == expectedRequestId && runId == expectedRunId) {
+                "Reflection response identifiers do not match the request."
+            }
+            require(generationMode == "FAKE" || generationMode == "ANTHROPIC") {
+                "The local reflection generation mode was invalid."
+            }
+            return requireNotNull(candidates).copy(isTestData = generationMode == "FAKE")
         }
-
-        val candidates = root.get("candidates").requireObject("candidates")
-        candidates.requireExactKeys(
-            setOf("spent", "feeling_good", "powered_up", "no_selection"),
-            "candidates"
-        )
-
-        return ReflectionCandidates(
-            spent = candidates.requireNonBlankString("spent"),
-            feelingGood = candidates.requireNonBlankString("feeling_good"),
-            poweredUp = candidates.requireNonBlankString("powered_up"),
-            noSelection = candidates.requireNonBlankString("no_selection")
-        )
     } catch (known: ReflectionBridgeException) {
         throw known
     } catch (invalid: Exception) {
@@ -240,33 +276,43 @@ internal fun parseReflectionResponse(
     }
 }
 
-private fun JsonElement?.requireObject(label: String): JsonObject {
-    if (this == null || !isJsonObject) {
-        throw ReflectionBridgeException("The local reflection response was invalid.")
-    }
-    return asJsonObject
-}
-
-private fun JsonObject.requireExactKeys(expected: Set<String>, label: String) {
-    if (keySet() != expected) {
-        throw ReflectionBridgeException("The local reflection $label was invalid.")
+private fun requireUnique(seen: MutableSet<String>, name: String) {
+    if (!seen.add(name)) {
+        throw ReflectionBridgeException("The local reflection response contains duplicate keys.")
     }
 }
 
-private fun JsonObject.requireString(name: String): String {
-    val value = get(name)
-    if (value == null || !value.isJsonPrimitive || !value.asJsonPrimitive.isString) {
-        throw ReflectionBridgeException("The local reflection response was invalid.")
-    }
-    return value.asString
-}
-
-private fun JsonObject.requireNonBlankString(name: String): String =
-    requireString(name).also { value ->
-        if (value.isBlank()) {
-            throw ReflectionBridgeException("The local reflection response was invalid.")
+private fun JsonReader.readCandidates(): ReflectionCandidates {
+    beginObject()
+    val values = mutableMapOf<String, String>()
+    val expected = setOf("spent", "feeling_good", "powered_up", "no_selection")
+    while (hasNext()) {
+        val name = nextName()
+        if (name !in expected || name in values) {
+            throw ReflectionBridgeException("The local reflection candidates were invalid.")
         }
+        val value = requireString()
+        if (value.isBlank()) {
+            throw ReflectionBridgeException("The local reflection candidates were invalid.")
+        }
+        values[name] = value
     }
+    endObject()
+    require(values.keys == expected) { "The local reflection candidates were invalid." }
+    return ReflectionCandidates(
+        spent = values.getValue("spent"),
+        feelingGood = values.getValue("feeling_good"),
+        poweredUp = values.getValue("powered_up"),
+        noSelection = values.getValue("no_selection")
+    )
+}
+
+private fun JsonReader.requireString(): String {
+    if (peek() != JsonToken.STRING) {
+        throw ReflectionBridgeException("The local reflection response was invalid.")
+    }
+    return nextString()
+}
 
 internal class ReflectionBridgeException(
     message: String,

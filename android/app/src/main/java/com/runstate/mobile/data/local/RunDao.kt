@@ -5,14 +5,15 @@ import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Transaction
+import kotlinx.coroutines.flow.Flow
 
 /**
  * The queries this slice is allowed to make against the run tables.
  *
  * Deliberately narrow: creating the initial run row, reading one run back by its
  * permanent UUID, durably moving that same run through pause, resume and completion,
- * and reading back every run that has not ended. General listing, History queries and
- * synchronization are separate contracts and are not opened here.
+ * reading back every run that has not ended, and observing completed runs for History.
+ * Synchronization remains a separate contract and is not opened here.
  *
  * Discovery is a read. [findActiveRuns] reports what storage holds; the recovery core
  * decides whether there is no run to restore, one run to adopt, or an inconsistency it
@@ -43,6 +44,17 @@ abstract class RunDao {
     /** Reads one run by its permanent UUID, or null when no such run is stored. */
     @Query("SELECT * FROM runs WHERE run_id = :runId")
     abstract suspend fun findById(runId: String): RunEntity?
+
+    /** The service follows durable lifecycle writes, including changes made by the Activity. */
+    @Query("SELECT * FROM runs WHERE run_id = :runId")
+    abstract fun observeRunById(runId: String): Flow<RunEntity?>
+
+    /** History is a read of completed rows, newest first with stable ordering for ties. */
+    fun observeCompletedRuns(): Flow<List<RunEntity>> =
+        observeRunsInState(StoredRunState.COMPLETED)
+
+    @Query("SELECT * FROM runs WHERE state = :state ORDER BY official_start_epoch_millis DESC, run_id ASC")
+    protected abstract fun observeRunsInState(state: StoredRunState): Flow<List<RunEntity>>
 
     /**
      * Reads one run's pause and resume history in the order the events happened.
@@ -111,6 +123,22 @@ abstract class RunDao {
             runningState = StoredRunState.RUNNING,
             pausedState = StoredRunState.PAUSED
         )
+
+    /** Live version of active-run discovery for opt-in collectors. Ambiguity remains visible. */
+    fun observeActiveRuns(): Flow<List<RunEntity>> =
+        observeRunsInStates(StoredRunState.RUNNING, StoredRunState.PAUSED)
+
+    @Query(
+        """
+        SELECT * FROM runs
+        WHERE state = :runningState OR state = :pausedState
+        ORDER BY official_start_epoch_millis ASC, run_id ASC
+        """
+    )
+    protected abstract fun observeRunsInStates(
+        runningState: StoredRunState,
+        pausedState: StoredRunState
+    ): Flow<List<RunEntity>>
 
     /**
      * Durably pauses a run that storage still believes is RUNNING.

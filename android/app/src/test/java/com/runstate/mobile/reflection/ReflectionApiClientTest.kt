@@ -55,21 +55,61 @@ class ReflectionApiClientTest {
         )
     }
 
+    @Test fun chosenPreRunEnergyComesFromTheSavedRun() {
+        val evidence = reflectionRequestFromSavedRun(
+            REQUEST_ID,
+            completedRun().copy(preRunEnergy = PreRunEnergy.MODERATE),
+            listOf(RunTransitionEntity(RUN_ID, 1, RunTransitionType.PAUSE, PAUSE))
+        ).evidence
+
+        assertEquals("MODERATE", evidence.preRunEnergy)
+    }
+
     @Test fun responsePreservesExactTextAndRejectsUntrustworthyAnswers() {
         val exact = "  [FAKE] Exact no-selection candidate.  "
         val parsed = parseReflectionResponse(response(noSelection = exact), REQUEST_ID, RUN_ID)
         assertEquals(exact, parsed.noSelection)
+        assertTrue(parsed.isTestData)
+
+        // The mode comes from the server field, never from wording inside a candidate.
+        val live = parseReflectionResponse(
+            response(generationMode = "ANTHROPIC", noSelection = exact), REQUEST_ID, RUN_ID
+        )
+        assertEquals(exact, live.noSelection)
+        assertFalse(live.isTestData)
 
         val invalid = listOf(
             response(requestId = "1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d"),
             response(runId = "1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d"),
             response(includeNoSelection = false),
             response(noSelection = "   "),
-            response(includeExtra = true)
+            response(includeExtra = true),
+            response(includeGenerationMode = false),
+            response(generationMode = "MOCK"),
+            response().replace("\"generationMode\":\"FAKE\"", "\"generationMode\":7"),
+            response().replace("\"spent\":\"[FAKE] Spent.\"", "\"spent\":7"),
+            response().replace("\"requestId\":", "\"requestId\":\"duplicate\",\"requestId\":"),
+            response().replace("\"spent\":", "\"spent\":\"duplicate\",\"spent\":"),
+            response() + "{}",
+            "/* comment */" + response()
         )
         invalid.forEach {
             assertThrows(ReflectionBridgeException::class.java) {
                 parseReflectionResponse(it, REQUEST_ID, RUN_ID)
+            }
+        }
+    }
+
+    @Test fun debugBridgeAcceptsOnlyEmulatorOrAdbReverseLoopback() {
+        LocalReflectionHttpClient(LOCAL_REFLECTION_ENDPOINT)
+        LocalReflectionHttpClient(PHONE_REFLECTION_ENDPOINT)
+        listOf(
+            "http://10.0.0.2:8787/api/reflections/candidates",
+            "http://127.0.0.1:8788/api/reflections/candidates",
+            "http://127.0.0.1:8787/api/reflections/candidates?leak=true"
+        ).forEach { endpoint ->
+            assertThrows(IllegalArgumentException::class.java) {
+                LocalReflectionHttpClient(endpoint)
             }
         }
     }
@@ -79,7 +119,9 @@ class ReflectionApiClientTest {
         runId: String = RUN_ID,
         noSelection: String = "[FAKE] None.",
         includeNoSelection: Boolean = true,
-        includeExtra: Boolean = false
+        includeExtra: Boolean = false,
+        includeGenerationMode: Boolean = true,
+        generationMode: String = "FAKE"
     ): String {
         val candidates = JsonObject().apply {
             addProperty("spent", "[FAKE] Spent.")
@@ -90,6 +132,7 @@ class ReflectionApiClientTest {
         return JsonObject().apply {
             addProperty("requestId", requestId)
             addProperty("runId", runId)
+            if (includeGenerationMode) addProperty("generationMode", generationMode)
             if (includeExtra) addProperty("extra", true)
             add("candidates", candidates)
         }.toString()

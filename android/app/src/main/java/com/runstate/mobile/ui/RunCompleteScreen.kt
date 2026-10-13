@@ -19,14 +19,18 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -34,6 +38,7 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.DeviceFontFamilyName
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
@@ -41,6 +46,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.runstate.mobile.data.local.ReflectionBranch
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.min
@@ -52,14 +58,16 @@ internal const val RUN_COMPLETE_VISUALIZER_TAG = "runCompleteVisualizer"
 internal const val RUN_COMPLETE_REFLECTION_TAG = "runCompleteReflection"
 internal const val RUN_COMPLETE_REFLECTION_TEXT_TAG = "runCompleteReflectionText"
 internal const val RUN_COMPLETE_REFLECTION_RETRY_TAG = "runCompleteReflectionRetry"
+internal const val RUN_COMPLETE_ENERGY_TAG = "runCompleteEnergy"
+internal const val RUN_COMPLETE_HISTORY_TAG = "runCompleteHistory"
 
-private val CompletionInk = Color(0xFF4A5049)
-private val CompletionStrongInk = Color(0xFF353A34)
-private val CompletionMutedInk = Color(0xFF8A8F87)
-private val CompletionGreen = Color(0xFF6A7F60)
+internal val CompletionInk = Color(0xFF4A5049)
+internal val CompletionStrongInk = Color(0xFF353A34)
+internal val CompletionMutedInk = Color(0xFF61685E)
+internal val CompletionGreen = Color(0xFF55704C)
 private val CompletionBlue = Color(0xFFAFCEDA)
-private val CompletionSurfaceTop = Color(0xFFFCFCFA)
-private val CompletionSurfaceBottom = Color(0xFFF4F5F1)
+internal val CompletionSurfaceTop = Color(0xFFFCFCFA)
+internal val CompletionSurfaceBottom = Color(0xFFF4F5F1)
 
 /** The only reflection information the completion UI is allowed to know. */
 internal sealed interface RunCompleteReflectionDisplay {
@@ -72,7 +80,7 @@ internal sealed interface RunCompleteReflectionDisplay {
  * Android ships a condensed sans family. Prefer it for instrument-like numbers and fall
  * back to the ordinary system sans if an OEM does not provide it under the AOSP name.
  */
-private val CompletionNumberFont = FontFamily(
+internal val CompletionNumberFont = FontFamily(
     Font(DeviceFontFamilyName("sans-serif-condensed"), weight = FontWeight.Normal),
     Font(DeviceFontFamilyName("sans-serif-condensed"), weight = FontWeight.Medium),
     Font(DeviceFontFamilyName("sans-serif"), weight = FontWeight.Normal),
@@ -94,7 +102,13 @@ internal fun RunCompleteScreen(
     onRetryReflection: () -> Unit,
     onStartAnother: () -> Unit,
     actionsEnabled: Boolean,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    selectedEnergy: ReflectionBranch? = null,
+    onSelectEnergy: (ReflectionBranch) -> Unit = {},
+    energyEnabled: Boolean = false,
+    isTestData: Boolean = true,
+    onViewHistory: () -> Unit = {},
+    showHistory: Boolean = false
 ) {
     val distance = splitMetric(metrics?.distance ?: "—")
     val pace = splitMetric(metrics?.averagePace ?: "—")
@@ -126,13 +140,36 @@ internal fun RunCompleteScreen(
                 pace = pace,
                 active = metrics?.active ?: "—"
             )
+            if (energyEnabled) {
+                EnergyChoices(
+                    selectedEnergy = selectedEnergy,
+                    onSelectEnergy = onSelectEnergy,
+                    enabled = actionsEnabled,
+                    reflectionFinal = reflection is RunCompleteReflectionDisplay.Ready
+                )
+            }
             if (reflection != null) {
                 Spacer(modifier = Modifier.height(14.dp))
                 ReflectionPanel(
                     reflection = reflection,
                     onRetry = onRetryReflection,
-                    retryEnabled = actionsEnabled
+                    retryEnabled = actionsEnabled,
+                    isTestData = isTestData
                 )
+            }
+            if (showHistory) {
+                TextButton(
+                    onClick = onViewHistory,
+                    enabled = actionsEnabled,
+                    colors = ButtonDefaults.textButtonColors(contentColor = CompletionStrongInk),
+                    modifier = Modifier
+                        .padding(top = 10.dp)
+                        .align(Alignment.CenterHorizontally)
+                        .heightIn(min = 48.dp)
+                        .testTag(RUN_COMPLETE_HISTORY_TAG)
+                ) {
+                    Text("View in Log History")
+                }
             }
         }
 
@@ -164,14 +201,15 @@ internal fun RunCompleteScreen(
 }
 
 /**
- * Temporary text-only reflection treatment while Energy selection is not implemented.
- * The disclosure stays attached in every state so a fake reply cannot resemble runner data.
+ * Selected text is supplied by the saved-run owner. Fake-mode disclosure remains attached
+ * in every state, while ordinary generation uses the same honest save/failure treatment.
  */
 @Composable
 private fun ReflectionPanel(
     reflection: RunCompleteReflectionDisplay,
     onRetry: () -> Unit,
-    retryEnabled: Boolean
+    retryEnabled: Boolean,
+    isTestData: Boolean
 ) {
     Column(
         modifier = Modifier
@@ -190,14 +228,16 @@ private fun ReflectionPanel(
             fontWeight = FontWeight.Bold,
             letterSpacing = 1.9.sp
         )
-        Text(
-            text = "FAKE BACKEND · TEST DATA",
-            color = CompletionGreen,
-            fontSize = 10.sp,
-            fontWeight = FontWeight.Bold,
-            letterSpacing = 1.25.sp,
-            modifier = Modifier.padding(top = 6.dp)
-        )
+        if (isTestData) {
+            Text(
+                text = "FAKE BACKEND · TEST DATA",
+                color = CompletionGreen,
+                fontSize = 10.sp,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 1.25.sp,
+                modifier = Modifier.padding(top = 6.dp)
+            )
+        }
 
         when (reflection) {
             RunCompleteReflectionDisplay.Preparing -> {
@@ -239,7 +279,7 @@ private fun ReflectionPanel(
                     modifier = Modifier.padding(top = 18.dp)
                 )
                 Text(
-                    text = "Your saved run is unchanged. Start the local fake backend, then retry.",
+                    text = "Your run is saved. You can retry the reflection when a connection is available.",
                     color = CompletionMutedInk,
                     fontSize = 13.sp,
                     lineHeight = 19.sp,
@@ -257,6 +297,98 @@ private fun ReflectionPanel(
                 }
             }
         }
+    }
+}
+
+/** Energy is optional and remains editable after the reflection has become permanent. */
+@Composable
+private fun EnergyChoices(
+    selectedEnergy: ReflectionBranch?,
+    onSelectEnergy: (ReflectionBranch) -> Unit,
+    enabled: Boolean,
+    reflectionFinal: Boolean
+) {
+    val choices = listOf(
+        ReflectionBranch.SPENT to "SPENT",
+        ReflectionBranch.FEELING_GOOD to "FEELING GOOD",
+        ReflectionBranch.POWERED_UP to "POWERED UP"
+    )
+    val largeText = LocalDensity.current.fontScale > 1.3f
+
+    Column(modifier = Modifier.fillMaxWidth().testTag(RUN_COMPLETE_ENERGY_TAG)) {
+        BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+            if (largeText || maxWidth < 300.dp) {
+                Column(
+                    modifier = Modifier.fillMaxWidth().selectableGroup(),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    choices.forEach { (branch, label) ->
+                        EnergyChoice(
+                            label = label,
+                            selected = selectedEnergy == branch,
+                            enabled = enabled,
+                            onClick = { onSelectEnergy(branch) },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                }
+            } else {
+                Row(
+                    modifier = Modifier.fillMaxWidth().selectableGroup(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    choices.forEach { (branch, label) ->
+                        EnergyChoice(
+                            label = label,
+                            selected = selectedEnergy == branch,
+                            enabled = enabled,
+                            onClick = { onSelectEnergy(branch) },
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                }
+            }
+        }
+        Text(
+            text = if (reflectionFinal) {
+                "You can update Energy. Your reflection stays the same."
+            } else {
+                "Optional · How you feel now"
+            },
+            color = CompletionMutedInk,
+            fontSize = 12.sp,
+            lineHeight = 18.sp,
+            modifier = Modifier.padding(top = 10.dp, bottom = 2.dp)
+        )
+    }
+}
+
+@Composable
+private fun EnergyChoice(
+    label: String,
+    selected: Boolean,
+    enabled: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val shape = RoundedCornerShape(16.dp)
+    Column(
+        modifier = modifier
+            .clip(shape)
+            .background(if (selected) CompletionStrongInk else Color.White.copy(alpha = 0.76f), shape)
+            .selectable(selected = selected, enabled = enabled, role = Role.RadioButton, onClick = onClick)
+            .heightIn(min = 76.dp)
+            .padding(horizontal = 12.dp, vertical = 15.dp),
+        verticalArrangement = Arrangement.Center
+    ) {
+        Text(
+            text = label,
+            color = if (selected) Color.White else CompletionStrongInk,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.SemiBold,
+            lineHeight = 17.sp,
+            letterSpacing = 0.6.sp
+        )
     }
 }
 
@@ -440,7 +572,7 @@ private fun DistanceInstrument(
             if (distance.unit.isNotEmpty()) {
                 Text(
                     text = distance.unit.uppercase(),
-                    color = CompletionMutedInk.copy(alpha = 0.72f),
+                    color = CompletionMutedInk,
                     fontFamily = CompletionNumberFont,
                     fontSize = if (distance.value.length >= 4) 24.sp else 28.sp,
                     fontWeight = FontWeight.Medium,
@@ -534,7 +666,7 @@ private fun CompactMetric(
         }
         Text(
             text = label,
-            color = CompletionMutedInk.copy(alpha = 0.72f),
+            color = CompletionMutedInk,
             fontSize = 9.sp,
             fontWeight = FontWeight.SemiBold,
             letterSpacing = 1.5.sp,
@@ -587,7 +719,7 @@ private fun CompletionVisualizer(modifier: Modifier = Modifier) {
 
 /** Fine structure and pale facets recreate the reference's layered porcelain field. */
 @Composable
-private fun CompletionAtmosphere(modifier: Modifier = Modifier) {
+internal fun CompletionAtmosphere(modifier: Modifier = Modifier) {
     Canvas(modifier = modifier) {
         drawRect(
             brush = Brush.radialGradient(

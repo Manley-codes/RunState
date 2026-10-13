@@ -8,7 +8,21 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.repeatOnLifecycle
 import com.runstate.mobile.data.local.DistanceUnit
 import com.runstate.mobile.data.local.MetricSource
+import com.runstate.mobile.data.local.PreRunEnergy
+import com.runstate.mobile.data.local.ReflectionBranch
+import com.runstate.mobile.data.local.ReflectionStatus
+import com.runstate.mobile.data.local.RunEntity
+import com.runstate.mobile.data.local.RunMusicObservationEntity
+import com.runstate.mobile.data.local.RunReflectionEntity
+import com.runstate.mobile.data.local.RunTransitionEntity
+import com.runstate.mobile.data.local.StoredRunState
+import com.runstate.mobile.data.local.TelemetryCoverage
 import com.runstate.mobile.run.RunMetrics
+import com.runstate.mobile.run.RunTimeline
+import com.runstate.mobile.run.TransitionHistoryCoverage
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 import java.util.Locale
 import kotlinx.coroutines.delay
 import kotlin.math.roundToLong
@@ -36,7 +50,10 @@ internal fun runMetricsDisplayFor(metrics: RunMetrics): RunMetricsDisplay {
         String.format(Locale.US, "%.2f %s", meters / metersPerUnit, distanceSuffix)
     } ?: "—"
 
-    val averagePace = metrics.paceSecondsPerMeter?.let { secondsPerMeter ->
+    val paceIsTrustworthy = metrics.source != MetricSource.GPS ||
+        metrics.coverage == TelemetryCoverage.COMPLETE
+    val averagePace = metrics.paceSecondsPerMeter?.takeIf { paceIsTrustworthy }
+        ?.let { secondsPerMeter ->
         val totalSeconds = (secondsPerMeter * metersPerUnit).roundToLong()
         val minutes = totalSeconds / 60L
         val seconds = totalSeconds % 60L
@@ -50,10 +67,131 @@ internal fun runMetricsDisplayFor(metrics: RunMetrics): RunMetricsDisplay {
         averagePace = averagePace,
         sourceLabel = when (metrics.source) {
             MetricSource.FIXTURE -> "Fixture metrics"
-            MetricSource.GPS -> "GPS metrics"
+            MetricSource.GPS -> when (metrics.coverage) {
+                TelemetryCoverage.COMPLETE -> "GPS metrics"
+                TelemetryCoverage.PARTIAL -> "GPS metrics · partial"
+                TelemetryCoverage.UNAVAILABLE -> "GPS distance unavailable"
+            }
             null -> "Metrics unavailable"
         }
     )
+}
+
+private val historyDateFormat = DateTimeFormatter.ofPattern("MMM d, yyyy · h:mm a", Locale.US)
+
+/** Uses only durable facts; opening History never asks the reflection provider to write again. */
+internal fun historyItemFor(
+    run: RunEntity,
+    transitions: List<RunTransitionEntity>,
+    reflection: RunReflectionEntity?,
+    musicObservations: List<RunMusicObservationEntity> = emptyList()
+): RunHistoryItem {
+    require(run.state == StoredRunState.COMPLETED) { "History requires a completed run." }
+    require(reflection == null || reflection.runId == run.runId) {
+        "A reflection must belong to the displayed run."
+    }
+    require(musicObservations.all { it.runId == run.runId }) {
+        "Music observations must belong to the displayed run."
+    }
+
+    val dateLabel = historyDateFormat.format(
+        Instant.ofEpochMilli(run.officialStartEpochMillis).atZone(ZoneId.of(run.startTimezoneId))
+    )
+
+    // A version-1 completed row may have no finish. Its time cannot be reconstructed.
+    val metrics = if (run.finishEpochMillis == null) {
+        null
+    } else {
+        completedHistoryMetrics(run, transitions)?.let(::runMetricsDisplayFor)
+    }
+
+    return RunHistoryItem(
+        runId = run.runId,
+        dateLabel = dateLabel,
+        metrics = metrics,
+        reflectionStatus = reflection?.status?.name,
+        reflectionText = reflection?.text,
+        energyLabel = when (reflection?.postRunEnergy) {
+            ReflectionBranch.SPENT -> "Spent"
+            ReflectionBranch.FEELING_GOOD -> "Feeling Good"
+            ReflectionBranch.POWERED_UP -> "Powered Up"
+            ReflectionBranch.NO_SELECTION, null -> null
+        },
+        isTestData = reflection?.takeIf { it.status == ReflectionStatus.READY }?.isTestData == true,
+        preRunEnergyLabel = when (run.preRunEnergy) {
+            PreRunEnergy.LOW -> "Low"
+            PreRunEnergy.MODERATE -> "Moderate"
+            PreRunEnergy.HIGH -> "High"
+            null -> null
+        },
+        musicObservationRequested = run.musicObservationRequested,
+        musicObservationCount = musicObservations.size,
+        lastObservedMedia = musicObservations.maxByOrNull { it.sequenceNumber }?.let { last ->
+            val label = listOfNotNull(last.title, last.artist).joinToString(" — ")
+            if (label.isBlank()) last.sourcePackage else "$label · ${last.sourcePackage}"
+        }
+    )
+}
+
+private fun completedHistoryMetrics(
+    run: RunEntity,
+    transitions: List<RunTransitionEntity>
+): RunMetrics? {
+    if (run.transitionHistoryComplete == true && transitions.any { it.runId != run.runId }) {
+        return null
+    }
+
+    // A malformed timeline must not stop History from showing the saved run and exact reply.
+    return try {
+        val finish = requireNotNull(run.finishEpochMillis)
+        val elapsed = requireNotNull(
+            RunTimeline.elapsedMillis(
+                officialStartEpochMillis = run.officialStartEpochMillis,
+                finishEpochMillis = finish,
+                currentState = StoredRunState.COMPLETED,
+                nowEpochMillis = finish
+            )
+        )
+        val timelineActive = RunTimeline.activeMillis(
+            officialStartEpochMillis = run.officialStartEpochMillis,
+            finishEpochMillis = finish,
+            currentState = StoredRunState.COMPLETED,
+            transitions = if (run.transitionHistoryComplete == true) transitions else emptyList(),
+            nowEpochMillis = finish,
+            historyCoverage = if (run.transitionHistoryComplete == true) {
+                TransitionHistoryCoverage.COMPLETE
+            } else {
+                TransitionHistoryCoverage.INCOMPLETE
+            }
+        )
+        // A GPS service can die while the run row remains RUNNING. History has no
+        // durable proof that the whole interval was observed, so a partial GPS record
+        // must not reconstruct an apparently precise active duration from wall time.
+        val active = if (run.metricSource == MetricSource.GPS &&
+            run.telemetryCoverage != TelemetryCoverage.COMPLETE
+        ) null else timelineActive
+        RunMetrics(
+            elapsedMillis = elapsed,
+            activeMillis = active,
+            distanceMeters = run.finalDistanceMeters,
+            paceSecondsPerMeter = if (
+                run.metricSource == MetricSource.GPS &&
+                run.telemetryCoverage != TelemetryCoverage.COMPLETE
+            ) null else RunTimeline.averagePaceSecondsPerMeter(
+                activeDurationMillis = active,
+                distanceMeters = run.finalDistanceMeters
+            ),
+            displayUnit = run.displayDistanceUnit ?: DistanceUnit.MILES,
+            source = run.metricSource,
+            coverage = run.telemetryCoverage ?: TelemetryCoverage.UNAVAILABLE
+        )
+    } catch (_: IllegalArgumentException) {
+        null
+    } catch (_: IllegalStateException) {
+        null
+    } catch (_: ArithmeticException) {
+        null
+    }
 }
 
 /**
