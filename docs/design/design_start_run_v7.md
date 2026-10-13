@@ -8,6 +8,18 @@ status: CURRENT DESCRIPTION - what is built in the prototype right now. Not a sp
 
 # Start Run — where this screen actually is
 
+**Native Android status, October 12, 2026:** a first Compose visual pass now follows this
+prototype's map, agent card, Energy tiles and Start control. The map stays illustrative; an
+explicit Use GPS choice now requests precise location and records cautious GPS evidence through
+a foreground service, while fixture mode remains the default. The hardcoded GPS status,
+last-at-place RunStyle card, shoe and music controls are not represented as working features.
+Pre-run Energy is optional, undoable, stored
+per run in Room version 5 and sent as saved reflection evidence. The functional Active controls
+now have a first native circular-map presentation, with explicit fixture/GPS provenance labels; the
+larger Active visual redesign Manley requested remains open. Countdown still uses the earlier
+foundation screen.
+See `project_current_state.md` for verification and remaining limits.
+
 **Read this instead of `design_start_active_run.md`.** That file describes the August 13 version of
 this screen, which no longer exists. It is kept as history, not as instructions.
 

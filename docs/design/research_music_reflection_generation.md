@@ -205,6 +205,12 @@ between Spotify content and other audio; production permission is unresolved. Th
 the user's manual listening experiment and does not establish that every possible delivery route
 is unavailable. No purchases, downloads of songs or Android changes were made.
 
+**October 12 follow-up:** Manley wants the music snippet paired with spoken reflection when it
+fits the implementation sequence. Preserve the manual experiment's positive feedback, then
+choose a permitted audio source and test the entrance timing after the voice reply and music
+evidence are stable. The request does not establish a Spotify playback permission or turn the
+current media-session observations into complete-song evidence.
+
 **Historical September direction (superseded by October 3):** return to developing the reflections. Retain these examples and the positive
 snippet feedback without making playback polish a prerequisite for the next writing test.
 

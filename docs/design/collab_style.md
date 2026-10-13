@@ -5,6 +5,20 @@ metadata:
   type: feedback
 ---
 
+**Current collaboration direction — October 11, 2026 (supersedes earlier handoff and step-approval rules):**
+- Manley explicitly authorized Codex to implement the RunState code directly and continue through
+  the technical work without stopping for routine approvals or CLI handoffs. Ask for his help only
+  when a product decision, credential, device action, or other essential input is needed.
+- Move quickly toward the Android demo while keeping the app's saved-run data and reflection text
+  trustworthy. Give concise progress and learning explanations without requiring him to manage
+  implementation details.
+- Do not stage, commit, push, or merge. Manley handles Git. Flag a good commit point and when to
+  push after checks pass.
+- Avoid unnecessary new local files. If implementation, schema export, or tests require one,
+  report its location and purpose at the next checkpoint.
+- Android development uses the Android Studio project under `android/`; Java backend work uses
+  the IntelliJ IDEA project under `backend/`. The shared repository root is `RunState/`.
+
 **Current collaboration direction — October 6, 2026 (supersedes older pace and routine-approval notes below):**
 - Manley will attend AfroTech and wants to fast-track a demonstrable app. Prioritize the complete
   Android run → generated reflection → durable Log History journey, with visible emulator checkpoints.

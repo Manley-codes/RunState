@@ -165,7 +165,10 @@ Not a roadmap. This is what the dependencies allow.
 
 ## Structured song-history contract — DEFAULT
 
-**Approved August 26, 2026. Conceptual only; nothing here authorizes implementation.** The
+**Approved August 26, 2026.** This remains the broader conceptual contract. An October 12
+opt-in Android first pass now stores media-session snapshots under the run UUID and labels them
+partial in History; it does not reconstruct complete song occurrences, control playback, collect
+feedback or transmit observed music to the reflection backend. The
 finished app both **chooses and watches**: it may prepare or queue music, and it observes what
 actually played. Those are related but different facts and must never be collapsed into one
 generic fact.

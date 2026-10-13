@@ -5,6 +5,93 @@ metadata:
   type: project
 ---
 
+## Current Android checkpoint — October 12, 2026
+
+The first native Start visual pass now uses the local `start.html` prototype's pale map image,
+floating agent card, three Energy tiles and dark curved Start footer. The map is explicitly
+illustrative; the place-specific RunStyle card and shoe mileage are not presented as real data.
+The optional GPS and music-observation controls now describe their actual behavior.
+Low, Moderate or High is optional,
+has Undo, and is saved under the permanent run UUID at official start. Bypass and older runs
+remain unknown. A failed start retry retains its original choice. "Start another run" returns
+to Ready so the next run can make a separate choice. The saved choice feeds the backend
+reflection evidence and appears as "Before run" in History; post-run Energy remains a separate
+"After run" answer. Room version 5 adds this nullable field through an explicit migration.
+The visual review image is `android/artifacts/run-start-energy-emulator.png`.
+
+Start now offers an explicit, reversible **Use GPS** choice. Fixture remains the default;
+precise-location permission and enabled phone GPS are required before a GPS countdown can
+become an official run. One tracking mode is frozen with the run UUID. The map artwork remains
+an illustration even when GPS is recording; it does not draw a real route. A same-process
+foreground location service owns a GPS start and its notification, follows durable pause/resume/
+completion state, and records raw GPS fixes and cautious distance decisions in Room version 6.
+Only accepted measured segments contribute distance. Partial GPS evidence is labeled as such;
+no measured segment means unknown distance, and partial GPS never displays a confident pace.
+After process death, reopening an unfinished GPS run offers an explicit tracking restart and
+does not bridge the missing route interval. This is an emulator implementation checkpoint,
+not an outdoor accuracy claim.
+An emulator walkthrough exercised permission opt-in, simulated movement, Home/background,
+Pause/Resume, a second measured section, hold-to-stop, foreground-service shutdown and
+History after process restart. The example saved 0.03 mi as partial GPS; pace stayed unknown.
+Screenshots are `android/artifacts/run-gps-start-emulator.png`,
+`android/artifacts/run-gps-active-emulator.png`, and
+`android/artifacts/run-gps-saved-emulator.png`. The Room store also guards against connecting
+a distance segment across a rapid durable Pause/Resume even if the service misses that
+intermediate state. History conservatively leaves active time unknown for partial GPS because
+the stored record cannot prove continuous service coverage after a process interruption.
+
+Start also offers **Observe music**, off by default and reversible before each run. It opens
+Android's notification-access Settings when needed; that Android grant is broad, so the UI says
+so. The service does not read notification contents. It attaches to active media sessions only
+while Room shows exactly one unfinished run and that run is RUNNING with its own music opt-in.
+Room version 7 saves timestamped source-app, optional title/artist, playback-state and callback
+snapshots under the run UUID. Pausing detaches observation; Room refuses late callbacks and
+non-opted-in writes. Missing events mean unknown coverage, not no music; these are observations,
+not proved complete songs or accurate song start/end times. No audio, lyrics, playback control
+or provider credentials are stored, and observed music is not sent to the reflection backend.
+Expanded Log History shows the last reported media title/artist/app and event count with an
+explicit partial-evidence label, or says music is unknown when an opted-in run has no events.
+Debug and release builds passed with 241 JVM tests; 15 focused Room/migration emulator tests,
+the Start music-control test and the History evidence test passed. Android bound the granted
+listener on the emulator without a startup error. Actual external-player behavior awaits a phone.
+
+Running and Paused now have a first native visual pass in the same light-map/dark-control
+family. The map becomes a circular, explicitly illustrative surface around truthful session
+time, fixture distance and pace; the separate active time remains visible. Pause, Resume and
+the 1.5-second hold-to-end keep their original coordinator callbacks and durable behavior.
+This is a reviewable foundation, not a settled Active design; Manley had flagged that screen
+for substantial redesign. The emulator image is `android/artifacts/run-active-emulator.png`.
+
+The debug Android journey now saves a completed fixture run, offers optional post-run Energy,
+selects one of four prepared replies (or the no-selection reply after about six seconds), and
+stores the exact selected text in Room. Log History shows completed runs, frozen metrics,
+later Energy feedback and that same saved text after app restart. Opening a ready History row
+speaks its saved text through Android TextToSpeech when a voice engine is available. A late
+Energy answer updates feedback without replacing the reply. Failed generation leaves the run
+saved and offers a reflection-only retry. Room version 4 introduced reflection storage;
+version 5 preserves it while adding pre-run Energy.
+
+The local backend labels each successful response `FAKE` or `ANTHROPIC`; Android uses that
+field for its test-data disclosure. The debug emulator connects through `10.0.2.2`; the debug
+phone route is prepared for USB `adb reverse` to `127.0.0.1` but has not been tested on a
+physical phone. Release still makes no local backend request. The backend suite passed 27
+tests; Android debug and release builds passed, with 241 debug JVM tests at this checkpoint. The original fixture checkpoint
+passed 29 focused database/migration and 35 focused Compose emulator tests. The GPS pass
+passed 11 focused Room/coordinator tests and its Start-screen opt-in test. A broader connected
+run passed 87 of 88 tests; its one screen-test teardown timeout passed when rerun alone. A manual fake-backend
+walkthrough verified both the on-time Spent reply and the no-selection reply, late Energy
+immutability, History display, and reopening after process restart. Screenshot:
+`android/artifacts/run-history-reflection-emulator.png`.
+
+**Still unverified or unbuilt:** no Anthropic key was available for a paid live generation
+check, and no physical phone was present for USB/network or outdoor GPS testing. GPS capture
+and its foreground service have passed an emulator walkthrough but still need outdoor phone field
+validation; fixture mode remains available. External music-app observation on a phone, Effort, a real route map,
+and further Active visual refinement are future work. Android still sends music as `UNKNOWN`, so a
+live reply cannot truthfully describe a song. The first
+functional reflection slice is implemented, but the music-aware physical-phone demo gate is
+not yet met. No work from this checkpoint was staged, committed or pushed by Codex.
+
 ## Current priority — October 7, 2026
 
 Manley clarified that the music/reflection creative baseline is ready for a first functional

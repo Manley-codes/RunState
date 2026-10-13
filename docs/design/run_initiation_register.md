@@ -370,12 +370,24 @@ before its in-memory transition remains a recovery concern. Real relaunch/proces
 the foreground service, telemetry and the server boundary remain unimplemented. The Java
 console and MySQL database are unaffected.
 
+**October 12, 2026 implementation update:** The historical status above predates the current
+Android app. Room version 6 now stores an explicit FIXTURE or GPS choice for new runs and an
+ordered, retry-safe raw GPS observation stream; earlier rows retain unknown tracking mode. A
+same-process `location` foreground service is started from the visible countdown only for an
+opt-in GPS run, promotes its notification before asking the existing coordinator for the durable
+start, and follows saved pause/resume/completion changes. GPS distance is made only from accepted
+measured segments, never fixture fallback. All first-pass GPS results are at most PARTIAL; an
+anchor alone leaves distance unavailable. Process recovery requires an explicit visible restart
+of GPS collection and must not connect the unobserved gap. Outdoor accuracy and physical-phone
+behavior still need field testing. See `project_current_state.md` for current verification.
+
 - Build Android first with Kotlin and native Android UI/platform services.
 - Room is the authoritative on-phone store. The interface observes durable state; it does not own
   the run clock or keep the only copy of an active run.
 - The process-scoped coordinator owns admission and run identity. A foreground service owns active
-  execution and lifetime — timer, GPS capture, notification and durable checkpoints — so navigation
-  or screen recreation cannot end the run.
+  GPS capture and its ongoing notification. The coordinator and Room own lifecycle timestamps and
+  checkpoints; the visible timer derives from those timestamps. Navigation or screen recreation
+  cannot become the only owner of a GPS run.
 - Local save is the source of truth. The minimum server boundary handles reflection generation and
   later duplicate-safe synchronization; it is not required for timing or completing a run.
 - Provider and model credentials remain off the phone.

@@ -182,8 +182,10 @@ RunState understand the runner across runs.**
   without saving, rebuilding, replaying speech or resetting inputs.
 - The reflection speaks when it arrives. **October 6, 2026 update:** Manley wants opening a run in
   History to speak its stored reflection automatically as well. History must read that stored text,
-  never regenerate it. The role of `REPLAY` remains for later UI refinement. The first functional
-  Android milestone is intentionally text-first and does not yet implement speech.
+  never regenerate it. The role of `REPLAY` remains for later UI refinement. As of October 12,
+  opening a ready History row invokes Android speech on the exact stored text when a voice engine
+  is available. Arrival speech and the deterministic spoken receipt remain unbuilt; physical-phone
+  audio quality has not been checked.
 
 ### Post-run voice contrast — DIRECTION, NOT YET PROTOTYPED *(added August 31, 2026)*
 
