@@ -4,7 +4,7 @@ description: "Working research notebook for a grounded, music-aware reflection s
 metadata:
   type: research
   status: active-working-notebook
-  updated: 2026-10-03
+  updated: 2026-10-14
 ---
 
 # Music-aware reflection generation research
@@ -15,6 +15,13 @@ This is a **working research notebook**, not a final production prompt or implem
 keeps sources, user feedback and limitations together. The October 3 checkpoint contains the approved
 first-version creative direction; the delivery contract lives in `design_run_response_system.md`.
 The earlier research-first pace below is historical, not the current implementation queue.
+
+**Current October 14 checkpoint:** live reflection text/reopen and one Moto screen-off GPS
+capture check have passed. Manley approved a temporary original instrumental after Completion
+speech; its local integration and provenance are recorded in the October 14 source decision below.
+Final build, all 76 emulator screen cases and Moto receipt → live reflection → instrumental
+hearing passed. Actual-song pairing remains later. The local no-selection prompt v1.3 needs
+push/manual deployment before live QA; the listening check used the unchanged hosted v1.2.
 
 Manley's direction as of September 17, 2026:
 
@@ -210,6 +217,44 @@ fits the implementation sequence. Preserve the manual experiment's positive feed
 choose a permitted audio source and test the entrance timing after the voice reply and music
 evidence are stable. The request does not establish a Spotify playback permission or turn the
 current media-session observations into complete-song evidence.
+
+**October 14 final source decision — temporary original instrumental approved:** Manley briefly
+preferred waiting for an actual song, then explicitly chose to use the instrumental until that is
+possible. The final approval supersedes the deferral. Its value is testing the speech-to-music
+entrance, cancellation and local playback independently of a song provider. It does not establish
+the intended semantic reflection/song pairing, automatic passage selection or Spotify permission.
+
+The current bounded implementation appends one 10-second cue only to successfully completed
+Completion reflection speech, after the factual saved-run receipt. History stays voice-only.
+Stop audio, navigation, a new run, app pause and disposal/rotation invalidate owned playback;
+focus/speech/player failures do not launch or resume a cue. Final integrated verification passed
+287 JVM tests per Android variant, all three APK builds and all 76 emulator screen cases, including
+ten new audio checks and actual-player playback. A real footer overlay intercepted the Stop touch;
+an isolated rerun confirmed the failure, then a measured footer/weighted scroll viewport fixed
+the production layout. The touch assertion was preserved and the isolated/full suite passed.
+
+Moto received the APK without a reset. One explicit Sample run (0.05 mi, 1:03 elapsed, 27 seconds
+active) received a live v1.2 reflection with no Energy choice or music sharing. Manley confirmed
+the saved receipt, exact reflection and instrumental were "all in order and landed perfectly."
+Focus logs recorded voice completion, the music-focus request 32 ms later and focus abandonment
+10.782 seconds afterward in that check; this is not a guaranteed future entrance latency.
+There was one hosted reflection-family request for the new Sample run and no network generation
+for cue playback. Stay-awake was restored to 0 with no GPS service/wake lock remaining. Actual-song
+selection/passage, Spotify permission and external music duck/resume remain independently open.
+
+**Asset provenance:** `android/app/src/main/res/raw/runstate_reflection_instrumental.mp3` was
+generated once with ElevenLabs Music v2 on October 14, 2026: instrumental-only, warm mellow
+hip-hop around 90 BPM with electric piano, bass and restrained drums. No artist, title, lyric or
+artist-voice reference was supplied. The asset is 258,514 bytes; SHA-256 is
+`80C37987BC985C54BEBF613E618DA3EAFCB742750EDC9F988CD6E0C678A0A114`.
+Generation references: flow `A1PrdpEGAiNEg3O1dCg2`, generation `uimfwx3mhqx7N2OnvXp2`.
+Completion credits `Eleven Music`; [ElevenLabs Music terms](https://elevenlabs.io/music-terms)
+are the source terms, not a claim of exclusive copyright or an actual-song licence.
+The MP3 is bundled once in the Android APK. There is no production ElevenLabs integration,
+per-run generation/network cost, API credential or signed download URL in the app/repository.
+The one-time asset-generation step is separate from Anthropic's live reflection generation.
+Choose an actual song and permitted playback route later; media-session metadata still does not
+grant playback rights. The local cue adds no song evidence, Room field or schema migration.
 
 **Historical September direction (superseded by October 3):** return to developing the reflections. Retain these examples and the positive
 snippet feedback without making playback polish a prerequisite for the next writing test.

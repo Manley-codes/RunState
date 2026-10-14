@@ -9,6 +9,57 @@ Every successfully saved run gets a contextual response. No exceptions.
 
 ## First functional Android reflection version — approved direction October 3, 2026
 
+**October 14 continuation — GPS capture passed; bounded wording/navigation polish:**
+The latest Moto walk saved 0.08 miles of partial GPS over 2:24 elapsed and reopened its exact
+live no-selection reply and one-section recorded path after process restart. Fresh fixes span
+the tested 110.786-second screen-off interval with zero stale decisions after the timed CPU wake
+safeguard. This verifies capture for that device/session, not distance accuracy or wider reliability.
+All measured GPS runs still receive the deliberate PARTIAL label; their frozen reflection evidence
+and History active time stay conservative. See `project_current_state.md` for the field aggregates.
+
+Local prompt `mobile-reflection-v1.3` now makes the no-selection boundary explicit: recognize known
+run facts, leave post-run feelings out, do not comment that they are unknown/unreported/unrecorded/
+unselected, and do not ask how the run felt or request Energy. Other branches and the sample,
+partial-GPS and partial-media limits are unchanged. No stored reply is rewritten. The resource
+header is the version source; the production provider's transport/configuration behavior is unchanged.
+All 45 backend tests passed, including the captured-request checks for the new instructions.
+Those checks do not prove generated writing compliance. A private local setup attempt made zero
+AI requests because it could not obtain usable configuration; live v1.3 verification remains
+pending a pushed commit and manual Render deployment. The working hosted service remains unchanged.
+
+History now scrolls to the top only when its first run identity changes. Initial loading/rotation
+and Energy/Effort updates keep the reader's position; navigation does not auto-expand, speak or
+regenerate a new row. All eleven focused History checks passed, with 287 JVM tests per Android
+variant and all APK builds. The only necessary new source file in the GPS repair was its focused
+wake-lease test; this wording/navigation polish introduced no new source file or schema.
+
+**October 14 instrumental continuation — approved source, integration and Moto hearing passed:**
+Manley's final decision is to use a short original instrumental until a suitable actual song and
+permitted playback route are chosen. Completion sequences saved receipt → exact reflection voice
+→ one 10-second bundled cue, only after successful reflection TTS `onDone` and while that same
+run/attempt remains visible. Plain History autoplay remains voice-only. A visible 48 dp `Stop
+audio` button cancels the sequence. Stop, Start another run, History navigation, lifecycle pause
+and disposal/rotation close owned playback and reject late callbacks; there is no automatic resume.
+Failed/interrupted/timed-out TTS, denied focus and player initialization failure do not produce a cue.
+MediaPlayer prepares asynchronously with transient music focus, pause-on-duck behavior, volume
+0.22 and a 15-second deadline. The cue is labelled `Eleven Music` on Completion.
+
+One new bundled MP3 was generated once through ElevenLabs Music v2; the app makes no ElevenLabs
+request and stores no new credential. No new reflection generation, network request, Room field
+or schema migration is introduced. Provenance lives in `research_music_reflection_generation.md`.
+The final build passed 287 debug/287 release JVM tests and all three APK builds. All 76 emulator
+screen cases passed, including ten new audio checks and actual-player playback. The first full
+run exposed a real Stop touch intercepted by the fixed Start another run footer; a synchronized
+isolated rerun confirmed it. A measured footer sibling/weighted scroll viewport fixed production
+layout; the real touch assertion remains, and the isolated check plus full 76-case rerun passed.
+Moto installed without reset. A new 0.05-mi Sample run received one hosted v1.2 live response
+family; Manley heard receipt → exact live reflection → instrumental and said it was "all in
+order and landed perfectly." No Energy selection or music sharing was needed. Cue playback is
+local, adding no generation call. Normal stay-awake 0 was restored with no GPS service/CPU lock.
+Actual-song pairing, Spotify playback and external music duck/resume remain unverified; the
+temporary cue is not evidence that those are implemented. This is a good commit point; the user
+still owns Git and local prompt v1.3 still needs push/manual deployment before its live QA.
+
 **October 13 continuing hosted delivery — live phone text, audible sequence and reopen verified:**
 Render now generates real reflections for the Moto over HTTPS. The phone
 accepts an explicit HTTPS endpoint and a 43–128-character URL-safe per-demo access code, distinct

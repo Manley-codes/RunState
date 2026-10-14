@@ -9,13 +9,13 @@ choice made in June can be re-examined in August without anyone reconstructing w
 
 ## Platforms and tools used
 
-**Current record: October 13, 2026.** Development tools help us build the app; runtime services
+**Current record: October 14, 2026.** Development tools help us build the app; runtime services
 are what the app actually uses. The browser designs, native phone app and reflection backend
 are separate parts of this project.
 
 | Role | Platform or tool | How it has helped RunState and its current status |
 |---|---|---|
-| Development | **Android Studio** | The IDE for the native Android project in `android/`. Its Android SDK and emulator tools build/install the app and test screens, permissions and simulated GPS. The Moto g play (2026) provides actual-device checks; outdoor accuracy and continuous screen-off tracking still need validation. |
+| Development | **Android Studio** | The IDE for the native Android project in `android/`. Its SDK, emulator and Java runtime also support builds/tests through PowerShell. The Moto g play (2026) now passed one 110.786-second outdoor screen-off capture check after the GPS wake safeguard; distance accuracy, wider reliability and long-run battery use remain unverified. |
 | Development | **IntelliJ IDEA** | The IDE for the original Java console app and Java reflection backend. IntelliJ's bundled Maven and Java runtime (JBR) were also used during build/test work; direct Java 17 checks now verify the backend launch boundary. Opening either IDE does not create a separate copy of the repository. |
 | Development | **Codex Desktop and Codex CLI** | Assisted implementation, code review, builds, tests and device checks. Earlier work used CLI handoffs; Manley later authorized direct implementation. Manley still handles commits and pushes. These are development assistants, not the app's reflection service. |
 | Development | **Earlier Claude conversations, Cowork and Claude Design** | Helped planning, design review and screen prototypes recorded in the design documents. Their design/planning role is separate from the Anthropic API that generates actual app reflections. |
@@ -24,10 +24,11 @@ are separate parts of this project.
 | App implementation | **Kotlin and Jetpack Compose; Java 17** | Kotlin/Compose build the native phone screens and behavior. Java 17 supports the console and the separate reflection backend, which currently uses the JDK HTTP server rather than Spring Boot. |
 | Build and verification | **Gradle, Maven and JUnit** | Gradle builds Android; Maven builds the Java projects. Unit and Android device tests check storage, run controls, failure handling and exact saved reflections. Automated tests are separate from physical outdoor/audio acceptance. |
 | Local storage | **Room/SQLite and MySQL** | Room manages the Android phone's SQLite database: runs, feedback, observations and exact selected replies stay local. MySQL belongs to the original console app. The reflection backend currently has no hosted run database; its request cache is temporary memory. |
-| Reflection runtime | **Anthropic Claude API** | The hosted backend now generated two new Moto Sample reflections; the latest exact text survived cold History reopen without a FAKE label. Manley entered the key privately on Render; it stays backend-only. A no-selection wording issue remains, and small checks do not prove broad quality. |
-| Speech runtime | **Android TextToSpeech** | Speaks the factual save receipt and exact stored reflection, with audio-focus/failure handling. Manley confirmed hearing saved facts followed by the latest hosted live reply. Music duck/resume/snippets remain unverified. |
-| Music evidence | **Spotify through Android media sessions** | Supplies partial local title/artist/playback observations while an opted-in run is Running. A separate per-run choice permits one eligible title/artist in reflection context. No Spotify SDK, preview playback or music snippet is implemented; metadata access is not playback permission. |
-| Hosted backend | **Render** | The `runstate-reflections` Starter service in Oregon ($7/month, free Hobby workspace) is Live with Anthropic and `/health` monitoring. Hosted FAKE staging preceded private key entry/live-mode deployment. Two paid phone generations, exact cold reopening and the latest audible sequence now passed. |
+| Reflection runtime | **Anthropic Claude API** | The hosted backend generates Sample and GPS reflections; the latest 0.08-mile GPS reply survived cold History reopen without a FAKE label. Manley entered the key privately on Render; it stays backend-only. Local prompt v1.3 strengthens unanswered-Energy wording, but still needs deployment/live verification. Small checks do not prove broad quality. |
+| Speech runtime | **Android TextToSpeech** | Speaks the factual save receipt and exact stored reflection, with audio-focus/failure handling. The Completion instrumental follows successful reflection speech; Manley confirmed receipt → live reflection → cue on the Moto. History remains voice-only. |
+| Asset creation and local playback | **ElevenLabs Music v2; Android MediaPlayer** | Generated one temporary original 10-second instrumental on October 14, bundled in the APK with an Eleven Music credit. MediaPlayer plays it locally after Completion speech. Build, 76 emulator screen cases and Moto hearing passed. The app has no ElevenLabs API integration, credential or per-run music request; actual-song playback remains later. |
+| Music evidence | **Spotify through Android media sessions** | Supplies partial local title/artist/playback observations while an opted-in run is Running. A separate per-run choice permits one eligible title/artist in reflection context. No Spotify SDK or preview playback is implemented; metadata access is not playback permission. The bundled instrumental is separate from these observations. |
+| Hosted backend | **Render** | The `runstate-reflections` Starter service in Oregon ($7/month, free Hobby workspace) is Live with Anthropic and `/health` monitoring. Hosted FAKE staging preceded private key entry/live mode. Sample and GPS replies reopen exactly; the October 13 receipt-to-reflection hearing gate remains passed. New local prompt changes require a pushed commit and manual deployment. |
 | Deployment packaging | **Docker** | Render built/deployed Java 17 after all 45 Linux backend tests passed. The test-reader repair kept security assertions. The FAKE command override is now cleared; the committed `--remote` CMD runs live mode with the server key. App code stayed at `85cbfab` through configuration deployments. |
 | Design preview | **Local HTML and GitHub Pages** | `start.html`/`completion.html` and the public preview helped review appearance and interactions. They are browser prototypes, not the installed Kotlin/Compose phone app, and do not prove native tracking or backend behavior. |
 
@@ -83,12 +84,32 @@ attached to that run, so History can reopen them offline without generating new 
 hosting continues while provisioned; live Anthropic requests add separate usage costs. Hosting
 can be changed/cancelled while the phone's local records remain.
 
-The latest no-selection reply mentioned that the after-run feeling "remains unrecorded", contrary
-to the existing rule to stay quiet about unanswered Energy. Structure, transport and persistence
-worked; writing quality still needs a bounded follow-up. No prompt fix or saved-reply rewrite
-has been made. History's older scroll position also sometimes hides the new row above until
-scrolling up; that is navigation polish, not lost data. Outdoor GPS continuity/accuracy, music
-duck/resume/snippets and broad writing quality remain unverified.
+**October 14 follow-up:** A timed CPU wake safeguard passed one Moto outdoor screen-off capture
+check, with fresh fixes throughout the 110.786-second locked interval and no stale rejections.
+The run saved 0.08 miles as partial GPS and reopened its exact live reply and one-section path.
+All 19 records remain. This is a device/session capture result, not an independently measured
+distance-accuracy claim. GPS still uses the deliberately conservative PARTIAL label.
+
+The earlier no-selection reply's "remains unrecorded" sentence prompted local v1.3 guidance:
+omit post-run feelings and missing-answer commentary, and do not request an Energy answer.
+All 45 backend tests passed; a local live check could not obtain a usable private configuration
+and made zero AI requests. The hosted service is unchanged until v1.3 is committed, pushed and
+manually deployed. Existing saved replies are never rewritten. History now resets to the top
+when a new first run appears, preserving position through feedback changes; all eleven focused
+History checks passed. The Android build/JVM checks also passed. Manley's final October 14 decision
+approved a temporary original instrumental until an actual song can be used. Completion now adds
+one 10-second local cue after successful reflection speech, with Stop audio and cancellation on
+navigation/new run/app pause; History remains voice-only. Final verification passed 287 JVM tests
+per Android variant, all three APK builds and all 76 emulator screen cases, including ten new
+audio checks and actual-player playback. The suite found a real footer overlap intercepting Stop
+touches; a measured footer/weighted scroll viewport repaired the UI, and the original touch check
+and complete rerun passed. Moto installation preserved data without a reset; a new Sample run
+received one live v1.2 response family, then Manley confirmed receipt → reflection → cue was
+"all in order and landed perfectly." Cue playback adds no network generation. The necessary MP3 is bundled at
+`android/app/src/main/res/raw/runstate_reflection_instrumental.mp3`; its origin and checksum are
+recorded in [the music research note](design/research_music_reflection_generation.md). It adds no
+runtime ElevenLabs request, credential or backend deployment. Actual-song source/playback,
+external music duck/resume, wider tracking/battery reliability and broad writing quality remain open.
 
 ---
 

@@ -5,11 +5,210 @@ metadata:
   type: project
 ---
 
-## Current Android checkpoint — October 13, 2026
+## Current Android checkpoint — October 14, 2026
 
-**Paused at Manley's request after the hosted live milestone.** Resume with the outdoor
-locked-screen GPS check first when he is available; no further task starts tonight. The
-no-selection wording and History scroll follow-ups below remain later polish.
+**Temporary instrumental installed and heard in order; integrated checks passed.** Manley's final
+decision supersedes the brief choice to wait: use an original RunState instrumental until an
+actual song and permitted playback route are available. This cue exercises the audible handoff;
+it does not establish song selection, a reflection/song pairing or Spotify playback permission.
+
+Completion now sequences the saved-run receipt, exact selected reflection speech and one bundled
+10-second instrumental only after the reflection's successful TTS completion. Ordinary History
+opening remains voice-only. Completion labels the cue's Eleven Music origin and provides a visible
+48 dp `Stop audio` control. Stop, Start another run, History navigation, lifecycle pause and
+disposal/rotation invalidate the current attempt and close owned speech/player resources without
+automatic resumption. Run/attempt/visibility guards reject old callbacks; focus denial, speech
+failure/interruption or timeout does not start the cue. The asynchronous local MediaPlayer uses
+transient music focus, pause-on-duck behavior, volume 0.22 and a 15-second deadline.
+
+One necessary new asset is `android/app/src/main/res/raw/runstate_reflection_instrumental.mp3`:
+generated once with ElevenLabs Music v2 on October 14, 2026, then bundled in the Android APK.
+The app does not call ElevenLabs or generate music per run; no credential, new network request,
+Room/schema change or backend deployment is required for playback. Asset provenance is recorded
+in `research_music_reflection_generation.md`. Existing source/test files carry the integration.
+The final integrated build passed 287 debug and 287 release JVM tests with zero failures/errors/
+skips and all three APK builds in 23 seconds. All 76 emulator screen cases passed in 256.619
+seconds, including ten new audio cases, actual-player playback and existing History/receipt/
+large-text checks. The initial suite passed 75/76: a real Stop touch was intercepted by the fixed
+Start another run footer. A synchronized isolated rerun still failed. The production layout was
+repaired to use a measured footer sibling and weighted scroll viewport, preserving the real touch
+assertion. The isolated check then passed in 8.623 seconds and all 76 cases passed together.
+
+Moto installation succeeded without a data reset. One explicit Sample run saved 0.05 mi,
+1:03 elapsed and 27 seconds active, with no Energy selection or music sharing. The existing
+hosted v1.2 service supplied one live response family. Its exact selected text was:
+
+> You covered 0.05 miles of sample distance in under a minute of active time. A brief run, but you
+> got out there.
+
+Phone focus logs recorded reflection voice finishing after 8.108 seconds, the music transient-focus
+request 32 ms later and its abandonment 10.782 seconds afterward. Those are this check's timings,
+not a promised audio latency. Manley confirmed the receipt, live reflection and instrumental were
+"all in order and landed perfectly." USB stay-awake was restored to 0; no GPS service/CPU wake lock
+remained. A final stable SQLite/WAL quick check confirmed 20 COMPLETED records: all 19 prior
+completed runs retained, no RUNNING/PAUSED rows, and the latest fixture run READY/NO_SELECTION/
+non-FAKE with matching exact text and observation/sharing off. The earlier 135.86013686 m GPS
+run and its exact stored reply are unchanged. The Moto is on Run Complete with no active run;
+the temporary inspection directory was removed, leaving no persistent database export.
+Render continues working v1.2; local prompt v1.3 still needs user push/manual deployment.
+Actual-song pairing/permission and Spotify duck/resume remain separate unverified items. This is
+a good commit point for the bounded changes; no assistant Git mutation occurred. No further
+outdoor walk is required now.
+
+### Earlier October 14 wording and History polish — retained proof
+
+**Wording/History polish and phone data retention passed; hosted v1.3 QA awaits deployment.**
+`RunHistoryScreen.kt` now remembers the previous newest run ID alongside its saveable list state.
+It scrolls to item 0 only when an actual new first ID arrives. Initial data hydration, rotation
+and feedback updates on the same first ID preserve position. The change does not expand a row,
+speak or retry a reflection automatically. One meaningful regression was added to the existing
+`RunStateScreenTest.kt`; this phase added no new source file.
+All 287 debug/287 release JVM tests passed with zero failures, and all three APKs rebuilt in
+about 43 seconds. Eleven focused History emulator cases passed in 46.143 seconds. The first
+suite launch exited before tests; the new case passed alone in 7.112 seconds, then the complete
+11-case rerun passed with nothing skipped. Moto installation and MainActivity launch succeeded
+without a reset. A background stable SQLite quick check after the upgrade confirmed all 19
+COMPLETED records and the latest PARTIAL 135.86013686 m/READY GPS record's exact live reply.
+Encrypted online settings are unchanged; their cold-reopen proof predates this upgrade and the
+settings code was not edited. The phone is locked on Start with no new official run. No manual
+Moto History interaction after this installation is claimed; native scroll behavior is verified
+by the 11 emulator checks. The phone can stay locked; no user unlock is required for this proof.
+
+The backend prompt source is now v1.3. Its small wording/header change keeps unknown post-run
+Energy out of `no_selection`: no invented feeling, unanswered/unreported/unrecorded commentary
+or "How did it feel?" question. Chosen Energy branches, factual partial-GPS/sample/music boundaries
+and frozen saved replies stay unchanged. A captured-request regression verifies the new
+instructions are transmitted. Provider production code and the HTTP contract are unchanged;
+all 45 backend tests passed on a clean build in 28.777 seconds. These mocked checks do not prove
+future model compliance. No prompt v1.3 live request was attempted, no new AI charge/secret file
+or local server was created, and the working Render deployment remains v1.2.
+The local prompt/readme changes require user commit/push and manual Render deployment before
+a bounded live v1.3 writing check. Existing selected replies must not be regenerated to apply it.
+At that checkpoint the music source choice was still pending; the approved instrumental
+continuation above supersedes that blocker. No further physical walk is needed now.
+This is a good commit point for the bounded changes; routine Git work remains the user's, before
+manual hosted deployment. At this checkpoint the only new source file was the earlier wake-lease
+unit test; the wording/History polish added none. Checks refreshed ignored `backend/.m2`, `backend/target` and
+`android/app/build` output, and temporary database inspection copies are removed. No commit,
+push, source credential file or additional writing generation was performed by the assistant.
+
+### October 14 physical capture milestone — retained proof
+
+**Physical screen-off capture gate passed for this Moto and one walk after the repair.**
+The main new GPS run saved 2:24 elapsed (144,817 ms), displayed 2:20 active and 135.86013686 m
+(0.08 mi). Distance became visible around elapsed 17 seconds. Pause occurred at 140.825 seconds.
+All 139 raw fixes were either accepted (35 points: one anchor/34 measured segments) or ignored
+within reported accuracy (104); there were zero stale, inaccurate, jump or out-of-order decisions.
+Measured segment sum, cumulative distance and saved final distance agree.
+
+Android screen-off/on events bracketed elapsed 21.544–132.330 seconds, a 110.786-second interval.
+That interval contained 111 fixes with one-second fix timestamps (21.601–131.601), 30 accepted
+measured segments totaling 117.1613725 m and 81 within-accuracy ignores, with zero stale fixes.
+The conservative interior excluding ten seconds at each end contained 91 fixes and 24 accepted
+segments totaling 95.332649 m. Maximum fix-timestamp gap through the locked interval was 1.0 s.
+Fresh accepted interior fixes support timely callback processing during screen lock; callback
+arrival itself is not separately persisted, so do not describe this as directly timed 1 Hz
+callbacks. This passes the capture gate for this device/session, not measured-distance accuracy,
+all-phone reliability, long-run battery behavior or music duck/resume/snippets.
+
+GPS coverage remains PARTIAL deliberately: current `metricsForCompletion` marks all measured
+GPS completions PARTIAL. That label is not evidence of a gap in this repeat. History therefore
+keeps Active unknown (`—`) conservatively and shows one section of the partial recorded path.
+Completion reached READY live text with the correct 0.08-mi partial-GPS qualifier. After a cold
+restart, online connection, metrics and exact Completion text reopened from the newest History
+row without a FAKE label:
+
+> You ran 0.08 miles recorded by partial GPS in about two and a half minutes around 9:21 a.m.
+> A quick one done.
+
+The database quick check found 19 COMPLETED records. Since the 17-record repair baseline, two
+distinct GPS starts saved: 30.443 s/7.01470975 m, then 144.817 s/135.86013686 m. Both are PARTIAL,
+READY/NO_SELECTION/non-FAKE with observation/sharing off; both have live replies, all old records
+remain, and no same-start duplicate or assistant retry occurred. The earlier low-distance run
+below also received one live reply. No music, audio or coordinates were shared with the model.
+After completion/cold reopen no GPS service or RunState CPU lock remains. The phone is on latest
+expanded History, with no new run started; USB stay-awake remains 0 and local servers stay off.
+Each temporary private repeat inspection snapshot was removed; no persistent database export,
+credential or raw-coordinate readout was retained. No source change or test rerun was needed for
+this repeat. The earlier verified 287-per-variant, APK, emulator and service checks remain valid.
+
+No additional physical walk is needed now. This capture pass unlocked the bounded writing/History
+polish described above; its local implementation does not yet establish hosted v1.3 quality.
+
+### Earlier October 14 failure diagnosis and software repair — retained history
+
+**Outdoor check did not pass continuous screen-off GPS; software repair checks passed.**
+Manley returned from the walk on the same GPS run. Distance first appeared to him around elapsed
+13:17. Android recorded screen off at 13:21.868 and on at 15:07.648: a 105.780-second interval.
+Pause followed at 15:18.788. Displayed active time then froze at 15:18 while elapsed continued,
+which is the intended pause contract, not proof that all those active minutes had continuous GPS.
+
+The completed run saved 27:19 elapsed, displayed 15:18 active and 63.479397577 m (0.04 mi) of
+partial GPS distance. Its 167 raw fixes yielded 15 accepted points: three anchors and 12 measured
+segments. The other decisions were 80 ignored within reported accuracy, 71 stale rejections and
+one implausible jump. During the recorded screen-off interval, 106 fixes had roughly one-second
+fix timestamps, but only nine points/eight segments were accepted (40.740 m); 71 consecutive
+fixes were stale from elapsed 13:48.450 through 14:58.450, and 26 were within-accuracy ignores.
+The interior portion contained 86 fixes, six accepted segments and 32.645 m. Fix timestamps do
+not prove callbacks arrived continuously: callback arrival is not separately persisted here.
+Accepted/stale fix-clock offsets agree within about 4 ms, consistent with delayed delivery
+rather than a wall-clock jump. CPU suspension/delayed delivery is a hypothesis, not a proven cause.
+Continuous locked-screen capture and measured-distance accuracy remain unverified.
+
+The same run reached READY with a newly generated live reflection that correctly qualified the
+partial GPS distance. That check made one provider request; 17 completed runs then remained with prior
+data retained. No music, audio or coordinates were sent to the reflection service/model. This
+does not upgrade the GPS coverage or change the frozen evidence/reply.
+
+**Repair verified in software/emulator and installed before the passing repeat above:** The tracking service uses
+a timed CPU wake lease only while Running: 120-second timeout, renewed every 60 seconds, with
+fixed tag `com.runstate.mobile:RunTrackingService`. Release on pause, provider disable, failure,
+stop and destroy is covered by unit checks. Actual emulator service behavior also passed below. The
+manifest declares WAKE_LOCK. Accuracy, stale-fix and jump filters stay unchanged. Existing UI
+files explain that paused elapsed time continues while active time/distance stay frozen.
+All 287 debug and 287 release JVM tests passed with zero failures/errors, and debug, release and
+instrumented-test APKs built. Three focused emulator UI checks passed in 13.428 seconds:
+Running omits the explanation, Paused shows it, and a short 360×480/large-font view scrolls.
+A real MainActivity/GPS-service emulator walkthrough showed one partial CPU lock while Running,
+renewal after 60 seconds without stacking (new lock age about 50 seconds at about 112 seconds),
+zero locks at Pause, one at Resume, zero with provider disabled and one after it restored. Hold
+Stop saved with zero locks and no GPS service remaining; emulator GPS was restored enabled.
+The Moto received the APK without resetting data. Cold Start retained `Online service selected`;
+a stable SQLite quick check confirmed 17 COMPLETED rows, the same latest 63.479397577 m PARTIAL
+GPS run (1,639,194 ms elapsed), READY/NO_SELECTION/non-FAKE and exact pre-update reply text.
+At that point the phone was on Start with GPS Ready/`GPS run`, no official run started, zero
+RunState CPU locks and USB stay-awake 0. The field repeat was still required then; its bounded
+passing result is recorded above. The repair uses existing `RunTrackingService.kt`,
+manifest, `ActiveRunScreen.kt` and `RunStateScreenTest.kt`; one necessary new file,
+`android/app/src/test/java/com/runstate/mobile/location/RunCpuWakeLeaseTest.kt`, contains the
+three lifecycle/failure/timeout checks that protect the new lease behavior.
+
+**Reference protocol for future regression checks; no further walk requested now:**
+
+1. Unplug USB, go outdoors and open Start. Confirm GPS run; if a fresh launch shows Sample,
+   tap Turn GPS on first. Then tap Start outdoors and wait for the countdown. Do not use a run
+   silently prestarted indoors.
+2. Walk until measured GPS distance appears. If none appears after two minutes of outdoor
+   movement, pause and report that stop condition instead of continuing the lock test.
+3. Walk a short screen-on baseline; note elapsed time and distance.
+4. Press Power to turn the display off for two minutes, without pausing the run.
+5. Unlock and note elapsed time and distance, then immediately press Pause.
+6. Return to USB with that same run still Paused. Do not hold Stop or start another run.
+7. The assistant audits and finishes that run; preserve its single identity for the comparison.
+
+Three private SQLite snapshot inspection passes each used temporary main/WAL copies because
+the Android Studio app-opening tool timed out, including clock-repeat and post-update checks.
+Stable-copy/integrity checks passed, and temporary `docs/local/gps-review-*` directories were
+removed immediately through TemporaryDirectory cleanup. No credentials were in the
+copies/readouts, no raw coordinates were printed, and no diagnostic database export remains. No new
+persistent diagnostic file, backend edit or Git mutation was made for this review. The hosted
+live/audio milestones below remain valid. The subsequent passing repeat above now unlocks the
+bounded writing/History polish queue.
+
+### October 13 hosted live milestone — retained history
+
+Work paused at Manley's request after this milestone, then resumed for the October 14 outdoor
+check above. The pause was a session checkpoint, not the current project state.
 
 **Continuing delivery pass — hosted live text, audible sequence and cold reopen verified:** Active Run
 now centers a large fitted elapsed timer, with a clear distance/pace panel and naturally measured
