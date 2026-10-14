@@ -380,6 +380,16 @@ duplicate IDs, unsupported methods and safe provider failures. Remote-mode tests
 loopback and use a dummy demo code: they cover authentication before parsing, Host/Origin/forwarded
 header boundaries, liveness, provider admission and cache capacity without contacting Anthropic.
 
+The first Render image build ran 43 tests and failed on a socket reset in the oversized-request
+test, whose raw client incorrectly waited for TCP EOF after an HTTP response. The test client now
+reads bounded headers and exactly the declared `Content-Length`, with no read beyond a complete
+response. Deterministic stream checks verify that a trailing reset cannot invalidate a complete
+response, while premature EOF/reset, oversized framing and conflicting framing still fail.
+The actual HTTP status/JSON and zero-provider-call assertions remain; no server guard, provider
+logic or Docker test execution is bypassed. The corrected image still requires a new Linux/Render
+build to confirm that platform outcome. After freshly compiling the changed tests, the focused
+22 endpoint tests and full 45-test suite passed locally on Windows with zero failures/errors/skips.
+
 ## Boundary
 
 The contract can validate the evidence it receives, but it cannot prove that Android saved the run.

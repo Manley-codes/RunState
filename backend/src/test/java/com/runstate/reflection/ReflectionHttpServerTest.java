@@ -16,6 +16,11 @@ import com.runstate.reflection.ReflectionProvider.FailureType;
 import com.runstate.reflection.ReflectionProvider.ReflectionProviderException;
 import org.junit.jupiter.api.Test;
 
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.EOFException;
+import java.io.IOException;
+import java.io.InputStream;
 import java.net.URI;
 import java.net.Socket;
 import java.net.http.HttpClient;
@@ -664,6 +669,60 @@ class ReflectionHttpServerTest {
         }
     }
 
+    @Test
+    void framedResponseEndsAtItsByteLengthWithoutWaitingForConnectionClose() throws Exception {
+        String body = "{\"message\":\"Exact response — café\"}";
+        byte[] bodyBytes = body.getBytes(StandardCharsets.UTF_8);
+        byte[] headerBytes = ("HTTP/1.1 413 Payload Too Large\r\nContent-Length: " + bodyBytes.length
+                + "\r\nContent-Type: application/json\r\n\r\n").getBytes(StandardCharsets.US_ASCII);
+        byte[] response = new byte[headerBytes.length + bodyBytes.length];
+        System.arraycopy(headerBytes, 0, response, 0, headerBytes.length);
+        System.arraycopy(bodyBytes, 0, response, headerBytes.length, bodyBytes.length);
+        InputStream resetAfterResponse = new InputStream() {
+            private int position;
+
+            @Override
+            public int read() throws IOException {
+                if (position == response.length) throw new IOException("Connection reset after complete response");
+                return Byte.toUnsignedInt(response[position++]);
+            }
+        };
+
+        assertEquals(new RawHttpResponse(413, body), readFramedResponse(resetAfterResponse));
+    }
+
+    @Test
+    void framedResponseRejectsTruncationResetAndUnboundedOrAmbiguousFraming() {
+        byte[] truncated = "HTTP/1.1 403 Forbidden\r\nContent-Length: 5\r\n\r\nabc"
+                .getBytes(StandardCharsets.US_ASCII);
+        InputStream resetBeforeComplete = new InputStream() {
+            private int position;
+
+            @Override
+            public int read() throws IOException {
+                if (position == truncated.length) throw new IOException("Connection reset before complete response");
+                return Byte.toUnsignedInt(truncated[position++]);
+            }
+        };
+        assertAll(
+                () -> assertThrows(EOFException.class,
+                        () -> readFramedResponse(new ByteArrayInputStream(truncated))),
+                () -> assertThrows(IOException.class, () -> readFramedResponse(resetBeforeComplete)),
+                () -> assertThrows(AssertionError.class, () -> readFramedResponse(new ByteArrayInputStream(
+                        ("HTTP/1.1 200 OK\r\nContent-Length: " + (ReflectionHttpServer.MAX_RESPONSE_BYTES + 1)
+                                + "\r\n\r\n").getBytes(StandardCharsets.US_ASCII)))),
+                () -> assertThrows(AssertionError.class, () -> readFramedResponse(new ByteArrayInputStream(
+                        "HTTP/1.1 200 OK\r\nContent-Length: 3\r\nContent-Length: 3\r\n\r\nabc"
+                                .getBytes(StandardCharsets.US_ASCII)))),
+                () -> assertThrows(AssertionError.class, () -> readFramedResponse(new ByteArrayInputStream(
+                        "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\nContent-Length: 3\r\n\r\nabc"
+                                .getBytes(StandardCharsets.US_ASCII)))),
+                () -> assertThrows(AssertionError.class, () -> readFramedResponse(new ByteArrayInputStream(
+                        ("HTTP/1.1 200 OK\r\nX-Padding: " + "x".repeat(16 * 1024))
+                                .getBytes(StandardCharsets.US_ASCII))))
+        );
+    }
+
     private ReflectionHttpServer startRemote(ReflectionProvider provider, int providerCalls, int cachedRequests)
             throws Exception {
         // Remote admission is exercised on loopback. No public port or provider is used.
@@ -733,29 +792,61 @@ class ReflectionHttpServerTest {
                 + "Connection: close\r\n"
                 + "\r\n";
 
-        String rawResponse;
         try (Socket socket = new Socket()) {
             socket.connect(server.address(), 2_000);
             socket.setSoTimeout(5_000);
             socket.getOutputStream().write(requestHead.getBytes(StandardCharsets.US_ASCII));
             socket.getOutputStream().write(bodyBytes);
             socket.getOutputStream().flush();
-            rawResponse = new String(
-                    socket.getInputStream().readAllBytes(),
-                    StandardCharsets.UTF_8
-            );
+            return readFramedResponse(socket.getInputStream());
+        }
+    }
+
+    /** The server sends fixed-length responses; TCP EOF is not part of their HTTP framing. */
+    private static RawHttpResponse readFramedResponse(InputStream input) throws IOException {
+        ByteArrayOutputStream headers = new ByteArrayOutputStream();
+        int delimiterBytes = 0;
+        byte[] delimiter = {'\r', '\n', '\r', '\n'};
+        while (delimiterBytes < delimiter.length) {
+            int next = input.read();
+            if (next < 0) throw new EOFException("Server returned incomplete HTTP headers");
+            if (headers.size() >= 16 * 1024) throw new AssertionError("HTTP response headers exceed the test limit");
+            headers.write(next);
+            delimiterBytes = next == delimiter[delimiterBytes] ? delimiterBytes + 1 : next == '\r' ? 1 : 0;
+        }
+        String[] lines = headers.toString(StandardCharsets.US_ASCII).split("\r\n");
+        String[] statusParts = lines[0].split(" ", 3);
+        if (statusParts.length < 2 || !"HTTP/1.1".equals(statusParts[0]) ||
+                !statusParts[1].matches("[1-5][0-9]{2}")) {
+            throw new AssertionError("Server returned an invalid HTTP status line");
         }
 
-        int statusLineEnd = rawResponse.indexOf("\r\n");
-        int bodyStart = rawResponse.indexOf("\r\n\r\n");
-        if (statusLineEnd < 0 || bodyStart < 0) {
-            throw new AssertionError("Server returned an incomplete HTTP response");
+        Integer contentLength = null;
+        for (int index = 1; index < lines.length; index++) {
+            int separator = lines[index].indexOf(':');
+            if (separator <= 0) throw new AssertionError("Server returned an invalid HTTP header");
+            String name = lines[index].substring(0, separator);
+            String value = lines[index].substring(separator + 1).trim();
+            if ("Transfer-Encoding".equalsIgnoreCase(name)) {
+                throw new AssertionError("A fixed-length test response cannot use Transfer-Encoding");
+            }
+            if ("Content-Length".equalsIgnoreCase(name)) {
+                if (contentLength != null || !value.matches("[0-9]{1,6}")) {
+                    throw new AssertionError("HTTP response needs one bounded Content-Length");
+                }
+                contentLength = Integer.parseInt(value);
+                if (contentLength > ReflectionHttpServer.MAX_RESPONSE_BYTES) {
+                    throw new AssertionError("HTTP response body exceeds the test limit");
+                }
+            }
         }
+        if (contentLength == null) throw new AssertionError("HTTP response is missing Content-Length");
+        byte[] body = input.readNBytes(contentLength);
+        if (body.length != contentLength) throw new EOFException("Server returned an incomplete HTTP response body");
 
-        String[] statusParts = rawResponse.substring(0, statusLineEnd).split(" ", 3);
         return new RawHttpResponse(
                 Integer.parseInt(statusParts[1]),
-                rawResponse.substring(bodyStart + 4)
+                new String(body, StandardCharsets.UTF_8)
         );
     }
 
