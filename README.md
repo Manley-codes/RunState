@@ -5,15 +5,18 @@
 
 It combines run data with personal history, pre- and post-run energy, effort, weather, route context, running gear, and music to build a clearer picture of what made a run feel and perform the way it did. After each logged run, RunState can surface personal patterns, compare similar efforts, and generate a contextual AI response grounded in what actually happened—including the music that shaped the experience when relevant.
 
-Learning project and portfolio piece. Java 17, Maven, MySQL, JUnit 5.
+Learning project and portfolio piece, with a Java console foundation and a native Android app.
 
-**[Live design previews →](https://manley-codes.github.io/runstate-preview/)** — interactive prototypes of the mobile screens. Best on a phone.
+**[Live design previews →](https://manley-codes.github.io/runstate-preview/)** — interactive browser prototypes of the mobile screens, separate from the installed Android app. Best on a phone.
+
+**[Platforms and tools used →](docs/README.md#platforms-and-tools-used)** — what Android Studio,
+IntelliJ, the development assistants, databases and hosted services each contribute.
 
 ---
 
 ## What it does
 
-You log a completed run through an interactive console menu. RunState stores it durably, checks
+The console version logs a completed run through an interactive menu. RunState stores it durably, checks
 for personal records, fetches the weather for that date and location, compares the run against
 similar past runs, and generates a short response about it.
 
@@ -29,7 +32,7 @@ similar past runs, and generates a short response about it.
 
 ---
 
-## Engineering notes
+## Console engineering notes
 
 These are the decisions I would want to talk through in an interview.
 
@@ -47,7 +50,7 @@ These are the decisions I would want to talk through in an interview.
 
 ---
 
-## Test suite
+## Console test suite
 
 - 383 automated tests, 0 failures
 Runs automatically on every push to master through GitHub Actions
@@ -59,7 +62,7 @@ mvn test
 
 ---
 
-## Architecture
+## Console architecture
 
 ```
 App ──► RunConsole ──► RunStorage ──────► MySQL
@@ -127,15 +130,30 @@ are complete.
 **Music Intelligence V1 is implemented but not accepted.** Music Intelligence V1 has been implemented and formally evaluated. It did not meet the quality bar defined before testing, so it has not been promoted as a finished feature. The evaluation process, results, and lessons learned are documented in
 **[docs/EVALUATION_RECORD.md](docs/EVALUATION_RECORD.md)**.
 
-Current work is UI design for a mobile client — defining what screens need so the backend contract
-follows from real interface requirements rather than the reverse. A Spring Boot API and a mobile
-client with GPS tracking follow from there.
+The native Android app is implemented in `android/`: Start, run/pause/resume/finish, local saving,
+Energy/Effort, spoken receipt/reflection and Log History work through Room storage. GPS records
+partial measured evidence; continuous screen-off tracking and outdoor accuracy still need
+validation. Spotify observations stay local unless a separate per-run choice permits one eligible
+title/artist in reflection context. No music snippet is implemented.
+
+The separate Java 17 reflection backend uses the JDK HTTP server. Small live Anthropic checks
+reached the phone through the computer connection and exact selected text survived reopening.
+Authenticated hosted HTTPS setup is prepared for debug/release. The Render Starter service now
+exists, but its first Linux Docker build stopped on a test-response reading error. A bounded
+test-reader repair passed all 45 backend tests on Windows; user commit/push and a new Linux build
+remain. The backend is not live, its Anthropic key is unset and standalone online phone delivery
+is unverified. Hosted staging starts with explicit FAKE replies; API keys remain
+backend-only. Tracking and saved History remain usable offline.
+See [the current Android checkpoint](docs/design/project_current_state.md) and
+[the platform map](docs/README.md#platforms-and-tools-used) for responsibilities and limits.
 
 ---
 
 ## Technologies
 
-Java 17 · Maven · MySQL / JDBC · Gson · `java.net.http` · JUnit 5 (Jupiter) · IntelliJ IDEA · Git
+Android: Kotlin · Jetpack Compose · Room / SQLite · Gradle · Android Studio
+
+Java console/backend: Java 17 · Maven · MySQL / JDBC (console) · Gson · JDK HTTP server/client · JUnit 5 · IntelliJ IDEA
 
 ---
 

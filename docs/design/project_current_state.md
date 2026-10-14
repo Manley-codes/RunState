@@ -17,6 +17,8 @@ this does not prove that the earlier long indoor/screen-off gaps are fixed. Spee
 and TTS callbacks per utterance, with separate initialization/playback deadlines. Receipt teardown
 always releases ownership; reflection engine errors and History navigation do not replay a failed
 reply or crash the delivery flow. Physical hearing and music duck/resume still need confirmation.
+The [platform/tool map](../README.md#platforms-and-tools-used) explains which IDEs, development
+assistants, local databases and hosted services contributed to this project.
 
 The phone can now save an explicit HTTPS reflection address and a separate per-demo access code.
 Both are encrypted with a device-bound AndroidKeyStore AES-GCM key in `reflection_connection`
@@ -37,15 +39,21 @@ The backend's deliberate `--remote` mode checks the exact public Host and Bearer
 before reading generation bodies. Limits are two provider calls at once, 256 retained request IDs,
 32 queued tasks and 64 KiB request/success-response bodies. Duplicate protection remains in-memory
 and single-instance. Java serves internal HTTP only: deployment requires private routing behind an
-HTTPS ingress, not an exposed plain HTTP listener. Container source is prepared, but no public
-service or standalone phone generation has been verified. Manley approved Render Starter at
-$7/month plus AI usage in a free Hobby workspace. Render sign-in is verified and its Web Service
-form is prepared for the public repository's `master` branch: Dockerfile `backend/Dockerfile`,
-build context `backend`, blank root directory, Starter instance, manual deploy and `/health`.
-The public-repository route needs no GitHub installation grant. No service was created or charged,
-no secret was entered and this setup made no provider call. Deployment now waits for Manley's
-commit/push and private per-demo access-code configuration, followed by fake staging and a separate
-live-key decision. The container uses an explicitly empty ENTRYPOINT and a CMD so the launch can
+HTTPS ingress, not an exposed plain HTTP listener. Manley created the Render `runstate-reflections`
+Starter service in Oregon at the approved $7/month plus AI usage in a free Hobby workspace. Its
+configured address is `https://runstate-reflections.onrender.com`, matching the configured public
+Host. It uses public `master`, Dockerfile `backend/Dockerfile`, context `backend`, blank root,
+manual deploy and temporary TCP health checks; no GitHub installation grant was needed. Launch is explicitly FAKE,
+and the hosted Anthropic key remains unset. No hosted AI or standalone phone request is verified.
+The first Docker build ended with 43 tests, zero failures and one Linux socket-reset error in the
+oversized-request security test. The raw test helper kept reading to EOF; a reset after a complete
+HTTP response can invalidate that unnecessary read. Only that test reader was repaired
+to read a bounded Content-Length response. The 403/413 JSON and zero-provider-call assertions
+remain, with no skipped tests or production-security relaxation. All 22 endpoint tests and the
+full 45-test backend suite passed on Windows. This repair awaits Manley's commit/push and a fresh
+Render Linux build; the backend is not live and the Linux fix is not yet verified.
+Private access configuration is kept out of the repository/docs. Hosted fake staging must pass
+before a separate live-key step. The container uses an explicitly empty ENTRYPOINT and a CMD so the launch can
 be overridden for fake staging. Finite JDK header/read/write/idle deadlines are configured;
 the container image, public ingress and body-upload behavior have not been exercised.
 The direct Java 17 process was checked locally in private `--remote --fake` mode using the exact
@@ -54,7 +62,8 @@ An incomplete-header client was closed after 15.1 seconds. This proves that loca
 and header deadline, not a built Docker image, Render TLS or standalone phone delivery. Its test
 access code existed only in process memory and was cleared; the server was stopped afterward.
 
-Confirmed verification is 43 backend tests, 284 JVM tests in each Android variant, all APK builds
+Current local verification is 45 backend tests on Windows (including 22 endpoint tests),
+284 JVM tests in each Android variant, all APK builds
 and one isolated encrypted-settings test on the Moto. The full emulator screen/database suite
 passed 88 tests; after the setup disclosure change, all three APKs rebuilt and the focused
 connection-dialog test passed. The release merged manifest was checked for Internet permission,
@@ -75,8 +84,10 @@ This continuing pass
 adds only three necessary files: `ReflectionConnectionSettings.kt` for encrypted connection
 storage, `backend/Dockerfile` for the hosted Java container and `backend/.dockerignore` for a strict
 container-build allowlist. One price/form review image was created outside the repository in the
-authorized visualizations folder; it adds no project source. No commits or pushes were made;
-routine Git work remains Manley's.
+authorized visualizations folder; it adds no project source. Manley has committed/pushed the
+earlier backend (`45d40cf`), Android (`0758f46`) and design checkpoint (`af98def`). The tested
+response-reader repair and current documentation updates await his next commit/push; assistants
+performed no Git mutations.
 
 ### Earlier live and optional-music checkpoints
 

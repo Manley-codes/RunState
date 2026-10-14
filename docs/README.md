@@ -7,11 +7,44 @@ The short version: RunState's documentation is more detailed than a console app 
 on purpose. Decisions are written down with their reasoning and an explicit status, so that a
 choice made in June can be re-examined in August without anyone reconstructing why it was made.
 
+## Platforms and tools used
+
+**Current record: October 13, 2026.** Development tools help us build the app; runtime services
+are what the app actually uses. The browser designs, native phone app and reflection backend
+are separate parts of this project.
+
+| Role | Platform or tool | How it has helped RunState and its current status |
+|---|---|---|
+| Development | **Android Studio** | The IDE for the native Android project in `android/`. Its Android SDK and emulator tools build/install the app and test screens, permissions and simulated GPS. The Moto g play (2026) provides actual-device checks; outdoor accuracy and continuous screen-off tracking still need validation. |
+| Development | **IntelliJ IDEA** | The IDE for the original Java console app and Java reflection backend. IntelliJ's bundled Maven and Java runtime (JBR) were also used during build/test work; direct Java 17 checks now verify the backend launch boundary. Opening either IDE does not create a separate copy of the repository. |
+| Development | **Codex Desktop and Codex CLI** | Assisted implementation, code review, builds, tests and device checks. Earlier work used CLI handoffs; Manley later authorized direct implementation. Manley still handles commits and pushes. These are development assistants, not the app's reflection service. |
+| Development | **Earlier Claude conversations, Cowork and Claude Design** | Helped planning, design review and screen prototypes recorded in the design documents. Their design/planning role is separate from the Anthropic API that generates actual app reflections. |
+| Development | **PowerShell** | The Windows terminal used to run builds, tests, local backend processes and Android device tools. It works on the same project files as the IDEs. |
+| Development | **Git and GitHub** | Preserve version history, publish the public source and run automated checks through GitHub Actions. Git records changes; GitHub hosts them. A source push does not itself prove the Render app has deployed. |
+| App implementation | **Kotlin and Jetpack Compose; Java 17** | Kotlin/Compose build the native phone screens and behavior. Java 17 supports the console and the separate reflection backend, which currently uses the JDK HTTP server rather than Spring Boot. |
+| Build and verification | **Gradle, Maven and JUnit** | Gradle builds Android; Maven builds the Java projects. Unit and Android device tests check storage, run controls, failure handling and exact saved reflections. Automated tests are separate from physical outdoor/audio acceptance. |
+| Local storage | **Room/SQLite and MySQL** | Room manages the Android phone's SQLite database: runs, feedback, observations and exact selected replies stay local. MySQL belongs to the original console app. The reflection backend currently has no hosted run database; its request cache is temporary memory. |
+| Reflection runtime | **Anthropic Claude API** | The backend generated real reflections in small live checks and the phone stored/reopened exact selected text. The Anthropic key stays on the backend. Hosted setup will first use explicit FAKE replies before live generation is enabled; small checks do not prove broad writing quality. |
+| Speech runtime | **Android TextToSpeech** | Speaks the factual save receipt and exact stored reflection, with audio-focus and failure handling. Some phone speech was heard, but current music duck/resume and the latest live delivery still need listening confirmation. |
+| Music evidence | **Spotify through Android media sessions** | Supplies partial local title/artist/playback observations while an opted-in run is Running. A separate per-run choice permits one eligible title/artist in reflection context. No Spotify SDK, preview playback or music snippet is implemented; metadata access is not playback permission. |
+| Hosted backend | **Render** | The `runstate-reflections` Starter service is provisioned in Oregon at the approved $7/month in a free Hobby workspace. Its first Linux build hit a security-test socket reset; a bounded test-reader repair passed all 45 backend tests on Windows and awaits user commit/push plus a Linux rebuild. The backend is not live, the hosted Anthropic key is unset and online phone delivery is unverified. |
+| Deployment packaging | **Docker** | The existing Dockerfile describes a repeatable Java backend container and allows a FAKE staging launch. Direct Java startup checks passed; the first Render build was blocked by a test-response read error. The prepared repair keeps the security assertions; a successful Linux image build/public hosting remain unverified. |
+| Design preview | **Local HTML and GitHub Pages** | `start.html`/`completion.html` and the public preview helped review appearance and interactions. They are browser prototypes, not the installed Kotlin/Compose phone app, and do not prove native tracking or backend behavior. |
+
+Render hosting has an ongoing cost while the paid service remains provisioned, even without a
+reflection request. Live Anthropic usage costs extra when requests reach it. Hosting can be
+changed or cancelled; local tracking, feedback and saved History remain usable offline, while
+new live reflections need a working connection.
+
+For the latest implemented behavior and remaining checks, read
+[the Android checkpoint](design/project_current_state.md). Backend setup is described in
+[backend/README.md](../backend/README.md); do not put private API keys or access codes in these docs.
+
 ---
 
 ## If you only read four files
 
-**1. [CURRENT_RUN_FLOW.md](CURRENT_RUN_FLOW.md)** — *what the application actually does*
+**1. [CURRENT_RUN_FLOW.md](CURRENT_RUN_FLOW.md)** — *what the console application actually does*
 
 The verified as-is behavior of one complete run, with a flowchart covering failure paths. It also
 carries a resolved-audit table: four gaps that were found in a self-audit, what each one really
@@ -61,6 +94,7 @@ rather than deleted.
 
 | Document | Covers |
 |---|---|
+| [design/project_current_state.md](design/project_current_state.md) | Current native Android/backend checkpoint and physical/hosting verification limits |
 | [CURRENT_RUN_FLOW.md](CURRENT_RUN_FLOW.md) | As-is console behavior, flowchart, resolved audit |
 | [AI_AGENT.md](AI_AGENT.md) | Agent identity, prompt architecture, constraints |
 | [DATA_PRIVACY.md](DATA_PRIVACY.md) | Exactly what leaves the machine, when, and what a failure does or doesn't guarantee |
