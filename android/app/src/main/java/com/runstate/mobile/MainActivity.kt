@@ -58,6 +58,7 @@ import com.runstate.mobile.ui.ReflectionSpeaker
 import com.runstate.mobile.ui.RunHistoryItem
 import com.runstate.mobile.ui.RunHistoryScreen
 import com.runstate.mobile.ui.RunStateScreen
+import com.runstate.mobile.ui.ReflectionConnectionDialog
 import com.runstate.mobile.ui.RunUiModel
 import com.runstate.mobile.ui.RunUiState
 import com.runstate.mobile.ui.rememberLifecycleCountdown
@@ -93,17 +94,24 @@ class MainActivity : ComponentActivity() {
         // database is opened.
         val runStateApplication = application as RunStateApplication
         val coordinator = runStateApplication.runSessionCoordinator
-        val reflectionCoordinator = runStateApplication.runReflectionCoordinator
         val database = runStateApplication.database
+        runStateApplication.initializeReflectionConnection()
 
         setContent {
             RunStateTheme {
+                val connection by runStateApplication.reflectionConnection.collectAsState()
+                val connectionSaving by runStateApplication.reflectionConnectionSaving.collectAsState()
+                val reflectionCoordinator = runStateApplication.runReflectionCoordinator
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
                     RunJourneyRoot(
                         coordinator = coordinator,
                         reflectionCoordinator = reflectionCoordinator,
                         database = database,
                         trackingFlow = runStateApplication.trackingServiceState,
+                        reflectionConnection = connection,
+                        reflectionConnectionSaving = connectionSaving,
+                        onSaveReflectionConnection = runStateApplication::saveReflectionConnection,
+                        onClearReflectionConnection = { runStateApplication.clearReflectionConnection() },
 
                         // The Activity's own lifecycle gates the countdown, so nothing counts
                         // down — and no run is started — while the app is in the background.
@@ -149,8 +157,15 @@ internal fun RunJourneyRoot(
     trackingFlow: StateFlow<RunTrackingServiceState>,
     lifecycle: Lifecycle,
     modifier: Modifier = Modifier,
-    completionSpeakerFactory: (Context) -> ReflectionSpeaker = { AndroidReflectionSpeaker(it) }
+    completionSpeakerFactory: (Context) -> ReflectionSpeaker = { AndroidReflectionSpeaker(it) },
+    reflectionConnection: ReflectionConnectionState = ReflectionConnectionState.Loading,
+    reflectionConnectionSaving: Boolean = false,
+    onSaveReflectionConnection: suspend (String, String) -> Unit = { _, _ -> },
+    onClearReflectionConnection: suspend () -> Unit = {}
 ) {
+
+    val reflectionRequestsAvailable = reflectionConnection is ReflectionConnectionState.Hosted ||
+        reflectionConnection == ReflectionConnectionState.Local
 
     // The last answer the coordinator gave, and nothing more. `remember` rather than
     // `rememberSaveable` for the reason above.
@@ -192,6 +207,9 @@ internal fun RunJourneyRoot(
     var pendingMusicAccess by rememberSaveable { mutableStateOf(false) }
     var historyItems by remember { mutableStateOf<List<RunHistoryItem>>(emptyList()) }
     var historyError by remember { mutableStateOf<String?>(null) }
+    var connectionDialogVisible by remember { mutableStateOf(false) }
+    var connectionSaving by remember { mutableStateOf(false) }
+    var connectionError by remember { mutableStateOf<String?>(null) }
     BackHandler(historyVisible) { historyVisible = false }
 
     val completedRuns by remember(database) { database.runDao().observeCompletedRuns() }
@@ -265,7 +283,7 @@ internal fun RunJourneyRoot(
     val pendingPermissionForRetry by rememberUpdatedState(permissionForRetry)
 
     fun localBridgePermissionGranted(): Boolean =
-        !BuildConfig.DEBUG ||
+        reflectionConnection != ReflectionConnectionState.Local ||
             Build.VERSION.SDK_INT < 37 ||
             ContextCompat.checkSelfPermission(
                 context,
@@ -331,6 +349,10 @@ internal fun RunJourneyRoot(
 
     fun retryReflection(runId: String) {
         if (reflectionCoordinator == null) return
+        if (!reflectionRequestsAvailable) {
+            historyError = "Set up reflections on Start, then reopen this run to retry."
+            return
+        }
         if (!historyVisible && model.state == RunUiState.Saved && completedRunId == runId) {
             completionSpeechEligibleRunId = runId
         }
@@ -430,15 +452,18 @@ internal fun RunJourneyRoot(
     }
 
     // This reports visibility; the process coordinator owns the delay, Room read and call.
-    LaunchedEffect(model.state, completedRunId, reflectionCoordinator) {
+    LaunchedEffect(model.state, completedRunId, reflectionCoordinator, reflectionConnection) {
         val activeReflectionCoordinator = reflectionCoordinator ?: return@LaunchedEffect
+        if (reflectionConnection == ReflectionConnectionState.Loading) return@LaunchedEffect
         if (model.state == RunUiState.Saved) {
             completedRunId?.let { runId ->
-                val bridgeReady = localBridgePermissionGranted()
+                val bridgeReady = reflectionRequestsAvailable && localBridgePermissionGranted()
                 activeReflectionCoordinator.onSavedVisible(runId, bridgeReady,
                     awaitingReceipt = completionReceiptRunId == runId &&
                         completionReceiptFinishedRunId != runId)
-                if (!bridgeReady) {
+                if (!reflectionRequestsAvailable) {
+                    activeReflectionCoordinator.onBridgeUnavailable(runId)
+                } else if (!bridgeReady) {
                     permissionRunId = runId
                     permissionForRetry = false
                     localNetworkPermissionLauncher.launch(LOCAL_NETWORK_PERMISSION)
@@ -517,7 +542,7 @@ internal fun RunJourneyRoot(
                 musicAccessGranted = false
                 musicReflectionSharingSelected = false
             }
-            val shareMusicForRun = observeMusicForRun && reflectionCoordinator != null &&
+            val shareMusicForRun = observeMusicForRun && reflectionRequestsAvailable &&
                 musicReflectionSharingSelected
             if (gpsSelected) {
                 if (!preciseLocationReady()) {
@@ -598,7 +623,8 @@ internal fun RunJourneyRoot(
             }
 
             is RunReflectionState.Failed -> if (current.runId == completedRunId) {
-                RunCompleteReflectionDisplay.Failed
+                if (reflectionRequestsAvailable) RunCompleteReflectionDisplay.Failed
+                else RunCompleteReflectionDisplay.ConnectionNeeded
             } else {
                 RunCompleteReflectionDisplay.Preparing
             }
@@ -637,6 +663,52 @@ internal fun RunJourneyRoot(
         speakerFactory = completionSpeakerFactory,
         onSpoken = { completionSpeechSpokenRunId = it }
     )
+
+    if (connectionDialogVisible && model.state == RunUiState.ReadyToStart) {
+        ReflectionConnectionDialog(
+            initialEndpoint = (reflectionConnection as? ReflectionConnectionState.Hosted)?.config?.endpoint.orEmpty(),
+            hasSavedConnection = reflectionConnection is ReflectionConnectionState.Hosted ||
+                reflectionConnection == ReflectionConnectionState.Unavailable,
+            saving = connectionSaving || reflectionConnectionSaving,
+            error = connectionError,
+            onDismiss = { if (!connectionSaving) connectionDialogVisible = false },
+            onSave = { endpoint, accessCode ->
+                if (!connectionSaving) {
+                    connectionSaving = true
+                    connectionError = null
+                    // A service choice starts with fresh per-run music-sharing consent.
+                    musicReflectionSharingSelected = false
+                    scope.launch {
+                        try {
+                            onSaveReflectionConnection(endpoint, accessCode)
+                            connectionDialogVisible = false
+                        } catch (cancelled: CancellationException) { throw cancelled }
+                        catch (_: IllegalArgumentException) {
+                            connectionError = "Use an HTTPS reflection address and a valid RunState access code."
+                        } catch (_: Exception) {
+                            connectionError = "Connection couldn't save. Try again."
+                        } finally { connectionSaving = false }
+                    }
+                }
+            },
+            onClear = {
+                if (!connectionSaving) {
+                    connectionSaving = true
+                    connectionError = null
+                    // This draft reset must survive rotation even when the caller's wait is cancelled.
+                    musicReflectionSharingSelected = false
+                    scope.launch {
+                        try {
+                            onClearReflectionConnection()
+                            connectionDialogVisible = false
+                        } catch (cancelled: CancellationException) { throw cancelled }
+                        catch (_: Exception) { connectionError = "Connection couldn't clear. Try again." }
+                        finally { connectionSaving = false }
+                    }
+                }
+            }
+        )
+    }
 
     if (historyVisible) {
         RunHistoryScreen(
@@ -707,7 +779,7 @@ internal fun RunJourneyRoot(
 
             // The same prepared run: the coordinator reuses its UUID and official start.
             val observeMusicForRun = musicSelected && hasMusicAccess(context)
-            val shareMusicForRun = observeMusicForRun && reflectionCoordinator != null &&
+            val shareMusicForRun = observeMusicForRun && reflectionRequestsAvailable &&
                 musicReflectionSharingSelected
             if (gpsSelected) {
                 if (preciseLocationReady()) {
@@ -773,7 +845,7 @@ internal fun RunJourneyRoot(
         gpsMessage = gpsMessage,
         musicSelected = musicSelected,
         musicAccessGranted = musicAccessGranted,
-        musicReflectionSharingAvailable = reflectionCoordinator != null,
+        musicReflectionSharingAvailable = reflectionRequestsAvailable,
         musicReflectionSharingSelected = musicReflectionSharingSelected,
         onToggleMusicReflectionSharing = {
             musicReflectionSharingSelected = musicSelected && hasMusicAccess(context) &&
@@ -837,7 +909,20 @@ internal fun RunJourneyRoot(
         isTestData = (activeReflection as? RunReflectionState.Ready)?.isTestData == true,
         onViewHistory = { historyVisible = true },
         showHistory = true,
-        actionsEnabled = !actionInFlight,
+        reflectionConnectionLabel = when (reflectionConnection) {
+            ReflectionConnectionState.Loading -> "Loading reflection connection…"
+            ReflectionConnectionState.Local -> "Computer connection selected"
+            ReflectionConnectionState.NotConfigured -> "Set up reflections"
+            ReflectionConnectionState.Unavailable -> "Reflection connection needs setup"
+            is ReflectionConnectionState.Hosted -> "Online service selected"
+        },
+        onOpenReflectionSetup = {
+            connectionError = null
+            connectionDialogVisible = true
+        },
+        reflectionSetupEnabled = !connectionSaving && !reflectionConnectionSaving &&
+            reflectionConnection != ReflectionConnectionState.Loading,
+        actionsEnabled = !actionInFlight && !reflectionConnectionSaving,
         modifier = modifier
     )
 }
@@ -865,28 +950,30 @@ internal fun RunCompleteReceiptEffect(
         if (locallyFinishedRunId == id) return
         locallyFinishedRunId = id
         activeReceiptRunId = null
-        speaker?.close()
+        val finishedSpeaker = speaker
         speaker = null
-        finishCallback(id)
+        try { finishedSpeaker?.close() } catch (_: RuntimeException) {
+            // The exact saved run remains usable when the platform speech service fails.
+        } finally { finishCallback(id) }
     }
 
     DisposableEffect(Unit) {
         onDispose {
             val interruptedId = activeReceiptRunId
-            speaker?.close()
-            interruptedId?.let(::finish)
+            if (interruptedId != null) finish(interruptedId)
+            else try { speaker?.close() } catch (_: RuntimeException) { }
         }
     }
     LaunchedEffect(completedRunId, receiptRunId, receiptText, finishedRunId, completionVisible) {
         activeReceiptRunId?.takeIf { it != completedRunId }?.let(::finish)
         val pendingId = receiptRunId?.takeIf { it != finishedRunId }
         if (pendingId == null || completedRunId != pendingId) {
-            speaker?.stop()
+            try { speaker?.stop() } catch (_: RuntimeException) { }
             return@LaunchedEffect
         }
         if (!completionVisible) {
-            speaker?.stop()
-            finish(pendingId)
+            try { speaker?.stop() } catch (_: RuntimeException) { }
+            finally { finish(pendingId) }
             return@LaunchedEffect
         }
         if (startedRunId == pendingId) {
@@ -921,21 +1008,33 @@ internal fun RunCompleteSpeechEffect(
 ) {
     val context = LocalContext.current
     var speaker by remember { mutableStateOf<ReflectionSpeaker?>(null) }
+    var speakingRunId by remember { mutableStateOf<String?>(null) }
 
     DisposableEffect(Unit) {
-        onDispose { speaker?.close() }
+        onDispose { try { speaker?.close() } catch (_: RuntimeException) { } }
     }
     LaunchedEffect(completedRunId, eligibleRunId, spokenRunId, reflectionState, completionVisible) {
+        if (speakingRunId != null && speakingRunId != completedRunId) {
+            val oldSpeaker = speaker
+            speaker = null
+            speakingRunId = null
+            try { oldSpeaker?.close() } catch (_: RuntimeException) { }
+        }
         if (!completionVisible) {
-            speaker?.stop()
+            try { speaker?.stop() } catch (_: RuntimeException) { }
             return@LaunchedEffect
         }
         val exactText = readyCompletionSpeechText(
             completedRunId, eligibleRunId, spokenRunId, reflectionState
         ) ?: return@LaunchedEffect
-        val activeSpeaker = speaker ?: speakerFactory(context).also { speaker = it }
-        activeSpeaker.speak(exactText)
         onSpoken(requireNotNull(completedRunId))
+        speakingRunId = completedRunId
+        try {
+            val activeSpeaker = speaker ?: speakerFactory(context).also { speaker = it }
+            activeSpeaker.speak(exactText)
+        } catch (_: RuntimeException) {
+            // Consume this arrival attempt once; a missing engine never replays on resume.
+        }
     }
 }
 

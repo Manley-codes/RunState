@@ -2,5 +2,5 @@ package com.runstate.mobile.reflection
 
 import com.runstate.mobile.BuildConfig
 
-/** Keeps the emulator-only bridge and its UI out of release behavior. */
+/** Local HTTP/USB routing is development-only; hosted access requires explicit saved settings. */
 internal fun reflectionBridgeEnabledForBuild(): Boolean = BuildConfig.DEBUG

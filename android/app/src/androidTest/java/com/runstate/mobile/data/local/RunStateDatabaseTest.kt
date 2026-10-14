@@ -6,12 +6,17 @@ import android.database.sqlite.SQLiteException
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.runstate.mobile.reflection.AndroidReflectionConnectionStore
+import com.runstate.mobile.reflection.ReflectionConnectionConfig
+import java.security.KeyStore
+import java.util.UUID
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
@@ -48,6 +53,27 @@ class RunStateDatabaseTest {
 
     private lateinit var context: Context
     private lateinit var database: RunStateDatabase
+    private val isolatedConnections = mutableListOf<TestConnectionStorage>()
+
+    private data class TestConnectionStorage(
+        val preferencesName: String,
+        val keyAlias: String,
+        val store: AndroidReflectionConnectionStore
+    )
+
+    private fun isolatedConnection(): TestConnectionStorage {
+        val suffix = UUID.randomUUID().toString()
+        val preferencesName = "reflection_connection_test_$suffix"
+        val keyAlias = "com.runstate.mobile.reflection.connection.test.$suffix"
+        return TestConnectionStorage(
+            preferencesName,
+            keyAlias,
+            AndroidReflectionConnectionStore(context, preferencesName, keyAlias)
+        ).also(isolatedConnections::add)
+    }
+
+    private fun keyExists(alias: String): Boolean = KeyStore.getInstance("AndroidKeyStore")
+        .apply { load(null) }.containsAlias(alias)
 
     /** A representative run row: official, just started, checkpoint at the start. */
     private val runningRun = RunEntity(
@@ -73,8 +99,67 @@ class RunStateDatabaseTest {
 
     @After
     fun tearDown() {
+        isolatedConnections.forEach { isolated ->
+            runBlocking { isolated.store.clear() }
+            context.deleteSharedPreferences(isolated.preferencesName)
+        }
+        isolatedConnections.clear()
         database.close()
         context.deleteDatabase(DATABASE_NAME)
+    }
+
+    @Test
+    fun hostedConnectionIsEncryptedAndSurvivesStoreRecreationUntilClear() = runBlocking {
+        val isolated = isolatedConnection()
+        val config = ReflectionConnectionConfig(
+            "https://reflection.example.com/api/reflections/candidates", "C".repeat(43)
+        )
+        isolated.store.save(config)
+        assertTrue(keyExists(isolated.keyAlias))
+        val storedValues = context.getSharedPreferences(isolated.preferencesName, Context.MODE_PRIVATE)
+            .all.values.joinToString()
+        assertFalse(storedValues.contains(config.endpoint))
+        assertFalse(storedValues.contains(config.accessCode))
+
+        val reopened = AndroidReflectionConnectionStore(
+            context, isolated.preferencesName, isolated.keyAlias
+        )
+        val loaded = reopened.load()
+        assertEquals(config.endpoint, loaded?.endpoint)
+        assertEquals(config.accessCode, loaded?.accessCode)
+        reopened.clear()
+        assertNull(isolated.store.load())
+        assertFalse(keyExists(isolated.keyAlias))
+    }
+
+    @Test
+    fun damagedCiphertextFailsClosedWithoutRevealingConnection() = runBlocking {
+        val isolated = isolatedConnection()
+        val config = ReflectionConnectionConfig(
+            "https://reflection.example.com/api/reflections/candidates", "D".repeat(43)
+        )
+        isolated.store.save(config)
+        context.getSharedPreferences(isolated.preferencesName, Context.MODE_PRIVATE).edit()
+            .putString("connection_v1", "damaged ciphertext").commit()
+        val failure = assertThrows(IllegalStateException::class.java) {
+            runBlocking { isolated.store.load() }
+        }
+        assertFalse(failure.message.orEmpty().contains(config.accessCode))
+        assertEquals("Saved reflection connection is unavailable.", failure.message)
+    }
+
+    @Test
+    fun missingKeystoreKeyFailsClosedRatherThanSilentlyGeneratingReplacement() = runBlocking {
+        val isolated = isolatedConnection()
+        isolated.store.save(ReflectionConnectionConfig(
+            "https://reflection.example.com/api/reflections/candidates", "E".repeat(43)
+        ))
+        KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
+            .deleteEntry(isolated.keyAlias)
+        assertThrows(IllegalStateException::class.java) {
+            runBlocking { isolated.store.load() }
+        }
+        assertFalse(keyExists(isolated.keyAlias))
     }
 
     /**

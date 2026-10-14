@@ -65,6 +65,8 @@ internal class RunTrackingService : Service() {
     private val policy = GpsDistancePolicy()
     private var work: Job? = null
     private var listener: LocationListener? = null
+    /** Invalidates callbacks queued before a pause, provider change, or registration removal. */
+    private var locationGeneration = 0L
     private var runId: String? = null
     private var storedState: StoredRunState? = null
     private var gpsEnabled = false
@@ -213,21 +215,32 @@ internal class RunTrackingService : Service() {
         gpsEnabled = locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)
         val next = object : LocationListener {
             override fun onLocationChanged(location: Location) {
-                if (storedState != StoredRunState.RUNNING || !gpsEnabled) return
+                if (listener !== this || storedState != StoredRunState.RUNNING || !gpsEnabled) return
+                val callbackListener = this
+                val deliveredGeneration = locationGeneration
+                // Snapshot both the fix and its delivery time before this callback queues
+                // behind an earlier Room write. Processing delay must not make a fresh fix
+                // appear stale, while a genuinely delayed platform fix remains rejectable.
+                val delivered = Location(location)
+                val deliveredAtElapsedRealtimeMillis = SystemClock.elapsedRealtime()
                 // A duplicate platform delivery keeps the same key and cannot add distance twice.
-                val key = "${location.provider ?: LocationManager.GPS_PROVIDER}:" +
-                    "${location.elapsedRealtimeNanos}:${location.time}:" +
-                    "${location.latitude.toBits()}:${location.longitude.toBits()}"
+                val key = "${delivered.provider ?: LocationManager.GPS_PROVIDER}:" +
+                    "${delivered.elapsedRealtimeNanos}:${delivered.time}:" +
+                    "${delivered.latitude.toBits()}:${delivered.longitude.toBits()}"
                 scope.launch {
                     observationLock.withLock {
-                        if (storedState != StoredRunState.RUNNING || !gpsEnabled) return@withLock
-                        saveObservation(id, key, location)
+                        if (listener !== callbackListener ||
+                            deliveredGeneration != locationGeneration ||
+                            storedState != StoredRunState.RUNNING || !gpsEnabled
+                        ) return@withLock
+                        saveObservation(id, key, delivered, deliveredAtElapsedRealtimeMillis)
                     }
                 }
             }
 
             override fun onProviderDisabled(provider: String) {
-                if (provider == LocationManager.GPS_PROVIDER) {
+                if (listener === this && provider == LocationManager.GPS_PROVIDER) {
+                    locationGeneration++
                     gpsEnabled = false
                     policy.trackingInterrupted()
                     app.publishTrackingServiceState(
@@ -238,8 +251,9 @@ internal class RunTrackingService : Service() {
             }
 
             override fun onProviderEnabled(provider: String) {
-                if (provider == LocationManager.GPS_PROVIDER &&
+                if (listener === this && provider == LocationManager.GPS_PROVIDER &&
                     storedState == StoredRunState.RUNNING) {
+                    locationGeneration++
                     gpsEnabled = true
                     policy.trackingInterrupted()
                     app.publishTrackingServiceState(RunTrackingServiceState.Tracking(id))
@@ -250,17 +264,34 @@ internal class RunTrackingService : Service() {
             @Deprecated("Android no longer uses provider status callbacks.")
             override fun onStatusChanged(provider: String?, status: Int, extras: Bundle?) = Unit
         }
-        locationManager.requestLocationUpdates(
-            LocationManager.GPS_PROVIDER,
-            1_000L,
-            0f,
-            next,
-            Looper.getMainLooper()
-        )
         listener = next
+        try {
+            locationManager.requestLocationUpdates(
+                LocationManager.GPS_PROVIDER,
+                1_000L,
+                0f,
+                next,
+                Looper.getMainLooper()
+            )
+        } catch (failure: RuntimeException) {
+            // A failed registration must not leave a live request consuming location power.
+            try {
+                locationManager.removeUpdates(next)
+            } catch (_: RuntimeException) {
+                // The original registration failure is the actionable error.
+            }
+            listener = null
+            gpsEnabled = false
+            throw failure
+        }
     }
 
-    private suspend fun saveObservation(id: String, key: String, location: Location) {
+    private suspend fun saveObservation(
+        id: String,
+        key: String,
+        location: Location,
+        deliveredAtElapsedRealtimeMillis: Long
+    ) {
         val elapsedNanos = location.elapsedRealtimeNanos
         val sample = GpsSample(
             latitudeDegrees = location.latitude,
@@ -272,7 +303,7 @@ internal class RunTrackingService : Service() {
         )
         val decision = policy.observe(
             sample = sample,
-            nowElapsedRealtimeMillis = SystemClock.elapsedRealtime(),
+            nowElapsedRealtimeMillis = deliveredAtElapsedRealtimeMillis,
             isRunning = true
         )
         try {
@@ -317,6 +348,7 @@ internal class RunTrackingService : Service() {
     }
 
     private fun stopGps() {
+        locationGeneration++
         listener?.let {
             try {
                 locationManager.removeUpdates(it)

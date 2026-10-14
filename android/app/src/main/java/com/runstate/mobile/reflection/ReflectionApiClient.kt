@@ -23,6 +23,8 @@ import java.nio.ByteBuffer
 import java.nio.charset.StandardCharsets
 import java.nio.charset.CodingErrorAction
 import java.util.UUID
+import javax.net.ssl.HttpsURLConnection
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -194,66 +196,105 @@ internal class LocalReflectionHttpClient(
     }
 
     override suspend fun request(request: ReflectionApiRequest): ReflectionCandidates =
-        withContext(Dispatchers.IO) {
-            val body = gson.toJson(request).toByteArray(StandardCharsets.UTF_8)
-            val connection = endpointUrl.openConnection() as HttpURLConnection
+        postReflectionRequest(endpointUrl, request, gson, { it.openConnection() as HttpURLConnection }, null)
+}
+
+/** Hosted mode never accepts a local HTTP connection, follows a redirect, or drops credentials. */
+internal class HostedReflectionHttpClient(
+    private val config: ReflectionConnectionConfig,
+    private val connectionFactory: (URL) -> HttpURLConnection = { it.openConnection() as HttpURLConnection },
+    private val gson: Gson = GsonBuilder().serializeNulls().create()
+) : ReflectionGateway {
+    override suspend fun request(request: ReflectionApiRequest): ReflectionCandidates =
+        postReflectionRequest(URL(config.endpoint), request, gson, connectionFactory, config.accessCode)
+}
+
+private suspend fun postReflectionRequest(
+    endpoint: URL,
+    request: ReflectionApiRequest,
+    gson: Gson,
+    connectionFactory: (URL) -> HttpURLConnection,
+    accessCode: String?
+): ReflectionCandidates = withContext(Dispatchers.IO) {
+    val hosted = accessCode != null
+    var connection: HttpURLConnection? = null
+    try {
+        val body = gson.toJson(request).toByteArray(StandardCharsets.UTF_8)
+        connection = connectionFactory(endpoint)
+        if (hosted && connection !is HttpsURLConnection) {
+            throw ReflectionBridgeException("The hosted reflection connection requires HTTPS.")
+        }
+        connection.requestMethod = "POST"
+        connection.connectTimeout = CONNECT_TIMEOUT_MILLIS
+        connection.readTimeout = READ_TIMEOUT_MILLIS
+        connection.instanceFollowRedirects = false
+        connection.doOutput = true
+        connection.setRequestProperty("Content-Type", "application/json; charset=utf-8")
+        connection.setRequestProperty("Accept", "application/json")
+        if (accessCode != null) connection.setRequestProperty("Authorization", "Bearer $accessCode")
+        connection.setFixedLengthStreamingMode(body.size)
+        connection.outputStream.use { it.write(body) }
+
+        val responseCode = connection.responseCode
+        if (responseCode != HttpURLConnection.HTTP_OK) {
+            if (!hosted) connection.errorStream?.use { readBoundedUtf8(it, false) }
+            // Never deserialize or display remote error bodies; they can echo credentials.
+            throw ReflectionBridgeException(
+                if (hosted) "The hosted reflection service rejected the request (HTTP $responseCode)."
+                else "The local reflection service rejected the request (HTTP $responseCode)."
+            )
+        }
+        val responseBody = connection.inputStream.use { readBoundedUtf8(it, hosted) }
+        if (hosted) {
             try {
-                connection.requestMethod = "POST"
-                connection.connectTimeout = CONNECT_TIMEOUT_MILLIS
-                connection.readTimeout = READ_TIMEOUT_MILLIS
-                connection.instanceFollowRedirects = false
-                connection.doOutput = true
-                connection.setRequestProperty("Content-Type", "application/json; charset=utf-8")
-                connection.setRequestProperty("Accept", "application/json")
-                connection.setFixedLengthStreamingMode(body.size)
-                connection.outputStream.use { it.write(body) }
-
-                val responseCode = connection.responseCode
-                if (responseCode != HttpURLConnection.HTTP_OK) {
-                    connection.errorStream?.use(::readBoundedUtf8)
-                    throw ReflectionBridgeException(
-                        "The local reflection service rejected the request (HTTP $responseCode)."
-                    )
-                }
-
-                val responseBody = connection.inputStream.use(::readBoundedUtf8)
                 parseReflectionResponse(responseBody, request.requestId, request.runId)
-            } catch (known: ReflectionBridgeException) {
-                throw known
-            } catch (unavailable: Exception) {
-                throw ReflectionBridgeException("The local reflection service is unavailable.", unavailable)
-            } finally {
-                connection.disconnect()
+            } catch (invalid: ReflectionBridgeException) {
+                throw ReflectionBridgeException("The hosted reflection response was invalid.")
             }
+        } else {
+            parseReflectionResponse(responseBody, request.requestId, request.runId)
         }
-
-    private fun readBoundedUtf8(input: InputStream): String {
-        val output = ByteArrayOutputStream()
-        val buffer = ByteArray(4_096)
-        var total = 0
-        while (true) {
-            val read = input.read(buffer)
-            if (read < 0) break
-            total += read
-            if (total > MAX_RESPONSE_BYTES) {
-                throw ReflectionBridgeException("The local reflection response was too large.")
-            }
-            output.write(buffer, 0, read)
+    } catch (known: ReflectionBridgeException) {
+        throw known
+    } catch (cancelled: CancellationException) {
+        throw cancelled
+    } catch (unavailable: Exception) {
+        if (hosted) throw ReflectionBridgeException("The hosted reflection service is unavailable.")
+        throw ReflectionBridgeException("The local reflection service is unavailable.", unavailable)
+    } finally {
+        try { connection?.disconnect() } catch (_: RuntimeException) {
+            // Cleanup must not replace a safe error or expose headers through a transport exception.
         }
-        return StandardCharsets.UTF_8.newDecoder()
-            .onMalformedInput(CodingErrorAction.REPORT)
-            .onUnmappableCharacter(CodingErrorAction.REPORT)
-            .decode(ByteBuffer.wrap(output.toByteArray()))
-            .toString()
-    }
-
-    private companion object {
-        const val CONNECT_TIMEOUT_MILLIS = 3_000
-        // Anthropic's backend request can legitimately run for up to 45 seconds.
-        const val READ_TIMEOUT_MILLIS = 60_000
-        const val MAX_RESPONSE_BYTES = 64 * 1_024
     }
 }
+
+private fun readBoundedUtf8(input: InputStream, hosted: Boolean): String {
+    val output = ByteArrayOutputStream()
+    val buffer = ByteArray(4_096)
+    var total = 0
+    while (true) {
+        val read = input.read(buffer)
+        if (read < 0) break
+        total += read
+        if (total > MAX_RESPONSE_BYTES) {
+            throw ReflectionBridgeException(
+                if (hosted) "The hosted reflection response was too large."
+                else "The local reflection response was too large."
+            )
+        }
+        output.write(buffer, 0, read)
+    }
+    return StandardCharsets.UTF_8.newDecoder()
+        .onMalformedInput(CodingErrorAction.REPORT)
+        .onUnmappableCharacter(CodingErrorAction.REPORT)
+        .decode(ByteBuffer.wrap(output.toByteArray()))
+        .toString()
+}
+
+private const val CONNECT_TIMEOUT_MILLIS = 3_000
+// Anthropic's backend request can legitimately run for up to 45 seconds.
+private const val READ_TIMEOUT_MILLIS = 60_000
+private const val MAX_RESPONSE_BYTES = 64 * 1_024
 
 /** Rejects any response that cannot be tied exactly to the request and four branches. */
 internal fun parseReflectionResponse(

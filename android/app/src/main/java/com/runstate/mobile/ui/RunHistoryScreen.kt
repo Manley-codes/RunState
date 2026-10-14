@@ -84,8 +84,23 @@ internal interface ReflectionSpeaker {
     fun close()
 }
 
+/** The Android boundary is separate so request ownership can be verified without playing audio. */
+internal interface ReflectionSpeechPlatform {
+    fun initialize(onReady: (Boolean) -> Unit, onDone: (String) -> Unit, onError: (String) -> Unit)
+    fun requestAudioFocus(utteranceId: String, onFocusLost: (String) -> Unit): Boolean
+    fun speak(utteranceId: String, text: String, rate: Float): Boolean
+    fun stop()
+    fun releaseAudioFocus()
+    fun close()
+}
+
 /** Android owns the voice; the saved text remains the source for both reading and speech. */
-internal class AndroidReflectionSpeaker(context: Context) : ReflectionSpeaker {
+internal class AndroidReflectionSpeaker(
+    context: Context,
+    private val platform: ReflectionSpeechPlatform = AndroidReflectionSpeechPlatform(context),
+    private val scheduleTimeout: ((Runnable, Long) -> Unit)? = null,
+    private val cancelTimeout: ((Runnable) -> Unit)? = null
+) : ReflectionSpeaker {
     private data class SpeechRequest(
         val id: String,
         val text: String,
@@ -95,18 +110,6 @@ internal class AndroidReflectionSpeaker(context: Context) : ReflectionSpeaker {
     )
 
     private val mainHandler = Handler(Looper.getMainLooper())
-    private val audioManager = context.applicationContext.getSystemService(AudioManager::class.java)
-    private val speechAttributes = AudioAttributes.Builder()
-        .setUsage(AudioAttributes.USAGE_ASSISTANCE_NAVIGATION_GUIDANCE)
-        .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
-        .build()
-    private val focusRequest = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK)
-        .setAudioAttributes(speechAttributes)
-        .setWillPauseWhenDucked(true)
-        .setOnAudioFocusChangeListener({ change -> if (change < 0) stop() }, mainHandler)
-        .build()
-    private var focusHeld = false
-    private var engine: TextToSpeech? = null
     private var initialized = false
     private var initializationFailed = false
     private var request: SpeechRequest? = null
@@ -115,37 +118,17 @@ internal class AndroidReflectionSpeaker(context: Context) : ReflectionSpeaker {
 
     init {
         try {
-            engine = TextToSpeech(context.applicationContext) { result ->
-                // Some engines report readiness on a binder thread. Keep state on the UI thread.
-                mainHandler.post {
+            platform.initialize(
+                onReady = { ready -> onMain {
                     if (!closed) {
-                        initialized = result == TextToSpeech.SUCCESS
+                        initialized = ready
                         initializationFailed = !initialized
-                        if (initialized) {
-                            try {
-                                engine?.setAudioAttributes(speechAttributes)
-                                engine?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
-                                    override fun onStart(utteranceId: String?) = Unit
-                                    override fun onDone(utteranceId: String?) = completeOnMain(utteranceId)
-                                    @Deprecated("Required by the Android speech listener")
-                                    override fun onError(utteranceId: String?) = completeOnMain(utteranceId)
-                                    override fun onError(utteranceId: String?, errorCode: Int) =
-                                        completeOnMain(utteranceId)
-                                    override fun onStop(utteranceId: String?, interrupted: Boolean) =
-                                        completeOnMain(utteranceId)
-                                })
-                                speakPending()
-                            } catch (_: RuntimeException) {
-                                initializationFailed = true
-                                initialized = false
-                                request?.id?.let(::finish)
-                            }
-                        } else {
-                            request?.id?.let(::finish)
-                        }
+                        if (initialized) speakPending() else request?.id?.let(::finish)
                     }
-                }
-            }
+                } },
+                onDone = { id -> onMain { finish(id) } },
+                onError = { id -> onMain { if (request?.id == id) stop() } }
+            )
         } catch (_: RuntimeException) {
             initializationFailed = true
             // The exact saved text remains on screen if no speech engine is available.
@@ -169,22 +152,16 @@ internal class AndroidReflectionSpeaker(context: Context) : ReflectionSpeaker {
         }
         val next = SpeechRequest(UUID.randomUUID().toString(), text, rate, onFinished)
         request = next
-        // Neither an absent receipt callback nor a stalled reflection may hold delivery/audio focus forever.
-        val timeoutMillis = if (onFinished != null) 15_000L else
-            (text.length * 100L + 15_000L).coerceIn(30_000L, 600_000L)
-        speechTimeout = Runnable { if (request?.id == next.id) stop() }.also {
-            mainHandler.postDelayed(it, timeoutMillis)
-        }
-        if (initialized) speakPending()
+        // Cold engine startup has its own deadline; it must not consume audible playback time.
+        if (initialized) speakPending() else armTimeout(next.id, 15_000L)
     }
 
     override fun stop() {
         val interrupted = request
         request = null
-        speechTimeout?.let(mainHandler::removeCallbacks)
-        speechTimeout = null
+        clearTimeout()
         try {
-            engine?.stop()
+            platform.stop()
         } catch (_: RuntimeException) {
             // A disconnected engine must not disturb History navigation.
         }
@@ -195,53 +172,136 @@ internal class AndroidReflectionSpeaker(context: Context) : ReflectionSpeaker {
     override fun close() {
         if (closed) return
         closed = true
-        stop()
         try {
-            engine?.shutdown()
-        } catch (_: RuntimeException) {
-            // The screen is already leaving; the visible run is still intact.
+            stop()
+        } finally {
+            try { platform.close() } catch (_: RuntimeException) {
+                // The screen is already leaving; the visible run is still intact.
+            }
         }
-        engine = null
     }
 
     private fun speakPending() {
         val current = request ?: return
-        val activeEngine = engine ?: return
         if (current.submitted) return
         current.submitted = true
         try {
-            focusHeld = audioManager?.requestAudioFocus(focusRequest) == AudioManager.AUDIOFOCUS_REQUEST_GRANTED
-            if (!focusHeld) {
+            if (!platform.requestAudioFocus(current.id) { id -> onMain {
+                    if (request?.id == id) stop()
+                } }) {
                 finish(current.id)
                 return
             }
-            activeEngine.setSpeechRate(current.rate)
-            if (activeEngine.speak(current.text, TextToSpeech.QUEUE_FLUSH, Bundle(), current.id) ==
-                TextToSpeech.ERROR) finish(current.id)
+            if (request?.id != current.id || closed) return
+            // The bounded playback budget starts only once a ready engine can queue this text.
+            val maximum = if (current.onFinished != null) 120_000L else 600_000L
+            armTimeout(current.id, (current.text.length * 100L + 15_000L).coerceIn(30_000L, maximum))
+            if (!platform.speak(current.id, current.text, current.rate) && request?.id == current.id) stop()
         } catch (_: RuntimeException) {
-            finish(current.id)
+            if (request?.id == current.id) stop()
             // Speech failure is independent of the saved reflection.
         }
     }
 
-    private fun completeOnMain(utteranceId: String?) {
-        if (utteranceId != null) mainHandler.post { finish(utteranceId) }
+    private fun onMain(action: () -> Unit) {
+        if (Looper.myLooper() == mainHandler.looper) action() else mainHandler.post { action() }
+    }
+
+    private fun armTimeout(id: String, delayMillis: Long) {
+        clearTimeout()
+        val timeout = object : Runnable {
+            override fun run() { if (speechTimeout === this && request?.id == id) stop() }
+        }
+        speechTimeout = timeout
+        if (scheduleTimeout != null) scheduleTimeout.invoke(timeout, delayMillis)
+        else mainHandler.postDelayed(timeout, delayMillis)
+    }
+
+    private fun clearTimeout() {
+        speechTimeout?.let { timeout ->
+            if (cancelTimeout != null) cancelTimeout.invoke(timeout) else mainHandler.removeCallbacks(timeout)
+        }
+        speechTimeout = null
     }
 
     private fun finish(utteranceId: String) {
         val finished = request?.takeIf { it.id == utteranceId } ?: return
         request = null
-        speechTimeout?.let(mainHandler::removeCallbacks)
-        speechTimeout = null
+        clearTimeout()
         releaseFocus()
         finished.onFinished?.invoke()
     }
 
     private fun releaseFocus() {
-        if (!focusHeld) return
-        focusHeld = false
-        try { audioManager?.abandonAudioFocusRequest(focusRequest) }
+        try { platform.releaseAudioFocus() }
         catch (_: RuntimeException) { /* Saved text stays readable if the audio service disconnects. */ }
+    }
+}
+
+private class AndroidReflectionSpeechPlatform(context: Context) : ReflectionSpeechPlatform {
+    private val appContext = context.applicationContext
+    private val mainHandler = Handler(Looper.getMainLooper())
+    private val audioManager = appContext.getSystemService(AudioManager::class.java)
+    private val speechAttributes = AudioAttributes.Builder()
+        .setUsage(AudioAttributes.USAGE_ASSISTANCE_NAVIGATION_GUIDANCE)
+        .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+        .build()
+    private var engine: TextToSpeech? = null
+    private var focusRequest: AudioFocusRequest? = null
+    private var closed = false
+
+    override fun initialize(onReady: (Boolean) -> Unit, onDone: (String) -> Unit, onError: (String) -> Unit) {
+        engine = TextToSpeech(appContext) { result ->
+            // Posting also lets the constructor assign engine before a very fast init callback.
+            mainHandler.post {
+                if (!closed) {
+                    try {
+                        val activeEngine = engine
+                        val listener = object : UtteranceProgressListener() {
+                            override fun onStart(utteranceId: String?) = Unit
+                            override fun onDone(utteranceId: String?) { utteranceId?.let(onDone) }
+                            @Deprecated("Required by the Android speech listener")
+                            override fun onError(utteranceId: String?) { utteranceId?.let(onError) }
+                            override fun onError(utteranceId: String?, errorCode: Int) { utteranceId?.let(onError) }
+                            override fun onStop(utteranceId: String?, interrupted: Boolean) { utteranceId?.let(onDone) }
+                        }
+                        onReady(result == TextToSpeech.SUCCESS && activeEngine != null &&
+                            activeEngine.setAudioAttributes(speechAttributes) == TextToSpeech.SUCCESS &&
+                            activeEngine.setOnUtteranceProgressListener(listener) == TextToSpeech.SUCCESS)
+                    } catch (_: RuntimeException) { onReady(false) }
+                }
+            }
+        }
+    }
+
+    override fun requestAudioFocus(utteranceId: String, onFocusLost: (String) -> Unit): Boolean {
+        // Every focus listener belongs to one utterance; a queued old LOSS cannot stop a new one.
+        val next = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK)
+            .setAudioAttributes(speechAttributes)
+            .setWillPauseWhenDucked(true)
+            .setOnAudioFocusChangeListener({ change -> if (change < 0) onFocusLost(utteranceId) }, mainHandler)
+            .build()
+        focusRequest = next
+        return audioManager?.requestAudioFocus(next) == AudioManager.AUDIOFOCUS_REQUEST_GRANTED
+    }
+
+    override fun speak(utteranceId: String, text: String, rate: Float): Boolean {
+        val activeEngine = engine ?: return false
+        return activeEngine.setSpeechRate(rate) == TextToSpeech.SUCCESS &&
+            activeEngine.speak(text, TextToSpeech.QUEUE_FLUSH, Bundle(), utteranceId) == TextToSpeech.SUCCESS
+    }
+
+    override fun stop() { engine?.stop() }
+    override fun releaseAudioFocus() {
+        val owned = focusRequest ?: return
+        focusRequest = null
+        audioManager?.abandonAudioFocusRequest(owned)
+    }
+    override fun close() {
+        closed = true
+        val owned = engine
+        engine = null
+        owned?.shutdown()
     }
 }
 
@@ -297,6 +357,15 @@ internal fun RunHistoryScreen(
     val currentRouteLoader by rememberUpdatedState(routeLoader)
     val context = LocalContext.current
 
+    fun closeSpeaker() {
+        val owned = speaker
+        speaker = null
+        try { owned?.close() } catch (_: RuntimeException) { /* Saved details remain readable. */ }
+    }
+    fun stopSpeaker() {
+        try { speaker?.stop() } catch (_: RuntimeException) { closeSpeaker() }
+    }
+
     val expandedGpsRun = items.firstOrNull { it.runId == expandedRunId }?.isGpsRun == true
     LaunchedEffect(expandedRunId, expandedGpsRun) {
         route = null
@@ -318,13 +387,13 @@ internal fun RunHistoryScreen(
 
     DisposableEffect(speechLifecycle) {
         val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_PAUSE) speaker?.stop()
+            if (event == Lifecycle.Event.ON_PAUSE) stopSpeaker()
         }
         speechLifecycle.addObserver(observer)
         // Read the current speaker on exit, including one created by the last tap before recomposition.
         onDispose {
             speechLifecycle.removeObserver(observer)
-            speaker?.close()
+            closeSpeaker()
         }
     }
     LaunchedEffect(items, expandedRunId) {
@@ -332,7 +401,7 @@ internal fun RunHistoryScreen(
         if (expandedRunId != null &&
             (openItem?.reflectionStatus != "READY" || openItem?.reflectionText.isNullOrBlank())
         ) {
-            speaker?.stop()
+            stopSpeaker()
         }
     }
     LaunchedEffect(items, editingEffortRunId) {
@@ -359,7 +428,7 @@ internal fun RunHistoryScreen(
             Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 12.dp)) {
                 TextButton(
                     onClick = {
-                        speaker?.stop()
+                        stopSpeaker()
                         onBack()
                     },
                     colors = ButtonDefaults.textButtonColors(contentColor = CompletionStrongInk),
@@ -430,15 +499,20 @@ internal fun RunHistoryScreen(
                         item = item,
                         expanded = expandedRunId == item.runId,
                         onToggle = {
-                            speaker?.stop()
+                            stopSpeaker()
                             if (expandedRunId == item.runId) {
                                 expandedRunId = null
                             } else {
                                 expandedRunId = item.runId
                                 val exactText = item.reflectionText
-                                if (item.reflectionStatus == "READY" && !exactText.isNullOrBlank()) {
-                                    val activeSpeaker = speaker ?: speakerFactory(context).also { speaker = it }
-                                    activeSpeaker.speak(exactText)
+                                if (item.reflectionStatus == "READY" && !exactText.isNullOrBlank() &&
+                                    speechLifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) {
+                                    try {
+                                        val activeSpeaker = speaker ?: speakerFactory(context).also { speaker = it }
+                                        activeSpeaker.speak(exactText)
+                                    } catch (_: RuntimeException) {
+                                        closeSpeaker()
+                                    }
                                 }
                             }
                         },

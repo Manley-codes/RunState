@@ -6,6 +6,11 @@ import com.runstate.mobile.data.local.RunStateDatabase
 import com.runstate.mobile.data.local.buildRunStateDatabase
 import com.runstate.mobile.location.RunTrackingServiceState
 import com.runstate.mobile.reflection.LocalReflectionHttpClient
+import com.runstate.mobile.reflection.AndroidReflectionConnectionStore
+import com.runstate.mobile.reflection.HostedReflectionHttpClient
+import com.runstate.mobile.reflection.ReflectionConnectionConfig
+import com.runstate.mobile.reflection.ReflectionGateway
+import com.runstate.mobile.reflection.ReflectionBridgeException
 import com.runstate.mobile.reflection.LOCAL_REFLECTION_ENDPOINT
 import com.runstate.mobile.reflection.PHONE_REFLECTION_ENDPOINT
 import com.runstate.mobile.reflection.RoomReflectionStore
@@ -19,9 +24,23 @@ import java.util.UUID
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.async
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+
+/** Configuration is distinct from proof that a server is currently reachable. */
+internal sealed interface ReflectionConnectionState {
+    data object Loading : ReflectionConnectionState
+    data object Local : ReflectionConnectionState
+    data object NotConfigured : ReflectionConnectionState
+    data object Unavailable : ReflectionConnectionState
+    data class Hosted(val config: ReflectionConnectionConfig) : ReflectionConnectionState
+}
 
 /**
  * The composition root: one database and one run coordinator, for the process.
@@ -173,29 +192,90 @@ class RunStateApplication : Application() {
         )
     }
 
-    /**
-     * One reflection attempt owner for the process, parallel to the run coordinator.
-     *
-     * A rotation replaces the Activity but not this object, so showing Saved again cannot
-     * issue a second provider call. Release builds keep the bridge disabled; only the debug
-     * manifest grants network access to the emulator's loopback alias.
-     */
-    internal val runReflectionCoordinator: RunReflectionCoordinator? by lazy {
-        if (!reflectionBridgeEnabledForBuild()) {
-            null
-        } else {
-            // The emulator has a special route to the host. A USB-connected phone instead
-            // reaches the same loopback-only service through `adb reverse tcp:8787 tcp:8787`.
-            val emulator = Build.PRODUCT.startsWith("sdk_") ||
-                Build.DEVICE.startsWith("emu") || Build.HARDWARE == "ranchu"
-            RunReflectionCoordinator(
-                runDao = database.runDao(),
-                store = RoomReflectionStore(database.reflectionDao(), database.musicObservationDao()),
-                gateway = LocalReflectionHttpClient(
-                    if (emulator) LOCAL_REFLECTION_ENDPOINT else PHONE_REFLECTION_ENDPOINT
-                ),
-                applicationScope = applicationScope
-            )
+    private val connectionStore by lazy { AndroidReflectionConnectionStore(this) }
+    private val connectionLock = Mutex()
+    private var connectionLoadStarted = false
+    private val mutableReflectionConnection = MutableStateFlow<ReflectionConnectionState>(
+        ReflectionConnectionState.Loading
+    )
+    internal val reflectionConnection: StateFlow<ReflectionConnectionState> =
+        mutableReflectionConnection.asStateFlow()
+    private val mutableConnectionSaving = MutableStateFlow(false)
+    internal val reflectionConnectionSaving: StateFlow<Boolean> = mutableConnectionSaving.asStateFlow()
+
+    /** Explicitly invoked by the Activity; tests and Application startup do not open the Keystore. */
+    internal fun initializeReflectionConnection() {
+        synchronized(this) {
+            if (connectionLoadStarted) return
+            connectionLoadStarted = true
+        }
+        applicationScope.launch {
+            connectionLock.withLock {
+                mutableReflectionConnection.value = try {
+                    connectionStore.load()?.let { ReflectionConnectionState.Hosted(it) }
+                        ?: defaultReflectionConnection()
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (_: Exception) {
+                    // Corrupt credentials never silently change the request's destination.
+                    ReflectionConnectionState.Unavailable
+                }
+            }
         }
     }
+
+    internal suspend fun saveReflectionConnection(endpoint: String, accessCode: String) {
+        val config = ReflectionConnectionConfig(endpoint.trim(), accessCode.trim())
+        changeReflectionConnection {
+            connectionStore.save(config)
+            mutableReflectionConnection.value = ReflectionConnectionState.Hosted(config)
+        }
+    }
+
+    internal suspend fun clearReflectionConnection() = changeReflectionConnection {
+        connectionStore.clear()
+        mutableReflectionConnection.value = defaultReflectionConnection()
+    }
+
+    /** Rotation cancels the caller's wait, never a connection write already accepted by the app. */
+    private suspend fun changeReflectionConnection(change: suspend () -> Unit) {
+        applicationScope.async {
+            connectionLock.withLock {
+                mutableConnectionSaving.value = true
+                try { change() } finally { mutableConnectionSaving.value = false }
+            }
+        }.await()
+    }
+
+    private fun defaultReflectionConnection(): ReflectionConnectionState =
+        if (reflectionBridgeEnabledForBuild()) ReflectionConnectionState.Local
+        else ReflectionConnectionState.NotConfigured
+
+    private var reflectionOwner: RunReflectionCoordinator? = null
+
+    /** Local feedback works offline; network admission separately requires a selected connection. */
+    internal val runReflectionCoordinator: RunReflectionCoordinator
+        get() {
+            return synchronized(this) {
+                reflectionOwner ?: RunReflectionCoordinator(
+                    runDao = database.runDao(),
+                    store = RoomReflectionStore(database.reflectionDao(), database.musicObservationDao()),
+                    gateway = ReflectionGateway { request ->
+                        when (val connection = mutableReflectionConnection.value) {
+                            is ReflectionConnectionState.Hosted ->
+                                HostedReflectionHttpClient(connection.config).request(request)
+                            ReflectionConnectionState.Local -> {
+                                val emulator = Build.PRODUCT.startsWith("sdk_") ||
+                                    Build.DEVICE.startsWith("emu") || Build.HARDWARE == "ranchu"
+                                LocalReflectionHttpClient(
+                                    if (emulator) LOCAL_REFLECTION_ENDPOINT else PHONE_REFLECTION_ENDPOINT
+                                ).request(request)
+                            }
+                            else -> throw ReflectionBridgeException("Reflection connection needs setup.")
+                        }
+                    },
+                    applicationScope = applicationScope
+                ).also { reflectionOwner = it }
+            }
+        }
 }

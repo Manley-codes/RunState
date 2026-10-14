@@ -24,7 +24,14 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -39,6 +46,10 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.window.DialogProperties
+import androidx.compose.ui.window.SecureFlagPolicy
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.runstate.mobile.R
@@ -58,6 +69,12 @@ internal const val START_ENERGY_UNDO_TAG = "startEnergyUndo"
 internal const val START_GPS_TOGGLE_TAG = "startGpsToggle"
 internal const val START_MUSIC_TOGGLE_TAG = "startMusicToggle"
 internal const val START_MUSIC_SHARING_TOGGLE_TAG = "startMusicSharingToggle"
+internal const val START_REFLECTION_SETUP_TAG = "startReflectionSetup"
+internal const val REFLECTION_CONNECTION_DIALOG_TAG = "reflectionConnectionDialog"
+internal const val REFLECTION_CONNECTION_ADDRESS_TAG = "reflectionConnectionAddress"
+internal const val REFLECTION_CONNECTION_CODE_TAG = "reflectionConnectionCode"
+internal const val REFLECTION_CONNECTION_SAVE_TAG = "reflectionConnectionSave"
+internal const val REFLECTION_CONNECTION_CLEAR_TAG = "reflectionConnectionClear"
 
 private val StartInk = Color(0xFF293326)
 private val StartForest = Color(0xFF2D3827)
@@ -87,6 +104,9 @@ internal fun StartRunScreen(
     musicReflectionSharingAvailable: Boolean = false,
     musicReflectionSharingSelected: Boolean = false,
     onToggleMusicReflectionSharing: () -> Unit = {},
+    reflectionConnectionLabel: String? = null,
+    onOpenReflectionSetup: () -> Unit = {},
+    reflectionSetupEnabled: Boolean = true,
     modifier: Modifier = Modifier
 ) {
     BoxWithConstraints(
@@ -156,6 +176,23 @@ internal fun StartRunScreen(
                             fontWeight = FontWeight.SemiBold,
                             fontSize = 12.sp
                         )
+                    }
+                }
+            }
+            if (reflectionConnectionLabel != null) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(reflectionConnectionLabel, color = StartInk, fontSize = 11.sp,
+                        modifier = Modifier.weight(1f))
+                    TextButton(
+                        onClick = onOpenReflectionSetup,
+                        enabled = actionsEnabled && reflectionSetupEnabled,
+                        modifier = Modifier.heightIn(min = 48.dp).testTag(START_REFLECTION_SETUP_TAG)
+                    ) {
+                        Text("Reflection setup", color = StartInk, fontSize = 12.sp)
                     }
                 }
             }
@@ -283,7 +320,8 @@ internal fun StartRunScreen(
                     }
                 }
             }
-            val energySpacerBase = if (showMusicSharing) 750.dp else 670.dp
+            val energySpacerBase = (if (showMusicSharing) 750.dp else 670.dp) +
+                (if (reflectionConnectionLabel != null) 48.dp else 0.dp)
             Spacer(modifier = Modifier.height((screenHeight - energySpacerBase).coerceAtLeast(20.dp)))
             PreRunEnergyChoices(
                 selected = selectedPreRunEnergy,
@@ -299,6 +337,73 @@ internal fun StartRunScreen(
             modifier = Modifier.align(Alignment.BottomCenter)
         )
     }
+}
+
+/** The private access code stays out of saved UI state and the dialog disallows screenshots. */
+@Composable
+internal fun ReflectionConnectionDialog(
+    initialEndpoint: String,
+    hasSavedConnection: Boolean,
+    saving: Boolean,
+    error: String?,
+    onDismiss: () -> Unit,
+    onSave: (String, String) -> Unit,
+    onClear: () -> Unit
+) {
+    var endpoint by remember(initialEndpoint) { mutableStateOf(initialEndpoint) }
+    var accessCode by remember { mutableStateOf("") }
+    AlertDialog(
+        onDismissRequest = { if (!saving) onDismiss() },
+        modifier = Modifier.testTag(REFLECTION_CONNECTION_DIALOG_TAG),
+        containerColor = StartCream,
+        properties = DialogProperties(securePolicy = SecureFlagPolicy.SecureOn),
+        title = { Text("Reflection connection", color = StartInk) },
+        text = {
+            Column(
+                modifier = Modifier.heightIn(max = 360.dp).verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text("Use your RunState service address and access code. Your Anthropic API key belongs on the server.",
+                    color = StartInk, fontSize = 13.sp, lineHeight = 19.sp)
+                OutlinedTextField(
+                    value = endpoint, onValueChange = { endpoint = it },
+                    label = { Text("Service address") },
+                    singleLine = true, enabled = !saving,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
+                    modifier = Modifier.fillMaxWidth().testTag(REFLECTION_CONNECTION_ADDRESS_TAG)
+                )
+                OutlinedTextField(
+                    value = accessCode, onValueChange = { accessCode = it },
+                    label = { Text("RunState access code") },
+                    singleLine = true, enabled = !saving,
+                    visualTransformation = PasswordVisualTransformation(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                    modifier = Modifier.fillMaxWidth().testTag(REFLECTION_CONNECTION_CODE_TAG)
+                )
+                Text("Saving selects this address for new reflection requests and for retries you choose in Log History. " +
+                    "Those requests send saved run facts and any music context you chose to share to this service. " +
+                    "Use only a service you trust. Saving does not check the connection.",
+                    color = StartInk.copy(alpha = 0.8f), fontSize = 12.sp, lineHeight = 18.sp)
+                if (error != null) Text(error, color = Color(0xFF8B392D), fontSize = 12.sp)
+                if (hasSavedConnection) {
+                    TextButton(onClick = onClear, enabled = !saving,
+                        modifier = Modifier.testTag(REFLECTION_CONNECTION_CLEAR_TAG)) {
+                        Text("Clear saved connection", color = StartInk)
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = { onSave(endpoint, accessCode) },
+                enabled = !saving && endpoint.isNotBlank() && accessCode.isNotBlank(),
+                modifier = Modifier.testTag(REFLECTION_CONNECTION_SAVE_TAG)
+            ) { Text(if (saving) "Saving…" else "Save", color = StartInk) }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss, enabled = !saving) { Text("Cancel", color = StartInk) }
+        }
+    )
 }
 
 @Composable

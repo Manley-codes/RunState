@@ -93,6 +93,9 @@ internal fun RunStateScreen(
     musicReflectionSharingAvailable: Boolean = false,
     musicReflectionSharingSelected: Boolean = false,
     onToggleMusicReflectionSharing: () -> Unit = {},
+    reflectionConnectionLabel: String? = null,
+    onOpenReflectionSetup: () -> Unit = {},
+    reflectionSetupEnabled: Boolean = true,
     isGpsRun: Boolean = false,
     gpsServicePresent: Boolean = false,
     onResumeGpsTracking: () -> Unit = {},
@@ -163,6 +166,9 @@ internal fun RunStateScreen(
             musicReflectionSharingAvailable = musicReflectionSharingAvailable,
             musicReflectionSharingSelected = musicReflectionSharingSelected,
             onToggleMusicReflectionSharing = onToggleMusicReflectionSharing,
+            reflectionConnectionLabel = reflectionConnectionLabel,
+            onOpenReflectionSetup = onOpenReflectionSetup,
+            reflectionSetupEnabled = reflectionSetupEnabled,
             modifier = modifier
         )
         return

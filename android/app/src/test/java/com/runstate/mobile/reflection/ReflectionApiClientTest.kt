@@ -3,6 +3,15 @@ package com.runstate.mobile.reflection
 import com.google.gson.JsonObject
 import com.google.gson.GsonBuilder
 import com.runstate.mobile.data.local.*
+import java.io.ByteArrayInputStream
+import java.io.ByteArrayOutputStream
+import java.io.InputStream
+import java.net.HttpURLConnection
+import java.net.URL
+import java.nio.charset.StandardCharsets
+import java.security.cert.Certificate
+import javax.net.ssl.HttpsURLConnection
+import kotlinx.coroutines.runBlocking
 import org.junit.Assert.*
 import org.junit.Test
 
@@ -238,6 +247,127 @@ class ReflectionApiClientTest {
                 LocalReflectionHttpClient(endpoint)
             }
         }
+    }
+
+    @Test fun hostedSettingsAcceptOnlyExactHttpsDnsEndpointAndOpaqueCode() {
+        val valid = "https://reflection.example.com/api/reflections/candidates"
+        ReflectionConnectionConfig(valid, "A".repeat(43))
+        ReflectionConnectionConfig(
+            "https://reflection.example.com:443/api/reflections/candidates", "a_-".repeat(20)
+        )
+        listOf(
+            "http://reflection.example.com/api/reflections/candidates",
+            "https://127.0.0.1/api/reflections/candidates",
+            "https://localhost/api/reflections/candidates",
+            "https://user@reflection.example.com/api/reflections/candidates",
+            "https://reflection.example.com:8443/api/reflections/candidates",
+            "https://reflection.example.com/api/reflections/candidates?debug=1",
+            "https://reflection.example.com/api/reflections/candidates#fragment",
+            "https://reflection.example.com/api/reflections/%63andidates",
+            "https://reflection.example.com/other"
+        ).forEach { address ->
+            assertThrows(IllegalArgumentException::class.java) {
+                ReflectionConnectionConfig(address, "A".repeat(43))
+            }
+        }
+        listOf("short", "A".repeat(129), "sk-ant-" + "A".repeat(43), "A".repeat(42) + "+")
+            .forEach { code ->
+                assertThrows(IllegalArgumentException::class.java) {
+                    ReflectionConnectionConfig(valid, code)
+                }
+            }
+    }
+
+    @Test fun hostedSettingsNeverPrintAddressOrAccessCode() {
+        val address = "https://reflection.example.com/api/reflections/candidates"
+        val code = "S".repeat(43)
+        val printed = ReflectionConnectionConfig(address, code).toString()
+        assertFalse(printed.contains(address))
+        assertFalse(printed.contains(code))
+    }
+
+    @Test fun hostedClientSendsBearerOverHttpsWithExistingRequestContract() = runBlocking {
+        val code = "K".repeat(43)
+        val config = ReflectionConnectionConfig(
+            "https://reflection.example.com/api/reflections/candidates", code
+        )
+        val fake = FakeHttpsConnection(URL(config.endpoint), response(generationMode = "ANTHROPIC"))
+        val result = HostedReflectionHttpClient(config, { fake }).request(
+            reflectionRequestFromSavedRun(REQUEST_ID, completedRun(), completedTransitions())
+        )
+        assertEquals("Bearer $code", fake.getRequestProperty("Authorization"))
+        assertEquals("POST", fake.requestMethod)
+        assertEquals(3_000, fake.connectTimeout)
+        assertEquals(60_000, fake.readTimeout)
+        assertFalse(fake.instanceFollowRedirects)
+        assertTrue(fake.sent.toString(StandardCharsets.UTF_8.name()).contains(REQUEST_ID))
+        assertEquals("[FAKE] None.", result.noSelection)
+        assertFalse(result.isTestData)
+        assertTrue(fake.wasDisconnected)
+    }
+
+    @Test fun hostedClientRejectsRedirectHttpDowngradeAndOversizeResponse() = runBlocking {
+        val config = ReflectionConnectionConfig(
+            "https://reflection.example.com/api/reflections/candidates", "Q".repeat(43)
+        )
+        val request = reflectionRequestFromSavedRun(REQUEST_ID, completedRun(), completedTransitions())
+        val redirected = FakeHttpsConnection(URL(config.endpoint), "", 302)
+        assertThrows(ReflectionBridgeException::class.java) {
+            runBlocking { HostedReflectionHttpClient(config, { redirected }).request(request) }
+        }
+        assertFalse(redirected.instanceFollowRedirects)
+        assertTrue(redirected.wasDisconnected)
+
+        val http = object : HttpURLConnection(URL("http://reflection.example.com")) {
+            override fun connect() = Unit
+            override fun disconnect() = Unit
+            override fun usingProxy() = false
+        }
+        assertThrows(ReflectionBridgeException::class.java) {
+            runBlocking { HostedReflectionHttpClient(config, { http }).request(request) }
+        }
+        val huge = FakeHttpsConnection(URL(config.endpoint), "x".repeat(65_537))
+        assertThrows(ReflectionBridgeException::class.java) {
+            runBlocking { HostedReflectionHttpClient(config, { huge }).request(request) }
+        }
+        assertTrue(huge.wasDisconnected)
+
+        val malformed = FakeHttpsConnection(URL(config.endpoint), "{bad json")
+        val invalid = assertThrows(ReflectionBridgeException::class.java) {
+            runBlocking { HostedReflectionHttpClient(config, { malformed }).request(request) }
+        }
+        assertEquals("The hosted reflection response was invalid.", invalid.message)
+        // Coroutine stack recovery can add a copy of our sanitized exception as its cause.
+        assertTrue(generateSequence(invalid as Throwable) { it.cause }.all {
+            it.message == "The hosted reflection response was invalid."
+        })
+
+        val unavailable = assertThrows(ReflectionBridgeException::class.java) {
+            runBlocking {
+                HostedReflectionHttpClient(config, { throw IllegalStateException(config.accessCode) })
+                    .request(request)
+            }
+        }
+        assertEquals("The hosted reflection service is unavailable.", unavailable.message)
+        assertTrue(generateSequence(unavailable as Throwable) { it.cause }.all {
+            it.message == "The hosted reflection service is unavailable."
+        })
+    }
+
+    private class FakeHttpsConnection(url: URL, private val body: String, private val status: Int = 200) :
+        HttpsURLConnection(url) {
+        val sent = ByteArrayOutputStream()
+        var wasDisconnected = false
+        override fun connect() = Unit
+        override fun disconnect() { wasDisconnected = true }
+        override fun usingProxy() = false
+        override fun getCipherSuite(): String = "TLS_AES_128_GCM_SHA256"
+        override fun getLocalCertificates(): Array<Certificate> = emptyArray()
+        override fun getServerCertificates(): Array<Certificate> = emptyArray()
+        override fun getOutputStream() = sent
+        override fun getInputStream(): InputStream =
+            ByteArrayInputStream(body.toByteArray(StandardCharsets.UTF_8))
+        override fun getResponseCode(): Int = status
     }
 
     private fun response(

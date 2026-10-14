@@ -14,9 +14,9 @@
    of those up independently of the main file would restore a torn set that matches no
    moment the database was actually in.
 
-   allowBackup stays true. Preferences and other future app data remain eligible; only
-   the database domain is withheld, and only until server sync and safe restore handling
-   exist to make a restored run meaningful.
+   allowBackup stays true. Other app data remains eligible. The reflection connection
+   preferences are also withheld because their encrypted access code belongs to this
+   device's Keystore key. The database exclusion lasts until safe restore handling exists.
 
    This file is what Android 11 (API 30) and lower read. Android 12 (API 31) and higher
    read data_extraction_rules.xml instead, so both files must carry the same exclusion.
@@ -25,4 +25,6 @@
 -->
 <full-backup-content>
     <exclude domain="database" path="." />
+    <!-- The access code is encrypted with a device-bound key; never back it up separately. -->
+    <exclude domain="sharedpref" path="reflection_connection.xml" />
 </full-backup-content>

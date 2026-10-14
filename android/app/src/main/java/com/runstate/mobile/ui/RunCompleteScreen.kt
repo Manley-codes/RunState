@@ -90,6 +90,7 @@ internal sealed interface RunCompleteReflectionDisplay {
     data object Preparing : RunCompleteReflectionDisplay
     data class Ready(val text: String) : RunCompleteReflectionDisplay
     data object Failed : RunCompleteReflectionDisplay
+    data object ConnectionNeeded : RunCompleteReflectionDisplay
 }
 
 /**
@@ -417,6 +418,13 @@ private fun ReflectionPanel(
                     .testTag(RUN_COMPLETE_REFLECTION_TEXT_TAG)
             )
 
+            RunCompleteReflectionDisplay.ConnectionNeeded -> {
+                Text("Your run is saved on this phone.", color = CompletionStrongInk,
+                    fontSize = 19.sp, lineHeight = 26.sp, modifier = Modifier.padding(top = 18.dp))
+                Text("Energy and Effort can still be recorded here. Set up reflections on Start, then retry this run in Log History.",
+                    color = CompletionMutedInk, fontSize = 13.sp, lineHeight = 19.sp,
+                    modifier = Modifier.padding(top = 6.dp))
+            }
             RunCompleteReflectionDisplay.Failed -> {
                 Text(
                     text = "Reflection couldn’t be prepared.",
