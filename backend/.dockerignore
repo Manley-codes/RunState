@@ -1,0 +1,6 @@
+# Allow only build inputs into the image context; local caches and credentials stay out.
+**
+!pom.xml
+!src/
+!src/**
+!Dockerfile

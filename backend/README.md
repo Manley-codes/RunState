@@ -1,16 +1,20 @@
-# RunState local reflection backend
+# RunState reflection backend
 
 This directory is a standalone Java 17/Maven project containing the reflection contract, Anthropic
-provider adapter, and a small local HTTP server. The server binds only to `127.0.0.1`; it is not
-publicly hosted. Android's debug emulator build can connect through the host alias `10.0.2.2`.
+provider adapter, and a small HTTP server. Normal startup binds only to `127.0.0.1`.
+Explicit `--remote` startup prepares an authenticated internal service for a private HTTPS ingress;
+the repository does not deploy it or make that HTTP port safe to expose publicly.
+Android's debug emulator build can connect locally through the host alias `10.0.2.2`.
 
 For a physical Android phone connected by USB with debugging enabled, run
 `adb reverse tcp:8787 tcp:8787` from the Android Studio terminal before opening the debug app.
 The phone's debug build then connects to its own `127.0.0.1:8787`, which ADB forwards to this
 backend on the computer. Keep the backend bound to computer loopback; this route does not require
 opening port 8787 to the Wi-Fi network. The reverse mapping lasts only while the device's ADB
-connection does. Release builds do not include the reflection bridge or its network permissions.
-The Anthropic key, when live mode is used, belongs only in the computer's backend environment.
+connection does. That local HTTP route remains debug-only. An explicitly configured hosted HTTPS
+connection can be used by debug or release builds; an unconfigured release stays offline. The
+phone's separately entered demo access code is kept in encrypted AndroidKeyStore-backed storage,
+not built into the APK. The Anthropic key belongs only in the backend environment, never the phone.
 
 Java records are used as small immutable data holders. A record exposes its values through generated
 accessor methods and does not offer setters; its constructor can still reject invalid combinations.
@@ -68,7 +72,7 @@ GPS and unavailable metrics, and limits claims made from partial media-session r
 a music reference when the evidence is weak. Structured-output validation checks shape and preserves exact text;
 it does not prove every generated statement is factual or that a real GPS distance is accurate.
 
-## Local HTTP API
+## HTTP API
 
 `POST /api/reflections/candidates` accepts one request identifier, one saved-run identifier, and one
 completed-run evidence snapshot. It returns the identifiers, a `generationMode` of `FAKE` or
@@ -144,9 +148,12 @@ Errors use a stable envelope such as
 
 - `invalid_json`, `invalid_request`, `request_too_large`, and `unsupported_media_type` for request
   problems;
-- `request_rejected` when Host or Origin fails the local request guard;
+- `request_rejected` when Host or Origin fails the selected mode's guard;
+- `unauthorized` for a missing, invalid or repeated remote Authorization header;
 - `method_not_allowed` and `not_found` for unsupported HTTP routes;
 - `request_id_conflict` when one request ID is reused with different run evidence;
+- `server_busy` when both provider slots are occupied, and `server_capacity` when the bounded
+  process-local request cache is full;
 - `provider_timeout`, `provider_unavailable`, and `provider_failure` for provider outcomes; and
 - `internal_error` for an unexpected server failure.
 
@@ -159,10 +166,20 @@ The server keeps an in-memory map keyed by `requestId`. Concurrent identical req
 provider call, and later identical requests receive the same cached success or failure. Reusing an
 ID with different identifiers or evidence returns `request_id_conflict` without calling the provider.
 
-This protection is intentionally process-local for the current loopback demonstration: it does not
-survive a server restart and has no persistence or eviction policy. A durable multi-process
-idempotency store belongs to a later hosted-service design. For a deliberate new attempt after a
-cached provider failure, use a new canonical request UUID.
+The same limits apply locally and remotely: two simultaneous provider calls, 256 retained request
+IDs, eight HTTP workers and a queue of 32 tasks. Request and success-response bodies are each at
+most 64 KiB; oversized provider output becomes a safe cached `provider_failure`. A new request
+that would exceed provider concurrency receives `503 server_busy` and is not cached, so retrying
+the same ID later does not create a second generation. At 256 retained IDs, new IDs receive
+`503 server_capacity`; retained successes, failures and conflicting-ID checks still work.
+
+There is deliberately no automatic eviction. Expiring an ID and generating it again would silently
+make a second potentially paid call for the same request. Deliberate restart clears the cache and
+its duplicate protection, so an old ID may generate again afterward. Use one service instance for
+the demo; multiple replicas do not share this map. Durable idempotency, user accounts and distributed
+admission belong to a later service design. For a deliberate new attempt after a cached provider
+failure, use a new canonical request UUID. Do not interpret `server_capacity` as permission to
+automatically restart or repeat paid work.
 
 ## Start the local server
 
@@ -223,6 +240,129 @@ The response must contain `"generationMode": "FAKE"` and four visibly `[FAKE]` t
 use `generationMode` for labeling, not inspect or rewrite the candidate text. Stop the server with
 `Ctrl+C`.
 
+## Prepare a hosted demonstration
+
+Nothing here deploys a service, opens a public port or creates a hosting account. Use the remote
+mode only behind a hosting ingress/reverse proxy that terminates **HTTPS**, forwards the expected
+public `Host` and `Authorization`, and keeps the application's internal HTTP listener inaccessible
+from the public network. Do not publish `8787` directly or port-forward this server through a home
+router. For a proxy on the same computer, bind the app to `127.0.0.1`; a managed container ingress
+normally needs `0.0.0.0` inside its private container network.
+
+`--remote` enables this boundary; `--remote --fake` uses the same authentication with fixed
+`FAKE` responses and no Anthropic traffic. No arguments and `--fake` retain the local loopback
+mode even when remote environment variables are present. Configure secrets in the hosting
+platform's secret/environment settings, without files, command-line values, Docker build arguments
+or Git changes:
+
+| Variable | Meaning |
+| --- | --- |
+| `RUNSTATE_DEMO_TOKEN` | Required opaque per-demo client access code. Generate at least 32 cryptographically random bytes and encode as URL-safe Base64 without padding (43 characters), or as 64 hex characters. Accepted format is 43–128 ASCII letters, digits, `_` or `-`; length/format validation cannot prove randomness. |
+| `RUNSTATE_REFLECTION_PUBLIC_HOST` | Required exact public HTTPS authority, such as `demo.example.com`, optionally `:443` or another HTTPS port. Do not include scheme, path, credentials or query. The proxy must preserve this Host. A default `:443` is equivalent to an omitted port. |
+| `RUNSTATE_REFLECTION_BIND_ADDRESS` | Optional numeric IPv4 bind address. Defaults to `0.0.0.0` **only in explicit remote mode**; set `127.0.0.1` for a proxy on the same host. Hostnames and IPv6 are not accepted in this bounded deployment. |
+| `RUNSTATE_REFLECTION_PORT` | Optional internal port, 1–65535. It takes priority over the hosting platform's `PORT`. Remote mode uses `PORT` when provided; otherwise it uses `8787`. Local mode ignores `PORT`. |
+| `ANTHROPIC_API_KEY` | Backend-only secret for live provider mode. Not needed for `--remote --fake`. |
+| `ANTHROPIC_MODEL` | Optional model override, unchanged from local live mode. |
+
+The Android endpoint is `https://<configured-public-host>/api/reflections/candidates`, with
+`Authorization: Bearer <demo-access-code>`. The code must match the server's `RUNSTATE_DEMO_TOKEN`.
+The request/response JSON stays identical to local mode. A single header is required, with the
+exact `Bearer ` prefix. Token comparison uses constant-time byte comparison; errors never echo
+tokens, request evidence or underlying provider exceptions. Any supplied browser Origin remains
+rejected, so this API has no browser/CORS client path. Untrusted `X-Forwarded-*` headers establish
+neither HTTPS, an allowed Host nor authentication.
+
+Remote-only `GET /health` returns `{"status":"ok"}` without authentication or provider work,
+but still requires the configured public Host and no Origin. It proves process liveness only;
+it does not prove that the demo code, Anthropic key, billing, generated text or phone connection
+works. Configure a TCP liveness probe if a host cannot preserve the expected Host for its HTTP
+probe. Validate authentication and exact `FAKE` delivery through the candidate endpoint before
+enabling the live provider.
+
+Render's HTTP probes use the service's `onrender.com` Host unless a verified custom domain exists,
+in which case Render chooses one custom domain. Therefore `/health` is compatible when
+`RUNSTATE_REFLECTION_PUBLIC_HOST` is that exact authority. Keep the first demo on its supplied
+`onrender.com` address without custom domains; after deployment, verify its actual HTTP probe.
+Render also supports default TCP probes. This is documentation verification, not an executed
+Render health check. [Render health-check documentation](https://render.com/docs/health-checks).
+
+The ingress must also bound request headers/body size, slow body uploads and connection count,
+and rate-limit traffic. Allow at most 64 KiB JSON and use a finite body/header timeout (for example
+15 seconds); allow the upstream response enough time for the provider's 45-second timeout. Disable
+request/response-body logging and Authorization-header logging in the proxy/platform. The JDK HTTP
+server has a bounded worker queue, so extreme ingress overload may close a connection; provider
+admission overload normally returns the explicit 503 errors above. Forwarded headers are never a
+replacement for private network isolation and edge TLS.
+
+The demo code protects one private demonstration; it is not general user authentication and should
+not be distributed in a public APK or public website. Anyone who has it can use the same bounded
+provider allowance. Rotate it in the hosting secrets and re-enter it on authorized phones if it is
+exposed. Keep one service instance and avoid automatic scaling until durable idempotency exists.
+
+### Container build inputs
+
+The necessary deployment artifacts are `backend/Dockerfile` and `backend/.dockerignore`.
+The Dockerfile builds/tests Java 17 sources, copies only runtime classes/dependencies, runs as a
+non-root numeric user with a bounded Java heap, and starts explicit `--remote` mode through a
+complete exec-form `CMD`. Its explicit empty `ENTRYPOINT` removes inherited wrappers and avoids
+Render's conflicting command-override descriptions. No token or Anthropic
+key is in the image. The `.dockerignore` allows only the POM, source tree and Dockerfile into the
+context, excluding local `.m2`, `target`, credential files and documentation attachments.
+
+The container also sets these OpenJDK 17 HTTP implementation properties **at JVM startup**:
+
+| Startup property | Demo setting |
+| --- | --- |
+| `sun.net.httpserver.maxReqTime` | 15 seconds to finish reading a request, including headers/body |
+| `sun.net.httpserver.maxRspTime` | 55 seconds for response generation and writing |
+| `sun.net.httpserver.timerMillis` | 1000 ms request/response deadline polling |
+| `sun.net.httpserver.maxReqHeaders` | 32 distinct header names |
+| `sun.net.httpserver.maxReqHeaderSize` | 16384 bytes for request line/header-list accounting |
+| `jdk.httpserver.maxConnections` | 40 open connections |
+| `sun.net.httpserver.maxIdleConnections` | 8 retained idle connections |
+| `sun.net.httpserver.idleInterval` | 15 seconds idle |
+| `sun.net.httpserver.clockTick` | 1000 ms idle polling |
+
+OpenJDK 17u's default request/response deadlines are disabled, so bounded workers alone would not
+release slow readers. These are verified implementation settings, not portable public API
+guarantees. Its periodic timer closes timed-out connections; the 55-second response setting leaves
+room for the 45-second provider timeout inside Android's 60-second read timeout. Scheduling is
+periodic, not an exact real-time guarantee. [OpenJDK 17u configuration](https://raw.githubusercontent.com/openjdk/jdk17u/master/src/jdk.httpserver/share/classes/sun/net/httpserver/ServerConfig.java),
+[deadline enforcement](https://raw.githubusercontent.com/openjdk/jdk17u/master/src/jdk.httpserver/share/classes/sun/net/httpserver/ServerImpl.java),
+[header accounting](https://raw.githubusercontent.com/openjdk/jdk17u/master/src/jdk.httpserver/share/classes/sun/net/httpserver/Request.java).
+
+Use the Docker startup command for remote hosting. A bare Java/IDE remote launch must supply the same
+`-D` flags before the server implementation initializes; changing them after creating a server does
+not configure that existing JVM. Local launches and tests are not globally reconfigured by app
+code. No in-process property assertion is claimed as a socket-timeout test: the chosen container
+runtime still needs a controlled slow-upload/deadline check before live deployment.
+
+A controlled local Java 17 `--remote --fake` launch with these startup flags verified health `200`,
+missing-token `401`, authenticated malformed-body `400`, and closure of an incomplete-header
+connection after 15.1 seconds. Its temporary test token and process were cleared afterward.
+This verifies that local runtime check, not the Docker image, a slow-body upload or Render ingress.
+
+For the first Render fake deployment, set **Docker Command** to this complete command; `--fake`
+alone is not an executable and must not be used as the override:
+
+```text
+java -Xmx256m -Dsun.net.httpserver.maxReqTime=15 -Dsun.net.httpserver.maxRspTime=55 -Dsun.net.httpserver.timerMillis=1000 -Dsun.net.httpserver.maxReqHeaders=32 -Dsun.net.httpserver.maxReqHeaderSize=16384 -Djdk.httpserver.maxConnections=40 -Dsun.net.httpserver.maxIdleConnections=8 -Dsun.net.httpserver.idleInterval=15 -Dsun.net.httpserver.clockTick=1000 -cp "/app/classes:/app/lib/*" com.runstate.reflection.ReflectionBackendMain --remote --fake
+```
+
+Keep `ANTHROPIC_API_KEY` absent during staging, confirm the startup identifies the fake provider,
+then verify the authenticated four-candidate `FAKE` response. For a later deliberate live deploy,
+configure the backend-only Anthropic key and **clear Docker Command** so the image's full default
+`CMD` starts live `--remote` mode with the same limits. The form tooltip mentions overriding both
+`CMD` and `ENTRYPOINT`, while published guidance describes overriding `CMD`; with an explicitly
+empty entrypoint and a complete command, neither interpretation appends a second Java executable
+or leaves `--fake` as the process name. [Render Docker command guidance](https://render.com/docs/docker#building-from-a-dockerfile),
+[Docker CMD/ENTRYPOINT semantics](https://docs.docker.com/reference/dockerfile/#understand-how-cmd-and-entrypoint-interact).
+
+Use `backend/` as the container build context and supply the environment through the hosting
+platform at runtime. `EXPOSE 8787` is image metadata, not a request to publish the port. The Docker
+image and actual host ingress must be built and verified separately before deployment; source
+tests alone do not verify image downloads, platform networking, TLS or Android HTTPS delivery.
+
 ## Run the tests
 
 From this directory, run:
@@ -235,8 +375,10 @@ If Maven is not on `PATH`, use IntelliJ IDEA's Maven tool window or its bundled 
 The project can be opened independently by selecting this directory or its `pom.xml` in IntelliJ.
 
 Endpoint tests start the server on an operating-system-assigned loopback port and inject fake
-providers. They cover configured generation modes, exact success text, invalid and oversized requests, duplicate IDs,
-unsupported methods, and safe provider failures without contacting Anthropic.
+providers. They cover configured generation modes, exact success text, invalid and oversized requests,
+duplicate IDs, unsupported methods and safe provider failures. Remote-mode tests also bind only to
+loopback and use a dummy demo code: they cover authentication before parsing, Host/Origin/forwarded
+header boundaries, liveness, provider admission and cache capacity without contacting Anthropic.
 
 ## Boundary
 
@@ -249,12 +391,15 @@ a saved `MUSIC` / `MEDIA_SESSION_PARTIAL` snapshot with one title and artist and
 response. That response did not mention the song; accepting music context does not guarantee a
 music reference. History reports the saved context without claiming a complete listening record.
 Local observation alone does not permit sharing, and existing records migrate with sharing off.
-Release builds do not call this backend.
+Hosted HTTPS can be explicitly configured in debug or release builds. The local computer/emulator
+HTTP route remains debug-only; the default unconfigured release makes no reflection request.
 
 Automated tests use dummy configuration and fake or simulated provider responses; they make no
 live Anthropic request. Separate bounded live checks exercised credentials, unit/time/provenance
 grounding and phone delivery, but do not establish general generation quality. The server has no
-database, authentication, TLS, durable idempotency, or public-hosting configuration. The Host/Origin
-guard does not authenticate arbitrary local programs. The full music-aware demonstration remains
+database, in-process TLS, durable idempotency or multi-user account system. Its optional remote
+mode requires a separately deployed private HTTPS ingress and per-demo token. That protected
+deployment is prepared in source, not verified as hosted. The local Host/Origin guard still does
+not authenticate arbitrary local programs. The full music-aware demonstration remains
 incomplete; current verification and remaining work are recorded in
 [`project_current_state.md`](../docs/design/project_current_state.md).

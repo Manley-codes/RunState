@@ -14,24 +14,32 @@ import java.io.InputStream;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
+import java.util.concurrent.Semaphore;
 import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
-/** Loopback-only HTTP boundary around one {@link ReflectionProvider}. */
+/** Local HTTP boundary, or an explicitly authenticated internal service behind HTTPS ingress. */
 public final class ReflectionHttpServer implements AutoCloseable {
 
     public static final String CANDIDATES_PATH = "/api/reflections/candidates";
+    public static final String HEALTH_PATH = "/health";
     public static final int MAX_REQUEST_BYTES = 64 * 1024;
+    public static final int MAX_RESPONSE_BYTES = 64 * 1024;
+    public static final int MAX_CONCURRENT_PROVIDER_CALLS = 2;
+    public static final int MAX_CACHED_REQUESTS = 256;
 
     /** Provider mode configured by the launcher, never inferred from generated text. */
     public enum GenerationMode {
@@ -41,6 +49,7 @@ public final class ReflectionHttpServer implements AutoCloseable {
 
     private static final String JSON_CONTENT_TYPE = "application/json; charset=utf-8";
     private static final int SERVER_THREADS = 8;
+    private static final int HTTP_QUEUE_CAPACITY = 32;
     private static final Set<String> ALLOWED_HOST_NAMES = Set.of(
             "127.0.0.1",
             "localhost",
@@ -51,21 +60,38 @@ public final class ReflectionHttpServer implements AutoCloseable {
     private final GenerationMode generationMode;
     private final HttpServer server;
     private final ExecutorService executor;
-    private final ConcurrentMap<String, RequestWork> workByRequestId = new ConcurrentHashMap<>();
+    private final RemoteAccess remoteAccess;
+    private final Semaphore providerSlots;
+    private final int maxCachedRequests;
+    private final Object cacheLock = new Object();
+    private final Map<String, RequestWork> workByRequestId = new HashMap<>();
     private final AtomicBoolean closed = new AtomicBoolean();
 
     private ReflectionHttpServer(
             ReflectionProvider provider,
             int port,
-            GenerationMode generationMode
+            GenerationMode generationMode,
+            RemoteAccess remoteAccess,
+            int maxConcurrentProviderCalls,
+            int maxCachedRequests
     ) throws IOException {
         this.provider = Objects.requireNonNull(provider, "provider");
         this.generationMode = Objects.requireNonNull(generationMode, "generationMode");
-        InetAddress loopback = InetAddress.getByName("127.0.0.1");
-        this.server = HttpServer.create(new InetSocketAddress(loopback, port), 0);
-        this.executor = Executors.newFixedThreadPool(
-                SERVER_THREADS,
-                new ServerThreadFactory()
+        requirePort(port);
+        if (maxConcurrentProviderCalls < 1 || maxConcurrentProviderCalls >= SERVER_THREADS ||
+                maxCachedRequests < maxConcurrentProviderCalls || maxCachedRequests > MAX_CACHED_REQUESTS) {
+            throw new IllegalArgumentException("Invalid reflection server resource limits.");
+        }
+        this.remoteAccess = remoteAccess;
+        this.providerSlots = new Semaphore(maxConcurrentProviderCalls);
+        this.maxCachedRequests = maxCachedRequests;
+        InetAddress bindAddress = remoteAccess == null
+                ? InetAddress.getByName("127.0.0.1") : remoteAccess.bindAddress;
+        this.server = HttpServer.create(new InetSocketAddress(bindAddress, port), HTTP_QUEUE_CAPACITY);
+        this.executor = new ThreadPoolExecutor(
+                SERVER_THREADS, SERVER_THREADS, 0L, TimeUnit.MILLISECONDS,
+                new ArrayBlockingQueue<>(HTTP_QUEUE_CAPACITY),
+                new ServerThreadFactory(), new ThreadPoolExecutor.AbortPolicy()
         );
         server.setExecutor(executor);
         server.createContext("/", this::handle);
@@ -83,10 +109,43 @@ public final class ReflectionHttpServer implements AutoCloseable {
             int port,
             GenerationMode generationMode
     ) throws IOException {
+        return new ReflectionHttpServer(provider, port, generationMode, null,
+                MAX_CONCURRENT_PROVIDER_CALLS, MAX_CACHED_REQUESTS);
+    }
+
+    /**
+     * Deliberate remote mode. This is internal HTTP: a private ingress must terminate HTTPS,
+     * preserve the configured public Host, bound slow requests, and block direct public access.
+     * Forwarded headers do not establish TLS or alter authentication/Host checks.
+     */
+    public static ReflectionHttpServer createRemote(
+            ReflectionProvider provider,
+            int port,
+            GenerationMode generationMode,
+            RemoteAccess remoteAccess
+    ) throws IOException {
+        return createRemote(provider, port, generationMode, remoteAccess,
+                MAX_CONCURRENT_PROVIDER_CALLS, MAX_CACHED_REQUESTS);
+    }
+
+    /** Smaller limits let loopback tests prove admission without filling the demo cache. */
+    static ReflectionHttpServer createRemote(
+            ReflectionProvider provider,
+            int port,
+            GenerationMode generationMode,
+            RemoteAccess remoteAccess,
+            int maxConcurrentProviderCalls,
+            int maxCachedRequests
+    ) throws IOException {
+        return new ReflectionHttpServer(provider, port, generationMode,
+                Objects.requireNonNull(remoteAccess, "remoteAccess"),
+                maxConcurrentProviderCalls, maxCachedRequests);
+    }
+
+    private static void requirePort(int port) {
         if (port < 0 || port > 65_535) {
             throw new IllegalArgumentException("port must be between 0 and 65535");
         }
-        return new ReflectionHttpServer(provider, port, generationMode);
     }
 
     public void start() {
@@ -147,10 +206,25 @@ public final class ReflectionHttpServer implements AutoCloseable {
             return error(
                     403,
                     "request_rejected",
-                    "The request is not allowed by this local server."
+                    "The request is not allowed by this server."
             );
         }
-        if (!CANDIDATES_PATH.equals(exchange.getRequestURI().getPath())) {
+        if (remoteAccess != null && HEALTH_PATH.equals(exchange.getRequestURI().getRawPath())) {
+            if (exchange.getRequestURI().getRawQuery() != null) {
+                return error(400, "invalid_request", "This endpoint does not accept query parameters.");
+            }
+            if (!"GET".equals(exchange.getRequestMethod())) {
+                exchange.getResponseHeaders().set("Allow", "GET");
+                return error(405, "method_not_allowed", "Only GET is supported for this endpoint.");
+            }
+            // Liveness only: no provider call, credentials, run data, or configuration disclosure.
+            return new EndpointResponse(200, "{\"status\":\"ok\"}");
+        }
+        if (remoteAccess != null && !remoteAccess.authorizes(exchange)) {
+            exchange.getResponseHeaders().set("WWW-Authenticate", "Bearer");
+            return error(401, "unauthorized", "A valid demo access token is required.");
+        }
+        if (!CANDIDATES_PATH.equals(exchange.getRequestURI().getRawPath())) {
             return error(404, "not_found", "The requested endpoint does not exist.");
         }
         if (exchange.getRequestURI().getRawQuery() != null) {
@@ -160,14 +234,16 @@ public final class ReflectionHttpServer implements AutoCloseable {
             exchange.getResponseHeaders().set("Allow", "POST");
             return error(405, "method_not_allowed", "Only POST is supported for this endpoint.");
         }
-        if (!isJsonContentType(exchange.getRequestHeaders().getFirst("Content-Type"))) {
+        List<String> contentTypes = exchange.getRequestHeaders().get("Content-Type");
+        if (contentTypes == null || contentTypes.size() != 1 || !isJsonContentType(contentTypes.get(0))) {
             return error(
                     415,
                     "unsupported_media_type",
                     "Content-Type must be application/json."
             );
         }
-        if (!isIdentityEncoding(exchange.getRequestHeaders().getFirst("Content-Encoding"))) {
+        List<String> encodings = exchange.getRequestHeaders().get("Content-Encoding");
+        if (encodings != null && (encodings.size() != 1 || !isIdentityEncoding(encodings.get(0)))) {
             return error(
                     415,
                     "unsupported_media_type",
@@ -187,6 +263,9 @@ public final class ReflectionHttpServer implements AutoCloseable {
         }
 
         String value = hostValues.get(0);
+        if (remoteAccess != null) {
+            return remoteAccess.allowsHost(value);
+        }
         int separator = value.lastIndexOf(':');
         if (separator <= 0 || separator != value.indexOf(':')) {
             return false;
@@ -204,8 +283,9 @@ public final class ReflectionHttpServer implements AutoCloseable {
 
     private EndpointResponse generateOnce(ApiRequest request) {
         String requestId = request.identifiers().requestId();
-
-        while (true) {
+        RequestWork work;
+        boolean owner;
+        synchronized (cacheLock) {
             RequestWork existing = workByRequestId.get(requestId);
             if (existing != null) {
                 if (!existing.request().equals(request)) {
@@ -215,24 +295,45 @@ public final class ReflectionHttpServer implements AutoCloseable {
                             "The requestId is already associated with different evidence."
                     );
                 }
-                return existing.response().join();
+                work = existing;
+                owner = false;
+            } else {
+                // Never evict a completed ID and silently pay to regenerate its exact duplicate.
+                if (workByRequestId.size() >= maxCachedRequests) {
+                    return error(503, "server_capacity", "The demo request capacity has been reached.");
+                }
+                if (!providerSlots.tryAcquire()) {
+                    // Busy requests are not cached; retry with the same ID is safe after admission frees.
+                    return error(503, "server_busy", "The reflection service is busy. Try again later.");
+                }
+                work = new RequestWork(request, new CompletableFuture<>());
+                workByRequestId.put(requestId, work);
+                owner = true;
             }
+        }
+        if (!owner) return work.response().join();
 
-            RequestWork created = new RequestWork(request, new CompletableFuture<>());
-            if (workByRequestId.putIfAbsent(requestId, created) == null) {
-                EndpointResponse response = callProvider(request);
-                created.response().complete(response);
-                return response;
-            }
+        EndpointResponse response = error(500, "internal_error", "The reflection request could not be completed.");
+        try {
+            response = callProvider(request);
+            return response;
+        } finally {
+            // Even an abnormal provider exit must unblock duplicates and release its bounded slot.
+            work.response().complete(response);
+            providerSlots.release();
         }
     }
 
     private EndpointResponse callProvider(ApiRequest request) {
         try {
             CandidateReflections candidates = provider.generate(request.evidence());
+            String body = ReflectionApiJson.success(request, candidates, generationMode);
+            if (body.getBytes(StandardCharsets.UTF_8).length > MAX_RESPONSE_BYTES) {
+                return providerFailure(FailureType.INVALID_RESPONSE);
+            }
             return new EndpointResponse(
                     200,
-                    ReflectionApiJson.success(request, candidates, generationMode)
+                    body
             );
         } catch (ReflectionProviderException failure) {
             return providerFailure(failure.failureType());
@@ -267,7 +368,11 @@ public final class ReflectionHttpServer implements AutoCloseable {
 
     private static byte[] readBoundedBody(HttpExchange exchange)
             throws IOException, RequestTooLargeException {
-        String contentLength = exchange.getRequestHeaders().getFirst("Content-Length");
+        List<String> lengths = exchange.getRequestHeaders().get("Content-Length");
+        if (lengths != null && lengths.size() != 1) {
+            throw new IllegalArgumentException("Content-Length must appear once");
+        }
+        String contentLength = lengths == null ? null : lengths.get(0);
         if (contentLength != null) {
             try {
                 long declaredLength = Long.parseLong(contentLength);
@@ -314,6 +419,93 @@ public final class ReflectionHttpServer implements AutoCloseable {
 
     private static EndpointResponse error(int status, String code, String message) {
         return new EndpointResponse(status, ReflectionApiJson.error(code, message));
+    }
+
+    /** Validated ingress settings. Never print or expose the opaque token as configuration text. */
+    public static final class RemoteAccess {
+        private final InetAddress bindAddress;
+        private final String publicAuthority;
+        private final byte[] authorizationBytes;
+
+        public RemoteAccess(String bindAddress, String publicAuthority, String demoToken) {
+            this.bindAddress = numericIpv4(bindAddress);
+            this.publicAuthority = publicAuthority(publicAuthority);
+            if (demoToken == null || !demoToken.matches("[A-Za-z0-9_-]{43,128}")) {
+                throw new IllegalArgumentException(
+                        "RUNSTATE_DEMO_TOKEN requires 43 to 128 URL-safe characters from at least 32 random bytes."
+                );
+            }
+            this.authorizationBytes = ("Bearer " + demoToken).getBytes(StandardCharsets.US_ASCII);
+        }
+
+        private boolean authorizes(HttpExchange exchange) {
+            List<String> values = exchange.getRequestHeaders().get("Authorization");
+            if (values == null || values.size() != 1) return false;
+            String supplied = values.get(0);
+            return supplied.length() <= 7 + 128 && MessageDigest.isEqual(
+                    authorizationBytes, supplied.getBytes(StandardCharsets.UTF_8));
+        }
+
+        private boolean allowsHost(String supplied) {
+            String normalized = supplied.toLowerCase(Locale.ROOT);
+            return publicAuthority.equals(normalized) ||
+                    (!publicAuthority.contains(":") && (publicAuthority + ":443").equals(normalized));
+        }
+
+        private static InetAddress numericIpv4(String supplied) {
+            if (supplied == null || !supplied.matches("(?:[0-9]{1,3}\\.){3}[0-9]{1,3}")) {
+                throw new IllegalArgumentException("RUNSTATE_REFLECTION_BIND_ADDRESS must be a numeric IPv4 address.");
+            }
+            byte[] bytes = new byte[4];
+            String[] parts = supplied.split("\\.");
+            for (int index = 0; index < parts.length; index++) {
+                int part = Integer.parseInt(parts[index]);
+                if (part > 255 || !Integer.toString(part).equals(parts[index])) {
+                    throw new IllegalArgumentException("RUNSTATE_REFLECTION_BIND_ADDRESS must be a numeric IPv4 address.");
+                }
+                bytes[index] = (byte) part;
+            }
+            try {
+                return InetAddress.getByAddress(bytes);
+            } catch (IOException impossible) {
+                throw new IllegalStateException("The IPv4 bind address could not be created.");
+            }
+        }
+
+        private static String publicAuthority(String supplied) {
+            if (supplied == null || supplied.isBlank() || supplied.length() > 259) {
+                throw invalidPublicHost();
+            }
+            String normalized = supplied.toLowerCase(Locale.ROOT);
+            String[] parts = normalized.split(":", -1);
+            if (parts.length > 2) throw invalidPublicHost();
+            String host = parts[0];
+            String label = "[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?";
+            if (host.length() > 253 || !host.matches(label + "(?:\\." + label + ")+") ||
+                    host.matches("[0-9.]+") || host.endsWith(".localhost")) {
+                throw invalidPublicHost();
+            }
+            if (parts.length == 2) {
+                if (!parts[1].matches("[0-9]{1,5}")) throw invalidPublicHost();
+                int port = Integer.parseInt(parts[1]);
+                if (port < 1 || port > 65_535 || !Integer.toString(port).equals(parts[1])) {
+                    throw invalidPublicHost();
+                }
+                if (port == 443) return host;
+            }
+            return normalized;
+        }
+
+        private static IllegalArgumentException invalidPublicHost() {
+            return new IllegalArgumentException(
+                    "RUNSTATE_REFLECTION_PUBLIC_HOST must be an ASCII public hostname with an optional HTTPS port."
+            );
+        }
+
+        @Override
+        public String toString() {
+            return "RemoteAccess[credentials=redacted]";
+        }
     }
 
     private static void writeResponse(HttpExchange exchange, EndpointResponse response)

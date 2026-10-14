@@ -24,7 +24,9 @@ import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -34,6 +36,7 @@ import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ReflectionHttpServerTest {
@@ -48,6 +51,8 @@ class ReflectionHttpServerTest {
     private static final String FEELING_GOOD = "Feeling good line one.\nLine two.\tStill exact.";
     private static final String POWERED_UP = "Powered up — exact punctuation.";
     private static final String NO_SELECTION = "No selection stays unknown.";
+    private static final String DEMO_HOST = "demo.runstate.example";
+    private static final String DUMMY_DEMO_TOKEN = "test-demo-token-0123456789-ABCDEFGHIJKLMNOPQ";
 
     private final HttpClient client = HttpClient.newBuilder()
             .connectTimeout(Duration.ofSeconds(2))
@@ -449,6 +454,243 @@ class ReflectionHttpServerTest {
         }
     }
 
+    @Test
+    void remoteModeRequiresDeliberateOptionsAndValidatedBackendOnlyConfiguration() {
+        assertAll(
+                () -> assertEquals(new ReflectionBackendMain.LaunchOptions(false, false),
+                        ReflectionBackendMain.parseOptions(new String[]{})),
+                () -> assertEquals(new ReflectionBackendMain.LaunchOptions(true, false),
+                        ReflectionBackendMain.parseOptions(new String[]{"--fake"})),
+                () -> assertEquals(new ReflectionBackendMain.LaunchOptions(false, true),
+                        ReflectionBackendMain.parseOptions(new String[]{"--remote"})),
+                () -> assertEquals(new ReflectionBackendMain.LaunchOptions(true, true),
+                        ReflectionBackendMain.parseOptions(new String[]{"--remote", "--fake"})),
+                () -> assertEquals(8787, ReflectionBackendMain.configuredPort(Map.of("PORT", "9000"))),
+                () -> assertEquals(9000, ReflectionBackendMain.configuredPort(Map.of("PORT", "9000"), true)),
+                () -> assertEquals(8788, ReflectionBackendMain.configuredPort(
+                        Map.of("PORT", "9000", "RUNSTATE_REFLECTION_PORT", "8788"), true)),
+                () -> assertThrows(IllegalArgumentException.class,
+                        () -> ReflectionBackendMain.configuredRemoteAccess(Map.of())),
+                () -> assertThrows(IllegalArgumentException.class,
+                        () -> new ReflectionHttpServer.RemoteAccess("0.0.0.0", DEMO_HOST, "weak")),
+                () -> assertThrows(IllegalArgumentException.class,
+                        () -> new ReflectionHttpServer.RemoteAccess("localhost", DEMO_HOST, DUMMY_DEMO_TOKEN)),
+                () -> assertThrows(IllegalArgumentException.class,
+                        () -> new ReflectionHttpServer.RemoteAccess("999.0.0.1", DEMO_HOST, DUMMY_DEMO_TOKEN)),
+                () -> assertThrows(IllegalArgumentException.class,
+                        () -> new ReflectionHttpServer.RemoteAccess("127.0.0.1", "https://" + DEMO_HOST,
+                                DUMMY_DEMO_TOKEN)),
+                () -> assertThrows(IllegalArgumentException.class,
+                        () -> new ReflectionHttpServer.RemoteAccess("127.0.0.1", "127.0.0.1:443",
+                                DUMMY_DEMO_TOKEN)),
+                () -> assertFalse(ReflectionBackendMain.configuredRemoteAccess(Map.of(
+                        "RUNSTATE_REFLECTION_PUBLIC_HOST", DEMO_HOST,
+                        "RUNSTATE_DEMO_TOKEN", DUMMY_DEMO_TOKEN)).toString().contains(DUMMY_DEMO_TOKEN))
+        );
+        IllegalArgumentException invalidArgument = assertThrows(IllegalArgumentException.class,
+                () -> ReflectionBackendMain.parseOptions(new String[]{DUMMY_DEMO_TOKEN}));
+        assertFalse(invalidArgument.getMessage().contains(DUMMY_DEMO_TOKEN));
+    }
+
+    @Test
+    void remoteAuthenticationPrecedesJsonAndForwardedHeadersCannotAuthorizeRequests() throws Exception {
+        AtomicInteger calls = new AtomicInteger();
+        try (ReflectionHttpServer server = startRemote(evidence -> {
+            calls.incrementAndGet();
+            return exactCandidates();
+        }, 2, 8)) {
+            List<List<String>> invalidAuthorization = List.of(
+                    List.of("Host: " + DEMO_HOST),
+                    List.of("Host: " + DEMO_HOST, "Authorization: Bearer incorrect"),
+                    List.of("Host: " + DEMO_HOST, "Authorization:"),
+                    List.of("Host: " + DEMO_HOST, "Authorization: Bearer " + DUMMY_DEMO_TOKEN,
+                            "Authorization: Bearer " + DUMMY_DEMO_TOKEN),
+                    List.of("Host: " + DEMO_HOST, "X-Forwarded-Proto: https",
+                            "X-Forwarded-Authorization: Bearer " + DUMMY_DEMO_TOKEN)
+            );
+            for (List<String> headers : invalidAuthorization) {
+                RawHttpResponse response = rawPost(server, headers, "{");
+                assertError(response, 401, "unauthorized");
+                assertFalse(response.body().contains(DUMMY_DEMO_TOKEN));
+                assertFalse(response.body().contains("incorrect"));
+            }
+            assertEquals(0, calls.get());
+        }
+    }
+
+    @Test
+    void remoteHostOriginAndStrictBodyGuardsRemainMandatoryWithAValidToken() throws Exception {
+        AtomicInteger calls = new AtomicInteger();
+        try (ReflectionHttpServer server = startRemote(evidence -> {
+            calls.incrementAndGet();
+            return exactCandidates();
+        }, 2, 8)) {
+            List<List<String>> rejected = List.of(
+                    List.of("Authorization: Bearer " + DUMMY_DEMO_TOKEN),
+                    List.of("Host: localhost:" + server.address().getPort(),
+                            "Authorization: Bearer " + DUMMY_DEMO_TOKEN, "X-Forwarded-Host: " + DEMO_HOST),
+                    List.of("Host: " + DEMO_HOST + ":8443", "Authorization: Bearer " + DUMMY_DEMO_TOKEN),
+                    List.of("Host: " + DEMO_HOST, "Host: " + DEMO_HOST,
+                            "Authorization: Bearer " + DUMMY_DEMO_TOKEN),
+                    List.of("Host: " + DEMO_HOST, "Authorization: Bearer " + DUMMY_DEMO_TOKEN, "Origin: null"),
+                    List.of("Host: " + DEMO_HOST, "Authorization: Bearer " + DUMMY_DEMO_TOKEN, "Origin:")
+            );
+            for (List<String> headers : rejected) {
+                assertError(rawPost(server, headers, validRequest()), 403, "request_rejected");
+            }
+            assertError(rawPost(server, remoteHeaders(), "{"), 400, "invalid_json");
+            assertError(rawPost(server, remoteHeaders(), validRequest().replace(
+                    REQUEST_ID, REQUEST_ID.toUpperCase())), 400, "invalid_request");
+            assertError(rawPost(server, remoteHeaders(), "x".repeat(ReflectionHttpServer.MAX_REQUEST_BYTES + 1)),
+                    413, "request_too_large");
+            assertEquals(0, calls.get());
+        }
+    }
+
+    @Test
+    void authenticatedRemoteResponsesRetainExactTextAndConfiguredMode() throws Exception {
+        AtomicInteger calls = new AtomicInteger();
+        try (ReflectionHttpServer server = startRemote(evidence -> {
+            calls.incrementAndGet();
+            return exactCandidates();
+        }, 2, 8)) {
+            RawHttpResponse first = rawPost(server, remoteHeaders(), validRequest());
+            RawHttpResponse duplicate = rawPost(server, List.of("Host: " + DEMO_HOST.toUpperCase() + ":443",
+                    "Authorization: Bearer " + DUMMY_DEMO_TOKEN), validRequest());
+            JsonObject response = JsonParser.parseString(first.body()).getAsJsonObject();
+            assertAll(
+                    () -> assertEquals(200, first.status()),
+                    () -> assertEquals(first, duplicate),
+                    () -> assertEquals("FAKE", response.get("generationMode").getAsString()),
+                    () -> assertEquals(SPENT, response.getAsJsonObject("candidates").get("spent").getAsString()),
+                    () -> assertEquals(FEELING_GOOD, response.getAsJsonObject("candidates").get("feeling_good").getAsString()),
+                    () -> assertEquals(1, calls.get())
+            );
+        }
+    }
+
+    @Test
+    void providerAdmissionIsBoundedWhileIdenticalRequestsStillShareOneCall() throws Exception {
+        AtomicInteger calls = new AtomicInteger();
+        CountDownLatch entered = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        ReflectionProvider fake = evidence -> {
+            if (calls.incrementAndGet() == 1) {
+                entered.countDown();
+                try {
+                    if (!release.await(5, TimeUnit.SECONDS)) throw new IllegalStateException("Test release timed out");
+                } catch (InterruptedException interrupted) {
+                    Thread.currentThread().interrupt();
+                    throw new IllegalStateException("Test provider interrupted");
+                }
+            }
+            return exactCandidates();
+        };
+        try (ReflectionHttpServer server = startRemote(fake, 1, 4)) {
+            CompletableFuture<RawHttpResponse> first = rawPostAsync(server, remoteHeaders(), validRequest());
+            assertTrue(entered.await(2, TimeUnit.SECONDS));
+            CompletableFuture<RawHttpResponse> duplicate = rawPostAsync(server, remoteHeaders(), validRequest());
+            String secondRequest = validRequest().replace(REQUEST_ID, SECOND_REQUEST_ID);
+            assertError(rawPost(server, remoteHeaders(), secondRequest), 503, "server_busy");
+            assertEquals(1, calls.get());
+            release.countDown();
+            RawHttpResponse firstResponse = first.get(5, TimeUnit.SECONDS);
+            assertEquals(200, firstResponse.status());
+            assertEquals(firstResponse, duplicate.get(5, TimeUnit.SECONDS));
+            // A busy rejection did not consume/cache this ID: the same request can be admitted later.
+            assertEquals(200, rawPost(server, remoteHeaders(), secondRequest).status());
+            assertEquals(2, calls.get());
+        } finally {
+            release.countDown();
+        }
+    }
+
+    @Test
+    void fullCacheRejectsNewIdsWithoutEvictingOriginalSuccessOrFailure() throws Exception {
+        AtomicInteger calls = new AtomicInteger();
+        try (ReflectionHttpServer server = startRemote(evidence -> {
+            if (calls.incrementAndGet() == 2) {
+                throw new ReflectionProviderException(FailureType.TIMEOUT, DUMMY_DEMO_TOKEN);
+            }
+            return exactCandidates();
+        }, 1, 2)) {
+            RawHttpResponse success = rawPost(server, remoteHeaders(), validRequest());
+            String failedRequest = validRequest().replace(REQUEST_ID, SECOND_REQUEST_ID);
+            RawHttpResponse failure = rawPost(server, remoteHeaders(), failedRequest);
+            assertError(failure, 504, "provider_timeout");
+            assertError(rawPost(server, remoteHeaders(), validRequest().replace(REQUEST_ID, THIRD_REQUEST_ID)),
+                    503, "server_capacity");
+            assertEquals(success, rawPost(server, remoteHeaders(), validRequest()));
+            assertEquals(failure, rawPost(server, remoteHeaders(), failedRequest));
+            assertError(rawPost(server, remoteHeaders(), validRequest().replace(RUN_ID, OTHER_RUN_ID)),
+                    409, "request_id_conflict");
+            assertEquals(2, calls.get());
+            assertFalse(failure.body().contains(DUMMY_DEMO_TOKEN));
+        }
+    }
+
+    @Test
+    void oversizedCandidateResponseBecomesSafeCachedProviderFailure() throws Exception {
+        AtomicInteger calls = new AtomicInteger();
+        try (ReflectionHttpServer server = startRemote(evidence -> {
+            calls.incrementAndGet();
+            return new CandidateReflections("x".repeat(ReflectionHttpServer.MAX_RESPONSE_BYTES),
+                    FEELING_GOOD, POWERED_UP, NO_SELECTION);
+        }, 1, 2)) {
+            RawHttpResponse response = rawPost(server, remoteHeaders(), validRequest());
+            assertError(response, 502, "provider_failure");
+            assertEquals(response, rawPost(server, remoteHeaders(), validRequest()));
+            assertTrue(response.body().getBytes(StandardCharsets.UTF_8).length < ReflectionHttpServer.MAX_RESPONSE_BYTES);
+            assertEquals(1, calls.get());
+        }
+    }
+
+    @Test
+    void remoteHealthIsLivenessOnlyAndRetainsHostOriginGuards() throws Exception {
+        AtomicInteger calls = new AtomicInteger();
+        try (ReflectionHttpServer server = startRemote(evidence -> {
+            calls.incrementAndGet();
+            return exactCandidates();
+        }, 1, 2)) {
+            RawHttpResponse health = rawRequest(server, "GET", ReflectionHttpServer.HEALTH_PATH,
+                    List.of("Host: " + DEMO_HOST), "");
+            assertEquals(200, health.status());
+            assertEquals("{\"status\":\"ok\"}", health.body());
+            assertError(rawRequest(server, "GET", ReflectionHttpServer.HEALTH_PATH,
+                    List.of("Host: " + DEMO_HOST, "Origin: null"), ""), 403, "request_rejected");
+            assertError(rawRequest(server, "GET", ReflectionHttpServer.HEALTH_PATH,
+                    List.of("Host: foreign.example"), ""), 403, "request_rejected");
+            assertEquals(0, calls.get());
+        }
+    }
+
+    private ReflectionHttpServer startRemote(ReflectionProvider provider, int providerCalls, int cachedRequests)
+            throws Exception {
+        // Remote admission is exercised on loopback. No public port or provider is used.
+        ReflectionHttpServer server = ReflectionHttpServer.createRemote(provider, 0,
+                ReflectionHttpServer.GenerationMode.FAKE,
+                new ReflectionHttpServer.RemoteAccess("127.0.0.1", DEMO_HOST, DUMMY_DEMO_TOKEN),
+                providerCalls, cachedRequests);
+        server.start();
+        return server;
+    }
+
+    private static List<String> remoteHeaders() {
+        return List.of("Host: " + DEMO_HOST, "Authorization: Bearer " + DUMMY_DEMO_TOKEN);
+    }
+
+    private static CompletableFuture<RawHttpResponse> rawPostAsync(
+            ReflectionHttpServer server, List<String> headers, String body
+    ) {
+        return CompletableFuture.supplyAsync(() -> {
+            try {
+                return rawPost(server, headers, body);
+            } catch (Exception failure) {
+                throw new CompletionException(failure);
+            }
+        });
+    }
+
     private ReflectionHttpServer start(ReflectionProvider provider) throws Exception {
         ReflectionHttpServer server = ReflectionHttpServer.create(provider, 0);
         server.start();
@@ -469,12 +711,22 @@ class ReflectionHttpServerTest {
             List<String> requestHeaders,
             String body
     ) throws Exception {
+        return rawRequest(server, "POST", ReflectionHttpServer.CANDIDATES_PATH, requestHeaders, body);
+    }
+
+    private static RawHttpResponse rawRequest(
+            ReflectionHttpServer server,
+            String method,
+            String path,
+            List<String> requestHeaders,
+            String body
+    ) throws Exception {
         byte[] bodyBytes = body.getBytes(StandardCharsets.UTF_8);
         String headers = String.join("\r\n", requestHeaders);
         if (!headers.isEmpty()) {
             headers += "\r\n";
         }
-        String requestHead = "POST " + ReflectionHttpServer.CANDIDATES_PATH + " HTTP/1.1\r\n"
+        String requestHead = method + " " + path + " HTTP/1.1\r\n"
                 + headers
                 + "Content-Type: application/json\r\n"
                 + "Content-Length: " + bodyBytes.length + "\r\n"
