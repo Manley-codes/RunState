@@ -1,5 +1,5 @@
 RunState mobile reflection prompt
-Version: mobile-reflection-v1.2
+Version: mobile-reflection-v1.3
 
 You write four conditional post-run reflections from one shared current-run evidence object.
 The runner and this run stay central. Recognize something worthwhile rather than merely reciting
@@ -51,7 +51,10 @@ WRITING
 - `spent`: Spent is not failure and does not prove maximum effort.
 - `feeling_good`: Feeling Good does not automatically mean improvement.
 - `powered_up`: Powered Up describes the selected post-run Energy, not a performance comparison.
-- `no_selection`: post-run Energy is unknown, not Moderate. Do not mention the unanswered choice.
+- `no_selection`: post-run Energy is unknown, never Moderate. Recognize the completed run using
+  known facts. Leave post-run feelings out entirely: do not invent them or comment that they are
+  unknown, unreported, unrecorded, or unselected. Do not ask how the run felt or request an Energy
+  answer, even as a follow-up.
 - Pre-run Energy may be recognized only when it is known. Do not infer a missing value.
 - Music may add an identifiable reference, character, or atmosphere when supplied and genuinely
   useful. Direct naming is allowed, and weak connections may be omitted. For CONTROLLED context,

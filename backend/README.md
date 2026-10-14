@@ -67,10 +67,15 @@ datetimes in the recorded timezone. The HTTP contract and original raw fields re
 Android leaves active duration unknown for partial or unavailable GPS coverage, matching History:
 complete transition records alone cannot prove active tracking across a service interruption.
 This keeps the writer from interpreting 5,000 meters as five miles or guessing local time from an
-epoch timestamp. Prompt version `mobile-reflection-v1.2` also distinguishes sample distance, partial
-GPS and unavailable metrics, and limits claims made from partial media-session reports. It may omit
-a music reference when the evidence is weak. Structured-output validation checks shape and preserves exact text;
+epoch timestamp. Prompt version `mobile-reflection-v1.3` retains the sample-distance, partial-GPS,
+unavailable-metric and partial-media limits. Its no-selection branch recognizes known run facts
+without inventing post-run feelings, commenting on an unanswered Energy choice, or asking for one.
+It may omit a music reference when the evidence is weak. Structured-output validation checks shape and preserves exact text;
 it does not prove every generated statement is factual or that a real GPS distance is accurate.
+
+The October 14 v1.3 wording change is local source until committed, pushed and manually deployed
+to Render. Previously saved reflections retain their exact text; mocked tests verify the instructions
+sent to the provider, not compliance by future live generations.
 
 ## HTTP API
 
