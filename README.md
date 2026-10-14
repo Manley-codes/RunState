@@ -138,14 +138,18 @@ title/artist in reflection context. No music snippet is implemented.
 
 The separate Java 17 reflection backend uses the JDK HTTP server. Small live Anthropic checks
 reached the phone through the computer connection and exact selected text survived reopening.
-Authenticated hosted HTTPS setup is prepared for debug/release. The Render Starter service now
-exists, but its first Linux Docker build stopped on a test-response reading error. A bounded
-test-reader repair passed all 45 backend tests on Windows; user commit/push and a new Linux build
-remain. The backend is not live, its Anthropic key is unset and standalone online phone delivery
-is unverified. Hosted staging starts with explicit FAKE replies; API keys remain
-backend-only. Tracking and saved History remain usable offline.
+The Render Starter backend is now Live with Anthropic after explicit FAKE staging and 45 passing
+Linux tests. Manley entered the key privately on Render; it remains backend-only. Two new labelled
+Moto Sample runs received real reflections over HTTPS, and he heard saved facts followed by the
+latest reply. Exact text/metrics/online settings survived cold History reopen without a FAKE label,
+with local USB forwarding removed and local servers stopped. The hosted live phone gate is met.
+A no-selection wording issue and History scroll polish remain; broad writing quality, outdoor GPS
+continuity/accuracy and music duck/snippets are not yet verified. Tracking and saved History remain
+usable offline.
 See [the current Android checkpoint](docs/design/project_current_state.md) and
 [the platform map](docs/README.md#platforms-and-tools-used) for responsibilities and limits.
+The [deployment walkthrough](docs/README.md#deployment-how-the-parts-connect) explains what
+building, deploying and installing each mean in this project.
 
 ---
 

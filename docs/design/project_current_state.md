@@ -7,7 +7,11 @@ metadata:
 
 ## Current Android checkpoint — October 13, 2026
 
-**Continuing delivery pass — integrated checks passed; deployment pending:** Active Run
+**Paused at Manley's request after the hosted live milestone.** Resume with the outdoor
+locked-screen GPS check first when he is available; no further task starts tonight. The
+no-selection wording and History scroll follow-ups below remain later polish.
+
+**Continuing delivery pass — hosted live text, audible sequence and cold reopen verified:** Active Run
 now centers a large fitted elapsed timer, with a clear distance/pace panel and naturally measured
 Pause/Resume/hold-to-end controls below a scrolling body. This uses native drawing and existing
 run states; no new image, live street map or coaching feature is implied.
@@ -16,7 +20,8 @@ listener/generation are discarded across pause or provider changes, protecting t
 this does not prove that the earlier long indoor/screen-off gaps are fixed. Speech now owns focus
 and TTS callbacks per utterance, with separate initialization/playback deadlines. Receipt teardown
 always releases ownership; reflection engine errors and History navigation do not replay a failed
-reply or crash the delivery flow. Physical hearing and music duck/resume still need confirmation.
+reply or crash the delivery flow. The latest controlled sample confirmed receipt then live-reply
+hearing; music duck/resume remains unverified.
 The [platform/tool map](../README.md#platforms-and-tools-used) explains which IDEs, development
 assistants, local databases and hosted services contributed to this project.
 
@@ -43,26 +48,73 @@ HTTPS ingress, not an exposed plain HTTP listener. Manley created the Render `ru
 Starter service in Oregon at the approved $7/month plus AI usage in a free Hobby workspace. Its
 configured address is `https://runstate-reflections.onrender.com`, matching the configured public
 Host. It uses public `master`, Dockerfile `backend/Dockerfile`, context `backend`, blank root,
-manual deploy and temporary TCP health checks; no GitHub installation grant was needed. Launch is explicitly FAKE,
-and the hosted Anthropic key remains unset. No hosted AI or standalone phone request is verified.
+manual deploy and the saved `/health` HTTP health-check path; no GitHub installation grant was
+needed. After FAKE staging below, Manley privately entered the hosted Anthropic key and the FAKE
+Docker Command override was cleared. The committed Dockerfile's `--remote` CMD now starts live
+mode. The same `85cbfab` deployment reached Live in 18.5 seconds at October 13, 11:33:22 p.m. CDT;
+startup confirmed the Anthropic provider on internal port 10000. No hosted key value entered the
+assistant session or project files.
 The first Docker build ended with 43 tests, zero failures and one Linux socket-reset error in the
 oversized-request security test. The raw test helper kept reading to EOF; a reset after a complete
 HTTP response can invalidate that unnecessary read. Only that test reader was repaired
 to read a bounded Content-Length response. The 403/413 JSON and zero-provider-call assertions
 remain, with no skipped tests or production-security relaxation. All 22 endpoint tests and the
-full 45-test backend suite passed on Windows. This repair awaits Manley's commit/push and a fresh
-Render Linux build; the backend is not live and the Linux fix is not yet verified.
-Private access configuration is kept out of the repository/docs. Hosted fake staging must pass
-before a separate live-key step. The container uses an explicitly empty ENTRYPOINT and a CMD so the launch can
+full 45-test backend suite passed on Windows. Manley pushed the repair `89ae9b5` and docs `85cbfab`.
+The manual Render deployment of `85cbfab` reached Live in 46.2 seconds: 45 Linux tests passed
+(14 provider, nine contract, 22 server), with zero failures/errors/skips, and the Docker image
+built successfully. That initial stage ran the authenticated public FAKE backend.
+After Manley rotated the demo access code, a replacement configuration deployment of the same
+`85cbfab` reached Live in 11.0 seconds. HTTPS checks returned `/health` 200 with `{"status":"ok"}`,
+missing-auth 401 and authenticated invalid `{}` request 400. A complete synthetic POST returned
+200/FAKE with both request/run identifiers matched and all four candidates validated. Render's
+HTTP health-check path is now saved as `/health`; this monitors server liveness, not provider
+readiness or complete phone behavior, and is not an internal-probe stress test.
+Private access configuration is kept out of the repository/docs. Hosted fake staging passed
+before the separate backend key/live-mode deployment above. The
+container uses an explicitly empty ENTRYPOINT and a CMD so the launch can
 be overridden for fake staging. Finite JDK header/read/write/idle deadlines are configured;
-the container image, public ingress and body-upload behavior have not been exercised.
+body-upload/deadline behavior through the public ingress has not been exercised.
 The direct Java 17 process was checked locally in private `--remote --fake` mode using the exact
 container startup flags: health returned 200, missing auth 401 and authenticated invalid JSON 400.
 An incomplete-header client was closed after 15.1 seconds. This proves that local Java boundary
 and header deadline, not a built Docker image, Render TLS or standalone phone delivery. Its test
 access code existed only in process memory and was cleared; the server was stopped afterward.
+The later Linux deployment/HTTPS checks above now verify the actual image and public service.
 
-Current local verification is 45 backend tests on Windows (including 22 endpoint tests),
+The Moto saved the full HTTPS endpoint and replacement access code in encrypted settings.
+`Online service selected` survived a cold restart. RunState's local 8787 USB forwarding was
+removed; neither local 8787 nor 8797 has a listener. A new labelled Sample run followed
+Start → Pause → hold Stop and saved October 13 at 11:19 p.m.: 0.06 mi sample distance, 54 seconds
+elapsed, 33 seconds active and sample pace 8:56/mi. With no post-run Energy choice, it automatically
+displayed exact `[FAKE] No-selection candidate.` with the test-data label. History opened that
+same text/metrics and retained them after a cold restart. One labelled sample record was added;
+pre-existing data remained. This met the hosted FAKE phone gate without using the local backend.
+Hearing was not confirmed for that earlier stage.
+
+After live deployment, a new Moto Sample run at 11:35 p.m. saved 0.08 mi sample distance,
+57 seconds elapsed and 44 seconds active. Its automatic no-selection reply was newly generated
+by Anthropic, had no FAKE label, and correctly qualified the sample distance and Tuesday night.
+It saved to History. Manley missed that first audio and requested a repeat: a second new Sample
+run saved 0.02 mi/24 seconds elapsed/10 seconds active and received another real no-selection
+reply. He confirmed hearing the factual save receipt followed by the live reflection, in order.
+The latest exact reply, metrics and online connection survived a cold restart; the FAKE label
+remained absent. The phone is left on this latest expanded History record. USB forwarding 8787
+is still absent, both local servers are stopped and USB stay-awake was restored to its original 0.
+This turn added one labelled FAKE Sample record and two labelled live Sample records while
+retaining prior data, with exactly two paid phone generations. No music sharing, audio or GPS
+coordinates were sent in these checks. This verifies hosted live delivery/persistence and one
+heard receipt-to-reflection sequence, not outdoor tracking or broad writing quality. No private
+code, API key or credential path is recorded here.
+
+**Bounded follow-ups:** The repeated `no_selection` reply said the after-run feeling "remains
+unrecorded", despite the existing instruction to stay quiet about unanswered Energy. This is a
+writing-quality issue rather than a factual/transport failure; no prompt repair was made, and
+the exact saved reply must remain unchanged. History also retained its older scroll anchor when
+opened after a new save; the newest row existed above it and appeared after scrolling up. That
+is optional navigation polish, with no data loss. Continuous screen-off GPS, outdoor accuracy,
+music duck/resume/snippets and broad reflection quality remain unverified.
+
+Current verification is 45 backend tests on Windows and Render Linux (including 22 endpoint tests),
 284 JVM tests in each Android variant, all APK builds
 and one isolated encrypted-settings test on the Moto. The full emulator screen/database suite
 passed 88 tests; after the setup disclosure change, all three APKs rebuilt and the focused
@@ -85,9 +137,11 @@ adds only three necessary files: `ReflectionConnectionSettings.kt` for encrypted
 storage, `backend/Dockerfile` for the hosted Java container and `backend/.dockerignore` for a strict
 container-build allowlist. One price/form review image was created outside the repository in the
 authorized visualizations folder; it adds no project source. Manley has committed/pushed the
-earlier backend (`45d40cf`), Android (`0758f46`) and design checkpoint (`af98def`). The tested
-response-reader repair and current documentation updates await his next commit/push; assistants
-performed no Git mutations.
+earlier backend (`45d40cf`), Android (`0758f46`) and design checkpoint (`af98def`), then the test
+repair (`89ae9b5`) and platform/checkpoint docs (`85cbfab`). Remote `85cbfab` and a clean local
+baseline were verified before these new checkpoint edits. Assistants performed no Git mutations.
+The [deployment learning guide](../README.md#deployment-how-the-parts-connect) explains the
+build/deploy/install distinction, two credentials, local-first storage and ongoing hosting costs.
 
 ### Earlier live and optional-music checkpoints
 

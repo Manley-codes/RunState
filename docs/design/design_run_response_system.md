@@ -9,8 +9,8 @@ Every successfully saved run gets a contextual response. No exceptions.
 
 ## First functional Android reflection version — approved direction October 3, 2026
 
-**October 13 continuing connection/delivery pass:** Hosted reflection source and phone setup are
-implemented, but public deployment and standalone phone generation are not yet verified. The phone
+**October 13 continuing hosted delivery — live phone text, audible sequence and reopen verified:**
+Render now generates real reflections for the Moto over HTTPS. The phone
 accepts an explicit HTTPS endpoint and a 43–128-character URL-safe per-demo access code, distinct
 from the backend-only Anthropic key. AndroidKeyStore AES-GCM encrypts both settings; their
 preferences are excluded from backup, corrupt settings fail closed and application-owned writes
@@ -27,20 +27,25 @@ Remote Java startup is deliberate (`--remote`): exact public Host and Bearer val
 generation-body parsing. Two simultaneous provider calls, 256 retained IDs, 32 queued tasks and
 64 KiB request/success-response bodies bound the demonstration server. It supplies internal HTTP,
 not TLS; private HTTPS ingress and single-instance deployment are required. Duplicate protection
-is memory-only and resets with the server. Render Starter at $7/month plus AI usage is approved;
-sign-in and the public-repository Web Service form are ready, but no service, charge or secret
-has been created. User commit/push and private per-demo configuration precede fake staging;
-live-key deployment remains a separate step. The container has empty ENTRYPOINT plus CMD for a
-fake launch override, and finite JDK header/read/write/idle deadlines. A direct Java 17 private
+is memory-only and resets with the server. Render Starter at $7/month plus AI usage is running
+in Oregon with `/health` liveness monitoring. Initial Docker/FAKE staging passed all 45 Linux
+tests and public HTTPS health/auth/candidate checks. After code rotation, a labelled phone FAKE
+Sample reply/reopen also passed. Manley then privately entered the hosted Anthropic key and the
+FAKE launch override was cleared. The same committed `85cbfab` reached Live in 18.5 seconds
+at October 13, 11:33:22 p.m. CDT, using the Dockerfile's `--remote` CMD and Anthropic provider
+on internal port 10000. No hosted key value entered the assistant session/project.
+The container has empty ENTRYPOINT plus CMD and finite JDK header/read/write/idle deadlines.
+An earlier direct Java 17 private
 remote-fake process with those exact startup flags returned health 200, missing-auth 401 and
 authenticated invalid-body 400; it closed an incomplete header after 15.1 seconds. The ephemeral
-code/process were cleared and stopped. Image building, body-upload behavior, public HTTPS and
-standalone phone generation remain unverified; a local Java check is not container/TLS proof.
+code/process were cleared and stopped. The subsequent actual Linux image/public HTTPS/phone
+checks establish hosted delivery; body-upload/deadline behavior through public ingress is not
+separately stress-verified. Health monitoring alone does not prove provider, voice or GPS quality.
 
 Speech focus, callbacks and completion now belong to each utterance, with separate initialization
 and playback deadlines. Receipt cleanup releases ownership; engine failures/navigation do not
-replay a failed reflection or crash the journey. Automated verification now includes 43 backend
-tests, 284 JVM tests per Android variant, 88 full emulator screen/database cases, all APK builds
+replay a failed reflection or crash the journey. Automated verification now includes 45 backend
+tests on Windows/Render Linux, 284 JVM tests per Android variant, 88 full emulator screen/database cases, all APK builds
 and one Moto encryption check. After the final disclosure change, three APKs rebuilt and one
 focused connection-dialog case passed. A simulated GPS MainActivity run preserved distance through
 paused movement, automatically selected/stored a FAKE no-selection reply, and reopened its exact
@@ -48,10 +53,26 @@ text and partial path in History. History conservatively kept partial-GPS active
 The refreshed Active screenshot was visually checked without overlap. Both JVM suites reran with
 284 passing tests after the last sharing-draft edit; the latest debug APK is installed on the Moto.
 Test packages/device review files were removed, the headless emulator closed and local servers
-stopped with no listeners on 8787/8797. These changes do not certify continuous screen-off GPS, actual phone
-hearing, music duck/resume, general reflection quality or a music snippet.
+stopped with no listeners on 8787/8797, and the local USB 8787 forwarding is removed.
+The first hosted live Sample run (11:35 p.m., 0.08 mi/57 s elapsed/44 s active) automatically
+received a real reply that qualified sample distance/Tuesday night. Manley missed its audio and
+requested a repeat: 0.02 mi/24 s elapsed/10 s active received another real no-selection reply,
+and he confirmed hearing saved facts followed by that reflection. Its latest exact text, metrics
+and encrypted online connection survived a cold restart with no FAKE label. This turn added one
+FAKE plus two live Sample records, with prior data retained and two paid phone generations.
+No music sharing/audio/coordinates were sent in these checks. The phone remains on latest
+expanded History and USB stay-awake is restored to original 0.
 
-**October 13 checkpoint:** A newly generated Anthropic reflection reached the Moto phone and its
+**Writing/navigation follow-ups:** The repeated `no_selection` reply said the after-run feeling
+"remains unrecorded", despite the existing instruction not to mention unanswered Energy. This is
+a bounded writing-quality miss, not a factual/transport failure. No prompt fix was made; keep
+the exact stored reply unchanged. History reused an older scroll anchor after a new save, with
+the newest row above and visible after scrolling up; optional navigation polish, no data loss.
+Continuous screen-off GPS, outdoor accuracy, music duck/resume/snippets and general writing
+quality remain unverified. Work is paused at Manley's request; on resume, outdoor locked-screen
+GPS validation comes first, with these polish items later.
+
+**Earlier October 13 computer-connected checkpoint:** A newly generated Anthropic reflection reached the Moto phone and its
 exact selected text survived late Energy feedback and History after a cold restart with the backend
 stopped. The first generated-text/persistence milestone is now exercised. Live checks exposed unit
 and partial-GPS wording errors; the backend now supplies calculated distance/time/provenance facts

@@ -24,11 +24,11 @@ are separate parts of this project.
 | App implementation | **Kotlin and Jetpack Compose; Java 17** | Kotlin/Compose build the native phone screens and behavior. Java 17 supports the console and the separate reflection backend, which currently uses the JDK HTTP server rather than Spring Boot. |
 | Build and verification | **Gradle, Maven and JUnit** | Gradle builds Android; Maven builds the Java projects. Unit and Android device tests check storage, run controls, failure handling and exact saved reflections. Automated tests are separate from physical outdoor/audio acceptance. |
 | Local storage | **Room/SQLite and MySQL** | Room manages the Android phone's SQLite database: runs, feedback, observations and exact selected replies stay local. MySQL belongs to the original console app. The reflection backend currently has no hosted run database; its request cache is temporary memory. |
-| Reflection runtime | **Anthropic Claude API** | The backend generated real reflections in small live checks and the phone stored/reopened exact selected text. The Anthropic key stays on the backend. Hosted setup will first use explicit FAKE replies before live generation is enabled; small checks do not prove broad writing quality. |
-| Speech runtime | **Android TextToSpeech** | Speaks the factual save receipt and exact stored reflection, with audio-focus and failure handling. Some phone speech was heard, but current music duck/resume and the latest live delivery still need listening confirmation. |
+| Reflection runtime | **Anthropic Claude API** | The hosted backend now generated two new Moto Sample reflections; the latest exact text survived cold History reopen without a FAKE label. Manley entered the key privately on Render; it stays backend-only. A no-selection wording issue remains, and small checks do not prove broad quality. |
+| Speech runtime | **Android TextToSpeech** | Speaks the factual save receipt and exact stored reflection, with audio-focus/failure handling. Manley confirmed hearing saved facts followed by the latest hosted live reply. Music duck/resume/snippets remain unverified. |
 | Music evidence | **Spotify through Android media sessions** | Supplies partial local title/artist/playback observations while an opted-in run is Running. A separate per-run choice permits one eligible title/artist in reflection context. No Spotify SDK, preview playback or music snippet is implemented; metadata access is not playback permission. |
-| Hosted backend | **Render** | The `runstate-reflections` Starter service is provisioned in Oregon at the approved $7/month in a free Hobby workspace. Its first Linux build hit a security-test socket reset; a bounded test-reader repair passed all 45 backend tests on Windows and awaits user commit/push plus a Linux rebuild. The backend is not live, the hosted Anthropic key is unset and online phone delivery is unverified. |
-| Deployment packaging | **Docker** | The existing Dockerfile describes a repeatable Java backend container and allows a FAKE staging launch. Direct Java startup checks passed; the first Render build was blocked by a test-response read error. The prepared repair keeps the security assertions; a successful Linux image build/public hosting remain unverified. |
+| Hosted backend | **Render** | The `runstate-reflections` Starter service in Oregon ($7/month, free Hobby workspace) is Live with Anthropic and `/health` monitoring. Hosted FAKE staging preceded private key entry/live-mode deployment. Two paid phone generations, exact cold reopening and the latest audible sequence now passed. |
+| Deployment packaging | **Docker** | Render built/deployed Java 17 after all 45 Linux backend tests passed. The test-reader repair kept security assertions. The FAKE command override is now cleared; the committed `--remote` CMD runs live mode with the server key. App code stayed at `85cbfab` through configuration deployments. |
 | Design preview | **Local HTML and GitHub Pages** | `start.html`/`completion.html` and the public preview helped review appearance and interactions. They are browser prototypes, not the installed Kotlin/Compose phone app, and do not prove native tracking or backend behavior. |
 
 Render hosting has an ongoing cost while the paid service remains provisioned, even without a
@@ -39,6 +39,56 @@ new live reflections need a working connection.
 For the latest implemented behavior and remaining checks, read
 [the Android checkpoint](design/project_current_state.md). Backend setup is described in
 [backend/README.md](../backend/README.md); do not put private API keys or access codes in these docs.
+
+## Deployment: how the parts connect
+
+**Verified October 13:** Manley pushed the repair and documentation to GitHub `master`. A manual
+Render deployment of `85cbfab` built the Docker image, passed all 45 Maven tests on Linux and
+started the Java 17 FAKE server. Manley then rotated the demo access code and redeployed the same
+version with its replacement configuration. Public HTTPS health/auth/candidate checks and a
+labelled Moto FAKE Sample reply/cold reopen passed without paid AI. He then privately entered
+the hosted Anthropic key and cleared the FAKE launch override. Another configuration deployment
+of the same `85cbfab` started live mode. Two new Sample runs received real reflections; he
+confirmed saved facts followed by the second reply, and its exact text/metrics/online settings
+survived cold restart with no FAKE label. Local USB forwarding is removed and local servers are
+stopped. This meets the hosted live phone delivery/reopen gate, with two paid generations.
+
+The sequence is **GitHub code → Docker/Maven build → running Render backend → HTTPS phone
+request → Anthropic when live mode and its key are configured**. Each part has a separate job:
+
+- **Build** turns source into runnable software and checks it. Maven/JUnit build and test the Java
+  backend inside Docker; a container packages its environment consistently. The first Linux test
+  read beyond a complete HTTP response and hit a reset. Reading the declared response length
+  repaired that test without weakening 403/413/security checks or skipping tests.
+- **Deploy** starts a built version on Render, where a restricted, non-root Java process runs the
+  backend. Render provides the public HTTPS entry point. This service uses manual deployments:
+  pushing another commit alone does not change the running version. Redeploy/rollback controls
+  select the version to run. Saving new credential values changes configuration; a configuration
+  deployment starts a process that reads them. Merely editing a saved setting is not proof that
+  the running process has the replacement.
+- **Install** puts the Android APK on the phone. Gradle builds that separate Kotlin/Compose app;
+  its screens and Room database do not live inside the backend container.
+
+There are two different credentials. The **demo access code** lets the phone call RunState's
+backend and is encrypted in phone settings after setup. The **Anthropic API key** lets the backend
+call the writing provider and stays server-only. Replacing one does not replace the other. The
+HTTPS checks prove server liveness/authentication; the additional phone checks now prove live
+delivery/saved-text reopening and one heard receipt-to-reflection sequence. Render's `/health`
+monitoring checks server liveness; separate tests establish provider/phone behavior, and hearing
+does not prove GPS accuracy or music handling.
+
+Room saves the run locally before asking for a reflection. A network failure leaves the saved
+run intact and offers reflection retry. Once selected, the exact reply and frozen evidence remain
+attached to that run, so History can reopen them offline without generating new text. Paid Render
+hosting continues while provisioned; live Anthropic requests add separate usage costs. Hosting
+can be changed/cancelled while the phone's local records remain.
+
+The latest no-selection reply mentioned that the after-run feeling "remains unrecorded", contrary
+to the existing rule to stay quiet about unanswered Energy. Structure, transport and persistence
+worked; writing quality still needs a bounded follow-up. No prompt fix or saved-reply rewrite
+has been made. History's older scroll position also sometimes hides the new row above until
+scrolling up; that is navigation polish, not lost data. Outdoor GPS continuity/accuracy, music
+duck/resume/snippets and broad writing quality remain unverified.
 
 ---
 
