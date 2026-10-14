@@ -4,6 +4,7 @@ import android.content.Context
 import android.media.AudioAttributes
 import android.media.AudioFocusRequest
 import android.media.AudioManager
+import android.media.MediaPlayer
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -22,6 +23,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -58,6 +60,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.runstate.mobile.data.local.PostRunEffort
+import com.runstate.mobile.R
 import java.util.UUID
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ensureActive
@@ -65,6 +68,7 @@ import kotlin.coroutines.coroutineContext
 import com.runstate.mobile.data.local.ReflectionBranch
 
 internal const val RUN_HISTORY_SCREEN_TAG = "runHistoryScreen"
+internal const val RUN_HISTORY_LIST_TAG = "runHistoryList"
 internal const val RUN_HISTORY_ROW_TAG_PREFIX = "runHistoryRow:"
 internal const val RUN_HISTORY_REFLECTION_TAG_PREFIX = "runHistoryReflection:"
 internal const val RUN_HISTORY_RETRY_TAG_PREFIX = "runHistoryRetry:"
@@ -76,6 +80,14 @@ internal const val RUN_HISTORY_ENERGY_CHOICE_TAG_PREFIX = "runHistoryEnergyChoic
 /** Kept injectable so screen behavior can be checked without a device voice engine. */
 internal interface ReflectionSpeaker {
     fun speak(text: String)
+    fun speakWithInstrumental(
+        text: String,
+        canPlayInstrumental: () -> Boolean = { true },
+        onFinished: () -> Unit
+    ) {
+        // Test/custom speakers without a player retain their plain-speech behavior.
+        try { speak(text) } finally { onFinished() }
+    }
     fun speakReceipt(text: String, onFinished: () -> Unit) {
         speak(text)
         onFinished()
@@ -89,6 +101,13 @@ internal interface ReflectionSpeechPlatform {
     fun initialize(onReady: (Boolean) -> Unit, onDone: (String) -> Unit, onError: (String) -> Unit)
     fun requestAudioFocus(utteranceId: String, onFocusLost: (String) -> Unit): Boolean
     fun speak(utteranceId: String, text: String, rate: Float): Boolean
+    fun playInstrumental(
+        utteranceId: String,
+        onDone: (String) -> Unit,
+        onError: (String) -> Unit,
+        onFocusLost: (String) -> Unit
+    ): Boolean = false
+    fun stopInstrumental() = Unit
     fun stop()
     fun releaseAudioFocus()
     fun close()
@@ -101,12 +120,15 @@ internal class AndroidReflectionSpeaker(
     private val scheduleTimeout: ((Runnable, Long) -> Unit)? = null,
     private val cancelTimeout: ((Runnable) -> Unit)? = null
 ) : ReflectionSpeaker {
+    private enum class SpeechPhase { WAITING_FOR_ENGINE, SPEAKING, INSTRUMENTAL }
+
     private data class SpeechRequest(
         val id: String,
         val text: String,
         val rate: Float,
         val onFinished: (() -> Unit)?,
-        var submitted: Boolean = false
+        val canPlayInstrumental: (() -> Boolean)?,
+        var phase: SpeechPhase = SpeechPhase.WAITING_FOR_ENGINE
     )
 
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -126,8 +148,10 @@ internal class AndroidReflectionSpeaker(
                         if (initialized) speakPending() else request?.id?.let(::finish)
                     }
                 } },
-                onDone = { id -> onMain { finish(id) } },
-                onError = { id -> onMain { if (request?.id == id) stop() } }
+                onDone = { id -> onMain { finishSpeech(id) } },
+                onError = { id -> onMain {
+                    if (request?.id == id && request?.phase != SpeechPhase.INSTRUMENTAL) stop()
+                } }
             )
         } catch (_: RuntimeException) {
             initializationFailed = true
@@ -136,21 +160,34 @@ internal class AndroidReflectionSpeaker(
     }
 
     override fun speak(text: String) {
-        submit(text, rate = 0.94f, onFinished = null)
+        submit(text, rate = 0.94f, onFinished = null, canPlayInstrumental = null)
+    }
+
+    override fun speakWithInstrumental(
+        text: String,
+        canPlayInstrumental: () -> Boolean,
+        onFinished: () -> Unit
+    ) {
+        submit(text, rate = 0.94f, onFinished = onFinished, canPlayInstrumental = canPlayInstrumental)
     }
 
     override fun speakReceipt(text: String, onFinished: () -> Unit) {
-        submit(text, rate = 1.0f, onFinished = onFinished)
+        submit(text, rate = 1.0f, onFinished = onFinished, canPlayInstrumental = null)
     }
 
-    private fun submit(text: String, rate: Float, onFinished: (() -> Unit)?) {
+    private fun submit(
+        text: String,
+        rate: Float,
+        onFinished: (() -> Unit)?,
+        canPlayInstrumental: (() -> Boolean)?
+    ) {
         stop()
         if (closed || initializationFailed || text.isBlank() ||
             text.length > TextToSpeech.getMaxSpeechInputLength()) {
             onFinished?.invoke()
             return
         }
-        val next = SpeechRequest(UUID.randomUUID().toString(), text, rate, onFinished)
+        val next = SpeechRequest(UUID.randomUUID().toString(), text, rate, onFinished, canPlayInstrumental)
         request = next
         // Cold engine startup has its own deadline; it must not consume audible playback time.
         if (initialized) speakPending() else armTimeout(next.id, 15_000L)
@@ -165,6 +202,7 @@ internal class AndroidReflectionSpeaker(
         } catch (_: RuntimeException) {
             // A disconnected engine must not disturb History navigation.
         }
+        stopInstrumental()
         releaseFocus()
         interrupted?.onFinished?.invoke()
     }
@@ -183,23 +221,59 @@ internal class AndroidReflectionSpeaker(
 
     private fun speakPending() {
         val current = request ?: return
-        if (current.submitted) return
-        current.submitted = true
+        if (current.phase != SpeechPhase.WAITING_FOR_ENGINE) return
+        current.phase = SpeechPhase.SPEAKING
         try {
             if (!platform.requestAudioFocus(current.id) { id -> onMain {
-                    if (request?.id == id) stop()
+                    if (request?.id == id && request?.phase == SpeechPhase.SPEAKING) stop()
                 } }) {
                 finish(current.id)
                 return
             }
             if (request?.id != current.id || closed) return
             // The bounded playback budget starts only once a ready engine can queue this text.
-            val maximum = if (current.onFinished != null) 120_000L else 600_000L
+            val maximum = if (current.onFinished != null && current.canPlayInstrumental == null)
+                120_000L else 600_000L
             armTimeout(current.id, (current.text.length * 100L + 15_000L).coerceIn(30_000L, maximum))
             if (!platform.speak(current.id, current.text, current.rate) && request?.id == current.id) stop()
         } catch (_: RuntimeException) {
             if (request?.id == current.id) stop()
             // Speech failure is independent of the saved reflection.
+        }
+    }
+
+    private fun finishSpeech(utteranceId: String) {
+        val current = request?.takeIf {
+            it.id == utteranceId && it.phase == SpeechPhase.SPEAKING
+        } ?: return
+        val allowed = try { current.canPlayInstrumental?.invoke() == true }
+        catch (_: RuntimeException) { false }
+        if (!allowed || closed || request !== current) {
+            finish(utteranceId)
+            return
+        }
+        // A true TTS completion is the only path into music. Old voice callbacks cannot
+        // end this phase, and a separate deadline also bounds asynchronous preparation.
+        current.phase = SpeechPhase.INSTRUMENTAL
+        clearTimeout()
+        releaseFocus()
+        armTimeout(current.id, 15_000L)
+        try {
+            val accepted = platform.playInstrumental(
+                current.id,
+                onDone = { id -> onMain {
+                    if (request?.id == id && request?.phase == SpeechPhase.INSTRUMENTAL) finish(id)
+                } },
+                onError = { id -> onMain {
+                    if (request?.id == id && request?.phase == SpeechPhase.INSTRUMENTAL) stop()
+                } },
+                onFocusLost = { id -> onMain {
+                    if (request?.id == id && request?.phase == SpeechPhase.INSTRUMENTAL) stop()
+                } }
+            )
+            if (!accepted && request === current) finish(current.id)
+        } catch (_: RuntimeException) {
+            if (request === current) stop()
         }
     }
 
@@ -228,8 +302,14 @@ internal class AndroidReflectionSpeaker(
         val finished = request?.takeIf { it.id == utteranceId } ?: return
         request = null
         clearTimeout()
+        stopInstrumental()
         releaseFocus()
         finished.onFinished?.invoke()
+    }
+
+    private fun stopInstrumental() {
+        try { platform.stopInstrumental() }
+        catch (_: RuntimeException) { /* Saved text remains available without music playback. */ }
     }
 
     private fun releaseFocus() {
@@ -238,7 +318,14 @@ internal class AndroidReflectionSpeaker(
     }
 }
 
-private class AndroidReflectionSpeechPlatform(context: Context) : ReflectionSpeechPlatform {
+internal class AndroidReflectionSpeechPlatform(context: Context) : ReflectionSpeechPlatform {
+    private class InstrumentalPlayback(
+        val id: String,
+        val player: MediaPlayer,
+        var focus: AudioFocusRequest? = null,
+        var released: Boolean = false
+    )
+
     private val appContext = context.applicationContext
     private val mainHandler = Handler(Looper.getMainLooper())
     private val audioManager = appContext.getSystemService(AudioManager::class.java)
@@ -248,6 +335,7 @@ private class AndroidReflectionSpeechPlatform(context: Context) : ReflectionSpee
         .build()
     private var engine: TextToSpeech? = null
     private var focusRequest: AudioFocusRequest? = null
+    private var instrumental: InstrumentalPlayback? = null
     private var closed = false
 
     override fun initialize(onReady: (Boolean) -> Unit, onDone: (String) -> Unit, onError: (String) -> Unit) {
@@ -263,7 +351,7 @@ private class AndroidReflectionSpeechPlatform(context: Context) : ReflectionSpee
                             @Deprecated("Required by the Android speech listener")
                             override fun onError(utteranceId: String?) { utteranceId?.let(onError) }
                             override fun onError(utteranceId: String?, errorCode: Int) { utteranceId?.let(onError) }
-                            override fun onStop(utteranceId: String?, interrupted: Boolean) { utteranceId?.let(onDone) }
+                            override fun onStop(utteranceId: String?, interrupted: Boolean) { utteranceId?.let(onError) }
                         }
                         onReady(result == TextToSpeech.SUCCESS && activeEngine != null &&
                             activeEngine.setAudioAttributes(speechAttributes) == TextToSpeech.SUCCESS &&
@@ -291,6 +379,86 @@ private class AndroidReflectionSpeechPlatform(context: Context) : ReflectionSpee
             activeEngine.speak(text, TextToSpeech.QUEUE_FLUSH, Bundle(), utteranceId) == TextToSpeech.SUCCESS
     }
 
+    override fun playInstrumental(
+        utteranceId: String,
+        onDone: (String) -> Unit,
+        onError: (String) -> Unit,
+        onFocusLost: (String) -> Unit
+    ): Boolean {
+        stopInstrumental()
+        if (closed) return false
+        val playback = InstrumentalPlayback(utteranceId, MediaPlayer())
+        instrumental = playback
+        fun failed() {
+            if (instrumental !== playback || playback.released) return
+            releaseInstrumental(playback)
+            onError(playback.id)
+        }
+        try {
+            val attributes = AudioAttributes.Builder()
+                .setUsage(AudioAttributes.USAGE_MEDIA)
+                .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                .build()
+            playback.player.setAudioAttributes(attributes)
+            playback.player.isLooping = false
+            playback.player.setVolume(0.22f, 0.22f)
+            playback.player.setOnPreparedListener { player ->
+                if (instrumental === playback && !playback.released && !closed) {
+                    try { player.start() } catch (_: RuntimeException) { failed() }
+                }
+            }
+            playback.player.setOnCompletionListener {
+                if (instrumental === playback && !playback.released) {
+                    releaseInstrumental(playback)
+                    onDone(playback.id)
+                }
+            }
+            playback.player.setOnErrorListener { _, _, _ -> failed(); true }
+            val nextFocus = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT)
+                .setAudioAttributes(attributes)
+                .setWillPauseWhenDucked(true)
+                .setOnAudioFocusChangeListener({ change ->
+                    if (change < 0 && instrumental === playback && !playback.released) {
+                        // Never resume a cue after a call, another player, or lost focus.
+                        releaseInstrumental(playback)
+                        onFocusLost(playback.id)
+                    }
+                }, mainHandler)
+                .build()
+            playback.focus = nextFocus
+            val granted = audioManager?.requestAudioFocus(nextFocus) == AudioManager.AUDIOFOCUS_REQUEST_GRANTED
+            if (!granted || instrumental !== playback || playback.released || closed) {
+                releaseInstrumental(playback)
+                return false
+            }
+            appContext.resources.openRawResourceFd(R.raw.runstate_reflection_instrumental).use { source ->
+                playback.player.setDataSource(source.fileDescriptor, source.startOffset, source.length)
+            }
+            playback.player.prepareAsync()
+            return true
+        } catch (_: Exception) {
+            releaseInstrumental(playback)
+            return false
+        }
+    }
+
+    override fun stopInstrumental() {
+        instrumental?.let(::releaseInstrumental)
+    }
+
+    private fun releaseInstrumental(playback: InstrumentalPlayback) {
+        if (playback.released) return
+        // Invalidate identity before release/abandon can deliver queued callbacks.
+        playback.released = true
+        if (instrumental === playback) instrumental = null
+        try { playback.player.release() } catch (_: RuntimeException) { }
+        val focus = playback.focus
+        playback.focus = null
+        if (focus != null) {
+            try { audioManager?.abandonAudioFocusRequest(focus) } catch (_: RuntimeException) { }
+        }
+    }
+
     override fun stop() { engine?.stop() }
     override fun releaseAudioFocus() {
         val owned = focusRequest ?: return
@@ -299,6 +467,8 @@ private class AndroidReflectionSpeechPlatform(context: Context) : ReflectionSpee
     }
     override fun close() {
         closed = true
+        stopInstrumental()
+        try { releaseAudioFocus() } catch (_: RuntimeException) { }
         val owned = engine
         engine = null
         owned?.shutdown()
@@ -349,6 +519,20 @@ internal fun RunHistoryScreen(
     routeLoader: (suspend (String) -> GpsRoutePreviewData)? = null,
     speechLifecycle: Lifecycle = LocalLifecycleOwner.current.lifecycle
 ) {
+    val listState = rememberLazyListState()
+    // A newly saved run is inserted above the old first row. LazyColumn's stable row keys
+    // otherwise preserve that old row as the scroll anchor and hide the new run above it.
+    // The saved identity guard leaves initial loading, rotation, and same-run feedback alone.
+    val newestRunId = items.firstOrNull()?.runId
+    var previousNewestRunId by rememberSaveable { mutableStateOf<String?>(null) }
+    LaunchedEffect(newestRunId) {
+        if (newestRunId != null) {
+            if (previousNewestRunId != null && previousNewestRunId != newestRunId) {
+                listState.scrollToItem(0)
+            }
+            previousNewestRunId = newestRunId
+        }
+    }
     var expandedRunId by rememberSaveable { mutableStateOf<String?>(null) }
     var editingEffortRunId by rememberSaveable { mutableStateOf<String?>(null) }
     var editingEnergyRunId by rememberSaveable { mutableStateOf<String?>(null) }
@@ -455,9 +639,10 @@ internal fun RunHistoryScreen(
             }
 
             LazyColumn(
+                state = listState,
                 contentPadding = PaddingValues(start = 24.dp, top = 10.dp, end = 24.dp, bottom = 32.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
-                modifier = Modifier.fillMaxWidth().weight(1f)
+                modifier = Modifier.fillMaxWidth().weight(1f).testTag(RUN_HISTORY_LIST_TAG)
             ) {
                 if (isLoading) {
                     item(key = "loading") {

@@ -186,6 +186,8 @@ internal fun RunJourneyRoot(
     // Reopening an older Saved run never speaks merely because Room restored READY text.
     var completionSpeechEligibleRunId by rememberSaveable { mutableStateOf<String?>(null) }
     var completionSpeechSpokenRunId by rememberSaveable { mutableStateOf<String?>(null) }
+    var completionAudioActive by remember { mutableStateOf(false) }
+    var stopCompletionAudio by remember { mutableStateOf<(() -> Unit)?>(null) }
     var completionReceiptRunId by rememberSaveable { mutableStateOf<String?>(null) }
     var completionReceiptText by rememberSaveable { mutableStateOf<String?>(null) }
     var completionReceiptStartedRunId by rememberSaveable { mutableStateOf<String?>(null) }
@@ -257,6 +259,7 @@ internal fun RunJourneyRoot(
         val observer = LifecycleEventObserver { _, event ->
             voiceForeground = lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)
             if (event == Lifecycle.Event.ON_PAUSE) {
+                stopCompletionAudio?.invoke()
                 effortSheetRunId?.let { reflectionCoordinator?.setEffortSheetOpen(it, false) }
             }
             if (event == Lifecycle.Event.ON_RESUME) {
@@ -661,7 +664,9 @@ internal fun RunJourneyRoot(
         completionVisible = completionVisible && (completionReceiptRunId != completedRunId ||
             completionReceiptFinishedRunId == completedRunId),
         speakerFactory = completionSpeakerFactory,
-        onSpoken = { completionSpeechSpokenRunId = it }
+        onSpoken = { completionSpeechSpokenRunId = it },
+        onAudioActiveChange = { completionAudioActive = it },
+        onStopReady = { stopCompletionAudio = it }
     )
 
     if (connectionDialogVisible && model.state == RunUiState.ReadyToStart) {
@@ -812,6 +817,7 @@ internal fun RunJourneyRoot(
         onResume = { requestAction(RunActionKind.RESUME) },
         onStop = { requestAction(RunActionKind.COMPLETE) },
         onStartAnother = {
+            stopCompletionAudio?.invoke()
             runGuarded {
 
                 // Reset per-run answers; keep the explicit GPS choice for this app session.
@@ -907,7 +913,9 @@ internal fun RunJourneyRoot(
         },
         energyEnabled = reflectionCoordinator != null,
         isTestData = (activeReflection as? RunReflectionState.Ready)?.isTestData == true,
-        onViewHistory = { historyVisible = true },
+        onViewHistory = { stopCompletionAudio?.invoke(); historyVisible = true },
+        reflectionAudioActive = completionAudioActive,
+        onStopReflectionAudio = { stopCompletionAudio?.invoke() },
         showHistory = true,
         reflectionConnectionLabel = when (reflectionConnection) {
             ReflectionConnectionState.Loading -> "Loading reflection connection…"
@@ -1004,24 +1012,45 @@ internal fun RunCompleteSpeechEffect(
     reflectionState: RunReflectionState?,
     completionVisible: Boolean,
     speakerFactory: (Context) -> ReflectionSpeaker,
-    onSpoken: (String) -> Unit
+    onSpoken: (String) -> Unit,
+    onAudioActiveChange: (Boolean) -> Unit = {},
+    onStopReady: ((() -> Unit)?) -> Unit = {}
 ) {
     val context = LocalContext.current
     var speaker by remember { mutableStateOf<ReflectionSpeaker?>(null) }
     var speakingRunId by remember { mutableStateOf<String?>(null) }
+    var activeAttempt by remember { mutableStateOf<Any?>(null) }
+    val currentRunId by rememberUpdatedState(completedRunId)
+    val currentVisible by rememberUpdatedState(completionVisible)
+    val audioCallback by rememberUpdatedState(onAudioActiveChange)
+    val stopReadyCallback by rememberUpdatedState(onStopReady)
+
+    fun stopAudio() {
+        // Invalidate first: stop may synchronously deliver an engine completion callback.
+        activeAttempt = null
+        audioCallback(false)
+        try { speaker?.stop() } catch (_: RuntimeException) { }
+    }
 
     DisposableEffect(Unit) {
-        onDispose { try { speaker?.close() } catch (_: RuntimeException) { } }
+        stopReadyCallback(::stopAudio)
+        onDispose {
+            activeAttempt = null
+            audioCallback(false)
+            stopReadyCallback(null)
+            try { speaker?.close() } catch (_: RuntimeException) { }
+        }
     }
     LaunchedEffect(completedRunId, eligibleRunId, spokenRunId, reflectionState, completionVisible) {
         if (speakingRunId != null && speakingRunId != completedRunId) {
+            stopAudio()
             val oldSpeaker = speaker
             speaker = null
             speakingRunId = null
             try { oldSpeaker?.close() } catch (_: RuntimeException) { }
         }
         if (!completionVisible) {
-            try { speaker?.stop() } catch (_: RuntimeException) { }
+            stopAudio()
             return@LaunchedEffect
         }
         val exactText = readyCompletionSpeechText(
@@ -1029,10 +1058,27 @@ internal fun RunCompleteSpeechEffect(
         ) ?: return@LaunchedEffect
         onSpoken(requireNotNull(completedRunId))
         speakingRunId = completedRunId
+        val attempt = Any()
+        activeAttempt = attempt
+        audioCallback(true)
         try {
             val activeSpeaker = speaker ?: speakerFactory(context).also { speaker = it }
-            activeSpeaker.speak(exactText)
+            val runId = completedRunId
+            activeSpeaker.speakWithInstrumental(
+                exactText,
+                canPlayInstrumental = {
+                    activeAttempt === attempt && speaker === activeSpeaker &&
+                        currentVisible && currentRunId == runId
+                },
+                onFinished = {
+                    if (activeAttempt === attempt) {
+                        activeAttempt = null
+                        audioCallback(false)
+                    }
+                }
+            )
         } catch (_: RuntimeException) {
+            stopAudio()
             // Consume this arrival attempt once; a missing engine never replays on resume.
         }
     }

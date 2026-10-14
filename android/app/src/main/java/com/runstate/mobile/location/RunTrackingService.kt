@@ -18,6 +18,7 @@ import android.os.Build
 import android.os.Bundle
 import android.os.IBinder
 import android.os.Looper
+import android.os.PowerManager
 import android.os.SystemClock
 import androidx.core.content.ContextCompat
 import com.runstate.mobile.MainActivity
@@ -32,6 +33,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
@@ -44,6 +46,51 @@ internal sealed interface RunTrackingServiceState {
     data class Tracking(val runId: String) : RunTrackingServiceState
     data class Paused(val runId: String) : RunTrackingServiceState
     data class Failed(val reason: String) : RunTrackingServiceState
+}
+
+/** Each timed platform lock is acquired once; renewal swaps in a new lock before releasing it. */
+internal interface TimedCpuWakeLock {
+    val isHeld: Boolean
+    fun acquire(timeoutMillis: Long)
+    fun release()
+}
+
+internal class RunCpuWakeLease(
+    private val newLock: () -> TimedCpuWakeLock,
+    private val timeoutMillis: Long
+) {
+    init {
+        require(timeoutMillis > 0L)
+    }
+
+    private var current: TimedCpuWakeLock? = null
+
+    fun start() {
+        if (current == null) replace()
+    }
+
+    fun renew() {
+        if (current != null) replace()
+    }
+
+    fun stop() {
+        val previous = current
+        current = null
+        if (previous?.isHeld == true) previous.release()
+    }
+
+    private fun replace() {
+        val replacement = newLock()
+        try {
+            replacement.acquire(timeoutMillis)
+        } catch (failure: RuntimeException) {
+            if (replacement.isHeld) replacement.release()
+            throw failure
+        }
+        val previous = current
+        current = replacement
+        if (previous?.isHeld == true) previous.release()
+    }
 }
 
 /**
@@ -70,6 +117,8 @@ internal class RunTrackingService : Service() {
     private var runId: String? = null
     private var storedState: StoredRunState? = null
     private var gpsEnabled = false
+    private var cpuWakeLease: RunCpuWakeLease? = null
+    private var wakeRenewal: Job? = null
     private var finishedNormally = false
     private var failed = false
 
@@ -174,15 +223,15 @@ internal class RunTrackingService : Service() {
                 }
                 try {
                     listenForGps(id)
-                    if (gpsEnabled) {
-                        app.publishTrackingServiceState(RunTrackingServiceState.Tracking(id))
-                        updateNotification("GPS run in progress")
-                    } else {
+                    if (!gpsEnabled) {
                         policy.trackingInterrupted()
                         app.publishTrackingServiceState(
                             RunTrackingServiceState.Failed("GPS is off; distance is incomplete.")
                         )
                         updateNotification("GPS off · distance incomplete")
+                    } else if (startCpuWakeLease()) {
+                        app.publishTrackingServiceState(RunTrackingServiceState.Tracking(id))
+                        updateNotification("GPS run in progress")
                     }
                 } catch (failure: SecurityException) {
                     policy.trackingInterrupted()
@@ -242,6 +291,7 @@ internal class RunTrackingService : Service() {
                 if (listener === this && provider == LocationManager.GPS_PROVIDER) {
                     locationGeneration++
                     gpsEnabled = false
+                    stopCpuWakeLease()
                     policy.trackingInterrupted()
                     app.publishTrackingServiceState(
                         RunTrackingServiceState.Failed("GPS was turned off during this run.")
@@ -256,8 +306,10 @@ internal class RunTrackingService : Service() {
                     locationGeneration++
                     gpsEnabled = true
                     policy.trackingInterrupted()
-                    app.publishTrackingServiceState(RunTrackingServiceState.Tracking(id))
-                    updateNotification("GPS run in progress")
+                    if (startCpuWakeLease()) {
+                        app.publishTrackingServiceState(RunTrackingServiceState.Tracking(id))
+                        updateNotification("GPS run in progress")
+                    }
                 }
             }
 
@@ -348,6 +400,7 @@ internal class RunTrackingService : Service() {
     }
 
     private fun stopGps() {
+        stopCpuWakeLease()
         locationGeneration++
         listener?.let {
             try {
@@ -358,6 +411,71 @@ internal class RunTrackingService : Service() {
         }
         listener = null
         gpsEnabled = false
+    }
+
+    /** A foreground notification alone does not guarantee prompt callbacks with the screen off. */
+    private fun startCpuWakeLease(): Boolean {
+        if (storedState != StoredRunState.RUNNING || !gpsEnabled || listener == null) return false
+        if (wakeRenewal?.isActive == true) return true
+        try {
+            if (!hasFineLocation() ||
+                !locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)
+            ) {
+                policy.trackingInterrupted()
+                failAndStop("Precise location or GPS was turned off during this run.")
+                return false
+            }
+            val lease = cpuWakeLease ?: RunCpuWakeLease(::newTimedCpuWakeLock, WAKE_TIMEOUT_MS)
+                .also { cpuWakeLease = it }
+            lease.start()
+            wakeRenewal = scope.launch {
+                while (true) {
+                    delay(WAKE_RENEW_MS)
+                    if (storedState != StoredRunState.RUNNING || !gpsEnabled || listener == null) {
+                        stopCpuWakeLease()
+                        return@launch
+                    }
+                    try {
+                        if (!hasFineLocation() ||
+                            !locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)
+                        ) {
+                            policy.trackingInterrupted()
+                            failAndStop("Precise location or GPS was turned off during this run.")
+                            return@launch
+                        }
+                        lease.renew()
+                    } catch (failure: RuntimeException) {
+                        policy.trackingInterrupted()
+                        failAndStop("Android could not keep GPS processing active; reopen the saved run.")
+                        return@launch
+                    }
+                }
+            }
+            return true
+        } catch (failure: RuntimeException) {
+            failAndStop("Android could not keep GPS processing active; reopen the saved run.")
+            return false
+        }
+    }
+
+    private fun stopCpuWakeLease() {
+        wakeRenewal?.cancel()
+        wakeRenewal = null
+        try {
+            cpuWakeLease?.stop()
+        } catch (_: RuntimeException) {
+            // Each acquisition has a hard timeout even if Android rejects explicit release.
+        }
+    }
+
+    private fun newTimedCpuWakeLock(): TimedCpuWakeLock {
+        val power = requireNotNull(getSystemService(PowerManager::class.java))
+        val platformLock = power.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, WAKE_TAG)
+        return object : TimedCpuWakeLock {
+            override val isHeld: Boolean get() = platformLock.isHeld
+            override fun acquire(timeoutMillis: Long) = platformLock.acquire(timeoutMillis)
+            override fun release() = platformLock.release()
+        }
     }
 
     private fun hasFineLocation(): Boolean =
@@ -434,6 +552,9 @@ internal class RunTrackingService : Service() {
         private const val EXTRA_RUN_ID = "run_id"
         private const val CHANNEL_ID = "active_run_tracking"
         private const val NOTIFICATION_ID = 3207
+        private const val WAKE_TAG = "com.runstate.mobile:RunTrackingService"
+        private const val WAKE_TIMEOUT_MS = 120_000L
+        private const val WAKE_RENEW_MS = 60_000L
 
         /** Call only after a visible Activity's countdown finishes and permissions are ready. */
         fun startNew(

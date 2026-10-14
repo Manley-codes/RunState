@@ -153,6 +153,16 @@ internal fun ActiveRunScreen(
                         .background(Color.White.copy(alpha = 0.7f))
                         .padding(horizontal = 12.dp, vertical = 8.dp)
                 )
+                if (paused) {
+                    Text(
+                        text = "Active time and distance are paused. Elapsed includes breaks.",
+                        color = ActiveInk.copy(alpha = 0.78f),
+                        fontSize = 12.sp,
+                        lineHeight = 18.sp,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth().padding(top = 10.dp)
+                    )
+                }
                 if (isGpsRun && gpsServicePresent && !paused && metrics?.gpsDistanceAvailable != true) {
                     Text(
                         text = "Waiting for usable GPS movement. Distance will appear once it is recorded.",

@@ -76,6 +76,7 @@ internal const val RUN_COMPLETE_EFFORT_TAG = "runCompleteEffort"
 internal const val RUN_COMPLETE_EFFORT_SHEET_TAG = "runCompleteEffortSheet"
 internal const val RUN_COMPLETE_EFFORT_CHOICE_TAG_PREFIX = "runCompleteEffortChoice:"
 internal const val RUN_COMPLETE_HISTORY_TAG = "runCompleteHistory"
+internal const val RUN_COMPLETE_AUDIO_STOP_TAG = "runCompleteAudioStop"
 
 internal val CompletionInk = Color(0xFF4A5049)
 internal val CompletionStrongInk = Color(0xFF353A34)
@@ -131,7 +132,9 @@ internal fun RunCompleteScreen(
     effortEnabled: Boolean = false,
     effortSaving: Boolean = false,
     effortError: String? = null,
-    onEffortSheetOpenChange: (Boolean) -> Unit = {}
+    onEffortSheetOpenChange: (Boolean) -> Unit = {},
+    reflectionAudioActive: Boolean = false,
+    onStopReflectionAudio: () -> Unit = {}
 ) {
     val distance = splitMetric(metrics?.distance ?: "—")
     val pace = splitMetric(metrics?.averagePace ?: "—")
@@ -157,85 +160,101 @@ internal fun RunCompleteScreen(
     ) {
         CompletionAtmosphere(Modifier.fillMaxSize())
 
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .padding(start = 26.dp, top = 24.dp, end = 22.dp, bottom = 126.dp)
-        ) {
-            SavedStatus(sourceLabel)
-            Spacer(modifier = Modifier.height(24.dp))
-            CompletionHero(
-                distance = distance,
-                elapsed = metrics?.elapsed ?: "—",
-                pace = pace,
-                active = metrics?.active ?: "—"
-            )
-            if (energyEnabled) {
-                EnergyChoices(
-                    selectedEnergy = selectedEnergy,
-                    onSelectEnergy = onSelectEnergy,
-                    enabled = actionsEnabled,
-                    reflectionFinal = reflection is RunCompleteReflectionDisplay.Ready
+        Column(Modifier.fillMaxSize()) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+                    .verticalScroll(rememberScrollState())
+                    .padding(start = 26.dp, top = 24.dp, end = 22.dp, bottom = 24.dp)
+            ) {
+                SavedStatus(sourceLabel)
+                Spacer(modifier = Modifier.height(24.dp))
+                CompletionHero(
+                    distance = distance,
+                    elapsed = metrics?.elapsed ?: "—",
+                    pace = pace,
+                    active = metrics?.active ?: "—"
                 )
-            }
-            if (effortEnabled) {
-                EffortControl(
-                    selectedEffort = selectedEffort,
-                    saving = effortSaving,
-                    error = effortError,
-                    enabled = actionsEnabled,
-                    onOpen = { effortSheetOpen = true }
-                )
-            }
-            if (reflection != null) {
-                Spacer(modifier = Modifier.height(14.dp))
-                ReflectionPanel(
-                    reflection = reflection,
-                    onRetry = onRetryReflection,
-                    retryEnabled = actionsEnabled,
-                    isTestData = isTestData
-                )
-            }
-            if (showHistory) {
-                TextButton(
-                    onClick = onViewHistory,
-                    enabled = actionsEnabled,
-                    colors = ButtonDefaults.textButtonColors(contentColor = CompletionStrongInk),
-                    modifier = Modifier
-                        .padding(top = 10.dp)
-                        .align(Alignment.CenterHorizontally)
-                        .heightIn(min = 48.dp)
-                        .testTag(RUN_COMPLETE_HISTORY_TAG)
-                ) {
-                    Text("View in Log History")
+                if (energyEnabled) {
+                    EnergyChoices(
+                        selectedEnergy = selectedEnergy,
+                        onSelectEnergy = onSelectEnergy,
+                        enabled = actionsEnabled,
+                        reflectionFinal = reflection is RunCompleteReflectionDisplay.Ready
+                    )
+                }
+                if (effortEnabled) {
+                    EffortControl(
+                        selectedEffort = selectedEffort,
+                        saving = effortSaving,
+                        error = effortError,
+                        enabled = actionsEnabled,
+                        onOpen = { effortSheetOpen = true }
+                    )
+                }
+                if (reflection != null) {
+                    Spacer(modifier = Modifier.height(14.dp))
+                    ReflectionPanel(
+                        reflection = reflection,
+                        onRetry = onRetryReflection,
+                        retryEnabled = actionsEnabled,
+                        isTestData = isTestData
+                    )
+                    if (reflectionAudioActive) {
+                        Text(
+                            "Voice, then a short RunState instrumental (Eleven Music)",
+                            color = CompletionMutedInk,
+                            fontSize = 13.sp,
+                            lineHeight = 19.sp,
+                            modifier = Modifier.padding(top = 10.dp)
+                        )
+                        TextButton(
+                            onClick = onStopReflectionAudio,
+                            colors = ButtonDefaults.textButtonColors(contentColor = CompletionStrongInk),
+                            modifier = Modifier.heightIn(min = 48.dp).testTag(RUN_COMPLETE_AUDIO_STOP_TAG)
+                        ) { Text("Stop audio") }
+                    }
+                }
+                if (showHistory) {
+                    TextButton(
+                        onClick = onViewHistory,
+                        enabled = actionsEnabled,
+                        colors = ButtonDefaults.textButtonColors(contentColor = CompletionStrongInk),
+                        modifier = Modifier
+                            .padding(top = 10.dp)
+                            .align(Alignment.CenterHorizontally)
+                            .heightIn(min = 48.dp)
+                            .testTag(RUN_COMPLETE_HISTORY_TAG)
+                    ) {
+                        Text("View in Log History")
+                    }
                 }
             }
-        }
 
-        Button(
-            onClick = onStartAnother,
-            enabled = actionsEnabled,
-            colors = ButtonDefaults.buttonColors(
-                containerColor = CompletionStrongInk,
-                contentColor = Color.White,
-                disabledContainerColor = CompletionStrongInk.copy(alpha = 0.38f),
-                disabledContentColor = Color.White.copy(alpha = 0.7f)
-            ),
-            shape = RoundedCornerShape(20.dp),
-            contentPadding = PaddingValues(horizontal = 24.dp, vertical = 16.dp),
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .fillMaxWidth()
-                .padding(horizontal = 24.dp, vertical = 20.dp)
-                .heightIn(min = 56.dp)
-        ) {
-            Text(
-                text = "Start another run",
-                fontSize = 16.sp,
-                fontWeight = FontWeight.SemiBold,
-                letterSpacing = 0.2.sp
-            )
+            Button(
+                onClick = onStartAnother,
+                enabled = actionsEnabled,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = CompletionStrongInk,
+                    contentColor = Color.White,
+                    disabledContainerColor = CompletionStrongInk.copy(alpha = 0.38f),
+                    disabledContentColor = Color.White.copy(alpha = 0.7f)
+                ),
+                shape = RoundedCornerShape(20.dp),
+                contentPadding = PaddingValues(horizontal = 24.dp, vertical = 16.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp, vertical = 20.dp)
+                    .heightIn(min = 56.dp)
+            ) {
+                Text(
+                    text = "Start another run",
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    letterSpacing = 0.2.sp
+                )
+            }
         }
 
         if (effortSheetOpen && effortEnabled) {

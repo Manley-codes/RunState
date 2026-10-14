@@ -1,5 +1,6 @@
 package com.runstate.mobile.ui
 
+import android.media.MediaMetadataRetriever
 import androidx.activity.ComponentActivity
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Text
@@ -24,6 +25,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performScrollToIndex
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.performTextInput
@@ -36,6 +38,7 @@ import androidx.lifecycle.LifecycleRegistry
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.runstate.mobile.MainActivity
+import com.runstate.mobile.R
 import com.runstate.mobile.RunCompleteSpeechEffect
 import com.runstate.mobile.RunCompleteReceiptEffect
 import com.runstate.mobile.data.local.ReflectionBranch
@@ -104,27 +107,38 @@ class RunStateScreenTest {
         var stops = 0
         var startAnothers = 0
         var reflectionRetries = 0
+        var audioStops = 0
         val energyAnswers = mutableListOf<ReflectionBranch>()
         var historyOpens = 0
 
         val total get() = starts + cancels + initializationRetries + startRetries +
-            pauses + resumes + stops + startAnothers + reflectionRetries
+            pauses + resumes + stops + startAnothers + reflectionRetries + audioStops
     }
 
     /** Controls engine/focus callbacks without producing audio or touching another app's player. */
     private class ControlledSpeechPlatform : ReflectionSpeechPlatform {
         data class Spoken(val id: String, val text: String, val rate: Float)
+        data class Instrumental(
+            val id: String,
+            val done: (String) -> Unit,
+            val failed: (String) -> Unit,
+            val focusLost: (String) -> Unit
+        )
         lateinit var ready: (Boolean) -> Unit
         lateinit var done: (String) -> Unit
         lateinit var failed: (String) -> Unit
         val focusLosses = mutableMapOf<String, (String) -> Unit>()
         val spoken = mutableListOf<Spoken>()
+        val instrumentals = mutableListOf<Instrumental>()
         var focusGranted = true
         var speechAccepted = true
+        var instrumentalAccepted = true
+        var loseFocusDuringInstrumental = false
         var loseFocusDuringRequest = false
         var stopThrows = false
         var focusOwner: String? = null
         var stops = 0
+        var instrumentalStops = 0
         var closes = 0
 
         override fun initialize(onReady: (Boolean) -> Unit, onDone: (String) -> Unit, onError: (String) -> Unit) {
@@ -146,8 +160,36 @@ class RunStateScreenTest {
             stops++
             if (stopThrows) error("Disconnected speech engine")
         }
+        override fun playInstrumental(
+            utteranceId: String,
+            onDone: (String) -> Unit,
+            onError: (String) -> Unit,
+            onFocusLost: (String) -> Unit
+        ): Boolean {
+            instrumentals += Instrumental(utteranceId, onDone, onError, onFocusLost)
+            if (loseFocusDuringInstrumental) onFocusLost(utteranceId)
+            return instrumentalAccepted
+        }
+        override fun stopInstrumental() { instrumentalStops++ }
         override fun releaseAudioFocus() { focusOwner = null }
         override fun close() { closes++ }
+    }
+
+    private class ControlledCompletionSpeaker : ReflectionSpeaker {
+        data class AudioRequest(val text: String, val canPlayCue: () -> Boolean, val finished: () -> Unit)
+        val requests = mutableListOf<AudioRequest>()
+        var stops = 0
+        var closes = 0
+        override fun speak(text: String) { error("Completion must choose its explicit audio sequence") }
+        override fun speakWithInstrumental(
+            text: String, canPlayInstrumental: () -> Boolean, onFinished: () -> Unit
+        ) { requests += AudioRequest(text, canPlayInstrumental, onFinished) }
+        override fun stop() {
+            stops++
+            // A real engine can synchronously deliver completion while being stopped.
+            requests.lastOrNull()?.finished?.invoke()
+        }
+        override fun close() { closes++; stop() }
     }
 
     /** Renders one screen and returns the counters its callbacks increment. */
@@ -161,7 +203,8 @@ class RunStateScreenTest {
         reflection: RunCompleteReflectionDisplay? = RunCompleteReflectionDisplay.Preparing,
         energyEnabled: Boolean = false,
         isTestData: Boolean = false,
-        showHistory: Boolean = false
+        showHistory: Boolean = false,
+        reflectionAudioActive: Boolean = false
     ): RecordedActions {
         val actions = RecordedActions()
 
@@ -192,6 +235,8 @@ class RunStateScreenTest {
                     isTestData = isTestData,
                     onViewHistory = { actions.historyOpens++ },
                     showHistory = showHistory,
+                    reflectionAudioActive = reflectionAudioActive,
+                    onStopReflectionAudio = { actions.audioStops++ },
                     modifier = modifier,
                     actionsEnabled = actionsEnabled
                 )
@@ -570,6 +615,8 @@ class RunStateScreenTest {
     fun runningShowsTheValuesAndFixtureDisclosure() {
         renderScreen(model = RunUiModel(RunUiState.ActiveRunning), metrics = fixtureMetrics())
         assertFixtureMetricsDisplayed()
+        composeTestRule.onNodeWithText("Active time and distance are paused. Elapsed includes breaks.")
+            .assertDoesNotExist()
     }
 
     /** Paused discloses and renders fixture metrics. */
@@ -577,6 +624,8 @@ class RunStateScreenTest {
     fun pausedShowsTheValuesAndFixtureDisclosure() {
         renderScreen(model = RunUiModel(RunUiState.ActivePaused), metrics = fixtureMetrics())
         assertFixtureMetricsDisplayed()
+        composeTestRule.onNodeWithText("Active time and distance are paused. Elapsed includes breaks.")
+            .performScrollTo().assertIsDisplayed()
     }
 
     /** Saved gives the frozen metrics the dedicated Run Complete hierarchy. */
@@ -821,6 +870,56 @@ class RunStateScreenTest {
         assertTrue(stops > 0)
         assertEquals(listOf(exact), spoken)
         assertEquals(0, retries)
+    }
+
+    @Test
+    fun newRunAppearsAtHistoryTopWithoutJumpingOnFeedbackEdits() {
+        val old = (0..11).map { index ->
+            RunHistoryItem("old-$index", "Older run $index", fixtureMetrics(), "READY",
+                "Saved reply $index", null, false)
+        }
+        val new = RunHistoryItem("new-run", "Newest run", fixtureMetrics(), "READY",
+            "Newest saved reply", null, false)
+        var rows by mutableStateOf(old)
+        var visible by mutableStateOf(true)
+        var spoken = 0
+        var retries = 0
+        composeTestRule.setContent {
+            if (visible) {
+                RunHistoryScreen(rows, onBack = { visible = false },
+                    onRetryReflection = { retries++ },
+                    speakerFactory = { object : ReflectionSpeaker {
+                        override fun speak(text: String) { spoken++ }
+                        override fun stop() = Unit
+                        override fun close() = Unit
+                    } },
+                    modifier = Modifier.size(360.dp, 600.dp))
+            } else {
+                Text("Run Complete")
+            }
+        }
+        composeTestRule.onNodeWithTag(RUN_HISTORY_LIST_TAG).performScrollToIndex(9)
+        composeTestRule.onNodeWithTag(RUN_HISTORY_ROW_TAG_PREFIX + "old-9").assertIsDisplayed()
+
+        // Re-enter while the old mapped list is still present, then receive the new Room row.
+        composeTestRule.runOnIdle { visible = false }
+        composeTestRule.runOnIdle { visible = true }
+        composeTestRule.runOnIdle { rows = listOf(new) + old }
+        composeTestRule.onNodeWithTag(RUN_HISTORY_ROW_TAG_PREFIX + "new-run").assertIsDisplayed()
+        composeTestRule.onNodeWithTag(RUN_HISTORY_REFLECTION_TAG_PREFIX + "new-run")
+            .assertDoesNotExist()
+
+        composeTestRule.onNodeWithTag(RUN_HISTORY_LIST_TAG).performScrollToIndex(10)
+        composeTestRule.onNodeWithTag(RUN_HISTORY_ROW_TAG_PREFIX + "old-9").assertIsDisplayed()
+        composeTestRule.runOnIdle {
+            rows = rows.map { row ->
+                if (row.runId == "old-9") row.copy(effort = PostRunEffort.SMOOTH,
+                    energy = ReflectionBranch.SPENT) else row
+            }
+        }
+        composeTestRule.onNodeWithTag(RUN_HISTORY_ROW_TAG_PREFIX + "old-9").assertIsDisplayed()
+        composeTestRule.onNodeWithTag(RUN_HISTORY_ROW_TAG_PREFIX + "new-run").assertDoesNotExist()
+        composeTestRule.runOnIdle { assertEquals(0, spoken); assertEquals(0, retries) }
     }
 
     @Test
@@ -1141,6 +1240,106 @@ class RunStateScreenTest {
     }
 
     @Test
+    fun completionDirectAudioStopConsumesArrivalAndDoesNotReplayOnReturn() {
+        val runId = "completion-audio-stop"
+        val exact = "  Exact completion.\nSecond line.  "
+        val speaker = ControlledCompletionSpeaker()
+        var spokenId by mutableStateOf<String?>(null)
+        var visible by mutableStateOf(true)
+        var present by mutableStateOf(true)
+        var audioActive = false
+        var stopAudio: (() -> Unit)? = null
+        val consumed = mutableListOf<String>()
+        composeTestRule.setContent {
+            if (present) RunCompleteSpeechEffect(runId, runId, spokenId,
+                RunReflectionState.Ready(runId, exact), visible, { speaker },
+                { consumed += it; spokenId = it },
+                onAudioActiveChange = { audioActive = it }, onStopReady = { stopAudio = it })
+        }
+        composeTestRule.runOnIdle {
+            assertTrue(audioActive)
+            assertEquals(exact, speaker.requests.single().text)
+            assertTrue(speaker.requests.single().canPlayCue())
+            requireNotNull(stopAudio).invoke()
+            assertFalse(audioActive)
+            assertFalse(speaker.requests.single().canPlayCue())
+            speaker.requests.single().finished()
+            visible = false
+        }
+        composeTestRule.runOnIdle { visible = true }
+        composeTestRule.runOnIdle {
+            assertEquals(listOf(runId), consumed)
+            assertEquals(1, speaker.requests.size)
+            assertFalse(audioActive)
+            assertTrue(speaker.stops > 0)
+            present = false
+        }
+        composeTestRule.runOnIdle {
+            assertEquals(null, stopAudio)
+            assertEquals(1, speaker.closes)
+        }
+    }
+
+    @Test
+    fun hiddenOrReplacedCompletionInvalidatesCueAndOldFinishCannotStopNewAudio() {
+        var runId by mutableStateOf("completion-first-audio")
+        var state by mutableStateOf<RunReflectionState>(RunReflectionState.Ready(runId, "First."))
+        var spokenId by mutableStateOf<String?>(null)
+        var visible by mutableStateOf(true)
+        var audioActive = false
+        val speakers = mutableListOf<ControlledCompletionSpeaker>()
+        composeTestRule.setContent {
+            RunCompleteSpeechEffect(runId, runId, spokenId, state, visible,
+                { ControlledCompletionSpeaker().also { speakers += it } }, { spokenId = it },
+                onAudioActiveChange = { audioActive = it })
+        }
+        composeTestRule.runOnIdle {
+            assertTrue(audioActive)
+            runId = "completion-second-audio"
+            state = RunReflectionState.Preparing(runId)
+        }
+        composeTestRule.runOnIdle {
+            assertEquals(1, speakers.single().closes)
+            assertFalse(speakers.single().requests.single().canPlayCue())
+            assertFalse(audioActive)
+            state = RunReflectionState.Ready(runId, "Second.")
+        }
+        composeTestRule.runOnIdle {
+            assertEquals(2, speakers.size)
+            assertTrue(audioActive)
+            speakers.first().requests.single().finished()
+            assertTrue(audioActive)
+            assertTrue(speakers.last().requests.single().canPlayCue())
+            visible = false
+        }
+        composeTestRule.runOnIdle {
+            assertFalse(audioActive)
+            assertFalse(speakers.last().requests.single().canPlayCue())
+            visible = true
+        }
+        composeTestRule.runOnIdle {
+            assertEquals(2, speakers.size)
+            assertEquals(1, speakers.last().requests.size)
+            assertFalse(audioActive)
+        }
+    }
+
+    @Test
+    fun completionAudioStopRemainsReachableOnShortLargeTextScreen() {
+        val actions = renderScreen(RunUiModel(RunUiState.Saved), fixtureMetrics(),
+            reflection = RunCompleteReflectionDisplay.Ready("Exact saved reflection. ".repeat(12)),
+            showHistory = true, reflectionAudioActive = true,
+            modifier = Modifier.size(360.dp, 480.dp), fontScale = 1.5f)
+        composeTestRule.onNodeWithTag(RUN_COMPLETE_AUDIO_STOP_TAG)
+            .performScrollTo().assertIsDisplayed().assertIsEnabled().performClick()
+        composeTestRule.runOnIdle {
+            assertEquals("Stop audio must receive the touch, including above the fixed footer", 1, actions.audioStops)
+            assertEquals(1, actions.total)
+        }
+        composeTestRule.onNodeWithText(START_ANOTHER).assertIsDisplayed()
+    }
+
+    @Test
     fun receiptTeardownFailureStillReleasesItsSelectionWindowOnce() {
         val runId = "receipt-teardown-run"
         var visible by mutableStateOf(true)
@@ -1327,6 +1526,217 @@ class RunStateScreenTest {
     }
 
     @Test
+    fun instrumentalWaitsForExactReflectionSpeechAndFinishesOnlyOnceAfterItsCue() {
+        composeTestRule.runOnUiThread {
+            val platform = ControlledSpeechPlatform()
+            val deadlines = mutableListOf<Pair<Runnable, Long>>()
+            val speaker = AndroidReflectionSpeaker(composeTestRule.activity, platform,
+                { task, delay -> deadlines += task to delay }, {})
+            var finished = 0
+            val exact = "  Exact saved reflection.\nSecond line.  "
+            speaker.speakWithInstrumental(exact, onFinished = { finished++ })
+            assertTrue(platform.spoken.isEmpty())
+            assertTrue(platform.instrumentals.isEmpty())
+            platform.ready(true)
+            val voice = platform.spoken.single()
+            assertEquals(exact, voice.text)
+            assertEquals(0.94f, voice.rate, 0f)
+            assertTrue(platform.instrumentals.isEmpty())
+
+            platform.done(voice.id)
+            val cue = platform.instrumentals.single()
+            assertEquals(0, finished)
+            assertEquals(15_000L, deadlines.last().second)
+            // A delayed voice callback must not cancel the cue that now owns this request.
+            platform.done(voice.id)
+            platform.failed(voice.id)
+            platform.focusLosses.getValue(voice.id).invoke(voice.id)
+            assertEquals(1, platform.instrumentals.size)
+            assertEquals(0, finished)
+            cue.done(cue.id)
+            cue.done(cue.id)
+            cue.failed(cue.id)
+            cue.focusLost(cue.id)
+            deadlines.last().first.run()
+            assertEquals(1, finished)
+            speaker.close()
+        }
+    }
+
+    @Test
+    fun packagedRunStateInstrumentalDecodesAsTenSecondsOfAudio() {
+        val decoder = MediaMetadataRetriever()
+        try {
+            composeTestRule.activity.resources.openRawResourceFd(R.raw.runstate_reflection_instrumental).use { asset ->
+                decoder.setDataSource(asset.fileDescriptor, asset.startOffset, asset.length)
+            }
+            val duration = requireNotNull(decoder.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)).toLong()
+            assertTrue("Bundled cue duration was $duration ms", duration in 9_500L..10_500L)
+            val mime = requireNotNull(decoder.extractMetadata(MediaMetadataRetriever.METADATA_KEY_MIMETYPE))
+            assertTrue("Bundled cue MIME was $mime", mime.startsWith("audio/"))
+        } finally {
+            decoder.release()
+        }
+    }
+
+    @Test
+    fun packagedInstrumentalPlaysToOneNaturalCompletionThroughAndroidPlayer() {
+        val finished = java.util.concurrent.CountDownLatch(1)
+        val completions = java.util.concurrent.atomic.AtomicInteger()
+        val errors = java.util.concurrent.atomic.AtomicInteger()
+        val focusLosses = java.util.concurrent.atomic.AtomicInteger()
+        var platform: ReflectionSpeechPlatform? = null
+        var accepted = false
+        try {
+            composeTestRule.runOnUiThread {
+                platform = AndroidReflectionSpeechPlatform(composeTestRule.activity)
+                accepted = requireNotNull(platform).playInstrumental("packaged-cue",
+                    onDone = { completions.incrementAndGet(); finished.countDown() },
+                    onError = { errors.incrementAndGet(); finished.countDown() },
+                    onFocusLost = { focusLosses.incrementAndGet(); finished.countDown() })
+            }
+            assertTrue("Android player rejected the bundled instrumental", accepted)
+            // The wait stays off the UI thread so preparation/completion callbacks can run.
+            assertTrue("Bundled instrumental did not complete within sixteen seconds",
+                finished.await(16, java.util.concurrent.TimeUnit.SECONDS))
+            composeTestRule.runOnUiThread {
+                assertEquals(1, completions.get())
+                assertEquals(0, errors.get())
+                assertEquals(0, focusLosses.get())
+            }
+        } finally {
+            composeTestRule.runOnUiThread { platform?.close() }
+        }
+    }
+
+    @Test
+    fun interruptedOrFailedVoiceNeverStartsAnInstrumental() {
+        composeTestRule.runOnUiThread {
+            listOf("initialization", "startup timeout", "focus denial", "focus loss",
+                "speech rejection", "speech error", "playback timeout", "stop", "close").forEach { failure ->
+                val platform = ControlledSpeechPlatform()
+                val deadlines = mutableListOf<Runnable>()
+                val speaker = AndroidReflectionSpeaker(composeTestRule.activity, platform,
+                    { task, _ -> deadlines += task }, {})
+                var finished = 0
+                if (failure != "initialization" && failure != "startup timeout") platform.ready(true)
+                platform.focusGranted = failure != "focus denial"
+                platform.loseFocusDuringRequest = failure == "focus loss"
+                platform.speechAccepted = failure != "speech rejection"
+                speaker.speakWithInstrumental("Saved reflection.", onFinished = { finished++ })
+                when (failure) {
+                    "initialization" -> platform.ready(false)
+                    "startup timeout", "playback timeout" -> deadlines.last().run()
+                    "speech error" -> platform.failed(platform.spoken.single().id)
+                    "stop" -> { platform.stopThrows = true; speaker.stop() }
+                    "close" -> speaker.close()
+                }
+                // Native engines sometimes report done after stop/error: it is not success.
+                platform.spoken.lastOrNull()?.let { platform.done(it.id); platform.failed(it.id) }
+                platform.ready(true)
+                assertEquals(failure, 1, finished)
+                assertTrue(failure, platform.instrumentals.isEmpty())
+                speaker.close()
+            }
+        }
+    }
+
+    @Test
+    fun cueFailureFocusLossTimeoutAndStopFinishWithoutReplaying() {
+        composeTestRule.runOnUiThread {
+            listOf("rejected", "error", "focus loss", "synchronous focus loss", "timeout", "stop", "close")
+                .forEach { failure ->
+                    val platform = ControlledSpeechPlatform().apply {
+                        instrumentalAccepted = failure != "rejected"
+                        loseFocusDuringInstrumental = failure == "synchronous focus loss"
+                    }
+                    val deadlines = mutableListOf<Runnable>()
+                    val speaker = AndroidReflectionSpeaker(composeTestRule.activity, platform,
+                        { task, _ -> deadlines += task }, {})
+                    platform.ready(true)
+                    var finished = 0
+                    speaker.speakWithInstrumental("Saved reflection.", onFinished = { finished++ })
+                    platform.done(platform.spoken.single().id)
+                    val cue = platform.instrumentals.single()
+                    when (failure) {
+                        "error" -> cue.failed(cue.id)
+                        "focus loss" -> cue.focusLost(cue.id)
+                        "timeout" -> deadlines.last().run()
+                        "stop" -> speaker.stop()
+                        "close" -> speaker.close()
+                    }
+                    cue.done(cue.id)
+                    cue.failed(cue.id)
+                    cue.focusLost(cue.id)
+                    assertEquals(failure, 1, finished)
+                    assertEquals(failure, 1, platform.spoken.size)
+                    assertEquals(failure, 1, platform.instrumentals.size)
+                    assertTrue(failure, platform.instrumentalStops > 0)
+                    speaker.close()
+                }
+        }
+    }
+
+    @Test
+    fun oldVoiceAndCueCallbacksCannotFinishTheNextReflection() {
+        composeTestRule.runOnUiThread {
+            val platform = ControlledSpeechPlatform()
+            val speaker = AndroidReflectionSpeaker(composeTestRule.activity, platform, { _, _ -> }, {})
+            platform.ready(true)
+            var firstFinished = 0
+            var secondFinished = 0
+            speaker.speakWithInstrumental("First.", onFinished = { firstFinished++ })
+            val firstVoice = platform.spoken.single().id
+            platform.done(firstVoice)
+            val firstCue = platform.instrumentals.single()
+            speaker.speakWithInstrumental("Second.", onFinished = { secondFinished++ })
+            val secondVoice = platform.spoken.last().id
+            assertEquals(1, firstFinished)
+            platform.done(firstVoice)
+            platform.failed(firstVoice)
+            platform.focusLosses.getValue(firstVoice).invoke(firstVoice)
+            firstCue.done(firstCue.id)
+            firstCue.failed(firstCue.id)
+            firstCue.focusLost(firstCue.id)
+            assertEquals(secondVoice, platform.focusOwner)
+            assertEquals(0, secondFinished)
+            assertEquals(1, platform.instrumentals.size)
+            platform.done(secondVoice)
+            val secondCue = platform.instrumentals.last()
+            firstCue.done(firstCue.id)
+            firstCue.focusLost(firstCue.id)
+            assertEquals(0, secondFinished)
+            secondCue.done(secondCue.id)
+            assertEquals(1, secondFinished)
+            assertEquals(1, firstFinished)
+            speaker.close()
+        }
+    }
+
+    @Test
+    fun instrumentalGuardIsCheckedAfterSpeechAndPlainHistorySpeechNeverPlaysCue() {
+        composeTestRule.runOnUiThread {
+            val platform = ControlledSpeechPlatform()
+            val speaker = AndroidReflectionSpeaker(composeTestRule.activity, platform, { _, _ -> }, {})
+            platform.ready(true)
+            var visible = true
+            var finished = 0
+            speaker.speakWithInstrumental("Completion.", { visible }, { finished++ })
+            visible = false
+            platform.done(platform.spoken.single().id)
+            assertEquals(1, finished)
+            assertTrue(platform.instrumentals.isEmpty())
+            speaker.speak("History voice only.")
+            platform.done(platform.spoken.last().id)
+            speaker.speakReceipt("Run saved.") { finished++ }
+            platform.done(platform.spoken.last().id)
+            assertEquals(2, finished)
+            assertTrue(platform.instrumentals.isEmpty())
+            speaker.close()
+        }
+    }
+
+    @Test
     fun completionReceiptFinishesBeforeReflectionAndDoesNotReplayOnReturn() {
         val runId = "0f6a2c1e-9d43-4b7a-9c21-7b5e8a4d1f30"
         val receipts = mutableListOf<String>()
@@ -1434,6 +1844,8 @@ class RunStateScreenTest {
         composeTestRule.runOnIdle { paused = true }
         composeTestRule.onNodeWithText(RESUME).assertIsDisplayed()
         composeTestRule.onNodeWithTag(HOLD_TO_STOP_TAG).assertIsDisplayed()
+        composeTestRule.onNodeWithText("Active time and distance are paused. Elapsed includes breaks.")
+            .performScrollTo().assertIsDisplayed()
         composeTestRule.onNodeWithTag(ACTIVE_RUN_METRICS_TAG).performScrollTo().assertIsDisplayed()
     }
 
@@ -1491,8 +1903,12 @@ class RunStateScreenTest {
         moveTo(owner, Lifecycle.State.RESUMED)
         var speeches = 0
         var stops = 0
+        var instrumentals = 0
         val speaker = object : ReflectionSpeaker {
             override fun speak(text: String) { speeches++ }
+            override fun speakWithInstrumental(
+                text: String, canPlayInstrumental: () -> Boolean, onFinished: () -> Unit
+            ) { instrumentals++; onFinished() }
             override fun stop() { stops++ }
             override fun close() = Unit
         }
@@ -1506,7 +1922,10 @@ class RunStateScreenTest {
         moveTo(owner, Lifecycle.State.CREATED)
         composeTestRule.runOnIdle { assertTrue(stops > beforeBackground) }
         moveTo(owner, Lifecycle.State.RESUMED)
-        composeTestRule.runOnIdle { assertEquals(1, speeches) }
+        composeTestRule.runOnIdle {
+            assertEquals(1, speeches)
+            assertEquals(0, instrumentals)
+        }
     }
 
     @Test

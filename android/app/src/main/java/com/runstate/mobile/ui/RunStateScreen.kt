@@ -104,7 +104,9 @@ internal fun RunStateScreen(
     effortEnabled: Boolean = false,
     effortSaving: Boolean = false,
     effortError: String? = null,
-    onEffortSheetOpenChange: (Boolean) -> Unit = {}
+    onEffortSheetOpenChange: (Boolean) -> Unit = {},
+    reflectionAudioActive: Boolean = false,
+    onStopReflectionAudio: () -> Unit = {}
 ) {
     val state = model.state
 
@@ -144,7 +146,9 @@ internal fun RunStateScreen(
             effortEnabled = effortEnabled,
             effortSaving = effortSaving,
             effortError = effortError,
-            onEffortSheetOpenChange = onEffortSheetOpenChange
+            onEffortSheetOpenChange = onEffortSheetOpenChange,
+            reflectionAudioActive = reflectionAudioActive,
+            onStopReflectionAudio = onStopReflectionAudio
         )
         return
     }
