@@ -9,6 +9,48 @@ Every successfully saved run gets a contextual response. No exceptions.
 
 ## First functional Android reflection version — approved direction October 3, 2026
 
+**October 13 continuing connection/delivery pass:** Hosted reflection source and phone setup are
+implemented, but public deployment and standalone phone generation are not yet verified. The phone
+accepts an explicit HTTPS endpoint and a 43–128-character URL-safe per-demo access code, distinct
+from the backend-only Anthropic key. AndroidKeyStore AES-GCM encrypts both settings; their
+preferences are excluded from backup, corrupt settings fail closed and application-owned writes
+survive rotation. Debug may use the local bridge; either build may use explicitly configured HTTPS.
+Release permits Internet but denies cleartext and has no local-network permission. No secret is
+embedded in the APK. The same local owner saves Energy/Effort without a configured connection;
+generation waits for a selected connection, and Completion/History expose honest setup/retry states.
+Retry preserves the saved run, frozen evidence and any already READY exact text.
+Setup now discloses that the chosen endpoint receives new requests and explicit History retries
+containing saved facts and any separately permitted frozen music context. Saving clears the
+sharing draft before the app-owned write waits, including across rotation.
+
+Remote Java startup is deliberate (`--remote`): exact public Host and Bearer validation precede
+generation-body parsing. Two simultaneous provider calls, 256 retained IDs, 32 queued tasks and
+64 KiB request/success-response bodies bound the demonstration server. It supplies internal HTTP,
+not TLS; private HTTPS ingress and single-instance deployment are required. Duplicate protection
+is memory-only and resets with the server. Render Starter at $7/month plus AI usage is approved;
+sign-in and the public-repository Web Service form are ready, but no service, charge or secret
+has been created. User commit/push and private per-demo configuration precede fake staging;
+live-key deployment remains a separate step. The container has empty ENTRYPOINT plus CMD for a
+fake launch override, and finite JDK header/read/write/idle deadlines. A direct Java 17 private
+remote-fake process with those exact startup flags returned health 200, missing-auth 401 and
+authenticated invalid-body 400; it closed an incomplete header after 15.1 seconds. The ephemeral
+code/process were cleared and stopped. Image building, body-upload behavior, public HTTPS and
+standalone phone generation remain unverified; a local Java check is not container/TLS proof.
+
+Speech focus, callbacks and completion now belong to each utterance, with separate initialization
+and playback deadlines. Receipt cleanup releases ownership; engine failures/navigation do not
+replay a failed reflection or crash the journey. Automated verification now includes 43 backend
+tests, 284 JVM tests per Android variant, 88 full emulator screen/database cases, all APK builds
+and one Moto encryption check. After the final disclosure change, three APKs rebuilt and one
+focused connection-dialog case passed. A simulated GPS MainActivity run preserved distance through
+paused movement, automatically selected/stored a FAKE no-selection reply, and reopened its exact
+text and partial path in History. History conservatively kept partial-GPS active time unknown.
+The refreshed Active screenshot was visually checked without overlap. Both JVM suites reran with
+284 passing tests after the last sharing-draft edit; the latest debug APK is installed on the Moto.
+Test packages/device review files were removed, the headless emulator closed and local servers
+stopped with no listeners on 8787/8797. These changes do not certify continuous screen-off GPS, actual phone
+hearing, music duck/resume, general reflection quality or a music snippet.
+
 **October 13 checkpoint:** A newly generated Anthropic reflection reached the Moto phone and its
 exact selected text survived late Energy feedback and History after a cold restart with the backend
 stopped. The first generated-text/persistence milestone is now exercised. Live checks exposed unit

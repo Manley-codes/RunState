@@ -7,6 +7,79 @@ metadata:
 
 ## Current Android checkpoint — October 13, 2026
 
+**Continuing delivery pass — integrated checks passed; deployment pending:** Active Run
+now centers a large fitted elapsed timer, with a clear distance/pace panel and naturally measured
+Pause/Resume/hold-to-end controls below a scrolling body. This uses native drawing and existing
+run states; no new image, live street map or coaching feature is implied.
+GPS fixes are copied and timestamped as their callbacks arrive. Queued fixes tied to an old
+listener/generation are discarded across pause or provider changes, protecting the run boundary;
+this does not prove that the earlier long indoor/screen-off gaps are fixed. Speech now owns focus
+and TTS callbacks per utterance, with separate initialization/playback deadlines. Receipt teardown
+always releases ownership; reflection engine errors and History navigation do not replay a failed
+reply or crash the delivery flow. Physical hearing and music duck/resume still need confirmation.
+
+The phone can now save an explicit HTTPS reflection address and a separate per-demo access code.
+Both are encrypted with a device-bound AndroidKeyStore AES-GCM key in `reflection_connection`
+preferences excluded from backup; the code is not the Anthropic API key and is never embedded in
+the app. Invalid/corrupt settings fail closed, settings writes belong to the app through rotation,
+and clearing the connection clears the music-sharing draft before waiting for storage. Hosted
+connections are available in debug and release when configured; the computer/emulator bridge
+remains debug-only. Release now has Internet permission but rejects cleartext and has no local
+network permission or debug network-security configuration in its merged manifest; debug retains
+its limited local allowlist. Setup discloses that the chosen endpoint receives new reflection
+requests and explicit History retries with saved facts and any separately permitted music context.
+Saving settings clears the sharing draft before the app-owned write waits, including through
+rotation. One reflection owner also preserves local Energy/Effort while unconfigured;
+no provider request occurs without a selected connection. Completion honestly asks for a connection,
+and History offers explicit reflection retry without saving a second run or replacing a READY reply.
+
+The backend's deliberate `--remote` mode checks the exact public Host and Bearer access code
+before reading generation bodies. Limits are two provider calls at once, 256 retained request IDs,
+32 queued tasks and 64 KiB request/success-response bodies. Duplicate protection remains in-memory
+and single-instance. Java serves internal HTTP only: deployment requires private routing behind an
+HTTPS ingress, not an exposed plain HTTP listener. Container source is prepared, but no public
+service or standalone phone generation has been verified. Manley approved Render Starter at
+$7/month plus AI usage in a free Hobby workspace. Render sign-in is verified and its Web Service
+form is prepared for the public repository's `master` branch: Dockerfile `backend/Dockerfile`,
+build context `backend`, blank root directory, Starter instance, manual deploy and `/health`.
+The public-repository route needs no GitHub installation grant. No service was created or charged,
+no secret was entered and this setup made no provider call. Deployment now waits for Manley's
+commit/push and private per-demo access-code configuration, followed by fake staging and a separate
+live-key decision. The container uses an explicitly empty ENTRYPOINT and a CMD so the launch can
+be overridden for fake staging. Finite JDK header/read/write/idle deadlines are configured;
+the container image, public ingress and body-upload behavior have not been exercised.
+The direct Java 17 process was checked locally in private `--remote --fake` mode using the exact
+container startup flags: health returned 200, missing auth 401 and authenticated invalid JSON 400.
+An incomplete-header client was closed after 15.1 seconds. This proves that local Java boundary
+and header deadline, not a built Docker image, Render TLS or standalone phone delivery. Its test
+access code existed only in process memory and was cleared; the server was stopped afterward.
+
+Confirmed verification is 43 backend tests, 284 JVM tests in each Android variant, all APK builds
+and one isolated encrypted-settings test on the Moto. The full emulator screen/database suite
+passed 88 tests; after the setup disclosure change, all three APKs rebuilt and the focused
+connection-dialog test passed. The release merged manifest was checked for Internet permission,
+no local-network permission, cleartext denied and no debug configuration.
+A real MainActivity emulator walkthrough measured 0.04 mi, paused, moved roughly 111 m while
+paused, and resumed with distance still 0.04 mi. New Running movement brought it to 0.06 mi;
+hold-to-stop saved partial metrics at 8:14 elapsed/7:09 displayed active. Automatic no-selection
+reached READY/FAKE; History reopened its exact text and a partial path with four sections from
+the pause and manual-delay gaps. History leaves active time unknown under the conservative GPS
+rule. This is simulated pause/reopen proof, not screen-off continuity or outdoor accuracy proof.
+The existing `android/artifacts/run-gps-active-emulator.png` was updated and visually checked
+without overlap at the default viewport. Both JVM variants were rerun after the final sharing-draft
+edit: 284 tests each, zero failures/errors. The latest debug APK was installed on the Moto while
+preserving app data. Test packages were removed from phone/emulator, temporary device review files
+were removed and the headless emulator closed. The local fake servers stopped; ports 8787 and
+8797 have no listeners. No secret or temporary diagnostic was retained in project source.
+This continuing pass
+adds only three necessary files: `ReflectionConnectionSettings.kt` for encrypted connection
+storage, `backend/Dockerfile` for the hosted Java container and `backend/.dockerignore` for a strict
+container-build allowlist. One price/form review image was created outside the repository in the
+authorized visualizations folder; it adds no project source. No commits or pushes were made;
+routine Git work remains Manley's.
+
+### Earlier live and optional-music checkpoints
+
 The first functional live-reflection gate is now met: the Moto received newly generated Anthropic
 text, selected and stored it, preserved it through late Energy feedback, and reopened the exact
 text in History after a cold restart with the backend stopped. A small five-generation live check

@@ -266,6 +266,26 @@ That saved live reply/evidence predates the final GPS timing guard and remains u
 reflection requests omit active duration for PARTIAL/UNAVAILABLE GPS rather than treating a
 reconstructed timer as proof of uninterrupted tracking; fixture/COMPLETE GPS retain known timing.
 
+**Continuing connection/audio pass:** Optional sharing keeps the same two per-run consent flags
+and one frozen partial Spotify title/artist. The prepared hosted path uses a separate encrypted
+per-demo connection code, never an on-phone Anthropic key. Generation has no provider request
+without a selected connection, while local Energy/Effort still save. Clearing the connection clears
+the draft sharing choice before the settings write waits; access revocation, observation-off and
+new runs also clear it. Existing READY replies and their frozen music evidence remain unchanged.
+Connection setup discloses that new requests and explicit History retries send saved facts and
+any separately permitted frozen music context to the chosen endpoint. Saving the setup also clears
+the sharing draft before waiting, including through rotation; it creates no new sharing consent.
+Speech ownership/deadlines are hardened, but actual hearing and music duck/resume remain unverified.
+No song audio enters AI or a new playback path. Observed Spotify metadata does not grant snippet
+rights; automated segues/previews need a permitted provider route before implementation. No snippet
+is built. Integrated emulator screen/database checks passed 88 cases, and the final setup-dialog
+check passed after rebuilding all APKs. Render sign-in/form preparation is complete, but no service,
+charge or secret was created. User commit/push and private connection setup precede hosted fake
+staging. Final sharing-draft changes passed both 284-test JVM suites and the latest debug APK is
+installed on the Moto; test packages/temp device files are removed and local servers stopped.
+The local Java 17 remote-fake auth/header-deadline check passed; Docker/public/standalone delivery
+remain unverified, as do actual music hearing/ducking and snippets.
+
 - Partial observations stay partial. Known identity with unknown timing is still useful, but it
   cannot support mile, split, opener, closer or complete-soundtrack claims.
 - Raw playback, decisions and runner feedback are evidence. Track roles, relationship patterns and
