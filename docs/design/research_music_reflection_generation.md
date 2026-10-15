@@ -20,8 +20,20 @@ The earlier research-first pace below is historical, not the current implementat
 capture check have passed. Manley approved a temporary original instrumental after Completion
 speech; its local integration and provenance are recorded in the October 14 source decision below.
 Final build, all 76 emulator screen cases and Moto receipt → live reflection → instrumental
-hearing passed. Actual-song pairing remains later. The local no-selection prompt v1.3 needs
-push/manual deployment before live QA; the listening check used the unchanged hosted v1.2.
+hearing passed. Actual-song pairing remains later. Manley subsequently reported Render Live at
+`bcde0c4`, containing no-selection prompt v1.3, and public health returned 200/ok. A subsequent
+connected-Moto Sample passed bounded live writing/cold-reopen QA: factual no-selection wording,
+no invented/missing feelings or question, 21 completed runs with prior 20 retained and exact stored
+fields unchanged across restart. This one output does not establish broad quality. The earlier
+instrumental hearing check used hosted v1.2. A second fresh v1.3 Sample then passed physical
+Spotify compatibility: Manley heard facts → reflection → cue while Spotify became quieter or
+paused and returned normally by itself; focus logs and PLAYING status support that handoff.
+Music observation/sharing stayed off and RunState issued no Spotify play command or song/audio
+sharing. There are now two bounded no-selection output passes and 22 completed runs, with every
+prior 21 run/reflection/transition/location field hash unchanged. This one Moto/session result does
+not establish wider-device/call/Bluetooth compatibility or general writing quality. Active visual
+review remains open after the bounded native pass recorded in `project_current_state.md`;
+actual-song pairing stays open.
 
 Manley's direction as of September 17, 2026:
 
@@ -240,7 +252,8 @@ Focus logs recorded voice completion, the music-focus request 32 ms later and fo
 10.782 seconds afterward in that check; this is not a guaranteed future entrance latency.
 There was one hosted reflection-family request for the new Sample run and no network generation
 for cue playback. Stay-awake was restored to 0 with no GPS service/wake lock remaining. Actual-song
-selection/passage, Spotify permission and external music duck/resume remain independently open.
+selection/passage, Spotify content permission and wider external audio compatibility remain open.
+The later one-Moto Spotify yield/return check in the current status above passed separately.
 
 **Asset provenance:** `android/app/src/main/res/raw/runstate_reflection_instrumental.mp3` was
 generated once with ElevenLabs Music v2 on October 14, 2026: instrumental-only, warm mellow

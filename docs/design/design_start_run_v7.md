@@ -8,7 +8,18 @@ status: CURRENT DESCRIPTION - what is built in the prototype right now. Not a sp
 
 # Start Run — where this screen actually is
 
-**Native Android status, October 12, 2026:** a first Compose visual pass now follows this
+**Native Active status, October 14, 2026:** a bounded Compose pass now puts exact distance above
+the smaller circular map/timer, with compact Average pace/Active below and full Elapsed fitted.
+The smaller mi/km suffix belongs to the same complete semantic value. Unknown metrics, truthful
+fixture/GPS labels, pause explanation and action/footer behavior remain; source/provenance may
+require scrolling on Paused, short-height or large-font views. Fresh Running/settled Paused
+renders were inspected, then final 287 JVM tests per variant, APK builds and 14 focused emulator
+checks passed. Moto update retained 22 completed runs without a new run or reflection request.
+The HTML reference file URL was blocked; no workaround or rendered-reference fidelity claim is
+made. This native pass is not a locked design or the larger Active redesign; that review remains open.
+See `project_current_state.md` for the review screenshots, exact verification and remaining limits.
+
+**Native foundation, October 12, 2026 — historical context:** a first Compose visual pass followed this
 prototype's map, agent card, Energy tiles and Start control. The map stays illustrative; an
 explicit Use GPS choice now requests precise location and records cautious GPS evidence through
 a foreground service, while fixture mode remains the default. The hardcoded GPS status,

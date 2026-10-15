@@ -9,6 +9,43 @@ Every successfully saved run gets a contextual response. No exceptions.
 
 ## First functional Android reflection version — approved direction October 3, 2026
 
+**October 14 Spotify follow-up — one physical compatibility pass:** Manley started Spotify, then
+a second fresh Sample (about 0.01 mi FIXTURE, 9.400 s elapsed/5.379 s active) finalized
+READY/NO_SELECTION/non-FAKE with no Energy answer or music observation/sharing:
+
+> You covered 0.01 miles of sample distance in under 10 seconds. A brief run, wrapped up at 7:05 p.m.
+
+Manley heard facts → reflection → instrumental; Spotify became quieter or paused and returned
+normally by itself. Focus logs showed reflection abandonment followed by cue music focus 21 ms
+later, cue abandonment after 10.488 s and Spotify full-gain request 106 ms afterward; Spotify was
+PLAYING. RunState issued no Spotify play command or song/audio/model sharing. A read-only audit
+found 22 completed/0 active with every prior 21 run/reflection/transition/location field hash
+unchanged. Temporary copies were removed, stay-awake 0 restored and no GPS service remained.
+No code edit or test rerun was needed. This one Moto/session pass does not cover wider audio
+compatibility, calls/Bluetooth or distance accuracy. v1.3 now has two bounded no-selection outputs;
+the first cold-reopen proof below remains separate. The later bounded native Active pass is
+recorded in `project_current_state.md`; larger Active design review remains open.
+
+**October 14 deployment follow-up — one live v1.3 Sample/cold-reopen check passed:** Manley manually deployed
+latest GitHub `master` and reported Render Succeeded/Live at `bcde0c4`, replacing `85cbfab`.
+Public `/health` returned 200/ok. That commit contains prompt `mobile-reflection-v1.3`; the Dockerfile
+copies its source resources and runs Maven test/package. Latest build logs were not inspected;
+health does not certify writing quality. A subsequent connected-Moto Sample separately produced
+this exact READY/NO_SELECTION/non-FAKE reply, with post-run Energy null and music sharing off:
+
+> You completed a sample run in just over 9 seconds at 6:57 p.m. That's time on your feet.
+
+The saved facts were 9.384 seconds elapsed, 5.378 seconds active, 16.134 m FIXTURE and
+America/Chicago timezone. The reply is factual and omits invented/unanswered feelings/questions.
+One fresh run was used, without an Energy answer or assistant Retry; a billed-request count was
+not independently established. Cold restart retained Online service, exact History text and all
+request/finalization/evidence fields. Stable read-only main/WAL checks found 21 completed/0 active,
+all prior 20 IDs retained and every stored run/reflection/transition/location field hash unchanged
+across restart. Temporary copies were removed, no persistent file/credential/source edit/Git
+mutation occurred and no tests needed rerunning. This is one bounded writing pass, not general
+quality or hearing confirmation for that first check. The subsequent Spotify/audio proof above
+adds one-Moto compatibility and v1.3 hearing; the later native pass is recorded in current state.
+
 **October 14 continuation — GPS capture passed; bounded wording/navigation polish:**
 The latest Moto walk saved 0.08 miles of partial GPS over 2:24 elapsed and reopened its exact
 live no-selection reply and one-section recorded path after process restart. Fresh fixes span
@@ -17,15 +54,15 @@ safeguard. This verifies capture for that device/session, not distance accuracy 
 All measured GPS runs still receive the deliberate PARTIAL label; their frozen reflection evidence
 and History active time stay conservative. See `project_current_state.md` for the field aggregates.
 
-Local prompt `mobile-reflection-v1.3` now makes the no-selection boundary explicit: recognize known
+Prompt `mobile-reflection-v1.3` makes the no-selection boundary explicit: recognize known
 run facts, leave post-run feelings out, do not comment that they are unknown/unreported/unrecorded/
 unselected, and do not ask how the run felt or request Energy. Other branches and the sample,
 partial-GPS and partial-media limits are unchanged. No stored reply is rewritten. The resource
 header is the version source; the production provider's transport/configuration behavior is unchanged.
 All 45 backend tests passed, including the captured-request checks for the new instructions.
 Those checks do not prove generated writing compliance. A private local setup attempt made zero
-AI requests because it could not obtain usable configuration; live v1.3 verification remains
-pending a pushed commit and manual Render deployment. The working hosted service remains unchanged.
+AI requests because it could not obtain usable configuration. The subsequent `bcde0c4` deployment
+above now includes v1.3; its subsequent bounded live Sample writing verification passed.
 
 History now scrolls to the top only when its first run identity changes. Initial loading/rotation
 and Energy/Effort updates keep the reader's position; navigation does not auto-expand, speak or
@@ -56,9 +93,10 @@ Moto installed without reset. A new 0.05-mi Sample run received one hosted v1.2 
 family; Manley heard receipt → exact live reflection → instrumental and said it was "all in
 order and landed perfectly." No Energy selection or music sharing was needed. Cue playback is
 local, adding no generation call. Normal stay-awake 0 was restored with no GPS service/CPU lock.
-Actual-song pairing, Spotify playback and external music duck/resume remain unverified; the
+Actual-song pairing, Spotify content playback and wider external audio compatibility remain unverified; the
 temporary cue is not evidence that those are implemented. This is a good commit point; the user
-still owns Git and local prompt v1.3 still needs push/manual deployment before its live QA.
+still owns Git. This listening result predates the v1.3 deployment; the later v1.3 check adds one
+writing/cold-reopen pass, not a new listening confirmation.
 
 **October 13 continuing hosted delivery — live phone text, audible sequence and reopen verified:**
 Render now generates real reflections for the Moto over HTTPS. The phone

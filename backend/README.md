@@ -73,9 +73,41 @@ without inventing post-run feelings, commenting on an unanswered Energy choice, 
 It may omit a music reference when the evidence is weak. Structured-output validation checks shape and preserves exact text;
 it does not prove every generated statement is factual or that a real GPS distance is accurate.
 
-The October 14 v1.3 wording change is local source until committed, pushed and manually deployed
-to Render. Previously saved reflections retain their exact text; mocked tests verify the instructions
-sent to the provider, not compliance by future live generations.
+**October 14 deployment checkpoint:** Manley manually deployed latest GitHub `master`, reported
+Render Succeeded/Live and confirmed commit `bcde0c4`, replacing `85cbfab`. This source includes v1.3;
+the Dockerfile copies full `src/`, including the prompt, and runs Maven test/package. Public
+`/health` returned 200 with `{"status":"ok"}`. Latest Render build logs were not inspected;
+health verifies liveness, not writing compliance. A subsequent connected-Moto Sample separately
+passed one bounded live v1.3 writing/cold-reopen check. With 9.384 seconds elapsed, 5.378 seconds
+active, 16.134 m FIXTURE, unknown pre-Energy/null post-Energy and music observation/sharing off,
+its exact READY/NO_SELECTION/non-FAKE text was:
+
+> You completed a sample run in just over 9 seconds at 6:57 p.m. That's time on your feet.
+
+It matches sample/time evidence and contains no invented/missing feeling or question. One fresh
+run was used, without an Energy answer or assistant Retry; no billed-request count was independently
+established. Cold History reopen retained exact text/request/finalization/evidence, Online service,
+21 completed/0 active and all prior 20 IDs. Stored field hashes matched across restart; temporary
+read-only snapshots were removed. No new credential/file/source change/test rerun/Git mutation.
+This is one output pass, not broad model compliance or new hearing confirmation. Previously saved
+replies remain unchanged; mocked tests still verify instruction transmission rather than live quality.
+
+**Subsequent Spotify compatibility check:** A second fresh v1.3 Sample finalized
+READY/NO_SELECTION/non-FAKE: about 0.01 mi FIXTURE, 9.400 s elapsed/5.379 s active, no Energy
+answer or music observation/sharing. Its exact reply was:
+
+> You covered 0.01 miles of sample distance in under 10 seconds. A brief run, wrapped up at 7:05 p.m.
+
+Manley heard facts → reflection → instrumental while user-started Spotify became quieter or
+paused and returned normally by itself. Phone focus logs support the handoff; Spotify was PLAYING
+afterward. RunState issued no Spotify play command and sent no song metadata/audio to the model.
+The audit found 22 completed/0 active and every prior 21 run/reflection/transition/location field
+hash unchanged. Temporary copies were removed, stay-awake 0 restored and no GPS service remained;
+no source change, test rerun, Git mutation or persistent file was required. These are two bounded no-selection output
+passes with one Moto/session audio compatibility pass, not broad quality, wider compatibility,
+calls/Bluetooth or distance accuracy. First-run cold-reopen proof remains separate. Active visual
+review remains open after the later bounded native pass recorded in current state; actual-song
+sourcing remains open.
 
 ## HTTP API
 
@@ -340,7 +372,8 @@ Use the Docker startup command for remote hosting. A bare Java/IDE remote launch
 `-D` flags before the server implementation initializes; changing them after creating a server does
 not configure that existing JVM. Local launches and tests are not globally reconfigured by app
 code. No in-process property assertion is claimed as a socket-timeout test: the chosen container
-runtime still needs a controlled slow-upload/deadline check before live deployment.
+runtime still needs a controlled slow-upload/deadline check; the current Live deployment and
+health response do not establish that separate boundary.
 
 A controlled local Java 17 `--remote --fake` launch with these startup flags verified health `200`,
 missing-token `401`, authenticated malformed-body `400`, and closure of an incomplete-header
@@ -413,8 +446,9 @@ Automated tests use dummy configuration and fake or simulated provider responses
 live Anthropic request. Separate bounded live checks exercised credentials, unit/time/provenance
 grounding and phone delivery, but do not establish general generation quality. The server has no
 database, in-process TLS, durable idempotency or multi-user account system. Its optional remote
-mode requires a separately deployed private HTTPS ingress and per-demo token. That protected
-deployment is prepared in source, not verified as hosted. The local Host/Origin guard still does
+mode requires a separately deployed private HTTPS ingress and per-demo token. The Render service
+is deployed at `bcde0c4` with public health and one live v1.3 Sample/cold-reopen check passed;
+general writing quality and slow-body/ingress deadline testing remain unverified. The local Host/Origin guard still does
 not authenticate arbitrary local programs. The full music-aware demonstration remains
 incomplete; current verification and remaining work are recorded in
 [`project_current_state.md`](../docs/design/project_current_state.md).

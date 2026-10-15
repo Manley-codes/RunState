@@ -7,6 +7,99 @@ metadata:
 
 ## Current Android checkpoint — October 14, 2026
 
+**Bounded native Active visual pass complete and installed.** Exact Distance now leads above the
+map/timer, with a smaller preserved mi/km suffix in the same complete semantic value. The circle
+is capped at 240 dp and fits the whole Elapsed value; a compact Average pace/Active panel sits
+below. Unknown values remain `—`. Source/provenance labels, honest GPS states, action failure/
+pending states, pause explanation and footer controls remain. Provenance may require body scrolling
+on Paused, short-height or large-font views; this is not an all-content-above-the-fold claim.
+
+Fresh emulator Running and settled Paused screens were visually inspected before and after the
+change. The first Paused capture was a transitional disabled Running state and was rejected/
+replaced. The HTML reference's file URL was blocked in the in-app browser; no workaround was used,
+so no rendered-HTML fidelity claim is made. This is an internal native pass, not a locked design.
+Only `ActiveRunScreen.kt` and one added case in the existing Compose test file changed; no new
+source file, app asset, Room schema or backend change. Final verification passed 287 debug/287
+release JVM tests with zero failures/errors/skips, three APK builds (27 seconds), and all 14
+focused UI checks (46.863 seconds) after rendered unit/spacing refinement. Checks cover complete
+long km/pace/time values, 1.5/2.0 font scaling, hierarchy, scrolling, legal disabled/failure actions,
+pause/Resume/hold behavior and GPS states. The full 77-case screen suite was not executed.
+
+Three necessary review screenshots were created in `android/artifacts/`:
+`run-active-before-emulator.png`, `run-paused-before-emulator.png` and `run-paused-emulator.png`.
+The existing `run-active-emulator.png` was refreshed. They preserve before/after visual evidence;
+they are review artifacts, not bundled app assets. Moto APK update and launch succeeded without
+reset. The post-install audit retained 22 COMPLETED/0 active and every stored run/reflection/
+transition/location field hash and exact reply. Start shows Ready, Online service selected,
+Sample and GPS off; normal stay-awake is 0. No new Moto run/provider request, credential read or
+Git mutation was made for this layout pass. The emulator-only inspection fixture was saved,
+its original stay-awake 1 restored, the app stopped and the emulator closed. This emulator test
+record is not another Moto run or model-quality result. Screenshot review-panel requests were queued.
+The next larger Active design review remains open; actual-song sourcing is later. Earlier hosted
+v1.3/Spotify QA below remains valid and accounts for the last two Sample runs in the 22-record total.
+
+### Earlier October 14 hosted/audio QA — retained proof
+
+**Hosted v1.3 has two bounded Sample passes; Spotify compatibility passed on this Moto.** Manley completed the Render walkthrough:
+`Manual Deploy` → `Deploy latest commit`, then reported Succeeded/Live and confirmed `bcde0c4`
+as the Live commit, replacing `85cbfab`. The pushed local/GitHub `master` copies match that commit;
+public `/health` returned HTTP 200 with `{"status":"ok"}`. The source Dockerfile copies the full
+`src/`, including prompt v1.3, and runs Maven test/package. Latest Render build logs were not
+inspected; health proves liveness, not writing compliance. The subsequent connected-phone checks
+below separately inspect the model outputs. No credential read or persistent file was needed.
+
+### Current October 14 Spotify compatibility check
+
+Manley started Spotify playback, then a second fresh Sample saved about 0.01 mi FIXTURE,
+9.400 seconds elapsed and 5.379 seconds active. With no Energy answer and music observation/
+sharing off, it finalized READY/NO_SELECTION/non-FAKE with this exact reply:
+
+> You covered 0.01 miles of sample distance in under 10 seconds. A brief run, wrapped up at 7:05 p.m.
+
+Manley heard saved facts → live reflection → instrumental and reported Spotify became quieter
+or paused, then returned to normal by itself. Phone focus logs showed receipt focus at
+19:05:40.030–19:05:46.792, reflection at 19:05:53.622–19:06:02.590, then transient music focus at
+19:06:02.611–19:06:13.099. The cue request followed reflection-focus abandonment by 21 ms and lasted
+10.488 seconds; Spotify requested full gain at 19:06:13.205, 106 ms after cue abandonment, and
+was PLAYING afterward. These are this check's timings, not guaranteed entrance/resumption latency.
+RunState issued no Spotify play command and sent no song metadata or audio to the model; music
+was user-started and this run's observation/sharing remained off.
+
+The final read-only audit found 22 COMPLETED runs and no active rows; all prior 21 run/reflection/
+transition/location field hashes were unchanged. Temporary copies were removed, stay-awake
+restored to 0 and no GPS service remained. No code change, test rerun, Git mutation or persistent
+file was required for this QA phase. This is a physical audio compatibility pass for one Moto/
+session, not wider devices/apps, phone-call/Bluetooth behavior or distance accuracy. v1.3 now has
+two bounded no-selection outputs, with the first run's cold-reopen proof separately recorded below.
+That compatibility pass preceded the bounded Active visual pass above. Larger Active design review
+and actual-song sourcing remain open.
+
+### First October 14 v1.3 Sample — writing and cold-reopen proof
+
+After Manley confirmed the Moto ready, one fresh Sample saved FIXTURE distance 16.134 m (about
+0.01 mi), 9.384 seconds elapsed and 5.378 seconds active. Its timestamps were 1792022225004–
+1792022234388 in America/Chicago. Pre-run Energy was UNKNOWN, post-run Energy was null and music
+observation/sharing were off. It finalized READY/NO_SELECTION/non-FAKE with `candidates_json`
+cleared. No Energy answer or assistant Retry was used. Its exact selected reply was:
+
+> You completed a sample run in just over 9 seconds at 6:57 p.m. That's time on your feet.
+
+That output matches the supplied duration/time and sample provenance, with no invented feeling,
+unanswered-feeling commentary or question. This is one bounded output pass, not general writing
+quality, all-branch compliance or independently established billed-request count.
+Cold force-stop/start retained Online service selection and native History's exact new reply.
+The run/reflection, including request ID, finalization and frozen evidence, stayed unchanged.
+Read-only stable main/WAL quick checks found 21 COMPLETED runs, no RUNNING/PAUSED rows and all 20
+prior IDs retained; hashes of every stored run/reflection/transition/location field matched before
+and after the cold restart. Temporary inspection snapshots were removed, with no persistent export.
+The Moto is on the newest expanded History row; USB stay-awake is restored to 0. No source change,
+test rerun or Git mutation was needed. There is no new hearing confirmation for this v1.3 check;
+the earlier v1.2 receipt/reflection/instrumental hearing was the audio proof at this point. The
+subsequent Spotify check above supplies current v1.3 hearing/compatibility proof for one Moto.
+An actual-song route remains separately open.
+
+### Earlier October 14 instrumental milestone — retained proof
+
 **Temporary instrumental installed and heard in order; integrated checks passed.** Manley's final
 decision supersedes the brief choice to wait: use an original RunState instrumental until an
 actual song and permitted playback route are available. This cue exercises the audible handoff;
@@ -50,14 +143,15 @@ completed runs retained, no RUNNING/PAUSED rows, and the latest fixture run READ
 non-FAKE with matching exact text and observation/sharing off. The earlier 135.86013686 m GPS
 run and its exact stored reply are unchanged. The Moto is on Run Complete with no active run;
 the temporary inspection directory was removed, leaving no persistent database export.
-Render continues working v1.2; local prompt v1.3 still needs user push/manual deployment.
-Actual-song pairing/permission and Spotify duck/resume remain separate unverified items. This is
+That listening check used hosted v1.2; the later `bcde0c4` deployment above now includes v1.3.
+Actual-song pairing/permission and wider external audio compatibility remain unverified. The
+subsequent one-Moto Spotify yield/return pass is recorded above. This was
 a good commit point for the bounded changes; no assistant Git mutation occurred. No further
 outdoor walk is required now.
 
 ### Earlier October 14 wording and History polish — retained proof
 
-**Wording/History polish and phone data retention passed; hosted v1.3 QA awaits deployment.**
+**Wording/History polish and phone data retention passed; v1.3 was not deployed at this checkpoint.**
 `RunHistoryScreen.kt` now remembers the previous newest run ID alongside its saveable list state.
 It scrolls to item 0 only when an actual new first ID arrives. Initial data hydration, rotation
 and feedback updates on the same first ID preserve position. The change does not expand a row,
@@ -74,16 +168,16 @@ settings code was not edited. The phone is locked on Start with no new official 
 Moto History interaction after this installation is claimed; native scroll behavior is verified
 by the 11 emulator checks. The phone can stay locked; no user unlock is required for this proof.
 
-The backend prompt source is now v1.3. Its small wording/header change keeps unknown post-run
+The backend prompt source became v1.3. Its small wording/header change keeps unknown post-run
 Energy out of `no_selection`: no invented feeling, unanswered/unreported/unrecorded commentary
 or "How did it feel?" question. Chosen Energy branches, factual partial-GPS/sample/music boundaries
 and frozen saved replies stay unchanged. A captured-request regression verifies the new
 instructions are transmitted. Provider production code and the HTTP contract are unchanged;
 all 45 backend tests passed on a clean build in 28.777 seconds. These mocked checks do not prove
 future model compliance. No prompt v1.3 live request was attempted, no new AI charge/secret file
-or local server was created, and the working Render deployment remains v1.2.
-The local prompt/readme changes require user commit/push and manual Render deployment before
-a bounded live v1.3 writing check. Existing selected replies must not be regenerated to apply it.
+or local server was created, and Render was still v1.2 at that earlier point. The later deployment
+above removes the push/deploy blocker; its later bounded live Sample writing check passed.
+Existing selected replies must not be regenerated to apply it.
 At that checkpoint the music source choice was still pending; the approved instrumental
 continuation above supersedes that blocker. No further physical walk is needed now.
 This is a good commit point for the bounded changes; routine Git work remains the user's, before
@@ -133,7 +227,8 @@ credential or raw-coordinate readout was retained. No source change or test reru
 this repeat. The earlier verified 287-per-variant, APK, emulator and service checks remain valid.
 
 No additional physical walk is needed now. This capture pass unlocked the bounded writing/History
-polish described above; its local implementation does not yet establish hosted v1.3 quality.
+polish described above. The later live Sample above supplies one bounded v1.3 writing pass;
+neither this field result nor that one output establishes general writing quality.
 
 ### Earlier October 14 failure diagnosis and software repair — retained history
 
