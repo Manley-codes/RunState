@@ -1850,6 +1850,55 @@ class RunStateScreenTest {
     }
 
     @Test
+    fun activeHierarchyKeepsExactMetricValuesAtLargeTextSizes() {
+        var paused by mutableStateOf(false)
+        var fontScale by mutableStateOf(1.5f)
+        val metrics = fixtureMetrics().copy(
+            distance = "1234.56 km",
+            elapsed = "100:59:59",
+            averagePace = "123:59 /km",
+            active = "100:59:59"
+        )
+        composeTestRule.setContent {
+            val density = LocalDensity.current
+            CompositionLocalProvider(LocalDensity provides Density(density.density, fontScale)) {
+                ActiveRunScreen(paused, metrics, false, true,
+                    { paused = true }, { paused = false }, {},
+                    modifier = Modifier.size(360.dp, 480.dp))
+            }
+        }
+
+        fun assertWholeValue(tag: String, value: String) {
+            val node = composeTestRule.onNodeWithTag(tag)
+            node.performScrollTo().assertTextEquals(value).assertIsDisplayed()
+            val layouts = mutableListOf<TextLayoutResult>()
+            node.performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
+            assertFalse(layouts.single().hasVisualOverflow)
+        }
+
+        for (scale in listOf(1.5f, 2f)) {
+            composeTestRule.runOnIdle { fontScale = scale }
+            composeTestRule.onNodeWithText(PAUSE).assertIsDisplayed()
+            assertWholeValue(ACTIVE_RUN_DISTANCE_TAG, metrics.distance)
+            assertEquals(1, composeTestRule.onAllNodesWithText(metrics.distance).fetchSemanticsNodes().size)
+            val distance = composeTestRule.onNodeWithTag(ACTIVE_RUN_DISTANCE_TAG).fetchSemanticsNode()
+            val circle = composeTestRule.onNodeWithTag(ACTIVE_RUN_CIRCLE_TAG).fetchSemanticsNode()
+            assertTrue(distance.positionInRoot.y + distance.size.height <= circle.positionInRoot.y)
+            assertWholeValue(ACTIVE_RUN_ELAPSED_TAG, metrics.elapsed)
+            assertWholeValue(ACTIVE_RUN_PACE_TAG, metrics.averagePace)
+            assertWholeValue(ACTIVE_RUN_ACTIVE_TAG, metrics.active)
+            composeTestRule.onNodeWithText(metrics.sourceLabel).performScrollTo().assertIsDisplayed()
+
+            composeTestRule.onNodeWithText(PAUSE).performClick()
+            composeTestRule.onNodeWithText(RESUME).assertIsDisplayed()
+            composeTestRule.onNodeWithTag(HOLD_TO_STOP_TAG).assertIsDisplayed()
+            composeTestRule.onNodeWithText("Active time and distance are paused. Elapsed includes breaks.")
+                .performScrollTo().assertIsDisplayed()
+            composeTestRule.onNodeWithText(RESUME).performClick()
+        }
+    }
+
+    @Test
     fun activeGpsWaitsForRecordedMovementBeforeClaimingRecording() {
         var measured by mutableStateOf(false)
         composeTestRule.setContent {

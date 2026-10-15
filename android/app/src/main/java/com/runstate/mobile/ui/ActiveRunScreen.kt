@@ -32,19 +32,27 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import com.runstate.mobile.R
 
 internal const val ACTIVE_RUN_SCREEN_TAG = "activeRunScreen"
 internal const val ACTIVE_RUN_CIRCLE_TAG = "activeRunCircle"
+internal const val ACTIVE_RUN_DISTANCE_TAG = "activeRunDistance"
 internal const val ACTIVE_RUN_ELAPSED_TAG = "activeRunElapsed"
 internal const val ACTIVE_RUN_METRICS_TAG = "activeRunMetrics"
+internal const val ACTIVE_RUN_PACE_TAG = "activeRunPace"
+internal const val ACTIVE_RUN_ACTIVE_TAG = "activeRunActive"
 
 private val ActiveInk = Color(0xFF293326)
 private val ActiveForest = Color(0xFF263222)
@@ -76,7 +84,7 @@ internal fun ActiveRunScreen(
             .testTag(ACTIVE_RUN_SCREEN_TAG)
             .background(Brush.verticalGradient(listOf(ActiveCream, Color(0xFFF0F3EB))))
     ) {
-        val circleSize = (maxWidth - 48.dp).coerceIn(120.dp, 300.dp)
+        val circleSize = (maxWidth - 48.dp).coerceIn(120.dp, 240.dp)
         val largeText = LocalDensity.current.fontScale > 1.3f
         val mapStatus = when {
             !isGpsRun -> "ILLUSTRATIVE MAP · LOCATION OFF"
@@ -105,7 +113,23 @@ internal fun ActiveRunScreen(
                     lineHeight = 20.sp,
                     modifier = Modifier.fillMaxWidth().padding(top = 10.dp)
                 )
-                Spacer(Modifier.height(22.dp))
+                Spacer(Modifier.height(16.dp))
+
+                Text(
+                    text = "Distance",
+                    color = ActiveInk.copy(alpha = 0.72f),
+                    fontSize = 12.sp,
+                    lineHeight = 18.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    letterSpacing = 1.2.sp
+                )
+                ActiveFittedValue(
+                    value = metrics?.distance ?: "—",
+                    maximumSize = 76,
+                    compactDistanceUnit = true,
+                    modifier = Modifier.padding(top = 4.dp).testTag(ACTIVE_RUN_DISTANCE_TAG)
+                )
+                Spacer(Modifier.height(14.dp))
 
                 Box(
                     modifier = Modifier
@@ -135,7 +159,11 @@ internal fun ActiveRunScreen(
                             letterSpacing = 1.2.sp
                         )
                         Spacer(Modifier.height(8.dp))
-                        ActiveElapsedTime(metrics?.elapsed ?: "—")
+                        ActiveFittedValue(
+                            value = metrics?.elapsed ?: "—",
+                            maximumSize = 68,
+                            modifier = Modifier.testTag(ACTIVE_RUN_ELAPSED_TAG)
+                        )
                     }
                 }
 
@@ -174,7 +202,7 @@ internal fun ActiveRunScreen(
                     )
                 }
 
-                ActiveMetricsPanel(metrics, Modifier.padding(top = 20.dp))
+                ActiveMetricsPanel(metrics, Modifier.padding(top = 16.dp))
                 if (isGpsRun && !gpsServicePresent) {
                     Text(
                         text = gpsMessage ?: "GPS is not recording. Distance may be incomplete.",
@@ -303,21 +331,36 @@ private fun ActiveStateBadge(paused: Boolean) {
     )
 }
 
-/** Fit the whole saved-format timer to the circle without clipping digits or changing the text. */
+/** Fit an exact formatted value, including its unit, without clipping or changing the text. */
 @Composable
-private fun ActiveElapsedTime(elapsed: String) {
+private fun ActiveFittedValue(
+    value: String,
+    maximumSize: Int,
+    modifier: Modifier = Modifier,
+    textAlign: TextAlign = TextAlign.Center,
+    compactDistanceUnit: Boolean = false
+) {
     BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
         val density = LocalDensity.current
         val measurer = rememberTextMeasurer()
         val style = TextStyle(fontFamily = CompletionNumberFont, fontWeight = FontWeight.Medium)
-        val textSize = remember(elapsed, maxWidth, density, measurer) {
+        // The formatter still owns the complete value; only an existing mi/km suffix changes size.
+        val displayedValue = remember(value, compactDistanceUnit) {
+            if (compactDistanceUnit && (value.endsWith(" mi") || value.endsWith(" km"))) {
+                buildAnnotatedString {
+                    append(value.dropLast(3))
+                    withStyle(SpanStyle(fontSize = 0.32.em)) { append(value.takeLast(3)) }
+                }
+            } else AnnotatedString(value)
+        }
+        val textSize = remember(displayedValue, maximumSize, maxWidth, density, measurer) {
             val availableWidth = with(density) { maxWidth.toPx() }
             var low = 10f
-            var high = 68f
+            var high = maximumSize.toFloat()
             repeat(8) {
                 val candidate = (low + high) / 2f
                 val measured = measurer.measure(
-                    text = elapsed, style = style.copy(fontSize = candidate.sp),
+                    text = displayedValue, style = style.copy(fontSize = candidate.sp),
                     softWrap = false, maxLines = 1, constraints = Constraints()
                 )
                 if (measured.size.width <= availableWidth) low = candidate else high = candidate
@@ -325,13 +368,13 @@ private fun ActiveElapsedTime(elapsed: String) {
             low.sp
         }
         Text(
-            text = elapsed,
+            text = displayedValue,
             color = ActiveInk,
             style = style.copy(fontSize = textSize, lineHeight = (textSize.value * 1.12f).sp),
             maxLines = 1,
             softWrap = false,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.fillMaxWidth().testTag(ACTIVE_RUN_ELAPSED_TAG)
+            textAlign = textAlign,
+            modifier = modifier.fillMaxWidth()
         )
     }
 }
@@ -343,45 +386,25 @@ private fun ActiveMetricsPanel(metrics: RunMetricsDisplay?, modifier: Modifier =
             .fillMaxWidth()
             .clip(RoundedCornerShape(24.dp))
             .background(Color.White.copy(alpha = 0.9f))
-            .padding(20.dp)
+            .padding(16.dp)
             .testTag(ACTIVE_RUN_METRICS_TAG)
     ) {
         val stacked = LocalDensity.current.fontScale > 1.25f || maxWidth < 280.dp
         Column(modifier = Modifier.fillMaxWidth()) {
             if (stacked) {
                 Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                    ActiveMetric("Distance", metrics?.distance ?: "—")
-                    ActiveMetric("Avg pace", metrics?.averagePace ?: "—")
+                    ActiveMetric("Avg pace", metrics?.averagePace ?: "—", ACTIVE_RUN_PACE_TAG)
+                    ActiveMetric("Active", metrics?.active ?: "—", ACTIVE_RUN_ACTIVE_TAG)
                 }
             } else {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(20.dp)
                 ) {
-                    ActiveMetric("Distance", metrics?.distance ?: "—", Modifier.weight(1f))
-                    ActiveMetric("Avg pace", metrics?.averagePace ?: "—", Modifier.weight(1f))
-                }
-            }
-            Spacer(Modifier.height(18.dp))
-            Box(Modifier.fillMaxWidth().height(1.dp).background(ActiveInk.copy(alpha = 0.09f)))
-            Spacer(Modifier.height(14.dp))
-            if (stacked) {
-                ActiveMetric("Active", metrics?.active ?: "—", valueSize = 22)
-            } else {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text("Active", color = ActiveInk.copy(alpha = 0.74f), fontSize = 12.sp)
-                    Text(
-                        text = metrics?.active ?: "—",
-                        color = ActiveInk,
-                        fontSize = 22.sp,
-                        fontFamily = CompletionNumberFont,
-                        fontWeight = FontWeight.Medium,
-                        maxLines = 1
-                    )
+                    ActiveMetric("Avg pace", metrics?.averagePace ?: "—", ACTIVE_RUN_PACE_TAG,
+                        Modifier.weight(1f))
+                    ActiveMetric("Active", metrics?.active ?: "—", ACTIVE_RUN_ACTIVE_TAG,
+                        Modifier.weight(1f))
                 }
             }
             Text(
@@ -397,7 +420,7 @@ private fun ActiveMetricsPanel(metrics: RunMetricsDisplay?, modifier: Modifier =
 }
 
 @Composable
-private fun ActiveMetric(label: String, value: String, modifier: Modifier = Modifier, valueSize: Int = 28) {
+private fun ActiveMetric(label: String, value: String, valueTag: String, modifier: Modifier = Modifier) {
     Column(modifier = modifier) {
         Text(
             text = label,
@@ -406,14 +429,11 @@ private fun ActiveMetric(label: String, value: String, modifier: Modifier = Modi
             lineHeight = 18.sp,
             fontWeight = FontWeight.SemiBold
         )
-        Text(
-            text = value,
-            color = ActiveInk,
-            fontFamily = CompletionNumberFont,
-            fontSize = valueSize.sp,
-            fontWeight = FontWeight.Medium,
-            lineHeight = (valueSize + 6).sp,
-            modifier = Modifier.padding(top = 3.dp)
+        ActiveFittedValue(
+            value = value,
+            maximumSize = 28,
+            textAlign = TextAlign.Start,
+            modifier = Modifier.padding(top = 3.dp).testTag(valueTag)
         )
     }
 }
