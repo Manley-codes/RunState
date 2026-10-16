@@ -87,6 +87,10 @@ abstract class LocationDao {
     @Query("SELECT * FROM run_location_points WHERE run_id = :runId ORDER BY sequence_number ASC")
     abstract suspend fun pointsFor(runId: String): List<RunLocationPointEntity>
 
+    /** Append-only live evidence: a UI tick reads new observations instead of the whole route. */
+    @Query("SELECT * FROM run_location_points WHERE run_id = :runId AND sequence_number > :afterSequence ORDER BY sequence_number ASC")
+    abstract suspend fun pointsAfter(runId: String, afterSequence: Int): List<RunLocationPointEntity>
+
     /** The final accepted cumulative value is the distance confirmed by durable points. */
     @Query("SELECT * FROM run_location_points WHERE run_id = :runId AND accepted_for_distance = 1 ORDER BY sequence_number DESC LIMIT 1")
     abstract suspend fun latestAccepted(runId: String): RunLocationPointEntity?

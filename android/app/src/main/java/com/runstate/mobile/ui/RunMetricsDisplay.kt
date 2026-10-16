@@ -188,7 +188,8 @@ internal fun historyItemFor(
             val source = if (last.sourcePackage == "com.spotify.music") "Spotify" else last.sourcePackage
             if (label.isBlank()) source else "$label · $source"
         },
-        reflectionMusicSummary = reflectionMusicSummaryFor(run, reflection)
+        reflectionMusicSummary = reflectionMusicSummaryFor(run, reflection),
+        telemetryCoverage = run.telemetryCoverage
     )
 }
 

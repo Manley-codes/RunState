@@ -30,6 +30,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -49,6 +50,7 @@ import com.runstate.mobile.run.RunAdmission
 import com.runstate.mobile.run.RunSessionCoordinator
 import com.runstate.mobile.location.RunTrackingService
 import com.runstate.mobile.location.RunTrackingServiceState
+import com.runstate.mobile.location.GpsSignalStatus
 import com.runstate.mobile.music.RunMusicNotificationListener
 import com.runstate.mobile.ui.RunMetricsDisplay
 import com.runstate.mobile.ui.RunMetricsTicker
@@ -59,6 +61,8 @@ import com.runstate.mobile.ui.RunHistoryItem
 import com.runstate.mobile.ui.RunHistoryScreen
 import com.runstate.mobile.ui.RunStateScreen
 import com.runstate.mobile.ui.ShortRunDecisionDialog
+import com.runstate.mobile.ui.RunSettingsDialog
+import com.runstate.mobile.settings.RunPreferences
 import com.runstate.mobile.ui.ReflectionConnectionDialog
 import com.runstate.mobile.ui.RunUiModel
 import com.runstate.mobile.ui.RunUiState
@@ -98,11 +102,15 @@ class MainActivity : ComponentActivity() {
         val coordinator = runStateApplication.runSessionCoordinator
         val database = runStateApplication.database
         runStateApplication.initializeReflectionConnection()
+        runStateApplication.initializeRunPreferences()
 
         setContent {
             RunStateTheme {
                 val connection by runStateApplication.reflectionConnection.collectAsState()
                 val connectionSaving by runStateApplication.reflectionConnectionSaving.collectAsState()
+                val runPreferences by runStateApplication.runPreferences.collectAsState()
+                val preferencesSaving by runStateApplication.runPreferencesSaving.collectAsState()
+                val preferencesError by runStateApplication.runPreferencesError.collectAsState()
                 val reflectionCoordinator = runStateApplication.runReflectionCoordinator
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
                     RunJourneyRoot(
@@ -114,6 +122,12 @@ class MainActivity : ComponentActivity() {
                         reflectionConnectionSaving = connectionSaving,
                         onSaveReflectionConnection = runStateApplication::saveReflectionConnection,
                         onClearReflectionConnection = { runStateApplication.clearReflectionConnection() },
+                        runPreferences = runPreferences,
+                        runPreferencesSaving = preferencesSaving,
+                        runPreferencesError = preferencesError,
+                        onSaveRunPreferences = runStateApplication::saveRunPreferences,
+                        onRetryRunPreferences = runStateApplication::initializeRunPreferences,
+                        runSettingsSessionId = runStateApplication.runSettingsSessionId,
 
                         // The Activity's own lifecycle gates the countdown, so nothing counts
                         // down — and no run is started — while the app is in the background.
@@ -163,7 +177,14 @@ internal fun RunJourneyRoot(
     reflectionConnection: ReflectionConnectionState = ReflectionConnectionState.Loading,
     reflectionConnectionSaving: Boolean = false,
     onSaveReflectionConnection: suspend (String, String) -> Unit = { _, _ -> },
-    onClearReflectionConnection: suspend () -> Unit = {}
+    onClearReflectionConnection: suspend () -> Unit = {},
+    runPreferences: RunPreferences? = RunPreferences(musicSetupComplete = true),
+    runPreferencesSaving: Boolean = false,
+    runPreferencesError: String? = null,
+    onSaveRunPreferences: suspend (RunPreferences) -> Unit = {},
+    onRetryRunPreferences: () -> Unit = {},
+    runSettingsSessionId: String = "isolated-preview",
+    musicAccessProvider: (Context) -> Boolean = ::hasMusicAccess
 ) {
 
     val reflectionRequestsAvailable = reflectionConnection is ReflectionConnectionState.Hosted ||
@@ -206,12 +227,27 @@ internal fun RunJourneyRoot(
     var energyError by remember { mutableStateOf<Pair<String, String>?>(null) }
     // This is still a draft choice until the official start writes it on the run row.
     var preRunEnergy by rememberSaveable { mutableStateOf<PreRunEnergy?>(null) }
-    var gpsSelected by rememberSaveable { mutableStateOf(false) }
+    // GPS is the normal path. An explicit Sample demo is a temporary draft, never a saved default.
+    val gpsModeSaver = remember(runSettingsSessionId) {
+        Saver<Boolean, Any>(
+            save = { listOf(runSettingsSessionId, it) },
+            restore = { raw ->
+                val draft = raw as? List<*>
+                if (draft?.getOrNull(0) == runSettingsSessionId) draft.getOrNull(1) as? Boolean ?: true
+                else true
+            }
+        )
+    }
+    var gpsSelected by rememberSaveable(runSettingsSessionId, stateSaver = gpsModeSaver) {
+        mutableStateOf(true)
+    }
     var gpsMessage by rememberSaveable { mutableStateOf<String?>(null) }
     var pendingGpsResumeId by rememberSaveable { mutableStateOf<String?>(null) }
-    var musicSelected by rememberSaveable { mutableStateOf(false) }
-    var musicReflectionSharingSelected by rememberSaveable { mutableStateOf(false) }
-    var pendingMusicAccess by rememberSaveable { mutableStateOf(false) }
+    val musicSelected = runPreferences?.observeMusic == true
+    val musicReflectionSharingSelected = runPreferences?.shareMusicInReflection == true
+    var runSettingsVisible by rememberSaveable { mutableStateOf(false) }
+    var preferenceWritePending by remember { mutableStateOf(false) }
+    var preferenceWriteError by remember { mutableStateOf<String?>(null) }
     var historyItems by remember { mutableStateOf<List<RunHistoryItem>>(emptyList()) }
     var historyError by remember { mutableStateOf<String?>(null) }
     var connectionDialogVisible by remember { mutableStateOf(false) }
@@ -252,14 +288,20 @@ internal fun RunJourneyRoot(
     }
     val trackingState by trackingFlow.collectAsState()
     val context = LocalContext.current
+    fun preciseLocationReady(): Boolean =
+        ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) ==
+            PackageManager.PERMISSION_GRANTED &&
+            context.getSystemService(LocationManager::class.java)
+                ?.isProviderEnabled(LocationManager.GPS_PROVIDER) == true
+    var gpsReady by remember(context) { mutableStateOf(preciseLocationReady()) }
     var voiceForeground by remember(lifecycle) {
         mutableStateOf(lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED))
     }
 
-    var musicAccessGranted by remember(context) { mutableStateOf(hasMusicAccess(context)) }
+    var musicAccessGranted by remember(context) { mutableStateOf(musicAccessProvider(context)) }
 
-    // Notification access is granted in Android Settings, outside this Activity. Recheck
-    // on return and do not retain an opt-in after the runner revokes that access.
+    // Permissions are separate from saved choices. Recheck on return; effective capture
+    // still requires current access at the official start, without rewriting consent.
     DisposableEffect(lifecycle, context) {
         val observer = LifecycleEventObserver { _, event ->
             voiceForeground = lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)
@@ -271,15 +313,8 @@ internal fun RunJourneyRoot(
                 effortSheetRunId?.let { reflectionCoordinator?.setEffortSheetOpen(it, true) }
             }
             if (event == Lifecycle.Event.ON_RESUME) {
-                val granted = hasMusicAccess(context)
-                musicAccessGranted = granted
-                if (pendingMusicAccess) {
-                    musicSelected = granted
-                    pendingMusicAccess = false
-                } else if (!granted) {
-                    musicSelected = false
-                }
-                if (!granted) musicReflectionSharingSelected = false
+                musicAccessGranted = musicAccessProvider(context)
+                gpsReady = preciseLocationReady()
             }
         }
         lifecycle.addObserver(observer)
@@ -313,17 +348,10 @@ internal fun RunJourneyRoot(
         permissionForRetry = false
     }
 
-    fun preciseLocationReady(): Boolean =
-        ContextCompat.checkSelfPermission(
-            context,
-            Manifest.permission.ACCESS_FINE_LOCATION
-        ) == PackageManager.PERMISSION_GRANTED &&
-            context.getSystemService(LocationManager::class.java)
-                ?.isProviderEnabled(LocationManager.GPS_PROVIDER) == true
-
     val gpsPermissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) {
+        gpsReady = preciseLocationReady()
         if (preciseLocationReady()) {
             val resumeId = pendingGpsResumeId
             if (resumeId == null) {
@@ -338,13 +366,22 @@ internal fun RunJourneyRoot(
                 }
             }
         } else {
-            gpsSelected = false
             gpsMessage = "Precise GPS is unavailable. Enable precise location and phone Location, then try again."
         }
         pendingGpsResumeId = null
     }
 
     fun requestGpsPermissions() {
+        val fineLocationGranted = ContextCompat.checkSelfPermission(
+            context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
+        if (fineLocationGranted && !preciseLocationReady()) {
+            try {
+                context.startActivity(Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS))
+            } catch (_: RuntimeException) {
+                gpsMessage = "Enable phone Location in Android Settings, then return to Start."
+            }
+            return
+        }
         val permissions = mutableListOf(
             Manifest.permission.ACCESS_COARSE_LOCATION,
             Manifest.permission.ACCESS_FINE_LOCATION
@@ -378,6 +415,27 @@ internal fun RunJourneyRoot(
     var actionInFlight by remember { mutableStateOf(false) }
 
     val scope = rememberCoroutineScope()
+
+    fun savePreferences(next: RunPreferences, afterSave: () -> Unit = {}) {
+        if (preferenceWritePending || runPreferencesSaving) return
+        preferenceWritePending = true
+        preferenceWriteError = null
+        scope.launch {
+            try {
+                onSaveRunPreferences(next)
+                afterSave()
+            } catch (cancelled: CancellationException) { throw cancelled }
+            catch (_: Exception) {
+                preferenceWriteError = "Preferences couldn't save. Try again before starting a run."
+            } finally { preferenceWritePending = false }
+        }
+    }
+
+    LaunchedEffect(model.state, runPreferences?.musicSetupComplete) {
+        if (model.state == RunUiState.ReadyToStart && runPreferences?.musicSetupComplete == false) {
+            runSettingsVisible = true
+        }
+    }
 
     fun saveEffort(runId: String, effort: PostRunEffort?) {
         if (effortSavingRunId != null) return
@@ -544,11 +602,9 @@ internal fun RunJourneyRoot(
 
             // The countdown only reaches here while the Activity is STARTED. If a Cancel is
             // already in flight, the guard drops this start, and the cancel wins.
-            val observeMusicForRun = musicSelected && hasMusicAccess(context)
+            val observeMusicForRun = musicSelected && musicAccessProvider(context)
             if (musicSelected && !observeMusicForRun) {
-                musicSelected = false
                 musicAccessGranted = false
-                musicReflectionSharingSelected = false
             }
             val shareMusicForRun = observeMusicForRun && reflectionRequestsAvailable &&
                 musicReflectionSharingSelected
@@ -687,9 +743,11 @@ internal fun RunJourneyRoot(
                     connectionSaving = true
                     connectionError = null
                     // A service choice starts with fresh per-run music-sharing consent.
-                    musicReflectionSharingSelected = false
                     scope.launch {
                         try {
+                            runPreferences?.takeIf { it.shareMusicInReflection }?.let {
+                                onSaveRunPreferences(it.copy(shareMusicInReflection = false))
+                            }
                             onSaveReflectionConnection(endpoint, accessCode)
                             connectionDialogVisible = false
                         } catch (cancelled: CancellationException) { throw cancelled }
@@ -706,9 +764,11 @@ internal fun RunJourneyRoot(
                     connectionSaving = true
                     connectionError = null
                     // This draft reset must survive rotation even when the caller's wait is cancelled.
-                    musicReflectionSharingSelected = false
                     scope.launch {
                         try {
+                            runPreferences?.takeIf { it.shareMusicInReflection }?.let {
+                                onSaveRunPreferences(it.copy(shareMusicInReflection = false))
+                            }
                             onClearReflectionConnection()
                             connectionDialogVisible = false
                         } catch (cancelled: CancellationException) { throw cancelled }
@@ -764,14 +824,24 @@ internal fun RunJourneyRoot(
         metrics = metrics,
         countdownDigit = countdownDigit,
         onStart = {
-            runGuarded {
-                coordinator.beginCountdown()
-                refresh()
+            when {
+                runPreferences == null || runPreferencesError != null || preferenceWriteError != null ||
+                    runPreferences.musicSetupComplete == false -> runSettingsVisible = true
+                runPreferencesSaving || preferenceWritePending -> Unit
+                gpsSelected && !preciseLocationReady() -> {
+                    gpsReady = false
+                    requestGpsPermissions()
+                }
+                else -> runGuarded {
+                    coordinator.beginCountdown()
+                    refresh()
+                }
             }
         },
         onCancelCountdown = {
             runGuarded {
                 coordinator.cancelCountdown()
+                gpsSelected = true
                 refresh()
             }
         },
@@ -790,7 +860,7 @@ internal fun RunJourneyRoot(
         onRetryStart = {
 
             // The same prepared run: the coordinator reuses its UUID and official start.
-            val observeMusicForRun = musicSelected && hasMusicAccess(context)
+            val observeMusicForRun = musicSelected && musicAccessProvider(context)
             val shareMusicForRun = observeMusicForRun && reflectionRequestsAvailable &&
                 musicReflectionSharingSelected
             if (gpsSelected) {
@@ -835,12 +905,11 @@ internal fun RunJourneyRoot(
             stopCompletionAudio?.invoke()
             runGuarded {
 
-                // Reset per-run answers; keep the explicit GPS choice for this app session.
+                // Only Energy is a per-run draft; music choices are saved preferences.
                 coordinator.prepareAnotherRun()
                 preRunEnergy = null
                 gpsMessage = null
-                musicSelected = false
-                musicReflectionSharingSelected = false
+                gpsSelected = true
                 refresh()
             }
         },
@@ -852,45 +921,17 @@ internal fun RunJourneyRoot(
         selectedPreRunEnergy = preRunEnergy,
         onSelectPreRunEnergy = { preRunEnergy = it },
         gpsSelected = gpsSelected,
-        onToggleGps = {
-            if (gpsSelected) {
-                gpsSelected = false
-                gpsMessage = null
-            } else if (preciseLocationReady()) {
-                gpsSelected = true
-                gpsMessage = null
-            } else {
-                requestGpsPermissions()
-            }
-        },
         gpsMessage = gpsMessage,
         musicSelected = musicSelected,
         musicAccessGranted = musicAccessGranted,
-        musicReflectionSharingAvailable = reflectionRequestsAvailable,
-        musicReflectionSharingSelected = musicReflectionSharingSelected,
-        onToggleMusicReflectionSharing = {
-            musicReflectionSharingSelected = musicSelected && hasMusicAccess(context) &&
-                reflectionCoordinator != null && !musicReflectionSharingSelected
-        },
-        onToggleMusic = {
-            if (musicSelected) {
-                musicSelected = false
-                musicReflectionSharingSelected = false
-            } else if (hasMusicAccess(context)) {
-                musicAccessGranted = true
-                musicSelected = true
-            } else {
-                musicAccessGranted = false
-                musicReflectionSharingSelected = false
-                pendingMusicAccess = openMusicAccessSettings(context)
-            }
-        },
         isGpsRun = activeTrackingMode == RunTrackingMode.GPS,
         gpsServicePresent = when (val service = trackingState) {
             is RunTrackingServiceState.Tracking -> service.runId == activeRunId
             is RunTrackingServiceState.Paused -> service.runId == activeRunId
             else -> false
         },
+        gpsSignalStatus = (trackingState as? RunTrackingServiceState.Tracking)
+            ?.takeIf { it.runId == activeRunId }?.signalStatus ?: GpsSignalStatus.ACQUIRING,
         onResumeGpsTracking = {
             activeRunId?.let { id ->
                 if (preciseLocationReady()) {
@@ -932,19 +973,6 @@ internal fun RunJourneyRoot(
         reflectionAudioActive = completionAudioActive,
         onStopReflectionAudio = { stopCompletionAudio?.invoke() },
         showHistory = true,
-        reflectionConnectionLabel = when (reflectionConnection) {
-            ReflectionConnectionState.Loading -> "Loading reflection connection…"
-            ReflectionConnectionState.Local -> "Computer connection selected"
-            ReflectionConnectionState.NotConfigured -> "Set up reflections"
-            ReflectionConnectionState.Unavailable -> "Reflection connection needs setup"
-            is ReflectionConnectionState.Hosted -> "Online service selected"
-        },
-        onOpenReflectionSetup = {
-            connectionError = null
-            connectionDialogVisible = true
-        },
-        reflectionSetupEnabled = !connectionSaving && !reflectionConnectionSaving &&
-            reflectionConnection != ReflectionConnectionState.Loading,
         actionsEnabled = !actionInFlight && !reflectionConnectionSaving,
         modifier = modifier,
         savedPreRunEnergy = completedRun?.preRunEnergy,
@@ -952,8 +980,77 @@ internal fun RunJourneyRoot(
         onReflectionPresentationHoldChange = { held ->
             if (held) completionPresentationHeldRunId = presentedRunId
             else if (completionPresentationHeldRunId == presentedRunId) completionPresentationHeldRunId = null
-        }
+        },
+        onOpenRunSettings = { runSettingsVisible = true },
+        gpsReady = gpsReady,
+        setupLoading = runPreferences == null && runPreferencesError == null,
+        reflectionSetupRequired = reflectionConnection == ReflectionConnectionState.NotConfigured ||
+            reflectionConnection == ReflectionConnectionState.Unavailable
     )
+
+    val settingsBusy = preferenceWritePending || runPreferencesSaving || connectionSaving ||
+        reflectionConnectionSaving
+    val settingsFailure = preferenceWriteError ?: runPreferencesError
+    if (runSettingsVisible && model.state == RunUiState.ReadyToStart && !historyVisible &&
+        !connectionDialogVisible) {
+        RunSettingsDialog(
+            gpsReady = gpsReady,
+            gpsMessage = gpsMessage,
+            musicObservationEnabled = musicSelected,
+            musicAccessGranted = musicAccessGranted,
+            musicReflectionSharingEnabled = musicReflectionSharingSelected,
+            musicReflectionSharingAvailable = reflectionRequestsAvailable,
+            reflectionConnectionLabel = when (reflectionConnection) {
+                ReflectionConnectionState.Loading -> "Loading reflection connection…"
+                ReflectionConnectionState.Local -> "Computer connection selected"
+                ReflectionConnectionState.NotConfigured -> "Set up reflections"
+                ReflectionConnectionState.Unavailable -> "Reflection connection needs setup"
+                is ReflectionConnectionState.Hosted -> "Online service selected"
+            },
+            demoMode = !gpsSelected,
+            settingsLoading = settingsBusy || runPreferences == null && runPreferencesError == null,
+            settingsError = settingsFailure,
+            preferencesAvailable = runPreferences != null,
+            onRetryPreferences = onRetryRunPreferences,
+            actionsEnabled = !actionInFlight,
+            onDismiss = {
+                val saved = runPreferences
+                if (!settingsBusy && saved != null) {
+                    // Always confirm storage again after a failed write before permitting Start.
+                    if (!saved.musicSetupComplete || settingsFailure != null) {
+                        savePreferences(saved.copy(musicSetupComplete = true)) {
+                            runSettingsVisible = false
+                        }
+                    } else runSettingsVisible = false
+                } else if (!settingsBusy) runSettingsVisible = false
+            },
+            onRequestLocationSetup = { requestGpsPermissions() },
+            onSetMusicObservation = { enabled ->
+                runPreferences?.let { saved ->
+                    savePreferences(saved.copy(observeMusic = enabled,
+                        shareMusicInReflection = enabled && saved.shareMusicInReflection))
+                }
+            },
+            onRequestMusicAccess = {
+                if (!openMusicAccessSettings(context)) {
+                    preferenceWriteError = "Music access settings couldn't open. Try again."
+                }
+            },
+            onSetMusicReflectionSharing = { enabled ->
+                runPreferences?.let { saved ->
+                    savePreferences(saved.copy(shareMusicInReflection = enabled && saved.observeMusic))
+                }
+            },
+            onSetDemoMode = { demo ->
+                gpsSelected = !demo
+                gpsMessage = null
+            },
+            onOpenReflectionSetup = {
+                connectionError = null
+                connectionDialogVisible = true
+            }
+        )
+    }
 
     val decisionRunId = shortRunDecisionId
     if (decisionRunId != null && decisionRunId == activeRunId &&
@@ -987,8 +1084,7 @@ internal fun RunJourneyRoot(
                         shortRunDecisionId = null
                         preRunEnergy = null
                         gpsMessage = null
-                        musicSelected = false
-                        musicReflectionSharingSelected = false
+                        gpsSelected = true
                     }) { coordinator.requestDiscard(decisionRunId) }
                     if (shortRunDecisionId == decisionRunId) {
                         shortRunDecisionError = "Your run wasn't discarded. It is still paused. Try again or save it."

@@ -4,6 +4,7 @@ import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.ForeignKey
 import androidx.room.Index
+import com.runstate.mobile.run.RunTimingMark
 
 /**
  * The only two lifecycle events that get their own stored row.
@@ -91,9 +92,23 @@ data class RunTransitionEntity(
      * session owner is the one that knows what instant the runner's tap belongs to.
      */
     @ColumnInfo(name = "occurred_at_epoch_millis")
-    val occurredAtEpochMillis: Long
+    val occurredAtEpochMillis: Long,
+
+    /** Optional monotonic evidence captured with this event, never reconstructed. */
+    @ColumnInfo(name = "elapsed_realtime_millis")
+    val elapsedRealtimeMillis: Long? = null,
+
+    @ColumnInfo(name = "timing_session_id")
+    val timingSessionId: String? = null
 ) {
     init {
+
+        require((elapsedRealtimeMillis == null) == (timingSessionId == null)) {
+            "Transition elapsed realtime and timing session must be present together."
+        }
+        if (elapsedRealtimeMillis != null && timingSessionId != null) {
+            RunTimingMark(elapsedRealtimeMillis, timingSessionId)
+        }
 
         // Numbering starts at 1, so 0 or a negative value means the allocation that
         // produced it was wrong rather than that the run had an unusual history.

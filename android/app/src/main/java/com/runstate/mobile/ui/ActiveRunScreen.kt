@@ -47,6 +47,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import com.runstate.mobile.R
+import com.runstate.mobile.location.GpsSignalStatus
 
 internal const val ACTIVE_RUN_SCREEN_TAG = "activeRunScreen"
 internal const val ACTIVE_RUN_CIRCLE_TAG = "activeRunCircle"
@@ -125,7 +126,8 @@ internal fun ActiveRunScreen(
     gpsServicePresent: Boolean = false,
     gpsMessage: String? = null,
     onResumeGpsTracking: () -> Unit = {},
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    gpsSignalStatus: GpsSignalStatus = GpsSignalStatus.ACQUIRING
 ) {
     BoxWithConstraints(
         modifier = modifier
@@ -139,8 +141,12 @@ internal fun ActiveRunScreen(
             !isGpsRun -> "ILLUSTRATIVE MAP · LOCATION OFF"
             !gpsServicePresent -> "ILLUSTRATIVE MAP · GPS STOPPED"
             paused -> "ILLUSTRATIVE MAP · GPS PAUSED"
-            metrics?.gpsDistanceAvailable != true -> "ILLUSTRATIVE MAP · GPS WAITING"
-            else -> "ILLUSTRATIVE MAP · GPS RECORDING"
+            else -> when (gpsSignalStatus) {
+                GpsSignalStatus.ACQUIRING -> "ILLUSTRATIVE MAP · GPS WAITING"
+                GpsSignalStatus.RECORDING -> "ILLUSTRATIVE MAP · GPS RECORDING"
+                GpsSignalStatus.WEAK -> "ILLUSTRATIVE MAP · GPS WEAK SIGNAL"
+                GpsSignalStatus.STALE -> "ILLUSTRATIVE MAP · GPS SIGNAL UNAVAILABLE"
+            }
         }
 
         // Controls take their natural height. The body scrolls in the remaining space,

@@ -8,6 +8,7 @@ import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.runstate.mobile.reflection.AndroidReflectionConnectionStore
 import com.runstate.mobile.reflection.ReflectionConnectionConfig
+import com.runstate.mobile.run.RunTimingMark
 import java.security.KeyStore
 import java.util.UUID
 import kotlinx.coroutines.Dispatchers
@@ -619,7 +620,8 @@ class RunStateDatabaseTest {
 
             // Act + assert: the pause reaches storage, updates the run, then fails.
             assertThrows(SQLiteException::class.java) {
-                runBlocking { database.runDao().pauseRun(runningRun.runId, PAUSED_AT) }
+                runBlocking { database.runDao().pauseRun(runningRun.runId, PAUSED_AT,
+                    RunTimingMark(600_100L, runningRun.runId)) }
             }
         } finally {
 
@@ -639,6 +641,42 @@ class RunStateDatabaseTest {
 
         // Assert: and no transition row survived the rollback either.
         assertTrue(storedTransitions().isEmpty())
+    }
+
+    @Test
+    fun timingEvidenceSurvivesStorageAndFailedResumeDoesNotLeaveAMarker() {
+        val sessionId = "03689ffc-65d9-4907-ae77-7a17b3ad77a6"
+        val markedRun = runningRun.copy(startElapsedRealtimeMillis = 100L, timingSessionId = sessionId)
+        runBlocking {
+            database.runDao().insert(markedRun)
+            database.runDao().pauseRun(markedRun.runId, PAUSED_AT, RunTimingMark(600_100L, sessionId))
+        }
+        val paused = storedRun()
+        val pausedEvents = storedTransitions()
+        assertEquals(600_100L, pausedEvents.single().elapsedRealtimeMillis)
+        assertEquals(sessionId, pausedEvents.single().timingSessionId)
+        val trigger = "block_marked_resume"
+        try {
+            database.openHelper.writableDatabase.execSQL("""
+                CREATE TRIGGER $trigger BEFORE INSERT ON run_transitions
+                WHEN NEW.transition_type = 'RESUME'
+                BEGIN SELECT RAISE(ABORT, 'resume insert blocked by test'); END
+            """.trimIndent())
+            assertThrows(SQLiteException::class.java) {
+                runBlocking { database.runDao().resumeRun(markedRun.runId, RESUMED_AT,
+                    RunTimingMark(900_100L, sessionId)) }
+            }
+        } finally {
+            database.openHelper.writableDatabase.execSQL("DROP TRIGGER IF EXISTS $trigger")
+        }
+        assertEquals(paused, storedRun())
+        assertEquals(pausedEvents, storedTransitions())
+        runBlocking { database.runDao().resumeRun(markedRun.runId, RESUMED_AT, RunTimingMark(900_100L, sessionId)) }
+        database.close()
+        database = openDatabase()
+        assertEquals(markedRun.copy(lastCheckpointEpochMillis = RESUMED_AT), storedRun())
+        assertEquals(listOf(600_100L, 900_100L), storedTransitions().map { it.elapsedRealtimeMillis })
+        assertEquals(listOf(sessionId, sessionId), storedTransitions().map { it.timingSessionId })
     }
 
     /**

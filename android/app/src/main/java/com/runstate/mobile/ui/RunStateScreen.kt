@@ -26,6 +26,7 @@ import androidx.lifecycle.repeatOnLifecycle
 import com.runstate.mobile.data.local.ReflectionBranch
 import com.runstate.mobile.data.local.PostRunEffort
 import com.runstate.mobile.data.local.PreRunEnergy
+import com.runstate.mobile.location.GpsSignalStatus
 import com.runstate.mobile.ui.theme.RunStateTheme
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
@@ -84,18 +85,10 @@ internal fun RunStateScreen(
     showHistory: Boolean = false,
     selectedPreRunEnergy: PreRunEnergy? = null,
     onSelectPreRunEnergy: (PreRunEnergy?) -> Unit = {},
-    gpsSelected: Boolean = false,
-    onToggleGps: () -> Unit = {},
+    gpsSelected: Boolean = true,
     gpsMessage: String? = null,
     musicSelected: Boolean = false,
     musicAccessGranted: Boolean = false,
-    onToggleMusic: () -> Unit = {},
-    musicReflectionSharingAvailable: Boolean = false,
-    musicReflectionSharingSelected: Boolean = false,
-    onToggleMusicReflectionSharing: () -> Unit = {},
-    reflectionConnectionLabel: String? = null,
-    onOpenReflectionSetup: () -> Unit = {},
-    reflectionSetupEnabled: Boolean = true,
     isGpsRun: Boolean = false,
     gpsServicePresent: Boolean = false,
     onResumeGpsTracking: () -> Unit = {},
@@ -109,7 +102,12 @@ internal fun RunStateScreen(
     onStopReflectionAudio: () -> Unit = {},
     savedPreRunEnergy: PreRunEnergy? = null,
     completionDateLabel: String? = null,
-    onReflectionPresentationHoldChange: (Boolean) -> Unit = {}
+    onReflectionPresentationHoldChange: (Boolean) -> Unit = {},
+    onOpenRunSettings: () -> Unit = {},
+    gpsReady: Boolean = false,
+    setupLoading: Boolean = false,
+    reflectionSetupRequired: Boolean = false,
+    gpsSignalStatus: GpsSignalStatus = GpsSignalStatus.ACQUIRING
 ) {
     val state = model.state
 
@@ -168,17 +166,13 @@ internal fun RunStateScreen(
             onViewHistory = onViewHistory,
             showHistory = showHistory,
             gpsSelected = gpsSelected,
-            onToggleGps = onToggleGps,
             gpsMessage = gpsMessage,
             musicSelected = musicSelected,
             musicAccessGranted = musicAccessGranted,
-            onToggleMusic = onToggleMusic,
-            musicReflectionSharingAvailable = musicReflectionSharingAvailable,
-            musicReflectionSharingSelected = musicReflectionSharingSelected,
-            onToggleMusicReflectionSharing = onToggleMusicReflectionSharing,
-            reflectionConnectionLabel = reflectionConnectionLabel,
-            onOpenReflectionSetup = onOpenReflectionSetup,
-            reflectionSetupEnabled = reflectionSetupEnabled,
+            onOpenRunSettings = onOpenRunSettings,
+            gpsReady = gpsReady,
+            setupLoading = setupLoading,
+            reflectionSetupRequired = reflectionSetupRequired,
             modifier = modifier
         )
         return
@@ -195,6 +189,7 @@ internal fun RunStateScreen(
             onStop = onStop,
             isGpsRun = isGpsRun,
             gpsServicePresent = gpsServicePresent,
+            gpsSignalStatus = gpsSignalStatus,
             gpsMessage = gpsMessage,
             onResumeGpsTracking = onResumeGpsTracking,
             modifier = modifier

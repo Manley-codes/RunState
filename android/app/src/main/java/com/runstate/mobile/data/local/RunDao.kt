@@ -5,6 +5,7 @@ import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Transaction
+import com.runstate.mobile.run.RunTimingMark
 import com.runstate.mobile.run.RunTimeline
 import com.runstate.mobile.run.TransitionHistoryCoverage
 import kotlinx.coroutines.flow.Flow
@@ -239,13 +240,18 @@ abstract class RunDao {
      *   Neither table changes in any of those cases.
      */
     @Transaction
-    open suspend fun pauseRun(runId: String, pausedAtEpochMillis: Long) {
+    open suspend fun pauseRun(
+        runId: String,
+        pausedAtEpochMillis: Long,
+        timingMark: RunTimingMark? = null
+    ) {
         moveState(
             runId = runId,
             expectedState = StoredRunState.RUNNING,
             newState = StoredRunState.PAUSED,
             transitionType = RunTransitionType.PAUSE,
-            occurredAtEpochMillis = pausedAtEpochMillis
+            occurredAtEpochMillis = pausedAtEpochMillis,
+            timingMark = timingMark
         )
     }
 
@@ -257,13 +263,18 @@ abstract class RunDao {
      *   Neither table changes in any of those cases.
      */
     @Transaction
-    open suspend fun resumeRun(runId: String, resumedAtEpochMillis: Long) {
+    open suspend fun resumeRun(
+        runId: String,
+        resumedAtEpochMillis: Long,
+        timingMark: RunTimingMark? = null
+    ) {
         moveState(
             runId = runId,
             expectedState = StoredRunState.PAUSED,
             newState = StoredRunState.RUNNING,
             transitionType = RunTransitionType.RESUME,
-            occurredAtEpochMillis = resumedAtEpochMillis
+            occurredAtEpochMillis = resumedAtEpochMillis,
+            timingMark = timingMark
         )
     }
 
@@ -313,7 +324,8 @@ abstract class RunDao {
         expectedState: StoredRunState,
         newState: StoredRunState,
         transitionType: RunTransitionType,
-        occurredAtEpochMillis: Long
+        occurredAtEpochMillis: Long,
+        timingMark: RunTimingMark?
     ) {
         requireUpdatableRun(runId, expectedState, occurredAtEpochMillis)
 
@@ -338,7 +350,9 @@ abstract class RunDao {
                 runId = runId,
                 sequenceNumber = nextSequenceNumber,
                 transitionType = transitionType,
-                occurredAtEpochMillis = occurredAtEpochMillis
+                occurredAtEpochMillis = occurredAtEpochMillis,
+                elapsedRealtimeMillis = timingMark?.elapsedRealtimeMillis,
+                timingSessionId = timingMark?.sessionId
             )
         )
     }

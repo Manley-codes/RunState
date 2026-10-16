@@ -19,7 +19,7 @@ import java.util.UUID
  * - **Retry identity.** The coordinator asks for a prepared row once and keeps it. A failed
  *   insert is retried with that exact row, so a retry re-attempts the same run instead of
  *   quietly minting a second UUID and a later start time for it.
- * - **Testability.** All three sources are injected, so a JVM test can fix the clock, the
+ * - **Testability.** The sources are injected, so a JVM test can fix the clocks, the
  *   zone and the identity and assert the row exactly, rather than asserting that a value
  *   "looks like" a UUID or "is roughly now".
  *
@@ -33,11 +33,14 @@ import java.util.UUID
  *   rather than a captured value, so a phone that changed zone since the app launched
  *   records where the run actually began.
  * @property uuidSupplier the source of the run's permanent identity.
+ * @property timingMarkSupplier optional same-process monotonic evidence, captured with
+ *   the wall-clock reading and retained in the prepared row across a save retry.
  */
 internal class PreparedRunFactory(
     private val clock: Clock,
     private val zoneIdSupplier: () -> ZoneId,
-    private val uuidSupplier: () -> UUID
+    private val uuidSupplier: () -> UUID,
+    private val timingMarkSupplier: () -> RunTimingMark? = { null }
 ) {
 
     /**
@@ -56,7 +59,8 @@ internal class PreparedRunFactory(
         require(!musicReflectionSharingAllowed || musicObservationRequested) {
             "Music reflection sharing requires this run's music observation opt-in."
         }
-        val officialStart = clock.millis()
+        val reading = readTime()
+        val officialStart = reading.epochMillis
 
         return RunEntity(
 
@@ -78,7 +82,9 @@ internal class PreparedRunFactory(
             preRunEnergy = preRunEnergy,
             trackingMode = trackingMode,
             musicObservationRequested = musicObservationRequested,
-            musicReflectionSharingAllowed = musicReflectionSharingAllowed
+            musicReflectionSharingAllowed = musicReflectionSharingAllowed,
+            startElapsedRealtimeMillis = reading.timingMark?.elapsedRealtimeMillis,
+            timingSessionId = reading.timingMark?.sessionId
         )
     }
 
@@ -90,4 +96,7 @@ internal class PreparedRunFactory(
      * source and a test that fixes this clock fixes all of them.
      */
     internal fun nowEpochMillis(): Long = clock.millis()
+
+    /** Capture each source once; callers retain this pair through one operation. */
+    internal fun readTime(): RunTimeReading = RunTimeReading(clock.millis(), timingMarkSupplier())
 }

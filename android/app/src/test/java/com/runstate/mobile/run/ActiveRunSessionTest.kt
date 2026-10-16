@@ -30,6 +30,22 @@ import org.junit.Test
  */
 class ActiveRunSessionTest {
 
+    @Test
+    fun `pause and resume persist exactly their supplied timing evidence`() {
+        val dao = FakeRunDao()
+        val owner = startedOwner(dao)
+        val pauseMark = RunTimingMark(60_000L, DECOY_RUN_ID)
+        val resumeMark = RunTimingMark(120_000L, DECOY_RUN_ID)
+        runBlocking {
+            owner.pause(FIRST_PAUSE, pauseMark)
+            owner.resume(RESUME, resumeMark)
+        }
+        val events = runBlocking { dao.transitionsFor(RUN_ID) }
+        assertEquals(listOf(60_000L, 120_000L), events.map { it.elapsedRealtimeMillis })
+        assertEquals(listOf(DECOY_RUN_ID, DECOY_RUN_ID), events.map { it.timingSessionId })
+        assertEquals(RunSessionState.RUNNING, owner.state)
+    }
+
     private companion object {
         const val OFFICIAL_START = 1_756_000_000_000L
 
@@ -170,7 +186,7 @@ class ActiveRunSessionTest {
 
         // Act + assert: the failure reaches the caller unchanged.
         val thrown = assertThrows(IllegalStateException::class.java) {
-            runBlocking { owner.pause(FIRST_PAUSE) }
+            runBlocking { owner.pause(FIRST_PAUSE, RunTimingMark(60_000L, DECOY_RUN_ID)) }
         }
         assertEquals("disk unavailable", thrown.message)
 
@@ -195,7 +211,7 @@ class ActiveRunSessionTest {
 
         // Act + assert
         val thrown = assertThrows(IllegalStateException::class.java) {
-            runBlocking { owner.resume(RESUME) }
+            runBlocking { owner.resume(RESUME, RunTimingMark(120_000L, DECOY_RUN_ID)) }
         }
         assertEquals("disk unavailable", thrown.message)
 
@@ -251,14 +267,14 @@ class ActiveRunSessionTest {
         var resumeCalls = 0
         var completeCalls = 0
 
-        override suspend fun pauseRun(runId: String, pausedAtEpochMillis: Long) {
+        override suspend fun pauseRun(runId: String, pausedAtEpochMillis: Long, timingMark: RunTimingMark?) {
             pauseCalls++
-            super.pauseRun(runId, pausedAtEpochMillis)
+            super.pauseRun(runId, pausedAtEpochMillis, timingMark)
         }
 
-        override suspend fun resumeRun(runId: String, resumedAtEpochMillis: Long) {
+        override suspend fun resumeRun(runId: String, resumedAtEpochMillis: Long, timingMark: RunTimingMark?) {
             resumeCalls++
-            super.resumeRun(runId, resumedAtEpochMillis)
+            super.resumeRun(runId, resumedAtEpochMillis, timingMark)
         }
 
         override suspend fun completeRun(

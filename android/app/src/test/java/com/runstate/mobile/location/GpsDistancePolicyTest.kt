@@ -47,6 +47,112 @@ class GpsDistancePolicyTest {
     }
 
     @Test
+    fun `a minute standing still cannot disguise a sudden one second jump`() {
+        val policy = GpsDistancePolicy()
+        policy.observe(sample(0.0, 1_000L, accuracy = 5.0), 1_000L, true)
+        for (second in 2L..61L) {
+            val stationary = policy.observe(sample(0.0, second * 1_000, accuracy = 5.0), second * 1_000, true)
+            assertEquals(GpsSampleStatus.IGNORED_WITHIN_ACCURACY, stationary.status)
+            assertFalse(stationary.hadUnobservedGap)
+        }
+
+        val jump = policy.observe(sample(100.0, 62_000L, accuracy = 5.0), 62_000L, true)
+
+        assertEquals(GpsSampleStatus.REJECTED_IMPLAUSIBLE_JUMP, jump.status)
+        assertNull(jump.distanceAddedMeters)
+        assertNull(jump.totalDistanceMeters)
+        assertTrue(jump.hadUnobservedGap)
+        assertEquals(
+            GpsSampleStatus.ACCEPTED_ANCHOR,
+            policy.observe(sample(100.0, 63_000L, accuracy = 5.0), 63_000L, true).status
+        )
+        val later = policy.observe(sample(120.0, 68_000L, accuracy = 5.0), 68_000L, true)
+        assertEquals(20.0, later.totalDistanceMeters!!, 0.3)
+    }
+
+    @Test
+    fun `one second gradual movement still accumulates beyond the retained uncertainty anchor`() {
+        val policy = GpsDistancePolicy()
+        policy.observe(sample(0.0, 1_000L, accuracy = 5.0), 1_000L, true)
+        for (second in 2L..21L) {
+            val moving = policy.observe(
+                sample((second - 1) * 3.0, second * 1_000, accuracy = 5.0), second * 1_000, true
+            )
+            assertTrue(moving.status == GpsSampleStatus.IGNORED_WITHIN_ACCURACY ||
+                moving.status == GpsSampleStatus.ACCEPTED_SEGMENT)
+            assertFalse(moving.hadUnobservedGap)
+        }
+        assertEquals(60.0, policy.distanceMeters!!, 0.3)
+    }
+
+    @Test
+    fun `latest fix check allows uncertainty instead of rejecting raw one second displacement`() {
+        val policy = GpsDistancePolicy()
+        policy.observe(sample(0.0, 1_000L, accuracy = 5.0), 1_000L, true)
+        policy.observe(sample(0.0, 10_000L, accuracy = 5.0), 10_000L, true)
+
+        // Fourteen raw meters in one second exceeds nine, but the uncertainty-adjusted
+        // lower bound is four. Its longer anchor interval is also plausible.
+        val noisyMovement = policy.observe(sample(14.0, 11_000L, accuracy = 5.0), 11_000L, true)
+
+        assertEquals(GpsSampleStatus.ACCEPTED_SEGMENT, noisyMovement.status)
+        assertFalse(noisyMovement.hadUnobservedGap)
+        assertEquals(14.0, noisyMovement.totalDistanceMeters!!, 0.3)
+    }
+
+    @Test
+    fun `accurate stationary jitter never accumulates distance or creates a false speed gap`() {
+        val policy = GpsDistancePolicy()
+        policy.observe(sample(0.0, 1_000L, accuracy = 5.0), 1_000L, true)
+        for (second in 2L..61L) {
+            val jitterMeters = if (second % 2L == 0L) 4.0 else -4.0
+            val jitter = policy.observe(sample(jitterMeters, second * 1_000, accuracy = 5.0), second * 1_000, true)
+            assertEquals(GpsSampleStatus.IGNORED_WITHIN_ACCURACY, jitter.status)
+            assertFalse(jitter.hadUnobservedGap)
+            assertNull(jitter.totalDistanceMeters)
+        }
+    }
+
+    @Test
+    fun `duplicate and out of order coordinates cannot replace the latest usable fix`() {
+        val policy = GpsDistancePolicy()
+        policy.observe(sample(0.0, 1_000L, accuracy = 5.0), 1_000L, true)
+        policy.observe(sample(0.0, 10_000L, accuracy = 5.0), 10_000L, true)
+        for (time in listOf(10_000L, 9_000L)) {
+            assertEquals(
+                GpsSampleStatus.REJECTED_OUT_OF_ORDER,
+                policy.observe(sample(100.0, time, accuracy = 5.0), 10_000L, true).status
+            )
+        }
+
+        val next = policy.observe(sample(14.0, 11_000L, accuracy = 5.0), 11_000L, true)
+        assertEquals(GpsSampleStatus.ACCEPTED_SEGMENT, next.status)
+        assertFalse(next.hadUnobservedGap)
+        assertEquals(14.0, next.totalDistanceMeters!!, 0.3)
+    }
+
+    @Test
+    fun `pause interruption and source gap each retire both old position references`() {
+        for (reset in listOf("pause", "interruption", "gap")) {
+            val policy = GpsDistancePolicy()
+            policy.observe(sample(0.0, 1_000L, accuracy = 5.0), 1_000L, true)
+            policy.observe(sample(0.0, 10_000L, accuracy = 5.0), 10_000L, true)
+            when (reset) {
+                "pause" -> policy.pause()
+                "interruption" -> policy.trackingInterrupted()
+            }
+            val newTime = if (reset == "gap") 26_000L else 11_000L
+            val newAnchor = policy.observe(sample(100.0, newTime, accuracy = 5.0), newTime, true)
+            assertEquals(reset, GpsSampleStatus.ACCEPTED_ANCHOR, newAnchor.status)
+            assertNull(newAnchor.totalDistanceMeters)
+            val later = policy.observe(sample(120.0, newTime + 5_000, accuracy = 5.0), newTime + 5_000, true)
+            assertEquals(reset, GpsSampleStatus.ACCEPTED_SEGMENT, later.status)
+            assertEquals(20.0, later.totalDistanceMeters!!, 0.3)
+            assertEquals(reset != "pause", later.hadUnobservedGap)
+        }
+    }
+
+    @Test
     fun `poor accuracy breaks the path but retains already measured distance`() {
         val policy = GpsDistancePolicy()
         policy.observe(sample(0.0, 1_000L), 1_000L, true)

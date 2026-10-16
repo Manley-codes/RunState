@@ -18,6 +18,9 @@ import com.runstate.mobile.data.local.TelemetryCoverage
 import com.runstate.mobile.ui.RunUiModel
 import com.runstate.mobile.ui.RunUiState
 import com.runstate.mobile.ui.runUiModelFor
+import com.runstate.mobile.ui.historyItemFor
+import com.runstate.mobile.ui.runMetricsDisplayFor
+import com.runstate.mobile.reflection.reflectionRequestFromSavedRun
 import java.time.Clock
 import java.time.Instant
 import java.time.ZoneId
@@ -97,13 +100,17 @@ class RunSessionCoordinatorRoomTest {
     }
 
     /** Builds a coordinator over whichever database instance is current. */
-    private fun coordinator(clock: SettableClock): RunSessionCoordinator =
+    private fun coordinator(
+        clock: SettableClock,
+        timingMarkSupplier: () -> RunTimingMark? = { null }
+    ): RunSessionCoordinator =
         RunSessionCoordinator(
             runDao = database.runDao(),
             preparedRunFactory = PreparedRunFactory(
                 clock = clock,
                 zoneIdSupplier = { ZoneId.of("America/Chicago") },
-                uuidSupplier = { UUID.fromString(RUN_ID) }
+                uuidSupplier = { UUID.fromString(RUN_ID) },
+                timingMarkSupplier = timingMarkSupplier
             ),
             applicationScope = applicationScope,
             locationDao = database.locationDao()
@@ -220,6 +227,137 @@ class RunSessionCoordinatorRoomTest {
         assertEquals(MetricSource.FIXTURE, restored.metricSource)
         assertEquals(TelemetryCoverage.COMPLETE, restored.telemetryCoverage)
         assertEquals(true, restored.transitionHistoryComplete)
+    }
+
+    @Test
+    fun continuousGpsTimingEarnsPaceAndReopensWithTheSameSavedEvidence() = runBlocking {
+        val clock = SettableClock(OFFICIAL_START)
+        val owner = coordinator(clock) { RunTimingMark(clock.nowMillis - OFFICIAL_START, RUN_ID) }
+        owner.initialize()
+        owner.beginCountdown()
+        owner.requestStart(trackingMode = RunTrackingMode.GPS).await()
+        recordContinuousGpsSection(1_000L, 116_000L)
+        clock.nowMillis = OFFICIAL_START + 119_000L
+        val live = requireNotNull(owner.runMetrics())
+        assertEquals(TelemetryCoverage.COMPLETE, live.coverage)
+        assertEquals(345.0, live.distanceMeters!!, 0.0)
+        assertEquals(119.0 / 345.0, live.paceSecondsPerMeter!!, 0.00001)
+
+        // A second metric read consumes no duplicate points or distance from the append-only cache.
+        assertEquals(live, owner.runMetrics())
+        clock.nowMillis = OFFICIAL_START + 120_000L
+        owner.requestAction(RunActionKind.PAUSE).await()
+        clock.nowMillis = FINISH
+        owner.requestAction(RunActionKind.COMPLETE).await()
+        val savedDisplay = runMetricsDisplayFor(requireNotNull(owner.runMetrics()))
+        assertTrue(savedDisplay.averagePace != "—")
+
+        database.close()
+        database = Room.databaseBuilder(context, RunStateDatabase::class.java, DATABASE_NAME).build()
+        val saved = requireNotNull(database.runDao().findById(RUN_ID))
+        val transitions = database.runDao().transitionsFor(RUN_ID)
+        assertEquals(TelemetryCoverage.COMPLETE, saved.telemetryCoverage)
+        assertEquals(0L, saved.startElapsedRealtimeMillis)
+        assertEquals(120_000L, transitions.single().elapsedRealtimeMillis)
+        val history = historyItemFor(saved, transitions, null)
+        assertEquals(savedDisplay.averagePace, history.metrics?.averagePace)
+        assertEquals(savedDisplay.active, history.metrics?.active)
+        val request = reflectionRequestFromSavedRun(UUID.randomUUID().toString(), saved, transitions)
+        assertEquals(120_000L, request.evidence.activeDurationMillis)
+        assertEquals("COMPLETE", request.evidence.metrics.coverage)
+    }
+
+    @Test
+    fun gpsPaceDisappearsOnMissingTailAndRemainsUnavailableAfterARecordedGap() = runBlocking {
+        val clock = SettableClock(OFFICIAL_START)
+        val owner = coordinator(clock) { RunTimingMark(clock.nowMillis - OFFICIAL_START, RUN_ID) }
+        owner.initialize()
+        owner.beginCountdown()
+        owner.requestStart(trackingMode = RunTrackingMode.GPS).await()
+        recordContinuousGpsSection(1_000L, 116_000L)
+        clock.nowMillis = OFFICIAL_START + 119_000L
+        assertEquals(TelemetryCoverage.COMPLETE, owner.runMetrics()?.coverage)
+        clock.nowMillis = OFFICIAL_START + 130_000L
+        val missingTail = requireNotNull(owner.runMetrics())
+        assertEquals(TelemetryCoverage.PARTIAL, missingTail.coverage)
+        assertNull(missingTail.paceSecondsPerMeter)
+
+        // Collection returns with a fresh anchor; never turn its unrecorded interval into pace.
+        database.locationDao().recordObservation(gpsObservation("reacquired", OFFICIAL_START + 140_000L))
+        database.locationDao().recordObservation(gpsObservation("after-gap", OFFICIAL_START + 145_000L, 15.0))
+        clock.nowMillis = OFFICIAL_START + 146_000L
+        owner.requestAction(RunActionKind.PAUSE).await()
+        owner.requestAction(RunActionKind.COMPLETE).await()
+        val saved = requireNotNull(database.runDao().findById(RUN_ID))
+        val transitions = database.runDao().transitionsFor(RUN_ID)
+        assertEquals(360.0, saved.finalDistanceMeters!!, 0.0)
+        assertEquals(TelemetryCoverage.PARTIAL, saved.telemetryCoverage)
+        assertEquals("—", historyItemFor(saved, transitions, null).metrics?.averagePace)
+        assertNull(reflectionRequestFromSavedRun(UUID.randomUUID().toString(), saved, transitions)
+            .evidence.activeDurationMillis)
+    }
+
+    @Test
+    fun gpsPauseResumeExcludesBreaksAndRequiresNewSectionEvidence() = runBlocking {
+        val clock = SettableClock(OFFICIAL_START)
+        val owner = coordinator(clock) { RunTimingMark(clock.nowMillis - OFFICIAL_START, RUN_ID) }
+        owner.initialize()
+        owner.beginCountdown()
+        owner.requestStart(trackingMode = RunTrackingMode.GPS).await()
+        recordContinuousGpsSection(1_000L, 116_000L)
+        clock.nowMillis = OFFICIAL_START + 120_000L
+        owner.requestAction(RunActionKind.PAUSE).await()
+        clock.nowMillis = OFFICIAL_START + 180_000L
+        owner.requestAction(RunActionKind.RESUME).await()
+        clock.nowMillis = OFFICIAL_START + 181_000L
+        assertEquals(TelemetryCoverage.PARTIAL, owner.runMetrics()?.coverage)
+        recordContinuousGpsSection(181_000L, 296_000L)
+        clock.nowMillis = OFFICIAL_START + 300_000L
+        owner.requestAction(RunActionKind.PAUSE).await()
+        owner.requestAction(RunActionKind.COMPLETE).await()
+        val metrics = requireNotNull(owner.runMetrics())
+        assertEquals(TelemetryCoverage.COMPLETE, metrics.coverage)
+        assertEquals(240_000L, metrics.activeMillis)
+        assertEquals(690.0, metrics.distanceMeters!!, 0.0)
+        assertEquals(240.0 / 690.0, metrics.paceSecondsPerMeter!!, 0.00001)
+    }
+
+    @Test
+    fun gpsClockChangeAndNewProcessCannotCertifyOldTiming() = runBlocking {
+        val clock = SettableClock(OFFICIAL_START)
+        var monotonicNow = 0L
+        val first = coordinator(clock) { RunTimingMark(monotonicNow, RUN_ID) }
+        first.initialize()
+        first.beginCountdown()
+        first.requestStart(trackingMode = RunTrackingMode.GPS).await()
+        recordContinuousGpsSection(1_000L, 116_000L)
+        monotonicNow = 119_000L
+        clock.nowMillis = OFFICIAL_START + 3_719_000L
+        assertEquals(TelemetryCoverage.PARTIAL, first.runMetrics()?.coverage)
+        clock.nowMillis = OFFICIAL_START + 119_000L
+        val repaired = requireNotNull(first.runMetrics())
+        assertEquals(TelemetryCoverage.COMPLETE, repaired.coverage)
+        assertEquals(119_000L, repaired.activeMillis)
+        assertEquals(119.0 / 345.0, repaired.paceSecondsPerMeter!!, 0.00001)
+        monotonicNow = 120_000L
+        clock.nowMillis = OFFICIAL_START + 121_000L // Wall clock changed by one second.
+        assertEquals(TelemetryCoverage.PARTIAL, first.runMetrics()?.coverage)
+        first.requestAction(RunActionKind.PAUSE).await()
+        val otherSession = "7b3d9e10-2c4f-4a86-9d05-6e8f1a2b3c4d"
+        val recovered = coordinator(clock) { RunTimingMark(monotonicNow, otherSession) }
+        recovered.initialize()
+        recovered.requestAction(RunActionKind.COMPLETE).await()
+        assertEquals(TelemetryCoverage.PARTIAL, recovered.runMetrics()?.coverage)
+        assertNull(recovered.runMetrics()?.paceSecondsPerMeter)
+    }
+
+    private suspend fun recordContinuousGpsSection(firstOffset: Long, lastOffset: Long) {
+        for (offset in firstOffset..lastOffset step 5_000L) {
+            database.locationDao().recordObservation(gpsObservation(
+                "timed-$offset", OFFICIAL_START + offset,
+                if (offset == firstOffset) null else 15.0
+            ))
+        }
     }
 
     @Test

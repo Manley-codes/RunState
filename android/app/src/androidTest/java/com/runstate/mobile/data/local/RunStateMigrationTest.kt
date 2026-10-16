@@ -59,6 +59,89 @@ class RunStateMigrationTest {
     private val context = InstrumentationRegistry.getInstrumentation().targetContext
 
     @Test
+    fun versionTenMigrationPreservesEveryStoredFieldAndLeavesTimingUnknown() {
+        val databaseName = "runstate-v10-timing-migration-test.db"
+        val activeId = "03689ffc-65d9-4907-ae77-7a17b3ad77a6"
+        val pausedId = "8c405ab0-4a80-4be9-9bfb-19f2517ec2ba"
+        val finish = OFFICIAL_START + 60_000L
+        val exactReply = "  Exact saved reply.\nUnicode — 🌤 stays.  "
+        val oldDatabase = helper.createDatabase(databaseName, 10)
+        oldDatabase.apply {
+            insertVersionTwoRun(state = "COMPLETED", lastCheckpointEpochMillis = finish, finishEpochMillis = finish)
+            insertVersionTwoRun(runId = activeId, state = "RUNNING",
+                lastCheckpointEpochMillis = OFFICIAL_START, finishEpochMillis = null)
+            insertVersionTwoRun(runId = pausedId, state = "PAUSED",
+                lastCheckpointEpochMillis = OFFICIAL_START + 30_000L, finishEpochMillis = null)
+            execSQL("""
+                UPDATE runs SET final_distance_meters=12.34, metric_source='GPS',
+                    telemetry_coverage='PARTIAL', display_distance_unit='MILES',
+                    transition_history_complete=1, pre_run_energy='LOW', tracking_mode='GPS',
+                    music_observation_requested=1, post_run_effort='WORKING',
+                    music_reflection_sharing_allowed=1 WHERE run_id=?
+            """.trimIndent(), arrayOf(RUN_ID))
+            execSQL("INSERT INTO run_transitions (run_id,sequence_number,transition_type,occurred_at_epoch_millis) VALUES (?,1,'PAUSE',?)",
+                arrayOf<Any>(RUN_ID, OFFICIAL_START + 30_000L))
+            execSQL("""
+                INSERT INTO run_location_points (run_id,sequence_number,observation_key,
+                    observed_at_epoch_millis,elapsed_realtime_nanos,latitude,longitude,horizontal_accuracy_meters,
+                    altitude_meters,speed_meters_per_second,bearing_degrees,
+                    accepted_for_distance,rejection_reason,segment_distance_meters,cumulative_distance_meters)
+                VALUES (?,1,'anchor',?,1000000000,40.0,-75.0,3.0,25.0,1.5,90.0,1,NULL,NULL,NULL),
+                       (?,2,'rejected',?,2000000000,40.0001,-75.0,99.0,NULL,NULL,NULL,0,'POOR_ACCURACY',NULL,NULL)
+            """.trimIndent(), arrayOf<Any>(RUN_ID, OFFICIAL_START + 1_000L, RUN_ID, OFFICIAL_START + 2_000L))
+            execSQL("""
+                INSERT INTO run_music_observations (run_id,sequence_number,observation_key,
+                    observed_at_epoch_millis,elapsed_realtime_nanos,source_package,title,artist,playback_state,event_kind)
+                VALUES (?,1,'music',?,2000000000,'test.player','Stored track','Stored artist','PLAYING','SESSION_SNAPSHOT')
+            """.trimIndent(), arrayOf<Any>(RUN_ID, OFFICIAL_START + 2_000L))
+            execSQL("""
+                INSERT INTO run_reflections (run_id,request_id,evidence_json,selection_deadline_epoch_millis,
+                    status,selected_branch,post_run_energy,text,finalized_at_epoch_millis,is_test_data,selection_window_started)
+                VALUES (?,?,'{"preserve":"exact evidence"}',?,'READY','SPENT','SPENT',?,?,0,1)
+            """.trimIndent(), arrayOf<Any>(RUN_ID, pausedId, finish + 6_000L, exactReply, finish + 7_000L))
+        }
+        val tableNames = listOf("runs", "run_transitions", "run_location_points", "run_music_observations", "run_reflections")
+        fun rows(database: SupportSQLiteDatabase, table: String, columns: List<String>): List<List<String?>> =
+            database.query("SELECT ${columns.joinToString(",") { "`$it`" }} FROM `$table` ORDER BY 1, 2").use { cursor ->
+                buildList {
+                    while (cursor.moveToNext()) {
+                        add(columns.indices.map { index -> if (cursor.isNull(index)) null else cursor.getString(index) })
+                    }
+                }
+            }
+        val oldColumns = tableNames.associateWith { table ->
+            oldDatabase.query("SELECT * FROM `$table` LIMIT 0").use { it.columnNames.toList() }
+        }
+        val before = tableNames.associateWith { rows(oldDatabase, it, oldColumns.getValue(it)) }
+        oldDatabase.close()
+
+        helper.runMigrationsAndValidate(databaseName, 11, true, MIGRATION_10_11).use { migrated ->
+            tableNames.forEach { table -> assertEquals(table, before.getValue(table), rows(migrated, table, oldColumns.getValue(table))) }
+            migrated.query("SELECT start_elapsed_realtime_millis,timing_session_id FROM runs").use { cursor ->
+                assertEquals(3, cursor.count)
+                while (cursor.moveToNext()) { assertTrue(cursor.isNull(0)); assertTrue(cursor.isNull(1)) }
+            }
+            migrated.query("SELECT elapsed_realtime_millis,timing_session_id FROM run_transitions").use { cursor ->
+                assertEquals(1, cursor.count)
+                assertTrue(cursor.moveToFirst())
+                assertTrue(cursor.isNull(0))
+                assertTrue(cursor.isNull(1))
+            }
+        }
+        // Also prove the production builder registers 10 -> 11 rather than only the test helper.
+        val directName = "runstate-v10-timing-factory-test.db"
+        helper.createDatabase(directName, 10).apply {
+            insertVersionTwoRun(state = "RUNNING", lastCheckpointEpochMillis = OFFICIAL_START, finishEpochMillis = null)
+            close()
+        }
+        val migrated = openDatabaseThroughFactory(directName)
+        val restored = runBlocking { requireNotNull(migrated.runDao().findById(RUN_ID)) }
+        assertNull(restored.startElapsedRealtimeMillis)
+        assertNull(restored.timingSessionId)
+        assertEquals(OFFICIAL_START, restored.officialStartEpochMillis)
+    }
+
+    @Test
     fun versionThreeMigrationPreservesRunsMetricsAndTransitionsWithoutInventingReflections() {
         val databaseName = "runstate-v3-reflection-migration-test.db"
         val finishedAt = OFFICIAL_START + 60_000

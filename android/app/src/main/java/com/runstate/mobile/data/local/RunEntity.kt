@@ -3,6 +3,7 @@ package com.runstate.mobile.data.local
 import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.PrimaryKey
+import com.runstate.mobile.run.RunTimingMark
 import java.time.DateTimeException
 import java.time.ZoneId
 import java.util.UUID
@@ -218,9 +219,24 @@ data class RunEntity(
 
     /** Separate, explicit consent for this run's observed music to inform its reflection. */
     @ColumnInfo(name = "music_reflection_sharing_allowed", defaultValue = "0")
-    val musicReflectionSharingAllowed: Boolean = false
+    val musicReflectionSharingAllowed: Boolean = false,
+
+    /** Monotonic official-start evidence; null on runs created before version 11. */
+    @ColumnInfo(name = "start_elapsed_realtime_millis")
+    val startElapsedRealtimeMillis: Long? = null,
+
+    /** Process identity for [startElapsedRealtimeMillis], never inferred for old runs. */
+    @ColumnInfo(name = "timing_session_id")
+    val timingSessionId: String? = null
 ) {
     init {
+
+        require((startElapsedRealtimeMillis == null) == (timingSessionId == null)) {
+            "Start elapsed realtime and timing session must be present together."
+        }
+        if (startElapsedRealtimeMillis != null && timingSessionId != null) {
+            RunTimingMark(startElapsedRealtimeMillis, timingSessionId)
+        }
 
         // Canonical-identity guard.
         require(isCanonicalUuidText(runId)) {

@@ -23,6 +23,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.runstate.mobile.data.local.RunLocationPointEntity
+import com.runstate.mobile.data.local.TelemetryCoverage
 import kotlin.math.cos
 import kotlin.math.max
 import kotlin.math.min
@@ -114,12 +115,21 @@ internal fun gpsRoutePreviewFor(
 
 /** A local, offline picture of saved GPS evidence. Optional failure never hides the saved run. */
 @Composable
-internal fun GpsRoutePreview(data: GpsRoutePreviewData, modifier: Modifier = Modifier) {
+internal fun GpsRoutePreview(
+    data: GpsRoutePreviewData,
+    modifier: Modifier = Modifier,
+    coverage: TelemetryCoverage? = TelemetryCoverage.PARTIAL
+) {
+    val recordedPathLabel = if (coverage == TelemetryCoverage.COMPLETE) {
+        "Recorded GPS path"
+    } else {
+        "Recorded GPS path · partial"
+    }
     Column(
         modifier = modifier.fillMaxWidth().testTag(GPS_ROUTE_PREVIEW_TAG)
     ) {
         Text(
-            text = "Recorded GPS path · partial",
+            text = recordedPathLabel,
             color = CompletionStrongInk,
             fontSize = 13.sp,
             fontWeight = FontWeight.Medium,
@@ -135,7 +145,8 @@ internal fun GpsRoutePreview(data: GpsRoutePreviewData, modifier: Modifier = Mod
             )
         } else {
             val pathDescription = if (data.hasMeasuredMovement) {
-                "Partial recorded GPS path in ${data.sections.size} separate recorded sections. " +
+                val prefix = if (coverage == TelemetryCoverage.COMPLETE) "Recorded" else "Partial recorded"
+                "$prefix GPS path in ${data.sections.size} separate recorded sections. " +
                     "No line joins unrecorded intervals."
             } else {
                 "Recorded GPS locations. Not enough recorded movement to show a measured path."

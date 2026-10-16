@@ -26,6 +26,7 @@ import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.junit4.StateRestorationTester
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.isDialog
 import androidx.compose.ui.test.performClick
@@ -54,12 +55,14 @@ import com.runstate.mobile.RunJourneyRoot
 import com.runstate.mobile.data.local.RunStateDatabase
 import com.runstate.mobile.data.local.StoredRunState
 import com.runstate.mobile.location.RunTrackingServiceState
+import com.runstate.mobile.location.GpsSignalStatus
 import com.runstate.mobile.run.PreparedRunFactory
 import com.runstate.mobile.run.RunActionKind
 import com.runstate.mobile.run.RunSessionCoordinator
 import com.runstate.mobile.data.local.ReflectionBranch
 import com.runstate.mobile.data.local.PostRunEffort
 import com.runstate.mobile.data.local.PreRunEnergy
+import com.runstate.mobile.data.local.TelemetryCoverage
 import com.runstate.mobile.reflection.RunReflectionState
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -531,9 +534,9 @@ class RunStateScreenTest {
     }
 
     @Test
-    fun startMakesGpsAnExplicitReversibleChoice() {
+    fun startReportsGpsReadinessWithoutAModeSwitch() {
+        var gpsReady by mutableStateOf(false)
         composeTestRule.setContent {
-            var gpsSelected by remember { mutableStateOf(false) }
             StartRunScreen(
                 selectedPreRunEnergy = null,
                 onSelectPreRunEnergy = {},
@@ -541,23 +544,23 @@ class RunStateScreenTest {
                 actionsEnabled = true,
                 onViewHistory = {},
                 showHistory = false,
-                gpsSelected = gpsSelected,
-                onToggleGps = { gpsSelected = !gpsSelected }
+                gpsSelected = true,
+                gpsReady = gpsReady
             )
         }
 
-        composeTestRule.onNodeWithText("ILLUSTRATIVE MAP · LOCATION OFF").assertExists()
-        composeTestRule.onNodeWithTag(START_GPS_TOGGLE_TAG).performClick()
-        composeTestRule.onNodeWithText("ILLUSTRATIVE MAP · GPS READY").assertExists()
-        composeTestRule.onNodeWithTag(START_GPS_TOGGLE_TAG).performClick()
-        composeTestRule.onNodeWithText("ILLUSTRATIVE MAP · LOCATION OFF").assertExists()
+        composeTestRule.onNodeWithText("Location setup on Start").assertExists()
+        composeTestRule.onNodeWithTag(START_GPS_TOGGLE_TAG).assertDoesNotExist()
+        composeTestRule.runOnIdle { gpsReady = true }
+        composeTestRule.onNodeWithText("GPS ready").assertExists()
+        composeTestRule.onNodeWithText("Sample demo · simulated distance").assertDoesNotExist()
     }
 
     @Test
-    fun startMusicObservationIsOptionalAndReversible() {
+    fun startReportsMusicPreferenceAndMissingAccessWithoutAToggle() {
         var accessGranted by mutableStateOf(false)
+        var musicSelected by mutableStateOf(false)
         composeTestRule.setContent {
-            var musicSelected by remember { mutableStateOf(false) }
             StartRunScreen(
                 selectedPreRunEnergy = null,
                 onSelectPreRunEnergy = {},
@@ -566,57 +569,48 @@ class RunStateScreenTest {
                 onViewHistory = {},
                 showHistory = false,
                 musicSelected = musicSelected,
-                musicAccessGranted = accessGranted,
-                onToggleMusic = { musicSelected = !musicSelected }
+                musicAccessGranted = accessGranted
             )
         }
 
-        composeTestRule.onNodeWithTag(START_MUSIC_TOGGLE_TAG).performScrollTo()
-        composeTestRule.onNodeWithText("Turn on").assertIsDisplayed()
-        composeTestRule.onNodeWithText(
-            "Android grants broad notification access. RunState reads media sessions only during opted-in runs."
-        ).assertIsDisplayed()
-
-        composeTestRule.onNodeWithTag(START_MUSIC_TOGGLE_TAG).performClick()
-        composeTestRule.onNodeWithText("Turn off").assertIsDisplayed()
-        composeTestRule.onNodeWithTag(START_MUSIC_TOGGLE_TAG).performClick()
-        composeTestRule.onNodeWithText("Turn on").assertIsDisplayed()
-
+        composeTestRule.onNodeWithTag(START_MUSIC_TOGGLE_TAG).assertDoesNotExist()
+        composeTestRule.onNodeWithText("Music observation off").assertExists()
+        composeTestRule.runOnIdle { musicSelected = true }
+        composeTestRule.onNodeWithText("Music observation needs access").assertExists()
         composeTestRule.runOnIdle { accessGranted = true }
-        composeTestRule.onNodeWithText(
-            "Saves media-session title, artist & app while Running. Other audio may appear."
-        )
-            .assertIsDisplayed()
+        composeTestRule.onNodeWithText("Music observation on").assertExists()
     }
 
     @Test
-    fun musicSharingRequiresObservationAccessAndASeparateChoice() {
+    fun settingsKeepLocalObservationAndCloudSharingAsSeparateChoices() {
         var observing by mutableStateOf(false)
         var access by mutableStateOf(false)
         var sharingAvailable by mutableStateOf(true)
         var sharing by mutableStateOf(false)
         var choices = 0
         composeTestRule.setContent {
-            StartRunScreen(
-                selectedPreRunEnergy = null, onSelectPreRunEnergy = {}, onStart = {},
-                actionsEnabled = true, onViewHistory = {}, showHistory = false,
-                musicSelected = observing, musicAccessGranted = access,
+            RunSettingsDialog(
+                gpsReady = true, gpsMessage = null,
+                musicObservationEnabled = observing, musicAccessGranted = access,
                 musicReflectionSharingAvailable = sharingAvailable,
-                musicReflectionSharingSelected = sharing,
-                onToggleMusicReflectionSharing = { choices++; sharing = !sharing }
+                musicReflectionSharingEnabled = sharing,
+                reflectionConnectionLabel = null, demoMode = false, onDismiss = {},
+                onRequestLocationSetup = {}, onSetMusicObservation = { observing = it },
+                onRequestMusicAccess = {}, onSetDemoMode = {}, onOpenReflectionSetup = {},
+                onSetMusicReflectionSharing = { choices++; sharing = it }
             )
         }
-        composeTestRule.onNodeWithTag(START_MUSIC_SHARING_TOGGLE_TAG).assertDoesNotExist()
+        composeTestRule.onNodeWithTag(SETTINGS_MUSIC_SHARING_TAG).performScrollTo().assertIsNotEnabled()
         composeTestRule.runOnIdle { observing = true }
-        composeTestRule.onNodeWithTag(START_MUSIC_SHARING_TOGGLE_TAG).assertDoesNotExist()
+        composeTestRule.runOnIdle { assertFalse(sharing); assertEquals(0, choices) }
         composeTestRule.runOnIdle { access = true }
-        composeTestRule.onNodeWithTag(START_MUSIC_SHARING_TOGGLE_TAG).performScrollTo().performClick()
+        composeTestRule.onNodeWithTag(SETTINGS_MUSIC_SHARING_TAG).performClick()
         composeTestRule.runOnIdle { assertTrue(sharing); assertEquals(1, choices) }
-        composeTestRule.onNodeWithTag(START_MUSIC_SHARING_TOGGLE_TAG).performClick()
+        composeTestRule.onNodeWithTag(SETTINGS_MUSIC_SHARING_TAG).performClick()
         composeTestRule.runOnIdle { assertFalse(sharing); assertEquals(2, choices); access = false }
-        composeTestRule.onNodeWithTag(START_MUSIC_SHARING_TOGGLE_TAG).assertDoesNotExist()
+        composeTestRule.onNodeWithText("Music access is needed before any song can be observed or shared.").assertExists()
         composeTestRule.runOnIdle { access = true; sharingAvailable = false; sharing = true }
-        composeTestRule.onNodeWithTag(START_MUSIC_SHARING_TOGGLE_TAG).assertDoesNotExist()
+        composeTestRule.onNodeWithText("A reflection connection is needed to use observed music in reflections.").assertExists()
     }
 
     /** Proves a countdown shows its digit, offers a way out, and never a second Start. */
@@ -1974,17 +1968,17 @@ class RunStateScreenTest {
     }
 
     @Test
-    fun reflectionSetupIsExplicitAndDisabledWhileItsConnectionIsLoading() {
-        var enabled by mutableStateOf(false)
+    fun startOpensRunSettingsWithoutShowingBackendControls() {
+        var loading by mutableStateOf(true)
         var opens = 0
         composeTestRule.setContent {
             StartRunScreen(null, {}, {}, true, {}, false,
-                reflectionConnectionLabel = "Set up reflections",
-                onOpenReflectionSetup = { opens++ }, reflectionSetupEnabled = enabled)
+                onOpenRunSettings = { opens++ }, setupLoading = loading)
         }
-        composeTestRule.onNodeWithTag(START_REFLECTION_SETUP_TAG).assertIsNotEnabled()
-        composeTestRule.runOnIdle { enabled = true }
-        composeTestRule.onNodeWithTag(START_REFLECTION_SETUP_TAG).performClick()
+        composeTestRule.onNodeWithTag(START_REFLECTION_SETUP_TAG).assertDoesNotExist()
+        composeTestRule.onNodeWithTag(START_RUN_SETTINGS_TAG).assertIsNotEnabled()
+        composeTestRule.runOnIdle { loading = false }
+        composeTestRule.onNodeWithTag(START_RUN_SETTINGS_TAG).performClick()
         composeTestRule.runOnIdle { assertEquals(1, opens) }
     }
 
@@ -2509,20 +2503,66 @@ class RunStateScreenTest {
     }
 
     @Test
-    fun activeGpsWaitsForRecordedMovementBeforeClaimingRecording() {
-        var measured by mutableStateOf(false)
+    fun activeGpsUsesFreshSignalEvenWhenEarlierDistanceExists() {
+        var signal by mutableStateOf(GpsSignalStatus.ACQUIRING)
         composeTestRule.setContent {
             ActiveRunScreen(false, fixtureMetrics().copy(
-                distance = if (measured) "0.03 mi" else "—",
-                sourceLabel = if (measured) "GPS metrics · partial" else "GPS distance unavailable",
-                gpsDistanceAvailable = measured), false, true, {}, {}, {},
-                isGpsRun = true, gpsServicePresent = true)
+                distance = "0.03 mi", sourceLabel = "GPS metrics · partial",
+                gpsDistanceAvailable = true), false, true, {}, {}, {},
+                isGpsRun = true, gpsServicePresent = true, gpsSignalStatus = signal)
         }
         composeTestRule.onNodeWithText("ILLUSTRATIVE MAP · GPS WAITING").assertExists()
         composeTestRule.onNodeWithText("ILLUSTRATIVE MAP · GPS RECORDING").assertDoesNotExist()
-        composeTestRule.runOnIdle { measured = true }
+        composeTestRule.runOnIdle { signal = GpsSignalStatus.RECORDING }
         composeTestRule.onNodeWithText("ILLUSTRATIVE MAP · GPS RECORDING").assertExists()
         composeTestRule.onNodeWithText("ILLUSTRATIVE MAP · GPS WAITING").assertDoesNotExist()
+        composeTestRule.runOnIdle { signal = GpsSignalStatus.WEAK }
+        composeTestRule.onNodeWithText("ILLUSTRATIVE MAP · GPS WEAK SIGNAL").assertExists()
+        composeTestRule.onNodeWithText("ILLUSTRATIVE MAP · GPS RECORDING").assertDoesNotExist()
+        composeTestRule.runOnIdle { signal = GpsSignalStatus.STALE }
+        composeTestRule.onNodeWithText("ILLUSTRATIVE MAP · GPS SIGNAL UNAVAILABLE").assertExists()
+        composeTestRule.onNodeWithText("ILLUSTRATIVE MAP · GPS RECORDING").assertDoesNotExist()
+        composeTestRule.onNodeWithTag(ACTIVE_RUN_DISTANCE_TAG).assertTextEquals("0.03 mi")
+        composeTestRule.onNodeWithText(PAUSE).assertIsEnabled()
+    }
+
+    @Test
+    fun activeGpsCanHaveFreshStationarySignalWithoutInventingDistance() {
+        composeTestRule.setContent {
+            ActiveRunScreen(false, fixtureMetrics().copy(
+                distance = "—", sourceLabel = "GPS distance unavailable",
+                gpsDistanceAvailable = false), false, true, {}, {}, {},
+                isGpsRun = true, gpsServicePresent = true, gpsSignalStatus = GpsSignalStatus.RECORDING)
+        }
+        composeTestRule.onNodeWithText("ILLUSTRATIVE MAP · GPS RECORDING").assertExists()
+        composeTestRule.onNodeWithTag(ACTIVE_RUN_DISTANCE_TAG).assertTextEquals("—")
+    }
+
+    @Test
+    fun runScreenForwardsSignalAndKeepsPausedStoppedAndSampleStatesDistinct() {
+        var paused by mutableStateOf(false)
+        var servicePresent by mutableStateOf(true)
+        var gps by mutableStateOf(true)
+        var signal by mutableStateOf(GpsSignalStatus.STALE)
+        composeTestRule.setContent {
+            RunStateScreen(
+                model = RunUiModel(if (paused) RunUiState.ActivePaused else RunUiState.ActiveRunning),
+                metrics = fixtureMetrics(), countdownDigit = null,
+                onStart = {}, onCancelCountdown = {}, onRetryInitialization = {}, onRetryStart = {},
+                onPause = {}, onResume = {}, onStop = {}, onStartAnother = {},
+                isGpsRun = gps, gpsServicePresent = servicePresent, gpsSignalStatus = signal
+            )
+        }
+        composeTestRule.onNodeWithText("ILLUSTRATIVE MAP · GPS SIGNAL UNAVAILABLE").assertExists()
+        composeTestRule.runOnIdle { paused = true }
+        composeTestRule.onNodeWithText("ILLUSTRATIVE MAP · GPS PAUSED").assertExists()
+        composeTestRule.runOnIdle { paused = false; signal = GpsSignalStatus.ACQUIRING }
+        composeTestRule.onNodeWithText("ILLUSTRATIVE MAP · GPS WAITING").assertExists()
+        composeTestRule.runOnIdle { servicePresent = false }
+        composeTestRule.onNodeWithText("ILLUSTRATIVE MAP · GPS STOPPED").assertExists()
+        composeTestRule.runOnIdle { gps = false; signal = GpsSignalStatus.RECORDING }
+        composeTestRule.onNodeWithText("ILLUSTRATIVE MAP · LOCATION OFF").assertExists()
+        composeTestRule.onNodeWithText("ILLUSTRATIVE MAP · GPS RECORDING").assertDoesNotExist()
     }
 
     @Test
@@ -2553,6 +2593,47 @@ class RunStateScreenTest {
         composeTestRule.onNodeWithText("Recorded GPS path · partial").assertExists()
         composeTestRule.runOnIdle { energy = ReflectionBranch.POWERED_UP }
         composeTestRule.runOnIdle { assertEquals(listOf(runId), loads) }
+    }
+
+    @Test
+    fun historyGpsPathLabelAndAccessibilityFollowFrozenCoverage() {
+        val runId = "0f6a2c1e-9d43-4b7a-9c21-7b5e8a4d1f30"
+        var coverage by mutableStateOf<TelemetryCoverage?>(TelemetryCoverage.COMPLETE)
+        composeTestRule.setContent {
+            RunHistoryScreen(
+                items = listOf(RunHistoryItem(runId, "Oct 16, 2026", fixtureMetrics(),
+                    "READY", "Exact saved reflection.", null, false,
+                    isGpsRun = true, telemetryCoverage = coverage)),
+                onBack = {}, onRetryReflection = {},
+                speakerFactory = { object : ReflectionSpeaker {
+                    override fun speak(text: String) = Unit
+                    override fun stop() = Unit
+                    override fun close() = Unit
+                } },
+                routeLoader = {
+                    GpsRoutePreviewData(listOf(listOf(
+                        GpsRouteCoordinate(0.1, 0.1), GpsRouteCoordinate(0.9, 0.9)
+                    )), 2, 1, 0.8, 0.8)
+                }
+            )
+        }
+        composeTestRule.onNodeWithTag(RUN_HISTORY_ROW_TAG_PREFIX + runId).performClick()
+        composeTestRule.onNodeWithText("Recorded GPS path").assertExists()
+        composeTestRule.onNodeWithText("Recorded GPS path · partial").assertDoesNotExist()
+        composeTestRule.onNodeWithContentDescription(
+            "Recorded GPS path in 1 separate recorded sections. No line joins unrecorded intervals."
+        ).assertExists()
+
+        composeTestRule.runOnIdle { coverage = TelemetryCoverage.PARTIAL }
+        composeTestRule.onNodeWithText("Recorded GPS path · partial").assertExists()
+        composeTestRule.onNodeWithText("Recorded GPS path").assertDoesNotExist()
+        composeTestRule.onNodeWithContentDescription(
+            "Partial recorded GPS path in 1 separate recorded sections. No line joins unrecorded intervals."
+        ).assertExists()
+
+        composeTestRule.runOnIdle { coverage = null }
+        composeTestRule.onNodeWithText("Recorded GPS path · partial").assertExists()
+        composeTestRule.onNodeWithText("Recorded GPS path").assertDoesNotExist()
     }
 
     @Test

@@ -1,6 +1,7 @@
 package com.runstate.mobile.run
 
 import com.runstate.mobile.data.local.RunEntity
+import com.runstate.mobile.data.local.FakeRunDao
 import com.runstate.mobile.data.local.PreRunEnergy
 import com.runstate.mobile.data.local.StoredRunState
 import com.runstate.mobile.data.local.RunTrackingMode
@@ -9,6 +10,7 @@ import java.time.Instant
 import java.time.ZoneId
 import java.time.ZoneOffset
 import java.util.UUID
+import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertThrows
@@ -21,6 +23,49 @@ import org.junit.Test
  * value merely looks like a UUID or is roughly the current time.
  */
 class PreparedRunFactoryTest {
+
+    @Test
+    fun `readTime and create capture each source once and freeze prepared timing through retry`() {
+        var wallReads = 0
+        var markReads = 0
+        var now = OFFICIAL_START
+        var elapsed = 10_000L
+        val timingSession = "03689ffc-65d9-4907-ae77-7a17b3ad77a6"
+        val factory = PreparedRunFactory(
+            clock = object : Clock() {
+                override fun getZone(): ZoneId = ZoneOffset.UTC
+                override fun withZone(zone: ZoneId): Clock = this
+                override fun instant(): Instant = Instant.ofEpochMilli(now)
+                override fun millis(): Long { wallReads++; return now }
+            },
+            zoneIdSupplier = { ZoneId.of("America/Chicago") },
+            uuidSupplier = { UUID.fromString(RUN_ID) },
+            timingMarkSupplier = { markReads++; RunTimingMark(elapsed, timingSession) }
+        )
+        val reading = factory.readTime()
+        assertEquals(RunTimeReading(now, RunTimingMark(elapsed, timingSession)), reading)
+        assertEquals(1, wallReads)
+        assertEquals(1, markReads)
+        val prepared = factory.create(trackingMode = RunTrackingMode.GPS)
+        assertEquals(2, wallReads)
+        assertEquals(2, markReads)
+        assertEquals(10_000L, prepared.startElapsedRealtimeMillis)
+        assertEquals(timingSession, prepared.timingSessionId)
+
+        val machine = RunSessionStateMachine().apply { beginCountdown() }
+        val dao = FakeRunDao().apply { failWith = IllegalStateException("disk unavailable") }
+        val starter = RunSessionStarter(machine, dao)
+        assertThrows(IllegalStateException::class.java) { runBlocking { starter.start(prepared) } }
+        now += 5_000L
+        elapsed += 5_000L
+        dao.failWith = null
+        runBlocking { starter.start(prepared) }
+        assertEquals(prepared, runBlocking { dao.findById(RUN_ID) })
+        assertEquals(OFFICIAL_START, prepared.officialStartEpochMillis)
+        assertEquals(10_000L, prepared.startElapsedRealtimeMillis)
+        assertEquals(2, wallReads)
+        assertEquals(2, markReads)
+    }
 
     private companion object {
         const val OFFICIAL_START = 1_756_000_000_000L

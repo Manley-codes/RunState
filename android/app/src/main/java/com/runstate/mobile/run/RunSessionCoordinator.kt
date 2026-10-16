@@ -6,6 +6,8 @@ import com.runstate.mobile.data.local.LocationDao
 import com.runstate.mobile.data.local.MetricSource
 import com.runstate.mobile.data.local.RunDao
 import com.runstate.mobile.data.local.RunEntity
+import com.runstate.mobile.data.local.RunLocationPointEntity
+import com.runstate.mobile.location.GpsCoverageEvaluator
 import com.runstate.mobile.data.local.PreRunEnergy
 import com.runstate.mobile.data.local.RunTransitionEntity
 import com.runstate.mobile.data.local.RunTrackingMode
@@ -281,6 +283,9 @@ internal class RunSessionCoordinator(
 
     /** Ordered transition history, loaded once and invalidated after pause or resume. */
     private var metricTransitions: List<RunTransitionEntity>? = null
+
+    /** Append-only GPS evidence for this owned run; discarded with the metric owner. */
+    private val metricGpsPoints = mutableListOf<RunLocationPointEntity>()
 
     /** Last live answer, used only to stop wall-clock correction making the display retreat. */
     private var lastPublishedMetrics: RunMetrics? = null
@@ -560,7 +565,8 @@ internal class RunSessionCoordinator(
             emptyList()
         }
 
-        val nowEpochMillis = preparedRunFactory.nowEpochMillis()
+        val now = preparedRunFactory.readTime()
+        val nowEpochMillis = now.epochMillis
         val elapsedMillis = checkNotNull(
             RunTimeline.elapsedMillis(
                 officialStartEpochMillis = run.officialStartEpochMillis,
@@ -586,7 +592,7 @@ internal class RunSessionCoordinator(
         val activeMillis = if (recoveredGpsGap && run.trackingMode == RunTrackingMode.GPS) {
             null
         } else {
-            timelineActiveMillis
+            timelineActiveMillis?.takeIf { it <= elapsedMillis }
         }
 
         val rawMetrics = when (run.state) {
@@ -594,29 +600,31 @@ internal class RunSessionCoordinator(
             StoredRunState.PAUSED -> {
                 val isGps = run.trackingMode == RunTrackingMode.GPS
                 val distance = if (isGps) {
-                    checkNotNull(locationDao) { "A GPS run needs its location store." }
-                        .latestMeasured(run.runId)?.cumulativeDistanceMeters
+                    val store = checkNotNull(locationDao) { "A GPS run needs its location store." }
+                    metricGpsPoints.addAll(store.pointsAfter(run.runId,
+                        metricGpsPoints.lastOrNull()?.sequenceNumber ?: 0))
+                    metricGpsPoints.lastOrNull {
+                        it.acceptedForDistance && it.cumulativeDistanceMeters != null
+                    }?.cumulativeDistanceMeters
                 } else {
                     activeMillis?.let(fixtureDistanceCalculator::distanceMetersAt)
                 }
+                val coverage = if (isGps) {
+                    GpsCoverageEvaluator.assess(run, transitions, metricGpsPoints,
+                        nowEpochMillis, now.timingMark, recoveredGpsGap)
+                } else if (distance == null) TelemetryCoverage.UNAVAILABLE else TelemetryCoverage.COMPLETE
                 RunMetrics(
                     elapsedMillis = elapsedMillis,
                     activeMillis = activeMillis,
                     distanceMeters = distance,
-                    paceSecondsPerMeter = if (isGps) null else
+                    paceSecondsPerMeter = if (isGps && coverage != TelemetryCoverage.COMPLETE) null else
                         RunTimeline.averagePaceSecondsPerMeter(
                             activeDurationMillis = activeMillis,
                             distanceMeters = distance
                         ),
                     displayUnit = DistanceUnit.MILES,
                     source = if (isGps) MetricSource.GPS else MetricSource.FIXTURE,
-                    coverage = if (distance == null) {
-                        TelemetryCoverage.UNAVAILABLE
-                    } else if (isGps) {
-                        TelemetryCoverage.PARTIAL
-                    } else {
-                        TelemetryCoverage.COMPLETE
-                    }
+                    coverage = coverage
                 )
             }
 
@@ -1174,7 +1182,7 @@ internal class RunSessionCoordinator(
 
         // Read once, here, from the same clock the official start came from. A retry after
         // a failure is a new request and reads it again: the runner pressed at a new moment.
-        val occurredAt = preparedRunFactory.nowEpochMillis()
+        val occurredAt = preparedRunFactory.readTime()
 
         // Reserved before launch, for the same reason as a start.
         reservedAction = kind
@@ -1194,17 +1202,17 @@ internal class RunSessionCoordinator(
     private suspend fun runLifecycleAction(
         session: ActiveRunSession,
         kind: RunActionKind,
-        occurredAt: Long
+        occurredAt: RunTimeReading
     ) {
         var completionMetrics: FinalRunMetrics? = null
         try {
             when (kind) {
-                RunActionKind.PAUSE -> session.pause(occurredAt)
-                RunActionKind.RESUME -> session.resume(occurredAt)
+                RunActionKind.PAUSE -> session.pause(occurredAt.epochMillis, occurredAt.timingMark)
+                RunActionKind.RESUME -> session.resume(occurredAt.epochMillis, occurredAt.timingMark)
                 RunActionKind.COMPLETE -> {
                     val metrics = metricsForCompletion(session.runId, occurredAt)
                     session.complete(
-                        finishEpochMillis = occurredAt,
+                        finishEpochMillis = occurredAt.epochMillis,
                         finalMetrics = metrics
                     )
                     completionMetrics = metrics
@@ -1233,7 +1241,7 @@ internal class RunSessionCoordinator(
             applyMetricActionSuccessLocked(
                 runId = session.runId,
                 kind = kind,
-                occurredAt = occurredAt,
+                occurredAt = occurredAt.epochMillis,
                 completionMetrics = completionMetrics
             )
             pendingAction = null
@@ -1291,6 +1299,11 @@ internal class RunSessionCoordinator(
 
     /** Applies a process-local display floor without changing any durable run fact. */
     private fun liveMetricsWithMonotonicFloor(current: RunMetrics): RunMetrics {
+        // Never import an earlier untrusted wall-clock spike into newly certified pace.
+        // Its active/distance pair was checked together against monotonic timing evidence.
+        if (current.source == MetricSource.GPS && current.coverage == TelemetryCoverage.COMPLETE) {
+            return current
+        }
         val previous = lastPublishedMetrics ?: return current
         val elapsed = maxOf(previous.elapsedMillis, current.elapsedMillis)
         val active = current.activeMillis?.let { currentActive ->
@@ -1318,6 +1331,7 @@ internal class RunSessionCoordinator(
     private fun clearMetricState() {
         metricRun = null
         metricTransitions = null
+        metricGpsPoints.clear()
         lastPublishedMetrics = null
         recoveredGpsGap = false
     }
@@ -1325,28 +1339,27 @@ internal class RunSessionCoordinator(
     /** Freeze only measurements belonging to this run's immutable tracking mode. */
     private suspend fun metricsForCompletion(
         runId: String,
-        finishEpochMillis: Long
+        finish: RunTimeReading
     ): FinalRunMetrics {
         val storedRun = checkNotNull(runDao.findById(runId)) {
             "No run is stored under $runId, so its metrics cannot be finalized."
         }
         if (storedRun.trackingMode == RunTrackingMode.GPS) {
-            val measuredDistance = checkNotNull(locationDao) {
+            val points = checkNotNull(locationDao) {
                 "A GPS run needs its location store."
-            }.latestMeasured(runId)?.cumulativeDistanceMeters
+            }.pointsFor(runId)
+            val measuredDistance = points.lastOrNull {
+                it.acceptedForDistance && it.cumulativeDistanceMeters != null
+            }?.cumulativeDistanceMeters
             return FinalRunMetrics(
                 distanceMeters = measuredDistance,
                 source = MetricSource.GPS,
-                // Until continuity is proven, a real measurement is honestly partial.
-                coverage = if (measuredDistance == null) {
-                    TelemetryCoverage.UNAVAILABLE
-                } else {
-                    TelemetryCoverage.PARTIAL
-                },
+                coverage = GpsCoverageEvaluator.assess(storedRun, runDao.transitionsFor(runId),
+                    points, finish.epochMillis, finish.timingMark, recoveredGpsGap),
                 displayUnit = DistanceUnit.MILES
             )
         }
-        return fixtureMetricsForCompletion(storedRun, finishEpochMillis)
+        return fixtureMetricsForCompletion(storedRun, finish.epochMillis)
     }
 
     /**

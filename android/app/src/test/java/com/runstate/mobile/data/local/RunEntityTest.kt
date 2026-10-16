@@ -1,5 +1,6 @@
 package com.runstate.mobile.data.local
 
+import com.runstate.mobile.run.RunTimingMark
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertThrows
@@ -15,6 +16,43 @@ class RunEntityTest {
 
     private val officialStart = 1_756_000_000_000L
     private val canonicalUuid = "0f6a2c1e-9d43-4b7a-9c21-7b5e8a4d1f30"
+
+    @Test
+    fun `timing marks allow zero and require a canonical process identity`() {
+        assertEquals(0L, RunTimingMark(0L, canonicalUuid).elapsedRealtimeMillis)
+        assertThrows(IllegalArgumentException::class.java) { RunTimingMark(-1L, canonicalUuid) }
+        listOf("", " ", "process", canonicalUuid.uppercase(), "1-1-1-1-1").forEach { invalid ->
+            assertThrows(IllegalArgumentException::class.java) { RunTimingMark(1L, invalid) }
+        }
+    }
+
+    @Test
+    fun `start timing is either absent or one validated pair`() {
+        val original = runWith()
+        assertNull(original.startElapsedRealtimeMillis)
+        assertNull(original.timingSessionId)
+        val marked = original.copy(startElapsedRealtimeMillis = 42L, timingSessionId = canonicalUuid)
+        assertEquals(42L, marked.startElapsedRealtimeMillis)
+        assertEquals(canonicalUuid, marked.timingSessionId)
+        assertThrows(IllegalArgumentException::class.java) { original.copy(startElapsedRealtimeMillis = 42L) }
+        assertThrows(IllegalArgumentException::class.java) { original.copy(timingSessionId = canonicalUuid) }
+        assertThrows(IllegalArgumentException::class.java) { marked.copy(startElapsedRealtimeMillis = -1L) }
+        assertThrows(IllegalArgumentException::class.java) { marked.copy(timingSessionId = " ") }
+    }
+
+    @Test
+    fun `transition timing preserves unknown and rejects half or invalid pairs`() {
+        val original = RunTransitionEntity(canonicalUuid, 1, RunTransitionType.PAUSE, officialStart)
+        assertNull(original.elapsedRealtimeMillis)
+        assertNull(original.timingSessionId)
+        val marked = original.copy(elapsedRealtimeMillis = 42L, timingSessionId = canonicalUuid)
+        assertEquals(42L, marked.elapsedRealtimeMillis)
+        assertEquals(canonicalUuid, marked.timingSessionId)
+        assertThrows(IllegalArgumentException::class.java) { original.copy(elapsedRealtimeMillis = 42L) }
+        assertThrows(IllegalArgumentException::class.java) { original.copy(timingSessionId = canonicalUuid) }
+        assertThrows(IllegalArgumentException::class.java) { marked.copy(elapsedRealtimeMillis = -1L) }
+        assertThrows(IllegalArgumentException::class.java) { marked.copy(timingSessionId = "bad-session") }
+    }
 
     /** Builds a valid row, overriding only the field under test. */
     private fun runWith(

@@ -13,6 +13,7 @@ import com.runstate.mobile.data.local.RunMusicObservationEntity
 import com.runstate.mobile.data.local.RunReflectionEntity
 import com.runstate.mobile.data.local.RunTransitionEntity
 import com.runstate.mobile.data.local.RunTransitionType
+import com.runstate.mobile.data.local.RunTrackingMode
 import com.runstate.mobile.data.local.StoredRunState
 import com.runstate.mobile.data.local.TelemetryCoverage
 import com.runstate.mobile.run.RunMetrics
@@ -252,6 +253,25 @@ class RunMetricsDisplayTest {
         assertNull(item.preRunEnergyLabel)
         assertNull(item.effort)
         assertEquals(false, item.isTestData)
+    }
+
+    @Test
+    fun `history retains frozen gps coverage without inferring it from distance`() {
+        for (coverage in listOf(TelemetryCoverage.COMPLETE, TelemetryCoverage.PARTIAL, null)) {
+            val run = historyRun(
+                finish = historyStart + 600_000L,
+                distanceMeters = if (coverage == null) null else 100.0,
+                coverage = coverage,
+                historyComplete = true
+            ).copy(
+                metricSource = if (coverage == null) null else MetricSource.GPS,
+                trackingMode = RunTrackingMode.GPS
+            )
+            val item = historyItemFor(run, emptyList(), null)
+
+            assertEquals(coverage, item.telemetryCoverage)
+            assertEquals(true, item.isGpsRun)
+        }
     }
 
     @Test

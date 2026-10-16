@@ -139,7 +139,7 @@ class ActiveRunSession internal constructor(
      * @throws IllegalStateException if this session is not RUNNING, or if Room refuses
      *   the pause. Nothing in memory changes in either case.
      */
-    suspend fun pause(pausedAtEpochMillis: Long) {
+    suspend fun pause(pausedAtEpochMillis: Long, timingMark: RunTimingMark? = null) {
         sessionLock.withLock {
             check(stateMachine.state == RunSessionState.RUNNING) {
                 "A run can only be paused while it is running, but this session is " +
@@ -147,7 +147,7 @@ class ActiveRunSession internal constructor(
             }
 
             // Durable first: if this throws, the session honestly stays RUNNING.
-            runDao.pauseRun(runId, pausedAtEpochMillis)
+            runDao.pauseRun(runId, pausedAtEpochMillis, timingMark)
 
             // The pause is on disk, so memory may now agree with it.
             stateMachine.pauseRun()
@@ -160,14 +160,14 @@ class ActiveRunSession internal constructor(
      * @throws IllegalStateException if this session is not PAUSED, or if Room refuses
      *   the resume. Nothing in memory changes in either case.
      */
-    suspend fun resume(resumedAtEpochMillis: Long) {
+    suspend fun resume(resumedAtEpochMillis: Long, timingMark: RunTimingMark? = null) {
         sessionLock.withLock {
             check(stateMachine.state == RunSessionState.PAUSED) {
                 "A run can only be resumed while it is paused, but this session is " +
                     "${stateMachine.state}."
             }
 
-            runDao.resumeRun(runId, resumedAtEpochMillis)
+            runDao.resumeRun(runId, resumedAtEpochMillis, timingMark)
 
             stateMachine.resumeRun()
         }

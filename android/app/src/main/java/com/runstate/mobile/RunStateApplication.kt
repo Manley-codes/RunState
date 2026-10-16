@@ -18,7 +18,11 @@ import com.runstate.mobile.reflection.RunReflectionCoordinator
 import com.runstate.mobile.reflection.reflectionBridgeEnabledForBuild
 import com.runstate.mobile.run.PreparedRunFactory
 import com.runstate.mobile.run.RunSessionCoordinator
+import com.runstate.mobile.settings.AndroidRunPreferencesStore
+import com.runstate.mobile.settings.RunPreferences
 import java.time.Clock
+import android.os.SystemClock
+import com.runstate.mobile.run.RunTimingMark
 import java.time.ZoneId
 import java.util.UUID
 import kotlinx.coroutines.CoroutineScope
@@ -27,6 +31,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.async
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -98,6 +103,9 @@ internal sealed interface ReflectionConnectionState {
  */
 class RunStateApplication : Application() {
 
+    /** Temporary demo drafts may survive rotation, but never inherit another process's mode. */
+    internal val runSettingsSessionId: String = UUID.randomUUID().toString()
+
     private val mutableTrackingServiceState = MutableStateFlow<RunTrackingServiceState>(
         RunTrackingServiceState.Idle
     )
@@ -137,6 +145,9 @@ class RunStateApplication : Application() {
      */
     internal val clock: Clock = Clock.systemUTC()
 
+    // An elapsed-time reading is comparable only within this uninterrupted process.
+    private val timingSessionId = UUID.randomUUID().toString()
+
     /**
      * The scope for work that must outlive any screen.
      *
@@ -155,6 +166,78 @@ class RunStateApplication : Application() {
      */
     internal val applicationScope: CoroutineScope by lazy {
         CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    }
+
+    private val runPreferencesStore by lazy { AndroidRunPreferencesStore(this) }
+    private val runPreferencesLock = Mutex()
+    private var runPreferencesLoadStarted = false
+    private var pendingRunPreferencesSaves = 0
+    private val mutableRunPreferences = MutableStateFlow<RunPreferences?>(null)
+    internal val runPreferences: StateFlow<RunPreferences?> = mutableRunPreferences.asStateFlow()
+    private val mutableRunPreferencesSaving = MutableStateFlow(false)
+    internal val runPreferencesSaving: StateFlow<Boolean> = mutableRunPreferencesSaving.asStateFlow()
+    private val mutableRunPreferencesError = MutableStateFlow<String?>(null)
+    internal val runPreferencesError: StateFlow<String?> = mutableRunPreferencesError.asStateFlow()
+
+    /** Explicit setup: tests and Application startup never read a runner's saved choices. */
+    internal fun initializeRunPreferences() {
+        synchronized(this) {
+            if (runPreferencesLoadStarted || mutableRunPreferences.value != null) return
+            runPreferencesLoadStarted = true
+        }
+        applicationScope.launch {
+            try {
+                runPreferencesLock.withLock {
+                    // A save accepted before initialization may already have supplied the state.
+                    if (mutableRunPreferences.value != null) return@withLock
+                    mutableRunPreferencesError.value = null
+                    try {
+                        mutableRunPreferences.value = withContext(Dispatchers.IO) {
+                            runPreferencesStore.load()
+                        }
+                    } catch (cancelled: CancellationException) {
+                        throw cancelled
+                    } catch (_: Exception) {
+                        mutableRunPreferencesError.value =
+                            "Run preferences could not be loaded. Try again."
+                    }
+                }
+            } finally {
+                // Failure remains retryable; successful initialization is guarded by its value.
+                synchronized(this@RunStateApplication) { runPreferencesLoadStarted = false }
+            }
+        }
+    }
+
+    /** Rotation cancels only the caller's wait; an accepted preference save finishes in the app. */
+    internal suspend fun saveRunPreferences(next: RunPreferences) {
+        applicationScope.async {
+            synchronized(this@RunStateApplication) {
+                pendingRunPreferencesSaves += 1
+                mutableRunPreferencesSaving.value = true
+            }
+            try {
+                runPreferencesLock.withLock {
+                    try {
+                        withContext(Dispatchers.IO) { runPreferencesStore.save(next) }
+                        // Publish only after commit, preserving the previous confirmed choice on error.
+                        mutableRunPreferences.value = next
+                        mutableRunPreferencesError.value = null
+                    } catch (cancelled: CancellationException) {
+                        throw cancelled
+                    } catch (_: Exception) {
+                        val message = "Your run preferences could not be saved. Please try again."
+                        mutableRunPreferencesError.value = message
+                        throw IllegalStateException(message)
+                    }
+                }
+            } finally {
+                synchronized(this@RunStateApplication) {
+                    pendingRunPreferencesSaves -= 1
+                    mutableRunPreferencesSaving.value = pendingRunPreferencesSaves > 0
+                }
+            }
+        }.await()
     }
 
     /**
@@ -186,7 +269,8 @@ class RunStateApplication : Application() {
             preparedRunFactory = PreparedRunFactory(
                 clock = clock,
                 zoneIdSupplier = ZoneId::systemDefault,
-                uuidSupplier = UUID::randomUUID
+                uuidSupplier = UUID::randomUUID,
+                timingMarkSupplier = { RunTimingMark(SystemClock.elapsedRealtime(), timingSessionId) }
             ),
             applicationScope = applicationScope
         )

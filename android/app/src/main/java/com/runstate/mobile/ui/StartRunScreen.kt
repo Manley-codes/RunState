@@ -104,6 +104,8 @@ internal const val START_GPS_TOGGLE_TAG = "startGpsToggle"
 internal const val START_MUSIC_TOGGLE_TAG = "startMusicToggle"
 internal const val START_MUSIC_SHARING_TOGGLE_TAG = "startMusicSharingToggle"
 internal const val START_REFLECTION_SETUP_TAG = "startReflectionSetup"
+internal const val START_RUN_SETTINGS_TAG = "startRunSettings"
+internal const val START_RUN_STATUS_TAG = "startRunStatus"
 internal const val REFLECTION_CONNECTION_DIALOG_TAG = "reflectionConnectionDialog"
 internal const val REFLECTION_CONNECTION_ADDRESS_TAG = "reflectionConnectionAddress"
 internal const val REFLECTION_CONNECTION_CODE_TAG = "reflectionConnectionCode"
@@ -142,19 +144,15 @@ internal fun StartRunScreen(
     actionsEnabled: Boolean,
     onViewHistory: () -> Unit,
     showHistory: Boolean,
-    gpsSelected: Boolean = false,
-    onToggleGps: () -> Unit = {},
+    gpsSelected: Boolean = true,
     gpsMessage: String? = null,
     musicSelected: Boolean = false,
     musicAccessGranted: Boolean = false,
-    onToggleMusic: () -> Unit = {},
-    musicReflectionSharingAvailable: Boolean = false,
-    musicReflectionSharingSelected: Boolean = false,
-    onToggleMusicReflectionSharing: () -> Unit = {},
-    reflectionConnectionLabel: String? = null,
-    onOpenReflectionSetup: () -> Unit = {},
-    reflectionSetupEnabled: Boolean = true,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onOpenRunSettings: () -> Unit = {},
+    gpsReady: Boolean = false,
+    setupLoading: Boolean = false,
+    reflectionSetupRequired: Boolean = false
 ) {
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     val view = LocalView.current
@@ -249,8 +247,7 @@ internal fun StartRunScreen(
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Text(
-                    text = if (gpsSelected) "ILLUSTRATIVE MAP · GPS READY"
-                        else "ILLUSTRATIVE MAP · LOCATION OFF",
+                    text = "ILLUSTRATIVE MAP",
                     color = StartInk,
                     fontSize = 9.sp,
                     fontWeight = FontWeight.Bold,
@@ -277,150 +274,68 @@ internal fun StartRunScreen(
                     }
                 }
             }
-            if (reflectionConnectionLabel != null) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(reflectionConnectionLabel, color = StartInk, fontSize = 11.sp,
-                        modifier = Modifier.weight(1f))
-                    TextButton(
-                        onClick = onOpenReflectionSetup,
-                        enabled = actionsEnabled && reflectionSetupEnabled,
-                        modifier = Modifier.heightIn(min = 48.dp).testTag(START_REFLECTION_SETUP_TAG)
-                    ) {
-                        Text("Reflection setup", color = StartInk, fontSize = 12.sp)
-                    }
-                }
-            }
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(top = 4.dp)
-                    .clip(RoundedCornerShape(16.dp))
-                    .background(StartCream.copy(alpha = 0.9f))
-                    .padding(start = 12.dp, end = 4.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
+                    .testTag(START_RUN_STATUS_TAG),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.Top
             ) {
-                Text(
-                    text = if (gpsSelected) "Precise GPS will record this run"
-                        else "Sample run · GPS off",
-                    color = StartInk,
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.SemiBold
-                )
-                TextButton(
-                    onClick = onToggleGps,
-                    enabled = actionsEnabled,
-                    modifier = Modifier
-                        .heightIn(min = 48.dp)
-                        .testTag(START_GPS_TOGGLE_TAG)
-                ) {
+                Column(Modifier.weight(1f).padding(top = 12.dp)) {
                     Text(
-                        if (gpsSelected) "Turn GPS off" else "Turn GPS on",
+                        text = when {
+                            setupLoading -> "Loading run preferences…"
+                            !gpsSelected -> "Sample demo · simulated distance"
+                            gpsReady -> "GPS ready"
+                            else -> "Location setup on Start"
+                        },
                         color = StartInk,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-            }
-            if (gpsMessage != null) {
-                Text(
-                    text = gpsMessage,
-                    color = StartInk,
-                    fontSize = 11.sp,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 5.dp)
-                )
-            }
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 8.dp)
-                    .clip(RoundedCornerShape(16.dp))
-                    .background(StartCream.copy(alpha = 0.9f))
-                    .padding(start = 12.dp, end = 4.dp, top = 6.dp, bottom = 6.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Column(Modifier.weight(1f)) {
-                    Text(
-                        text = "Observe music",
-                        color = StartInk,
-                        fontSize = 11.sp,
+                        fontSize = 12.sp,
+                        lineHeight = 17.sp,
                         fontWeight = FontWeight.SemiBold
                     )
-                    Text(
-                        text = if (musicAccessGranted)
-                            "Saves media-session title, artist & app while Running. Other audio may appear."
-                        else
-                            "Android grants broad notification access. RunState reads media sessions only during opted-in runs.",
-                        color = StartInk.copy(alpha = 0.78f),
-                        fontSize = 10.sp,
-                        lineHeight = 13.sp
-                    )
+                    if (!setupLoading) {
+                        Text(
+                            text = when {
+                                !musicSelected -> "Music observation off"
+                                !musicAccessGranted -> "Music observation needs access"
+                                else -> "Music observation on"
+                            },
+                            color = StartInk.copy(alpha = 0.72f),
+                            fontSize = 11.sp,
+                            lineHeight = 16.sp
+                        )
+                        if (reflectionSetupRequired) {
+                            Text(
+                                "Set up reflections in Run settings",
+                                color = StartInk.copy(alpha = 0.72f),
+                                fontSize = 11.sp,
+                                lineHeight = 16.sp
+                            )
+                        }
+                        if (gpsMessage != null) {
+                            Text(
+                                gpsMessage,
+                                color = StartInk,
+                                fontSize = 11.sp,
+                                lineHeight = 16.sp,
+                                modifier = Modifier.padding(top = 3.dp)
+                            )
+                        }
+                    }
                 }
                 TextButton(
-                    onClick = onToggleMusic,
-                    enabled = actionsEnabled,
-                    modifier = Modifier
-                        .heightIn(min = 48.dp)
-                        .testTag(START_MUSIC_TOGGLE_TAG)
+                    onClick = onOpenRunSettings,
+                    enabled = actionsEnabled && !setupLoading,
+                    modifier = Modifier.heightIn(min = 48.dp).testTag(START_RUN_SETTINGS_TAG)
                 ) {
-                    Text(
-                        if (musicSelected) "Turn off" else "Turn on",
-                        color = StartInk,
-                        fontWeight = FontWeight.Bold
-                    )
+                    Text("Run settings", color = StartInk, fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold)
                 }
             }
-            val showMusicSharing = musicReflectionSharingAvailable && musicSelected && musicAccessGranted
-            if (showMusicSharing) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 8.dp)
-                        .clip(RoundedCornerShape(16.dp))
-                        .background(StartCream.copy(alpha = 0.9f))
-                        .padding(start = 12.dp, end = 4.dp, top = 6.dp, bottom = 6.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column(Modifier.weight(1f)) {
-                        Text(
-                            "Music in reflection",
-                            color = StartInk,
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                        Text(
-                            (if (musicReflectionSharingSelected) "On for this run. " else "Optional. ") +
-                                "Shares one reported Spotify title and artist with RunState’s backend and Anthropic. " +
-                                "Partial observation; no audio.",
-                            color = StartInk.copy(alpha = 0.78f),
-                            fontSize = 10.sp,
-                            lineHeight = 13.sp
-                        )
-                    }
-                    TextButton(
-                        onClick = onToggleMusicReflectionSharing,
-                        enabled = actionsEnabled,
-                        modifier = Modifier
-                            .heightIn(min = 48.dp)
-                            .testTag(START_MUSIC_SHARING_TOGGLE_TAG)
-                    ) {
-                        Text(
-                            if (musicReflectionSharingSelected) "Turn off" else "Include",
-                            color = StartInk,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-                }
-            }
-            val energySpacerBase = (if (showMusicSharing) 750.dp else 670.dp) +
-                (if (reflectionConnectionLabel != null) 48.dp else 0.dp)
-            Spacer(modifier = Modifier.height((screenHeight - energySpacerBase).coerceAtLeast(20.dp)))
+            val energySpacerBase = 580.dp + if (gpsMessage != null) 24.dp else 0.dp
+            Spacer(modifier = Modifier.height((screenHeight - energySpacerBase).coerceAtLeast(24.dp)))
             PreRunEnergyChoices(
                 selected = selectedPreRunEnergy,
                 onSelect = selection@{ energy ->
@@ -457,7 +372,7 @@ internal fun StartRunScreen(
 
         StartFooter(
             onStart = onStart,
-            enabled = actionsEnabled,
+            enabled = actionsEnabled && !setupLoading,
             gpsSelected = gpsSelected,
             energySelected = selectedPreRunEnergy != null,
             phase = ringPhase,

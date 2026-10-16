@@ -76,6 +76,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.runstate.mobile.data.local.PostRunEffort
+import com.runstate.mobile.data.local.TelemetryCoverage
 import com.runstate.mobile.R
 import java.util.UUID
 import kotlinx.coroutines.CancellationException
@@ -507,7 +508,9 @@ internal data class RunHistoryItem(
     val effort: PostRunEffort? = null,
     val isGpsRun: Boolean = false,
     val energy: ReflectionBranch? = null,
-    val reflectionMusicSummary: String? = null
+    val reflectionMusicSummary: String? = null,
+    /** Frozen at completion; path geometry never infers complete recording by itself. */
+    val telemetryCoverage: TelemetryCoverage? = null
 )
 
 internal sealed interface HistoryRouteDisplay {
@@ -1085,7 +1088,8 @@ private fun HistoryRow(
                     when (route) {
                         is HistoryRouteDisplay.Ready -> GpsRoutePreview(route.data,
                             Modifier.padding(top = 10.dp, bottom = 12.dp)
-                                .background(CompletionSurfaceTop, RoundedCornerShape(12.dp)).padding(12.dp))
+                                .background(CompletionSurfaceTop, RoundedCornerShape(12.dp)).padding(12.dp),
+                            coverage = item.telemetryCoverage)
                         HistoryRouteDisplay.Failed -> Text(
                             "Recorded GPS path couldn't load. Close and reopen this run to retry.",
                             color = rowMuted, fontSize = 12.sp, lineHeight = 18.sp,

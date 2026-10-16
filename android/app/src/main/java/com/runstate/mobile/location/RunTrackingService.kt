@@ -47,7 +47,10 @@ import kotlinx.coroutines.sync.withLock
 internal sealed interface RunTrackingServiceState {
     data object Idle : RunTrackingServiceState
     data object Starting : RunTrackingServiceState
-    data class Tracking(val runId: String) : RunTrackingServiceState
+    data class Tracking(
+        val runId: String,
+        val signalStatus: GpsSignalStatus = GpsSignalStatus.ACQUIRING
+    ) : RunTrackingServiceState
     data class Paused(val runId: String) : RunTrackingServiceState
     data class Failed(val reason: String) : RunTrackingServiceState
 }
@@ -125,6 +128,9 @@ internal class RunTrackingService : Service() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val observationLock = Mutex()
     private var policy = GpsDistancePolicy()
+    private val signalMonitor = GpsSignalMonitor()
+    private var signalWatchdog: Job? = null
+    private var storageFailureActive = false
     private var work: Job? = null
     private var acceptedStartId = 0
     private var listener: LocationListener? = null
@@ -165,6 +171,8 @@ internal class RunTrackingService : Service() {
         failed = false
         storedState = null
         acceptedStartId = startId
+        storageFailureActive = false
+        signalMonitor.reset(SystemClock.elapsedRealtime())
 
         try {
             promoteToForeground("Preparing GPS run")
@@ -320,8 +328,8 @@ internal class RunTrackingService : Service() {
                         )
                         updateNotification("GPS off · distance incomplete")
                     } else if (startCpuWakeLease()) {
-                        app.publishTrackingServiceState(RunTrackingServiceState.Tracking(id))
-                        updateNotification("GPS run in progress")
+                        startSignalWatchdog(id)
+                        publishSignalState(id)
                     }
                 } catch (failure: SecurityException) {
                     policy.trackingInterrupted()
@@ -351,6 +359,7 @@ internal class RunTrackingService : Service() {
     @SuppressLint("MissingPermission") // Checked before the service starts and again above.
     private fun listenForGps(id: String) {
         if (listener != null) return
+        signalMonitor.reset(SystemClock.elapsedRealtime())
         gpsEnabled = locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)
         val next = object : LocationListener {
             override fun onLocationChanged(location: Location) {
@@ -372,7 +381,10 @@ internal class RunTrackingService : Service() {
                             deliveredGeneration != locationGeneration ||
                             storedState != StoredRunState.RUNNING || !gpsEnabled
                         ) return@withLock
-                        saveObservation(id, key, delivered, deliveredAtElapsedRealtimeMillis)
+                        saveObservation(
+                            id, key, delivered, deliveredAtElapsedRealtimeMillis,
+                            callbackListener, deliveredGeneration
+                        )
                     }
                 }
             }
@@ -381,6 +393,8 @@ internal class RunTrackingService : Service() {
                 if (listener === this && provider == LocationManager.GPS_PROVIDER) {
                     locationGeneration++
                     gpsEnabled = false
+                    stopSignalWatchdog()
+                    signalMonitor.reset(SystemClock.elapsedRealtime())
                     stopCpuWakeLease()
                     policy.trackingInterrupted()
                     app.publishTrackingServiceState(
@@ -396,9 +410,10 @@ internal class RunTrackingService : Service() {
                     locationGeneration++
                     gpsEnabled = true
                     policy.trackingInterrupted()
+                    signalMonitor.reset(SystemClock.elapsedRealtime())
                     if (startCpuWakeLease()) {
-                        app.publishTrackingServiceState(RunTrackingServiceState.Tracking(id))
-                        updateNotification("GPS run in progress")
+                        startSignalWatchdog(id)
+                        publishSignalState(id)
                     }
                 }
             }
@@ -432,7 +447,9 @@ internal class RunTrackingService : Service() {
         id: String,
         key: String,
         location: Location,
-        deliveredAtElapsedRealtimeMillis: Long
+        deliveredAtElapsedRealtimeMillis: Long,
+        callbackListener: LocationListener,
+        deliveredGeneration: Long
     ) {
         val elapsedNanos = location.elapsedRealtimeNanos
         val sample = GpsSample(
@@ -468,33 +485,38 @@ internal class RunTrackingService : Service() {
                     segmentDistanceMeters = decision.distanceAddedMeters
                 )
             )
-            if (runId != id || policy !== observationPolicy) return
+            if (!ownsObservation(id, observationPolicy, callbackListener, deliveredGeneration)) return
             // Room rechecks the durable run state and checkpoint. If it downgrades a
             // callback that the in-memory filter liked, the next fix must be a fresh
             // anchor rather than measuring from a point storage refused.
             if (decision.acceptedForRoute && !stored.acceptedForDistance) {
                 observationPolicy.trackingInterrupted()
             }
-            if (gpsEnabled && storedState == StoredRunState.RUNNING &&
-                app.trackingServiceState.value is RunTrackingServiceState.Failed) {
-                app.publishTrackingServiceState(RunTrackingServiceState.Tracking(id))
-                updateNotification("GPS run in progress")
-            }
+            val usable = isDurablyUsableGpsFix(
+                decision.status, stored.acceptedForDistance, stored.rejectionReason
+            )
+            val signal = signalMonitor.onStoredFix(
+                decision.status, sample.elapsedRealtimeMillis, usable, SystemClock.elapsedRealtime()
+            )
+            // An inaccurate/replayed observation may be durably saved for diagnostics; that
+            // alone must not erase a storage failure or claim that GPS is recording again.
+            if (usable && signal == GpsSignalStatus.RECORDING) storageFailureActive = false
+            publishSignalState(id)
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (failure: Exception) {
-            if (runId != id || policy !== observationPolicy) return
+            if (!ownsObservation(id, observationPolicy, callbackListener, deliveredGeneration)) return
             observationPolicy.trackingInterrupted()
-            app.publishTrackingServiceState(
-                RunTrackingServiceState.Failed("A GPS point could not be saved; distance is incomplete.")
-            )
-            updateNotification("GPS record incomplete")
+            storageFailureActive = true
+            publishSignalState(id)
         }
     }
 
     private fun stopGps() {
+        stopSignalWatchdog()
         stopCpuWakeLease()
         locationGeneration++
+        signalMonitor.reset(SystemClock.elapsedRealtime())
         listener?.let {
             try {
                 locationManager.removeUpdates(it)
@@ -504,6 +526,61 @@ internal class RunTrackingService : Service() {
         }
         listener = null
         gpsEnabled = false
+    }
+
+    /** Recheck after every suspended Room write: the same UUID can pause and resume meanwhile. */
+    private fun ownsObservation(
+        id: String,
+        observationPolicy: GpsDistancePolicy,
+        callbackListener: LocationListener,
+        generation: Long
+    ): Boolean = runId == id && policy === observationPolicy &&
+        listener === callbackListener && generation == locationGeneration &&
+        storedState == StoredRunState.RUNNING && gpsEnabled
+
+    private fun startSignalWatchdog(id: String) {
+        stopSignalWatchdog()
+        val generation = locationGeneration
+        signalWatchdog = scope.launch {
+            while (runId == id && generation == locationGeneration &&
+                listener != null && gpsEnabled && storedState == StoredRunState.RUNNING) {
+                delay(1_000L)
+                if (runId != id || generation != locationGeneration || listener == null ||
+                    !gpsEnabled || storedState != StoredRunState.RUNNING) return@launch
+                // A delayed Room write can make committed evidence old while source fixes
+                // remain continuous. Only the distance policy judges source-time route gaps.
+                publishSignalState(id)
+            }
+        }
+    }
+
+    private fun stopSignalWatchdog() {
+        signalWatchdog?.cancel()
+        signalWatchdog = null
+    }
+
+    private fun publishSignalState(id: String) {
+        if (runId != id || storedState != StoredRunState.RUNNING || !gpsEnabled || listener == null) return
+        if (storageFailureActive) {
+            val failure = RunTrackingServiceState.Failed(
+                "A GPS point could not be saved; distance is incomplete."
+            )
+            if (app.trackingServiceState.value != failure) {
+                app.publishTrackingServiceState(failure)
+                updateNotification("GPS record incomplete")
+            }
+            return
+        }
+        val signal = signalMonitor.status(SystemClock.elapsedRealtime())
+        val next = RunTrackingServiceState.Tracking(id, signal)
+        if (app.trackingServiceState.value == next) return
+        app.publishTrackingServiceState(next)
+        updateNotification(when (signal) {
+            GpsSignalStatus.ACQUIRING -> "Finding GPS signal"
+            GpsSignalStatus.RECORDING -> "GPS recording"
+            GpsSignalStatus.WEAK -> "Weak GPS · distance may be incomplete"
+            GpsSignalStatus.STALE -> "GPS unavailable · waiting for a fresh fix"
+        })
     }
 
     /** A foreground notification alone does not guarantee prompt callbacks with the screen off. */

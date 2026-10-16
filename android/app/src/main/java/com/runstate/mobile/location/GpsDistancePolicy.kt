@@ -70,6 +70,8 @@ internal class GpsDistancePolicy(
     private val config: GpsDistanceConfig = GpsDistanceConfig()
 ) {
     private var anchor: GpsSample? = null
+    /** Includes usable fixes inside the distance anchor's uncertainty envelope. */
+    private var lastUsableSample: GpsSample? = null
     private var lastSeenElapsedRealtimeMillis: Long? = null
     private var measuredDistanceMeters: Double? = null
     private var firstFixAfterPause = false
@@ -82,11 +84,13 @@ internal class GpsDistancePolicy(
 
     fun pause() {
         anchor = null
+        lastUsableSample = null
         firstFixAfterPause = true
     }
 
     fun trackingInterrupted() {
         anchor = null
+        lastUsableSample = null
         firstFixAfterPause = false
         hadUnobservedGap = true
     }
@@ -146,6 +150,7 @@ internal class GpsDistancePolicy(
         val previousAnchor = anchor
         if (previousAnchor == null) {
             anchor = sample
+            lastUsableSample = sample
             firstFixAfterPause = false
             return decision(GpsSampleStatus.ACCEPTED_ANCHOR, acceptedForRoute = true)
         }
@@ -158,11 +163,33 @@ internal class GpsDistancePolicy(
             return decision(GpsSampleStatus.REJECTED_INVALID)
         }
 
+        // A distance anchor can be old after standing still. Comparing only with that
+        // anchor would average a sudden jump over all the stationary time. Also check
+        // the latest usable fix, subtracting positional uncertainty before judging its
+        // short-interval speed so ordinary one-second GPS noise is not treated as motion.
+        val previousUsable = lastUsableSample
+        if (previousUsable != null) {
+            val recentSeconds =
+                (sample.elapsedRealtimeMillis - previousUsable.elapsedRealtimeMillis) / 1_000.0
+            val recentMeters = greatCircleMeters(previousUsable, sample)
+            if (!recentMeters.isFinite() || recentSeconds <= 0.0) {
+                trackingInterrupted()
+                return decision(GpsSampleStatus.REJECTED_INVALID)
+            }
+            val recentUncertainty = previousUsable.horizontalAccuracyMeters!! + accuracy
+            val minimumRecentMeters = max(0.0, recentMeters - recentUncertainty)
+            if (minimumRecentMeters / recentSeconds > config.maxPlausibleSpeedMetersPerSecond) {
+                trackingInterrupted()
+                return decision(GpsSampleStatus.REJECTED_IMPLAUSIBLE_JUMP)
+            }
+        }
+
         // Small movement cannot be distinguished from the reported uncertainty. Retain the
         // earlier anchor so genuine movement can eventually exceed the uncertainty envelope.
         val uncertaintyMeters =
             previousAnchor.horizontalAccuracyMeters!! + accuracy
         if (segmentMeters <= uncertaintyMeters) {
+            lastUsableSample = sample
             return decision(GpsSampleStatus.IGNORED_WITHIN_ACCURACY)
         }
 
@@ -178,6 +205,7 @@ internal class GpsDistancePolicy(
         }
         measuredDistanceMeters = newDistance
         anchor = sample
+        lastUsableSample = sample
         return decision(
             GpsSampleStatus.ACCEPTED_SEGMENT,
             acceptedForRoute = true,

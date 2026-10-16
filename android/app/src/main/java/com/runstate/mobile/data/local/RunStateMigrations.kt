@@ -227,3 +227,13 @@ val MIGRATION_9_10 = object : Migration(9, 10) {
         )
     }
 }
+
+/** Add measured timing evidence only for future writes; existing timing stays unknown. */
+val MIGRATION_10_11 = object : Migration(10, 11) {
+    override fun migrate(connection: SQLiteConnection) {
+        connection.execSQL("ALTER TABLE `runs` ADD COLUMN `start_elapsed_realtime_millis` INTEGER")
+        connection.execSQL("ALTER TABLE `runs` ADD COLUMN `timing_session_id` TEXT")
+        connection.execSQL("ALTER TABLE `run_transitions` ADD COLUMN `elapsed_realtime_millis` INTEGER")
+        connection.execSQL("ALTER TABLE `run_transitions` ADD COLUMN `timing_session_id` TEXT")
+    }
+}
