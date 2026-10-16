@@ -7,6 +7,13 @@ metadata:
 
 # Run initiation register — LIVE
 
+**October 15, 2026 native correction:** the main Active timer now shows active duration and freezes
+when Paused; a smaller **Total incl. breaks** value retains elapsed time. Sample mode explicitly
+explains that distance is simulated at 3 meters per Running second, even while stationary. Neither
+the elapsed storage definition nor GPS measurement changes. A deliberately confirmed short-run
+discard is now available before completion; the bounded rules are recorded below. Automatic start,
+stop and accidental-run detection remain experiments, not consequences of this correction.
+
 **Read this file.** Not archived, not parked.
 
 **What this system is.** Everything that removes friction from *starting* a run — arming the app,
@@ -261,9 +268,10 @@ The experimental Armed and Watching detection states above stay separate and do 
 **Recovery is behavior, not another stored state.** If startup finds the same unfinished session in
 Running or Paused, RunState restores only information confirmed through its last durable checkpoint.
 It must not invent distance or active time for an uncertain gap. The runner may continue that same
-session or end and save it; neither path creates a duplicate. Discard remains an explicit open
-decision tied to accidental starts and must never happen silently. The local identity format is a
-separate contract defined immediately below.
+session or end and save it; neither path creates a duplicate. The October 15 bounded discard path
+below applies only when complete durable history proves a sufficiently short paused session;
+uncertain recovery history is never grounds for deletion. Discard must never happen silently.
+The local identity format is a separate contract defined immediately below.
 
 **Recovery core — implemented September 9, 2026.** `ActiveRunRecovery` queries discovery once. Zero
 rows leaves a fresh machine at No session; exactly one Running or Paused row restores the machine
@@ -280,6 +288,35 @@ pauses. Active duration includes only Running intervals and is the duration used
 visible timer is calculated from this stored timeline; it is not the source of truth. Future
 confirmed detection may supply a buffered estimated takeoff as the official start without changing
 this lifecycle.
+
+**Native timer presentation — October 15, 2026:** the prominent timer is now **Active time** and
+stops while Paused. **Total incl. breaks** is secondary and continues during pauses because the
+underlying elapsed definition remains start-to-finish. Paused distance and active duration remain
+frozen. The explicit Sample banner explains the intentional 3-meters-per-second Running-only
+simulation; a stationary Sample run is not GPS movement evidence. GPS distance still requires
+accepted measured segments and never falls back to the simulation.
+
+### Explicit short-run discard — implemented October 15, 2026
+
+After the run is durably Paused, the usual hold-to-end action offers **Save run / Discard run /
+Keep paused** only if the saved pause/resume timeline is complete and validates active duration
+from zero up to, but excluding, 30 seconds. Eligibility is read for the prompt and checked again
+inside the discard transaction. The same UUID must still identify an unfinished Paused row at its
+expected checkpoint. Exactly 30 seconds, longer runs and missing or unreliable history retain the
+ordinary completion path. A short duration never automatically cancels or deletes anything.
+
+- **Save run** performs normal completion on that same row; only after durable completion may its
+  factual receipt and reflection request start. The already-built reflection flow prepares four
+  Energy branches in one request before selection; choosing Energy does not add another request.
+- **Discard run** requires the explicit choice and transactionally deletes only that eligible
+  unfinished Paused run, with its owned transitions and observations removed by existing cascades.
+  It never matches or deletes a completed History record and starts no receipt or provider work.
+- **Keep paused**, dismissal and screen recreation preserve the same paused session. A failed
+  save or discard keeps the session and exposes a retryable error rather than claiming success.
+
+This is a narrow manual correction for accidental starts, not automatic pause, movement detection
+or a general unfinished-run deletion feature. The run was already durable while Running/Paused;
+the runner's decision precedes its durable completion.
 
 **Stored time format — added August 31, 2026.** Every calendar timestamp named in that contract —
 the official start, the optional finish, each pause and resume transition, and each durable

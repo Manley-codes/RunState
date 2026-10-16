@@ -5,7 +5,369 @@ metadata:
   type: project
 ---
 
-## Current Android checkpoint — October 14, 2026
+## Current Android checkpoint — October 15, 2026
+
+### Latest follow-up — Sample clarity, paused timer and explicit short-run discard
+
+Manley reported distance increasing at his desk and the paused timer continuing, recalled the
+prepared-Energy-response plan, and requested an accidental-start safeguard plus an opinion on
+Completion's primary exit. The updated native app is installed on the Moto using the Android Studio
+JBR/SDK/Gradle toolchain; no IDE migration, backend or Render deployment was involved.
+
+- The fresh phone audit confirmed its newest saved run used `FIXTURE` (Sample) mode. Sample
+  intentionally advances distance at 3 meters per Running second, even while stationary; Paused
+  distance freezes. Active now prominently says **SAMPLE RUN · SIMULATED DISTANCE** and explains
+  this behavior above distance. GPS instead says **GPS RUN** and still uses measured evidence,
+  without a sample fallback. GPS-distance filtering was not changed, and this is not a new
+  stationary/known-distance accuracy proof.
+- Active's main circular timer now shows **Active time**, which freezes on Pause. The smaller
+  **Total incl. breaks** preserves start-to-current elapsed time, including breaks. Stored elapsed,
+  active accounting, pace rules and partial/unknown GPS handling are unchanged; uncertain active
+  duration stays unknown rather than substituting total time.
+- After Pause and hold-to-end, a run with reliably stored active duration strictly below 30 seconds
+  offers **Save run / Discard run / Keep paused** before completion. Save takes the ordinary durable
+  completion, receipt and reflection path. Discard explicitly removes only that paused unfinished
+  UUID and its dependent local rows; no automatic deletion or general completed-History deletion.
+  The duration boundary is a chosen initial product rule, not measured accidental-start detection.
+  Longer or uncertain runs retain normal completion.
+- The decision stays tied to the same paused identity across screen restoration. Back/Keep paused
+  leaves it paused; busy writes cannot be dismissed or overlapped. Ordinary failures retain the
+  paused run and permit retry. The process owns deletion, so screen cancellation cannot abandon a
+  partially applied request. Storage rechecks state, identity, checkpoint and complete transition
+  history in one transaction before deleting. Recovered GPS gaps are ineligible. GPS service
+  cleanup treats an explicitly retired run normally, isolates any newer worker and gives a new
+  GPS UUID a fresh policy; late callbacks cannot update a different worker.
+- The requested prepared-reflection family was already implemented: one structured request starts
+  after durable completion and prepares Spent, Feeling Good, Powered Up and No selection together.
+  Energy picks locally; it does not start another generation request. Only the selected exact text
+  is retained; unused candidates are discarded at finalization. A fast tap can still precede the
+  network response. A new delayed-gateway regression proves all three chosen branches use the
+  already-started request and finalize exact text once the receipt releases. No four-call rewrite,
+  model change or additional paid verification was needed.
+
+Verification: both final JVM suites passed **303 tests each**, zero failures/errors; debug, release
+and Android-test packages built successfully. The final test-only import correction/package run
+passed in eight seconds. **28 focused silent Moto cases passed**: eight real isolated Room cases
+plus four new timer/root Save/Discard/restoration cases (11.834 seconds), followed by 16 affected
+screen/hold/ticker/large-text regressions (26.455 seconds). The root cases use in-memory Room and a
+silent speaker: prompting/discarding emits no receipt; Save emits one factual receipt after a
+COMPLETED row. Real-phone GPS-service discard/restart, a new outdoor measured route and hearing
+were not physically exercised in this pass; no full previous 89-case rerun is implied.
+
+Fresh before/after actual-phone audits match every field across runs, reflections, transitions,
+location points and music observations: **28 COMPLETED/0 active**, SHA-256
+`3ce90d23957af13beff55e1564765a9dd76c5f37141860eeaa40fefdd9d3e79a`.
+Both audits found two music-observed runs and the newest run's observation off. The 28-row baseline
+was collected before installing/testing this follow-up; it supersedes the earlier 24-row snapshot.
+No actual phone run was started, completed or discarded by this QA. No real voice, provider call,
+credential read or emulator was used. The Moto is returned to Start with plugged-in stay-awake
+restored to its original 0; the two owned screenshot-cache files and transient private database
+copies were removed.
+
+One necessary new review image, `android/artifacts/run-active-short-run-moto.png`, pairs the native
+paused timer and explicit choice. It is labeled controlled preview, not an actual newly saved run.
+No new production source file, app asset, library or Room schema was needed for this follow-up.
+No Git staging, commit or push was performed; this is a good commit point.
+
+**Product opinions and later review:** recommend **Done** as Completion's primary exit while
+keeping **View in Log History** nearby. The existing Start another run actually returns to Ready
+without starting a countdown; its label/button remains unchanged in this pass. Prefer a clear
+save/discard decision over silent deletion, because a genuinely short run may still matter.
+Manley requests a later app-wide review of how RunState represents the runner's state, after
+current correctness work and a few more bounded tasks; evaluate pre/post Energy, Effort, context,
+music evidence and meaningful interpretation rather than treating metrics/visual polish as the
+complete product. This is a review request, not authorization to invent unknown feelings or add
+unbounded coaching features. Known-distance GPS/coverage proof remains the reliability priority.
+
+### Earlier corrections — answered Energy, reply timing, music visibility and representation
+
+Manley reported that Completion's three Energy choices returned after their intake animation,
+music shown in the preview was missing on the actual phone, and asked about History's source
+filters and a naturally darker-skinned runner in its photo. These corrections are installed on
+the Moto; the earlier follow-up below is historical proof, not the current timing contract.
+
+- Completion now tracks an answered input separately from provider readiness. The three choices
+  stay gone after selection even while a response is preparing. `Energy +` explicitly reopens them
+  for later edits; each edit closes them again. Restored answered state does not replay intake.
+- During the initial intake, the reflection panel and automatic reflection speech wait for the
+  tile to reach the agent. Once it finishes, the exact ready reply appears, or an honest Preparing/
+  failure state if still needed. Selection persistence, provider dispatch, saved-run receipt speech
+  and the unanswered automatic transition remain immediate/unchanged. The hold is registered
+  before the selection callback, released on cancellation/background/disposal, and scoped to the
+  presented run. Late edits of an already delivered reply do not replay or hold its text/audio.
+- Expanded History now quietly explains when music was not recorded and how to enable Observe
+  music for a future run. Existing captured and opted-in/zero-observation details remain truthful;
+  collapsed rows stay clean. The phone has 24 completed runs, only two with music observation
+  enabled and captured; its newest run had observation off. Notification access alone does not
+  enable per-run observation. The controlled preview deliberately uses example music; no prior
+  music can be reconstructed from that example, and cloud sharing stays a separate opt-in.
+- `All / GPS / Samples` remain source filters, not different running sessions or workout types.
+  There are zero GPS rows with fixture metrics in the current phone database. Their current
+  purpose is to distinguish real tracking from demonstration records. Date, distance/duration
+  and saved Energy/Effort would be more useful everyday filters; they are proposals, not shipped
+  changes in this pass. Sample controls can move into demo setup in a later bounded change.
+- The existing bundled `android/app/src/main/res/drawable/history_running_trail.jpg` was replaced
+  with an image-tool edit giving the runner natural dark-brown exposed skin while retaining the
+  trail scene, clothing and framing. The full image and actual native background were reviewed.
+  `android/app/src/main/assets/third_party_notices.txt` retains the Pexels source/license and
+  explicitly records the AI-edited derivative. This is a visible photographic edit, not a claim
+  of pixel-identical preservation outside the requested area.
+
+Verification: 291 debug and 291 release JVM tests passed with zero failures/errors; debug, release
+and Android-test APK builds passed (30 seconds). After adding an interruption regression, the
+test package rebuilt in five seconds. Both application packages were rebuilt after the attribution
+edit (11 seconds). All 89 selected isolated Moto screen checks passed in 137.301 seconds, including
+slower response preparation, initial text/speech ordering, restored selections, intake interruption,
+late Energy edits, missing/captured music, existing ownership and accessible layouts. The two
+real-app recreation/physical-instrumental cases remain excluded from this silent screen run;
+earlier hearing proof is not repeated or expanded by these results.
+
+Fresh before/after phone audits match all stored fields across runs, reflections, transitions,
+location points and music observations: 24 COMPLETED/0 active, SHA-256
+`6183215a8fa45e5a6dcff001aa9e24c9da20ff7a7211c62784b91f6d5ef589ca`.
+No actual phone run was started, no real speech/provider request was triggered and no credentials
+or emulator were used. The Moto is left on Start with normal plugged-in stay-awake restored to 0.
+Six owned screenshot-cache files were removed. The exact temporary
+`docs/local/completion-sequence-review-a7f953a502f642bdb6ec5b5fca8ce3b6` folder, including test logs,
+native frames, comparisons and private audit copies, was removed after review.
+
+The existing paired `android/artifacts/run-complete-moto.png` and `run-history-moto.png` were
+refreshed; the History expanded side is explicitly a music example. No new project source file,
+dependency, database schema, backend or Render change was needed for these corrections. No files
+were staged, committed or pushed. This is a good commit point after visual review.
+
+Image-edit record: built-in image tool, edit mode with `referenced_image_paths` pointing to the
+existing bundled JPEG and `transparent_background=false`. The necessary generated source is
+retained outside the repository at
+`C:\Users\Owner\.codex\generated_images\01a103b6-bff0-72d1-8008-7b8b20f78035\exec-6b19e7ff-703f-4580-9a78-cb668d116406.png`
+(1024×1536). It was converted to JPEG at quality 92 for the existing offline app asset; no further
+retouching or cropping was performed. Exact prompt:
+
+> Edit the supplied photograph for an Android running app background. Change ONLY the visible exposed skin of the single runner seen from behind to a natural deep brown skin tone, so the runner visually represents a Black person. Match the existing bright outdoor sun, believable highlights, shadow gradients and skin texture on the neck, shoulders, arms and legs; avoid a flat painted or artificial dark tint. Preserve the exact runner pose, body proportions, face orientation (back view), hair, white cap, white sleeveless shirt, grey shorts, socks, colorful shoes, blue bottle, runner shadow, green mountain valley, trail, vegetation, sky and clouds. Preserve the same vertical composition and framing and photographic realism. Do not add people or objects, recolor clothes, change terrain or stylize the photo. No text or watermark. This is a precise local photographic skin-tone edit, not a newly composed scene.
+
+### Earlier follow-up — original music artwork, Completion motion and expanded music
+
+Manley liked the native journey, especially History, and requested the original Start music image,
+music detail inside expanded records, and the same irregular moving/receiving agent on Completion.
+He also asked what the existing Start controls and box below Completion Energy are for; their
+layout was not redesigned in this clarification pass.
+
+- Start now uses the exact embedded `./assets/opt/music-orb.jpg` from the supplied Production
+  `start.html`, copied unchanged to `android/app/src/main/res/drawable/start_music_orb.jpg`
+  (614×620 JPEG, 26,963 bytes; SHA-256 `3b9b30fabbf1f41bc1b68e603221266281bc3395b42b2e046f80527efaf3b9a5`).
+  It is shown untinted at 64 dp; the unused generic headphone drawable was removed. This is
+  supplied artwork, not a claim of Pexels licensing. Its provenance is in the bundled notices.
+- `android/app/src/main/java/com/runstate/mobile/ui/RunAgentVisualizer.kt` is the one necessary new
+  source file: Start's exact existing 76-bar drawing and 5464 ms traveling wave were extracted
+  into a shared component so the screens cannot drift into separate agent styles. Completion's
+  default ring grows from 60 to 80 dp, keeping the text-collision fallback and 116 dp accessible
+  layout. Post-run Energy snapshots converge and the chosen tile travels to the measured ring
+  center, with a receiving swell. The owner receives Energy immediately, exactly once; neither
+  saved reply nor speech waits for this decorative 1630 ms flight. Restored selections do not
+  replay, and lifecycle/disabled-motion/geometry changes cancel or skip decoration only.
+- Expanded History puts real saved music evidence directly under the exact reply, with a quiet
+  gold divider/mark. Title/artist/source, partial listening-update count and local/cloud-sharing
+  status stay truthful; the Spotify package is labeled `Spotify`. Updates do not mean unique
+  songs or a full soundtrack. Zero observations remain unknown, and no request means no section.
+  Collapsed rows remain clean. No playback control, playlist, schema or new sharing permission.
+- The white box below Completion Energy is the existing reflection panel: Preparing, exact saved
+  text, connection-needed or failure/retry. `EFFORT +` is a separate optional input. Start's mode,
+  observation and optional music-sharing controls work now; backend setup/sample mode remain
+  prominent demo/development controls whose placement can be simplified later. Details are in
+  `design_start_run_v7.md`. The shoe object still says LATER; chooser/owned pairs/mileage remain
+  deferred, as do footer playlist mechanics. No shoe click handler was implied by this pass.
+
+Verification: the first integrated build passed 291 JVM tests per variant and all three APK builds
+(38 seconds), then all 85 selected isolated Moto screen cases passed in 129.122 seconds. They
+include pixel-changing Completion motion, measured tile approach to the ring, immediate Ready
+and exactly-one callback, available Start another action, restored state/background cancellation,
+partial/zero music evidence and previous controls/audio ownership/large-text coverage. Final
+Spotify/plain-language polish rebuilt both 291-test suites and three APKs successfully (21 seconds).
+All five affected silent native preview/music checks passed again in 11.331 seconds. The same two
+real-app recreation/physical-instrumental cases remain excluded from this isolated run. No new
+live hearing/model-quality proof or outdoor GPS/recovery test is implied.
+
+The existing paired Completion/History images and Start recording are refreshed for this version;
+native flight frames are reviewed in the temporary folder, not retained as extra project assets.
+The controlled History preview's artist/title are explicitly synthetic example values, not phone
+music observations. Only the shared source and original-art JPEG are new files for this follow-up;
+no new app dependency, Room schema, backend or Render change.
+
+The final phone audit now has 23 COMPLETED/0 active records. Excluding its newest row reproduces
+the previous exact 22-record hash across runs/reflections/transitions/location points. The additional
+FIXTURE run started October 15 at 18:54:08.801 UTC and finished 18:54:28.421 UTC, before this
+follow-up's source/artwork edits (the copied orb was written at 19:17:52 UTC). No before/after
+baseline was collected for that additional row, so do not claim an exact 23-row preservation
+comparison; it was retained, not altered or removed. No actual phone run was started by this
+follow-up's isolated tests or Moderate/Undo recording. Six owned screenshot-cache files were
+removed and normal stay-awake restored to 0. Start is left with Energy unanswered, Sample/GPS-off
+as found. No emulator or credentials were used in this follow-up, and no live reflection/hearing
+check was requested. No staging, commit or push performed.
+
+The exact temporary `docs/local/ui-motion-followup-772764bfeff049e8be4b717f1943c47f` folder was
+removed after visual QA, including its decoder, frame sequences, comparison images, logs and
+private audit copies. The complete refreshed 17-second Start recording was inspected through
+17 chronological one-second frames and its final frame. Completion's initial/Ready and 200/800 ms
+intake states, expanded music strip, chosen reference and native Start/original-art comparison
+were visually reviewed. Existing paired preview filenames were reused; no extra retained QA file.
+
+### Earlier October 15 journey visual pass — retained proof
+
+**Native Start, Completion and History visual pass installed and screen-tested.** Both supplied
+recordings were reviewed through chronological frames across their full 23.13/79.40-second timelines,
+including the final frames, before this pass's source edits; all six static Completion alternatives
+were compared. `Screenshot 2026-08-21 131400.png` supplies the chosen cool porcelain/sage/dark-instrument
+direction, with a restrained warm Energy accent. This is a working native interpretation, not a
+locked design or a claim that every prototype feature has shipped.
+
+- **Start:** licensed shoe/headphone objects now flank Start and are explicitly marked `LATER`.
+  Selecting optional pre-run Energy adds a restrained breathing Start halo; Undo removes it.
+  The triangle's interior now uses the dial's dark fill. The compact irregular moving agent and
+  Energy intake from the earlier passes remain. No shoe is silently assigned, and no owned pair,
+  mileage, playlist or working decorative control is invented.
+- **Completion:** distance/ring/time hierarchy, vertical bracketed Energy tiles and paper-like exact
+  reply follow the chosen reference. Saved pre-run Energy and completion date come from the actual
+  completed row, with its saved timezone; missing values remain unknown. The original Barlow
+  Condensed numeral face is bundled instead of relying on different OEM condensed-font aliases.
+  Its existing shared numeric use also updates the Active numerals without redesigning that screen.
+  Ready shows compact before/after Energy and `Energy +` for later feedback. Effort, optional inputs,
+  automatic no-selection timing, retry, audio Stop and fixed Start another behavior retain their
+  existing owners. Real weather, lifetime mileage and Share are not fabricated from the prototype.
+- **History:** an offline licensed running photo, saved-run summary and `All / GPS / Samples` filters
+  replace the generic list presentation. Compact closed rows expand into a dark exact-reply record;
+  existing feedback, route loading, voice ownership and scroll behavior remain. Unknown source is
+  not relabeled Sample; GPS partial coverage and unknown pace remain explicit. PR ranking, splits
+  and full-field editing remain later.
+
+Final verification: 291 debug and 291 release JVM tests passed with no failures/errors; debug,
+release and Android-test APKs built. After a small text-contrast correction, the final three APK
+builds passed in 23 seconds and all 82 selected isolated Moto screen checks passed in 121.797
+seconds, including Start glow/Undo pixels, late Energy, exact reply/feedback/audio ownership,
+History filters, long values and large-text/short-view layouts. Two pre-existing countdown tests
+mixed wall-time polling with Compose virtual-time delays and failed during earlier runs; they now
+advance the same clock explicitly while preserving 3→2→1, lifecycle and exactly-once assertions.
+No production countdown timing changed. The two cases excluded from this isolated run launch the
+real app across recreation or play the real instrumental; this pass does not repeat their earlier
+physical hearing proof. The previews use controlled native test data and silent speakers, not new
+recorded runs or live AI results. Real History navigation was not invoked after automatic approval
+review rejected it for possible speech; isolated silent History checks supplied the new UI proof.
+
+Necessary new app assets (no new production source file or library):
+
+- `android/app/src/main/res/drawable/ic_shoe_sneaker.xml` and `ic_headphones.xml`: licensed footer icons.
+- `android/app/src/main/res/drawable/history_running_trail.jpg`: offline Alin Serban/Pexels backdrop.
+- `android/app/src/main/res/font/barlow_condensed_regular.ttf` and `barlow_condensed_medium.ttf`:
+  consistent narrow metric numerals from the original prototype font family.
+- `android/app/src/main/assets/third_party_notices.txt`: required icon/font licenses and photo source.
+
+Two necessary review images, `android/artifacts/run-complete-moto.png` and `run-history-moto.png`,
+each show two controlled native states. The existing `start-agent-energy-motion-moto.mp4` was
+refreshed with this pass's real Moto Start, Moderate intake/glow and Undo; all 17 one-second frames
+plus the final frame were reviewed. Completion was compared with the chosen static reference and
+History with the supplied recording. These are native previews, not a declaration of pixel parity.
+The History test fixture was finally corrected to show unknown active time as well as unknown pace
+for partial GPS, matching the real formatter; that one screen/filter/audio-stop test passed again
+in 4.334 seconds after the test-package rebuild (28 seconds). Production code was unchanged.
+
+The final Moto audit retained all 22 COMPLETED/0 active records and exact stored run/reflection/
+transition/location field hashes. No phone run was started/saved, no provider request was issued and
+no credential was read. The four owned test-cache screenshots were removed; Start is left with
+Energy unanswered and normal stay-awake restored to 0. The exact temporary review folder under
+`docs/local/ui-demo-review-16dbd4f152064bf0883051c9ab402bf1` (decoder, reference frames, test logs,
+comparisons and private audit copies) was removed after review; only the listed assets/previews
+remain. No Room schema, backend or Render change;
+Manley's visual acceptance remains pending. No Git staging, commit or push performed.
+
+### October 15 controlled GPS force-stop recovery proof
+
+An owned emulator on explicit serial `emulator-5560` ran the latest debug APK with synthetic GPS,
+networking unavailable and no audible playback. Verified launch flags included `-read-only`,
+`-no-snapshot-load`, `-no-snapshot-save` and `-no-audio`; Moto serial `ZT422G8FT4` was not used.
+
+- One run, `0afede3f-3cc9-463d-8c2e-848b2fb4fdf9`, had 47 durable observations and
+  100.07543398010287 m before external `force-stop`. The old PID 2767 exited; cold reopen used
+  PID 6115 and retained the identical run row and every existing observation.
+- Recovered UI showed GPS STOPPED, explicit Restart GPS tracking, partial distance and unknown
+  active/pace. No silent automatic GPS restart occurred. Restart at a distant synthetic position
+  made observation 48 a new anchor with a null segment and unchanged cumulative distance: the
+  unobserved interval was not joined into a fabricated segment.
+- Subsequent observed movement, Pause and completion produced that same UUID exactly once:
+  99 observations, two anchors/four measured segments, final 200.33619283794647 m, equal to the
+  accepted segment sum. No point changed after Pause. Final coverage stayed PARTIAL, with unknown
+  pace/active time and 00:05:17 elapsed. Completion remained durable offline; reflection became
+  FAILED/NO_SELECTION with null text. No model generation occurred.
+- Cold collapsed History retained the same facts and read-only database comparison retained all
+  final run/point/transition/reflection fields. Optional expansion was rejected by automatic
+  approval review for possible speech and was not retried. The separate silent component tests
+  above establish expanded UI behavior. GPS service and current RunState wake ownership ended;
+  the owned emulator exited and its temporary inspection files were removed.
+
+**AVD preservation limitation:** 12 of 15 original disk/snapshot files matched their initial
+SHA-256 hashes, but `userdata-qemu.img.qcow2`, `sdcard.img.qcow2` and
+`encryptionkey.img.qcow2` under `C:\Users\Owner\.android\avd\Medium_Phone.avd` did not.
+Their sizes matched and their last-write timestamps were at
+emulator startup, before the controlled run/data setup. Read-only `qemu-img info` reported clean
+containers and the original October 14 internal snapshots; raw backing images and external
+snapshot/RAM files matched. Startup metadata changes are plausible, not established. Do not
+claim byte-for-byte original AVD preservation or independently verified unchanged guest data.
+No repair or further launch was attempted. This caveat is separate from the exact Moto-data audit.
+
+This is a **controlled force-stop/reopen proof**, not OEM low-memory termination, physical-phone
+end-to-end recovery, known-distance outdoor accuracy, a meaningful GPS pace policy or battery
+endurance. No GPS implementation defect was observed and no GPS source was changed. Next reuse
+of the original AVD should inspect its prior paused test record before relying on that state.
+
+### Earlier October 15 compact visualizer follow-up — retained proof
+
+**Compact Start visualizer installed.** Manley's first follow-up enlarged the ring from 69 to
+100 dp on the Moto (84 dp below a 400 dp viewport), with approximately doubled stroke width.
+His latest refinement keeps that size/weight but reduces empty card space: vertical padding
+15 to 6 dp, height 130 to 112 dp on the Moto, and corner radius 28 to 24 dp. Muted sage/purple/
+olive colors with 0.84–0.96 idle opacity replace the darker, more vibrant pass, staying clearer
+than the original faint ring. Text columns wrap instead of compressing the ring at larger font
+sizes; rounded caps stay inside the drawing bounds. Wave, intake timing, Undo and immediate
+Start behavior remain. No other controls, screens, app data contracts or backend code changed.
+Only existing `StartRunScreen.kt` changed for these refinements; no new test or source file.
+
+Final debug/release/test APK builds passed in 22 seconds. All five existing focused motion/
+Energy tests passed directly on the Moto in 12.612 seconds after the compact/color adjustment.
+The actual Start screen was visually inspected; labels, all three Energy choices and the fixed
+Start control remain visible. The existing `android/artifacts/start-agent-energy-motion-moto.mp4`
+was refreshed to show the compact/softer version, with only Moderate and Undo tapped. No run was started
+or saved. Temporary screenshot removed, stay-awake restored to 0, and no Git mutation performed.
+This follow-up supersedes the original ring size/palette below; Manley's visual review is pending.
+
+### Initial October 15 motion pass — retained proof
+
+**Two requested Start motions implemented and installed on the Moto.** Before source edits, the
+entire supplied 17.17-second recording was decoded and reviewed through chronological frames,
+with closer idle/intake sequences. The existing Compose Start screen now draws an uneven,
+traveling wave through 76 fixed-angle bars, producing the reference's spinning illusion. Energy
+tiles converge and the chosen tile shrinks into the measured agent center, followed by a brief
+receiving swell. The ring represents the agent taking in information, not a permanent Energy gauge.
+Current layout, colors, wording, controls and all other screens remain unchanged. Energy still
+updates the parent draft immediately; Start need not wait for the decoration. Undo cancels it,
+restored choices do not replay it, layout/lifecycle changes cancel only the flight, and disabled
+system animations are respected.
+
+Only existing `StartRunScreen.kt` and `RunStateScreenTest.kt` source/test files changed. Final
+checks passed 287 debug/287 release JVM tests, all three APK builds, and 11 focused isolated
+Start-screen UI tests in 63.537 seconds. The first focused run passed 9/11: two new tests needed
+an explicit recomposition frame after Undo with their manually paused clock. They now assert
+the draft clears immediately and advance one frame before checking the new UI; touch, geometry
+and state assertions remain. No production fix was needed for those test failures.
+
+One necessary review artifact, `android/artifacts/start-agent-energy-motion-moto.mp4` (16.95 s),
+shows idle, Moderate intake and Undo on the physical phone. Its full timeline and closer motion
+frames were inspected; the before/after initial screenshots match pixel-for-pixel outside the
+ring and system status bar. Manley's visual acceptance is pending. No new source file or app
+asset was added. Temporary decoder/frames/private audit copies were removed after review.
+Moto installation preserved all 22 COMPLETED/0 active runs and exact stored run/reflection/
+transition/location field hashes. No run was started, saved or sent for reflection. Start is left
+with all Energy choices available; stay-awake restored to 0. The owned test emulator was closed,
+retaining its pre-existing paused sample untouched. No backend/Render change or Git mutation.
+
+### Earlier October 14 Active visual pass — retained proof
 
 **Bounded native Active visual pass complete and installed.** Exact Distance now leads above the
 map/timer, with a smaller preserved mi/km suffix in the same complete semantic value. The circle

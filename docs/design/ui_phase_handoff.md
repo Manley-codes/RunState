@@ -1,11 +1,11 @@
 ---
 name: ui-phase-handoff
-description: State of the UI design phase through August 25 2026. Start, Active Run, Run Complete and Log History have stable prototype foundations; records the process, decisions, backend requirements, and current queue.
+description: UI phase history through August 25 2026, with the October 15 native Android visual checkpoint. Records prototype decisions, native presentation boundaries, and remaining work.
 metadata:
   type: project
 ---
 
-# UI phase — handoff, updated August 25 2026
+# UI phase — handoff, updated October 15 2026
 
 Written because the session that produced this got very long. Everything needed to continue is here.
 Amended August 7 2026: interaction behavior, `Share` status, the song-location requirement, the
@@ -34,6 +34,93 @@ Amended August 25 2026: saved-run management Pass 2 made the Java console path u
 View Run History. It supports real-ID selection, post-run Energy/Effort updates, confirmed deletion,
 stale-History failure handling, and silent PR rebuilds. The mobile History interface remains a
 prototype, and no full editor for other run fields was added.
+
+---
+
+## October 15 native Android visual checkpoint
+
+**Native visual checkpoint and October 15 corrections installed and checked.** The sections below retain the
+August prototype history and its decisions. Their statements that mobile screens are only
+prototypes describe that earlier checkpoint; current native behavior is recorded here and in
+`project_current_state.md`.
+
+- **Run Complete:** the supplied `Screenshot 2026-08-21 131400.png` is the visual reference:
+  cool porcelain, sage, dark condensed instruments and a restrained warm accent. The prototype's
+  original Barlow Condensed font is now bundled for consistent native metric typography. Energy
+  choices use a vertical stack of compact squares with registration corners; answered choices use
+  compact before/after Energy summaries and an explicit late-Energy action. The reply is framed
+  like paper, Effort stays quiet, and the fixed Start another action remains. Saved pre-run Energy
+  and completion date are supplied by the parent from the saved record; this screen does not
+  reconstruct or invent them. Durable save, provider work, exact selected text and audio ownership stay
+  with their existing owners. The follow-up shares Start's uneven, moving decorative agent through
+  `RunAgentVisualizer.kt`; Completion uses an 80 dp ring in the standard composition, with a larger
+  accessible-layout ring. Tapped Energy choices converge and travel into it. Answered state is now
+  independent of provider readiness: the three choices do not reappear after the first tap, even
+  while generation is pending. The save/selection callback still runs immediately and exactly once.
+  Initial paper-panel/text arrival and reflection speech wait until intake finishes or is safely
+  cancelled; this presentation gate does not delay durable selection, provider work or the factual
+  saved-run receipt, and the six-second no-selection behavior stays unchanged. Restored choices do
+  not replay the flight. **Energy +** deliberately reopens the late-input choices, which close on
+  every selection. The box below the choices is the existing **reflection panel**, showing preparing,
+  exact saved reply, connection-needed or failure/retry state after the intake gate. It is not
+  another question or an added input.
+- **Log History:** a running photograph and saved-run summary bring the native screen closer to
+  the recording. Compact closed rows expand into a darker reply surface. `All / GPS / Samples`
+  are source filters over the same saved records, not different run sessions: GPS identifies actual
+  location tracking and Samples identifies demonstration-distance records. Unknown legacy source
+  stays in All. These tabs are unchanged; date, distance/duration and Energy/Effort filters remain
+  proposals rather than implemented running categories. Exact stored-text speech, feedback updates,
+  scroll ownership and lazy GPS-route loading retain their existing contracts. These filters do not imply PR ranking
+  or a built splits interface. In the follow-up, saved music details sit immediately below the exact
+  reply inside the expanded dark record, with a quiet gold divider and static music mark. The
+  details use the real last-observed title/artist/app, saved media-session update count, explicit
+  partial-coverage caveat and saved cloud-sharing status. Zero observations remain unknown. Expanded
+  records without per-run observation now say quietly, “Music wasn’t recorded for this run.”, with
+  an “Enable Observe music before a future run to save available song details.” tip. These notices
+  do not mean no music played and do not alter consent or invent earlier tracks. Collapsed rows
+  keep music out, and this strip does not imply a complete soundtrack, live playback or new sharing
+  permission. The controlled preview includes synthetic observed-media examples. The actual phone's
+  pre-install audit found 24 completed runs: only two opted into observation, both with saved
+  observations; its newest run had observation off. A preview with song details therefore does not
+  imply every real record has them.
+- **Start:** the shoe and music objects are visual affordances for this pass. Durable shoe
+  ownership/mileage and music-playlist mechanics remain later work; decorative objects must not
+  claim those functions already exist. The follow-up replaces the generic headphone glyph with the
+  exact original music-orb image from the user's `Production/start.html` export, shown untinted at
+  64 dp. Its supplied-art provenance is distinct from the licensed History photograph below.
+  Start and Completion now share the same moving-agent drawing code. No fake weather, BPM,
+  cumulative mileage, PRs or splits are added to make the native screens resemble populated prototypes.
+- **Bundled assets:** Alin Serban's [Pexels photo 33284135](https://www.pexels.com/photo/man-running-on-scenic-mountain-trail-33284135/)
+  is an offline decorative backdrop under the [free Pexels license](https://www.pexels.com/license/),
+  not a claimed user route or endorsement. At Manley's request, the built-in image tool edited this
+  backdrop into a derivative with natural dark-brown skin on the runner. The Pexels source credit
+  and license notices remain; this is an edited decorative image, not a claim about the photographed
+  person's identity. The shoe icon uses Material Design Icons under Apache
+  2.0; Barlow Condensed uses SIL Open Font License 1.1. `start_music_orb.jpg` is copied unchanged from
+  the user-supplied export, rather than represented as Pexels-licensed art. Source and license
+  notices live in `android/app/src/main/assets/third_party_notices.txt`.
+
+This is a native visual pass, not a declaration that the look is locked. Broader Active Run
+design and actual-song playback stay separate from these presentation changes.
+
+Prior visual-pass verification: 291 debug and 291 release JVM tests passed; debug, release and Android-test APKs built.
+All 82 selected isolated Moto screen checks passed after two existing countdown tests were made
+deterministic against Compose's clock without changing production timing or weakening assertions.
+Checks include preserved exact reply/feedback/audio behavior, large-text layouts, Start glow/Undo
+and honest History filters. Review screenshots use controlled test rows and silent speakers;
+they do not represent new user runs, live reflection outputs or another physical hearing check.
+The final visual comparison and saved-data audit are detailed in `project_current_state.md`.
+The shared-agent/intake, original music-artwork and expanded-music follow-up passed both 291-test
+JVM suites, all three APK builds and 85 selected silent Moto screen checks; the five affected
+native preview/music cases passed again after final Spotify/plain-language polish. See current
+state for exact timings, controlled-preview disclosures and final data/cleanup evidence.
+
+Latest correction verification: 291 debug and 291 release JVM tests passed, and debug, release and
+Android-test APKs built. All 89 selected silent Moto screen cases passed in 137.301 seconds,
+including answered/pending Energy, intake-gated reflection presentation/speech, deliberate late
+Energy reopening and expanded unrecorded-music notices. No new app source file, Room schema,
+backend change or permission was introduced by these corrections. This is controlled screen proof,
+not a new physical hearing, provider-quality or outdoor GPS proof.
 
 ---
 

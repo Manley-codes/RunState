@@ -8,6 +8,91 @@ status: CURRENT DESCRIPTION - what is built in the prototype right now. Not a sp
 
 # Start Run — where this screen actually is
 
+**Native timing and accidental-start correction, October 15, 2026:** Active now makes **Active
+time** the main timer; it freezes while Paused. The smaller **Total incl. breaks** value keeps
+counting because elapsed time still means official start to finish, including pauses. This changes
+the display hierarchy, not saved timestamps, the elapsed definition or pace calculation. Sample
+mode now has an explicit banner explaining its simulated distance: it deliberately adds 3 meters
+per second while Running, even at a desk, and freezes distance when Paused. GPS mode uses measured
+location evidence instead; it never substitutes sample distance.
+
+After Pause, holding to end a run with reliably saved active time below 30 seconds opens **Save
+run / Discard run / Keep paused** before completion. No short run is silently removed. Save follows
+the normal durable completion, receipt and reflection path; Discard explicitly removes only that
+unfinished paused run. Dismissing the choice, keeping it paused or rotating preserves the same
+paused run; a failed save or discard leaves a retryable error. The exact eligibility and storage
+boundary are recorded in `run_initiation_register.md`.
+
+The prepared-reflection family is already built: after durable completion, one backend request
+prepares all four Energy branches before selection. A tap chooses locally and does not start
+another generation request. A quick tap can still precede the network response; receipt and
+initial visualizer intake also govern presentation. `design_run_response_system.md` remains the
+canonical detailed contract.
+
+**Native music artwork and panel clarification, October 15, 2026:** the original profile,
+lime-headphone and waveform orb is copied unmodified from the Production `start.html` manifest
+(`./assets/opt/music-orb.jpg`, UUID `82c43e6a-55ff-4ef3-a580-4747bc5b5d81`) into
+`android/app/src/main/res/drawable/start_music_orb.jpg`. It replaces the generic headphones,
+displayed at 64 dp without a tint. The footer music object still says `LATER`; it does not open a
+playlist or start playback. The shoe object also remains `LATER`, with no chooser, owned-pair
+inventory or mileage. Existing optional music observation and reflection sharing are separate
+working controls, explained below. The follow-up is installed on the Moto: all 85 selected silent
+screen cases passed, both 291-test JVM suites and all three APK builds passed, and five affected
+checks passed again after final wording polish. See `project_current_state.md` for exact evidence.
+
+The panels below the agent are functional controls or truthful status, not fake sample cards.
+Their current placement is provisional rather than a finished-screen commitment:
+
+| Visible item | What it does now | Design status |
+| --- | --- | --- |
+| Illustrative map / GPS label and Log History | Clarifies that the background map is artwork; the GPS choice is separate. Log History opens saved runs. | Keep provenance truthful; the map is not a live location preview. |
+| Reflection connection and Reflection setup | Selects the backend address and RunState access code used for new reflection requests and chosen History retries. “Online service selected” means configured, not a successful connection test. | Working setup, currently prominent for the demo; a later Settings or onboarding home is recommended. |
+| GPS / Sample run | Chooses precise GPS recording or sample distance for the next run, with real permission handling. | Working mode choice; later consolidate sample/demo controls while keeping the chosen mode clear. |
+| Observe music | Opts into local media-session title, artist and app observations while Running. Android's broad notification-access grant is explained. | Working optional observation, not song selection or playback. |
+| Music in reflection | Appears when observation, permission and a backend are available. Separate per-run consent allows one eligible observed Spotify title and artist to reach the backend and Anthropic; no audio is sent. | Working optional privacy choice that must remain accessible. |
+
+No panel-layout changes were made in this artwork follow-up. Consolidating backend setup and
+sample/demo controls is a later design pass; it must preserve GPS clarity and separate music consent.
+
+**Native journey additions, October 15, 2026:** the Start footer now includes shoe and headphone
+objects marked `LATER`; neither claims a saved collection, mileage or playlist mechanics. Optional
+Energy makes Start glow softly, Undo restores its idle treatment, and starting without Energy
+remains available. The play triangle's inner polygon now matches the dark dial. These additions
+retain the compact agent, irregular traveling wave and intake described below. The original
+prototype Barlow Condensed font is also bundled for native Completion/Active metric numerals.
+The full supplied Start and Completion/History recordings and all six Completion alternatives were
+reviewed before these additions. Final native builds and all 82 selected isolated Moto screen checks
+passed; final review/data-retention details live in `project_current_state.md`. Shoe catalog research
+is in `design_shoe_selection.md`; durable owned pairs and completed-run mileage remain separate work.
+
+**Native Start legibility follow-up, October 15, 2026:** Manley found the first moving ring too
+small and faint. Its native box is now 100 dp on the Moto (previously 69 dp), or 84 dp on screens
+under 400 dp wide. Bars are roughly twice as thick on the Moto, with darker sage/purple/olive
+tones and a stronger minimum opacity. The wave, intake timing and optional Energy behavior stay
+the same. The card grows to fit; text columns can wrap without compressing the reserved ring,
+and rounded stroke caps remain inside its receiving-swell bounds. All three APK builds and five
+focused physical-Moto motion/Energy checks passed. The existing preview video was refreshed;
+no additional retained file was needed. Manley's visual acceptance remains pending.
+
+**Latest card/color refinement, October 15:** Manley wanted less empty space and found the darker
+ring too vibrant. Keep the larger ring and stroke; reduce card vertical padding from 15 to 6 dp
+(130 to 112 dp tall on the Moto) and corners from 28 to 24 dp. Muted sage `#849B80`, purple
+`#A390B3` and olive `#ACA473`, with 0.84–0.96 idle opacity, sit between the faint first pass and
+the darker follow-up. Text, motion and Energy behavior remain. All three APK builds and five
+existing Moto checks passed; the same preview video was refreshed without another retained file.
+This is the current native card/color treatment; visual acceptance remains with Manley.
+
+**Initial native Start motion, October 15, 2026:** Manley requested only the original agent's irregular,
+traveling wave and the Energy intake motion, keeping the current native screen's other design.
+The entire supplied 17.17-second recording was reviewed through sequential frames before edits.
+The native ring now varies its 76 fixed-angle bars to create the spinning illusion. Energy tiles
+converge, the chosen tile shrinks toward the measured ring center, and the ring briefly receives
+it before returning to its idle wave. It remains an agent taking in information, not an Energy
+gauge. The real optional draft updates on tap; Start stays available and Undo restores the tiles.
+Backgrounding or moving the layout cancels only the visual flight; restored choices do not replay.
+System-disabled animations are respected. Installed and recorded on the Moto; visual acceptance
+remains with Manley. No other native layout, labels, controls or data behavior changed.
+
 **Native Active status, October 14, 2026:** a bounded Compose pass now puts exact distance above
 the smaller circular map/timer, with compact Average pace/Active below and full Elapsed fitted.
 The smaller mi/km suffix belongs to the same complete semantic value. Unknown metrics, truthful
@@ -181,14 +266,24 @@ resume the run — it is not a music command.
 what settled the older open question of whether Stop needs a confirmation step — a hold *is* the
 confirmation.
 
-### How an accidental start gets undone — still open
+### How an accidental start gets undone — bounded native choice built October 15
 
-There is **no cancel button**, and that's deliberate. Manley's direction on August 16: instead of a
-cancel control, detect that a run probably wasn't real from very early stoppage, then either discard
-it or ask whether to keep it.
+Pause, then hold to end. If the saved transition history is complete and confirms **less than
+30 seconds of active time**, the native app asks whether to **Save run**, **Discard run**, or
+**Keep paused**. The threshold uses active time, so sitting paused does not make an accidental
+start ineligible. Exactly 30 seconds, longer runs and uncertain histories follow ordinary
+completion rather than guessing that the run was accidental.
 
-The likely shape is save durably first, then offer to discard — so the save-first rule still holds.
-**Manley is still thinking about this.** Nothing is built.
+Save completes the same durable run and then starts its normal receipt/reflection path. Discard
+requires the runner's explicit choice and removes only that exact unfinished, paused run and its
+owned child observations. It cannot delete a completed History entry. There is no automatic
+short-run deletion, no provider request or completion receipt before Save, and no new run created
+by retry. Keep paused, dismissal and rotation preserve the paused session. Storage failure leaves
+the run paused with a visible retry path.
+
+The earlier August prototype considered saving a completion first and offering removal afterward.
+The native correction instead confirms the decision while the unfinished session is already
+durably paused. Automatic accidental-start detection remains separate, unbuilt work.
 
 (In the console code, `cancelCount()` exists and is wired to nothing.)
 
@@ -239,7 +334,7 @@ The prototype exposes requirements. It doesn't satisfy them.
 | Pause / resume / stop states | Android state machine, Room lifecycle, UUID-bound owner, active-row discovery, recovery core, production database and recovery-before-start coordinator are built; the Android initialization call site, foreground-service execution and UI wiring remain |
 | Shoe mileage | Design accepted; exactly-once completed-run mileage not implemented |
 | RunStyle card content | Needs a query for *last run at this route/place*; the data exists |
-| Early-stoppage detection | Nothing built |
+| Accidental short start | Native explicit Save/Discard/Keep paused choice below 30 reliable active seconds is built; automatic detection remains later |
 
 Later refinement still has to test: contrast over the map, dynamic type, screen-reader labels and
 state announcements, tap targets, reduced motion, battery, outdoor visibility, the music-free state,

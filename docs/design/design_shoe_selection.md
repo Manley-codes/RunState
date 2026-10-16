@@ -22,6 +22,35 @@ and returning the selected shoe name and mileage to Start.
 This does not resolve route, surface, or run-company input. Those remain separate progressive-input
 decisions. Starting energy also remains separate and optional.
 
+## October 15, 2026 — native status and catalog research
+
+Native Start now shows circular shoe and music objects beside Start, using Apache-licensed
+Material Design Icons vectors. Both are labeled `LATER`. Shoe search, selection, saved pairs and
+mileage remain unimplemented; no pair is assigned by default and no owned shoes or mileage are
+invented. The interactions below still describe the accepted prototype and later production work.
+
+A small candidate catalog was checked against official sources on October 15:
+
+| Brand | Model | Official source |
+| --- | --- | --- |
+| ASICS | Novablast 6 | [Product](https://www.asics.com/us/en-us/novablast-6/p/ANA_1011C243-102.html) |
+| Nike | Pegasus 42 | [Announcement](https://about.nike.com/en/newsroom/releases/nike-pegasus-42-official-images) |
+| HOKA | Clifton 11 | [Product](https://au.hoka.com/products/clifton-11-1176572-flck-flck) |
+| Brooks | Ghost 18 | [Product](https://www.brooksrunning.com/en_us/mens/shoes/road-running-shoes/ghost-18/1104931D462.075.html) |
+| Saucony | Ride 19 | [Product](https://www.saucony.com/en/ride-19/60823M.html) |
+| HOKA | Speedgoat 7 | [Official catalog](https://stores.hoka.com/) and [Speedgoat 7 event](https://eu-events.hoka.com/speedgoat7quest) |
+
+[Strava's 2025 report](https://press.strava.com/articles/strava-releases-12th-annual-year-in-sport-trend-report-2025)
+names Novablast, Pegasus and Clifton as its three most-logged shoe families. That supports including
+those families; it does not rank these particular versions or establish a best shoe for a runner.
+The catalog is research for later options, not a populated native shoe collection.
+
+For later mileage, give each physical pair its own identity and associate it with the official run.
+Derive totals from that pair's completed GPS runs with known saved distance, rather than incrementing
+a mutable counter on Stop. Exclude fixture/sample distance and do not invent unavailable distance.
+This keeps retries from adding the same run twice. An optional pair nickname, such as `Blue pair`,
+would help distinguish two pairs of the same model; that remains a later refinement.
+
 ---
 
 ## Start-screen entry and selected state
