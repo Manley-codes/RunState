@@ -7,7 +7,196 @@ metadata:
 
 ## Current Android checkpoint — October 15, 2026
 
-### Latest follow-up — Sample clarity, paused timer and explicit short-run discard
+### Latest GPS foundation — timing evidence and conditional average pace
+
+The next software slice is installed on the Moto. New GPS runs may now show average pace when
+their stored fixes and lifecycle timing support it. Completion freezes that verdict and the same
+metrics for History and reflection evidence. Older completed runs retain their original values;
+none are retrospectively promoted. This supersedes the earlier all-GPS-PARTIAL limitation below.
+
+- A recent-fix plausibility check rejects a sudden jump after standing still. The previous
+  distance anchor could otherwise spread that jump over the whole stationary interval. Accurate
+  stationary fixes and gradual movement inside normal reported uncertainty remain supported.
+- Room **10 → 11** adds nullable monotonic start/pause/resume readings and a process-session UUID.
+  Calendar timestamps still determine the stored timeline; the independent steadily increasing
+  clock detects disagreement. Different processes cannot certify one another's timing, even
+  without a reboot. Recovery preserves the run but remains partial when that proof is missing.
+- The first coverage policy requires each Running interval's start/end edges within **5 seconds**,
+  combined edge omissions no more than **5%** of active time, and usable fix spacing within
+  **15 seconds**. Lifecycle clocks must agree within **250 ms**, including total active duration;
+  location epoch/source mapping has a **1,000 ms** allowance. Missing/rejected evidence or clock
+  disagreement withholds pace. Pauses are excluded and resumes require a fresh section anchor.
+- These are provisional recording-continuity rules, not measured-distance accuracy guarantees.
+  An initial acquisition taking over five seconds keeps that run partial. Average pace can become
+  unavailable after five seconds without a usable tail while signal status remains recording
+  until its separate fifteen-second expiry. Daytime testing must assess practical availability
+  before tuning the rules; do not relax them merely to populate the display.
+- History's offline path label follows the frozen coverage verdict. It remains an illustration
+  of recorded points, not a street map. Incremental reads cache append-only observations per run;
+  completion assesses the full durable evidence before freezing metrics.
+
+Verification used Android Studio's JBR/SDK and Gradle: **358 debug + 358 release JVM tests** passed,
+zero failures/errors/skips, and debug/release/test APK builds passed. **All 63 distinct selected
+silent Moto cases eventually passed:** 62 on the initial run; the migration case initially lacked
+the newly generated schema 11 asset in its test APK. Repackaging that APK and rerunning the case
+passed. Checks cover old-field migration, timing transactions, continuous/gapped/paused recording,
+clock changes, process changes, frozen History/reflection metrics and path labels/accessibility.
+
+The actual app opened successfully with schema 11. Read-only before/after audits matched every
+original field across the five saved tables: **30 COMPLETED / 0 active**, SHA-256
+`cfcbfddf8af6fbee45711ccb1c392578c5a983d2aef81b0b944e69dfed0c9ef8`.
+All added timing fields on old rows remain null. No real run or provider request was started.
+The phone's original plugged-in stay-awake setting (0) was restored. Private temporary database
+snapshots were removed automatically after inspection.
+
+Four necessary new files, all under `C:\Users\Owner\IdeaProjects\RunState`:
+
+- `android/app/src/main/java/com/runstate/mobile/run/RunTimingMark.kt`: validated paired timing
+  evidence shared by lifecycle/storage code.
+- `android/app/src/main/java/com/runstate/mobile/location/GpsCoverageEvaluator.kt`: isolated,
+  conservative recording assessment, independent of Android screens.
+- `android/app/src/test/java/com/runstate/mobile/location/GpsCoverageEvaluatorTest.kt`: 21 focused
+  cases for coverage, gaps, clock disagreement, stationary evidence and immutable completion.
+- `android/app/schemas/com.runstate.mobile.data.local.RunStateDatabase/11.json`: generated Room
+  schema needed to preserve and verify the additive database migration.
+
+**Next:** measured-route and stationary/lock/pause/recovery proof when Manley is available in
+daylight, plus a real current-position/route map and basic splits. No outdoor test tonight was
+requested. Full timer correction across wall-clock changes, process/OEM reliability and longer-run
+accuracy remain open. Opening screen/logo follow the GPS foundation before presentation polish;
+Manley has a concept to share at that stage. No staging, commits, pushes or deployment occurred.
+This is a tested commit point when Manley chooses to pause for Git.
+
+### Previous GPS foundation — fresh signal status
+
+Following the accepted GPS-first review, Active and the foreground notification now report
+**finding / recording / weak / unavailable** from durably usable location evidence. Previously Active
+treated any earlier measured distance as evidence that GPS was still recording. The new status
+expires when the latest usable source timestamp is over 15 seconds old, including when Android
+stops delivering callbacks. Accurate stationary fixes are healthy without inventing distance.
+Paused, stopped and Sample remain separate; a weak/lost signal does not disable Pause or request
+an unnecessary service restart.
+
+The monitor uses Android's monotonic source time, not delivery or database completion time.
+Rejected, duplicate and out-of-order observations cannot refresh recording; Room's checkpoint
+rejection overrides in-memory acceptance. Pause/resume, provider changes and new ownership reset
+the assessment. Queued work rechecks listener, generation, UUID, policy and running/provider state
+after suspended writes. A storage failure remains visible until fresh usable storage succeeds.
+The one-second watcher runs only while collecting and publishes state changes rather than
+reposting the notification on every tick. It does not change distance anchors: source-time gap
+rules already prevent bridging missing movement, and slow storage must not erase valid segments.
+
+Built with Android Studio's JBR/SDK and Gradle, then installed in place on the Moto. Debug and
+release JVM suites each passed **325 tests**, zero failures/errors/skips, including **13 new signal
+tests**. Debug, release and instrumentation APK builds passed. **12 silent Moto screen cases**
+passed in 18.039 seconds, including three signal-state cases plus timer, controls and large text.
+Final wording uses **signal unavailable** because a startup timeout need not mean a previously
+acquired signal was lost. All three APKs rebuilt successfully, and the three affected phone cases
+passed again in 4.932 seconds; the final stored-data audit still matches the same baseline.
+These are deterministic software/screen checks, not a new physical signal-loss or accuracy test.
+Before/after audits matched all five stored tables: **30 COMPLETED / 0 active**, SHA-256
+`cfcbfddf8af6fbee45711ccb1c392578c5a983d2aef81b0b944e69dfed0c9ef8`.
+No real run, reflection request, music preference or Android permission was changed by QA.
+The original plugged-in stay-awake setting (0) was restored and RunState reopened.
+
+Necessary new files in `C:\Users\Owner\IdeaProjects\RunState` for this pass:
+
+- `android/app/src/main/java/com/runstate/mobile/location/GpsSignalMonitor.kt`: isolated clock-based
+  assessment, independent of the screen and distance arithmetic.
+- `android/app/src/test/java/com/runstate/mobile/location/GpsSignalMonitorTest.kt`: freshness,
+  stationary, rejected/late data, reset and delayed-storage distance regressions.
+- `docs/design/runner_problems_and_feature_opportunities.md`: requested opportunity document;
+  start detection and music-respecting announcements receive emphasis without changing the queue.
+
+Latest music steering: focus on voice tone/delivery fitting the music using permitted evidence;
+the optional echo treatment is parked. Spotify is first choice; evaluate other platforms if
+substantial barriers accumulate. Manley can perform real runs or recruit testers when needed;
+give a precise protocol, including who starts and whether to pause or finish, before each check.
+
+**Remaining at that checkpoint:** durable coverage/timing and meaningful pace, known-distance stationary/
+lock/pause/recovery proof, then real current-position/route map and basic splits. Coverage remains
+PARTIAL and GPS average pace unavailable; the map remains illustrative. Clock changes/recovery
+need explicit treatment before promoting coverage. No schema, metrics calculation, backend or
+deployment changed here. No files staged, committed or pushed; this bounded pass is a good commit
+point together with its tests/documentation when Manley chooses to commit.
+
+### Latest setup simplification — normal GPS and remembered optional music
+
+Manley explicitly approved replacing repeated Start-screen selections with one-time setup after
+the explanation of their testing/privacy purposes. Normal Start now defaults to GPS. The moving
+agent, optional pre-run Energy, Start footer and History entry remain; the repeated control panels
+are replaced by quiet status and **Run settings**. This is native Android work using Android
+Studio's JBR/SDK and Gradle, not a new web prototype or backend deployment.
+
+- **GPS:** Start checks current precise-location permission and phone Location before countdown.
+  It requests Android permission when missing, or opens phone Location settings when permission
+  already exists but Location is off. Returning/granting does not start an unseen run; the runner
+  taps Start again. Denial never selects Sample or manufactures distance. Readiness is permission/
+  provider status, not a claim of an acquired fix, accurate route or successful capture.
+- **Remembered music:** a one-time settings review starts both observation and sharing off, even
+  on an already-authorized phone. Done records review completion. The two choices persist through
+  app restarts, screen restoration, saved/discarded runs and later Starts. No permission grant or
+  prior run is used to infer consent. At the official start, observation additionally requires
+  current Android access; sharing additionally requires its separate remembered choice and a
+  selected reflection backend. These effective choices are frozen on that run's existing row.
+  Revocation prevents capture/sharing without erasing the preference. Local metadata and sending
+  one eligible Spotify title/artist to the backend/Anthropic remain separate; no audio is captured.
+- **Settings:** the scrollable sheet holds location/access setup, remembered music choices,
+  reflection connection setup and the clearly separated **Sample demo**. Start says observation
+  on/off/access needed, never Music detected without evidence. A configured connection is not
+  advertised as a health check. Changing/clearing the destination durably disables remembered
+  sharing before changing the connection, so consent is not carried to another destination.
+- **Temporary Sample:** only an explicit Demo choice selects simulated distance. It survives
+  rotation, but the saved UI draft includes a process-session identity; a fresh process restores
+  GPS instead of inheriting Sample. Canceling countdown, returning after completion, or discarding
+  restores GPS. Sample is never written into persistent preferences.
+- **Storage/ownership:** the three nonsecret preference booleans use private SharedPreferences,
+  independent of Room and Android grants. Application-owned serialized I/O publishes only after
+  successful storage and survives caller rotation. Read/save failures remain visible and block
+  Start until confirmed preferences are available; loading failures have an explicit Retry action.
+  No Room schema, dependency, tracking policy, stored reflection or old per-run consent changed.
+
+Verification: both debug/release JVM suites passed **312 tests each**, zero failures/errors,
+including nine new persistence/default/consent/error cases. Final production and test APK builds
+passed in 22 seconds. All **25 distinct selected silent Moto cases** eventually passed: 24 passed
+in the 56.446-second combined run; a test-only attempt to scroll the fixed Completion button was
+removed and the remaining saved-then-discarded preference case passed in 6.951 seconds. Earlier
+test fixes corrected cold-process simulation and drove the actual visible countdown digits rather
+than a helper-only tag. The clean-Start case passed again in 3.852 seconds after adding the actual
+app's system-bar spacing to its preview host; no production change followed the final build.
+The two final test-only package rebuilds passed in two seconds each. The tests use uniquely named
+temporary preferences, in-memory Room, silent speech and a null reflection provider; no real GPS
+run, Android grant change, model call or hearing/known-distance proof is implied.
+
+Actual Moto before/after audits match every stored field across runs, reflections, transitions,
+location points and music observations: **29 COMPLETED/0 active**, SHA-256
+`a0611fce23837c99df861d21df4e6ceb39ea75115ae00e3dd386c97c30bfb327`.
+The new baseline was collected before this install/test pass; the newest stored run was GPS and
+there were two music-observed runs. No actual phone run was added, completed or discarded by QA.
+No credentials were inspected, no remote configuration/deployment was changed and no emulator was
+used. The app is returned to its first settings review for Manley's own choices; no observation/
+sharing preference was selected on his behalf. Normal plugged-in stay-awake was restored to its
+original 0. Four owned screenshot-cache files, isolated preference files and transient private
+database copies were removed.
+
+Necessary new files, all under `C:\Users\Owner\IdeaProjects\RunState`:
+
+- `android/app/src/main/java/com/runstate/mobile/settings/RunPreferences.kt`: independent validated
+  preference/storage boundary; a new file avoids putting storage code into a screen.
+- `android/app/src/main/java/com/runstate/mobile/ui/RunSettingsDialog.kt`: the settings surface,
+  separated so Start stays readable and presentation owns no permission or storage side effects.
+- `android/app/src/test/java/com/runstate/mobile/settings/RunPreferencesTest.kt`: nine focused
+  default, separate-choice, round-trip and failure tests.
+- `android/app/src/androidTest/java/com/runstate/mobile/ui/RunSettingsScreenTest.kt`: eight isolated
+  native presentation/root tests for setup, restoration, per-run snapshots and Sample boundaries.
+- `android/artifacts/run-settings-moto.png`: one retained paired native preview, visually checked;
+  the two panes deliberately show controlled status/setup examples, not identical live app state.
+
+`design_start_run_v7.md` and `ui_phase_handoff.md` now mark the repeated-panel description as
+historical. The earlier motion video remains proof of that earlier visual phase, not a current
+Start-panel preview. No Git files were staged, committed or pushed. This is a good commit point.
+
+### Earlier follow-up — Sample clarity, paused timer and explicit short-run discard
 
 Manley reported distance increasing at his desk and the paused timer continuing, recalled the
 prepared-Energy-response plan, and requested an accidental-start safeguard plus an opinion on

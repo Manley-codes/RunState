@@ -7,6 +7,11 @@ metadata:
 
 # Run initiation register — LIVE
 
+**October 15 opportunity emphasis:** Manley reaffirmed automatic start detection as an especially
+appealing problem-solving direction. [Runner problems and feature opportunities](runner_problems_and_feature_opportunities.md)
+captures its value and evaluation alongside music-respecting announcements. This does not change
+the GPS-first build order or mark detection implemented.
+
 **October 15, 2026 native correction:** the main Active timer now shows active duration and freezes
 when Paused; a smaller **Total incl. breaks** value retains elapsed time. Sample mode explicitly
 explains that distance is simulated at 3 meters per Running second, even while stationary. Neither
@@ -334,6 +339,14 @@ therefore anchors to the saved epoch-based checkpoints rather than to any monoto
 no-invention rule above applies across the gap: neither distance nor active duration may be
 manufactured for an interval the checkpoints do not cover.
 
+**Implemented timing evidence — October 15 continuation:** Room 11 adds nullable monotonic start
+and pause/resume readings, paired with a canonical process-session UUID. A new process gets a new
+identity; persisted monotonic values from it cannot certify a previous process's run, even if the
+device did not reboot. Legacy rows remain null. Epoch checkpoints still drive recovery and the
+stored timeline; this addition detects clock disagreement, not full timer correction. Existing
+saved values are not recalculated. The additive migration and actual-phone old-field preservation
+are verified in `project_current_state.md`.
+
 ---
 
 ## Local-first run identity and synchronization — DEFAULT
@@ -501,6 +514,17 @@ the feature is opt-in or a default, and its audio/haptic confirmation remain Pha
 experiments rather than current promises.
 
 ### Distance, pace and automatic splits
+
+**Current implementation:** new GPS average pace is conditional on stored timing and recording
+continuity. Each Running interval permits at most 5 seconds at either edge, at most 5% combined
+edge omissions across active time, and at most 15 seconds between usable fixes. Start/pause/resume
+and current epoch/monotonic timing must agree within 250 ms, including total active duration; GPS
+source/epoch mapping permits 1,000 ms. Accurate stationary fixes provide coverage without distance.
+Rejected/missing evidence, clock disagreement or a different process leaves pace unavailable.
+Completion freezes the assessed coverage and metrics; History and reflection use that snapshot.
+These initial conservative limits still need real-route availability and accuracy checks; COMPLETE
+means the recording meets this policy, not independently proven distance accuracy. Automatic splits
+below remain the intended contract, not an implemented feature.
 
 - Total distance is derived from accepted Running observations. The visible distance counter is a
   view of that saved evidence, not a separate source of truth.

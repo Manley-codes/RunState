@@ -39,6 +39,43 @@ prototype, and no full editor for other run fields was added.
 
 ## October 15 native Android visual checkpoint
 
+**Queued opening screen and app logo:** Manley has a basic opening-screen concept to share. Ask
+for it after the GPS foundation, before presentation freeze/polish; an earlier volunteered review
+is welcome. Preserve fast entry without a forced splash delay. No new design or asset is selected,
+and this queue item does not displace GPS work.
+
+**Latest native Start setup correction:** the everyday Start path now defaults to precise GPS,
+with quiet readiness/setup statuses and **Run settings** replacing the repeated GPS/music/backend
+choice panels below the agent. The map stays illustrative. A GPS-ready label means the required
+permission and phone setting are available, not that a fix has been acquired. Start asks for
+missing precise-location permission before countdown, or opens phone Location settings when needed.
+The runner taps Start again afterward; granting permission or returning from setup never launches a
+run automatically. Denied or revoked access never selects Sample as a fallback.
+
+On first use, music has an optional settings review with both **Observe music** and **Music in
+reflection** off, even if Android notification access was granted earlier. Done remembers review
+completion. The two choices are persisted separately and do not reset after a run is saved,
+discarded or canceled. Android permission does not imply observation consent; observation does not
+imply cloud sharing. Sharing requires observation, and official-start snapshots additionally gate
+effective observation on current access and sharing on the configured backend. Missing/revoked
+access is explained without overwriting the saved preference or claiming that no music played.
+Enabled/access-needed statuses do not claim music was detected. Earlier saved runs keep their
+original consent fields and observations; none are backfilled or rewritten.
+
+Settings also holds the reflection address/access-code setup. “Service selected” remains a
+configuration statement, not proof of connection. Changing or clearing the service first saves
+remembered music sharing as off, so a previous destination's choice does not silently authorize a
+new one. Settings reads and accepted writes have a process owner; loading/failure/saving blocks
+Start, errors are retryable, and rotation does not cancel an accepted preference save.
+
+**Sample demo** is now an explicit temporary draft under Demo & testing. It is absent from persisted
+normal-run preferences. Rotation retains that chosen draft, while a new-process nonce prevents
+restored Activity state from making Sample the next-run default after process recreation.
+Countdown cancel, completed-run return to Start and discard restore GPS. Sample still truthfully
+labels its simulated distance; no new outdoor-GPS accuracy claim is made. Descriptions below of
+per-run Start switches or prominent connection panels are earlier design/build history, superseded
+by this setup correction. Verification results for this correction live in `project_current_state.md`.
+
 **Native visual checkpoint and October 15 corrections installed and checked.** The sections below retain the
 August prototype history and its decisions. Their statements that mobile screens are only
 prototypes describe that earlier checkpoint; current native behavior is recorded here and in

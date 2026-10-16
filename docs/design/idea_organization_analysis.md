@@ -1,11 +1,62 @@
 ---
 name: idea-organization-analysis
-description: August 4 2026 organization pass over every loose idea across the three ChatGPT strategy docs, the Claude Design work, and the repo's parked files. Collapses ~35 ideas into four systems plus a shared music-context service; finds that the runner model is the substrate three systems consume and the only one buildable today. Grades and places every idea (build now / next / later / hold / reject).
+description: October 15 2026 problem-value review and approved delivery direction, followed by the historical August 4 idea organization. Separates runner problems, evidence, product hypotheses and future features; historical build-now labels are not the current Android queue.
 metadata:
   type: project
 ---
 
 # RunState — idea organization and assessment
+
+## Current problem-value review — October 15, 2026
+
+Manley agreed with the project review's direction: dependable GPS and a real map first, one useful
+runner-state learning feature next, then bounded music integration. Check Spotify feasibility early;
+protect time for saved-data protection, documentation, failure handling and demonstration rehearsal.
+He then asked which ideas solve real problems, while explicitly retaining that order. This section
+records the assessment and a proposed usefulness check, not approval to build every feature below.
+
+Follow-up emphasis and recovered ideas now live in
+[Runner problems and feature opportunities](runner_problems_and_feature_opportunities.md),
+especially automatic start detection and announcements that respect music. It is not a new queue.
+
+**Strongest distinctive problem hypothesis:** a runner can see the numbers but struggle to understand
+why a run felt different, or notice worthwhile changes that are not a faster pace. RunState can
+preserve how the runner started, what the run demanded and how they finished, then show supported
+patterns. These observations provide clues, not proof of causes or measured fitness improvement.
+
+| Runner problem | Relevant capability | Evidence and placement |
+| --- | --- | --- |
+| Did the run record correctly, and will it remain saved? | Dependable GPS, honest signal/coverage, pause, recovery, durable History and eventual export | Foundation first. This project's phone checks and user confusion about Sample distance demonstrate concrete trust/usability needs; broader field accuracy remains open. A map adds location awareness, not accuracy by itself. |
+| Why did similar-looking runs feel different? | Pre/post Energy, separate reported Effort and conservative comparisons | Strongest distinctive opportunity. Earlier notes record Manley's run-club observations; usefulness of RunState's interpretation still needs testing with other runners. First native step should be a small supported Energy observation. |
+| Am I overlooking runs that felt easier without being faster? | Quiet Gains from comparable output and lower reported Effort | Strong potential after reliable metrics and repeated answered runs. Describe reported ease; do not infer physiological improvement. Console comparison code exists, native learning does not. |
+| Why must I configure the app again when I am ready to leave? | Remembered preferences, quick manual Start and optional inputs | Directly observed friction in this project; much has now been addressed. Hurried club departures also motivate later Prepare to Detect, but automatic detection is not needed for the first improvement. |
+| Why does the app interrupt my music or concentration? | Optional, predictable speech and respectful audio handoff | Earlier notes record a runner's complaint; one Moto sequence proved delivery/Spotify return. User benefit and wider compatibility need further checks. Elaborate voice matching stays later. |
+| Which songs belonged to runs I enjoyed, and which suited running? | Honest music History and later separate Taste/Run fit feedback | Promising hypothesis. Partial observations cannot establish a full soundtrack, preference or a song's effect. Keep the bounded music priority and resolve permitted provider/AI/playback use first. |
+| How much have I used each pair of shoes? | Saved physical pairs, remembered selection and completed-run mileage | Concrete bookkeeping utility, after core reliability/state/music. No universal replacement or injury-prevention claim. Native mechanics are not built. |
+
+**Evidence limits:** founder experience, a reported club complaint, working software and demand from
+other runners are different evidence. No outside-runner validation was established by this review.
+The historical numeric idea scores below are judgments, not measured demand or current priorities.
+Existing products already offer [perceived exertion](https://support.strava.com/en-us/articles/15401767-perceived-exertion)
+and [gear tracking](https://support.garmin.com/en-IN/?faq=9EtB5L0OA26gp56Yv9tyH9).
+Their documentation establishes those capabilities, not market demand for RunState or uniqueness.
+The opportunity is a useful, low-friction connection between facts, subjective state and history.
+
+**Experience and identity:** the moving agent, visual styling, share artifacts and music snippet can
+make the product recognizable and enjoyable. They are not yet demonstrated answers to the central
+problem. A reflection that only offers generic praise has a weak value proposition; it earns its
+place by faithfully reflecting the run or surfacing useful evidence. Do not assume effects on
+motivation, adherence or wellbeing without testing them.
+
+**Proposed small usefulness check:** once GPS and the first state insight are usable, invite roughly
+3–5 willing runners to try them. First ask how they currently make sense of a run; observe Start and
+finish without coaching; ask what the reflection added beyond the metrics and what was inaccurate
+or unnecessary. Across repeated use, note whether they choose to revisit History and record Energy
+or Effort again. This is formative feedback, not statistical validation or a new analytics system.
+No invitations, user-data collection or tests were performed by this review. Add the check to the
+existing delivery work rather than creating another feature queue or delaying GPS.
+
+## Historical August 4 organization — retained reasoning, not the current build order
 
 **Date:** August 4, 2026
 **Reviewed:** the three ChatGPT strategy documents and both diagrams, the Claude Design Soundtrack

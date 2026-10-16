@@ -7,6 +7,16 @@ metadata:
 
 # Music feature register — LIVE
 
+**October 15 opportunity emphasis:** Manley's focus is announcement voice, tone and delivery that
+fit the playing music and feel less intrusive. The optional echo/spacious-music effect is parked.
+Spotify stays the first choice; consider alternatives only if multiple substantial barriers block
+the intended experience. Matching must use permitted evidence, without assuming permission for
+audio capture, analysis or AI ingestion. Delivery, scheduling/mute choices, existing support ideas
+and the audio/provider limits are collected in
+[Runner problems and feature opportunities](runner_problems_and_feature_opportunities.md).
+This is an experiment record; it neither changes the GPS-first build order nor approves Spotify
+audio processing.
+
 **Read this file.** It is not archived and not parked. Approved by Manley on August 4, 2026.
 
 **Why this file exists.** Good music ideas kept disappearing. Two causes, both structural:

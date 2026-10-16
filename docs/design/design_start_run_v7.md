@@ -8,6 +8,52 @@ status: CURRENT DESCRIPTION - what is built in the prototype right now. Not a sp
 
 # Start Run — where this screen actually is
 
+**Latest native GPS status correction, October 15:** Active now distinguishes GPS waiting,
+recording, weak signal and signal unavailable from fresh usable recorded observations. Earlier distance
+does not keep the recording label alive; accurate stationary readings can be healthy before any
+distance exists. A usable fix older than 15 seconds loses freshness. Paused/stopped/Sample stay
+distinct. This changes status truth only: the map is still illustrative and coverage/pace work
+remains. See `project_current_state.md` for verification.
+
+**Latest native setup correction, October 15, 2026:** regular Start now uses precise GPS by
+default. The map remains illustrative; a quiet status describes GPS readiness, not an acquired
+position or a live map. The repeated GPS/music/connection panels have moved into **Run settings**.
+The Start surface keeps quiet setup/status messages and a Settings entry so the everyday path is
+optional pre-run Energy, then Start.
+
+Music has a one-time settings review. **Observe music** and **Music in reflection** start off,
+including on a phone that already granted Android notification access. Done records that the review
+is complete; choosing either option is optional. The app remembers the two choices separately
+across restarts, and completing, discarding or canceling a run does not reset them. Sharing can
+only be enabled with observation. Local observation and sending one eligible observed Spotify
+title/artist to the reflection service and Anthropic remain different choices; no audio is recorded
+or sent. The external-access explanation remains in Settings.
+
+These preferences are not permission grants or claims that music is playing. At the official start,
+the app snapshots observation only when the saved choice and current Android access allow it;
+sharing additionally needs its separate saved choice and an available configured backend. Revoked
+access leaves the remembered preference intact but prevents effective observation/sharing and shows
+the needed setup. A quiet status such as enabled or access needed must not claim **Music detected**
+without actual evidence. Previously saved per-run consent and observations are not rewritten.
+
+When GPS permission is missing, Start requests precise location before countdown. When phone
+Location is disabled, the setup path opens Android's Location settings. After returning or granting
+permission, the runner taps Start again; setup never starts a run by itself and permission denial
+never falls back to Sample distance.
+
+**Sample demo** now lives under Settings' Demo & testing section. It is one explicitly chosen
+temporary draft, not the normal default or a persistent preference. Rotation preserves the draft,
+but a new-process nonce prevents Android state restoration from reviving Sample as the next-run
+default. Canceling the countdown, completing/returning for another run, or discarding restores GPS.
+The active Sample banner still explains that distance increases while standing still.
+
+Reflection address/access-code setup also lives in Settings. A configured service label is not a
+connectivity test. Changing or clearing that service first durably turns remembered music sharing
+off; consent for an earlier destination is not carried into a new one. Preference read/save errors
+are explicit and block Start until a confirmed state is available; an accepted save survives screen
+rotation. The following panel-placement descriptions are retained as history of the earlier native
+screen, not instructions to restore those controls below the agent.
+
 **Native timing and accidental-start correction, October 15, 2026:** Active now makes **Active
 time** the main timer; it freezes while Paused. The smaller **Total incl. breaks** value keeps
 counting because elapsed time still means official start to finish, including pauses. This changes
@@ -29,7 +75,7 @@ another generation request. A quick tap can still precede the network response; 
 initial visualizer intake also govern presentation. `design_run_response_system.md` remains the
 canonical detailed contract.
 
-**Native music artwork and panel clarification, October 15, 2026:** the original profile,
+**Earlier native music artwork and panel clarification, October 15, 2026 — panel placement historical:** the original profile,
 lime-headphone and waveform orb is copied unmodified from the Production `start.html` manifest
 (`./assets/opt/music-orb.jpg`, UUID `82c43e6a-55ff-4ef3-a580-4747bc5b5d81`) into
 `android/app/src/main/res/drawable/start_music_orb.jpg`. It replaces the generic headphones,
@@ -40,8 +86,8 @@ working controls, explained below. The follow-up is installed on the Moto: all 8
 screen cases passed, both 291-test JVM suites and all three APK builds passed, and five affected
 checks passed again after final wording polish. See `project_current_state.md` for exact evidence.
 
-The panels below the agent are functional controls or truthful status, not fake sample cards.
-Their current placement is provisional rather than a finished-screen commitment:
+The earlier panels below the agent were functional controls or truthful status, not fake sample cards.
+Their provisional placement is now superseded by the Run settings correction above:
 
 | Visible item | What it does now | Design status |
 | --- | --- | --- |
@@ -51,8 +97,9 @@ Their current placement is provisional rather than a finished-screen commitment:
 | Observe music | Opts into local media-session title, artist and app observations while Running. Android's broad notification-access grant is explained. | Working optional observation, not song selection or playback. |
 | Music in reflection | Appears when observation, permission and a backend are available. Separate per-run consent allows one eligible observed Spotify title and artist to reach the backend and Anthropic; no audio is sent. | Working optional privacy choice that must remain accessible. |
 
-No panel-layout changes were made in this artwork follow-up. Consolidating backend setup and
-sample/demo controls is a later design pass; it must preserve GPS clarity and separate music consent.
+No panel-layout changes were made in that artwork follow-up. Its proposed consolidation of backend
+setup and sample/demo controls is now implemented by the latest correction, preserving GPS clarity
+and separate music consent.
 
 **Native journey additions, October 15, 2026:** the Start footer now includes shoe and headphone
 objects marked `LATER`; neither claims a saved collection, mileage or playlist mechanics. Optional
