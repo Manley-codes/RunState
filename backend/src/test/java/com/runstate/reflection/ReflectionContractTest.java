@@ -16,6 +16,9 @@ import static com.runstate.reflection.ReflectionContract.PreRunEnergy;
 import static com.runstate.reflection.ReflectionContract.RequestIdentifiers;
 import static com.runstate.reflection.ReflectionContract.RunMetricsEvidence;
 import static com.runstate.reflection.ReflectionContract.TelemetryCoverage;
+import static com.runstate.reflection.ReflectionContract.WeatherContext;
+import static com.runstate.reflection.ReflectionContract.WeatherSource;
+import static com.runstate.reflection.ReflectionContract.WeatherResolution;
 import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -83,6 +86,75 @@ class ReflectionContractTest {
                 () -> assertEquals(MusicContext.unknown(), evidence.musicContext()),
                 () -> assertEquals(MusicState.UNKNOWN, evidence.musicContext().state())
         );
+        assertNull(evidence.weatherContext());
+    }
+
+    @Test
+    void weatherPreservesItsValidHourSeparatelyFromFetchTimeAndOwnsTheStartTime() {
+        long start = 1_780_000_000_000L;
+        long hour = start / 3_600_000L * 3_600_000L;
+        WeatherContext weather = weather(start, hour, hour + 3_600_000L, start + 1_800_000L,
+                21.5, 20.0, 48.5, 8.0, 0);
+        CompletedRunEvidence evidence = new CompletedRunEvidence(start, start + 1_800_000L,
+                "America/Chicago", null, null, null, null, weather);
+        assertAll(
+                () -> assertEquals(weather, evidence.weatherContext()),
+                () -> assertEquals(start + 1_800_000L, evidence.weatherContext().fetchedAtEpochMillis()),
+                () -> assertEquals(hour, evidence.weatherContext().validFromEpochMillis()),
+                () -> assertThrows(IllegalArgumentException.class,
+                        () -> new CompletedRunEvidence(start + 1L, start + 1_800_000L,
+                                "America/Chicago", null, null, null, null, weather))
+        );
+    }
+
+    @Test
+    void weatherRejectsWrongHoursUnalignedIntervalsAndFetchBeforeTarget() {
+        assertAll(
+                () -> assertThrows(IllegalArgumentException.class,
+                        () -> weather(3_600_000L, 0, 3_600_000L, 3_600_000L, 20, 20, 50, 5, 0)),
+                () -> assertThrows(IllegalArgumentException.class,
+                        () -> weather(3_600_000L, 3_600_001L, 7_200_001L, 3_600_000L, 20, 20, 50, 5, 0)),
+                () -> assertThrows(IllegalArgumentException.class,
+                        () -> weather(1L, 0, 3_600_001L, 1L, 20, 20, 50, 5, 0)),
+                () -> assertThrows(IllegalArgumentException.class,
+                        () -> weather(1L, 0, 3_600_000L, 0L, 20, 20, 50, 5, 0)),
+                () -> assertThrows(IllegalArgumentException.class,
+                        () -> new WeatherContext(null, WeatherResolution.HOURLY, 1, 0, 3_600_000L, 1,
+                                20, 20, 50, 5, 0)),
+                () -> assertThrows(IllegalArgumentException.class,
+                        () -> new WeatherContext(WeatherSource.OPEN_METEO, null, 1, 0, 3_600_000L, 1,
+                                20, 20, 50, 5, 0))
+        );
+    }
+
+    @Test
+    void weatherRejectsNonfiniteOutOfRangeValuesAndUnsupportedConditions() {
+        for (double invalid : new double[]{Double.NaN, Double.POSITIVE_INFINITY, -100.1, 70.1}) {
+            assertThrows(IllegalArgumentException.class,
+                    () -> weather(1, 0, 3_600_000L, 1, invalid, 20, 50, 5, 0));
+        }
+        assertAll(
+                () -> assertThrows(IllegalArgumentException.class,
+                        () -> weather(1, 0, 3_600_000L, 1, 20, -150.1, 50, 5, 0)),
+                () -> assertThrows(IllegalArgumentException.class,
+                        () -> weather(1, 0, 3_600_000L, 1, 20, 100.1, 50, 5, 0)),
+                () -> assertThrows(IllegalArgumentException.class,
+                        () -> weather(1, 0, 3_600_000L, 1, 20, 20, -0.1, 5, 0)),
+                () -> assertThrows(IllegalArgumentException.class,
+                        () -> weather(1, 0, 3_600_000L, 1, 20, 20, 100.1, 5, 0)),
+                () -> assertThrows(IllegalArgumentException.class,
+                        () -> weather(1, 0, 3_600_000L, 1, 20, 20, 50, 500.1, 0)),
+                () -> assertThrows(IllegalArgumentException.class,
+                        () -> weather(1, 0, 3_600_000L, 1, 20, 20, 50, -0.1, 0)),
+                () -> assertThrows(IllegalArgumentException.class,
+                        () -> weather(1, 0, 3_600_000L, 1, 20, 20, 50, 5, 4))
+        );
+    }
+
+    private static WeatherContext weather(long target, long from, long to, long fetched,
+            double temperature, double apparent, double humidity, double wind, int code) {
+        return new WeatherContext(WeatherSource.OPEN_METEO, WeatherResolution.HOURLY,
+                target, from, to, fetched, temperature, apparent, humidity, wind, code);
     }
 
     @Test

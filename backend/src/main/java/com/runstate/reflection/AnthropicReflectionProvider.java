@@ -14,6 +14,7 @@ import com.runstate.reflection.ReflectionContract.CompletedRunEvidence;
 import com.runstate.reflection.ReflectionContract.MusicContext;
 import com.runstate.reflection.ReflectionContract.RunMetricsEvidence;
 import com.runstate.reflection.ReflectionContract.TelemetryCoverage;
+import com.runstate.reflection.ReflectionContract.WeatherContext;
 import com.runstate.reflection.ReflectionProvider.FailureType;
 import com.runstate.reflection.ReflectionProvider.ReflectionProviderException;
 
@@ -207,6 +208,22 @@ public final class AnthropicReflectionProvider implements ReflectionProvider {
         addNullableString(serializedMusic, "artist_name", music.artistName());
         addNullableString(serializedMusic, "artist_description", music.artistDescription());
         serialized.add("music_context", serializedMusic);
+        if (evidence.weatherContext() != null) {
+            WeatherContext weather = evidence.weatherContext();
+            JsonObject serializedWeather = new JsonObject();
+            serializedWeather.addProperty("source", weather.source().name());
+            serializedWeather.addProperty("resolution", weather.resolution().name());
+            serializedWeather.addProperty("target_epoch_millis", weather.targetEpochMillis());
+            serializedWeather.addProperty("valid_from_epoch_millis", weather.validFromEpochMillis());
+            serializedWeather.addProperty("valid_to_epoch_millis", weather.validToEpochMillis());
+            serializedWeather.addProperty("fetched_at_epoch_millis", weather.fetchedAtEpochMillis());
+            serializedWeather.addProperty("temperature_celsius", weather.temperatureCelsius());
+            serializedWeather.addProperty("apparent_temperature_celsius", weather.apparentTemperatureCelsius());
+            serializedWeather.addProperty("relative_humidity_percent", weather.relativeHumidityPercent());
+            serializedWeather.addProperty("wind_speed_kmh", weather.windSpeedKmh());
+            serializedWeather.addProperty("weather_code", weather.weatherCode());
+            serialized.add("weather_context", serializedWeather);
+        }
         serialized.add("reflection_facts", reflectionFacts(evidence));
 
         return serialized;
@@ -229,7 +246,21 @@ public final class AnthropicReflectionProvider implements ReflectionProvider {
         facts.addProperty("finish_local_datetime", DateTimeFormatter.ISO_OFFSET_DATE_TIME.format(
                 Instant.ofEpochMilli(evidence.finishEpochMillis()).atZone(zone)
         ));
+        WeatherContext weather = evidence.weatherContext();
+        if (weather != null) {
+            facts.addProperty("weather_temperature_fahrenheit", fahrenheit(weather.temperatureCelsius()));
+            facts.addProperty("weather_apparent_temperature_fahrenheit", fahrenheit(weather.apparentTemperatureCelsius()));
+            facts.addProperty("weather_valid_from_local_datetime", DateTimeFormatter.ISO_OFFSET_DATE_TIME.format(
+                    Instant.ofEpochMilli(weather.validFromEpochMillis()).atZone(zone)));
+            facts.addProperty("weather_valid_to_local_datetime", DateTimeFormatter.ISO_OFFSET_DATE_TIME.format(
+                    Instant.ofEpochMilli(weather.validToEpochMillis()).atZone(zone)));
+        }
         return facts;
+    }
+
+    private static BigDecimal fahrenheit(double celsius) {
+        return BigDecimal.valueOf(celsius).multiply(new BigDecimal("1.8"))
+                .add(new BigDecimal("32")).setScale(1, RoundingMode.HALF_UP);
     }
 
     private static String reflectionDistanceText(RunMetricsEvidence metrics) {

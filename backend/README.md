@@ -24,7 +24,7 @@ accessor methods and does not offer setters; its constructor can still reject in
 - `RequestIdentifiers` carries a canonical request UUID and the canonical Android run UUID.
 - `CompletedRunEvidence` carries completed epoch-millisecond timestamps, the IANA timezone recorded
   at the run's start, optional active duration, raw metric evidence, optional pre-run Energy, and
-  optional music context with explicit provenance.
+  optional music context with explicit provenance, and optional timestamped modeled weather.
 - `RunMetricsEvidence` uses Android's existing meanings: distance is stored in meters, the display
   unit remains separate, and metric source and telemetry coverage describe provenance. Unknown
   metrics stay unknown; the contract does not add formatted distance or pace strings.
@@ -42,6 +42,50 @@ accessor methods and does not offer setters; its constructor can still reject in
 - `CandidateReflections` requires nonblank text for the exact keys `spent`, `feeling_good`,
   `powered_up`, and `no_selection`. Accepted text is retained exactly rather than trimmed or
   rewritten.
+
+### Optional native hourly weather
+
+`evidence.weatherContext` is optional. Omitted or JSON `null` means unknown; all older request
+shapes remain valid. A supplied object requires exactly these eleven fields:
+
+```json
+{
+  "source": "OPEN_METEO",
+  "resolution": "HOURLY",
+  "targetEpochMillis": 1780000000000,
+  "validFromEpochMillis": 1779998400000,
+  "validToEpochMillis": 1780002000000,
+  "fetchedAtEpochMillis": 1780001800000,
+  "temperatureCelsius": 21.5,
+  "apparentTemperatureCelsius": 20.0,
+  "relativeHumidityPercent": 48.5,
+  "windSpeedKmh": 8.0,
+  "weatherCode": 0
+}
+```
+
+The target must equal the run's official start. The valid interval is the containing UTC hour,
+including its start and excluding its end; fetch time cannot precede the target. All values must
+be finite and bounded; the condition must be a supported WMO code. Missing components, extra
+fields, coordinates, partial objects, unsupported sources and daily resolution are rejected.
+The snapshot estimates weather near the start; it does not prove whole-run conditions or how
+the runner felt. Coordinates are not accepted by this contract, and the backend does no weather
+lookup. Android's separately approved lookup supplies the frozen facts.
+
+The provider receives this provenance and interval, plus backend-converted Fahrenheit values
+and local valid times. Prompt v1.4 may recognize useful pleasant or adverse weather while
+prohibiting weather-caused Energy/performance claims. Missing weather is omitted from model
+facts. No existing saved reflection is rewritten by this backend change.
+
+Deploy the compatible backend before an Android build sends a non-null `weatherContext` to the
+hosted service. The previous strict server rejects this new field; Android must omit null
+weather fields for old-server compatibility. Local source/tests do not update Render.
+
+October 16 local verification: bundled Maven `clean test` passed all 52 backend tests, with
+zero failures, errors or skips. Added checks cover old/missing/null weather, strict required
+fields, numeric/time/source validation, coordinate rejection, fake-provider HTTP delivery,
+Fahrenheit conversion and prompt transmission. Providers were simulated; this does not prove
+live weather-reflection writing quality or deploy the new contract/prompt.
 
 ## Anthropic adapter
 
@@ -67,14 +111,14 @@ datetimes in the recorded timezone. The HTTP contract and original raw fields re
 Android leaves active duration unknown for partial or unavailable GPS coverage, matching History:
 complete transition records alone cannot prove active tracking across a service interruption.
 This keeps the writer from interpreting 5,000 meters as five miles or guessing local time from an
-epoch timestamp. Prompt version `mobile-reflection-v1.3` retains the sample-distance, partial-GPS,
+epoch timestamp. Prompt version `mobile-reflection-v1.4` retains the sample-distance, partial-GPS,
 unavailable-metric and partial-media limits. Its no-selection branch recognizes known run facts
 without inventing post-run feelings, commenting on an unanswered Energy choice, or asking for one.
 It may omit a music reference when the evidence is weak. Structured-output validation checks shape and preserves exact text;
 it does not prove every generated statement is factual or that a real GPS distance is accurate.
 
 **October 14 deployment checkpoint:** Manley manually deployed latest GitHub `master`, reported
-Render Succeeded/Live and confirmed commit `bcde0c4`, replacing `85cbfab`. This source includes v1.3;
+Render Succeeded/Live and confirmed commit `bcde0c4`, replacing `85cbfab`. That deployed commit includes v1.3;
 the Dockerfile copies full `src/`, including the prompt, and runs Maven test/package. Public
 `/health` returned 200 with `{"status":"ok"}`. Latest Render build logs were not inspected;
 health verifies liveness, not writing compliance. A subsequent connected-Moto Sample separately

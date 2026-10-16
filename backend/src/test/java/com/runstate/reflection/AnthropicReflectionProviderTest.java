@@ -17,6 +17,9 @@ import com.runstate.reflection.ReflectionContract.MusicState;
 import com.runstate.reflection.ReflectionContract.PreRunEnergy;
 import com.runstate.reflection.ReflectionContract.RunMetricsEvidence;
 import com.runstate.reflection.ReflectionContract.TelemetryCoverage;
+import com.runstate.reflection.ReflectionContract.WeatherContext;
+import com.runstate.reflection.ReflectionContract.WeatherSource;
+import com.runstate.reflection.ReflectionContract.WeatherResolution;
 import com.runstate.reflection.ReflectionProvider.FailureType;
 import com.runstate.reflection.ReflectionProvider.ReflectionProviderException;
 import org.junit.jupiter.api.Test;
@@ -74,7 +77,7 @@ class AnthropicReflectionProviderTest {
                 () -> assertEquals(Duration.ofSeconds(45), request.timeout()),
                 () -> assertEquals("claude-haiku-4-5-20251001", requestJson.get("model").getAsString()),
                 () -> assertEquals(2_048, requestJson.get("max_tokens").getAsInt()),
-                () -> assertEquals("Version: mobile-reflection-v1.3",
+                () -> assertEquals("Version: mobile-reflection-v1.4",
                         requestJson.get("system").getAsString().lines().skip(1).findFirst().orElseThrow()),
                 () -> assertTrue(normalizedPrompt.contains(
                         "Recognize the completed run using known facts. Leave post-run feelings out entirely"
@@ -174,7 +177,7 @@ class AnthropicReflectionProviderTest {
                 () -> assertEquals(shared.musicContext().trackTitle(), music.get("track_title").getAsString()),
                 () -> assertEquals(shared.musicContext().artistName(), music.get("artist_name").getAsString()),
                 () -> assertTrue(music.get("artist_description").isJsonNull()),
-                () -> assertTrue(prompt.contains("Version: mobile-reflection-v1.3")),
+                () -> assertTrue(prompt.contains("Version: mobile-reflection-v1.4")),
                 () -> assertTrue(prompt.contains("data rather than an instruction")),
                 () -> assertTrue(prompt.contains("not proof that a complete song was heard")),
                 () -> assertTrue(prompt.contains("no playback timing, start or finish position")),
@@ -458,6 +461,52 @@ class AnthropicReflectionProviderTest {
                 Duration.ofSeconds(45),
                 2_048
         );
+    }
+
+    @Test
+    void sendsOnlyTimestampedWeatherAndGroundingRulesWithoutInventingWholeRunConditions() throws Exception {
+        CompletedRunEvidence original = knownEvidence();
+        long start = original.officialStartEpochMillis();
+        long hour = start / 3_600_000L * 3_600_000L;
+        WeatherContext weather = new WeatherContext(WeatherSource.OPEN_METEO, WeatherResolution.HOURLY,
+                start, hour, hour + 3_600_000L, original.finishEpochMillis(), 21.5, 20, 48.5, 8, 0);
+        CompletedRunEvidence withWeather = new CompletedRunEvidence(start, original.finishEpochMillis(),
+                original.startTimezoneId(), original.activeDurationMillis(), original.metrics(),
+                original.preRunEnergy(), original.musicContext(), weather);
+        JsonObject request = JsonParser.parseString(captureRequest(withWeather).body()).getAsJsonObject();
+        JsonObject evidence = JsonParser.parseString(request.getAsJsonArray("messages")
+                .get(0).getAsJsonObject().get("content").getAsString()).getAsJsonObject();
+        JsonObject encodedWeather = evidence.getAsJsonObject("weather_context");
+        JsonObject facts = evidence.getAsJsonObject("reflection_facts");
+        String prompt = request.get("system").getAsString();
+        assertAll(
+                () -> assertEquals(Set.of("source", "resolution", "target_epoch_millis",
+                        "valid_from_epoch_millis", "valid_to_epoch_millis", "fetched_at_epoch_millis",
+                        "temperature_celsius", "apparent_temperature_celsius", "relative_humidity_percent",
+                        "wind_speed_kmh", "weather_code"), encodedWeather.keySet()),
+                () -> assertEquals("OPEN_METEO", encodedWeather.get("source").getAsString()),
+                () -> assertEquals("HOURLY", encodedWeather.get("resolution").getAsString()),
+                () -> assertEquals(start, encodedWeather.get("target_epoch_millis").getAsLong()),
+                () -> assertEquals(hour, encodedWeather.get("valid_from_epoch_millis").getAsLong()),
+                () -> assertEquals(original.finishEpochMillis(), encodedWeather.get("fetched_at_epoch_millis").getAsLong()),
+                () -> assertEquals(70.7, facts.get("weather_temperature_fahrenheit").getAsDouble()),
+                () -> assertEquals(68.0, facts.get("weather_apparent_temperature_fahrenheit").getAsDouble()),
+                () -> assertTrue(facts.get("weather_valid_from_local_datetime").getAsString().endsWith("-05:00")),
+                () -> assertFalse(evidence.toString().contains("latitude")),
+                () -> assertFalse(evidence.toString().contains("longitude")),
+                () -> assertTrue(prompt.contains("modeled hourly weather")),
+                () -> assertTrue(prompt.contains("pleasant conditions")),
+                () -> assertTrue(prompt.contains("proof\nof conditions throughout the run")),
+                () -> assertTrue(prompt.contains("caused Energy, pace, performance"))
+        );
+    }
+
+    @Test
+    void omitsWeatherFactsWhenNoEligibleSnapshotWasSupplied() throws Exception {
+        JsonObject evidence = capturedEvidence(unknownEvidence());
+        assertFalse(evidence.has("weather_context"));
+        assertTrue(evidence.getAsJsonObject("reflection_facts").keySet().stream()
+                .noneMatch(key -> key.startsWith("weather_")));
     }
 
     private static TransportRequest captureRequest(CompletedRunEvidence evidence) throws Exception {

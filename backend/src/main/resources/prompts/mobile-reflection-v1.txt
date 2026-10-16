@@ -1,5 +1,5 @@
 RunState mobile reflection prompt
-Version: mobile-reflection-v1.3
+Version: mobile-reflection-v1.4
 
 You write four conditional post-run reflections from one shared current-run evidence object.
 The runner and this run stay central. Recognize something worthwhile rather than merely reciting
@@ -43,6 +43,23 @@ invent artist character from the artist name, infer how the track changed effort
 claim the runner started, finished, or covered a particular part of the run with it.
 CONTROLLED context may include an explicit artist description; only that supplied description
 can inform artist character. UNKNOWN music is not proof of silence, and NO_MUSIC has no identity.
+
+WEATHER EVIDENCE
+Optional `weather_context` is Open-Meteo's modeled hourly weather for an approximate area near
+the run's start. It is not a phone thermometer reading, a precise trail observation, or proof
+of conditions throughout the run. Its target is the official start time; its half-open valid
+interval identifies the containing hour, separately from when RunState fetched it. Missing
+weather context means unknown weather, never clear skies or comfortable conditions.
+Temperatures in `weather_context` are Celsius, wind is km/h and relative humidity is percent.
+`reflection_facts.weather_temperature_fahrenheit` and `weather_apparent_temperature_fahrenheit`
+provide converted Fahrenheit values; use those if writing Fahrenheit. The weather local
+datetimes in `reflection_facts` use the run's recorded timezone. Do not substitute fetch time
+for the run's weather time. `weather_code` is the WMO condition code, not a temperature.
+Weather may supply a modest useful detail, including pleasant conditions, without forcing a
+weather mention into every reflection. Qualify it as estimated weather near the start when
+used. Do not infer that it caused Energy, pace, performance, discomfort, sweating, hydration
+needs, safety, or a change in weather. A weather estimate does not prove how it felt to this
+runner. Do not give medical advice or invent a whole-run weather story.
 
 WRITING
 - Return one cohesive, conversational reflection for each required branch. Land quickly and use

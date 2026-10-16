@@ -61,6 +61,47 @@ public final class ReflectionContract {
         MEDIA_SESSION_PARTIAL
     }
 
+    /** This slice accepts one modeled hourly snapshot near the run's start. */
+    public enum WeatherSource { OPEN_METEO }
+    public enum WeatherResolution { HOURLY }
+
+    /** Lookup coordinates are excluded from reflection evidence; null context means unknown weather. */
+    public record WeatherContext(
+            WeatherSource source,
+            WeatherResolution resolution,
+            long targetEpochMillis,
+            long validFromEpochMillis,
+            long validToEpochMillis,
+            long fetchedAtEpochMillis,
+            double temperatureCelsius,
+            double apparentTemperatureCelsius,
+            double relativeHumidityPercent,
+            double windSpeedKmh,
+            int weatherCode
+    ) {
+        public WeatherContext {
+            require(source == WeatherSource.OPEN_METEO
+                            && resolution == WeatherResolution.HOURLY,
+                    "weather requires OPEN_METEO HOURLY provenance");
+            require(targetEpochMillis >= 0 && validFromEpochMillis >= 0 && fetchedAtEpochMillis >= targetEpochMillis,
+                    "weather timestamps must be nonnegative and fetched no earlier than the target");
+            require(validFromEpochMillis % 3_600_000L == 0
+                            && validFromEpochMillis <= Long.MAX_VALUE - 3_600_000L
+                            && validToEpochMillis == validFromEpochMillis + 3_600_000L
+                            && targetEpochMillis >= validFromEpochMillis && targetEpochMillis < validToEpochMillis,
+                    "weather must identify the UTC hour containing its target time");
+            requireFiniteRange(temperatureCelsius, -100, 70, "temperatureCelsius");
+            requireFiniteRange(apparentTemperatureCelsius, -150, 100, "apparentTemperatureCelsius");
+            requireFiniteRange(relativeHumidityPercent, 0, 100, "relativeHumidityPercent");
+            requireFiniteRange(windSpeedKmh, 0, 500, "windSpeedKmh");
+            require(switch (weatherCode) {
+                case 0, 1, 2, 3, 45, 48, 51, 53, 55, 56, 57, 61, 63, 65,
+                        66, 67, 71, 73, 75, 77, 80, 81, 82, 85, 86, 95, 96, 99 -> true;
+                default -> false;
+            }, "weatherCode must be a supported WMO condition code");
+        }
+    }
+
     /**
      * Raw completed metric evidence. Null components together mean the evidence is unknown.
      */
@@ -164,7 +205,8 @@ public final class ReflectionContract {
             Long activeDurationMillis,
             RunMetricsEvidence metrics,
             PreRunEnergy preRunEnergy,
-            MusicContext musicContext
+            MusicContext musicContext,
+            WeatherContext weatherContext
     ) {
 
         public CompletedRunEvidence {
@@ -182,6 +224,16 @@ public final class ReflectionContract {
             metrics = metrics == null ? RunMetricsEvidence.unknown() : metrics;
             preRunEnergy = preRunEnergy == null ? PreRunEnergy.UNKNOWN : preRunEnergy;
             musicContext = musicContext == null ? MusicContext.unknown() : musicContext;
+            require(weatherContext == null || weatherContext.targetEpochMillis() == officialStartEpochMillis,
+                    "weather target must match officialStartEpochMillis");
+        }
+
+        /** Keeps clients without native weather source compatible and weather unknown. */
+        public CompletedRunEvidence(long officialStartEpochMillis, long finishEpochMillis,
+                String startTimezoneId, Long activeDurationMillis, RunMetricsEvidence metrics,
+                PreRunEnergy preRunEnergy, MusicContext musicContext) {
+            this(officialStartEpochMillis, finishEpochMillis, startTimezoneId, activeDurationMillis,
+                    metrics, preRunEnergy, musicContext, null);
         }
     }
 
@@ -232,6 +284,11 @@ public final class ReflectionContract {
     private static void requireOptionalText(String candidate, String fieldName) {
         require(candidate == null || !candidate.isBlank(),
                 fieldName + " must be absent or contain nonblank text");
+    }
+
+    private static void requireFiniteRange(double value, double minimum, double maximum, String fieldName) {
+        require(Double.isFinite(value) && value >= minimum && value <= maximum,
+                fieldName + " must be finite and between " + minimum + " and " + maximum);
     }
 
     private static void requireCandidateText(String candidate, String branchKey) {

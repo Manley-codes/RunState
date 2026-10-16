@@ -19,6 +19,9 @@ import com.runstate.reflection.ReflectionContract.PreRunEnergy;
 import com.runstate.reflection.ReflectionContract.RequestIdentifiers;
 import com.runstate.reflection.ReflectionContract.RunMetricsEvidence;
 import com.runstate.reflection.ReflectionContract.TelemetryCoverage;
+import com.runstate.reflection.ReflectionContract.WeatherContext;
+import com.runstate.reflection.ReflectionContract.WeatherSource;
+import com.runstate.reflection.ReflectionContract.WeatherResolution;
 
 import java.io.IOException;
 import java.io.StringReader;
@@ -42,7 +45,8 @@ final class ReflectionApiJson {
             "activeDurationMillis",
             "metrics",
             "preRunEnergy",
-            "musicContext"
+            "musicContext",
+            "weatherContext"
     );
     private static final Set<String> REQUIRED_EVIDENCE_FIELDS = Set.of(
             "officialStartEpochMillis",
@@ -61,6 +65,11 @@ final class ReflectionApiJson {
             "artistName",
             "artistDescription",
             "provenance"
+    );
+    private static final Set<String> WEATHER_FIELDS = Set.of(
+            "source", "resolution", "targetEpochMillis", "validFromEpochMillis", "validToEpochMillis",
+            "fetchedAtEpochMillis", "temperatureCelsius", "apparentTemperatureCelsius",
+            "relativeHumidityPercent", "windSpeedKmh", "weatherCode"
     );
 
     private ReflectionApiJson() {
@@ -118,7 +127,8 @@ final class ReflectionApiJson {
                 optionalLong(evidence, "activeDurationMillis"),
                 optionalMetrics(evidence, "metrics"),
                 optionalEnum(evidence, "preRunEnergy", PreRunEnergy.class),
-                optionalMusic(evidence, "musicContext")
+                optionalMusic(evidence, "musicContext"),
+                optionalWeather(evidence, "weatherContext")
         );
     }
 
@@ -158,6 +168,35 @@ final class ReflectionApiJson {
                 optionalString(music, "artistName"),
                 optionalString(music, "artistDescription"),
                 optionalEnum(music, "provenance", MusicProvenance.class)
+        );
+    }
+
+    private static WeatherContext optionalWeather(JsonObject parent, String key) {
+        JsonElement value = parent.get(key);
+        if (value == null || value.isJsonNull()) {
+            return null;
+        }
+        if (!value.isJsonObject()) {
+            throw new IllegalArgumentException(key + " must be an object or null");
+        }
+        JsonObject weather = value.getAsJsonObject();
+        requireFields(weather, WEATHER_FIELDS, WEATHER_FIELDS, key);
+        long code = requiredLong(weather, "weatherCode");
+        if (code < Integer.MIN_VALUE || code > Integer.MAX_VALUE) {
+            throw new IllegalArgumentException("weatherCode must be an integer in range");
+        }
+        return new WeatherContext(
+                optionalEnum(weather, "source", WeatherSource.class),
+                optionalEnum(weather, "resolution", WeatherResolution.class),
+                requiredLong(weather, "targetEpochMillis"),
+                requiredLong(weather, "validFromEpochMillis"),
+                requiredLong(weather, "validToEpochMillis"),
+                requiredLong(weather, "fetchedAtEpochMillis"),
+                requiredDouble(weather, "temperatureCelsius"),
+                requiredDouble(weather, "apparentTemperatureCelsius"),
+                requiredDouble(weather, "relativeHumidityPercent"),
+                requiredDouble(weather, "windSpeedKmh"),
+                (int) code
         );
     }
 
@@ -244,6 +283,14 @@ final class ReflectionApiJson {
         } catch (NumberFormatException invalidNumber) {
             throw new IllegalArgumentException(key + " must be a number or null", invalidNumber);
         }
+    }
+
+    private static double requiredDouble(JsonObject object, String key) {
+        Double value = optionalDouble(object, key);
+        if (value == null) {
+            throw new IllegalArgumentException(key + " must be a number");
+        }
+        return value;
     }
 
     private static <E extends Enum<E>> E optionalEnum(

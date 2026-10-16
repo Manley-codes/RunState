@@ -150,6 +150,89 @@ class ReflectionHttpServerTest {
     }
 
     @Test
+    void optionalHourlyWeatherReachesProviderWithoutLookupCoordinates() throws Exception {
+        JsonObject request = JsonParser.parseString(validRequest()).getAsJsonObject();
+        request.getAsJsonObject("evidence").add("weatherContext", validWeather());
+        AtomicReference<CompletedRunEvidence> captured = new AtomicReference<>();
+        try (ReflectionHttpServer server = start(evidence -> {
+            captured.set(evidence);
+            return exactCandidates();
+        })) {
+            assertEquals(200, post(server, request.toString()).statusCode());
+            assertAll(
+                    () -> assertEquals(1_780_000_000_000L, captured.get().weatherContext().targetEpochMillis()),
+                    () -> assertEquals(48.5, captured.get().weatherContext().relativeHumidityPercent()),
+                    () -> assertEquals(21.5, captured.get().weatherContext().temperatureCelsius())
+            );
+        }
+        request.getAsJsonObject("evidence").remove("weatherContext");
+        assertNull(ReflectionApiJson.parseRequest(request.toString().getBytes(StandardCharsets.UTF_8))
+                .evidence().weatherContext());
+        request.getAsJsonObject("evidence").add("weatherContext", null);
+        assertNull(ReflectionApiJson.parseRequest(request.toString().getBytes(StandardCharsets.UTF_8))
+                .evidence().weatherContext());
+    }
+
+    @Test
+    void rejectsMalformedOrUnownedWeatherBeforeCallingProvider() throws Exception {
+        AtomicInteger calls = new AtomicInteger();
+        try (ReflectionHttpServer server = start(evidence -> {
+            calls.incrementAndGet();
+            return exactCandidates();
+        })) {
+            for (String field : validWeather().keySet()) {
+                JsonObject incomplete = validWeather();
+                incomplete.remove(field);
+                JsonObject request = JsonParser.parseString(validRequest()).getAsJsonObject();
+                request.getAsJsonObject("evidence").add("weatherContext", incomplete);
+                assertError(post(server, request.toString()), 400, "invalid_request");
+                JsonObject withNull = validWeather();
+                withNull.add(field, null);
+                request.getAsJsonObject("evidence").add("weatherContext", withNull);
+                assertError(post(server, request.toString()), 400, "invalid_request");
+            }
+            for (String invalidJson : List.of(
+                    "[]", "true", "{\"state\":\"UNKNOWN\"}",
+                    validWeather().toString().replace("\"weatherCode\":0", "\"weatherCode\":0.5"),
+                    validWeather().toString().replace("\"temperatureCelsius\":21.5", "\"temperatureCelsius\":1e999"),
+                    validWeather().toString().replace("OPEN_METEO", "OTHER"),
+                    validWeather().toString().replace("HOURLY", "DAILY"),
+                    validWeather().toString().replace("\"targetEpochMillis\":1780000000000",
+                            "\"targetEpochMillis\":1780000000001"),
+                    validWeather().toString().replace("\"weatherCode\":0", "\"weatherCode\":4294967296")
+            )) {
+                JsonObject request = JsonParser.parseString(validRequest()).getAsJsonObject();
+                request.getAsJsonObject("evidence").add("weatherContext", JsonParser.parseString(invalidJson));
+                assertError(post(server, request.toString()), 400, "invalid_request");
+            }
+            JsonObject coordinates = validWeather();
+            coordinates.addProperty("latitude", 29.72);
+            JsonObject request = JsonParser.parseString(validRequest()).getAsJsonObject();
+            request.getAsJsonObject("evidence").add("weatherContext", coordinates);
+            assertError(post(server, request.toString()), 400, "invalid_request");
+            assertEquals(0, calls.get());
+        }
+    }
+
+    private static JsonObject validWeather() {
+        long start = 1_780_000_000_000L;
+        long hour = start / 3_600_000L * 3_600_000L;
+        JsonObject weather = new JsonObject();
+        weather.addProperty("source", "OPEN_METEO");
+        weather.addProperty("resolution", "HOURLY");
+        weather.addProperty("targetEpochMillis", start);
+        weather.addProperty("validFromEpochMillis", hour);
+        weather.addProperty("validToEpochMillis", hour + 3_600_000L);
+        weather.addProperty("fetchedAtEpochMillis", start + 1_800_000L);
+        weather.addProperty("temperatureCelsius", 21.5);
+        weather.addProperty("apparentTemperatureCelsius", 20.0);
+        weather.addProperty("relativeHumidityPercent", 48.5);
+        weather.addProperty("windSpeedKmh", 8.0);
+        weather.addProperty("weatherCode", 0);
+        return weather;
+    }
+
+    @Test
     void optionalProvenanceKeepsLegacyControlledAndUnknownRequestsCompatible() throws Exception {
         JsonObject legacy = JsonParser.parseString(validRequest()).getAsJsonObject();
         assertEquals(MusicProvenance.CONTROLLED, ReflectionApiJson.parseRequest(
