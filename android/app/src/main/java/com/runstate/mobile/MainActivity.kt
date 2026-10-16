@@ -58,12 +58,14 @@ import com.runstate.mobile.ui.ReflectionSpeaker
 import com.runstate.mobile.ui.RunHistoryItem
 import com.runstate.mobile.ui.RunHistoryScreen
 import com.runstate.mobile.ui.RunStateScreen
+import com.runstate.mobile.ui.ShortRunDecisionDialog
 import com.runstate.mobile.ui.ReflectionConnectionDialog
 import com.runstate.mobile.ui.RunUiModel
 import com.runstate.mobile.ui.RunUiState
 import com.runstate.mobile.ui.rememberLifecycleCountdown
 import com.runstate.mobile.ui.runMetricsDisplayFor
 import com.runstate.mobile.ui.historyItemFor
+import com.runstate.mobile.ui.completionDateLabelFor
 import com.runstate.mobile.ui.savedRunReceiptFor
 import com.runstate.mobile.ui.gpsRoutePreviewFor
 import com.runstate.mobile.ui.runUiModelFor
@@ -182,11 +184,14 @@ internal fun RunJourneyRoot(
 
     // Navigation survives rotation; every saved value still comes from Room.
     var historyVisible by rememberSaveable { mutableStateOf(false) }
+    var shortRunDecisionId by rememberSaveable { mutableStateOf<String?>(null) }
+    var shortRunDecisionError by rememberSaveable { mutableStateOf<String?>(null) }
     // Only a completion performed in this UI (or its explicit retry) earns arrival speech.
     // Reopening an older Saved run never speaks merely because Room restored READY text.
     var completionSpeechEligibleRunId by rememberSaveable { mutableStateOf<String?>(null) }
     var completionSpeechSpokenRunId by rememberSaveable { mutableStateOf<String?>(null) }
     var completionAudioActive by remember { mutableStateOf(false) }
+    var completionPresentationHeldRunId by remember { mutableStateOf<String?>(null) }
     var stopCompletionAudio by remember { mutableStateOf<(() -> Unit)?>(null) }
     var completionReceiptRunId by rememberSaveable { mutableStateOf<String?>(null) }
     var completionReceiptText by rememberSaveable { mutableStateOf<String?>(null) }
@@ -582,8 +587,7 @@ internal fun RunJourneyRoot(
         }
     )
 
-    val requestAction: (RunActionKind) -> Unit = { kind ->
-        runGuarded {
+    suspend fun performAction(kind: RunActionKind) {
             if (kind == RunActionKind.COMPLETE) {
                 activeRunId?.let { id ->
                     // Reserve audible delivery before even a fast completion can expose Saved.
@@ -609,8 +613,8 @@ internal fun RunJourneyRoot(
                     }
                 }
             }) { coordinator.requestAction(kind) }
-        }
     }
+    val requestAction: (RunActionKind) -> Unit = { kind -> runGuarded { performAction(kind) } }
 
     val reflectionDisplay = when {
         reflectionCoordinator == null -> null
@@ -661,7 +665,8 @@ internal fun RunJourneyRoot(
         eligibleRunId = completionSpeechEligibleRunId,
         spokenRunId = completionSpeechSpokenRunId,
         reflectionState = reflectionState,
-        completionVisible = completionVisible && (completionReceiptRunId != completedRunId ||
+        completionVisible = completionVisible && completionPresentationHeldRunId != completedRunId &&
+            (completionReceiptRunId != completedRunId ||
             completionReceiptFinishedRunId == completedRunId),
         speakerFactory = completionSpeakerFactory,
         onSpoken = { completionSpeechSpokenRunId = it },
@@ -752,6 +757,8 @@ internal fun RunJourneyRoot(
         else -> null
     }
 
+    val completedRun = completedRuns?.firstOrNull { it.runId == completedRunId }
+    val presentedRunId = completedRunId
     RunStateScreen(
         model = model,
         metrics = metrics,
@@ -815,7 +822,15 @@ internal fun RunJourneyRoot(
         },
         onPause = { requestAction(RunActionKind.PAUSE) },
         onResume = { requestAction(RunActionKind.RESUME) },
-        onStop = { requestAction(RunActionKind.COMPLETE) },
+        onStop = {
+            runGuarded {
+                val id = activeRunId
+                if (id != null && coordinator.canDiscardShortRun(id)) {
+                    shortRunDecisionId = id
+                    shortRunDecisionError = null
+                } else performAction(RunActionKind.COMPLETE)
+            }
+        },
         onStartAnother = {
             stopCompletionAudio?.invoke()
             runGuarded {
@@ -894,7 +909,7 @@ internal fun RunJourneyRoot(
         onSelectEnergy = { branch ->
             completedRunId?.let { reflectionCoordinator?.selectEnergy(it, branch) }
         },
-        selectedEffort = completedRuns?.firstOrNull { it.runId == completedRunId }?.postRunEffort,
+        selectedEffort = completedRun?.postRunEffort,
         onSelectEffort = { effort -> completedRunId?.let { saveEffort(it, effort) } },
         effortEnabled = completedRunId != null,
         effortSaving = effortSavingRunId == completedRunId,
@@ -931,8 +946,57 @@ internal fun RunJourneyRoot(
         reflectionSetupEnabled = !connectionSaving && !reflectionConnectionSaving &&
             reflectionConnection != ReflectionConnectionState.Loading,
         actionsEnabled = !actionInFlight && !reflectionConnectionSaving,
-        modifier = modifier
+        modifier = modifier,
+        savedPreRunEnergy = completedRun?.preRunEnergy,
+        completionDateLabel = completedRun?.let(::completionDateLabelFor),
+        onReflectionPresentationHoldChange = { held ->
+            if (held) completionPresentationHeldRunId = presentedRunId
+            else if (completionPresentationHeldRunId == presentedRunId) completionPresentationHeldRunId = null
+        }
     )
+
+    val decisionRunId = shortRunDecisionId
+    if (decisionRunId != null && decisionRunId == activeRunId &&
+        model.state == RunUiState.ActivePaused) {
+        ShortRunDecisionDialog(
+            busy = actionInFlight || model.actionInProgress,
+            error = shortRunDecisionError,
+            onKeepPaused = {
+                shortRunDecisionId = null
+                shortRunDecisionError = null
+            },
+            onSave = {
+                runGuarded {
+                    val owned = coordinator.journeySnapshot().admission as? RunAdmission.RunInProgress
+                    if (owned?.session?.runId == decisionRunId) {
+                        performAction(RunActionKind.COMPLETE)
+                        if (model.state == RunUiState.Saved) {
+                            shortRunDecisionId = null
+                            shortRunDecisionError = null
+                        } else shortRunDecisionError = "Your run couldn't save. It is still paused. Try again."
+                    } else {
+                        shortRunDecisionId = null
+                        refresh()
+                    }
+                }
+            },
+            onDiscard = {
+                runGuarded {
+                    shortRunDecisionError = null
+                    awaitDurable(onSuccess = {
+                        shortRunDecisionId = null
+                        preRunEnergy = null
+                        gpsMessage = null
+                        musicSelected = false
+                        musicReflectionSharingSelected = false
+                    }) { coordinator.requestDiscard(decisionRunId) }
+                    if (shortRunDecisionId == decisionRunId) {
+                        shortRunDecisionError = "Your run wasn't discarded. It is still paused. Try again or save it."
+                    }
+                }
+            }
+        )
+    }
 }
 
 /** Consume the saved receipt once; an interrupted receipt releases delivery without replay. */

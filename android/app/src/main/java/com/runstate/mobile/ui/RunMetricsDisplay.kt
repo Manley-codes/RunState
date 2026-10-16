@@ -24,6 +24,7 @@ import com.runstate.mobile.data.local.TelemetryCoverage
 import com.runstate.mobile.run.RunMetrics
 import com.runstate.mobile.run.RunTimeline
 import com.runstate.mobile.run.TransitionHistoryCoverage
+import java.time.DateTimeException
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -117,6 +118,20 @@ internal fun runMetricsDisplayFor(metrics: RunMetrics): RunMetricsDisplay {
 }
 
 private val historyDateFormat = DateTimeFormatter.ofPattern("MMM d, yyyy · h:mm a", Locale.US)
+private val completionDateFormat = DateTimeFormatter.ofPattern("EEE, MMM d · h:mm a", Locale.US)
+
+/** Completion uses its saved finish and run timezone; missing history never becomes today's time. */
+internal fun completionDateLabelFor(run: RunEntity): String? {
+    if (run.state != StoredRunState.COMPLETED) return null
+    val finish = run.finishEpochMillis ?: return null
+    return try {
+        completionDateFormat.format(
+            Instant.ofEpochMilli(finish).atZone(ZoneId.of(run.startTimezoneId))
+        )
+    } catch (_: DateTimeException) {
+        null
+    }
+}
 
 /** Uses only durable facts; opening History never asks the reflection provider to write again. */
 internal fun historyItemFor(
@@ -170,7 +185,8 @@ internal fun historyItemFor(
         musicObservationCount = musicObservations.size,
         lastObservedMedia = musicObservations.maxByOrNull { it.sequenceNumber }?.let { last ->
             val label = listOfNotNull(last.title, last.artist).joinToString(" — ")
-            if (label.isBlank()) last.sourcePackage else "$label · ${last.sourcePackage}"
+            val source = if (last.sourcePackage == "com.spotify.music") "Spotify" else last.sourcePackage
+            if (label.isBlank()) source else "$label · $source"
         },
         reflectionMusicSummary = reflectionMusicSummaryFor(run, reflection)
     )

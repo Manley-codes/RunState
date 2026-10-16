@@ -175,6 +175,61 @@ class RunReflectionCoordinatorTest {
         assertEquals(ready, store.rows.getValue(RUN_ID))
     }
 
+    @Test fun allEnergyBranchesUseTheAlreadyStartedDelayedFamilyWithoutAnotherRequest() {
+        val family = candidates()
+        val chosenTexts = mapOf(
+            ReflectionBranch.SPENT to family.spent,
+            ReflectionBranch.FEELING_GOOD to family.feelingGood,
+            ReflectionBranch.POWERED_UP to family.poweredUp
+        )
+        chosenTexts.forEach { (branch, exactText) ->
+            val store = MemoryReflectionStore()
+            val response = CompletableDeferred<ReflectionCandidates>()
+            var calls = 0
+            var now = 100L
+            val coordinator = RunReflectionCoordinator(
+                runDao = completedDao(), store = store,
+                gateway = ReflectionGateway { calls++; response.await() },
+                applicationScope = scope(),
+                requestIdSupplier = { UUID.fromString(FIRST_REQUEST_ID) },
+                nowMillis = { now },
+                quietDelay = { CompletableDeferred<Unit>().await() }
+            )
+
+            coordinator.onSavedVisible(RUN_ID, awaitingReceipt = true)
+            assertEquals("$branch starts generation before Energy input", 1, calls)
+            assertNull(store.rows.getValue(RUN_ID).postRunEnergy)
+            assertNull(store.rows.getValue(RUN_ID).candidatesJson)
+
+            now = 9_000L // The receipt is still playing while generation is delayed.
+            coordinator.selectEnergy(RUN_ID, branch)
+            assertEquals("$branch must not start another request", 1, calls)
+            assertEquals(branch, store.rows.getValue(RUN_ID).selectedBranch)
+            assertEquals(RunReflectionState.Preparing(RUN_ID, branch), coordinator.state.value)
+
+            response.complete(family)
+            val waitingForReceipt = store.rows.getValue(RUN_ID)
+            assertNotNull(waitingForReceipt.candidatesJson)
+            assertNull(waitingForReceipt.text)
+            assertEquals(ReflectionStatus.PENDING, waitingForReceipt.status)
+            assertEquals(RunReflectionState.Preparing(RUN_ID, branch), coordinator.state.value)
+
+            coordinator.finishReceipt(RUN_ID)
+            val ready = store.rows.getValue(RUN_ID)
+            assertEquals(RunReflectionState.Ready(RUN_ID, exactText, branch), coordinator.state.value)
+            assertEquals(exactText, ready.text)
+            assertEquals(branch, ready.selectedBranch)
+            assertNull(ready.candidatesJson)
+            assertEquals(1, calls)
+
+            now = 12_000L
+            coordinator.finishReceipt(RUN_ID)
+            coordinator.onSavedVisible(RUN_ID, awaitingReceipt = true)
+            assertEquals("$branch must remain finalized exactly once", ready, store.rows.getValue(RUN_ID))
+            assertEquals(1, calls)
+        }
+    }
+
     @Test fun noEnergyGetsAFullQuietWindowAfterReceiptFinishes() {
         val store = MemoryReflectionStore()
         var now = 100L

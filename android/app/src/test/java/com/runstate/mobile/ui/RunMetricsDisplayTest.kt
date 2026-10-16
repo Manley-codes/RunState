@@ -30,6 +30,45 @@ class RunMetricsDisplayTest {
     private val historyStart = Instant.parse("2026-10-12T01:30:00Z").toEpochMilli()
 
     @Test
+    fun `completion date uses saved finish and timezone across the utc date boundary`() {
+        val finish = Instant.parse("2026-10-13T00:05:00Z").toEpochMilli()
+        val run = historyRun(finish = finish, historyComplete = true)
+
+        assertEquals("Mon, Oct 12 · 7:05 PM", completionDateLabelFor(run))
+        assertEquals("Tue, Oct 13 · 12:05 AM",
+            completionDateLabelFor(run.copy(startTimezoneId = "UTC")))
+    }
+
+    @Test
+    fun `missing completion finish stays absent without a start or current time fallback`() {
+        val run = historyRun(finish = null, historyComplete = false)
+
+        assertNull(completionDateLabelFor(run))
+    }
+
+    @Test
+    fun `unfinished running and paused rows never receive a completion date`() {
+        val unfinished = historyRun(finish = null, historyComplete = true)
+
+        listOf(StoredRunState.RUNNING, StoredRunState.PAUSED).forEach { state ->
+            assertNull(completionDateLabelFor(unfinished.copy(state = state)))
+        }
+    }
+
+    @Test
+    fun `invalid saved timezone stays absent without a device zone fallback`() {
+        val run = historyRun(finish = historyStart + 600_000L, historyComplete = true)
+        // Constructors reject invalid zones. Corrupt only this fixture to exercise the
+        // formatter's defensive boundary without weakening the production entity guard.
+        RunEntity::class.java.getDeclaredField("startTimezoneId").apply {
+            isAccessible = true
+            set(run, "Not/A_Real_Zone")
+        }
+
+        assertNull(completionDateLabelFor(run))
+    }
+
+    @Test
     fun `save receipt uses saved fixture facts and spoken duration units`() {
         val run = historyRun(historyStart + 3_661_000L, 1_609.344,
             TelemetryCoverage.COMPLETE, true)
@@ -85,6 +124,9 @@ class RunMetricsDisplayTest {
         assertEquals(true, item.musicObservationRequested)
         assertEquals(2, item.musicObservationCount)
         assertEquals("Later title — Artist · com.example.player", item.lastObservedMedia)
+        val spotify = historyItemFor(run, emptyList(), null,
+            listOf(second.copy(sourcePackage = "com.spotify.music")))
+        assertEquals("Later title — Artist · Spotify", spotify.lastObservedMedia)
         assertEquals("Music observations kept on this phone", item.reflectionMusicSummary)
         val noObservation = historyItemFor(run, emptyList(), null)
         assertEquals(0, noObservation.musicObservationCount)

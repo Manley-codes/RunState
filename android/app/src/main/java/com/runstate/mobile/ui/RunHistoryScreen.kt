@@ -10,21 +10,32 @@ import android.os.Handler
 import android.os.Looper
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.border
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ModalBottomSheet
@@ -44,10 +55,15 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
@@ -500,6 +516,13 @@ internal sealed interface HistoryRouteDisplay {
     data object Failed : HistoryRouteDisplay
 }
 
+private enum class HistoryFilter(val label: String) { ALL("All"), GPS("GPS"), SAMPLES("Samples") }
+
+private val HistoryDark = Color(0xFF263029)
+private val HistoryLightInk = Color(0xFFF4F5ED)
+private val HistoryLightMuted = Color(0xFFCAD0C5)
+private val HistoryGold = Color(0xFFD6BC72)
+
 /** A single expanded saved record keeps exact reflection text readable on a phone. */
 @Composable
 internal fun RunHistoryScreen(
@@ -536,6 +559,7 @@ internal fun RunHistoryScreen(
     var expandedRunId by rememberSaveable { mutableStateOf<String?>(null) }
     var editingEffortRunId by rememberSaveable { mutableStateOf<String?>(null) }
     var editingEnergyRunId by rememberSaveable { mutableStateOf<String?>(null) }
+    var filter by rememberSaveable { mutableStateOf(HistoryFilter.ALL) }
     var speaker by remember { mutableStateOf<ReflectionSpeaker?>(null) }
     var route by remember { mutableStateOf<Pair<String, HistoryRouteDisplay>?>(null) }
     val currentRouteLoader by rememberUpdatedState(routeLoader)
@@ -601,47 +625,114 @@ internal fun RunHistoryScreen(
         }
     }
 
-    Box(
+    val visibleItems = when (filter) {
+        HistoryFilter.ALL -> items
+        HistoryFilter.GPS -> items.filter { it.isGpsRun }
+        // Unknown legacy provenance must not be relabelled as a sample run.
+        HistoryFilter.SAMPLES -> items.filter { it.metrics?.sourceLabel == "Fixture metrics" }
+    }
+    val summaryItem = visibleItems.firstOrNull { it.runId == expandedRunId }
+        ?: visibleItems.firstOrNull()
+
+    BoxWithConstraints(
         modifier = modifier
             .fillMaxSize()
             .testTag(RUN_HISTORY_SCREEN_TAG)
-            .background(Brush.verticalGradient(listOf(CompletionSurfaceTop, CompletionSurfaceBottom)))
+            .background(CompletionSurfaceBottom)
     ) {
-        CompletionAtmosphere(Modifier.fillMaxSize())
+        val compactSummary = maxHeight < 680.dp || LocalDensity.current.fontScale > 1.25f
+        Image(
+            painter = painterResource(R.drawable.history_running_trail),
+            contentDescription = null,
+            contentScale = ContentScale.Crop,
+            modifier = Modifier.fillMaxSize()
+        )
+        Box(Modifier.fillMaxSize().background(Brush.verticalGradient(
+            0f to HistoryDark.copy(alpha = 0.50f),
+            0.34f to Color(0xFFF2F4EB).copy(alpha = 0.14f),
+            0.72f to Color(0xFFF4F6EF).copy(alpha = 0.64f),
+            1f to Color(0xFFFAFBF6).copy(alpha = 0.96f)
+        )))
         Column(modifier = Modifier.fillMaxSize()) {
-            Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 12.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
                 TextButton(
                     onClick = {
                         stopSpeaker()
                         onBack()
                     },
-                    colors = ButtonDefaults.textButtonColors(contentColor = CompletionStrongInk),
+                    colors = ButtonDefaults.textButtonColors(contentColor = Color.White),
                     contentPadding = PaddingValues(horizontal = 0.dp, vertical = 12.dp),
                     modifier = Modifier.heightIn(min = 48.dp)
                 ) {
-                    Text("Back to run")
+                    Text("Back to run", fontSize = 12.sp)
                 }
                 Text(
                     text = "LOG HISTORY",
-                    color = CompletionStrongInk,
-                    fontSize = 28.sp,
-                    fontFamily = CompletionNumberFont,
-                    fontWeight = FontWeight.Medium,
-                    letterSpacing = 1.1.sp,
+                    color = Color.White,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 1.8.sp,
                     modifier = Modifier.semantics { heading() }
                 )
-                Text(
-                    text = "Your saved runs",
-                    color = CompletionMutedInk,
-                    fontSize = 14.sp,
-                    modifier = Modifier.padding(top = 5.dp)
-                )
+            }
+
+            if (summaryItem != null) {
+                HistoryMetricsPanel(summaryItem,
+                    Modifier.padding(horizontal = 20.dp, vertical = 6.dp), compact = compactSummary)
+            }
+            if (items.isNotEmpty()) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 6.dp)
+                        .fillMaxWidth()
+                        .background(Color.White.copy(alpha = 0.58f), RoundedCornerShape(24.dp))
+                        .border(1.dp, Color.White.copy(alpha = 0.55f), RoundedCornerShape(24.dp))
+                        .padding(3.dp),
+                    horizontalArrangement = Arrangement.spacedBy(3.dp)
+                ) {
+                    HistoryFilter.entries.forEach { choice ->
+                        Box(
+                            modifier = Modifier.weight(1f).heightIn(min = 42.dp)
+                                .clip(RoundedCornerShape(22.dp))
+                                .background(if (filter == choice) Color.White.copy(alpha = 0.94f) else Color.Transparent)
+                                .selectable(
+                                    selected = filter == choice,
+                                    role = Role.Tab,
+                                    onClick = {
+                                        if (filter != choice) {
+                                            stopSpeaker()
+                                            expandedRunId = null
+                                            filter = choice
+                                        }
+                                    }
+                                )
+                                .testTag("runHistoryFilter:" + choice.name),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(choice.label, fontSize = 12.sp,
+                                fontWeight = if (filter == choice) FontWeight.Bold else FontWeight.Medium,
+                                color = CompletionStrongInk)
+                        }
+                    }
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 25.dp, vertical = 7.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text("YOUR SAVED RUNS", color = HistoryDark, fontSize = 9.sp,
+                        fontWeight = FontWeight.Bold, letterSpacing = 1.2.sp)
+                    Text("${visibleItems.size} ${if (visibleItems.size == 1) "activity" else "activities"}",
+                        color = HistoryDark, fontSize = 11.sp)
+                }
             }
 
             LazyColumn(
                 state = listState,
-                contentPadding = PaddingValues(start = 24.dp, top = 10.dp, end = 24.dp, bottom = 32.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
+                contentPadding = PaddingValues(start = 20.dp, top = 4.dp, end = 20.dp, bottom = 32.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
                 modifier = Modifier.fillMaxWidth().weight(1f).testTag(RUN_HISTORY_LIST_TAG)
             ) {
                 if (isLoading) {
@@ -679,7 +770,12 @@ internal fun RunHistoryScreen(
                         }
                     }
                 }
-                items(items = items, key = { it.runId }) { item ->
+                if (!isLoading && error == null && items.isNotEmpty() && visibleItems.isEmpty()) {
+                    item(key = "empty-filter") {
+                        HistoryMessage("No ${if (filter == HistoryFilter.GPS) "GPS" else "sample"} runs saved yet.")
+                    }
+                }
+                items(items = visibleItems, key = { it.runId }) { item ->
                     HistoryRow(
                         item = item,
                         expanded = expandedRunId == item.runId,
@@ -741,13 +837,92 @@ internal fun RunHistoryScreen(
 }
 
 @Composable
+private fun HistoryMetricsPanel(
+    item: RunHistoryItem,
+    modifier: Modifier = Modifier,
+    compact: Boolean = false
+) {
+    Column(
+        modifier = modifier.fillMaxWidth()
+            .background(Color(0xFFF7F8F1).copy(alpha = 0.82f), RoundedCornerShape(18.dp))
+            .border(1.dp, Color.White.copy(alpha = 0.58f), RoundedCornerShape(18.dp))
+            .padding(horizontal = 18.dp, vertical = 14.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text(
+                    text = item.metrics?.distance ?: "—",
+                    color = HistoryDark,
+                    fontFamily = CompletionNumberFont,
+                    fontSize = if (compact) 38.sp else 49.sp,
+                    fontWeight = FontWeight.Medium,
+                    lineHeight = if (compact) 42.sp else 52.sp,
+                    letterSpacing = (-1.5).sp
+                )
+                Text("DISTANCE", color = CompletionMutedInk, fontSize = 8.sp,
+                    fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp)
+            }
+            Column(Modifier.weight(0.85f), horizontalAlignment = Alignment.End) {
+                Text(
+                    text = item.energyLabel?.let { "ENERGY · ${it.uppercase()}" } ?: "ENERGY NOT RECORDED",
+                    color = CompletionStrongInk,
+                    fontSize = 9.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    lineHeight = 14.sp,
+                    modifier = Modifier.background(Color.White.copy(alpha = 0.40f), RoundedCornerShape(10.dp))
+                        .padding(horizontal = 9.dp, vertical = 5.dp)
+                )
+                Text(
+                    text = item.metrics?.sourceLabel ?: "Metrics unavailable",
+                    color = CompletionMutedInk,
+                    fontSize = 10.sp,
+                    lineHeight = 15.sp,
+                    modifier = Modifier.padding(top = 5.dp)
+                )
+            }
+        }
+        Text(item.dateLabel, color = CompletionStrongInk, fontSize = 10.sp,
+            fontWeight = FontWeight.Medium, lineHeight = 16.sp,
+            modifier = Modifier.padding(top = 4.dp))
+        if (!compact) {
+            Spacer(Modifier.fillMaxWidth().padding(top = 10.dp).height(1.dp)
+                .background(CompletionStrongInk.copy(alpha = 0.13f)))
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(top = 9.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                HistorySummaryMetric("PACE", item.metrics?.averagePace ?: "—", Modifier.weight(1f))
+                HistorySummaryMetric("TIME", item.metrics?.elapsed ?: "—", Modifier.weight(1f))
+                HistorySummaryMetric("ACTIVE", item.metrics?.active ?: "—", Modifier.weight(1f))
+            }
+        }
+    }
+}
+
+@Composable
+private fun HistorySummaryMetric(label: String, value: String, modifier: Modifier = Modifier) {
+    Column(modifier) {
+        Text(value, color = HistoryDark, fontFamily = CompletionNumberFont,
+            fontSize = 20.sp, lineHeight = 25.sp, fontWeight = FontWeight.Medium)
+        Text(label, color = CompletionMutedInk, fontSize = 8.sp,
+            fontWeight = FontWeight.SemiBold, letterSpacing = 1.3.sp)
+    }
+}
+
+@Composable
 private fun HistoryMessage(text: String) {
     Text(
         text = text,
-        color = CompletionMutedInk,
+        color = CompletionStrongInk,
         fontSize = 15.sp,
         lineHeight = 22.sp,
-        modifier = Modifier.fillMaxWidth().padding(vertical = 14.dp)
+        modifier = Modifier.fillMaxWidth()
+            .background(Color.White.copy(alpha = 0.82f), RoundedCornerShape(14.dp))
+            .padding(18.dp)
     )
 }
 
@@ -765,100 +940,166 @@ private fun HistoryRow(
     energyError: String?,
     route: HistoryRouteDisplay?
 ) {
-    val shape = RoundedCornerShape(22.dp)
+    val shape = RoundedCornerShape(13.dp)
+    val rowInk = if (expanded) HistoryLightInk else CompletionStrongInk
+    val rowMuted = if (expanded) HistoryLightMuted else CompletionMutedInk
+    val rowAccent = if (expanded) HistoryGold else CompletionGreen
+    val reflectionState = when (item.reflectionStatus) {
+        "READY" -> "Reflection saved"
+        "PENDING" -> "Reflection pending"
+        "FAILED" -> "Reflection unavailable"
+        else -> "Saved run"
+    }
     Column(
         modifier = Modifier
             .fillMaxWidth()
+            .animateContentSize(tween(250))
             .clip(shape)
-            .background(Color.White.copy(alpha = if (expanded) 0.88f else 0.62f))
+            .background(if (expanded) HistoryDark.copy(alpha = 0.96f) else Color(0xFFF5F7EE).copy(alpha = 0.87f))
+            .border(1.dp, if (expanded) HistoryGold.copy(alpha = 0.28f) else Color.White.copy(alpha = 0.68f), shape)
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .testTag(RUN_HISTORY_ROW_TAG_PREFIX + item.runId)
-                .semantics { stateDescription = if (expanded) "Expanded" else "Collapsed" }
+                .semantics {
+                    stateDescription = "${if (expanded) "Expanded" else "Collapsed"} · $reflectionState"
+                }
                 .clickable(
                     role = Role.Button,
                     onClickLabel = if (expanded) "Close run details" else "Open run details",
                     onClick = onToggle
                 )
-                .padding(20.dp)
+                .padding(horizontal = 16.dp, vertical = 10.dp)
         ) {
-            Text(
-                text = item.dateLabel,
-                color = CompletionMutedInk,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.SemiBold,
-                lineHeight = 18.sp
-            )
-            Text(
-                text = item.metrics?.distance ?: "—",
-                color = CompletionStrongInk,
-                fontFamily = CompletionNumberFont,
-                fontSize = 38.sp,
-                fontWeight = FontWeight.Medium,
-                lineHeight = 44.sp,
-                modifier = Modifier.padding(top = 8.dp)
-            )
-            Text(
-                text = "${item.metrics?.elapsed ?: "—"} time · ${item.metrics?.averagePace ?: "—"} pace",
-                color = CompletionInk,
-                fontSize = 13.sp,
-                lineHeight = 20.sp
-            )
-            Text(
-                text = item.metrics?.sourceLabel ?: "Metrics unavailable",
-                color = CompletionMutedInk,
-                fontSize = 12.sp,
-                lineHeight = 18.sp,
-                modifier = Modifier.padding(top = 4.dp)
-            )
             Row(
-                modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Spacer(Modifier.width(3.dp).height(31.dp)
+                    .background(if (item.isGpsRun) rowAccent else rowMuted.copy(alpha = 0.50f), RoundedCornerShape(2.dp)))
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        text = item.metrics?.distance ?: "—",
+                        color = rowInk,
+                        fontFamily = CompletionNumberFont,
+                        fontSize = if (expanded) 22.sp else 25.sp,
+                        fontWeight = FontWeight.Medium,
+                        lineHeight = if (expanded) 26.sp else 29.sp,
+                        letterSpacing = (-0.5).sp
+                    )
+                    Text(
+                        text = "${item.metrics?.elapsed ?: "—"} time · ${item.metrics?.averagePace ?: "—"} pace",
+                        color = rowMuted,
+                        fontSize = 11.sp,
+                        lineHeight = 14.sp
+                    )
+                }
+                Column(Modifier.weight(0.80f), horizontalAlignment = Alignment.End) {
+                    Text(item.dateLabel, color = rowInk, fontSize = 10.sp,
+                        lineHeight = 15.sp, fontWeight = FontWeight.SemiBold)
+                    Text(
+                        text = if (expanded) "CLOSE −" else "OPEN +",
+                        color = rowMuted,
+                        fontSize = 9.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 0.7.sp,
+                        modifier = Modifier.padding(top = 4.dp)
+                    )
+                }
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(start = 15.dp, top = 4.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = when (item.reflectionStatus) {
-                        "READY" -> "Reflection saved"
-                        "PENDING" -> "Reflection pending"
-                        "FAILED" -> "Reflection unavailable"
-                        else -> "Saved run"
-                    },
-                    color = CompletionGreen,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Medium,
-                    modifier = Modifier.weight(1f).padding(end = 10.dp)
+                    text = (item.metrics?.sourceLabel ?: "Metrics unavailable") +
+                        if (!expanded && item.reflectionStatus in listOf("PENDING", "FAILED"))
+                            " · $reflectionState" else "",
+                    color = rowMuted,
+                    fontSize = 9.sp,
+                    lineHeight = 13.sp,
+                    modifier = Modifier.weight(1f).padding(end = 8.dp)
                 )
-                Text(
-                    text = if (expanded) "CLOSE −" else "OPEN +",
-                    color = CompletionMutedInk,
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = 0.7.sp
-                )
+                if (expanded) {
+                    Text(
+                        text = reflectionState,
+                        color = rowAccent,
+                        fontSize = 9.sp,
+                        lineHeight = 13.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.weight(0.85f)
+                    )
+                }
             }
         }
         if (expanded) {
             Column(modifier = Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, bottom = 22.dp)) {
+                Text(
+                    text = "RUNSTATE",
+                    color = rowAccent,
+                    fontSize = 9.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 1.8.sp,
+                    modifier = Modifier.padding(top = 4.dp)
+                )
+                Text(
+                    text = when {
+                        item.reflectionStatus == "READY" && !item.reflectionText.isNullOrBlank() -> item.reflectionText
+                        item.reflectionStatus == "PENDING" -> "Your run is saved. Its reflection is still being prepared."
+                        item.reflectionStatus == "FAILED" -> "Your run is saved. The reflection couldn’t be prepared."
+                        item.reflectionStatus == null -> "No reflection saved for this run."
+                        else -> "Reflection unavailable. Your run is saved."
+                    },
+                    color = rowInk,
+                    fontSize = 17.sp,
+                    lineHeight = 25.sp,
+                    modifier = Modifier
+                        .padding(top = 9.dp, bottom = 10.dp)
+                        .testTag(RUN_HISTORY_REFLECTION_TAG_PREFIX + item.runId)
+                )
+                if (item.musicObservationRequested) {
+                    HistoryObservedMusic(item)
+                } else {
+                    Column(
+                        modifier = Modifier.fillMaxWidth().padding(top = 6.dp, bottom = 12.dp),
+                        verticalArrangement = Arrangement.spacedBy(3.dp)
+                    ) {
+                        Text(
+                            text = "Music wasn’t recorded for this run.",
+                            color = rowMuted,
+                            fontSize = 12.sp,
+                            lineHeight = 18.sp
+                        )
+                        Text(
+                            text = "Enable Observe music before a future run to save available song details.",
+                            color = rowMuted,
+                            fontSize = 11.sp,
+                            lineHeight = 17.sp
+                        )
+                    }
+                }
                 if (item.isGpsRun) {
                     when (route) {
                         is HistoryRouteDisplay.Ready -> GpsRoutePreview(route.data,
-                            Modifier.padding(top = 10.dp, bottom = 12.dp))
+                            Modifier.padding(top = 10.dp, bottom = 12.dp)
+                                .background(CompletionSurfaceTop, RoundedCornerShape(12.dp)).padding(12.dp))
                         HistoryRouteDisplay.Failed -> Text(
                             "Recorded GPS path couldn't load. Close and reopen this run to retry.",
-                            color = CompletionMutedInk, fontSize = 12.sp, lineHeight = 18.sp,
+                            color = rowMuted, fontSize = 12.sp, lineHeight = 18.sp,
                             modifier = Modifier.padding(vertical = 12.dp)
                         )
                         HistoryRouteDisplay.Loading, null -> Text(
-                            "Loading recorded GPS path…", color = CompletionMutedInk,
+                            "Loading recorded GPS path…", color = rowMuted,
                             fontSize = 12.sp, modifier = Modifier.padding(vertical = 12.dp)
                         )
                     }
                 }
                 Text(
                     text = "Active time · ${item.metrics?.active ?: "—"}",
-                    color = CompletionMutedInk,
+                    color = rowMuted,
                     fontSize = 12.sp,
                     lineHeight = 18.sp,
                     modifier = Modifier.padding(top = 4.dp)
@@ -866,7 +1107,7 @@ private fun HistoryRow(
                 if (item.preRunEnergyLabel != null) {
                     Text(
                         text = "Before run · ${item.preRunEnergyLabel}",
-                        color = CompletionStrongInk,
+                        color = rowInk,
                         fontSize = 13.sp,
                         lineHeight = 20.sp,
                         modifier = Modifier.padding(top = 12.dp)
@@ -876,7 +1117,7 @@ private fun HistoryRow(
                     TextButton(
                         onClick = onEditEnergy,
                         enabled = !energySaving,
-                        colors = ButtonDefaults.textButtonColors(contentColor = CompletionStrongInk),
+                        colors = ButtonDefaults.textButtonColors(contentColor = rowInk),
                         contentPadding = PaddingValues(horizontal = 0.dp, vertical = 10.dp),
                         modifier = Modifier
                             .padding(top = 4.dp)
@@ -890,16 +1131,16 @@ private fun HistoryRow(
                         )
                     }
                     if (energySaving) {
-                        Text("Saving Energy…", color = CompletionMutedInk, fontSize = 12.sp)
+                        Text("Saving Energy…", color = rowMuted, fontSize = 12.sp)
                     }
                     if (energyError != null) {
-                        Text(energyError, color = CompletionStrongInk, fontSize = 12.sp, lineHeight = 18.sp)
+                        Text(energyError, color = rowInk, fontSize = 12.sp, lineHeight = 18.sp)
                     }
                 }
                 TextButton(
                     onClick = onEditEffort,
                     enabled = !effortSaving,
-                    colors = ButtonDefaults.textButtonColors(contentColor = CompletionMutedInk),
+                    colors = ButtonDefaults.textButtonColors(contentColor = rowMuted),
                     contentPadding = PaddingValues(horizontal = 0.dp, vertical = 10.dp),
                     modifier = Modifier
                         .padding(top = 4.dp)
@@ -914,79 +1155,25 @@ private fun HistoryRow(
                     )
                 }
                 if (effortSaving) {
-                    Text("Saving Effort…", color = CompletionMutedInk, fontSize = 12.sp)
+                    Text("Saving Effort…", color = rowMuted, fontSize = 12.sp)
                 }
                 if (effortError != null) {
-                    Text(effortError, color = CompletionStrongInk, fontSize = 12.sp, lineHeight = 18.sp)
-                }
-                if (item.musicObservationRequested) {
-                    Text(
-                        text = "OBSERVED MEDIA · PARTIAL",
-                        color = CompletionGreen,
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = 1.1.sp,
-                        modifier = Modifier.padding(top = 16.dp)
-                    )
-                    Text(
-                        text = if (item.musicObservationCount == 0) {
-                            "No media session was observed. Music remains unknown."
-                        } else {
-                            "Last observed · ${item.lastObservedMedia ?: "Unknown media"}"
-                        },
-                        color = CompletionStrongInk,
-                        fontSize = 13.sp,
-                        lineHeight = 20.sp,
-                        modifier = Modifier.padding(top = 5.dp)
-                    )
-                    if (item.musicObservationCount > 0) {
-                        Text(
-                            text = "${item.musicObservationCount} media-session updates saved. This may not be the full soundtrack.",
-                            color = CompletionMutedInk,
-                            fontSize = 11.sp,
-                            lineHeight = 17.sp,
-                            modifier = Modifier.padding(top = 4.dp)
-                        )
-                    }
-                    item.reflectionMusicSummary?.let { summary ->
-                        Text(
-                            text = summary,
-                            color = CompletionMutedInk,
-                            fontSize = 11.sp,
-                            lineHeight = 17.sp,
-                            modifier = Modifier.padding(top = 6.dp)
-                        )
-                    }
+                    Text(effortError, color = rowInk, fontSize = 12.sp, lineHeight = 18.sp)
                 }
                 if (item.isTestData) {
                     Text(
                         text = "FAKE BACKEND · TEST DATA",
-                        color = CompletionGreen,
+                        color = rowAccent,
                         fontSize = 10.sp,
                         fontWeight = FontWeight.Bold,
                         letterSpacing = 1.1.sp,
                         modifier = Modifier.padding(top = 18.dp)
                     )
                 }
-                Text(
-                    text = when {
-                        item.reflectionStatus == "READY" && !item.reflectionText.isNullOrBlank() -> item.reflectionText
-                        item.reflectionStatus == "PENDING" -> "Your run is saved. Its reflection is still being prepared."
-                        item.reflectionStatus == "FAILED" -> "Your run is saved. The reflection couldn’t be prepared."
-                        item.reflectionStatus == null -> "No reflection saved for this run."
-                        else -> "Reflection unavailable. Your run is saved."
-                    },
-                    color = CompletionStrongInk,
-                    fontSize = 19.sp,
-                    lineHeight = 28.sp,
-                    modifier = Modifier
-                        .padding(top = 16.dp)
-                        .testTag(RUN_HISTORY_REFLECTION_TAG_PREFIX + item.runId)
-                )
                 if (item.reflectionStatus == "FAILED") {
                     OutlinedButton(
                         onClick = onRetryReflection,
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = CompletionStrongInk),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = rowInk),
                         shape = RoundedCornerShape(16.dp),
                         modifier = Modifier
                             .padding(top = 16.dp)
@@ -997,6 +1184,82 @@ private fun HistoryRow(
                     }
                 }
             }
+        }
+    }
+}
+
+/** Saved device evidence belongs beside the reply, without suggesting live playback. */
+@Composable
+private fun HistoryObservedMusic(item: RunHistoryItem) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 9.dp, bottom = 15.dp)
+    ) {
+        Spacer(
+            Modifier.fillMaxWidth().height(1.dp)
+                .background(HistoryGold.copy(alpha = 0.25f))
+        )
+        Row(
+            modifier = Modifier.padding(top = 12.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // A static mark keeps a saved observation distinct from a player/equalizer.
+            Canvas(Modifier.size(16.dp)) {
+                val center = size.height / 2f
+                val heights = floatArrayOf(0.34f, 0.70f, 1f, 0.55f)
+                heights.forEachIndexed { index, fraction ->
+                    val x = size.width * (index + 0.5f) / heights.size
+                    val halfHeight = size.height * fraction * 0.43f
+                    drawLine(
+                        color = HistoryGold,
+                        start = Offset(x, center - halfHeight),
+                        end = Offset(x, center + halfHeight),
+                        strokeWidth = 1.6.dp.toPx(),
+                        cap = StrokeCap.Round
+                    )
+                }
+            }
+            Text(
+                text = "OBSERVED MEDIA · PARTIAL",
+                color = HistoryGold,
+                fontSize = 9.sp,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 1.sp,
+                lineHeight = 14.sp,
+                modifier = Modifier.weight(1f)
+            )
+        }
+        Text(
+            text = if (item.musicObservationCount == 0) {
+                "No media session was observed. Music remains unknown."
+            } else {
+                "Last observed · ${item.lastObservedMedia ?: "Unknown media"}"
+            },
+            color = HistoryLightInk,
+            fontSize = 13.sp,
+            fontWeight = if (item.musicObservationCount > 0) FontWeight.Medium else FontWeight.Normal,
+            lineHeight = 20.sp,
+            modifier = Modifier.padding(top = 7.dp)
+        )
+        if (item.musicObservationCount > 0) {
+            Text(
+                text = "${item.musicObservationCount} listening updates saved. This may not be the full soundtrack.",
+                color = HistoryLightMuted,
+                fontSize = 11.sp,
+                lineHeight = 17.sp,
+                modifier = Modifier.padding(top = 4.dp)
+            )
+        }
+        item.reflectionMusicSummary?.let { summary ->
+            Text(
+                text = summary,
+                color = HistoryLightMuted,
+                fontSize = 11.sp,
+                lineHeight = 17.sp,
+                modifier = Modifier.padding(top = 6.dp)
+            )
         }
     }
 }

@@ -1,5 +1,10 @@
 package com.runstate.mobile.ui
 
+import android.animation.ValueAnimator
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -13,6 +18,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -32,37 +38,52 @@ import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.Layout
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.text.font.DeviceFontFamilyName
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.testTag
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.constrainHeight
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.runstate.mobile.data.local.ReflectionBranch
+import com.runstate.mobile.R
 import com.runstate.mobile.data.local.PostRunEffort
-import kotlin.math.PI
-import kotlin.math.cos
-import kotlin.math.min
-import kotlin.math.sin
+import com.runstate.mobile.data.local.PreRunEnergy
+import kotlin.math.roundToInt
 
 internal const val RUN_COMPLETE_SCREEN_TAG = "runCompleteScreen"
 internal const val RUN_COMPLETE_DISTANCE_TAG = "runCompleteDistance"
@@ -72,6 +93,7 @@ internal const val RUN_COMPLETE_REFLECTION_TAG = "runCompleteReflection"
 internal const val RUN_COMPLETE_REFLECTION_TEXT_TAG = "runCompleteReflectionText"
 internal const val RUN_COMPLETE_REFLECTION_RETRY_TAG = "runCompleteReflectionRetry"
 internal const val RUN_COMPLETE_ENERGY_TAG = "runCompleteEnergy"
+internal const val RUN_COMPLETE_ENERGY_INTAKE_TAG = "runCompleteEnergyIntake"
 internal const val RUN_COMPLETE_EFFORT_TAG = "runCompleteEffort"
 internal const val RUN_COMPLETE_EFFORT_SHEET_TAG = "runCompleteEffortSheet"
 internal const val RUN_COMPLETE_EFFORT_CHOICE_TAG_PREFIX = "runCompleteEffortChoice:"
@@ -79,12 +101,28 @@ internal const val RUN_COMPLETE_HISTORY_TAG = "runCompleteHistory"
 internal const val RUN_COMPLETE_AUDIO_STOP_TAG = "runCompleteAudioStop"
 
 internal val CompletionInk = Color(0xFF4A5049)
-internal val CompletionStrongInk = Color(0xFF353A34)
+internal val CompletionStrongInk = Color(0xFF2D3832)
 internal val CompletionMutedInk = Color(0xFF61685E)
 internal val CompletionGreen = Color(0xFF55704C)
 private val CompletionBlue = Color(0xFFAFCEDA)
-internal val CompletionSurfaceTop = Color(0xFFFCFCFA)
-internal val CompletionSurfaceBottom = Color(0xFFF4F5F1)
+private val CompletionWarmAccent = Color(0xFFA47B44)
+internal val CompletionSurfaceTop = Color(0xFFFCFDFC)
+internal val CompletionSurfaceBottom = Color(0xFFF0F4F4)
+
+/** A tap-only visual snapshot, separate from the owner's saved Energy and reply state. */
+private class CompletionEnergyIntake(
+    val branch: ReflectionBranch,
+    val tiles: Map<ReflectionBranch, Rect>,
+    val target: Offset
+)
+
+private val CompletionEnergyBranches = listOf(
+    ReflectionBranch.SPENT, ReflectionBranch.FEELING_GOOD, ReflectionBranch.POWERED_UP
+)
+private val CompletionIntakeMarkEase = CubicBezierEasing(0.32f, 0.72f, 0.3f, 1f)
+private val CompletionIntakeMergeEase = CubicBezierEasing(0.4f, 0f, 0.2f, 1f)
+private val CompletionIntakeTravelEase = CubicBezierEasing(0.5f, 0.02f, 0.28f, 1f)
+private val CompletionIntakeFadeEase = CubicBezierEasing(0.4f, 0f, 1f, 1f)
 
 /** The only reflection information the completion UI is allowed to know. */
 internal sealed interface RunCompleteReflectionDisplay {
@@ -95,22 +133,21 @@ internal sealed interface RunCompleteReflectionDisplay {
 }
 
 /**
- * Android ships a condensed sans family. Prefer it for instrument-like numbers and fall
- * back to the ordinary system sans if an OEM does not provide it under the AOSP name.
+ * Bundle the prototype's open-licensed numeral face so OEM font aliases cannot change
+ * the distance and timing hierarchy. Both font files and their license ship with the app.
  */
 internal val CompletionNumberFont = FontFamily(
-    Font(DeviceFontFamilyName("sans-serif-condensed"), weight = FontWeight.Normal),
-    Font(DeviceFontFamilyName("sans-serif-condensed"), weight = FontWeight.Medium),
-    Font(DeviceFontFamilyName("sans-serif"), weight = FontWeight.Normal),
-    Font(DeviceFontFamilyName("sans-serif"), weight = FontWeight.Medium)
+    Font(R.font.barlow_condensed_regular, weight = FontWeight.Normal),
+    Font(R.font.barlow_condensed_medium, weight = FontWeight.Medium)
 )
 
 /**
  * The saved-run presentation, translated from the working Run Complete reference.
  *
  * The layout deliberately consumes only facts already supplied by the lifecycle foundation.
- * The visualizer is a static completed-state mark: it does not claim music, reflection or live
- * analysis. A missing read remains an em dash, and the fixed action stays reachable while the
+ * The visualizer shares Start's decorative agent wave and receives tapped Energy choices;
+ * its motion does not claim music playback or live analysis.
+ * A missing read remains an em dash, and the fixed action stays reachable while the
  * factual content scrolls behind it on short screens or with large system text.
  */
 @Composable
@@ -134,24 +171,96 @@ internal fun RunCompleteScreen(
     effortError: String? = null,
     onEffortSheetOpenChange: (Boolean) -> Unit = {},
     reflectionAudioActive: Boolean = false,
-    onStopReflectionAudio: () -> Unit = {}
+    onStopReflectionAudio: () -> Unit = {},
+    savedPreRunEnergy: PreRunEnergy? = null,
+    completionDateLabel: String? = null,
+    onReflectionPresentationHoldChange: (Boolean) -> Unit = {}
 ) {
     val distance = splitMetric(metrics?.distance ?: "—")
     val pace = splitMetric(metrics?.averagePace ?: "—")
     val sourceLabel = metrics?.sourceLabel ?: "Metrics unavailable"
     var effortSheetOpen by rememberSaveable { mutableStateOf(false) }
+    var energyChoicesOpen by rememberSaveable { mutableStateOf(false) }
+    var energySubmitted by rememberSaveable { mutableStateOf(false) }
+    val reflectionFinal = reflection is RunCompleteReflectionDisplay.Ready
+    var previousReflectionFinal by rememberSaveable { mutableStateOf(reflectionFinal) }
     val currentSheetOpenChange by rememberUpdatedState(onEffortSheetOpenChange)
+    val currentPresentationHoldChange by rememberUpdatedState(onReflectionPresentationHoldChange)
+    var initialPresentationHeld by remember { mutableStateOf(false) }
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    val view = LocalView.current
+    var lifecycleStarted by remember(lifecycle) {
+        mutableStateOf(lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED))
+    }
+    var animationsEnabled by remember(view) { mutableStateOf(ValueAnimator.areAnimatorsEnabled()) }
+    var rootBounds by remember { mutableStateOf<Rect?>(null) }
+    var ringBounds by remember { mutableStateOf<Rect?>(null) }
+    val tileBounds = remember { mutableStateMapOf<ReflectionBranch, Rect>() }
+    var intake by remember { mutableStateOf<CompletionEnergyIntake?>(null) }
+    val intakeTime = remember { Animatable(0f) }
+
+    DisposableEffect(lifecycle, view) {
+        val observer = LifecycleEventObserver { _, event ->
+            lifecycleStarted = lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)
+            animationsEnabled = ValueAnimator.areAnimatorsEnabled()
+            if (event == Lifecycle.Event.ON_PAUSE || !lifecycleStarted) intake = null
+        }
+        lifecycle.addObserver(observer)
+        onDispose { lifecycle.removeObserver(observer) }
+    }
+    LaunchedEffect(intake, lifecycleStarted, animationsEnabled) {
+        val current = intake
+        if (current == null) {
+            if (initialPresentationHeld) {
+                initialPresentationHeld = false
+                currentPresentationHoldChange(false)
+            }
+            return@LaunchedEffect
+        }
+        if (!lifecycleStarted || !animationsEnabled) {
+            intake = null
+            return@LaunchedEffect
+        }
+        intakeTime.snapTo(0f)
+        intakeTime.animateTo(1630f, tween(1630, easing = LinearEasing))
+        if (intake === current) intake = null
+    }
+    val ringVisible = rootBounds?.let { viewport -> ringBounds?.overlaps(viewport) } == true
+    val ringPhase = rememberRunAgentPhase(lifecycleStarted && animationsEnabled && ringVisible)
+    val ringModifier = Modifier.onGloballyPositioned { coordinates ->
+        val bounds = coordinates.boundsInRoot()
+        if (ringBounds != null && ringBounds != bounds) intake = null
+        ringBounds = bounds
+    }
 
     // Restored sheets continue holding the quiet no-Energy window after rotation.
     LaunchedEffect(effortSheetOpen) { currentSheetOpenChange(effortSheetOpen) }
-    DisposableEffect(Unit) {
-        onDispose { currentSheetOpenChange(false) }
+    // This changes presentation only. The owner has already selected and saved the reply.
+    LaunchedEffect(reflectionFinal) {
+        if (reflectionFinal && !previousReflectionFinal) energyChoicesOpen = false
+        previousReflectionFinal = reflectionFinal
     }
+    DisposableEffect(Unit) {
+        onDispose {
+            currentSheetOpenChange(false)
+            currentPresentationHoldChange(false)
+        }
+    }
+
+    // A recorded choice and a finished provider response are separate states. Waiting
+    // for the latter must never cause the answered initial choices to return.
+    val hasEnergyAnswer = energySubmitted ||
+        (selectedEnergy != null && selectedEnergy != ReflectionBranch.NO_SELECTION)
 
     Box(
         modifier = modifier
             .fillMaxSize()
             .testTag(RUN_COMPLETE_SCREEN_TAG)
+            .onGloballyPositioned { coordinates ->
+                val bounds = coordinates.boundsInRoot()
+                if (rootBounds != null && rootBounds != bounds) intake = null
+                rootBounds = bounds
+            }
             .background(
                 Brush.verticalGradient(
                     colors = listOf(CompletionSurfaceTop, CompletionSurfaceBottom)
@@ -166,25 +275,66 @@ internal fun RunCompleteScreen(
                     .fillMaxWidth()
                     .weight(1f)
                     .verticalScroll(rememberScrollState())
-                    .padding(start = 26.dp, top = 24.dp, end = 22.dp, bottom = 24.dp)
+                    .padding(start = 26.dp, top = 22.dp, end = 24.dp, bottom = 24.dp)
             ) {
-                SavedStatus(sourceLabel)
-                Spacer(modifier = Modifier.height(24.dp))
+                SavedStatus(sourceLabel, completionDateLabel)
+                Spacer(modifier = Modifier.height(18.dp))
                 CompletionHero(
                     distance = distance,
                     elapsed = metrics?.elapsed ?: "—",
                     pace = pace,
-                    active = metrics?.active ?: "—"
+                    active = metrics?.active ?: "—",
+                    phase = ringPhase,
+                    intakeTime = { if (intake != null) intakeTime.value else null },
+                    ringModifier = ringModifier
                 )
-                if (energyEnabled) {
+                CompletionEnergySummary(
+                    before = savedPreRunEnergy,
+                    after = selectedEnergy,
+                    showAfter = reflectionFinal && !initialPresentationHeld,
+                    canEdit = energyEnabled && (reflectionFinal || hasEnergyAnswer) && !initialPresentationHeld,
+                    editEnabled = actionsEnabled,
+                    choicesOpen = energyChoicesOpen,
+                    onEdit = { energyChoicesOpen = !energyChoicesOpen }
+                )
+                if (energyEnabled && ((!reflectionFinal && !hasEnergyAnswer) || energyChoicesOpen)) {
                     EnergyChoices(
                         selectedEnergy = selectedEnergy,
-                        onSelectEnergy = onSelectEnergy,
+                        onSelectEnergy = { branch ->
+                            // Replace the visual flight on a new tap, never the real save callback.
+                            intake = null
+                            energySubmitted = true
+                            energyChoicesOpen = false
+                            animationsEnabled = ValueAnimator.areAnimatorsEnabled()
+                            val root = rootBounds
+                            val ring = ringBounds
+                            val allTiles = CompletionEnergyBranches.associateWith { tileBounds[it] }
+                            if (lifecycleStarted && animationsEnabled && ringVisible && root != null &&
+                                ring != null && allTiles.values.all { it != null && it.width > 0f && it.height > 0f }) {
+                                intake = CompletionEnergyIntake(
+                                    branch,
+                                    allTiles.mapValues { (_, bounds) -> bounds!!.translate(-root.topLeft) },
+                                    ring.center - root.topLeft
+                                )
+                                if (!reflectionFinal) {
+                                    // Register before the owner can synchronously publish READY.
+                                    initialPresentationHeld = true
+                                    currentPresentationHoldChange(true)
+                                }
+                            }
+                            // Save immediately; only initial text/voice presentation waits for intake.
+                            onSelectEnergy(branch)
+                        },
                         enabled = actionsEnabled,
-                        reflectionFinal = reflection is RunCompleteReflectionDisplay.Ready
+                        reflectionFinal = reflectionFinal,
+                        intake = intake,
+                        onTileBounds = { branch, bounds ->
+                            if (tileBounds[branch] != null && tileBounds[branch] != bounds) intake = null
+                            tileBounds[branch] = bounds
+                        }
                     )
                 }
-                if (effortEnabled) {
+                if (effortEnabled && !reflectionFinal) {
                     EffortControl(
                         selectedEffort = selectedEffort,
                         saving = effortSaving,
@@ -193,7 +343,7 @@ internal fun RunCompleteScreen(
                         onOpen = { effortSheetOpen = true }
                     )
                 }
-                if (reflection != null) {
+                if (reflection != null && !initialPresentationHeld) {
                     Spacer(modifier = Modifier.height(14.dp))
                     ReflectionPanel(
                         reflection = reflection,
@@ -216,6 +366,15 @@ internal fun RunCompleteScreen(
                         ) { Text("Stop audio") }
                     }
                 }
+                if (effortEnabled && reflectionFinal) {
+                    EffortControl(
+                        selectedEffort = selectedEffort,
+                        saving = effortSaving,
+                        error = effortError,
+                        enabled = actionsEnabled,
+                        onOpen = { effortSheetOpen = true }
+                    )
+                }
                 if (showHistory) {
                     TextButton(
                         onClick = onViewHistory,
@@ -223,11 +382,11 @@ internal fun RunCompleteScreen(
                         colors = ButtonDefaults.textButtonColors(contentColor = CompletionStrongInk),
                         modifier = Modifier
                             .padding(top = 10.dp)
-                            .align(Alignment.CenterHorizontally)
+                            .align(Alignment.Start)
                             .heightIn(min = 48.dp)
                             .testTag(RUN_COMPLETE_HISTORY_TAG)
                     ) {
-                        Text("View in Log History")
+                        Text("View in Log History  →", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                     }
                 }
             }
@@ -241,7 +400,7 @@ internal fun RunCompleteScreen(
                     disabledContainerColor = CompletionStrongInk.copy(alpha = 0.38f),
                     disabledContentColor = Color.White.copy(alpha = 0.7f)
                 ),
-                shape = RoundedCornerShape(20.dp),
+                shape = RoundedCornerShape(16.dp),
                 contentPadding = PaddingValues(horizontal = 24.dp, vertical = 16.dp),
                 modifier = Modifier
                     .fillMaxWidth()
@@ -256,6 +415,10 @@ internal fun RunCompleteScreen(
                 )
             }
         }
+
+        // This survives an immediate Ready reply removing the real choice column.
+        // Drawn copies do not expose duplicate actions or intercept the fixed footer.
+        intake?.let { current -> CompletionEnergyIntakeOverlay(current, time = { intakeTime.value }) }
 
         if (effortSheetOpen && effortEnabled) {
             EffortChoiceSheet(
@@ -278,6 +441,87 @@ internal fun PostRunEffort.displayLabel(): String = when (this) {
     PostRunEffort.EMPTY_TANK -> "Empty Tank"
 }
 
+/** A saved answer is shown as a fact; an absent answer is never inferred from the run. */
+@Composable
+private fun CompletionEnergySummary(
+    before: PreRunEnergy?,
+    after: ReflectionBranch?,
+    showAfter: Boolean,
+    canEdit: Boolean,
+    editEnabled: Boolean,
+    choicesOpen: Boolean,
+    onEdit: () -> Unit
+) {
+    val beforeLabel = when (before) {
+        PreRunEnergy.LOW -> "Low"
+        PreRunEnergy.MODERATE -> "Moderate"
+        PreRunEnergy.HIGH -> "High"
+        null -> "Unknown"
+    }
+    val afterLabel = when (after) {
+        ReflectionBranch.SPENT -> "Spent"
+        ReflectionBranch.FEELING_GOOD -> "Feeling Good"
+        ReflectionBranch.POWERED_UP -> "Powered Up"
+        ReflectionBranch.NO_SELECTION, null -> "Not selected"
+    }
+    val largeText = LocalDensity.current.fontScale > 1.3f
+    Column(modifier = Modifier.fillMaxWidth().padding(top = 12.dp, bottom = 8.dp)) {
+        if (largeText) {
+            EnergySummaryFact(beforeLabel, "PRE-RUN STATE", false)
+            if (showAfter) {
+                Spacer(Modifier.height(12.dp))
+                EnergySummaryFact(afterLabel, "POST-RUN STATE", after != null && after != ReflectionBranch.NO_SELECTION)
+            }
+        } else {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                EnergySummaryFact(beforeLabel, "PRE-RUN STATE", false, Modifier.weight(1f))
+                if (showAfter) {
+                    Spacer(Modifier.width(16.dp))
+                    EnergySummaryFact(afterLabel, "POST-RUN STATE", after != null && after != ReflectionBranch.NO_SELECTION,
+                        Modifier.weight(1f))
+                }
+            }
+        }
+        if (canEdit) {
+            TextButton(
+                onClick = onEdit,
+                enabled = editEnabled,
+                colors = ButtonDefaults.textButtonColors(contentColor = CompletionMutedInk),
+                contentPadding = PaddingValues(horizontal = 0.dp, vertical = 8.dp),
+                modifier = Modifier.heightIn(min = 48.dp)
+            ) {
+                Text(if (choicesOpen) "Close Energy choices" else "Energy +",
+                    fontSize = 11.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 1.sp)
+            }
+        }
+    }
+}
+
+@Composable
+private fun EnergySummaryFact(
+    label: String,
+    caption: String,
+    filled: Boolean,
+    modifier: Modifier = Modifier
+) {
+    Column(modifier = modifier) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Canvas(Modifier.size(8.dp)) {
+                if (filled) drawCircle(CompletionGreen)
+                else drawCircle(CompletionGreen, style = androidx.compose.ui.graphics.drawscope.Stroke(1.dp.toPx()))
+            }
+            Text(label, color = CompletionStrongInk, fontSize = 15.sp, lineHeight = 21.sp,
+                fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(start = 7.dp))
+        }
+        Text(caption, color = CompletionMutedInk, fontSize = 9.sp, letterSpacing = 1.5.sp,
+            lineHeight = 14.sp, modifier = Modifier.padding(top = 4.dp))
+    }
+}
+
 /** Effort stays smaller than Energy and never implies that an answer is required. */
 @Composable
 private fun EffortControl(
@@ -292,6 +536,7 @@ private fun EffortControl(
             onClick = onOpen,
             enabled = enabled && !saving,
             colors = ButtonDefaults.textButtonColors(contentColor = CompletionMutedInk),
+            contentPadding = PaddingValues(horizontal = 0.dp, vertical = 8.dp),
             modifier = Modifier.heightIn(min = 48.dp).testTag(RUN_COMPLETE_EFFORT_TAG)
         ) {
             Text(
@@ -383,14 +628,17 @@ private fun ReflectionPanel(
         modifier = Modifier
             .fillMaxWidth()
             .testTag(RUN_COMPLETE_REFLECTION_TAG)
+            .shadow(5.dp, RoundedCornerShape(7.dp), ambientColor = CompletionInk.copy(alpha = 0.08f),
+                spotColor = CompletionInk.copy(alpha = 0.1f))
             .background(
-                color = Color.White.copy(alpha = 0.62f),
-                shape = RoundedCornerShape(22.dp)
+                color = Color.White.copy(alpha = 0.86f),
+                shape = RoundedCornerShape(7.dp)
             )
-            .padding(horizontal = 20.dp, vertical = 18.dp)
+            .completionBrackets(CompletionWarmAccent.copy(alpha = 0.75f))
+            .padding(horizontal = 20.dp, vertical = 20.dp)
     ) {
         Text(
-            text = "REFLECTION",
+            text = "RUNSTATE · REFLECTION",
             color = CompletionMutedInk,
             fontSize = 10.sp,
             fontWeight = FontWeight.Bold,
@@ -429,9 +677,9 @@ private fun ReflectionPanel(
             is RunCompleteReflectionDisplay.Ready -> Text(
                 text = reflection.text,
                 color = CompletionStrongInk,
-                fontSize = 21.sp,
+                fontSize = 19.sp,
                 fontWeight = FontWeight.Medium,
-                lineHeight = 29.sp,
+                lineHeight = 28.sp,
                 modifier = Modifier
                     .padding(top = 18.dp)
                     .testTag(RUN_COMPLETE_REFLECTION_TEXT_TAG)
@@ -481,7 +729,9 @@ private fun EnergyChoices(
     selectedEnergy: ReflectionBranch?,
     onSelectEnergy: (ReflectionBranch) -> Unit,
     enabled: Boolean,
-    reflectionFinal: Boolean
+    reflectionFinal: Boolean,
+    intake: CompletionEnergyIntake?,
+    onTileBounds: (ReflectionBranch, Rect) -> Unit
 ) {
     val choices = listOf(
         ReflectionBranch.SPENT to "SPENT",
@@ -490,38 +740,25 @@ private fun EnergyChoices(
     )
     val largeText = LocalDensity.current.fontScale > 1.3f
 
-    Column(modifier = Modifier.fillMaxWidth().testTag(RUN_COMPLETE_ENERGY_TAG)) {
-        BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
-            if (largeText || maxWidth < 300.dp) {
-                Column(
-                    modifier = Modifier.fillMaxWidth().selectableGroup(),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    choices.forEach { (branch, label) ->
-                        EnergyChoice(
-                            label = label,
-                            selected = selectedEnergy == branch,
-                            enabled = enabled,
-                            onClick = { onSelectEnergy(branch) },
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                    }
-                }
-            } else {
-                Row(
-                    modifier = Modifier.fillMaxWidth().selectableGroup(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    choices.forEach { (branch, label) ->
-                        EnergyChoice(
-                            label = label,
-                            selected = selectedEnergy == branch,
-                            enabled = enabled,
-                            onClick = { onSelectEnergy(branch) },
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
-                }
+    Column(modifier = Modifier.fillMaxWidth().testTag(RUN_COMPLETE_ENERGY_TAG).padding(top = 10.dp)) {
+        Text("POST RUN ENERGY", color = CompletionMutedInk, fontSize = 9.sp,
+            fontWeight = FontWeight.SemiBold, letterSpacing = 1.7.sp,
+            modifier = Modifier.padding(bottom = 12.dp))
+        Column(
+            modifier = Modifier.fillMaxWidth().selectableGroup(),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            choices.forEach { (branch, label) ->
+                EnergyChoice(
+                    label = label,
+                    branch = branch,
+                    selected = selectedEnergy == branch,
+                    enabled = enabled,
+                    onClick = { onSelectEnergy(branch) },
+                    modifier = (if (largeText) Modifier.fillMaxWidth() else Modifier.width(124.dp))
+                        .onGloballyPositioned { onTileBounds(branch, it.boundsInRoot()) }
+                        .graphicsLayer { alpha = if (intake != null) 0f else 1f }
+                )
             }
         }
         Text(
@@ -541,35 +778,136 @@ private fun EnergyChoices(
 @Composable
 private fun EnergyChoice(
     label: String,
+    branch: ReflectionBranch,
     selected: Boolean,
     enabled: Boolean,
     onClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    interactive: Boolean = true,
+    labelAlpha: Float = 1f
 ) {
-    val shape = RoundedCornerShape(16.dp)
+    val shape = RoundedCornerShape(3.dp)
+    val surface = when (branch) {
+        ReflectionBranch.SPENT -> Color(0xFF6A7977)
+        ReflectionBranch.FEELING_GOOD -> Color(0xFF4C6258)
+        ReflectionBranch.POWERED_UP -> Color(0xFFE0BA78)
+        ReflectionBranch.NO_SELECTION -> CompletionSurfaceBottom
+    }
+    val ink = if (branch == ReflectionBranch.POWERED_UP) CompletionStrongInk else Color.White
     Column(
         modifier = modifier
+            .shadow(if (selected) 6.dp else 3.dp, shape,
+                ambientColor = CompletionInk.copy(alpha = 0.13f), spotColor = CompletionInk.copy(alpha = 0.14f))
             .clip(shape)
-            .background(if (selected) CompletionStrongInk else Color.White.copy(alpha = 0.76f), shape)
-            .selectable(selected = selected, enabled = enabled, role = Role.RadioButton, onClick = onClick)
-            .heightIn(min = 76.dp)
-            .padding(horizontal = 12.dp, vertical = 15.dp),
-        verticalArrangement = Arrangement.Center
+            .background(surface.copy(alpha = if (enabled) 1f else 0.55f), shape)
+            .completionBrackets(ink.copy(alpha = if (selected) 0.9f else 0.4f))
+            .then(if (interactive) Modifier.selectable(
+                selected = selected, enabled = enabled, role = Role.RadioButton, onClick = onClick
+            ) else Modifier)
+            .heightIn(min = 98.dp)
+            .padding(horizontal = 10.dp, vertical = 18.dp),
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Text(
             text = label,
-            color = if (selected) Color.White else CompletionStrongInk,
-            fontSize = 12.sp,
+            color = ink.copy(alpha = (if (enabled) 1f else 0.7f) * labelAlpha),
+            fontSize = 13.sp,
             fontWeight = FontWeight.SemiBold,
             lineHeight = 17.sp,
-            letterSpacing = 0.6.sp
+            letterSpacing = 0.1.sp,
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center
         )
     }
 }
 
+/** Only visual copies fly; the selected value has already reached the saved-run owner. */
+@Composable
+private fun CompletionEnergyIntakeOverlay(intake: CompletionEnergyIntake, time: () -> Float) {
+    val density = LocalDensity.current
+    val elapsed = time()
+    val mark = CompletionIntakeMarkEase.transform((elapsed / 150f).coerceIn(0f, 1f))
+    val merge = CompletionIntakeMergeEase.transform(((elapsed - 150f) / 320f).coerceIn(0f, 1f))
+    val travel = CompletionIntakeTravelEase.transform(((elapsed - 470f) / 640f).coerceIn(0f, 1f))
+    val chosenBounds = intake.tiles.getValue(intake.branch)
+    (CompletionEnergyBranches.filter { it != intake.branch } + intake.branch).forEach { branch ->
+        val chosen = branch == intake.branch
+        if ((chosen && elapsed < 1110f) || (!chosen && elapsed < 470f)) {
+            val bounds = intake.tiles.getValue(branch)
+            val scale = when {
+                chosen && elapsed < 150f -> 1f + mark * 0.015f
+                chosen && elapsed < 470f -> 1.015f + merge * 0.02f
+                chosen -> 1.035f + travel * (0.13f - 1.035f)
+                else -> 1f - merge * 0.1f
+            }
+            val destination = if (chosen) {
+                bounds.center + (intake.target - bounds.center) * travel
+            } else {
+                bounds.center + (chosenBounds.center - bounds.center) * (0.62f * merge)
+            }
+            val opacity = if (chosen) {
+                1f - CompletionIntakeFadeEase.transform(((elapsed - 870f) / 260f).coerceIn(0f, 1f))
+            } else {
+                1f - ((elapsed - 150f) / 260f).coerceIn(0f, 1f)
+            }
+            Box(
+                modifier = Modifier
+                    .offset { IntOffset(bounds.left.roundToInt(), bounds.top.roundToInt()) }
+                    .size(with(density) { bounds.width.toDp() }, with(density) { bounds.height.toDp() })
+                    .graphicsLayer {
+                        translationX = destination.x - bounds.center.x
+                        translationY = destination.y - bounds.center.y
+                        scaleX = scale
+                        scaleY = scale
+                        transformOrigin = TransformOrigin.Center
+                        alpha = opacity
+                        shape = RoundedCornerShape(3.dp + 35.dp * travel)
+                        clip = true
+                    }
+                    .clearAndSetSemantics { if (chosen) testTag = RUN_COMPLETE_ENERGY_INTAKE_TAG }
+            ) {
+                EnergyChoice(
+                    label = when (branch) {
+                        ReflectionBranch.SPENT -> "SPENT"
+                        ReflectionBranch.FEELING_GOOD -> "FEELING GOOD"
+                        ReflectionBranch.POWERED_UP -> "POWERED UP"
+                        ReflectionBranch.NO_SELECTION -> ""
+                    },
+                    branch = branch,
+                    selected = chosen,
+                    enabled = true,
+                    onClick = {},
+                    modifier = Modifier.fillMaxSize(),
+                    interactive = false,
+                    labelAlpha = 1f - ((elapsed - 470f) / 200f).coerceIn(0f, 1f)
+                )
+            }
+        }
+    }
+}
+
+/** Fine registration corners echo the reference without outlining every surface. */
+private fun Modifier.completionBrackets(color: Color): Modifier = drawBehind {
+    val inset = 8.dp.toPx()
+    val reach = 9.dp.toPx()
+    val stroke = 0.7.dp.toPx()
+    val left = inset
+    val right = size.width - inset
+    val top = inset
+    val bottom = size.height - inset
+    drawLine(color, Offset(left, top + reach), Offset(left, top), stroke)
+    drawLine(color, Offset(left, top), Offset(left + reach, top), stroke)
+    drawLine(color, Offset(right - reach, top), Offset(right, top), stroke)
+    drawLine(color, Offset(right, top), Offset(right, top + reach), stroke)
+    drawLine(color, Offset(left, bottom - reach), Offset(left, bottom), stroke)
+    drawLine(color, Offset(left, bottom), Offset(left + reach, bottom), stroke)
+    drawLine(color, Offset(right - reach, bottom), Offset(right, bottom), stroke)
+    drawLine(color, Offset(right, bottom), Offset(right, bottom - reach), stroke)
+}
+
 /** The reference uses one quiet line rather than a badge or a second page title. */
 @Composable
-private fun SavedStatus(sourceLabel: String) {
+private fun SavedStatus(sourceLabel: String, completionDateLabel: String?) {
     val largeText = LocalDensity.current.fontScale > 1.35f
 
     if (largeText) {
@@ -621,6 +959,12 @@ private fun SavedStatus(sourceLabel: String) {
             )
         }
     }
+    if (!completionDateLabel.isNullOrBlank()) {
+        Text(completionDateLabel.uppercase(), color = CompletionMutedInk, fontSize = 9.sp,
+            fontWeight = FontWeight.Medium, letterSpacing = 1.3.sp, lineHeight = 15.sp,
+            modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+    }
 }
 
 @Composable
@@ -628,7 +972,10 @@ private fun CompletionHero(
     distance: MetricParts,
     elapsed: String,
     pace: MetricParts,
-    active: String
+    active: String,
+    phase: State<Float>,
+    intakeTime: () -> Float?,
+    ringModifier: Modifier
 ) {
     val largeText = LocalDensity.current.fontScale > 1.35f
 
@@ -638,14 +985,20 @@ private fun CompletionHero(
                 distance = distance,
                 elapsed = elapsed,
                 pace = pace,
-                active = active
+                active = active,
+                phase = phase,
+                intakeTime = intakeTime,
+                ringModifier = ringModifier
             )
         } else {
             AccessibleCompletionHero(
                 distance = distance,
                 elapsed = elapsed,
                 pace = pace,
-                active = active
+                active = active,
+                phase = phase,
+                intakeTime = intakeTime,
+                ringModifier = ringModifier
             )
         }
     }
@@ -657,20 +1010,24 @@ private fun OffsetCompletionHero(
     distance: MetricParts,
     elapsed: String,
     pace: MetricParts,
-    active: String
+    active: String,
+    phase: State<Float>,
+    intakeTime: () -> Float?,
+    ringModifier: Modifier
 ) {
     Layout(
         modifier = Modifier
             .fillMaxWidth()
-            .heightIn(min = 246.dp),
+            .heightIn(min = 156.dp),
         content = {
-            DistanceInstrument(distance = distance)
+            DistanceInstrument(distance = distance, compact = true)
             CompactMetrics(
                 elapsed = elapsed,
                 pace = pace,
-                active = active
+                active = active,
+                compact = true
             )
-            CompletionVisualizer(modifier = Modifier.size(80.dp))
+            CompletionVisualizer(phase, intakeTime, modifier = Modifier.size(80.dp).then(ringModifier))
         }
     ) { measurables, constraints ->
         val looseConstraints = constraints.copy(minWidth = 0, minHeight = 0)
@@ -685,11 +1042,11 @@ private fun OffsetCompletionHero(
         )
         val markPlaceable = measurables[2].measure(looseConstraints)
         val width = constraints.maxWidth
-        val gap = 12.dp.roundToPx()
-        val distanceY = 18.dp.roundToPx()
+        val gap = 8.dp.roundToPx()
+        val distanceY = 8.dp.roundToPx()
         val metricsX = width - metricsPlaceable.width
         val metricsY = if (distancePlaceable.width + gap <= metricsX) {
-            35.dp.roundToPx()
+            12.dp.roundToPx()
         } else {
             distanceY + distancePlaceable.height + gap
         }
@@ -697,7 +1054,7 @@ private fun OffsetCompletionHero(
         // OEM fonts and timer digits can consume the original fixed central gap.
         // Put decoration below the facts when it cannot fit without covering text.
         val markFitsBetween = distancePlaceable.width + gap + markPlaceable.width + gap <= metricsX
-        val preferredMarkX = (width - markPlaceable.width) / 2 + 16.dp.roundToPx()
+        val preferredMarkX = (width - markPlaceable.width) / 2 + 8.dp.roundToPx()
         val markX = if (markFitsBetween) {
             preferredMarkX.coerceIn(
                 distancePlaceable.width + gap,
@@ -710,7 +1067,7 @@ private fun OffsetCompletionHero(
             distanceY + distancePlaceable.height,
             metricsY + metricsPlaceable.height
         )
-        val markY = if (markFitsBetween) distanceY else factsBottom + gap
+        val markY = if (markFitsBetween) 22.dp.roundToPx() else factsBottom + gap
         val height = constraints.constrainHeight(maxOf(factsBottom, markY + markPlaceable.height))
 
         layout(width, height) {
@@ -727,15 +1084,21 @@ private fun AccessibleCompletionHero(
     distance: MetricParts,
     elapsed: String,
     pace: MetricParts,
-    active: String
+    active: String,
+    phase: State<Float>,
+    intakeTime: () -> Float?,
+    ringModifier: Modifier
 ) {
     Column(modifier = Modifier.fillMaxWidth()) {
         DistanceInstrument(distance = distance)
         CompletionVisualizer(
+            phase = phase,
+            intakeTime = intakeTime,
             modifier = Modifier
                 .align(Alignment.CenterHorizontally)
                 .padding(vertical = 18.dp)
                 .size(116.dp)
+                .then(ringModifier)
         )
         CompactMetrics(
             elapsed = elapsed,
@@ -750,14 +1113,19 @@ private fun AccessibleCompletionHero(
 @Composable
 private fun DistanceInstrument(
     distance: MetricParts,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    compact: Boolean = false
 ) {
     val numberSize = when {
+        compact && distance.value.length >= 5 -> 60.sp
+        compact -> 72.sp
         distance.value.length >= 5 -> 72.sp
         distance.value.length == 4 -> 82.sp
         else -> 98.sp
     }
     val numberLineHeight = when {
+        compact && distance.value.length >= 5 -> 66.sp
+        compact -> 78.sp
         distance.value.length >= 5 -> 70.sp
         distance.value.length == 4 -> 80.sp
         else -> 92.sp
@@ -767,7 +1135,7 @@ private fun DistanceInstrument(
         Row(verticalAlignment = Alignment.Bottom) {
             Text(
                 text = distance.value,
-                color = CompletionInk,
+                color = CompletionStrongInk,
                 fontFamily = CompletionNumberFont,
                 fontSize = numberSize,
                 fontWeight = FontWeight.Normal,
@@ -780,16 +1148,16 @@ private fun DistanceInstrument(
                     text = distance.unit.uppercase(),
                     color = CompletionMutedInk,
                     fontFamily = CompletionNumberFont,
-                    fontSize = if (distance.value.length >= 4) 24.sp else 28.sp,
+                    fontSize = if (compact) 21.sp else if (distance.value.length >= 4) 24.sp else 28.sp,
                     fontWeight = FontWeight.Medium,
-                    modifier = Modifier.padding(start = 6.dp, bottom = 10.dp)
+                    modifier = Modifier.padding(start = if (compact) 4.dp else 6.dp, bottom = 10.dp)
                 )
             }
         }
         DistanceRuler(
             modifier = Modifier
                 .padding(top = 8.dp)
-                .width(174.dp)
+                .width(if (compact) 142.dp else 174.dp)
                 .height(14.dp)
         )
     }
@@ -824,15 +1192,19 @@ private fun CompactMetrics(
     pace: MetricParts,
     active: String,
     modifier: Modifier = Modifier,
-    generousSpacing: Boolean = false
+    generousSpacing: Boolean = false,
+    compact: Boolean = false
 ) {
     Column(
         modifier = modifier.testTag(RUN_COMPLETE_METRICS_TAG),
         verticalArrangement = Arrangement.spacedBy(if (generousSpacing) 14.dp else 10.dp)
     ) {
-        CompactMetric(value = elapsed, label = "TIME", valueSize = 22.sp)
-        CompactMetric(value = pace.value, unit = pace.unit, label = "PACE", valueSize = 29.sp)
-        CompactMetric(value = active, label = "ACTIVE", valueSize = 22.sp)
+        CompactMetric(value = elapsed, label = "TIME", valueSize = if (compact) 20.sp else 22.sp,
+            compact = compact)
+        CompactMetric(value = pace.value, unit = pace.unit, label = "PACE", valueSize = if (compact) 24.sp else 29.sp,
+            compact = compact)
+        CompactMetric(value = active, label = "ACTIVE", valueSize = if (compact) 20.sp else 22.sp,
+            compact = compact)
     }
 }
 
@@ -842,7 +1214,8 @@ private fun CompactMetric(
     label: String,
     valueSize: androidx.compose.ui.unit.TextUnit,
     modifier: Modifier = Modifier,
-    unit: String = ""
+    unit: String = "",
+    compact: Boolean = false
 ) {
     Row(
         modifier = modifier.fillMaxWidth(),
@@ -851,11 +1224,11 @@ private fun CompactMetric(
     ) {
         Text(
             text = value,
-            color = CompletionInk,
+            color = CompletionStrongInk,
             fontFamily = CompletionNumberFont,
             fontSize = valueSize,
             fontWeight = FontWeight.Medium,
-            lineHeight = valueSize,
+            lineHeight = valueSize * 1.12f,
             maxLines = 1,
             softWrap = false,
             overflow = TextOverflow.Clip
@@ -865,7 +1238,7 @@ private fun CompactMetric(
                 text = unit.uppercase(),
                 color = CompletionMutedInk,
                 fontFamily = CompletionNumberFont,
-                fontSize = 14.sp,
+                fontSize = if (compact) 12.sp else 14.sp,
                 fontWeight = FontWeight.Medium,
                 maxLines = 1,
                 softWrap = false,
@@ -875,9 +1248,9 @@ private fun CompactMetric(
         Text(
             text = label,
             color = CompletionMutedInk,
-            fontSize = 9.sp,
+            fontSize = if (compact) 8.sp else 9.sp,
             fontWeight = FontWeight.SemiBold,
-            letterSpacing = 1.5.sp,
+            letterSpacing = if (compact) 1.sp else 1.5.sp,
             maxLines = 1,
             softWrap = false,
             modifier = Modifier.padding(start = 8.dp, bottom = 3.dp)
@@ -885,47 +1258,13 @@ private fun CompactMetric(
     }
 }
 
-/** A neutral completion mark; static because reflection text does not imply live analysis. */
+/** Start and Completion use the same decorative agent; only a tap starts an intake swell. */
 @Composable
-private fun CompletionVisualizer(modifier: Modifier = Modifier) {
-    Canvas(modifier = modifier.testTag(RUN_COMPLETE_VISUALIZER_TAG)) {
-        val center = Offset(size.width / 2f, size.height / 2f)
-        val outerRadius = min(size.width, size.height) * 0.48f
-        val innerRadius = outerRadius * 0.78f
-        val tickCount = 64
-
-        repeat(tickCount) { index ->
-            val angle = (index.toFloat() / tickCount.toFloat()) * 2f * PI.toFloat() - PI.toFloat() / 2f
-            val color = when (index) {
-                in 18..28 -> Color(0xFFC7D7A5)
-                in 29..39 -> Color(0xFFC5C8E7)
-                in 40..49 -> Color(0xFFAFCEDD)
-                else -> CompletionMutedInk.copy(alpha = 0.28f)
-            }
-            val start = Offset(
-                x = center.x + cos(angle) * innerRadius,
-                y = center.y + sin(angle) * innerRadius
-            )
-            val end = Offset(
-                x = center.x + cos(angle) * outerRadius,
-                y = center.y + sin(angle) * outerRadius
-            )
-            drawLine(
-                color = color,
-                start = start,
-                end = end,
-                strokeWidth = 1.2.dp.toPx(),
-                cap = StrokeCap.Round
-            )
-        }
-
-        drawCircle(
-            color = CompletionSurfaceTop.copy(alpha = 0.78f),
-            radius = innerRadius * 0.82f,
-            center = center
-        )
-    }
-}
+private fun CompletionVisualizer(
+    phase: State<Float>,
+    intakeTime: () -> Float?,
+    modifier: Modifier = Modifier
+) = RunAgentRing(phase, intakeTime, modifier.testTag(RUN_COMPLETE_VISUALIZER_TAG))
 
 /** Fine structure and pale facets recreate the reference's layered porcelain field. */
 @Composable
@@ -933,7 +1272,7 @@ internal fun CompletionAtmosphere(modifier: Modifier = Modifier) {
     Canvas(modifier = modifier) {
         drawRect(
             brush = Brush.radialGradient(
-                colors = listOf(Color(0xFFE9EEE4).copy(alpha = 0.55f), Color.Transparent),
+                colors = listOf(Color(0xFFE6EFF0).copy(alpha = 0.55f), Color.Transparent),
                 center = Offset(size.width * 0.82f, size.height * 0.18f),
                 radius = size.width * 0.78f
             )
@@ -959,7 +1298,7 @@ internal fun CompletionAtmosphere(modifier: Modifier = Modifier) {
             lineTo(size.width * 0.55f, size.height * 0.22f)
             close()
         }
-        drawPath(topFacet, Color(0xFFDDE5D8).copy(alpha = 0.55f))
+        drawPath(topFacet, Color(0xFFDCE8E9).copy(alpha = 0.55f))
 
         val topHighlight = Path().apply {
             moveTo(size.width * 0.78f, 0f)
@@ -975,7 +1314,7 @@ internal fun CompletionAtmosphere(modifier: Modifier = Modifier) {
             lineTo(size.width * 0.77f, size.height * 0.68f)
             close()
         }
-        drawPath(middleFacet, Color(0xFFEAE8D7).copy(alpha = 0.44f))
+        drawPath(middleFacet, Color(0xFFD8DFE1).copy(alpha = 0.44f))
 
         val lowerFacet = Path().apply {
             moveTo(size.width * 0.72f, size.height * 0.56f)

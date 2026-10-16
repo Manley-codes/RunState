@@ -20,7 +20,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -59,8 +61,55 @@ private val ActiveForest = Color(0xFF263222)
 private val ActiveLime = Color(0xFFB8D442)
 private val ActiveCream = Color(0xFFF9FAF5)
 
+/** An unfinished short run remains safely paused until the runner makes an explicit choice. */
+@Composable
+internal fun ShortRunDecisionDialog(
+    busy: Boolean,
+    error: String?,
+    onSave: () -> Unit,
+    onDiscard: () -> Unit,
+    onKeepPaused: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = { if (!busy) onKeepPaused() },
+        containerColor = ActiveCream,
+        titleContentColor = ActiveInk,
+        textContentColor = ActiveInk,
+        title = { Text("Save this short run?") },
+        text = {
+            Column(
+                modifier = Modifier.heightIn(max = 280.dp).verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text("You recorded less than 30 seconds of active time. Save it to History, or discard it if you started by accident. Discard permanently removes this run.")
+                if (error != null) Text(error, color = Color(0xFF8B392D))
+            }
+        },
+        confirmButton = {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Button(
+                    onClick = onSave,
+                    enabled = !busy,
+                    colors = ButtonDefaults.buttonColors(containerColor = ActiveForest),
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
+                ) { Text(if (busy) "Finishing…" else "Save run") }
+                TextButton(
+                    onClick = onDiscard,
+                    enabled = !busy,
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
+                ) { Text("Discard run", color = if (busy) ActiveInk.copy(alpha = 0.38f) else Color(0xFF8B392D)) }
+                TextButton(
+                    onClick = onKeepPaused,
+                    enabled = !busy,
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
+                ) { Text("Keep paused", color = ActiveInk.copy(alpha = if (busy) 0.38f else 0.85f)) }
+            }
+        }
+    )
+}
+
 /**
- * The Start map becomes an elapsed-time instrument. It remains an illustration in every mode;
+ * The Start map becomes an active-time instrument. It remains an illustration in every mode;
  * all displayed measurements and GPS states come from the existing run owner.
  */
 @Composable
@@ -116,6 +165,31 @@ internal fun ActiveRunScreen(
                 Spacer(Modifier.height(16.dp))
 
                 Text(
+                    text = if (isGpsRun) "GPS RUN" else "SAMPLE RUN · SIMULATED DISTANCE",
+                    color = ActiveForest,
+                    fontSize = 11.sp,
+                    lineHeight = 17.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    letterSpacing = 0.8.sp,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(if (isGpsRun) Color.White else ActiveLime.copy(alpha = 0.26f))
+                        .padding(horizontal = 12.dp, vertical = 9.dp)
+                )
+                if (!isGpsRun) {
+                    Text(
+                        text = "Sample distance increases automatically, even when you are still.",
+                        color = ActiveInk.copy(alpha = 0.78f),
+                        fontSize = 12.sp,
+                        lineHeight = 18.sp,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
+                    )
+                }
+                Spacer(Modifier.height(12.dp))
+                Text(
                     text = "Distance",
                     color = ActiveInk.copy(alpha = 0.72f),
                     fontSize = 12.sp,
@@ -151,7 +225,7 @@ internal fun ActiveRunScreen(
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         Text(
-                            text = "Elapsed",
+                            text = "Active time",
                             color = ActiveInk.copy(alpha = 0.72f),
                             fontSize = 12.sp,
                             lineHeight = 18.sp,
@@ -160,9 +234,9 @@ internal fun ActiveRunScreen(
                         )
                         Spacer(Modifier.height(8.dp))
                         ActiveFittedValue(
-                            value = metrics?.elapsed ?: "—",
+                            value = metrics?.active ?: "—",
                             maximumSize = 68,
-                            modifier = Modifier.testTag(ACTIVE_RUN_ELAPSED_TAG)
+                            modifier = Modifier.testTag(ACTIVE_RUN_ACTIVE_TAG)
                         )
                     }
                 }
@@ -183,7 +257,7 @@ internal fun ActiveRunScreen(
                 )
                 if (paused) {
                     Text(
-                        text = "Active time and distance are paused. Elapsed includes breaks.",
+                        text = "Active time and distance are paused. Total time includes breaks.",
                         color = ActiveInk.copy(alpha = 0.78f),
                         fontSize = 12.sp,
                         lineHeight = 18.sp,
@@ -394,7 +468,7 @@ private fun ActiveMetricsPanel(metrics: RunMetricsDisplay?, modifier: Modifier =
             if (stacked) {
                 Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                     ActiveMetric("Avg pace", metrics?.averagePace ?: "—", ACTIVE_RUN_PACE_TAG)
-                    ActiveMetric("Active", metrics?.active ?: "—", ACTIVE_RUN_ACTIVE_TAG)
+                    ActiveMetric("Total incl. breaks", metrics?.elapsed ?: "—", ACTIVE_RUN_ELAPSED_TAG)
                 }
             } else {
                 Row(
@@ -403,7 +477,7 @@ private fun ActiveMetricsPanel(metrics: RunMetricsDisplay?, modifier: Modifier =
                 ) {
                     ActiveMetric("Avg pace", metrics?.averagePace ?: "—", ACTIVE_RUN_PACE_TAG,
                         Modifier.weight(1f))
-                    ActiveMetric("Active", metrics?.active ?: "—", ACTIVE_RUN_ACTIVE_TAG,
+                    ActiveMetric("Total incl. breaks", metrics?.elapsed ?: "—", ACTIVE_RUN_ELAPSED_TAG,
                         Modifier.weight(1f))
                 }
             }
