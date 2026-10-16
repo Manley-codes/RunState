@@ -5,6 +5,8 @@ import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Transaction
+import com.runstate.mobile.run.RunTimeline
+import com.runstate.mobile.run.TransitionHistoryCoverage
 import kotlinx.coroutines.flow.Flow
 
 /**
@@ -28,6 +30,11 @@ import kotlinx.coroutines.flow.Flow
  */
 @Dao
 abstract class RunDao {
+
+    companion object {
+        /** Accidental-start prompt applies strictly below thirty seconds of active time. */
+        const val SHORT_RUN_ACTIVE_LIMIT_MILLIS = 30_000L
+    }
 
     /**
      * Writes one run row.
@@ -80,6 +87,67 @@ abstract class RunDao {
      */
     @Query("SELECT COUNT(*) FROM runs")
     abstract suspend fun countRuns(): Int
+
+    /** A read for the prompt; deletion independently rechecks the same durable evidence. */
+    @Transaction
+    open suspend fun isShortPausedRunDiscardEligible(runId: String): Boolean {
+        val run = findById(runId) ?: return false
+        return shortPausedRunHasReliableHistory(run, transitionsFor(runId))
+    }
+
+    /**
+     * Explicitly discards only one reliably short, paused, unfinished run. The read,
+     * timeline validation and conditional delete share one transaction; child observations
+     * and transitions are removed by the existing foreign-key cascades. Completed
+     * records can never match this operation.
+     */
+    @Transaction
+    open suspend fun discardShortPausedRun(runId: String) {
+        val run = findById(runId) ?: error("No run is stored under $runId.")
+        check(shortPausedRunHasReliableHistory(run, transitionsFor(runId))) {
+            "Only a paused run with reliable active time below thirty seconds may be discarded."
+        }
+        check(deletePausedRunAtCheckpoint(runId, StoredRunState.PAUSED, run.lastCheckpointEpochMillis) == 1) {
+            "The intended paused run changed before it could be discarded."
+        }
+    }
+
+    private fun shortPausedRunHasReliableHistory(
+        run: RunEntity,
+        transitions: List<RunTransitionEntity>
+    ): Boolean {
+        if (run.state != StoredRunState.PAUSED || run.finishEpochMillis != null ||
+            run.transitionHistoryComplete != true || transitions.isEmpty() ||
+            transitions.any { it.runId != run.runId } ||
+            transitions.last().occurredAtEpochMillis != run.lastCheckpointEpochMillis
+        ) return false
+        return try {
+            val active = RunTimeline.activeMillis(
+                officialStartEpochMillis = run.officialStartEpochMillis,
+                finishEpochMillis = null,
+                currentState = run.state,
+                transitions = transitions,
+                nowEpochMillis = run.lastCheckpointEpochMillis,
+                historyCoverage = TransitionHistoryCoverage.COMPLETE
+            ) ?: return false
+            active in 0L until SHORT_RUN_ACTIVE_LIMIT_MILLIS
+        } catch (_: IllegalArgumentException) {
+            false
+        } catch (_: IllegalStateException) {
+            false
+        }
+    }
+
+    @Query("""
+        DELETE FROM runs WHERE run_id = :runId AND state = :pausedState
+          AND finish_epoch_millis IS NULL AND transition_history_complete = 1
+          AND last_checkpoint_epoch_millis = :checkpointEpochMillis
+    """)
+    protected abstract suspend fun deletePausedRunAtCheckpoint(
+        runId: String,
+        pausedState: StoredRunState,
+        checkpointEpochMillis: Long
+    ): Int
 
     /**
      * Saves or clears the runner's optional Effort after a durable completion.

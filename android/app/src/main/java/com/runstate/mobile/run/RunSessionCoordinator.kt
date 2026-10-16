@@ -151,11 +151,12 @@ internal enum class StartAttemptPhase {
     Failed
 }
 
-/** The three durable lifecycle actions a live run can be asked to take. */
+/** Durable lifecycle writes, including the separately confirmed short-run discard. */
 internal enum class RunActionKind {
     PAUSE,
     RESUME,
-    COMPLETE
+    COMPLETE,
+    DISCARD
 }
 
 /**
@@ -458,6 +459,69 @@ internal class RunSessionCoordinator(
     /** The immutable tracking choice on this cycle's active run, if any. */
     suspend fun trackingMode(): RunTrackingMode? = coordinatorLock.withLock {
         metricRun?.trackingMode
+    }
+
+    /** A prompt hint only; the discard transaction rechecks the stored timeline. */
+    suspend fun canDiscardShortRun(runId: String): Boolean = coordinatorLock.withLock {
+        if (initializationStatus != InitializationStatus.Completed || inconsistentActiveRuns.isNotEmpty() ||
+            startReserved || reservedAction != null || recoveredGpsGap
+        ) return@withLock false
+        val session = activeSession ?: return@withLock false
+        if (session.runId != runId || session.state != RunSessionState.PAUSED) return@withLock false
+        try {
+            runDao.isShortPausedRunDiscardEligible(runId)
+        } catch (cancellation: CancellationException) {
+            throw cancellation
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    /**
+     * The runner explicitly chose Discard for this exact short paused run. The process
+     * owns the write, so a disappearing Activity cancels only its own wait. A failed
+     * delete keeps the paused owner intact and may be retried; no completed row is deleted.
+     */
+    suspend fun requestDiscard(runId: String): Deferred<Unit> = coordinatorLock.withLock {
+        check(initializationStatus == InitializationStatus.Completed && inconsistentActiveRuns.isEmpty()) {
+            "Discard requires consistent initialized storage."
+        }
+        check(!startReserved) { "Discard cannot overlap an official start." }
+        val session = checkNotNull(activeSession) { "Discard needs a live run." }
+        check(session.runId == runId) { "Discard must name the current run exactly." }
+        if (reservedAction != null) {
+            val attempt = checkNotNull(pendingAction)
+            check(attempt.isActive) { "An earlier action has an unknown outcome." }
+            check(reservedAction == RunActionKind.DISCARD) { "Discard cannot overlap another action." }
+            return@withLock attempt
+        }
+        check(session.state == RunSessionState.PAUSED && !recoveredGpsGap) {
+            "Discard requires a paused run with reliable active time."
+        }
+        check(runDao.isShortPausedRunDiscardEligible(runId)) { "This run is not eligible for short-run discard." }
+        reservedAction = RunActionKind.DISCARD
+        val attempt = applicationScope.async {
+            try {
+                runDao.discardShortPausedRun(runId)
+            } catch (cancellation: CancellationException) {
+                // Its storage outcome is unknown: retain the reservation, as other writes do.
+                throw cancellation
+            } catch (failure: Exception) {
+                coordinatorLock.withLock {
+                    pendingAction = null
+                    reservedAction = null
+                    lastActionFailed = RunActionKind.DISCARD
+                }
+                throw failure
+            }
+            coordinatorLock.withLock {
+                pendingAction = null
+                reservedAction = null
+                beginFreshCycle()
+            }
+        }
+        pendingAction = attempt
+        attempt
     }
 
     /**
@@ -1063,6 +1127,7 @@ internal class RunSessionCoordinator(
      *   reporting its result. Nothing is launched in any of those cases.
      */
     suspend fun requestAction(kind: RunActionKind): Deferred<Unit> = coordinatorLock.withLock {
+        check(kind != RunActionKind.DISCARD) { "Discard requires an explicit run UUID through requestDiscard." }
         check(initializationStatus == InitializationStatus.Completed) {
             "A run action cannot be taken before recovery has completed."
         }
@@ -1101,6 +1166,7 @@ internal class RunSessionCoordinator(
             RunActionKind.PAUSE -> RunSessionState.RUNNING
             RunActionKind.RESUME,
             RunActionKind.COMPLETE -> RunSessionState.PAUSED
+            RunActionKind.DISCARD -> error("Discard requires requestDiscard.")
         }
         check(session.state == requiredState) {
             "A $kind needs a $requiredState run, but this run is ${session.state}."
@@ -1143,6 +1209,7 @@ internal class RunSessionCoordinator(
                     )
                     completionMetrics = metrics
                 }
+                RunActionKind.DISCARD -> error("Discard requires requestDiscard.")
             }
         } catch (cancellation: CancellationException) {
 
@@ -1214,6 +1281,7 @@ internal class RunSessionCoordinator(
                     displayDistanceUnit = metrics.displayUnit
                 )
             }
+            RunActionKind.DISCARD -> error("Discard has no surviving metric row.")
         }
 
         if (kind == RunActionKind.PAUSE || kind == RunActionKind.RESUME) {

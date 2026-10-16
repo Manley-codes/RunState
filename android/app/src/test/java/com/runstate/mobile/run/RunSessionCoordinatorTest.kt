@@ -10,6 +10,7 @@ import com.runstate.mobile.data.local.RunTransitionType
 import com.runstate.mobile.data.local.RunTrackingMode
 import com.runstate.mobile.data.local.StoredRunState
 import com.runstate.mobile.data.local.TelemetryCoverage
+import com.runstate.mobile.location.missingTrackedRunWasRetired
 import java.time.Clock
 import java.time.Instant
 import java.time.ZoneId
@@ -149,6 +150,220 @@ class RunSessionCoordinatorTest {
         var cause: Throwable? = null
         attempt.invokeOnCompletion { cause = it }
         return cause
+    }
+
+    @Test
+    fun `explicit short paused discard removes only that run then returns ready`() = runBlocking {
+        val fixture = Fixture()
+        startedRun(fixture)
+        fixture.dao.insert(preparedRun(THIRD_RUN_ID).copy(
+            state = StoredRunState.COMPLETED,
+            finishEpochMillis = OFFICIAL_START + 1_000L,
+            lastCheckpointEpochMillis = OFFICIAL_START + 1_000L
+        ))
+        fixture.clock.nowMillis += 15_000L
+        fixture.coordinator.requestAction(RunActionKind.PAUSE).await()
+        fixture.clock.nowMillis += 600_000L // Paused waiting does not add active time.
+        assertTrue(fixture.coordinator.canDiscardShortRun(RUN_ID))
+        fixture.coordinator.requestDiscard(RUN_ID).await()
+        assertNull(fixture.dao.findById(RUN_ID))
+        assertTrue(fixture.dao.transitionsFor(RUN_ID).isEmpty())
+        assertEquals(StoredRunState.COMPLETED, fixture.dao.findById(THIRD_RUN_ID)?.state)
+        assertEquals(RunAdmission.ReadyForCountdown, fixture.coordinator.journeySnapshot().admission)
+        assertNull(fixture.coordinator.runMetrics())
+        fixture.coordinator.beginCountdown()
+        assertEquals(SECOND_RUN_ID, fixture.coordinator.requestStart().await().runId)
+        fixture.scope.cancel()
+    }
+
+    @Test
+    fun `discard refuses running mismatched completed and thirty-second runs`() = runBlocking {
+        val fixture = Fixture()
+        startedRun(fixture)
+        assertFalse(fixture.coordinator.canDiscardShortRun(RUN_ID))
+        assertTrue(runCatching { fixture.coordinator.requestDiscard(RUN_ID) }.isFailure)
+        fixture.clock.nowMillis += 30_000L
+        fixture.coordinator.requestAction(RunActionKind.PAUSE).await()
+        assertFalse(fixture.coordinator.canDiscardShortRun(RUN_ID))
+        assertTrue(runCatching { fixture.coordinator.requestDiscard(SECOND_RUN_ID) }.isFailure)
+        assertTrue(runCatching { fixture.coordinator.requestDiscard(RUN_ID) }.isFailure)
+        fixture.coordinator.requestAction(RunActionKind.COMPLETE).await()
+        assertFalse(fixture.coordinator.canDiscardShortRun(RUN_ID))
+        assertTrue(runCatching { fixture.coordinator.requestDiscard(RUN_ID) }.isFailure)
+        assertEquals(StoredRunState.COMPLETED, fixture.dao.findById(RUN_ID)?.state)
+        fixture.scope.cancel()
+    }
+
+    @Test
+    fun `discard eligibility sums active intervals and refuses legacy or malformed history`() = runBlocking {
+        val fixture = Fixture()
+        startedRun(fixture)
+        fixture.clock.nowMillis += 14_000L
+        fixture.coordinator.requestAction(RunActionKind.PAUSE).await()
+        fixture.clock.nowMillis += 100_000L
+        fixture.coordinator.requestAction(RunActionKind.RESUME).await()
+        fixture.clock.nowMillis += 15_999L
+        fixture.coordinator.requestAction(RunActionKind.PAUSE).await()
+        assertTrue(fixture.coordinator.canDiscardShortRun(RUN_ID))
+        val index = fixture.dao.inserted.indexOfFirst { it.runId == RUN_ID }
+        val original = fixture.dao.inserted[index]
+        fixture.dao.inserted[index] = original.copy(transitionHistoryComplete = null)
+        assertFalse(fixture.coordinator.canDiscardShortRun(RUN_ID))
+        fixture.dao.inserted[index] = original
+        fixture.dao.transitions.removeAt(1)
+        assertFalse(fixture.coordinator.canDiscardShortRun(RUN_ID))
+        assertTrue(runCatching { fixture.coordinator.requestDiscard(RUN_ID) }.isFailure)
+        assertEquals(StoredRunState.PAUSED, fixture.dao.findById(RUN_ID)?.state)
+        fixture.scope.cancel()
+    }
+
+    @Test
+    fun `discard failure keeps paused ownership and allows an explicit retry`() = runBlocking {
+        val fixture = Fixture()
+        val owner = startedRun(fixture)
+        fixture.clock.nowMillis += 5_000L
+        fixture.coordinator.requestAction(RunActionKind.PAUSE).await()
+        fixture.dao.failDiscardWith = IllegalStateException("disk unavailable")
+        val failure = fixture.coordinator.requestDiscard(RUN_ID)
+        assertTrue(runCatching { failure.await() }.isFailure)
+        val snapshot = fixture.coordinator.journeySnapshot()
+        assertSame(owner, (snapshot.admission as RunAdmission.RunInProgress).session)
+        assertEquals(RunActionKind.DISCARD, snapshot.lastActionFailed)
+        assertNull(snapshot.reservedAction)
+        assertEquals(StoredRunState.PAUSED, fixture.dao.findById(RUN_ID)?.state)
+        fixture.dao.failDiscardWith = null
+        fixture.coordinator.requestDiscard(RUN_ID).await()
+        assertEquals(RunAdmission.ReadyForCountdown, fixture.coordinator.journeySnapshot().admission)
+        fixture.scope.cancel()
+    }
+
+    @Test
+    fun `discard shares duplicate request and refuses resume complete or start while pending`() = runBlocking {
+        val fixture = Fixture()
+        startedRun(fixture)
+        fixture.clock.nowMillis += 5_000L
+        fixture.coordinator.requestAction(RunActionKind.PAUSE).await()
+        val entered = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        fixture.dao.duringDiscard = { entered.complete(Unit); release.await() }
+        val first = fixture.coordinator.requestDiscard(RUN_ID)
+        entered.await()
+        assertSame(first, fixture.coordinator.requestDiscard(RUN_ID))
+        assertFalse(fixture.coordinator.canDiscardShortRun(RUN_ID))
+        assertEquals(RunActionKind.DISCARD, fixture.coordinator.journeySnapshot().reservedAction)
+        assertEquals(StoredRunState.PAUSED, fixture.dao.findById(RUN_ID)?.state)
+        assertTrue(runCatching { fixture.coordinator.requestAction(RunActionKind.RESUME) }.isFailure)
+        assertTrue(runCatching { fixture.coordinator.requestAction(RunActionKind.COMPLETE) }.isFailure)
+        assertTrue(runCatching { fixture.coordinator.beginCountdown() }.isFailure)
+        assertTrue(runCatching { fixture.coordinator.requestDiscard(SECOND_RUN_ID) }.isFailure)
+        release.complete(Unit)
+        first.await()
+        assertEquals(RunAdmission.ReadyForCountdown, fixture.coordinator.journeySnapshot().admission)
+        fixture.scope.cancel()
+    }
+
+    @Test
+    fun `cancelling the discard caller does not cancel the process-owned deletion`() = runBlocking {
+        val fixture = Fixture()
+        startedRun(fixture)
+        fixture.clock.nowMillis += 5_000L
+        fixture.coordinator.requestAction(RunActionKind.PAUSE).await()
+        val entered = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        fixture.dao.duringDiscard = { entered.complete(Unit); release.await() }
+        val caller = launch { fixture.coordinator.requestDiscard(RUN_ID).await() }
+        entered.await()
+        caller.cancel()
+        caller.join()
+        assertEquals(StoredRunState.PAUSED, fixture.dao.findById(RUN_ID)?.state)
+        release.complete(Unit)
+        fixture.coordinator.awaitReservedWork()
+        assertNull(fixture.dao.findById(RUN_ID))
+        assertEquals(RunAdmission.ReadyForCountdown, fixture.coordinator.journeySnapshot().admission)
+        fixture.scope.cancel()
+    }
+
+    @Test
+    fun `discard cannot overlap a pending resume or completion`() = runBlocking {
+        for (action in listOf(RunActionKind.RESUME, RunActionKind.COMPLETE)) {
+            val fixture = Fixture()
+            startedRun(fixture)
+            fixture.clock.nowMillis += 5_000L
+            fixture.coordinator.requestAction(RunActionKind.PAUSE).await()
+            val entered = CompletableDeferred<Unit>()
+            val release = CompletableDeferred<Unit>()
+            val hold: suspend () -> Unit = { entered.complete(Unit); release.await() }
+            if (action == RunActionKind.RESUME) fixture.dao.duringStateChange = hold
+            else fixture.dao.duringCompletion = hold
+            val pending = fixture.coordinator.requestAction(action)
+            entered.await()
+            assertFalse(fixture.coordinator.canDiscardShortRun(RUN_ID))
+            assertTrue(runCatching { fixture.coordinator.requestDiscard(RUN_ID) }.isFailure)
+            release.complete(Unit)
+            pending.await()
+            assertEquals(1, fixture.dao.countRuns())
+            fixture.scope.cancel()
+        }
+    }
+
+    @Test
+    fun `recovered running gps gap never becomes eligible after a quick pause`() = runBlocking {
+        val fixture = Fixture()
+        fixture.dao.insert(preparedRun().copy(trackingMode = RunTrackingMode.GPS))
+        fixture.coordinator.initialize()
+        fixture.clock.nowMillis += 5_000L
+        fixture.coordinator.requestAction(RunActionKind.PAUSE).await()
+        assertFalse(fixture.coordinator.canDiscardShortRun(RUN_ID))
+        assertTrue(runCatching { fixture.coordinator.requestDiscard(RUN_ID) }.isFailure)
+        assertEquals(1, fixture.dao.countRuns())
+        fixture.scope.cancel()
+    }
+
+    @Test
+    fun `tracking disappearance is expected only after the coordinator retires that exact run`() = runBlocking {
+        val fixture = Fixture()
+        startedRun(fixture)
+        fixture.clock.nowMillis += 5_000L
+        fixture.coordinator.requestAction(RunActionKind.PAUSE).await()
+        assertFalse(missingTrackedRunWasRetired(RUN_ID, fixture.coordinator.journeySnapshot()))
+        fixture.coordinator.requestDiscard(RUN_ID).await()
+        assertTrue(missingTrackedRunWasRetired(RUN_ID, fixture.coordinator.journeySnapshot()))
+        fixture.coordinator.beginCountdown()
+        assertTrue(missingTrackedRunWasRetired(RUN_ID, fixture.coordinator.journeySnapshot()))
+        fixture.coordinator.requestStart().await()
+        val nextRun = fixture.coordinator.journeySnapshot()
+        assertTrue(missingTrackedRunWasRetired(RUN_ID, nextRun))
+        assertFalse(missingTrackedRunWasRetired(SECOND_RUN_ID, nextRun))
+        assertFalse(missingTrackedRunWasRetired(RUN_ID, RunJourneySnapshot(
+            InitializationStatus.NotAttempted, RunAdmission.NotInitialized
+        )))
+        assertFalse(missingTrackedRunWasRetired(RUN_ID, RunJourneySnapshot(
+            InitializationStatus.Completed,
+            RunAdmission.BlockedByInconsistentStorage(listOf(preparedRun()))
+        )))
+        fixture.scope.cancel()
+    }
+
+    @Test
+    fun `application cancellation retains an uncertain discard reservation instead of claiming ready`() = runBlocking {
+        val fixture = Fixture()
+        startedRun(fixture)
+        fixture.clock.nowMillis += 5_000L
+        fixture.coordinator.requestAction(RunActionKind.PAUSE).await()
+        val entered = CompletableDeferred<Unit>()
+        val neverReleased = CompletableDeferred<Unit>()
+        fixture.dao.duringDiscard = { entered.complete(Unit); neverReleased.await() }
+        val attempt = fixture.coordinator.requestDiscard(RUN_ID)
+        entered.await()
+        fixture.scope.cancel()
+        attempt.join()
+        val snapshot = fixture.coordinator.journeySnapshot()
+        assertEquals(RunActionKind.DISCARD, snapshot.reservedAction)
+        assertNull(snapshot.lastActionFailed)
+        assertEquals(RunSessionState.PAUSED, (snapshot.admission as RunAdmission.RunInProgress).session.state)
+        assertEquals(StoredRunState.PAUSED, fixture.dao.findById(RUN_ID)?.state)
+        assertTrue(runCatching { fixture.coordinator.requestDiscard(RUN_ID) }.isFailure)
+        assertTrue(runCatching { fixture.coordinator.requestAction(RunActionKind.RESUME) }.isFailure)
     }
 
     // ---------------------------------------------------------------------------------

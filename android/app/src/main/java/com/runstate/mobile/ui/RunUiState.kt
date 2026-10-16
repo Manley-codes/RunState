@@ -210,6 +210,9 @@ private fun activeRunModel(
 
             RunActionKind.COMPLETE ->
                 RunUiState.ActivePaused to setOf(RunSessionState.PAUSED, RunSessionState.COMPLETED)
+
+            RunActionKind.DISCARD ->
+                RunUiState.ActivePaused to setOf(RunSessionState.PAUSED)
         }
         check(sessionState in allowed) {
             "A reserved $reserved cannot accompany a $sessionState run."

@@ -367,6 +367,23 @@ class RunUiStateTest {
         }
     }
 
+    @Test
+    fun `a pending discard remains visibly paused and returns ready only after deletion`() = runBlocking {
+        val dao = FakeRunDao()
+        val (coordinator, _) = startedRun(dao)
+        coordinator.requestAction(RunActionKind.PAUSE).await()
+        val release = CompletableDeferred<Unit>()
+        dao.duringDiscard = { release.await() }
+        val pending = coordinator.requestDiscard(RUN_ID)
+        assertEquals(
+            RunUiModel(RunUiState.ActivePaused, actionInProgress = true),
+            runUiModelFor(coordinator.journeySnapshot())
+        )
+        release.complete(Unit)
+        pending.await()
+        assertEquals(RunUiModel(RunUiState.ReadyToStart), runUiModelFor(coordinator.journeySnapshot()))
+    }
+
     /**
      * Proves the pre-action state is shown even when the session has already advanced.
      *

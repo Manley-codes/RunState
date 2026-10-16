@@ -27,6 +27,9 @@ import com.runstate.mobile.data.local.PreRunEnergy
 import com.runstate.mobile.data.local.RunLocationObservation
 import com.runstate.mobile.data.local.RunTrackingMode
 import com.runstate.mobile.data.local.StoredRunState
+import com.runstate.mobile.run.InitializationStatus
+import com.runstate.mobile.run.RunAdmission
+import com.runstate.mobile.run.RunJourneySnapshot
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -35,6 +38,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.takeWhile
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -46,6 +50,17 @@ internal sealed interface RunTrackingServiceState {
     data class Tracking(val runId: String) : RunTrackingServiceState
     data class Paused(val runId: String) : RunTrackingServiceState
     data class Failed(val reason: String) : RunTrackingServiceState
+}
+
+/** Missing storage is expected only after this coordinator has retired that exact owner. */
+internal fun missingTrackedRunWasRetired(runId: String, snapshot: RunJourneySnapshot): Boolean {
+    if (snapshot.initializationStatus != InitializationStatus.Completed) return false
+    return when (val admission = snapshot.admission) {
+        RunAdmission.ReadyForCountdown, RunAdmission.CountdownInProgress -> true
+        is RunAdmission.RunInProgress -> admission.session.runId != runId
+        is RunAdmission.RunCompleted -> admission.session.runId != runId
+        RunAdmission.NotInitialized, is RunAdmission.BlockedByInconsistentStorage -> false
+    }
 }
 
 /** Each timed platform lock is acquired once; renewal swaps in a new lock before releasing it. */
@@ -109,8 +124,9 @@ internal class RunTrackingService : Service() {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val observationLock = Mutex()
-    private val policy = GpsDistancePolicy()
+    private var policy = GpsDistancePolicy()
     private var work: Job? = null
+    private var acceptedStartId = 0
     private var listener: LocationListener? = null
     /** Invalidates callbacks queued before a pause, provider change, or registration removal. */
     private var locationGeneration = 0L
@@ -125,7 +141,10 @@ internal class RunTrackingService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        if (work?.isActive == true) return START_NOT_STICKY
+        if (work?.isActive == true) {
+            retryCommandAfterRetiredOwner(intent, flags, startId)
+            return START_NOT_STICKY
+        }
 
         val action = intent?.action
         val existingId = intent?.getStringExtra(EXTRA_RUN_ID)
@@ -141,6 +160,11 @@ internal class RunTrackingService : Service() {
             failAndStop("Precise location and GPS must be enabled before tracking starts.")
             return START_NOT_STICKY
         }
+
+        finishedNormally = false
+        failed = false
+        storedState = null
+        acceptedStartId = startId
 
         try {
             promoteToForeground("Preparing GPS run")
@@ -170,6 +194,14 @@ internal class RunTrackingService : Service() {
                         com.runstate.mobile.run.InitializationStatus.Completed) {
                         "Run recovery did not finish."
                     }
+                    check(snapshot.admission == RunAdmission.CountdownInProgress) {
+                        "A new GPS run requires its own countdown."
+                    }
+                    // A reused service is not a reused run. Retire the old listener and
+                    // drain its in-flight observation before assigning a clean policy.
+                    stopGps()
+                    runId = null
+                    observationLock.withLock { policy = GpsDistancePolicy() }
                     app.runSessionCoordinator.requestStart(
                         energy,
                         RunTrackingMode.GPS,
@@ -195,8 +227,13 @@ internal class RunTrackingService : Service() {
                     idToResume
                 }
                 runId = id
-                app.database.runDao().observeRunById(id).collect { row ->
-                    checkNotNull(row) { "The active run disappeared from storage." }
+                app.database.runDao().observeRunById(id).takeWhile { row ->
+                    if (row != null) true else {
+                        finishRetiredRunObservation(id, startId)
+                        false
+                    }
+                }.collect { stored ->
+                    val row = checkNotNull(stored)
                     check(row.trackingMode == RunTrackingMode.GPS) {
                         "The active run is not a GPS run."
                     }
@@ -209,6 +246,59 @@ internal class RunTrackingService : Service() {
             }
         }
         return START_NOT_STICKY
+    }
+
+    /** A discard can finish while the next countdown delivers its new service command. */
+    private fun retryCommandAfterRetiredOwner(intent: Intent?, flags: Int, startId: Int) {
+        val previousWork = work ?: return
+        val previousId = runId ?: return
+        val nextIntent = intent?.let(::Intent) ?: return
+        scope.launch {
+            try {
+                app.runSessionCoordinator.awaitReservedWork()
+                val snapshot = app.runSessionCoordinator.journeySnapshot()
+                val admission = snapshot.admission
+                val isNextCountdown = nextIntent.action == ACTION_START_NEW &&
+                    admission == RunAdmission.CountdownInProgress
+                val isDifferentResume = nextIntent.action == ACTION_RESUME_EXISTING &&
+                    admission is RunAdmission.RunInProgress && admission.session.runId != previousId &&
+                    admission.session.runId == nextIntent.getStringExtra(EXTRA_RUN_ID)
+                if ((!isNextCountdown && !isDifferentResume) ||
+                    !missingTrackedRunWasRetired(previousId, snapshot) ||
+                    app.database.runDao().findById(previousId) != null ||
+                    work !== previousWork || runId != previousId
+                ) return@launch
+                // Identity is checked after every suspension: this old observer may not
+                // cancel a worker already installed for the newer command.
+                previousWork.cancel()
+                work = null
+                stopGps()
+                policy.trackingInterrupted()
+                onStartCommand(nextIntent, flags, startId)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                // The original observer still owns error reporting for its saved run.
+            }
+        }
+    }
+
+    private suspend fun finishRetiredRunObservation(id: String, startId: Int) {
+        app.runSessionCoordinator.awaitReservedWork()
+        val snapshot = app.runSessionCoordinator.journeySnapshot()
+        check(missingTrackedRunWasRetired(id, snapshot)) {
+            "The active run disappeared from storage."
+        }
+        if (runId != id || acceptedStartId != startId) return
+        stopGps()
+        policy.trackingInterrupted()
+        finishedNormally = true
+        // Never replace a newer run's progress with this old run's Idle event.
+        if (snapshot.admission == RunAdmission.ReadyForCountdown ||
+            snapshot.admission == RunAdmission.CountdownInProgress
+        ) app.publishTrackingServiceState(RunTrackingServiceState.Idle)
+        // Android ignores this stop when it has already received a newer startId.
+        stopSelf(startId)
     }
 
     private fun reconcileStoredState(id: String, state: StoredRunState) {
@@ -353,7 +443,8 @@ internal class RunTrackingService : Service() {
             observedEpochMillis = location.time,
             elapsedRealtimeMillis = elapsedNanos / 1_000_000L
         )
-        val decision = policy.observe(
+        val observationPolicy = policy
+        val decision = observationPolicy.observe(
             sample = sample,
             nowElapsedRealtimeMillis = deliveredAtElapsedRealtimeMillis,
             isRunning = true
@@ -377,11 +468,12 @@ internal class RunTrackingService : Service() {
                     segmentDistanceMeters = decision.distanceAddedMeters
                 )
             )
+            if (runId != id || policy !== observationPolicy) return
             // Room rechecks the durable run state and checkpoint. If it downgrades a
             // callback that the in-memory filter liked, the next fix must be a fresh
             // anchor rather than measuring from a point storage refused.
             if (decision.acceptedForRoute && !stored.acceptedForDistance) {
-                policy.trackingInterrupted()
+                observationPolicy.trackingInterrupted()
             }
             if (gpsEnabled && storedState == StoredRunState.RUNNING &&
                 app.trackingServiceState.value is RunTrackingServiceState.Failed) {
@@ -391,7 +483,8 @@ internal class RunTrackingService : Service() {
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (failure: Exception) {
-            policy.trackingInterrupted()
+            if (runId != id || policy !== observationPolicy) return
+            observationPolicy.trackingInterrupted()
             app.publishTrackingServiceState(
                 RunTrackingServiceState.Failed("A GPS point could not be saved; distance is incomplete.")
             )

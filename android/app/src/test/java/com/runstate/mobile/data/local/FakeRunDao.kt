@@ -56,6 +56,9 @@ open class FakeRunDao : RunDao() {
     /** When set, [applyCompletion] throws this instead of changing anything. */
     var failCompletionWith: Exception? = null
 
+    var duringDiscard: (suspend () -> Unit)? = null
+    var failDiscardWith: Exception? = null
+
     /**
      * How many times the discovery query has actually been reached.
      *
@@ -112,6 +115,23 @@ open class FakeRunDao : RunDao() {
     }
 
     override suspend fun countRuns(): Int = inserted.size
+
+    override suspend fun deletePausedRunAtCheckpoint(
+        runId: String,
+        pausedState: StoredRunState,
+        checkpointEpochMillis: Long
+    ): Int {
+        duringDiscard?.invoke()
+        failDiscardWith?.let { throw it }
+        val index = inserted.indexOfFirst {
+            it.runId == runId && it.state == pausedState && it.finishEpochMillis == null &&
+                it.transitionHistoryComplete == true && it.lastCheckpointEpochMillis == checkpointEpochMillis
+        }
+        if (index < 0) return 0
+        inserted.removeAt(index)
+        transitions.removeAll { it.runId == runId }
+        return 1
+    }
 
     override suspend fun updatePostRunEffortIfCompleted(
         runId: String,

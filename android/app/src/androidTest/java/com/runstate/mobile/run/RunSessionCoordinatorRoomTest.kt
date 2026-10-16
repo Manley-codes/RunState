@@ -6,6 +6,9 @@ import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.runstate.mobile.data.local.DistanceUnit
 import com.runstate.mobile.data.local.MetricSource
+import com.runstate.mobile.data.local.MusicObservationKind
+import com.runstate.mobile.data.local.MusicPlaybackState
+import com.runstate.mobile.data.local.RunMusicObservation
 import com.runstate.mobile.data.local.RunLocationObservation
 import com.runstate.mobile.data.local.RunStateDatabase
 import com.runstate.mobile.data.local.RunTrackingMode
@@ -24,9 +27,13 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.async
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -318,4 +325,124 @@ class RunSessionCoordinatorRoomTest {
         acceptedForDistance = true,
         segmentDistanceMeters = segmentMeters
     )
+
+    @Test
+    fun explicitShortDiscardCascadesOnlyItsOwnChildrenAndLeavesHistoryUnchanged() = runBlocking {
+        val clock = SettableClock(OFFICIAL_START)
+        val coordinator = coordinator(clock)
+        val dao = database.runDao()
+        coordinator.initialize()
+        coordinator.beginCountdown()
+        coordinator.requestStart(trackingMode = RunTrackingMode.GPS, musicObservationRequested = true).await()
+        database.locationDao().recordObservation(gpsObservation("short-anchor", OFFICIAL_START + 1_000L))
+        database.musicObservationDao().recordObservation(RunMusicObservation(
+            runId = RUN_ID,
+            observationKey = "short-music",
+            observedAtEpochMillis = OFFICIAL_START + 1_000L,
+            elapsedRealtimeNanos = 1_000_000_000L,
+            sourcePackage = "test.music",
+            title = "Test track",
+            artist = "Test artist",
+            playbackState = MusicPlaybackState.PLAYING,
+            eventKind = MusicObservationKind.SESSION_SNAPSHOT
+        ))
+        clock.nowMillis += 5_000L
+        coordinator.requestAction(RunActionKind.PAUSE).await()
+        val savedId = "c4e1b8a2-7d35-4f61-8b0c-2a9e6d4f13b7"
+        val saved = requireNotNull(dao.findById(RUN_ID)).copy(
+            runId = savedId,
+            state = StoredRunState.COMPLETED,
+            finishEpochMillis = clock.nowMillis
+        )
+        dao.insert(saved)
+        assertFalse(dao.isShortPausedRunDiscardEligible(savedId))
+        assertTrue(runCatching { dao.discardShortPausedRun(savedId) }.isFailure)
+
+        // Even an unexpected child left by another writer must obey its existing FK.
+        database.openHelper.writableDatabase.execSQL(
+            "INSERT INTO run_reflections (run_id, request_id, evidence_json, selection_deadline_epoch_millis, status, is_test_data, selection_window_started) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            arrayOf<Any?>(RUN_ID, UUID.randomUUID().toString(), "{}", clock.nowMillis, "PENDING", 1, 1)
+        )
+        assertTrue(coordinator.canDiscardShortRun(RUN_ID))
+        coordinator.requestDiscard(RUN_ID).await()
+        assertNull(dao.findById(RUN_ID))
+        assertTrue(dao.transitionsFor(RUN_ID).isEmpty())
+        assertTrue(database.locationDao().pointsFor(RUN_ID).isEmpty())
+        assertTrue(database.musicObservationDao().observationsFor(RUN_ID).isEmpty())
+        assertNull(database.reflectionDao().findByRunId(RUN_ID))
+        assertEquals(saved, dao.findById(savedId))
+        assertEquals(1, dao.countRuns())
+        assertEquals(RunUiModel(RunUiState.ReadyToStart), runUiModelFor(coordinator.journeySnapshot()))
+    }
+
+    @Test
+    fun databaseDeleteFailureKeepsThePausedRunAndItsChildrenUntilRetrySucceeds() = runBlocking {
+        val clock = SettableClock(OFFICIAL_START)
+        val coordinator = coordinator(clock)
+        coordinator.initialize()
+        coordinator.beginCountdown()
+        coordinator.requestStart(trackingMode = RunTrackingMode.GPS).await()
+        database.locationDao().recordObservation(gpsObservation("kept-anchor", OFFICIAL_START + 1_000L))
+        clock.nowMillis += 5_000L
+        coordinator.requestAction(RunActionKind.PAUSE).await()
+        val paused = database.runDao().findById(RUN_ID)
+        val transitions = database.runDao().transitionsFor(RUN_ID)
+        database.openHelper.writableDatabase.execSQL(
+            "CREATE TRIGGER block_test_discard BEFORE DELETE ON runs BEGIN SELECT RAISE(ABORT, 'test storage failure'); END"
+        )
+        assertTrue(runCatching { coordinator.requestDiscard(RUN_ID).await() }.isFailure)
+        assertEquals(paused, database.runDao().findById(RUN_ID))
+        assertEquals(transitions, database.runDao().transitionsFor(RUN_ID))
+        assertEquals(1, database.locationDao().pointsFor(RUN_ID).size)
+        assertEquals(RunActionKind.DISCARD, coordinator.journeySnapshot().lastActionFailed)
+        database.openHelper.writableDatabase.execSQL("DROP TRIGGER block_test_discard")
+        coordinator.requestDiscard(RUN_ID).await()
+        assertNull(database.runDao().findById(RUN_ID))
+        assertTrue(database.locationDao().pointsFor(RUN_ID).isEmpty())
+    }
+
+    @Test
+    fun shortDiscardRefusesLongCompletedAndIncompleteRowsAndSerializesAgainstResume() = runBlocking {
+        val clock = SettableClock(OFFICIAL_START)
+        val coordinator = coordinator(clock)
+        val dao = database.runDao()
+        coordinator.initialize()
+        coordinator.beginCountdown()
+        coordinator.requestStart().await()
+        clock.nowMillis += 30_000L
+        coordinator.requestAction(RunActionKind.PAUSE).await()
+        assertFalse(dao.isShortPausedRunDiscardEligible(RUN_ID))
+        assertTrue(runCatching { dao.discardShortPausedRun(RUN_ID) }.isFailure)
+        coordinator.requestAction(RunActionKind.COMPLETE).await()
+        val saved = dao.findById(RUN_ID)
+        assertTrue(runCatching { dao.discardShortPausedRun(RUN_ID) }.isFailure)
+        assertEquals(saved, dao.findById(RUN_ID))
+
+        val shortId = "c4e1b8a2-7d35-4f61-8b0c-2a9e6d4f13b7"
+        val fresh = requireNotNull(saved).copy(
+            runId = shortId,
+            state = StoredRunState.RUNNING,
+            finishEpochMillis = null,
+            lastCheckpointEpochMillis = OFFICIAL_START,
+            finalDistanceMeters = null,
+            metricSource = null,
+            telemetryCoverage = null,
+            displayDistanceUnit = null
+        )
+        dao.insert(fresh)
+        dao.pauseRun(shortId, OFFICIAL_START + 5_000L)
+        val discard = async(Dispatchers.Default) { runCatching { dao.discardShortPausedRun(shortId) } }
+        val resume = async(Dispatchers.Default) { runCatching { dao.resumeRun(shortId, OFFICIAL_START + 6_000L) } }
+        assertEquals(1, listOf(discard.await(), resume.await()).count { it.isSuccess })
+        val surviving = dao.findById(shortId)
+        assertTrue(surviving == null || surviving.state == StoredRunState.RUNNING)
+        assertEquals(saved, dao.findById(RUN_ID))
+
+        val legacyId = "1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d"
+        dao.insert(fresh.copy(runId = legacyId, transitionHistoryComplete = null))
+        dao.pauseRun(legacyId, OFFICIAL_START + 5_000L)
+        assertFalse(dao.isShortPausedRunDiscardEligible(legacyId))
+        assertTrue(runCatching { dao.discardShortPausedRun(legacyId) }.isFailure)
+        assertEquals(StoredRunState.PAUSED, dao.findById(legacyId)?.state)
+    }
 }
