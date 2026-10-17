@@ -9,7 +9,8 @@ choice made in June can be re-examined in August without anyone reconstructing w
 
 ## Platforms and tools used
 
-**Current record: October 14, 2026.** Development tools help us build the app; runtime services
+**Platform list updated October 16, 2026; individual checkpoints retain their dates.**
+Development tools help us build the app; runtime services
 are what the app actually uses. The browser designs, native phone app and reflection backend
 are separate parts of this project.
 
@@ -24,12 +25,17 @@ are separate parts of this project.
 | App implementation | **Kotlin and Jetpack Compose; Java 17** | Kotlin/Compose build the native phone screens and behavior. Java 17 supports the console and the separate reflection backend, which currently uses the JDK HTTP server rather than Spring Boot. |
 | Build and verification | **Gradle, Maven and JUnit** | Gradle builds Android; Maven builds the Java projects. Unit and Android device tests check storage, run controls, failure handling and exact saved reflections. Automated tests are separate from physical outdoor/audio acceptance. |
 | Local storage | **Room/SQLite and MySQL** | Room manages the Android phone's SQLite database: runs, feedback, observations and exact selected replies stay local. MySQL belongs to the original console app. The reflection backend currently has no hosted run database; its request cache is temporary memory. |
-| Reflection runtime | **Anthropic Claude API** | The hosted backend generates Sample and GPS reflections. Prompt v1.3 at `bcde0c4` now has two bounded live no-selection outputs; the first preserved exact text after cold History reopen. The key stays backend-only. Two small checks do not establish broad quality. |
+| Android map rendering | **MapLibre Native 13.7.1 (OpenGL)** | Draws the optional GPS Start/Active Live map. The normal Start view restores its static illustration; opening Live map enables a temporary foreground position preview without creating a run. Active uses the existing recorder's route and current/last-known position. The renderer measures no distance and starts no second recorder. Corner tree shadows remain decorative. [Official release](https://github.com/maplibre/maplibre-native/releases/tag/android-v13.7.1). |
+| Street-map data and styling | **OpenFreeMap; OpenMapTiles schema; OpenStreetMap data** | Supplies vector features when Live map is opened with an actual location anchor. RunState's original inline style independently colors sage landscape, cream buildings, blue water and dashed paths; it is not a screen tint or a derivative of the hosted Liberty style. The stable TileJSON points to current weekly data. No account/key, external style, sprite or terrain source is used. Viewed-area requests disclose network location and map areas; linked attribution remains visible. Public service has no availability guarantee. [Official integration guide](https://openfreemap.org/quick_start/); [map privacy](DATA_PRIVACY.md#android-street-map--october-16-2026). |
+| Map labels | **Noto Sans Regular** | MapLibre downloads and caches only the required glyph ranges from OpenFreeMap for street and place names. No new font binary is bundled. Noto Sans is licensed under SIL OFL 1.1; the app's existing notices identify the source and license. [Provider font sources](https://github.com/hyperknot/openfreemap-styles/tree/main/fonts); [license record](https://github.com/hyperknot/openfreemap-styles/blob/main/LICENSE.md). |
+| Map networking | **OkHttp 4.12.0** | The dedicated map client permits only the declared HTTPS OpenFreeMap TileJSON, bounded vector-tile coordinates and Noto Sans Regular glyph ranges. It identifies RunState and preserves cache validators; no map credentials or reflection context are sent. Normal Start/Active views make no new tile requests, and no offline-area download or prefetch feature is enabled. [Official source and license](https://github.com/square/okhttp/tree/parent-4.12.0). |
+| Run-start weather | **Open-Meteo; OkHttp** | An off-by-default remembered choice permits one direct HTTPS lookup from a rounded approximate GPS start location. The saved modeled hourly estimate powers Completion/expanded History and can enter the first reflection without coordinates. Three-second total budget; no polling, retry or old-run backfill. No new account/key/subscription; public noncommercial endpoint terms must be revisited before commercial release. [API](https://open-meteo.com/en/docs); [Android privacy](DATA_PRIVACY.md#android-weather-near-the-run-start--october-16-2026). |
+| Reflection runtime | **Anthropic Claude API** | The hosted backend generates Sample and GPS reflections. Prompt v1.4 at `da808a0` adds optional saved hourly-weather evidence; deployment/health and 52 simulated backend tests passed, while live known-weather writing remains to check. Earlier v1.3 no-selection/audio/History checks are separate evidence. The key stays backend-only. |
 | Speech runtime | **Android TextToSpeech** | Speaks the factual save receipt and exact stored reflection, with audio-focus/failure handling. Manley confirmed facts → live reflection → instrumental while Spotify yielded and returned normally by itself on the Moto. This is one session's compatibility proof. History remains voice-only. |
 | Asset creation and local playback | **ElevenLabs Music v2; Android MediaPlayer** | Generated one temporary original 10-second instrumental on October 14, bundled in the APK with an Eleven Music credit. MediaPlayer plays it locally after Completion speech. Build, 76 emulator screen cases and Moto hearing passed. The app has no ElevenLabs API integration, credential or per-run music request; actual-song playback remains later. |
 | Music evidence | **Spotify through Android media sessions** | Supplies partial local title/artist/playback observations while an opted-in run is Running. A separate per-run choice permits one eligible title/artist in reflection context. No Spotify SDK or preview playback is implemented; metadata access is not playback permission. The bundled instrumental is separate from these observations. |
-| Hosted backend | **Render** | The `runstate-reflections` Starter service in Oregon ($7/month, free Hobby workspace) uses manual deployment and `/health` monitoring. Manley reported Succeeded/Live at `bcde0c4` on October 14; health returned 200/ok and one subsequent v1.3 Sample writing/cold-reopen check passed. Earlier audio proof remains separate. |
-| Deployment packaging | **Docker** | Packages Java 17 and backend resources; the source Dockerfile copies full `src/` and runs Maven test/package. October 13 Linux build tests passed; latest `bcde0c4` deployment logs were not inspected. The `--remote` CMD remains live mode; v1.3 source is now deployed. |
+| Hosted backend | **Render** | The `runstate-reflections` Starter service in Oregon ($7/month, free Hobby workspace) uses manual deployment and `/health` monitoring. Manley deployed `da808a0` on October 16; direct dashboard review confirmed Succeeded/Live in 1m36s and health returned 200/ok. No new subscription. Live known-weather writing remains separate from deployment and earlier audio proof. |
+| Deployment packaging | **Docker** | Packages Java 17 and backend resources; the Dockerfile copies full `src/` and runs Maven test/package. The `da808a0` deployment's visible log tail showed BUILD SUCCESS and the Anthropic backend starting on internal port 10000. The `--remote` CMD remains live mode; prompt v1.4 source is deployed. |
 | Design preview | **Local HTML and GitHub Pages** | `start.html`/`completion.html` and the public preview helped review appearance and interactions. They are browser prototypes, not the installed Kotlin/Compose phone app, and do not prove native tracking or backend behavior. |
 
 Render hosting has an ongoing cost while the paid service remains provisioned, even without a
@@ -43,7 +49,17 @@ For the latest implemented behavior and remaining checks, read
 
 ## Deployment: how the parts connect
 
-**Current October 14 checkpoint:** Manley chose `Manual Deploy` → `Deploy latest commit`, reported
+**Latest October 16 continuation:** Manley committed/pushed backend `da808a0`, adding compatible
+optional hourly weather evidence and prompt v1.4. The Android weather update is installed, sharing
+remains off, and all 32 old run records are preserved. Direct Render review still showed `bcde0c4`
+Live; Manley then selected Manual Deploy → Deploy latest commit. Direct review confirmed
+`da808a0` **Deploy succeeded / Live**, deployment `dep-db978k6q1p3s73arjd3g`, in 1m36s. Public
+`/health` returned HTTP 200/ok, and the visible build/start log tail passed. This updates the hosted
+server, while the Android APK was installed separately; pushing alone had not deployed the code.
+The older v1.3 deployment and audio evidence below remain
+historical, separate checks. See [the current checkpoint](design/project_current_state.md).
+
+**Historical October 14 checkpoint:** Manley chose `Manual Deploy` → `Deploy latest commit`, reported
 Succeeded/Live and confirmed `bcde0c4` on Render, replacing `85cbfab`. The pushed local/GitHub
 `master` copies match that commit; public health returned 200/ok. This deploy includes prompt v1.3.
 Latest build logs were not inspected. A subsequent connected-Moto Sample separately passed one

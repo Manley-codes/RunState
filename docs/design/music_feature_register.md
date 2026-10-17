@@ -7,6 +7,85 @@ metadata:
 
 # Music feature register — LIVE
 
+**Latest October 16 listening direction — revised entrance confirmed on Moto:** the initial
+automated handoff sounded good, but its opening beat did not reveal the connection. Cue v2 for
+Sunday Best now uses the auditioned 15.5–25.5 s early vocal hook and clearer editorial recognition,
+adapting to Energy without invented feelings. The automated Feeling Good repeat passed in 32.821 s,
+restored the original paused position and received Manley's confirmation: “Yes, both landed well.”
+This confirms the reflection fit and entrance for this auditioned original recording, not other versions.
+Other songs may fit by atmosphere; direct lyrical resemblance or explicit naming is not required.
+
+**October 16 execution supersedes research-only next steps:** native song-passage automation is
+built and installed for one initial curated, genuinely observed song (Sunday Best / Surfaces).
+It pairs optional editorial context with the selected reflection and launches the checked current
+Spotify passage only after successful speech. Backend cue acknowledgement and old-server fallback
+are implemented. Both final 488-test JVM suites, 58 backend tests, APK builds and eight silent Moto checks
+passed. The opted-in real automated phone check also passed: live reflection → Spotify passage →
+confirmed paused-position restoration, with all saved data unchanged. Final buffering-interruption
+guards and five regressions passed; the revised entrance is now user-confirmed. Compatible hosted
+backend activation and broader song selection remain pending. Temporary backend/USB routing/test
+package were removed after the earlier check. Prior manual
+experiments already validate the creative concept; new tests must target automation. The snippet
+reveals the musical connection and does not require every reflection to name the artist/song.
+Multiple independent live AI agents, artist research and broader song coverage remain later.
+See [execution checkpoint](project_current_state.md#automated-song-passage-first-version--real-automated-phone-check-passed).
+
+**October 16 Google-method review — native current-song passage control PROVEN in a temporary test:**
+All ten supplied screenshots were reviewed. The Android observer route is already built. A new
+Moto test under RunState's own app permissions, with explicit approval, paused/moved within the
+current Spotify track, played about ten seconds and confirmed original-position/play-state
+restoration, without a Spotify SDK/key, another-song selection, queue edits or audio extraction.
+This proves local current-session mechanics; arbitrary-song URI playback and automatic speech→song
+permission remain open. The temporary test source/package were removed, normal artifact rebuilt,
+and all 32 original run records/fields preserved. No production feature was added in this round.
+
+For independent song interpretation, Musixmatch's new Analysis product explicitly markets AI inputs;
+Basic currently lists $49/month and 100 analysis calls/day. Standard terms still require written
+AI approval, so clarify exact derived-label/spoken-reflection/retention scope before buying.
+LyricFind's public semantic demo and a separate MusicBrainz core-catalog API lookup passed; neither
+grants recorded-song playback rights. Genius is not a documented full-lyrics API. Hiding Spotify's
+name, running a local LLM or relabeling observations is not a documented permission workaround.
+The [method matrix, actual test evidence and unsent Musixmatch inquiry](research_music_reflection_generation.md#google-screenshot-methods-reviewed--october-16-2026-latest)
+record the bounded next path. Spotify remains first; weather's finer timing follows music.
+
+**October 16 deeper Spotify review — official MCP public search PROVEN; account/use scope NEEDS REVIEW:**
+Spotify stays first. Anthropic's [verified Spotify connector](https://claude.com/marketplace/connectors/spotify)
+publishes Spotify's own MCP server, and its [API catalog](https://platform.claude.com/docs/en/agents-and-tools/remote-mcp-servers)
+lists Spotify. A bounded Claude Messages API request with only `search` enabled returned HTTP 200
+and one successful Spotify MCP search result for a public easy-run track query. No account/listening
+data, playlists/library, currently-playing state or run facts were used. This proves a working
+custom-backend public-search route despite an earlier direct unauthenticated initialization's 403.
+The model stopped at its output limit, so completed prose quality was not evaluated. A second
+tool-listing-only Claude API call returned 200 with zero tool calls: the actual server advertises
+`search`, `remove_from_library`, `save_to_library`, `generate_playlist`, `get_currently_playing`,
+which differs from the directory's six-tool list. Two Anthropic calls total; no Spotify account
+linked or persistent files made. The currently-playing description requires authenticated Free or
+Premium access and a direct user request about current playback; it disallows proactive calls.
+It is therefore not an established route for automatic background run observation. Search is
+read-only with public/activity/similar and authenticated library/history variants, not lyrics,
+biographies, transcripts, music facts/news or audio analysis. Playlist generation requires Premium
+and explicit creation intent and remains out of scope. No seek/pause/timed-excerpt tool appeared.
+Ask Spotify whether an approved automated same-run route exists within those boundaries, plus
+account authorization, applicable terms and permission for song/run correlation, generated
+reflections and, separately, passage playback. Public API access is not universally blocked;
+reported tool capabilities do not establish those broader permissions. No further API calls now.
+Manley's intuition also has evidence: historical Nike pace-based playlists and Runkeeper song/pace
+analytics, current approved DJ products, and Spotify's own 2026 Running Mode/AI show that deeper
+experiences exist. Strava's integration is now discontinued. Their contracts and capabilities do
+not transfer to a new RunState app; Premium is playback access, not an external AI/excerpt licence.
+The general [Spotify User Guidelines](https://www.spotify.com/us/legal/user-guidelines/) also address
+AI ingestion and automated collection, strengthening the earlier Developer-Terms-only caveat:
+Android observation without an SDK is not an established exemption. Exact use needs clarification.
+The [latest research review and unsent support draft](research_music_reflection_generation.md#deeper-spotify-review--october-16-2026-latest)
+records the MCP lead/access result, dated evidence, revised unsent request, separate-agreement
+route, App Remote proof boundary and alternatives.
+MusicBrainz CC0 core metadata is an independent-source candidate, not a way to relabel Spotify
+observations; old Last.fm/ListenBrainz and licensed-lyrics ideas remain recorded, not newly approved.
+The trust ledger and music-aware reflection direction require permitted evidence. Ordinary run-cue
+ducking and an intentional reflection-to-song passage are separate cases. Manley's successful
+manual pairings are already evidence; no repeat test, provider switch, new capture/sharing, SDK
+integration or actual-song asset is approved by this documentation update.
+
 **October 15 opportunity emphasis:** Manley's focus is announcement voice, tone and delivery that
 fit the playing music and feel less intrusive. The optional echo/spacious-music effect is parked.
 Spotify stays the first choice; consider alternatives only if multiple substantial barriers block

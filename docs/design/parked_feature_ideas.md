@@ -13,6 +13,54 @@ live in parked_music_recommendation.md. This file now holds TWO categories (July
 and **accepted/later** (committed to the vision, waiting for its proper phase — currently
 the automatic-splits/telemetry entry).
 
+## Suggested running places on Start — deferred October 16, 2026
+
+**Status: recorded for later consideration, not an implementation task or a change in priorities.**
+Manley asked to preserve this idea until more important work is finished. Revisit after progress
+on the current GPS reliability and runner-state priorities; no delivery date or final scope is set.
+
+**The idea:** keep the attractive static Start-screen imagery, but use it to introduce a suggested
+running place, such as Hermann Park or Buffalo Bayou Trail. The featured place could change from
+day to day, and a swipe indicator could let the runner browse another place. Later suggestions
+could consider weather, crowding, how many people are there, or reviews. These are possible inputs,
+not data sources or capabilities the app currently has.
+
+**Potential value:** help someone decide where to run and discover an appropriate alternative,
+rather than only rotate decorative backgrounds. This is place discovery; the separate Future Run
+Suggestions entry below concerns coaching-like recommendations about run type and distance.
+
+**Recommended first scope, still to decide:** a small curated set of places with a useful reason
+to explore each one, known details such as surface or shade, and a way to keep a favorite. Daily
+novelty should not displace a runner's familiar choice. Swipe only the place preview, keeping the
+agent, Energy choices and Start button anchored. Keep Active focused on the current run and its
+optional live map. This should remain a bounded addition to RunState's before/after state concept.
+
+Clearly label a featured place as a suggestion (for example, "Explore · Hermann Park"), not the
+runner's current location. Browsing a suggestion must not start a run or change where GPS records.
+Weather, current crowd levels and reviews need suitable sources before influencing recommendations;
+"usually busy" is different from "busy now," and high ratings alone do not establish running fit.
+Pre-run Energy could contribute later, but Low Energy must not automatically imply a short run.
+
+**Next decision when revisited:** choose the initial places and useful details, confirm reusable
+imagery and data sources, and approve one bounded design/implementation slice. No trail navigation,
+live crowd detection or recommendation engine is authorized by this note.
+
+## Calorie indicator — later, nonpriority (October 16, 2026)
+
+**Status: recorded at Manley's request for later consideration.** He wants a calorie indicator,
+but explicitly said it is not a priority. No calculation, Android storage field or working native
+indicator currently exists; this note does not authorize implementation or move it ahead of the
+current pace and run-context work.
+
+Any future value should be presented as an **estimate**, with its calculation or external source,
+required inputs and uncertainty understood before a number is displayed. Do not invent a body
+weight or use a decorative calorie ring as evidence that calories were measured.
+
+Older visual notes mention a Completion calorie ring, while `design_start_run_v7.md` records a
+proposal to replace the Active calorie slot with cadence. Keep those as design history: this
+latest request preserves the calorie idea without selecting a screen, ring, formula or replacement.
+Revisit when higher-priority run accuracy/context work is settled and approve one bounded slice.
+
 ## Top Run Highlights — strongest of the batch
 
 Top ~3 all-around best runs as badge/reward-style cards — balancing distance, pace, post-run

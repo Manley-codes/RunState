@@ -1,23 +1,103 @@
 ---
 name: design-start-run-v7
-description: "The Start screen as it actually stands after the August 16-19 2026 passes - map foundation, RunStyle card, energy absorption into the ring, and the collapse into the timer. Prototype only. Nothing here is locked."
+description: "Current native Start/Active decisions followed by the August 16-19 prototype record: map foundation, energy absorption into the ring and transition into the timer. Visual design remains open."
 metadata:
   type: project
-status: CURRENT DESCRIPTION - what is built in the prototype right now. Not a specification, not locked.
+status: CURRENT NATIVE DECISIONS plus dated prototype history; verification lives in project_current_state.md. Visual design is not locked.
 ---
 
 # Start Run — where this screen actually is
 
-**Latest native GPS status correction, October 15:** Active now distinguishes GPS waiting,
+**October 16 Spotify follow-up, installed after the returned run review:** the original music orb now has a deliberate
+`MUSIC / SPOTIFY` action that opens the installed Spotify app. It sends no playback command,
+starts no run and changes no observation/sharing preference. If Spotify cannot open, RunState
+shows an explanatory message. Its artwork, sizing and footer position remain unchanged; Shoes
+still says `LATER`. Builds and the callback UI test on the Moto passed; the installed Spotify
+launcher activity resolves. Actual Spotify playback was not controlled during verification.
+Manley clarified that this object originally had other music purposes. Its current launcher is
+a useful interim action, not a decision to dedicate the music entry permanently to Spotify.
+This supersedes the music-placeholder status below.
+
+**October 16 footer polish — approved direction:** keep the original music artwork with more
+clearance below the footer's curved top. Give Shoes a softly uneven, shaded backing without the
+enclosing circular border. Keep Start's round dial, tick marks and play symbol, but replace its
+flat fill and continuous idle outline with restrained depth and a partial upper highlight.
+The existing Energy-triggered glow remains. The curved side shoulders are raised within the same
+footer bounds, and the crest above Start is one smooth rounded hill without the small central dip;
+control sizes/positions and the stationary Energy gap are unchanged. Shoes and
+Music still show `LATER`; this pass does not add their mechanics. Verification belongs in
+`project_current_state.md`.
+
+**Latest October 16 direction — original Start artwork, optional styled live map:** Manley
+clarified that he wants the actual landscape features recolored, not a blue/green tint. The
+live map now uses OpenFreeMap vector data with an original RunState style: light sage ground,
+stronger green park/wood areas, darker cream building shapes, restrained blue road edges,
+blue waterways and dashed mapped paths. Feature geometry remains real; a mapped path is not a
+claim of public access or a recommended running route. No colored wash sits over the live map.
+
+The original static Start image is restored by default, including its corner atmosphere.
+**Live map** opens a separate optional location preview; **Close map** returns to Start. The
+normal Active layout is restored too, with **View live map** / **View recorded map** as its
+explicit options. This replaces the earlier always-visible background/Expand decision below.
+The fixed portrait Energy/footer layout, white card definition and drag cancellation remain.
+
+Only the opened Start map owns a foreground, memory-only preview listener. Close, History,
+backgrounding and changing mode stop it; opening again can reacquire. Starting from either
+screen closes/stops the preview before countdown, then the existing recorder owns the real run.
+During a run, hiding the map does not stop recording. No map tiles or native map renderer are
+requested by the static Start/Active views. Expanded maps show provider disclosure and linked
+OpenFreeMap/OpenMapTiles/OpenStreetMap attribution. Provider details live in `../DATA_PRIVACY.md`.
+
+**October 16 Start refinement:** Manley found that the scrollable Energy/content stack could
+move into the separately fixed Start crest, and the real map's beige/white treatment lost the
+earlier screen's character. On normal portrait screens, upper content, Energy and the footer now
+hold separate measured space; Energy clears the footer by at least 12 dp. Dragging inside an
+Energy tile does not answer it. Short screens or larger text retain access to setup/history
+without allowing Energy to overlap Start. Very short landscape windows use one scrollable stack.
+
+The RunState card stays opaque white, with a quiet green-grey edge and shadow. A blue/sage
+atmosphere and the existing tree shadows sit above the real streets; these are screen decorations,
+not invented parks or terrain. Map gestures are available only in Expand. The normal backdrop
+follows GPS, and closing Expand recenters it. No run-recording or Energy meaning changed.
+This visual pass is open to review; device results live in `project_current_state.md`.
+
+**Earlier October 16 native map continuation — superseded by optional maps above:** Manley wanted the real map visible
+by default on both GPS Start and Active, while preserving the corner tree shadows. The earlier
+separate **View live map / View recorded map** entry is superseded. The same native map remains
+through countdown, running and **Expand**; expansion enlarges it instead of initializing a
+second map. The decorative shadows do not imply actual tree locations. History retains its
+separate offline recorded-path preview.
+
+Start's foreground preview is memory-only. An accurate cached GPS fix up to 30 minutes old can
+establish a clearly labeled last-known position; only a usable source fix within 15 seconds is
+current. The preview stops in History, the background and Sample mode. It creates no saved run,
+route or distance before Start. The official start hands location ownership to the existing run
+recorder; Active's marker and separated route sections use that recorded evidence. The map does
+not request another recording stream. Missing permission or location stays an honest unavailable
+or waiting state, never a fabricated live position. Paused and stale markers remain identified.
+
+OpenStreetMap tile requests can occur automatically when GPS Start is visible and an actual
+anchor exists; they are no longer limited to a separately opened map view. Requests reveal the
+viewed area and IP address, as described in `../DATA_PRIVACY.md`. No new map account or hosted
+service is introduced. Map loading is separate from GPS recording and run controls.
+
+Manley reported that real street tiles worked but the first opening was slow. Keeping one map
+removes the redundant expansion initialization by design; no measured speed improvement or
+outdoor accuracy is claimed yet. This continuation's build/device results belong in
+`project_current_state.md`, not in this decision record. New-run pace can meet the conservative
+coverage policy; older/partial runs remain unchanged.
+
+**Earlier native GPS status correction, October 15:** Active distinguishes GPS waiting,
 recording, weak signal and signal unavailable from fresh usable recorded observations. Earlier distance
 does not keep the recording label alive; accurate stationary readings can be healthy before any
 distance exists. A usable fix older than 15 seconds loses freshness. Paused/stopped/Sample stay
-distinct. This changes status truth only: the map is still illustrative and coverage/pace work
-remains. See `project_current_state.md` for verification.
+distinct. That checkpoint changed status truth while the map was still illustrative; the later
+map and coverage/pace work above supersedes that limitation. See `project_current_state.md`.
 
-**Latest native setup correction, October 15, 2026:** regular Start now uses precise GPS by
-default. The map remains illustrative; a quiet status describes GPS readiness, not an acquired
-position or a live map. The repeated GPS/music/connection panels have moved into **Run settings**.
+**Earlier native setup correction, October 15, 2026:** regular Start uses precise GPS by
+default. At that checkpoint the map was illustrative and quiet status described readiness;
+the October 16 foreground preview now supplies the distinct current/last-known position.
+The repeated GPS/music/connection panels have moved into **Run settings**.
 The Start surface keeps quiet setup/status messages and a Settings entry so the everyday path is
 optional pre-run Energy, then Start.
 
@@ -166,7 +246,7 @@ See `project_current_state.md` for verification and remaining limits.
 **Read this instead of `design_start_active_run.md`.** That file describes the August 13 version of
 this screen, which no longer exists. It is kept as history, not as instructions.
 
-**What this file is:** a plain description of the Start screen prototype as of **August 19, 2026** —
+**What follows:** a historical description of the Start screen prototype as of **August 19, 2026** —
 what it does, why each piece is there, and what still isn't decided. Written so it can be picked up
 cold months later without rebuilding the context from memory.
 
@@ -366,14 +446,16 @@ toward what does work.
 
 ---
 
-## What this screen needs that doesn't exist yet
+## Requirements exposed by the historical prototype
 
-The prototype exposes requirements. It doesn't satisfy them.
+The prototype exposes requirements. It does not establish native implementation; current native
+map behavior is recorded at the top, and broader implementation status lives in
+`project_current_state.md`. Rows not explicitly updated below retain their historical context.
 
 | Needed | Status |
 | --- | --- |
 | Live elapsed time, distance, pace | Mobile tracking / GPS / session work |
-| Real map and route tracking | Mobile / GPS phase |
+| Real map and route tracking | Native GPS Start/Active map continuation is recorded above; recorded evidence feeds the route, while field accuracy and performance checks remain separate. |
 | Cadence, if it takes the calories slot | Phone sensors — reachable without extra hardware, not built |
 | BPM | Sensor or health-platform integration; not collected |
 | Music-reactive ring | Real playback signal and a permission strategy |

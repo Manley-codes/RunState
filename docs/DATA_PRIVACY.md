@@ -1,7 +1,139 @@
 # Data & Privacy
 
-RunState is a local Java console app. Your run history is **stored on your machine** and is
-never synced to a RunState server or account system — RunState has no server and no accounts.
+This page contains the original **Java console** privacy record and a separate, bounded
+**Android street-map and weather** records below. It is not yet a complete privacy notice for the Android
+app. In particular, the console's request fields and local fallback behavior must not be read
+as a description of the Android reflection flow.
+
+The Android app stores run history on the phone and uses a hosted RunState reflection backend
+on Render. That backend can send approved run context, including optional eligible music
+metadata, to Anthropic. See [the current Android checkpoint](design/project_current_state.md)
+and [backend documentation](../backend/README.md) for those implemented boundaries. The older
+console statement that RunState has no server does **not** apply to the Android app.
+
+## Android curated song passage — October 16, 2026
+
+The first automated passage version uses the existing optional music-observation and separate
+reflection-sharing choices. A known song must appear in eligible same-run Spotify observations.
+Selection stays local and sends one approved title/artist with partial-report provenance, plus
+RunState's own bounded editorial theme/connection note, to the reflection backend and Anthropic.
+It does not send a listening-history list, recording, lyrics, Spotify account credential or artist
+profile. Editorial interpretation is separate from what the device actually observed.
+
+The playback title/artist, selected start and bounded duration are frozen in the phone's existing
+reflection-evidence JSON and stripped from the network request as local transport data. A matching
+server cue acknowledgement is required for automatic passage playback. An older hosted server
+receives the previous compatible request instead. Existing saved reflections are not rewritten.
+
+Using the existing notification-listener access, RunState can send ordinary pause/seek/play
+commands to the matching current Spotify media session. No new Android permission, SDK account,
+audio capture, recording extraction, other-song selection or queue mutation is added. Spotify's
+app plays its own audio. Successful speech is required before a passage starts; leaving/stopping
+the screen or changed playback cancels ownership. Normal completion attempts and verifies the
+earlier position and playing/paused state; an interruption never automatically resumes music.
+Missing access, a different song or unsupported controls skip the passage. History stays voice-only.
+Initial coverage is one curated song; this is not an automatic whole-catalog meaning/chorus engine.
+
+## Android street map — October 16, 2026
+
+The GPS Start and Active screens offer an optional **Live map**, rendered by MapLibre Native
+13.7.1. The normal Start screen uses the original static illustration, and the normal Active
+screen emphasizes run controls and metrics. Opening those normal screens does not initialize
+the street map or request its tiles. The illustration and corner tree shadows are artwork,
+not evidence of the runner's surroundings. History's existing offline path preview remains
+separate and does not request street tiles.
+
+While the Start map is open, an eligible foreground GPS preview can use an accurate cached location no more
+than 30 minutes old, clearly labeled last known. Only a usable location whose source time is
+within 15 seconds is labeled current. The preview is memory-only: it does not create a saved
+run, route or distance before Start. It stops when the map closes, in History, in the background
+and in Sample mode, and hands off before run recording starts.
+Missing location permission or evidence is not replaced with a fabricated position. During a
+run, the map uses the existing recorded GPS evidence; the renderer does not start a second
+location recorder.
+
+Opening Live map with an actual location anchor can request vector map data and label glyphs
+from `https://tiles.openfreemap.org` over HTTPS. The inline RunState style uses the stable
+`/planet` TileJSON endpoint, which identifies the provider's current weekly tile set, and
+`/fonts/Noto%20Sans%20Regular/{range}.pbf` for map labels. There is no external style, sprite,
+terrain source or RunState-backend proxy. Without an eligible anchor,
+the app does not request an arbitrary location's tiles as if that were the runner's position.
+The tile address identifies the viewed area and zoom level; the provider also receives the
+connection's IP address and an app-identifying User-Agent. Following the position or panning
+can request additional areas. Consequently, **local route storage does not mean that viewing
+the street map reveals no location information to an external service**. OpenFreeMap may use
+a CDN. Its access logs omit IP addresses by default, but error logs and temporary security
+logs can include them; see the provider's [privacy policy](https://openfreemap.org/privacy/).
+
+RunState draws the route locally. Map requests do not include saved route-point lists, run
+IDs, Energy answers, reflection text, music metadata, audio, or backend access codes. There
+is no route-upload, navigation or map-account feature in this slice. A stale or paused marker
+is identified as the last recorded position rather than represented as a fresh location.
+
+MapLibre caches viewed map resources locally under its normal HTTP caching behavior; the
+cache itself can reveal areas previously viewed. The map cache file `mbgl-offline.db` and
+its `-wal`, `-shm` and `-journal` sidecars are excluded from Android cloud backup and device
+transfer. That is separate from the existing run-database exclusion. App-controlled map
+request logging and the SDK action journal are disabled. No offline-area download or tile
+prefetch feature is enabled. These controls do not remove the provider's network logs.
+
+RunState's original map style colors actual source features separately: sage ground/landscape,
+cream buildings, blue water and distinct dashed paths. These colors are cartographic choices,
+not a land-access assessment or a claim that every sage area is a park. OpenFreeMap supplies
+OpenStreetMap data using the OpenMapTiles schema. The map displays linked OpenFreeMap,
+OpenMapTiles and OpenStreetMap attribution and identifies RunState in requests. No account
+or API key is required. This public service is best effort, without an availability guarantee;
+tracking and run controls do not depend on map tiles loading. A map-loading failure does
+not mean GPS recording has failed. See the
+[OpenFreeMap terms](https://openfreemap.org/tos/), [integration guide](https://openfreemap.org/quick_start/)
+and the
+[platform/tool record](README.md#platforms-and-tools-used).
+
+## Android weather near the run start — October 16, 2026
+
+`Run settings` → **Weather near my run** is a separate remembered choice, **off by default**.
+Turning it on applies to future GPS runs; it does not upload old routes or retrieve historical
+weather for old runs. Location permission, optional street-map use and music consent do not turn
+this choice on. Turning it off stops capture for future runs; it does not erase saved weather or
+change a reflection whose evidence was already frozen.
+
+After one eligible accepted GPS point is saved within the first two minutes, the phone may make
+one direct HTTPS request to `https://api.open-meteo.com/v1/forecast`. Latitude and longitude are
+rounded to **two decimal places before transmission**, giving roughly kilometre-scale precision
+that varies with latitude. This is approximate location, not anonymous information. The provider
+also sees the connection IP address. The URL includes the requested run-start UTC hour, selected
+weather variables and unit/time-format choices. No full route, run ID, Energy, music, reflection,
+backend access code or Anthropic key is included. A redirect is not followed, and RunState does
+not log the request URL or provider exception text.
+
+The saved result is an **hourly modeled estimate near the start**, including temperature,
+feels-like temperature, humidity, wind, condition, provider/resolution, the target run start,
+the valid hour and fetch time. Its Room row is linked to the run's permanent UUID. The weather
+snapshot contains no latitude/longitude; precise GPS route storage elsewhere in the run database
+is a separate feature. Completion and expanded History use the saved facts, with the hour shown
+in the run's saved timezone. There is no continuous weather polling or background weather-only
+location acquisition. Samples, missing early fixes and failed lookups never create made-up weather.
+
+When an initial reflection is prepared, an already-ready snapshot may be included in the
+request to **RunState on Render and Anthropic**, alongside the other approved run facts.
+Only weather facts and their time/source metadata are sent, **not lookup coordinates**.
+RunState does not wait for weather before saving or generating a reflection. Retry/reopen reuse
+the original evidence; late weather does not silently rewrite an existing reply.
+
+Provider and CC BY 4.0 licence links appear beside the weather display on Completion and expanded
+History. The bundled notices identify the data source and RunState's unit/condition-label display
+conversions. See [Open-Meteo's licence record](https://open-meteo.com/en/licence).
+
+The provider's [API documentation](https://open-meteo.com/en/docs) describes the modeled hourly
+values; its [terms and privacy record](https://open-meteo.com/en/terms) describe its own data
+handling, licensing and service limits. This prototype uses the public noncommercial endpoint;
+review commercial service terms before a commercial release. RunState has not purchased a
+weather subscription or created a new weather account.
+
+## Java console privacy record
+
+The original Java console app stores run history **on your machine**. That console history
+is not synchronized to a RunState server or account system.
 
 That is not the same as saying your data never leaves your machine. Two external services are
 involved:
@@ -16,7 +148,7 @@ Both are described in full below.
 
 ---
 
-## Anthropic API
+## Java console: Anthropic API
 
 ### When a request happens
 
@@ -192,7 +324,7 @@ lookup earlier in the flow may already have happened.
 
 ---
 
-## Open-Meteo API
+## Java console: Open-Meteo API
 
 The weather lookup makes **up to two requests**, and they do not send the same thing. Either
 may not happen at all.
@@ -223,5 +355,6 @@ Open-Meteo is a free, open-source weather service — no account or API key requ
 
 ---
 
-RunState is a learning and portfolio project, not a commercial service. Both external APIs
-are used solely to power the AI response and weather context features.
+RunState is a learning and portfolio project. The two external APIs in the console record
+above power its AI response and weather context features; this does not enumerate the
+Android app's separate hosted services or its map requests.

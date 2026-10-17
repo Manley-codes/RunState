@@ -244,7 +244,18 @@ any future track-level feedback remain later decisions.
 
 ### Truth and privacy boundaries
 
-**October 13 limited sharing approval:** Manley approved a separate optional, per-run choice to
+**Current clarification — October 16:** the October 15 remembered-settings direction supersedes
+the early reset-every-run wording below. Observation and optional sharing preferences are now
+remembered; each new run still stores its own permission flags, and old records gain no consent.
+Changing/clearing the reflection connection resets sharing. No preference was changed during the
+October 16 Spotify work. The existing title/artist cloud path is technically implemented but its
+provider clearance is unresolved: Spotify's API/SDK rules restrict metadata ingestion into AI,
+analysis and automated audio segues. The Android-observation distinction and exact questions are
+recorded in [the Spotify checkpoint](research_music_reflection_generation.md#spotify-feasibility-checkpoint--october-16-2026).
+Do not expand that path, add SDK-derived metadata or infer music/run relationships on an assumption
+of permission. The current local reliability/launcher work neither clears nor expands cloud use.
+
+**Historical October 13 limited sharing approval:** Manley approved a separate optional, per-run choice to
 share one observed Spotify title and artist with RunState's backend and Anthropic for a reflection.
 It is off by default, resets for the next run, and does not grant sharing for old records. The
 implementation records the choice separately from local observation and selects one eligible

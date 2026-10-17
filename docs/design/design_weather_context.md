@@ -7,10 +7,113 @@ metadata:
 
 # Phase 5, Step 2 — Weather context (✅ SHIPPED July 6–7, 2026 — kept as reference spec)
 
+## Next weather direction — requested October 16 after the music work
+
+Manley clarified that he wants weather closer to the actual current/run time, rather than the
+hourly snapshot just installed. He is open to a paid provider if necessary, but no purchase is
+authorized or selected. Investigate provider refresh rate, modeled/observed resolution and how
+weather should represent the run before choosing a subscription. A timestamp accurate to the
+minute must not imply weather measurements exist at that resolution. This follow-up starts
+**after the current music task**; the existing hourly capture stays as implemented for now.
+
 > As-built reality: see `design_weather_cleanup.md` (STATUS: BUILT & VERIFIED) and the
 > "Current weather architecture" section of `project_current_state.md`. This file remains
 > useful for the WMO code mapping, API URLs, and original decision reasoning.
 > The RPE note at the bottom has since become a real design: `design_effort_cost.md`.
+
+## Android implementation — October 16, 2026
+
+**Built, installed on the Moto and deployed on Render at `da808a0`; Live/health verified.** This section
+supersedes the requested-only follow-up below. The console implementation later in this file
+remains a separate historical feature.
+
+- **One estimate near the start, not continuous weather.** After an accepted GPS point is saved
+  within the first 120 seconds of a new run, an independent application job can make one lookup.
+  Both wall-clock and monotonic evidence must establish that window. A late first fix settles
+  without HTTP. Sample runs and old completed runs do not trigger capture or backfill.
+- **A remembered, separate choice.** `Run settings` → `Weather near my run` defaults off. Its
+  disclosure explains approximate start-location sharing with Open-Meteo, the provider's access
+  to the network IP address, and optional use of saved facts in reflections. It applies to future
+  GPS runs; opening settings, History or the map does not start a weather lookup.
+- **Minimal location disclosure.** The phone rounds latitude/longitude to two decimal places
+  (roughly kilometre-scale, varying with latitude) before a direct HTTPS request to the fixed
+  Open-Meteo forecast endpoint. It sends the requested UTC hour and weather-variable/unit choices.
+  The full route, run UUID, Energy, music, backend token and API key are not request parameters.
+- **An explicit time contract.** Select the UTC hour containing the official run start. Save
+  target, valid-from, valid-to and fetched-at timestamps, source `OPEN_METEO`, resolution `HOURLY`,
+  temperature, feels-like, humidity, wind and WMO condition. This is modeled area weather, not
+  a phone sensor reading, a minute-by-minute observation or proof of whole-run conditions.
+- **Failure stays optional.** A three-second total budget, no retry/redirect and bounded strict
+  parsing keep weather independent of recording and saving. Room 12 adds `run_weather`, keyed
+  to one permanent run UUID, with DISABLED/PENDING/READY/UNAVAILABLE. It changes no old run fields.
+  A claimed attempt is not repeated after process death; a saved pending status displays
+  Unavailable rather than promising background work that may no longer exist.
+- **Save once, use the same facts.** Completion and expanded History show only that run's saved
+  snapshot and local start-zone hour, with Fahrenheit/mph for miles or Celsius/km/h for km.
+  Old/disabled rows show no invented conditions. The first reflection request reads an already
+  READY, correctly matched snapshot without waiting; retries and reopen reuse frozen evidence.
+  Late weather can refresh its display but cannot rewrite an existing reflection.
+- **Coordinates do not enter reflections.** Only the validated eleven-field weather object can
+  enter the hosted backend/Anthropic evidence. Missing weather is omitted on the wire for older
+  strict servers. Backend v1.4 accepts old requests and permits relevant pleasant as well as
+  difficult conditions, without treating weather as the cause of Energy or performance.
+
+Verification: 52 backend tests; 460 Android JVM tests per build variant; debug, release and
+instrumentation APKs; three focused Moto migration/settings checks. All passed. Public-place
+Open-Meteo and Android-client-to-fake-backend probes passed separately from the device checks.
+No private phone location was sent for weather and the real preference remains off. A future
+opted-in GPS run and hosted known-weather reflection still need end-to-end confirmation.
+See `project_current_state.md` for deployment, preservation evidence and the six necessary new files.
+
+## Historical Android follow-up — requested before implementation on October 16, 2026
+
+**Status: requested goal, not built or a final implementation scope.** Manley wants weather
+matched to the actual time of a run, saved with that run and used as grounded context in its
+Android reflection when relevant.
+His observation that today's weather felt good is a reason to preserve useful conditions, not
+only adverse heat or rain. Weather may add relevant context; it must not claim to explain a
+runner's feelings or performance. Revisit a bounded next slice after the current pace work.
+
+**Current boundary:** the shipped feature below is the Java console's city/date lookup. It stores
+daily-mean temperature and feels-like values plus a daily condition. It is not run-time weather.
+The Android run row, reflection evidence contract and backend currently contain no weather
+fields or lookup. Android already stores official start/finish times, the start timezone and
+timestamped GPS observations, so the missing start-time foundation in the older deferral below
+now exists. This does not mean time-matched weather capture itself has been implemented.
+
+**Evidence to preserve in a proposed native contract:**
+
+- The weather values and units, provider/source and modeled-data provenance; these are contextual
+  estimates for an area, not readings from a phone temperature sensor.
+- The provider-valid time or interval, separately from when RunState fetched the result; also
+  preserve temporal resolution and the run's timezone. A lookup made after finishing must still
+  select the run's time, rather than substitute conditions at the time of the lookup.
+- The location basis and precision used for the lookup, with honest missing or partial evidence.
+  Choose the representative time/location or run-window rule before claiming coverage of an
+  entire run. One snapshot near the start is a possible first slice, not the settled requirement.
+- A durable snapshot owned by the saved run. Reflection evidence should freeze the eligible
+  weather facts it actually used, so reopening or retrying cannot silently replace the original
+  context with today's weather. Failed lookup must not block recording or saving; missing weather
+  stays unknown, and an existing reflection is not silently rewritten.
+
+[Open-Meteo's API documentation](https://open-meteo.com/en/docs) supports hourly/time-bounded
+queries and model-based current conditions. Its daily weather code is the most severe condition
+of the day, so the console's daily code must not be reused as proof of the sky during a morning
+run. Exact sampling resolution, retrieval timing, storage/API changes and display remain to decide.
+
+**Privacy proposal, not existing permission:** the console disclosure in `../DATA_PRIVACY.md`
+covers city-geocoding coordinates; Android's optional map disclosure covers a different provider.
+Neither establishes a choice to send device-derived run coordinates to Open-Meteo. Before a native
+lookup, settle the location precision, direct-versus-backend request route and clear disclosure
+of what leaves the phone. A full route is not needed for a bounded weather lookup. Prefer sending
+only the resulting weather facts and provenance into reflections, keeping lookup coordinates
+out of the reflection payload. The provider's [privacy record](https://open-meteo.com/en/terms)
+notes that API logs can contain coordinates/IP addresses and are removed after 90 days.
+
+The decisions and build plan below remain the historical console baseline; this follow-up does
+not approve a new source edit, continuous sampling or a broader roadmap change.
+
+---
 
 Goal: give the AI agent (`RunAgent`) weather context for each run so post-run responses can
 reference real conditions ("five miles in that humidity is a different kind of effort").

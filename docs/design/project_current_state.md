@@ -5,7 +5,640 @@ metadata:
   type: project
 ---
 
-## Current Android checkpoint — October 15, 2026
+## Current Android checkpoint — October 16, 2026
+
+### Automated song-passage first version — real automated phone check passed
+
+**Latest listening feedback / adjustment:** Manley heard both automatically and said the handoff
+went well, but the reflection's musical connection was unclear and the opening ten seconds were
+mostly instrumental. He wants the early vocal hook for this song; a fitting atmosphere is enough
+for some other pairings, without forcing every reply to name or directly reference a song. Earlier
+manual listening notes already recorded this entrance preference and should have informed the
+first offset. Catalog cue `sunday_best_surfaces_v2` now uses a **15.5–25.5 second**
+window and clearer independent editorial context about a good thing to take from completing the
+run. Energy remains authoritative. The repeated automated Moto check passed (32.821 s) and Manley
+confirmed **"Yes, both landed well"** for the early vocal hook and improved reflection fit. This
+is an auditioned entrance for this original recording, not automatic chorus detection or proof
+that another version shares its timing. Keep the current v2 pairing as the accepted starting point.
+The optional automated audio check can use a controlled Feeling Good branch and expose only its
+fictional sample reply text for correlation review. It never inserts or changes saved runs.
+Backend prompt/schema are unchanged by this follow-up; existing backend commit instructions remain
+valid. No additional source/test/asset files were created for the adjustment.
+Both 488-test JVM suites and all three APK builds passed after this adjustment. The revised debug
+app was installed on Moto. The repeat used the controlled Feeling Good branch, one real provider
+request and the actual automatic voice → Spotify handoff, then confirmed original paused-position
+restoration. It created no saved run. After cleanup, the exact six-table/32-run checksum still
+matched. Temporary backend, USB forwarding and test package were removed; normal RunState reopened.
+Hosted backend activation and broader song coverage remain, with no Git mutations performed.
+
+Manley explicitly approved execution after clarifying that prior manual pairings already validated
+the creative experience. The snippet should reveal the reflection's musical connection; do not
+restart manual pairing tests or broaden provider research before trying the automation.
+
+The native app now selects a known, genuinely observed same-run song, freezes its editorial cue
+and local passage plan with reflection evidence, and can hand successful exact-text speech to a
+Spotify passage automatically. Initial catalog: **Sunday Best / Surfaces**, with a curated
+ten-second passage. No unknown-song meanings or arbitrary replacement songs are invented. The
+controller checks current identity/state/position, stops on interruption and verifies normal
+position/play-state restoration. It does not select another track or alter a queue. Unsupported
+current songs skip the planned passage rather than playing an unrelated instrumental.
+
+Backend prompt v1.5 accepts optional independent editorial song context and echoes its cue ID.
+Health advertises support via a header without changing its old body. Hosted Android preflights
+that capability and preserves the previous request/audio behavior against the current old Render
+deployment. New pairing therefore needs the compatible backend deployed before hosted activation.
+No Git mutation/deployment was performed. No Room schema change; READY rows still discard unused
+candidates, and the acknowledgement for automatic arrival playback is process-owned. History
+remains voice-only; saved reflection text is unchanged by later catalog or feedback changes.
+
+**Verification:** 58 backend tests passed; **488 JVM tests per Android variant** passed, and debug,
+release and instrumentation APKs built. The Moto update and **eight silent audio ownership checks**
+passed. All **32 completed runs**, zero active runs and every field in all six user tables retained
+checksum `ca50c51d50bd1328790faef3a0209870c85a9acaecfb2012d049a72c87f29530` before/after installation
+and silent testing. Temporary inspection copies were removed. The explicitly opted-in real phone
+check then passed: one live Anthropic reflection automatically handed off to the selected Spotify
+opening passage and confirmed original paused-position restoration. Its first attempt stopped
+before provider/audio use because the sample lacked its required final PAUSE transition; the test
+fixture was corrected. The successful check used controlled sample facts and an isolated test
+screen, not inserted production runs. The same six-table checksum remained unchanged afterward.
+The temporary local backend was stopped and its USB forwarding removed; the phone's saved hosted
+connection was unchanged. Manley's accepted revised-entrance feedback is recorded above;
+compatible Render activation remains open.
+The final focused review identified delayed-play cancellation during buffering. The fixed
+controller now cancels its pending start/resume on timeout, navigation or cancellation without
+touching a different recording/session or manual seek. Five new regression tests passed in both
+488-test suites; the rebuilt final update and all eight silent Moto checks passed again. The real
+audible success preceded this final failure-path guard; it was not needlessly repeated. The final
+six-table checksum again matched, the temporary test package was removed and normal RunState was
+reopened. No additional real run or automatic playback was started during cleanup.
+
+**Necessary new files:** production `music/SpotifySongPassage.kt` separates checked device controls
+from speech; `music/SongReflectionPlan.kt` keeps cue selection and frozen local playback data
+together. Tests: JVM `music/SpotifySongPassageTest.kt`, `music/SongReflectionPlanTest.kt`, and
+instrumentation `ui/SongPassageSpeechTest.kt`. All live under `android/app/src/` in their corresponding
+`main/java`, `test/java`, or `androidTest/java/com/runstate/mobile/` trees. No new downloaded song,
+asset, subscription, cloud secret or provider account was created. Existing source and documentation
+were extended; prior unrelated GPS/weather/UI changes were preserved.
+
+### Broader music-provider and personal-prototype review
+
+Manley asked to recover earlier alternatives and focus on a useful personal/portfolio prototype.
+Current and historical project notes recover Last.fm/ListenBrainz discovery, Apple handoff and
+Jamendo/directly licensed song ideas. No uniquely identified forgotten service. New public search
+and audio HEAD checks passed for Deezer/Apple previews and an Audius full stream, with no private
+data, downloaded audio or playback. Epidemic has documented free prototyping; Feed Clips is a new
+major-label app-clip lead with scoped access/custom pricing. Jamendo's official demo credential is
+suspended, so catalog access was not proved. Existing Spotify current-song control mechanics
+already passed on Moto; recommend the complete speech/passage/restoration experiment next, without
+buying a lyric-analysis plan. Keep private experiments, conference use and public distribution
+distinct. Full comparisons/evidence live in the existing music research notebook. No app code,
+new files, device/account changes, purchases, provider messages, Git mutations or deployments.
+
+### Musixmatch $49 follow-up assessment
+
+Manley requested research and wants actual recorded-song playback after reflection settled before
+paying. Basic's 100 analysis calls/day and real theme/mood fields are promising; the text snippet
+does not provide a recording, guaranteed chorus or passage timestamps. Public AI-product marketing
+and standard terms leave exact external-AI, spoken-output and saved-History permissions unresolved.
+Recommend no purchase yet. Prior Moto current-song controls remain passed; the complete app-managed
+reflection/passage sequence has not been tested by this research. Findings and bounded next checks
+are in the existing music research notebook. No new files, production code, phone changes, purchases,
+provider messages, commits, pushes or deployments in this follow-up.
+
+### Google music-method review and real Spotify passage experiment
+
+Manley supplied ten Google screenshots, asked for a full primary-source check and actual promising
+method tests, and kept Spotify first. All screenshots were reviewed. Their Android notification /
+media-session approach is already RunState's field-proven capture path. Unsupported assurances
+about zero provider risk, hiding Spotify's name, local AI, universal background timeouts and free
+lyrics/snippets were corrected in the existing research notebook. Web Playback is browser-based;
+native App Remote remains an option, not a prerequisite for every standard Android control.
+
+**New hardware proof:** with Manley's Moto connected and Spotify playing, a read-only test under
+RunState's actual target context and existing notification grant confirmed pause, seek and URI/search
+request capabilities. Manley then separately approved a temporary interruption. A current-song
+pause → seek back about five seconds → play about ten seconds → pause → restore original position
+and resume passed in 11.979 seconds, with all three inspection/control/restoration confirmations.
+An earlier control attempt stopped before issuing commands when a prerequisite was not confirmed;
+the diagnostic and final attempt passed. No other song/queue/playlist was selected and no music
+data left the phone. URI playback was only advertised, not executed. This proves a real SDK/key-free
+current-song control route on this Moto, not arbitrary-track selection, exact audible ten-second
+termination, broad device compatibility or permission for automatic reflection/audio sequencing.
+
+**External context proof:** an independently selected public MusicBrainz query returned 200 and
+38 candidate recordings for Lovely Day / Bill Withers. Identical top title/artist/score with
+different recording IDs/lengths demonstrates matching ambiguity. A public LyricFind/LyricIQ demo
+report for Lose Yourself / Eminem returned emotion/sentiment/content labels without lyrics/audio;
+it proves a working external interpretation service, not API integration, reuse permission or the
+runner's emotion. Two planned extra song comparisons were not performed when the browser became
+unavailable. Musixmatch's current Analysis product explicitly offers AI-use song signals and its
+Basic plan lists $49/month / 100 analysis calls/day. Standard terms still call for written AI
+approval; the exact derived-label, spoken-output and retained-History scope needs confirmation
+before buying. Genius has no documented full-lyrics endpoint; lyrics text snippets and recording
+passages are different. Actual-song licences/App Remote restrictions remain separate work.
+
+The existing research notebook contains the complete method matrix and a concrete unsent inquiry.
+The provider's published legal contact was verified from its public terms; explicit authorization
+to send the inquiry from connected Gmail is pending. No account, subscription, purchase, external
+message or production music feature was added at this checkpoint.
+
+**File and phone ledger:** the only new source was a necessary temporary instrumentation harness,
+`android/app/src/androidTest/java/com/runstate/mobile/music/TemporarySpotifyControlProbe.kt`.
+It and the phone's `.test` package were removed; the normal instrumentation APK was rebuilt without
+the probe and RunState reopened. No permanent source/asset/document file added. Existing music
+research/register, current-state/memory/weather and local-roadmap notes are updated. All **32**
+saved runs/every original five-table field remain identical to SHA-256
+`618c51b4f1154f4d84d1076f0363628da9455cd87cee4d7c37a62769ba8e5a76`;
+temporary private inspection copies were removed. Playback returned to its observed earlier
+position/playing state. No app settings, permissions, real runs, Git mutations or Render changes.
+Work used Codex Desktop, Android Studio's JBR/SDK/Gradle, official provider docs and public demos.
+
+**Weather steering:** Manley wants finer current/run-time weather rather than the installed hourly
+snapshot, with a paid source considered if needed. Record the goal; investigate it **after music**.
+No weather code, sharing choice or subscription changed in this review. The current software is
+still at the previous Android/code commit checkpoint; this review adds existing-document updates.
+
+### Native run-time weather installed; official Spotify public search proven
+
+**Latest checkpoint; supersedes requested-only weather wording in older entries below.** Manley
+authorized completion of native weather and extensive Spotify-first research, connected/unlocked
+the Moto, then personally committed/pushed backend `da808a0` (`feat: add time-matched weather to
+reflection requests`). Local HEAD and `origin/master` match. Render was still serving `bcde0c4`
+when inspected directly; Manley started Manual Deploy → Deploy latest commit. Direct inspection
+then confirmed deployment `dep-db978k6q1p3s73arjd3g` **Deploy succeeded / Live**, source `da808a0`,
+duration 1m36s. Public `/health` returned HTTP 200 with `{"status":"ok"}`. Its visible log tail
+showed Docker/Maven BUILD SUCCESS and the Anthropic backend listening on internal port 10000;
+no environment/secret page was opened. No assistant Git mutation occurred.
+
+**What the app can now do:** after a separate remembered `Weather near my run` choice in Run
+settings, a future GPS run can capture one modeled hourly weather estimate near its official
+start. Completion and an expanded History record can show temperature, condition, feels-like,
+humidity, wind and the matching local hour. The first reflection can use a saved ready snapshot,
+including relevant pleasant conditions; it cannot treat weather as a measured cause of feelings
+or performance. There is no continuous/weather-along-route claim, backfill or per-second weather.
+
+The choice remains **off** on the real phone. Consent explains that one approximate start location,
+rounded to two decimal degrees, goes directly to Open-Meteo, which also sees the network IP.
+Coordinates/full route do not enter the saved weather snapshot or Render/Anthropic request.
+One accepted saved GPS fix within 120 seconds can schedule a three-second, no-retry HTTPS lookup
+in a separate application job. Expired/unsupported attempts stop without HTTP. Recording, Pause,
+saving and pre-generation never wait. Room 12 adds only `run_weather`; failed or abandoned attempts
+stay unknown/Unavailable. A late saved result may update the weather display but never rewrite
+already-frozen reflection evidence. Old request shapes remain accepted by the new server; the
+phone omits unknown weather on the wire for old strict-server compatibility.
+
+**Verification:** 52 backend tests; **460 debug and 460 release JVM tests**, all with zero
+failures/errors/skips; debug, release and instrumentation APKs built. Three focused Moto cases
+passed: complete Room 11→12 field preservation, production-factory migration/once-only weather
+settling, and weather default-off/explicit-tap/loading-disabled settings behavior. Two initial
+test-fixture mistakes were repaired (metric provenance/transition history and a non-UUID test ID),
+then the applicable suites/cases passed. A final narrow expired-window regression and honest
+pending-status label were included in both final suites/APKs and the final in-place Moto install.
+The test package was removed, and the ordinary app was reopened without starting a real run.
+
+Public-place probes used deliberately public Hermann Park coordinates, not the phone's route:
+the actual compiled Android Open-Meteo client returned a correctly timed hourly result in 2,612 ms;
+the actual Android weather/reflection clients then delivered known weather to a temporary fake
+Java backend and received all four candidates. The owned fake server was stopped afterward.
+These prove the client/contract path, not hosted live known-weather writing or private phone capture.
+No live weather-reflection call, real phone weather request or consent change occurred. The separate
+bounded Spotify search and capability-listing probes below made two small live Anthropic API calls.
+
+**Phone preservation:** final read-only check found **32 completed runs, Room 12, zero weather
+rows**, with all original five tables' full stored-data digest unchanged:
+`618c51b4f1154f4d84d1076f0363628da9455cd87cee4d7c37a62769ba8e5a76`.
+The old field run remains frozen PARTIAL; sanitized evaluator replay remains COMPLETE. Temporary
+private database copies and generic probe source files were removed; ignored build outputs refreshed.
+
+**Spotify findings:** official Nike/Runkeeper integrations and historical song/pace analysis support
+Manley's intuition, but old capabilities do not establish current new-app permission. Anthropic
+lists Spotify's own MCP connector for Claude API developers, including currently-playing metadata.
+One truthful direct unauthenticated initialize returned 403 HTML with no authentication challenge;
+this was not treated as proof the supported Claude API route could not work.
+
+**The supported public-search route was then proven.** A single Messages API request used the
+documented `mcp-client-2025-11-20` connector with only `search` enabled and every other tool disabled.
+It returned HTTP 200, one actual Spotify `search` tool call and an MCP result with `is_error=false`.
+The response reached its output limit, so completed prose quality is not claimed. Usage reported
+4,347 input / 273 output tokens. The existing authorized key was read privately from Manley's
+previously specified document and sent only in the Anthropic authentication header; no key was
+printed, copied into source or saved to a new file. The prompt was a public music-catalog query.
+No run facts, observed titles, listening history or Spotify account credentials were supplied, and
+no playlist/library/playback action was enabled. No SDK, new account or new subscription was needed
+for this bounded test. The earlier direct 403 is limited historical evidence, not a universal access
+block. The live probe was separate from the installed app; it did not integrate MCP into RunState.
+
+A second documented API request used `mcp-client-2026-09-15`, `tool_choice: none` and all tools
+disabled to inspect capabilities only. HTTP 200 returned five actual advertised tools: `search`,
+`remove_from_library`, `save_to_library`, `generate_playlist`, `get_currently_playing`; the directory's
+six names are not the observed live list. No tool ran; usage was 30 input / 8 output tokens.
+The current-playback tool requires an authenticated Free/Premium account and a direct user inquiry;
+its description expressly excludes proactive calls. Search is read-only, requires language/prompt
+and Spotify links with entities, and excludes lyrics, biographies, transcripts and music facts/news.
+Playlist generation requires Premium and explicit creation intent; it stays out of this task.
+No seek/pause/timed-excerpt tool was advertised. These are reported capability boundaries, not a
+blanket correlation licence or a background-recorder route. Both probes were standalone, not an
+installed integration. Account authorization and exact song/run-correlation/reflection use still
+need guidance. Premium alone is not documented clearance for these uses. A specific unsent
+clarification request is ready in the existing notebook; no external message was sent.
+The already-successful manual voice/song pairing is acknowledged; it need not be rediscovered.
+Existing Android local observation/optional sharing were not expanded or newly declared cleared.
+No Spotify SDK/account connection or actual-song snippet was implemented; original cue stays.
+
+**Necessary new permanent files — six, all in the Android project:**
+
+1. `android/app/src/main/java/com/runstate/mobile/weather/RunWeatherSnapshot.kt` — validated saved
+   weather/time/source contract and strict parsing.
+2. `android/app/src/main/java/com/runstate/mobile/weather/OpenMeteoWeatherClient.kt` — bounded,
+   fixed-provider HTTPS lookup; no new service account or credential.
+3. `android/app/src/main/java/com/runstate/mobile/weather/RunWeatherCapture.kt` — independent
+   per-run ownership, eligibility, timeout and once-only capture.
+4. `android/app/src/main/java/com/runstate/mobile/data/local/RunWeatherEntity.kt` — snapshot/status,
+   minimal store and Room DAO together, avoiding extra storage files.
+5. `android/app/src/test/java/com/runstate/mobile/weather/RunWeatherTest.kt` — focused evidence,
+   transport, consent/ownership/timing/failure regression checks.
+6. `android/app/schemas/com.runstate.mobile.data.local.RunStateDatabase/12.json` — required generated
+   Room migration schema, preserving future upgrade verification.
+
+Existing preferences/settings, service/application, migration, reflection/client, Completion/History
+and display code/tests were extended. The existing asset-notices file now records Open-Meteo's
+CC BY 4.0 data licence and unit/label conversions; linked provider/licence credits sit beside both
+weather displays, as the provider requests. The APKs were rebuilt for those final credit additions.
+Backend changes are the eight committed files. Existing
+weather/privacy/platform/memory/current-state/music-research/register/local-roadmap documents were
+updated; no new document, image, font or music asset was added in this slice. Earlier map/music/GPS
+uncommitted work remains present. Work used Codex Desktop plus Android Studio's JBR/SDK/Gradle,
+IntelliJ's bundled Maven for the backend, public official documentation and Render's dashboard.
+
+**Remaining acceptance:** `da808a0` Live/health is verified; let Manley choose whether to enable
+weather. A future ordinary GPS run can confirm new-run pace, real capture/display and a hosted
+weather-aware reflection together; do not silently enable sharing or rewrite old runs. Spotify
+supported-client clarification remains separate. Software is a good Android/docs commit checkpoint
+after the deployment review; Manley handles all commits/pushes. No new subscription was needed.
+
+### Returned Hermann Park field run — review and bounded pace correction installed
+
+Manley returned with the Moto connected. He reported 1.61 miles and 18:17 from **RunState**,
+Spotify playing, likely screen locking (not certain), and only pausing at finish. Adidas also ran,
+but continued for about ten extra minutes including walking; he clarified there was no actual
+Adidas malfunction. Its final total is not a matched distance/time reference. No independent
+distance-accuracy claim is made from this outing, and screen-off timing is not independently proven.
+
+Read-only inspection found **32 COMPLETED / 0 active**, Room 11 and a passing database quick check.
+The newest saved GPS run has 2,594.1739 m (**1.61194 mi**), 18:17.154 elapsed and a sole PAUSE at
+18:02.839 active, leaving 14.315 seconds paused before final completion. It contains **1,082**
+contiguous GPS observations, approximately one second apart (largest source gap 1.0092 s), with
+500 accepted route points and 582 accurate stationary/uncertainty-envelope observations. No other
+rejection reason or long capture gap was found. Median reported accuracy was 2 m; this is the
+provider's uncertainty report, not independently measured route accuracy. The first fix arrived
+0.951 seconds after Start on the source monotonic clock; the last preceded Pause by 0.889 seconds.
+
+**Actual missing-pace cause:** GPS Unix timestamps were consistently **1,022–1,034 ms** ahead of
+the phone-wall/monotonic mapping, exceeding the provisional absolute 1,000 ms limit. This was not
+a slow initial acquisition or a point after Pause on the monotonic clock. Android documents that
+GPS Unix time originates from the constellation clock and recommends monotonic elapsed realtime
+for comparing fixes: https://developer.android.com/reference/android/location/Location#getTime().
+
+`GpsCoverageEvaluator.kt` now fixes a reference offset at the first valid in-Running accepted
+anchor. Each relevant fix must remain within a provisional **±2,000 ms absolute offset** and
+**±1,000 ms residual drift from that fixed reference**; the reference never rebases at pauses or
+gaps. Same-process identity, lifecycle ±250 ms agreement, monotonic ordering, five-second edges,
+15-second internal gaps, five-percent edge omissions, rejected-point/accuracy/distance checks and
+frozen completed verdicts remain. This is a recording-clock correction, not a distance-accuracy
+guarantee or a separate current/rolling pace feature. Map clock/interval semantics remain a
+separate follow-up; `GpsMapEvidence` still has an absolute one-second source check.
+
+A private computer replay of all 1,082 saved points against the compiled evaluator changed the
+simulated pre-completion verdict from PARTIAL to COMPLETE, while an actual completed-record
+assessment still returned its frozen PARTIAL. Coordinates were removed from the JVM replay;
+the phone record and reflection were never rewritten. Its active time/distance imply a diagnostic
+average near **11:12/mi**, not a newly saved/displayed value for the old run.
+
+**Music result:** 509 Spotify reports, including 385 PLAYING reports and eight distinct reported
+title/artist pairs; these are partial reports, not proof of eight complete songs. The reflection
+is READY/non-test, selected Spent, with a frozen MUSIC/MEDIA_SESSION_PARTIAL context and no
+active-duration claim. It did not mention the supplied track title. Detection and the optional
+sharing path therefore work technically; provider permission and consistent creative song use
+remain separate questions. Manley entered High pre-run Energy and Empty Tank Effort.
+
+**Verification and install:** both **441-test** debug/release JVM suites passed with zero failures,
+errors or skips; debug/release/instrumentation APKs built. Seven new regressions in the existing
+`GpsCoverageEvaluatorTest.kt` cover fixed bias, both signs/bounds, jumps/drift, pause/resume and
+unchanged gap/ownership/history rules. The earlier prepared Spotify launcher/reliability/History
+slice was installed together with this pace correction, in place. Its one focused silent Moto
+music-button test passed. The Spotify launcher intent resolves to its installed MainActivity;
+no play/seek/pause command or real run was started. The temporary test package was removed and
+RunState reopened. Full five-table saved-data SHA-256 before/after installation and verification:
+`618c51b4f1154f4d84d1076f0363628da9455cd87cee4d7c37a62769ba8e5a76`.
+No additional outdoor test was requested; future-run pace still needs field confirmation.
+
+**New requests and next decisions:** Manley wants weather matched to the run's actual time and
+used in reflections and other screens. Console daily means already exist, but Android has no
+weather capture/storage/backend evidence yet; do not imply the console feature is mobile-ready.
+Timestamp-validity, source/resolution, privacy and a bounded native contract are recorded in
+`design_weather_context.md`. Calories are explicitly later/nonpriority in `parked_feature_ideas.md`.
+The music orb was not originally intended solely for Spotify; its current launcher is an interim
+useful action. Keep the broader music entry open. Spotify remains first choice; a manual song
+audition, exact provider clarification and a directly licensed song are distinct possible paths.
+No external message was sent, provider/account setting changed, or new paid source selected.
+
+Only two source/test files changed for this correction: the existing `GpsCoverageEvaluator.kt`
+and `GpsCoverageEvaluatorTest.kt`. Existing memory/checkpoint/Start/weather/parked/local-roadmap
+documents and the run-initiation contract were updated; **no new permanent project file** was needed. Temporary private database
+copies and a generic JVM replay source were removed after inspection (including cleanup of one
+failed inspection attempt). Standard ignored Gradle reports/APKs were regenerated. Work used
+Codex Desktop, Android Studio's JBR/SDK and Gradle. No staging, commits, pushes or Render deployment.
+
+### Latest Spotify work — prepared on computer while Manley tests GPS
+
+Manley authorized Spotify-first reflection/snippet research and bounded implementation during his
+real run. **The Moto was not accessed or updated.** Inspect the returned run before installing this
+new build. Android work used the repository's Gradle build with Android Studio's JBR/SDK through
+Codex Desktop; it was not a separate IntelliJ checkout. No Git mutations, Render deployment,
+provider request, account registration, secret access, download of music or new subscription.
+
+**Prepared app changes:**
+- Start's existing music orb opens the installed Spotify app on a deliberate tap; it retains its
+  artwork and geometry and now reads `MUSIC / SPOTIFY`. Missing/blocked Spotify shows a message.
+  This is a launcher, not account connection, playback control or a playlist feature.
+- A broken media controller no longer shuts down healthy music observation. Registration and
+  run-interval ownership reject late callbacks across removal, pause, another run and reconnect;
+  security failures stop all watches. Failed registrations retry on a later session-list update,
+  with no background polling. Stored run/consent checks and partial-evidence limits remain.
+- An optional music-store read failure no longer hides otherwise readable runs and saved replies
+  from History. The affected expanded record reports unavailable song details and offers reopening
+  History; a successful empty read still means unknown music, not a read failure. Cancellation is
+  preserved, and opted-out runs do not query music observations.
+
+**Research outcome:** App Remote has play/seek/pause capabilities, but the exact automatic
+reflection-to-Spotify-passage use raises an explicit segue restriction. API/SDK metadata-to-AI and
+song/run analysis conflict with standard published restrictions; applicability to the existing pure
+Android observation route remains unresolved. User consent and earlier successful requests are
+not provider clearance. The shipped optional cloud-sharing behavior and saved evidence were not
+changed or expanded. Do not add SDK ingestion or promise a permitted snippet from this work.
+Official sources, a draft of five clarification questions (unsent), account prerequisites, timing/
+queue-restoration limitations and a secondary Apple/Jamendo/licensed-song comparison live in
+`research_music_reflection_generation.md`. Spotify remains first choice; no provider switch.
+
+**Verification:** full debug/release JVM suites passed; debug, release and instrumentation APKs
+built successfully. Ten new registry tests cover per-controller failures, recovery, stale callbacks,
+run boundaries, permission loss and cancellation. Four new History tests cover failure isolation,
+unknown-versus-unavailable, opt-out and cancellation. The final stronger saved-reply fixture passed
+the 434-test debug suite and a focused 26-test release run. The new Compose launcher test compiled
+but was not executed: no phone or emulator checks during the field run. The actual Spotify launch
+and listener delivery remain device checks. `git diff --check` passed.
+
+**Files changed by this Spotify slice (relative to the existing GPS/UI work):**
+- `android/app/src/main/java/com/runstate/mobile/MainActivity.kt`: manual platform launch/failure
+  message and optional-music History loading.
+- `android/app/src/main/java/com/runstate/mobile/music/RunMusicNotificationListener.kt`: Android
+  controller adaptation and callback ownership.
+- **New** `android/app/src/main/java/com/runstate/mobile/music/MusicSessionRegistry.kt`: a small
+  Android-independent controller registry, needed to isolate failures and test callback ownership.
+- **New** `android/app/src/test/java/com/runstate/mobile/music/MusicSessionRegistryTest.kt`:
+  deterministic registry regression tests without accessing a device or Spotify account.
+- `android/app/src/main/java/com/runstate/mobile/ui/StartRunScreen.kt` and `RunStateScreen.kt`:
+  deliberate music-button action and callback forwarding.
+- `android/app/src/main/java/com/runstate/mobile/ui/RunMetricsDisplay.kt` and `RunHistoryScreen.kt`:
+  optional read boundary and distinct unavailable-media presentation.
+- `android/app/src/test/java/com/runstate/mobile/ui/RunMetricsDisplayTest.kt` and
+  `android/app/src/androidTest/java/com/runstate/mobile/ui/RunStateScreenTest.kt`: regression coverage.
+- Existing documents `MEMORY.md`, `design_start_run_v7.md`, `design_music_selection_system.md`,
+  `research_music_reflection_generation.md` and this checkpoint: current behavior, research and
+  correction of historical reset-every-run wording. No new document or image/audio file.
+
+Normal ignored Gradle build/test reports and APK outputs were regenerated under `android/app/build`
+with Gradle's local build cache. No dependencies or project settings were added for this slice.
+This is a local review checkpoint, with device verification and provider decisions still open;
+it is not completion of the requested actual-song experience.
+
+### Latest Start footer polish — spacing and softer depth
+
+**Same-day follow-up:** the small dip directly above Start is removed. Both curve segments now
+meet at one smooth rounded crest. The debug build passed and the update was installed in place
+and visually verified on the Moto. Automated suites were not rerun for this curve-only adjustment.
+
+Manley approved more space above the original music artwork, a gently irregular shoe backing,
+and a round Start dial with softer depth instead of a sticker-like enclosing outline. The side
+shoulders of the footer are raised within its existing bounds, so music gains clearance while
+all control positions/sizes and the Energy/footer gap remain unchanged. Shoes now use an uneven
+shaded surface and a faint partial highlight; Start uses restrained surface shading, a contained
+shadow, an upper highlight and an open play symbol that reveals the dial beneath it. Its existing
+Energy-triggered glow is retained. Shoes/Music remain `LATER`; no mechanics or tracking changed.
+
+**Verification:** Android Studio JBR/SDK and Gradle built debug, release and instrumentation APKs.
+All **five selected silent Moto checks** passed: stationary portrait swipes/intake/Undo, short
+screens at 1.5x/2x text, landscape access, visible Start glow with exact idle restoration, and the
+existing optional-map journey/preview. The synthetic preview and actual installed Start screen
+were visually inspected. No new tests were added for this decorative change; JVM suites were not
+rerun. `git diff --check` passed. The full saved-data audit remains **31 COMPLETED / 0 active**,
+schema 11, with before/after SHA-256
+`cf4bbdf6df9db0a1a3d5335449e6de5b2944ca68ac096248ad2d7feb69441c28`.
+
+Only `StartRunScreen.kt` changed in app source for this slice. Existing design/checkpoint/memory
+documents and `android/artifacts/start-live-map-preview.png` were updated. No new source, asset or
+test files were created; the temporary actual-phone review image and audit copies were removed.
+The phone is left on Start, its temporary stay-awake change restored. No real run, audible test,
+provider request or Git mutation was performed. This is a visual-review/commit checkpoint, not
+proof of outdoor GPS accuracy.
+
+### Latest map refinement — actual feature colors and optional access
+
+The previous tint did not match Manley's request. Live maps now use **OpenFreeMap vector tiles**
+through the existing MapLibre renderer, with an original inline style. The ground is light sage;
+parks/wood have distinct greens, buildings are darker cream, road edges are restrained blue-grey,
+and actual waterways and dashed mapped paths receive blue details. No invented geographic
+features or color-wash overlay are used. This is presentation, not navigation or access guidance.
+
+The original static Start artwork and non-live Active layout are restored. **Live map** opens
+Start's optional location preview, and **View live map / View recorded map** opens the active
+run's evidence. Close restores the normal screen and disposes the map renderer. Start's temporary
+GPS preview is enabled only while its map is open, stops synchronously on Close/History/mode
+changes and before countdown, and resumes appropriately when reopened. Recording remains
+independent of map visibility. Energy gestures, spacing and white-card definition are retained.
+
+The new provider requires no account, key or subscription. One stable TileJSON URL supplies the
+current dated vector-tile paths; one font family supplies remote Noto Sans Regular glyphs.
+The dedicated client accepts only HTTPS GETs to the declared host and narrowly allowed paths,
+with bounded tile coordinates/font ranges, no query/userinfo/fragment, and no redirects. Original
+cache validation is retained. No sprites, external style, terrain, offline download or prefetch
+were added. Linked OpenMapTiles/OSM attribution and optional OpenFreeMap credit are displayed;
+provider/font notices and platform/privacy documents were updated. The provider is best effort.
+
+**Verification:** both **420-test JVM suites** passed. Android Studio JBR/SDK and Gradle built
+debug, release and instrumentation APKs. All **13 selected silent Moto cases** passed, including
+explicit open/close/no-run creation, absence of a default renderer, Active ownership and controls,
+no-fix permission handling, background/disposal, stationary portrait Energy, enlarged text and
+short landscape. Native automated tests use synthetic public-park coordinates and no remote tiles.
+The actual Moto map separately loaded real vector streets, labels, sage ground, cream buildings
+and blue road edges. The original Start screen was visually confirmed after Close. Actual preview
+listener counts were 1 while open, 0 after Close, 0 on Home and 1 after return/reopen.
+
+The before/after full-table audit preserved **31 COMPLETED / 0 active**, schema 11, SHA-256
+`cf4bbdf6df9db0a1a3d5335449e6de5b2944ca68ac096248ad2d7feb69441c28`.
+This audit includes all current table fields, so its hash format differs from earlier
+original-field audits; before and after this slice are identical. No real run, live reflection,
+audio, Render action or Git mutation was performed. No new source/test files were needed.
+The existing Start preview artifact was refreshed; private actual-location screenshots and audit
+copies were removed. The phone's stay-awake setting was restored. Morning field testing is
+available when Manley is ready; give a precise protocol before he presses Start, and do not start
+a timer while he is preparing. This UI check does not establish distance accuracy or pace coverage.
+
+### Latest Start correction — stationary layout and cooler live-map treatment
+
+Manley reported that swiping moved the upper card and Energy choices into the fixed Start crest,
+and that the live map's pale stone/cream treatment made the white card disappear. Start now
+measures upper details, Energy and footer separately. Normal portrait has no vertical scroll
+range; Energy stays at least 12 dp above the footer. Larger text can scroll upper details only,
+and very short landscape windows use one continuous stack so every action remains reachable.
+An inside-tile drag is explicitly canceled as a tap; normal touch and accessibility selection,
+intake animation, immediate Start choice and Undo remain intact.
+
+The white agent card now has a quiet green-grey border/shadow. Blue and sage atmosphere replaces
+the broad white wash, with soft corner color and the existing tree shadows. Street geography and
+labels remain real; no geographic features, tile provider or GPS behavior were changed. Background
+map gestures are disabled; Expand enables pan/zoom while keeping north-up/flat orientation. Close
+restores centering/following without rebuilding the native map.
+
+**Verification:** Android Studio JBR/SDK and Gradle built debug, release and test APKs; both
+**417-test JVM suites** passed. All **11 selected silent Moto cases** passed on the final build.
+The first swipe regression caught an accidental selection from a drag entirely inside a tile;
+the cancellation repair was then verified with physical swipes and taps. Checks also cover
+360×480 with 150%/200% text, 640×320 landscape with enlarged text, Energy intake/Undo, setup,
+and real native map retention/gesture modes through Start/countdown/Active/Expand/Close/background.
+The updated app was installed in place and the real Start screen visually reviewed.
+
+The before/after original-field audit remains **31 COMPLETED / 0 active**, schema 11, SHA-256
+`6cc7a1e0d3ffbd85bcf4eaf646904ae3c31d04d402b11096ec8b3b21e71b5895`.
+No real run, reflection request, audio test, Git mutation or Render operation was performed.
+No new source/test files were needed for this correction. Existing
+`android/artifacts/start-live-map-preview.png` was refreshed from the synthetic, tile-free test;
+private temporary actual-location screenshots and audit copies were removed after review.
+Phone stay-awake was restored to 0. The earlier map source/test files below remain uncommitted.
+
+### Latest map continuation — live Start and Active background
+
+Manley confirmed the preceding street map worked, but opening it initially felt slow. The map
+now prepares automatically on GPS Start and stays in one native renderer through countdown,
+Active and Expand/Close. Expansion no longer constructs a second map. Start keeps its Energy
+intake and footer, a softened map treatment, and original procedural tree-shadow corners. Active
+uses a smaller translucent timer to expose the map. Linked OSM attribution stays below the view;
+Expand exposes pan, recenter, retry and the existing Pause/Resume actions.
+
+Start uses a **foreground-only, memory-only location preview**. Accurate cached GPS fixes up to
+30 minutes old may anchor the map as **last known**; only source age within 15 seconds qualifies
+as current. Missing permission/location has a direct setup action, never a fabricated marker.
+The preview creates no run, distance or route. A synchronous handoff removes its listener before
+the recording service starts, and blocks late callbacks/lifecycle restarts until new preparation.
+Active uses only its own recorded evidence; the preview marker is cleared before that evidence
+arrives. History, Sample and backgrounding stop preview acquisition. This is preparation rather
+than automatic run detection. Street tiles can now be requested when Start is visible; provider
+disclosure and platform/design documents were updated accordingly.
+
+**Verification:** Android Studio JBR/SDK and Gradle built all three APKs. Both **417-test JVM
+suites** passed. All **14 distinct selected silent Moto checks** passed after correcting one
+test's attempt to scroll the fixed Start button. The two integrated map cases were rerun on the
+final visual build and passed. The native continuity test uses synthetic public-park coordinates
+and no street tiles: one actual MapView survives Start/countdown/Active/Expand/Pause/Close and
+background/resume; preview/absent evidence clears real GeoJSON sources; Recenter remains reachable.
+Other selected checks retain countdown, Energy/setup, paused-time, large-text and short-run behavior.
+
+On the actual Moto, Start displayed real streets and a fresh current position without tapping
+Expand. A read-only system check found one RunState location registration on Start, zero on Home,
+and zero in the unexpanded History list. No real run, audio or live reflection request was started.
+The before/after original-field audit matched **31 COMPLETED / 0 active**, schema 11, SHA-256
+`6cc7a1e0d3ffbd85bcf4eaf646904ae3c31d04d402b11096ec8b3b21e71b5895`.
+The one existing timed GPS run and transition remained present. No saved runs were changed.
+The device stay-awake setting is restored to 0 after checks. No Git mutation or Render operation occurred.
+
+Two necessary source/test files were added in this continuation:
+
+- `android/app/src/main/java/com/runstate/mobile/location/ForegroundGpsPreview.kt` owns temporary
+  pre-run acquisition, freshness and synchronous handoff without persistence.
+- `android/app/src/test/java/com/runstate/mobile/location/ForegroundGpsPreviewTest.kt` covers 24
+  freshness, permission/provider, cleanup and handoff cases.
+
+The synthetic, network-free layout preview is `android/artifacts/start-live-map-preview.png`.
+An additional synthetic Active capture confirmed the position marker remains visible beside the
+timer; the same continuity test passed again, and its temporary device/host images were removed.
+Temporary screenshots of actual phone location and audit database copies are removed after review.
+The four map files from the preceding uncommitted slice remain necessary. Actual cold-start timing,
+measured outdoor accuracy, sustained screen-off behavior and practical pace availability still need
+the agreed daytime field protocol; this change does not claim instantaneous fixes or map loading.
+
+### Latest GPS foundation — optional live street map installed
+
+Historical checkpoint: the continuation above supersedes its optional-map/illustrative-Start UI.
+
+Active GPS runs now offer **View live map**, or **View recorded map** while paused. The separate
+map view can pan/zoom, recenter/follow, and Pause/Resume through the existing coordinator. Close
+returns to the normal Active controls for finishing. Sample runs have no map entry. Start's
+background and the Active timer texture remain explicitly illustrative; History retains its
+existing offline path preview. This is the first real-map surface, not a whole-screen redesign.
+
+The map reads the same run-owned durable GPS evidence as metrics, never a second location engine.
+It draws separate sections around recorded anchors, pauses, rejected observations, missing
+sequences and source-time gaps. Accurate stationary observations can update a marker without
+adding distance. A fresh marker requires a current usable source timestamp, matching process/
+lifecycle timing and recording signal. Otherwise it says **last recorded location**, including
+paused/recovered cases; legacy records cannot invent current-position proof. Map failures do not
+mutate run ownership or block the normal controls. The coordinator's append-only cache is shared
+safely between map and metric reads and cleared when the run retires.
+
+Implementation uses **MapLibre Native OpenGL 13.7.1** with **OpenStreetMap standard raster tiles**
+and a dedicated **OkHttp 4.12.0** client. Coroutines Android/core are aligned at **1.10.2**.
+The renderer is created only when its view is opened and a usable local anchor exists. It follows
+Activity lifecycle and stops availability polling in the background. Explicit HTTPS tile requests
+identify RunState, preserve caching headers, reject undeclared destinations and disable redirects;
+there is no tile prefetch or offline-area download. Linked OSM attribution remains visible.
+MapLibre/HTTP request logging and the action journal are disabled. The map's files-domain
+`mbgl-offline.db` cache and its sidecars are excluded from all configured backup/transfer channels.
+
+No new map account, API key or paid service was configured. OSM's community tile service is
+best effort, so a later larger release may need another tile provider. Requests disclose the
+viewed tile area/zoom and IP address; route GeoJSON stays local. The map dialog explains this.
+Platform roles, privacy boundaries and bundled licenses are recorded in `docs/README.md`,
+`docs/DATA_PRIVACY.md` and `android/app/src/main/assets/third_party_notices.txt`.
+Primary references: [MapLibre release](https://github.com/maplibre/maplibre-native/releases/tag/android-v13.7.1)
+and [OSM tile policy](https://operations.osmfoundation.org/policies/tiles/).
+
+**Verification:** Android Studio JBR/SDK and Gradle built debug, release and test APKs. Both
+**389-test JVM suites** passed with zero failures/errors. All **20 distinct selected Moto cases**
+eventually passed: 19 initially; an isolated map-read failure test originally closed Room, which
+correctly propagated cancellation. The test now uses an invalid row in its separate test database
+to exercise ordinary unreadable evidence. That case and the native renderer passed on the final
+build. The renderer check used synthetic park geometry and a background-only style with **no
+remote tile sources**, verified actual marker pixels, background/resume, recenter and disposal/
+reopening. Other cases cover GPS-only entry, controls at large text, stale/paused labels, repeated
+map/metric reads, run retirement and existing lifecycle/pace behavior. Backup XML exclusions were
+also checked in each channel. The first full build took 2m10s; the final rebuild passed in 19s.
+
+After in-place installation and normal app reopen, the read-only audit still matches every
+original field in all five stored tables: **30 COMPLETED / 0 active**, schema 11, SHA-256
+`cfcbfddf8af6fbee45711ccb1c392578c5a983d2aef81b0b944e69dfed0c9ef8`.
+All added timing fields on those old rows remain null. No real run, live AI request, music
+preference or runtime permission was changed. The phone's stay-awake setting was restored to 0;
+temporary private database copies were automatically removed. No staging, commits, pushes or
+Render deployment occurred.
+
+Four necessary new files under `C:\Users\Owner\IdeaProjects\RunState`:
+
+- `android/app/src/main/java/com/runstate/mobile/location/GpsMapEvidence.kt`: independent route
+  segmentation and current/last-known/paused marker assessment from stored evidence.
+- `android/app/src/main/java/com/runstate/mobile/ui/RecordedRunMap.kt`: optional native renderer,
+  provider configuration, lifecycle, map status and attribution.
+- `android/app/src/test/java/com/runstate/mobile/location/GpsMapEvidenceTest.kt`: 24 focused cases
+  for gaps, timestamps, process/reboot boundaries, stationary points and missing evidence.
+- `android/app/src/test/java/com/runstate/mobile/ui/RecordedRunMapTest.kt`: seven source/request,
+  no-network-style, status and no-invented-camera-location checks.
+
+**Remaining:** actual street-tile delivery and map behavior during a known-distance outdoor run
+have not been exercised on the Moto. No outdoor check was requested tonight. Daytime checks must
+also measure stationary drift, locked-screen capture, Pause/Resume and practical pace availability;
+initial acquisition over five seconds still keeps coverage partial under the preceding policy.
+Basic splits, Start's real-location preparation, a street-map History view, full clock correction
+and wider OEM/long-run recovery remain open. Map rendering does not establish GPS accuracy.
+Opening screen/logo remain after the GPS foundation and before final presentation polish.
 
 ### Latest GPS foundation — timing evidence and conditional average pace
 
