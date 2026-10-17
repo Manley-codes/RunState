@@ -237,12 +237,14 @@ class SongPassageSpeechTest {
 
     private fun speaker(
         platform: ControlledPlatform,
-        deadlines: MutableList<Runnable> = mutableListOf()
+        deadlines: MutableList<Runnable> = mutableListOf(),
+        delays: MutableList<Long> = mutableListOf(),
+        cancelled: MutableList<Runnable> = mutableListOf()
     ) = AndroidReflectionSpeaker(
         composeTestRule.activity,
         platform,
-        scheduleTimeout = { task, _ -> deadlines += task },
-        cancelTimeout = {}
+        scheduleTimeout = { task, delay -> deadlines += task; delays += delay },
+        cancelTimeout = { task -> cancelled += task }
     )
 
     @Test
@@ -250,7 +252,8 @@ class SongPassageSpeechTest {
         composeTestRule.runOnUiThread {
             val platform = ControlledPlatform()
             val deadlines = mutableListOf<Runnable>()
-            val speaker = speaker(platform, deadlines)
+            val delays = mutableListOf<Long>()
+            val speaker = speaker(platform, deadlines, delays)
             var finished = 0
             val exact = "  Exact saved reflection.\nSecond line.  "
             try {
@@ -263,6 +266,13 @@ class SongPassageSpeechTest {
                 assertTrue(platform.passages.isEmpty())
 
                 platform.voiceDone(voice.id)
+                assertTrue("Music must wait after the reflection ends.", platform.passages.isEmpty())
+                assertEquals(650L, delays.last())
+                assertEquals("Speech focus is retained during the quiet gap.", "voice", platform.events.last())
+                val handoff = deadlines.last()
+                platform.voiceDone(voice.id)
+                assertEquals("Duplicate speech completion must not reschedule music.", handoff, deadlines.last())
+                handoff.run()
                 val played = platform.passages.single()
                 assertEquals(passage, played.request)
                 assertEquals(0, finished)
@@ -279,6 +289,7 @@ class SongPassageSpeechTest {
                 played.done(played.id)
                 played.failed(played.id)
                 played.focusLost(played.id)
+                handoff.run()
                 deadlines.last().run()
                 assertEquals(1, finished)
                 assertEquals(null, platform.activePassage)
@@ -328,12 +339,14 @@ class SongPassageSpeechTest {
         composeTestRule.runOnUiThread {
             listOf(false, true).forEach { close ->
                 val platform = ControlledPlatform()
-                val speaker = speaker(platform)
+                val deadlines = mutableListOf<Runnable>()
+                val speaker = speaker(platform, deadlines)
                 var finished = 0
                 try {
                     platform.ready(true)
                     speaker.speakWithSongPassage("Saved reflection.", passage, onFinished = { finished++ })
                     platform.voiceDone(platform.spoken.single().id)
+                    deadlines.last().run()
                     val played = platform.passages.single()
                     assertEquals(played.id, platform.activePassage)
                     if (close) speaker.close() else speaker.stop()
@@ -358,7 +371,8 @@ class SongPassageSpeechTest {
     fun obsoleteAndForeignVoiceOrPassageCallbacksCannotFinishTheNextRequest() {
         composeTestRule.runOnUiThread {
             val platform = ControlledPlatform()
-            val speaker = speaker(platform)
+            val deadlines = mutableListOf<Runnable>()
+            val speaker = speaker(platform, deadlines)
             var firstFinished = 0
             var secondFinished = 0
             try {
@@ -366,6 +380,7 @@ class SongPassageSpeechTest {
                 speaker.speakWithSongPassage("First.", passage, onFinished = { firstFinished++ })
                 val firstVoice = platform.spoken.single().id
                 platform.voiceDone(firstVoice)
+                deadlines.last().run()
                 val firstPassage = platform.passages.single()
                 val nextPassage = passage.copy(startPositionMillis = 8_000L)
                 speaker.speakWithSongPassage("Second.", nextPassage, onFinished = { secondFinished++ })
@@ -383,6 +398,7 @@ class SongPassageSpeechTest {
                 assertEquals(1, platform.passages.size)
 
                 platform.voiceDone(secondVoice)
+                deadlines.last().run()
                 val secondPassage = platform.passages.last()
                 assertEquals(nextPassage, secondPassage.request)
                 firstPassage.done(firstPassage.id)
@@ -418,6 +434,7 @@ class SongPassageSpeechTest {
                     platform.ready(true)
                     speaker.speakWithSongPassage("Saved reflection.", passage, onFinished = { finished++ })
                     platform.voiceDone(platform.spoken.single().id)
+                    deadlines.last().run()
                     val played = platform.passages.single()
                     when (failure) {
                         "error" -> played.failed(played.id)
@@ -455,6 +472,118 @@ class SongPassageSpeechTest {
                 assertEquals(0, platform.instrumentalStarts)
             } finally {
                 speaker.close()
+            }
+        }
+    }
+
+    @Test
+    fun stopCloseAndFocusLossDuringQuietGapCancelMusicEvenWhenCancelledTaskRuns() {
+        composeTestRule.runOnUiThread {
+            listOf("stop", "close", "focus loss").forEach { interruption ->
+                val platform = ControlledPlatform()
+                val deadlines = mutableListOf<Runnable>()
+                val cancelled = mutableListOf<Runnable>()
+                val speaker = speaker(platform, deadlines, cancelled = cancelled)
+                var finished = 0
+                try {
+                    platform.ready(true)
+                    speaker.speakWithSongPassage("Saved reflection.", passage, onFinished = { finished++ })
+                    val voice = platform.spoken.single().id
+                    platform.voiceDone(voice)
+                    val handoff = deadlines.last()
+                    assertTrue(platform.passages.isEmpty())
+                    when (interruption) {
+                        "stop" -> speaker.stop()
+                        "close" -> speaker.close()
+                        "focus loss" -> platform.focusLosses.getValue(voice)(voice)
+                    }
+                    assertTrue(interruption, handoff in cancelled)
+                    // Removing a scheduled task cannot recall one already queued for delivery.
+                    handoff.run()
+                    handoff.run()
+                    platform.voiceDone(voice)
+                    platform.voiceFailed(voice)
+                    assertTrue(interruption, platform.passages.isEmpty())
+                    assertEquals(interruption, 1, finished)
+                    assertEquals(interruption, 0, platform.instrumentalStarts)
+                } finally {
+                    speaker.close()
+                }
+            }
+        }
+    }
+
+    @Test
+    fun replacingReflectionDuringQuietGapPreventsOldTaskFromStartingEitherSong() {
+        composeTestRule.runOnUiThread {
+            val platform = ControlledPlatform()
+            val deadlines = mutableListOf<Runnable>()
+            val cancelled = mutableListOf<Runnable>()
+            val speaker = speaker(platform, deadlines, cancelled = cancelled)
+            var firstFinished = 0
+            var secondFinished = 0
+            try {
+                platform.ready(true)
+                speaker.speakWithSongPassage("First reflection.", passage) { firstFinished++ }
+                val firstVoice = platform.spoken.single().id
+                platform.voiceDone(firstVoice)
+                val oldHandoff = deadlines.last()
+
+                val secondPassage = passage.copy(startPositionMillis = 8_000L)
+                speaker.speakWithSongPassage("Second reflection.", secondPassage) { secondFinished++ }
+                assertTrue(oldHandoff in cancelled)
+                oldHandoff.run()
+                platform.voiceDone(firstVoice)
+                assertTrue(platform.passages.isEmpty())
+                assertEquals(1, firstFinished)
+                assertEquals(0, secondFinished)
+
+                val secondVoice = platform.spoken.last().id
+                platform.voiceDone(secondVoice)
+                val currentHandoff = deadlines.last()
+                oldHandoff.run()
+                assertTrue(platform.passages.isEmpty())
+                currentHandoff.run()
+                oldHandoff.run()
+                currentHandoff.run()
+                val played = platform.passages.single()
+                assertEquals(secondPassage, played.request)
+                played.done(played.id)
+                assertEquals(1, firstFinished)
+                assertEquals(1, secondFinished)
+            } finally {
+                speaker.close()
+            }
+        }
+    }
+
+    @Test
+    fun musicEligibilityRevokedOrUnavailableDuringQuietGapNeverStartsPlayback() {
+        composeTestRule.runOnUiThread {
+            listOf(false, true).forEach { eligibilityThrows ->
+                val platform = ControlledPlatform()
+                val deadlines = mutableListOf<Runnable>()
+                val speaker = speaker(platform, deadlines)
+                var gapStarted = false
+                var finished = 0
+                try {
+                    platform.ready(true)
+                    speaker.speakWithSongPassage("Saved reflection.", passage, canPlayPassage = {
+                        if (gapStarted && eligibilityThrows) throw IllegalStateException("Unavailable owner")
+                        !gapStarted
+                    }, onFinished = { finished++ })
+                    platform.voiceDone(platform.spoken.single().id)
+                    val handoff = deadlines.last()
+                    assertTrue(platform.passages.isEmpty())
+                    gapStarted = true
+                    handoff.run()
+                    handoff.run()
+                    assertTrue(platform.passages.isEmpty())
+                    assertEquals(1, finished)
+                    assertEquals(0, platform.instrumentalStarts)
+                } finally {
+                    speaker.close()
+                }
             }
         }
     }

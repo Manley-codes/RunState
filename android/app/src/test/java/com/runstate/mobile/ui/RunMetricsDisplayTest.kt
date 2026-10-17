@@ -181,6 +181,87 @@ class RunMetricsDisplayTest {
     }
 
     @Test
+    fun `save receipt speaks trusted saved average mile pace using active rather than elapsed time`() {
+        val run = historyRun(historyStart + 600_000L, 1_609.344,
+            TelemetryCoverage.COMPLETE, true).copy(metricSource = MetricSource.GPS,
+            trackingMode = RunTrackingMode.GPS)
+        val transitions = listOf(RunTransitionEntity(historyRunId, 1, RunTransitionType.PAUSE,
+            historyStart + 500_000L))
+
+        assertEquals("Run saved. 1 mile. Elapsed time, 10 minutes. " +
+            "Average pace, 8 minutes, 20 seconds per mile.", savedRunReceiptFor(run, transitions))
+        // Without the actual saved pause rows, this same run cannot safely announce a pace.
+        assertEquals("Run saved. 1 mile. Elapsed time, 10 minutes.", savedRunReceiptFor(run))
+    }
+
+    @Test
+    fun `save receipt uses stored kilometer unit and spoken pace rounding and singular units`() {
+        val cases = listOf(
+            Triple(330_000L, 1_000.0, "5 minutes, 30 seconds"),
+            Triple(61_000L, 1_000.0, "1 minute, 1 second"),
+            Triple(119_600L, 1_000.0, "2 minutes")
+        )
+        cases.forEach { (activeMillis, meters, expectedPace) ->
+            val run = historyRun(historyStart + activeMillis, meters,
+                TelemetryCoverage.COMPLETE, true).copy(metricSource = MetricSource.GPS,
+                displayDistanceUnit = DistanceUnit.KILOMETERS)
+            val transitions = listOf(RunTransitionEntity(historyRunId, 1, RunTransitionType.PAUSE,
+                historyStart + activeMillis))
+            val receipt = savedRunReceiptFor(run, transitions)
+            assertTrue("Saved pace for $activeMillis active milliseconds: $receipt",
+                receipt.endsWith("Average pace, $expectedPace per kilometer."))
+        }
+    }
+
+    @Test
+    fun `save receipt omits average pace for partial unavailable or incomplete saved evidence`() {
+        val complete = historyRun(historyStart + 600_000L, 1_609.344,
+            TelemetryCoverage.COMPLETE, true).copy(metricSource = MetricSource.GPS)
+        val unavailable = complete.copy(finalDistanceMeters = null, telemetryCoverage = TelemetryCoverage.UNAVAILABLE)
+        val legacy = historyRun(historyStart + 600_000L, historyComplete = false)
+        val partialFixture = complete.copy(metricSource = MetricSource.FIXTURE,
+            telemetryCoverage = TelemetryCoverage.PARTIAL)
+        listOf(complete.copy(telemetryCoverage = TelemetryCoverage.PARTIAL), unavailable, legacy,
+            partialFixture, complete.copy(transitionHistoryComplete = false),
+            complete.copy(transitionHistoryComplete = null), complete.copy(finalDistanceMeters = 0.0))
+            .forEach { run ->
+                val receipt = savedRunReceiptFor(run, emptyList())
+                assertFalse(receipt, receipt.contains("pace", ignoreCase = true))
+            }
+    }
+
+    @Test
+    fun `save receipt cannot invent pace from foreign malformed or zero active saved timelines`() {
+        val run = historyRun(historyStart + 600_000L, 1_609.344,
+            TelemetryCoverage.COMPLETE, true).copy(metricSource = MetricSource.GPS)
+        val pause = RunTransitionEntity(historyRunId, 1, RunTransitionType.PAUSE, historyStart + 300_000L)
+        listOf(
+            listOf(pause.copy(runId = "cccccccc-cccc-4ccc-8ccc-cccccccccccc")),
+            listOf(pause.copy(sequenceNumber = 2)),
+            listOf(pause.copy(occurredAtEpochMillis = historyStart + 700_000L)),
+            listOf(pause.copy(occurredAtEpochMillis = historyStart))
+        ).forEach { transitions ->
+            assertEquals("Run saved. 1 mile. Elapsed time, 10 minutes.", savedRunReceiptFor(run, transitions))
+        }
+    }
+
+    @Test
+    fun `save receipt stays factual when the run carries energy effort and music choices`() {
+        val run = historyRun(historyStart + 600_000L, 1_609.344,
+            TelemetryCoverage.COMPLETE, true).copy(metricSource = MetricSource.GPS)
+        val factual = "Run saved. 1 mile. Elapsed time, 10 minutes. Average pace, 10 minutes per mile."
+        val transitions = listOf(RunTransitionEntity(historyRunId, 1, RunTransitionType.PAUSE,
+            historyStart + 600_000L))
+        PreRunEnergy.entries.forEach { energy ->
+            PostRunEffort.entries.forEach { effort ->
+                assertEquals("Receipt must stay factual for $energy and $effort", factual,
+                    savedRunReceiptFor(run.copy(preRunEnergy = energy, postRunEffort = effort,
+                        musicObservationRequested = true, musicReflectionSharingAllowed = true), transitions))
+            }
+        }
+    }
+
+    @Test
     fun `history labels music as partial observations under the saved run`() {
         val run = historyRun(
             finish = historyStart + 600_000L,

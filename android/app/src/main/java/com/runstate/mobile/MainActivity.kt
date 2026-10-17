@@ -701,7 +701,12 @@ internal fun RunJourneyRoot(
                         completionSpeechEligibleRunId = id
                         completionReceiptRunId = id
                         completionReceiptText = try {
-                            database.runDao().findById(id)?.let(::savedRunReceiptFor)
+                            database.runDao().findById(id)?.let { row ->
+                                val transitions = try { database.runDao().transitionsFor(id) }
+                                catch (cancelled: CancellationException) { throw cancelled }
+                                catch (_: Exception) { null }
+                                savedRunReceiptFor(row, transitions)
+                            }
                         } catch (cancelled: CancellationException) { throw cancelled }
                         catch (_: Exception) { null } ?: "Run saved."
                     }

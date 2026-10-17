@@ -49,7 +49,10 @@ internal data class RunMetricsDisplay(
 )
 
 /** A factual confirmation from the completed row, never a generated interpretation. */
-internal fun savedRunReceiptFor(run: RunEntity): String {
+internal fun savedRunReceiptFor(run: RunEntity): String = savedRunReceiptFor(run, null)
+
+/** Pace needs the actual saved timeline; an omitted list must never imply the run had no pauses. */
+internal fun savedRunReceiptFor(run: RunEntity, transitions: List<RunTransitionEntity>?): String {
     require(run.state == StoredRunState.COMPLETED)
     val distance = run.finalDistanceMeters?.let { meters ->
         val (unitMeters, singular, plural) = when (run.displayDistanceUnit) {
@@ -78,7 +81,27 @@ internal fun savedRunReceiptFor(run: RunEntity): String {
         }
         "Elapsed time, $words."
     }
-    return listOfNotNull("Run saved.", distance, duration).joinToString(" ")
+    val pace = savedAveragePaceReceiptFor(run, transitions)
+    return listOfNotNull("Run saved.", distance, duration, pace).joinToString(" ")
+}
+
+private fun savedAveragePaceReceiptFor(run: RunEntity, transitions: List<RunTransitionEntity>?): String? {
+    if (transitions == null || run.telemetryCoverage != TelemetryCoverage.COMPLETE ||
+        run.metricSource == null || run.displayDistanceUnit == null) return null
+    // Reuse History's frozen-distance and complete-timeline rules instead of dividing by elapsed time.
+    val pace = completedHistoryMetrics(run, transitions)?.paceSecondsPerMeter ?: return null
+    val (unitMeters, unit) = when (run.displayDistanceUnit) {
+        DistanceUnit.MILES -> 1_609.344 to "mile"
+        DistanceUnit.KILOMETERS -> 1_000.0 to "kilometer"
+    }
+    val perUnit = (pace * unitMeters).takeIf {
+        it.isFinite() && it > 0.0 && it < Long.MAX_VALUE.toDouble()
+    } ?: return null
+    val totalSeconds = perUnit.roundToLong().takeIf { it > 0 } ?: return null
+    val words = listOf(totalSeconds / 60L to "minute", totalSeconds % 60L to "second")
+        .filter { it.first > 0 }
+        .joinToString(", ") { (count, name) -> "$count $name${if (count == 1L) "" else "s"}" }
+    return "Average pace, $words per $unit."
 }
 
 /** Converts stored-unit-independent metrics into stable runner-facing text. */
