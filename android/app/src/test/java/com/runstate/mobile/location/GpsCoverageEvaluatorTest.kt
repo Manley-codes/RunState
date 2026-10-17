@@ -11,6 +11,7 @@ import com.runstate.mobile.data.local.StoredRunState
 import com.runstate.mobile.data.local.TelemetryCoverage
 import com.runstate.mobile.run.RunTimingMark
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class GpsCoverageEvaluatorTest {
@@ -82,6 +83,10 @@ class GpsCoverageEvaluatorTest {
             displayDistanceUnit = DistanceUnit.MILES
         )
         assertEquals(TelemetryCoverage.PARTIAL, assess(run = completed))
+        assertEquals(TelemetryCoverage.PARTIAL, assess(run = completed,
+            points = route(1_000L..59_000L).map {
+                it.copy(observedAtEpochMillis = it.observedAtEpochMillis + 1_033L)
+            }))
         assertEquals(TelemetryCoverage.COMPLETE, assess(
             run = completed.copy(telemetryCoverage = TelemetryCoverage.COMPLETE),
             transitions = emptyList(), points = emptyList(), currentSession = OTHER_SESSION
@@ -234,6 +239,111 @@ class GpsCoverageEvaluatorTest {
         }))
         assertEquals(TelemetryCoverage.PARTIAL, assess(points = points.mapIndexed { index, point ->
             if (index == 20) point.copy(elapsedRealtimeNanos = 0L) else point
+        }))
+    }
+
+    @Test
+    fun `stable measured source offset profile certifies by monotonic running boundaries`() {
+        val pauseOffset = 1_082_839L
+        val points = route(950L..1_081_950L,
+            stationaryOffsets = (200_950L..400_950L step 1_000L).toSet())
+            .mapIndexed { index, point ->
+                val sourceOffset = if (index == 0 || index == 1_081) 1_033L else
+                    1_022L + index % 13
+                point.copy(observedAtEpochMillis = point.observedAtEpochMillis + sourceOffset)
+            }
+        assertEquals(1_082, points.size)
+        // The source epoch appears after Pause, but the source monotonic time is still Running.
+        assertTrue(points.last().observedAtEpochMillis > EPOCH + pauseOffset)
+        assertTrue(points.last().elapsedRealtimeNanos!! / 1_000_000L < MONO + pauseOffset)
+        assertEquals(TelemetryCoverage.COMPLETE, assess(
+            run = paused(pauseOffset), transitions = listOf(pause(pauseOffset)),
+            points = points, nowOffset = 1_097_154L
+        ))
+        assertEquals(TelemetryCoverage.COMPLETE, assess(
+            run = running(), transitions = emptyList(), points = points, nowOffset = pauseOffset
+        ))
+    }
+
+    @Test
+    fun `bounded constant source offsets work in either direction including the absolute limit`() {
+        listOf(-2_000L, -1_500L, -1_033L, 1_033L, 1_500L, 2_000L).forEach { sourceOffset ->
+            assertEquals("offset $sourceOffset", TelemetryCoverage.COMPLETE, assess(
+                run = paused(120_000L), transitions = listOf(pause(120_000L)),
+                points = route(3_000L..119_000L).map {
+                    it.copy(observedAtEpochMillis = it.observedAtEpochMillis + sourceOffset)
+                }, nowOffset = 130_000L
+            ))
+        }
+    }
+
+    @Test
+    fun `absolute source offset remains bounded at both the first anchor and later fixes`() {
+        listOf(-1L, 1L).forEach { sign ->
+            listOf(true, false).forEach { excessiveAtStart ->
+                val points = route(3_000L..119_000L).mapIndexed { index, point ->
+                    val offset = if (excessiveAtStart || index == 30) 2_001L else 1_500L
+                    point.copy(observedAtEpochMillis = point.observedAtEpochMillis + sign * offset)
+                }
+                assertEquals("sign $sign, first $excessiveAtStart", TelemetryCoverage.PARTIAL, assess(
+                    run = paused(120_000L), transitions = listOf(pause(120_000L)),
+                    points = points, nowOffset = 130_000L
+                ))
+            }
+        }
+    }
+
+    @Test
+    fun `residual source clock jumps are checked against the fixed first anchor`() {
+        listOf(-1L, 1L).forEach { sign ->
+            listOf(1_000L, 1_001L).forEach { drift ->
+                val points = route(1_000L..59_000L).mapIndexed { index, point ->
+                    val offset = sign * (-500L + if (index >= 30) drift else 0L)
+                    point.copy(observedAtEpochMillis = point.observedAtEpochMillis + offset)
+                }
+                assertEquals("sign $sign, drift $drift",
+                    if (drift == 1_000L) TelemetryCoverage.COMPLETE else TelemetryCoverage.PARTIAL,
+                    assess(points = points))
+            }
+        }
+    }
+
+    @Test
+    fun `small successive source clock changes cannot gradually rebase the reference`() {
+        val points = route(1_000L..59_000L).mapIndexed { index, point ->
+            point.copy(observedAtEpochMillis = point.observedAtEpochMillis - 500L + index * 20L)
+        }
+        assertEquals(TelemetryCoverage.PARTIAL, assess(points = points))
+    }
+
+    @Test
+    fun `pause resume preserves the original source clock reference`() {
+        val transitions = listOf(pause(), resume(90_000L, 2), pause(150_000L, 3))
+        val route = route(1_000L..59_000L, 91_000L..149_000L)
+        assertEquals(TelemetryCoverage.COMPLETE, assess(
+            run = paused(150_000L), transitions = transitions,
+            points = route.map { it.copy(observedAtEpochMillis = it.observedAtEpochMillis + 1_033L) },
+            nowOffset = 160_000L
+        ))
+        assertEquals(TelemetryCoverage.PARTIAL, assess(
+            run = paused(150_000L), transitions = transitions,
+            points = route.map {
+                val sourceOffset = if (offset(it) < 90_000L) -600L else 600L
+                it.copy(observedAtEpochMillis = it.observedAtEpochMillis + sourceOffset)
+            }, nowOffset = 160_000L
+        ))
+    }
+
+    @Test
+    fun `calibration preserves delayed callback guards and cannot repair missing running edges`() {
+        val delayed = insertRejected(route(1_000L..59_000L), 30, 15_000L, "OUT_OF_ORDER")
+            .map { it.copy(observedAtEpochMillis = it.observedAtEpochMillis + 1_033L) }
+        assertEquals(TelemetryCoverage.COMPLETE, assess(points = delayed))
+        assertEquals(TelemetryCoverage.PARTIAL, assess(points = route(6_000L..59_000L).map {
+            it.copy(observedAtEpochMillis = it.observedAtEpochMillis + 1_033L)
+        }))
+        assertEquals(TelemetryCoverage.PARTIAL, assess(points = route(1_000L..54_000L).map {
+            it.copy(observedAtEpochMillis = it.observedAtEpochMillis + 1_033L)
         }))
     }
 

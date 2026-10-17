@@ -22,13 +22,17 @@ import kotlin.math.max
  * fix is usable coverage even though the distance policy deliberately adds no distance for it.
  *
  * Lifecycle marks must share one process and agree with the wall timeline within 250 ms, both
- * at each boundary and for total active duration. A GPS source's epoch time may differ by at most
- * 1,000 ms from that mapping. These explicit allowances are provisional recording rules, not a
- * measured-route accuracy claim or permission to infer missing movement.
+ * at each boundary and for total active duration. GPS epoch time may have a stable offset from
+ * the device's wall clock: its absolute offset is bounded to 2,000 ms, with at most 1,000 ms drift
+ * from the first valid Running anchor. That reference never follows later drift or resets at a
+ * pause. Location ordering, interval edges and gaps still use monotonic source time. These explicit
+ * allowances are provisional recording rules, not a measured-route accuracy claim or permission
+ * to infer missing movement.
  */
 internal object GpsCoverageEvaluator {
     internal const val MAX_EDGE_MILLIS = 5_000L
     internal const val LIFECYCLE_CLOCK_TOLERANCE_MILLIS = 250L
+    internal const val MAX_SOURCE_CLOCK_OFFSET_MILLIS = 2_000L
     internal const val SOURCE_CLOCK_TOLERANCE_MILLIS = 1_000L
 
     private val distanceConfig = GpsDistanceConfig()
@@ -98,12 +102,13 @@ internal object GpsCoverageEvaluator {
         val checkpoint = transitions.lastOrNull()?.occurredAtEpochMillis ?: run.officialStartEpochMillis
         if (run.lastCheckpointEpochMillis != checkpoint || nowEpochMillis < checkpoint) return false
 
-        fun clocksAgree(epoch: Long, mono: Long, tolerance: Long): Boolean {
+        fun clockOffsetMillis(epoch: Long, mono: Long): Long {
             val wallDelta = Math.subtractExact(epoch, run.officialStartEpochMillis)
             val monoDelta = Math.subtractExact(mono, startMono)
-            val difference = Math.subtractExact(wallDelta, monoDelta)
-            return difference in -tolerance..tolerance
+            return Math.subtractExact(wallDelta, monoDelta)
         }
+        fun clocksAgree(epoch: Long, mono: Long, tolerance: Long): Boolean =
+            clockOffsetMillis(epoch, mono) in -tolerance..tolerance
         if (!clocksAgree(nowEpochMillis, now.elapsedRealtimeMillis, LIFECYCLE_CLOCK_TOLERANCE_MILLIS)) {
             return false
         }
@@ -147,6 +152,14 @@ internal object GpsCoverageEvaluator {
         var distanceAnchorMono: Long? = null
         var cumulative = 0.0
         var measuredSegmentSeen = false
+        var sourceClockOffset: Long? = null
+        fun sourceClocksAgree(epoch: Long, mono: Long): Boolean {
+            val reference = sourceClockOffset ?: return false
+            val offset = clockOffsetMillis(epoch, mono)
+            if (offset !in -MAX_SOURCE_CLOCK_OFFSET_MILLIS..MAX_SOURCE_CLOCK_OFFSET_MILLIS) return false
+            return Math.subtractExact(offset, reference) in
+                -SOURCE_CLOCK_TOLERANCE_MILLIS..SOURCE_CLOCK_TOLERANCE_MILLIS
+        }
         points.forEach { point ->
             val mono = point.elapsedRealtimeNanos?.div(1_000_000L) ?: return false
             val ignoredDelayed = !point.acceptedForDistance && point.rejectionReason in delayedReasons
@@ -154,7 +167,7 @@ internal object GpsCoverageEvaluator {
                 // A newer monotonic point rejected only by epoch order is a clock anomaly,
                 // not evidence of harmless delayed delivery.
                 if (lastUsableMono == null || mono > lastUsableMono!!) return false
-                if (!clocksAgree(point.observedAtEpochMillis, mono, SOURCE_CLOCK_TOLERANCE_MILLIS)) return false
+                if (!sourceClocksAgree(point.observedAtEpochMillis, mono)) return false
                 return@forEach
             }
 
@@ -168,9 +181,7 @@ internal object GpsCoverageEvaluator {
                 if (!point.acceptedForDistance && point.rejectionReason in outsideRunningReasons) return@forEach
                 return false
             }
-            if (lastUsableMono?.let { mono <= it } == true ||
-                !clocksAgree(point.observedAtEpochMillis, mono, SOURCE_CLOCK_TOLERANCE_MILLIS)
-            ) return false
+            if (lastUsableMono?.let { mono <= it } == true) return false
             val accuracy = point.horizontalAccuracyMeters?.toDouble() ?: return false
             if (!accuracy.isFinite() || accuracy <= 0.0 || accuracy > distanceConfig.maxHorizontalAccuracyMeters) {
                 return false
@@ -204,6 +215,13 @@ internal object GpsCoverageEvaluator {
                 }
                 distanceAnchorMono = mono
             }
+            if (sourceClockOffset == null) {
+                // Only the first valid in-Running accepted anchor establishes the reference.
+                // Keep it across every later point and pause/resume interval; never rebase.
+                if (!point.acceptedForDistance || point.segmentDistanceMeters != null) return false
+                sourceClockOffset = clockOffsetMillis(point.observedAtEpochMillis, mono)
+            }
+            if (!sourceClocksAgree(point.observedAtEpochMillis, mono)) return false
             interval.lastFix = mono
             lastUsableMono = mono
         }

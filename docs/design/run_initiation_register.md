@@ -519,7 +519,11 @@ experiments rather than current promises.
 continuity. Each Running interval permits at most 5 seconds at either edge, at most 5% combined
 edge omissions across active time, and at most 15 seconds between usable fixes. Start/pause/resume
 and current epoch/monotonic timing must agree within 250 ms, including total active duration; GPS
-source/epoch mapping permits 1,000 ms. Accurate stationary fixes provide coverage without distance.
+source/epoch mapping uses a fixed reference from the first valid Running anchor, with at most
+2,000 ms absolute offset and 1,000 ms residual drift from that reference. It never rebases across
+pause/resume. This October 16 correction follows a steady real run with a 1,022–1,034 ms GPS/device
+clock bias; the absolute two-second cap is provisional, not an Android accuracy guarantee.
+Accurate stationary fixes provide coverage without distance.
 Rejected/missing evidence, clock disagreement or a different process leaves pace unavailable.
 Completion freezes the assessed coverage and metrics; History and reflection use that snapshot.
 These initial conservative limits still need real-route availability and accuracy checks; COMPLETE
