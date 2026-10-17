@@ -10,6 +10,8 @@ import com.runstate.mobile.reflection.AndroidReflectionConnectionStore
 import com.runstate.mobile.reflection.HostedReflectionHttpClient
 import com.runstate.mobile.reflection.ReflectionConnectionConfig
 import com.runstate.mobile.reflection.ReflectionGateway
+import com.runstate.mobile.reflection.ReflectionSpeechGateway
+import com.runstate.mobile.reflection.ReflectionSpeechHttpClient
 import com.runstate.mobile.reflection.ReflectionBridgeException
 import com.runstate.mobile.reflection.LOCAL_REFLECTION_ENDPOINT
 import com.runstate.mobile.reflection.PHONE_REFLECTION_ENDPOINT
@@ -338,6 +340,22 @@ class RunStateApplication : Application() {
     private fun defaultReflectionConnection(): ReflectionConnectionState =
         if (reflectionBridgeEnabledForBuild()) ReflectionConnectionState.Local
         else ReflectionConnectionState.NotConfigured
+
+    /** Re-read the selected destination per utterance; never keep an obsolete access code in a player. */
+    internal val reflectionSpeechGateway: ReflectionSpeechGateway = ReflectionSpeechGateway { text ->
+        when (val connection = mutableReflectionConnection.value) {
+            is ReflectionConnectionState.Hosted ->
+                ReflectionSpeechHttpClient.hosted(connection.config).synthesize(text)
+            ReflectionConnectionState.Local -> if (reflectionBridgeEnabledForBuild()) {
+                val emulator = Build.PRODUCT.startsWith("sdk_") ||
+                    Build.DEVICE.startsWith("emu") || Build.HARDWARE == "ranchu"
+                ReflectionSpeechHttpClient.local(
+                    if (emulator) LOCAL_REFLECTION_ENDPOINT else PHONE_REFLECTION_ENDPOINT
+                ).synthesize(text)
+            } else null
+            else -> null
+        }
+    }
 
     private var reflectionOwner: RunReflectionCoordinator? = null
 

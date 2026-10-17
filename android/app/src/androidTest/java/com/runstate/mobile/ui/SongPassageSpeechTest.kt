@@ -8,7 +8,13 @@ import com.runstate.mobile.music.AndroidSpotifyPassageSession
 import com.runstate.mobile.music.PassagePlayback
 import com.runstate.mobile.data.local.*
 import com.runstate.mobile.reflection.LocalReflectionHttpClient
+import com.runstate.mobile.reflection.AndroidReflectionConnectionStore
+import com.runstate.mobile.reflection.CompletedRunEvidence
+import com.runstate.mobile.reflection.HostedReflectionHttpClient
 import com.runstate.mobile.reflection.PHONE_REFLECTION_ENDPOINT
+import com.runstate.mobile.reflection.ReflectionApiRequest
+import com.runstate.mobile.reflection.ReflectionMetricsEvidence
+import com.runstate.mobile.reflection.ReflectionMusicContext
 import com.runstate.mobile.reflection.pairedPassageFor
 import com.runstate.mobile.reflection.reflectionRequestFromSavedRun
 import androidx.test.platform.app.InstrumentationRegistry
@@ -34,6 +40,45 @@ class SongPassageSpeechTest {
     val composeTestRule = createAndroidComposeRule<ComponentActivity>()
 
     private val passage = SongPassageRequest("Selected title", "Selected artist", 5_000L)
+
+    /** Explicit silent hosted smoke check; synthetic facts only, no saved-run or preference writes. */
+    @Test fun hostedSampleReflectionUsesSavedConnection() {
+        assumeTrue(InstrumentationRegistry.getArguments().getString("allowHostedCheck") == "yes")
+        try {
+            val context = InstrumentationRegistry.getInstrumentation().targetContext
+            val connection = runBlocking { AndroidReflectionConnectionStore(context).load() }
+            assertNotNull("A saved hosted reflection connection is required for this optional check.", connection)
+            val finish = System.currentTimeMillis()
+            val request = ReflectionApiRequest(
+                requestId = UUID.randomUUID().toString(),
+                runId = UUID.randomUUID().toString(),
+                evidence = CompletedRunEvidence(
+                    officialStartEpochMillis = finish - 1_920_000L,
+                    finishEpochMillis = finish,
+                    startTimezoneId = "America/Chicago",
+                    activeDurationMillis = 1_920_000L,
+                    metrics = ReflectionMetricsEvidence(3 * 1_609.344, "FIXTURE", "COMPLETE", "MILES"),
+                    preRunEnergy = "MODERATE",
+                    musicContext = ReflectionMusicContext(
+                        state = "MUSIC", trackTitle = "Lovely Day", artistName = "Bill Withers",
+                        provenance = "CONTROLLED"
+                    )
+                )
+            )
+            // The real client's response parser rejects mismatched requestId/runId before returning.
+            // A successful result therefore also verifies this fresh request's exact identifiers.
+            val candidates = runBlocking { HostedReflectionHttpClient(requireNotNull(connection)).request(request) }
+            assertFalse("The hosted smoke check requires real provider generation.", candidates.isTestData)
+            assertTrue("All four hosted reflection candidates must be nonblank.",
+                listOf(candidates.spent, candidates.feelingGood, candidates.poweredUp, candidates.noSelection)
+                    .all { it.isNotBlank() })
+            assertTrue("This sample must not acquire an unrequested curated song cue.", candidates.songCueId == null)
+            // This proves authenticated hosted generation, not receipt of optional song enrichment.
+        } catch (_: Exception) {
+            // Never attach private connection details, provider diagnostics or generated text to failures.
+            throw AssertionError("The optional silent hosted reflection check could not complete.")
+        }
+    }
 
     /** Explicit opt-in only: one live sample request, real TTS and automatic Spotify transport. */
     @Test fun realSampleReflectionAutomaticallyHandsOffToSpotify() {

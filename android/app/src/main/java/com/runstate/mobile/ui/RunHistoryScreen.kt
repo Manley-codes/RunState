@@ -5,6 +5,7 @@ import android.media.AudioAttributes
 import android.media.AudioFocusRequest
 import android.media.AudioManager
 import android.media.MediaPlayer
+import android.media.MediaDataSource
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -78,6 +79,8 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.runstate.mobile.data.local.PostRunEffort
 import com.runstate.mobile.data.local.TelemetryCoverage
 import com.runstate.mobile.R
+import com.runstate.mobile.RunStateApplication
+import com.runstate.mobile.reflection.ReflectionSpeechGateway
 import com.runstate.mobile.music.AndroidSpotifyPassageSession
 import com.runstate.mobile.music.SongPassageRequest
 import com.runstate.mobile.music.SongPassageStatus
@@ -133,9 +136,16 @@ internal interface ReflectionSpeaker {
 
 /** The Android boundary is separate so request ownership can be verified without playing audio. */
 internal interface ReflectionSpeechPlatform {
+    fun reflectionSpeechGateway(): ReflectionSpeechGateway? = null
     fun initialize(onReady: (Boolean) -> Unit, onDone: (String) -> Unit, onError: (String) -> Unit)
     fun requestAudioFocus(utteranceId: String, onFocusLost: (String) -> Unit): Boolean
     fun speak(utteranceId: String, text: String, rate: Float): Boolean
+    /** Unavailable is allowed only before playback starts; an audible failure must never repeat text. */
+    fun playReflectionAudio(
+        utteranceId: String, audio: ByteArray,
+        onDone: (String) -> Unit, onUnavailable: (String) -> Unit, onError: (String) -> Unit
+    ): Boolean = false
+    fun stopReflectionAudio() = Unit
     fun playSongPassage(
         utteranceId: String,
         passage: SongPassageRequest,
@@ -156,26 +166,31 @@ internal interface ReflectionSpeechPlatform {
     fun close()
 }
 
-/** Android owns the voice; the saved text remains the source for both reading and speech. */
+/** The selected saved text owns one voice attempt and, only on success, its optional music. */
 internal class AndroidReflectionSpeaker(
     context: Context,
     private val platform: ReflectionSpeechPlatform = AndroidReflectionSpeechPlatform(context),
     private val scheduleTimeout: ((Runnable, Long) -> Unit)? = null,
     private val cancelTimeout: ((Runnable) -> Unit)? = null
 ) : ReflectionSpeaker {
-    private enum class SpeechPhase { WAITING_FOR_ENGINE, SPEAKING, INSTRUMENTAL }
+    private enum class SpeechPhase { PREPARING_CLOUD, WAITING_FOR_ENGINE, SPEAKING, INSTRUMENTAL }
+    private enum class SpeechPurpose { RECEIPT, REFLECTION }
 
     private data class SpeechRequest(
         val id: String,
         val text: String,
         val rate: Float,
+        val purpose: SpeechPurpose,
         val onFinished: (() -> Unit)?,
         val canPlayInstrumental: (() -> Boolean)?,
         val songPassage: SongPassageRequest? = null,
-        var phase: SpeechPhase = SpeechPhase.WAITING_FOR_ENGINE
+        var phase: SpeechPhase = SpeechPhase.WAITING_FOR_ENGINE,
+        var cloudAudio: Boolean = false
     )
 
     private val mainHandler = Handler(Looper.getMainLooper())
+    private val voiceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    private var preparation: Job? = null
     private var initialized = false
     private var initializationFailed = false
     private var request: SpeechRequest? = null
@@ -189,12 +204,15 @@ internal class AndroidReflectionSpeaker(
                     if (!closed) {
                         initialized = ready
                         initializationFailed = !initialized
-                        if (initialized) speakPending() else request?.id?.let(::finish)
+                        if (request?.phase == SpeechPhase.WAITING_FOR_ENGINE) {
+                            if (initialized) speakPending() else request?.id?.let(::finish)
+                        }
                     }
                 } },
-                onDone = { id -> onMain { finishSpeech(id) } },
+                onDone = { id -> onMain { if (request?.cloudAudio != true) finishSpeech(id) } },
                 onError = { id -> onMain {
-                    if (request?.id == id && request?.phase != SpeechPhase.INSTRUMENTAL) stop()
+                    if (request?.id == id && !requireNotNull(request).cloudAudio &&
+                        request?.phase == SpeechPhase.SPEAKING) stop()
                 } }
             )
         } catch (_: RuntimeException) {
@@ -225,7 +243,8 @@ internal class AndroidReflectionSpeaker(
     }
 
     override fun speakReceipt(text: String, onFinished: () -> Unit) {
-        submit(text, rate = 1.0f, onFinished = onFinished, canPlayInstrumental = null)
+        submit(text, rate = 1.0f, onFinished = onFinished, canPlayInstrumental = null,
+            purpose = SpeechPurpose.RECEIPT)
     }
 
     private fun submit(
@@ -233,31 +252,85 @@ internal class AndroidReflectionSpeaker(
         rate: Float,
         onFinished: (() -> Unit)?,
         canPlayInstrumental: (() -> Boolean)?,
-        songPassage: SongPassageRequest? = null
+        songPassage: SongPassageRequest? = null,
+        purpose: SpeechPurpose = SpeechPurpose.REFLECTION
     ) {
         stop()
-        if (closed || initializationFailed || text.isBlank() ||
+        if (closed || text.isBlank() ||
             text.length > TextToSpeech.getMaxSpeechInputLength()) {
             onFinished?.invoke()
             return
         }
-        val next = SpeechRequest(UUID.randomUUID().toString(), text, rate, onFinished,
+        val next = SpeechRequest(UUID.randomUUID().toString(), text, rate, purpose, onFinished,
             canPlayInstrumental, songPassage)
         request = next
-        // Cold engine startup has its own deadline; it must not consume audible playback time.
-        if (initialized) speakPending() else armTimeout(next.id, 15_000L)
+        val gateway = if (purpose == SpeechPurpose.REFLECTION) platform.reflectionSpeechGateway() else null
+        if (gateway == null) useLocalVoice(next) else {
+            next.phase = SpeechPhase.PREPARING_CLOUD
+            armTimeout(next.id, 25_000L)
+            preparation = voiceScope.launch {
+                val audio = try { gateway.synthesize(next.text) }
+                catch (cancelled: CancellationException) { throw cancelled }
+                catch (_: Exception) { null }
+                if (request !== next || closed || next.phase != SpeechPhase.PREPARING_CLOUD) return@launch
+                preparation = null
+                if (audio == null) useLocalVoice(next) else playCloudVoice(next, audio)
+            }
+        }
+    }
+
+    private fun useLocalVoice(current: SpeechRequest) {
+        if (request !== current || closed) return
+        preparation?.cancel()
+        preparation = null
+        current.cloudAudio = false
+        current.phase = SpeechPhase.WAITING_FOR_ENGINE
+        clearTimeout()
+        try { platform.stopReflectionAudio() } catch (_: RuntimeException) { }
+        releaseFocus()
+        if (initializationFailed) finish(current.id)
+        else if (initialized) speakPending() else armTimeout(current.id, 15_000L)
+    }
+
+    private fun playCloudVoice(current: SpeechRequest, audio: ByteArray) {
+        if (request !== current || closed) return
+        current.cloudAudio = true
+        current.phase = SpeechPhase.SPEAKING
+        try {
+            if (!platform.requestAudioFocus(current.id) { id -> onMain {
+                    if (request?.id == id && request?.phase == SpeechPhase.SPEAKING) stop()
+                } }) {
+                finish(current.id)
+                return
+            }
+            if (request !== current || closed) return
+            armSpeechTimeout(current)
+            fun ownsCloud(id: String) = request === current && current.id == id &&
+                current.cloudAudio && current.phase == SpeechPhase.SPEAKING && !closed
+            val accepted = platform.playReflectionAudio(current.id, audio,
+                { id -> onMain { if (ownsCloud(id)) finishSpeech(id) } },
+                { id -> onMain { if (ownsCloud(id)) useLocalVoice(current) } },
+                { id -> onMain { if (ownsCloud(id)) stop() } })
+            if (!accepted && ownsCloud(current.id)) useLocalVoice(current)
+        } catch (_: RuntimeException) {
+            // The platform reports pre-playback failures explicitly. Unknown failures cannot repeat speech.
+            if (request === current) stop()
+        }
     }
 
     override fun stop() {
         val interrupted = request
         request = null
         clearTimeout()
+        preparation?.cancel()
+        preparation = null
         try {
             platform.stop()
         } catch (_: RuntimeException) {
             // A disconnected engine must not disturb History navigation.
         }
         stopInstrumental()
+        try { platform.stopReflectionAudio() } catch (_: RuntimeException) { }
         releaseFocus()
         interrupted?.onFinished?.invoke()
     }
@@ -265,6 +338,7 @@ internal class AndroidReflectionSpeaker(
     override fun close() {
         if (closed) return
         closed = true
+        voiceScope.cancel()
         try {
             stop()
         } finally {
@@ -287,14 +361,17 @@ internal class AndroidReflectionSpeaker(
             }
             if (request?.id != current.id || closed) return
             // The bounded playback budget starts only once a ready engine can queue this text.
-            val maximum = if (current.onFinished != null && current.canPlayInstrumental == null)
-                120_000L else 600_000L
-            armTimeout(current.id, (current.text.length * 100L + 15_000L).coerceIn(30_000L, maximum))
+            armSpeechTimeout(current)
             if (!platform.speak(current.id, current.text, current.rate) && request?.id == current.id) stop()
         } catch (_: RuntimeException) {
             if (request?.id == current.id) stop()
             // Speech failure is independent of the saved reflection.
         }
+    }
+
+    private fun armSpeechTimeout(current: SpeechRequest) {
+        val maximum = if (current.purpose == SpeechPurpose.RECEIPT) 120_000L else 600_000L
+        armTimeout(current.id, (current.text.length * 100L + 15_000L).coerceIn(30_000L, maximum))
     }
 
     private fun finishSpeech(utteranceId: String) {
@@ -336,7 +413,12 @@ internal class AndroidReflectionSpeaker(
     private fun armTimeout(id: String, delayMillis: Long) {
         clearTimeout()
         val timeout = object : Runnable {
-            override fun run() { if (speechTimeout === this && request?.id == id) stop() }
+            override fun run() {
+                if (speechTimeout === this && request?.id == id) {
+                    val current = requireNotNull(request)
+                    if (current.phase == SpeechPhase.PREPARING_CLOUD) useLocalVoice(current) else stop()
+                }
+            }
         }
         speechTimeout = timeout
         if (scheduleTimeout != null) scheduleTimeout.invoke(timeout, delayMillis)
@@ -354,6 +436,9 @@ internal class AndroidReflectionSpeaker(
         val finished = request?.takeIf { it.id == utteranceId } ?: return
         request = null
         clearTimeout()
+        preparation?.cancel()
+        preparation = null
+        try { platform.stopReflectionAudio() } catch (_: RuntimeException) { }
         stopInstrumental()
         releaseFocus()
         finished.onFinished?.invoke()
@@ -372,6 +457,23 @@ internal class AndroidReflectionSpeaker(
 }
 
 internal class AndroidReflectionSpeechPlatform(context: Context) : ReflectionSpeechPlatform {
+    private class MemoryAudioSource(private var audio: ByteArray?) : MediaDataSource() {
+        @Synchronized override fun getSize(): Long = audio?.size?.toLong() ?: 0L
+        @Synchronized override fun readAt(position: Long, buffer: ByteArray, offset: Int, size: Int): Int {
+            val bytes = audio ?: return -1
+            if (position < 0L) return -1
+            if (size == 0) return 0
+            if (position >= bytes.size) return -1
+            val count = minOf(size, bytes.size - position.toInt())
+            bytes.copyInto(buffer, offset, position.toInt(), position.toInt() + count)
+            return count
+        }
+        @Synchronized override fun close() { audio = null }
+    }
+    private class ReflectionAudio(
+        val id: String, val player: MediaPlayer, val source: MemoryAudioSource,
+        var started: Boolean = false, var released: Boolean = false
+    )
     private class InstrumentalPlayback(
         val id: String,
         val player: MediaPlayer,
@@ -380,6 +482,8 @@ internal class AndroidReflectionSpeechPlatform(context: Context) : ReflectionSpe
     )
 
     private val appContext = context.applicationContext
+    override fun reflectionSpeechGateway(): ReflectionSpeechGateway? =
+        (appContext as? RunStateApplication)?.reflectionSpeechGateway
     private val passageScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val passageController by lazy {
         SpotifySongPassageController(AndroidSpotifyPassageSession(appContext))
@@ -395,6 +499,7 @@ internal class AndroidReflectionSpeechPlatform(context: Context) : ReflectionSpe
     private var engine: TextToSpeech? = null
     private var focusRequest: AudioFocusRequest? = null
     private var instrumental: InstrumentalPlayback? = null
+    private var reflectionAudio: ReflectionAudio? = null
     private var closed = false
 
     override fun initialize(onReady: (Boolean) -> Unit, onDone: (String) -> Unit, onError: (String) -> Unit) {
@@ -436,6 +541,58 @@ internal class AndroidReflectionSpeechPlatform(context: Context) : ReflectionSpe
         val activeEngine = engine ?: return false
         return activeEngine.setSpeechRate(rate) == TextToSpeech.SUCCESS &&
             activeEngine.speak(text, TextToSpeech.QUEUE_FLUSH, Bundle(), utteranceId) == TextToSpeech.SUCCESS
+    }
+
+    override fun playReflectionAudio(
+        utteranceId: String, audio: ByteArray,
+        onDone: (String) -> Unit, onUnavailable: (String) -> Unit, onError: (String) -> Unit
+    ): Boolean {
+        stopReflectionAudio()
+        if (closed || audio.isEmpty()) return false
+        val playback = ReflectionAudio(utteranceId, MediaPlayer(), MemoryAudioSource(audio))
+        reflectionAudio = playback
+        fun owns() = reflectionAudio === playback && !playback.released && !closed
+        fun failed() {
+            if (!owns()) return
+            val hadStarted = playback.started
+            releaseReflectionAudio(playback)
+            if (hadStarted) onError(playback.id) else onUnavailable(playback.id)
+        }
+        return try {
+            playback.player.setAudioAttributes(speechAttributes)
+            playback.player.isLooping = false
+            playback.player.setOnPreparedListener { player ->
+                if (owns()) try {
+                    player.start()
+                    playback.started = true
+                } catch (_: RuntimeException) { failed() }
+            }
+            playback.player.setOnCompletionListener {
+                if (owns()) {
+                    releaseReflectionAudio(playback)
+                    onDone(playback.id)
+                }
+            }
+            playback.player.setOnErrorListener { _, _, _ -> failed(); true }
+            playback.player.setDataSource(playback.source)
+            playback.player.prepareAsync()
+            true
+        } catch (_: Exception) {
+            releaseReflectionAudio(playback)
+            false
+        }
+    }
+
+    override fun stopReflectionAudio() {
+        reflectionAudio?.let(::releaseReflectionAudio)
+    }
+
+    private fun releaseReflectionAudio(playback: ReflectionAudio) {
+        if (playback.released) return
+        playback.released = true
+        if (reflectionAudio === playback) reflectionAudio = null
+        try { playback.player.release() } catch (_: RuntimeException) { }
+        playback.source.close()
     }
 
     override fun playInstrumental(
@@ -557,7 +714,10 @@ internal class AndroidReflectionSpeechPlatform(context: Context) : ReflectionSpe
         }
     }
 
-    override fun stop() { engine?.stop() }
+    override fun stop() {
+        stopReflectionAudio()
+        engine?.stop()
+    }
     override fun releaseAudioFocus() {
         val owned = focusRequest ?: return
         focusRequest = null
@@ -565,6 +725,7 @@ internal class AndroidReflectionSpeechPlatform(context: Context) : ReflectionSpe
     }
     override fun close() {
         closed = true
+        stopReflectionAudio()
         stopSongPassage()
         passageScope.cancel()
         stopInstrumental()
