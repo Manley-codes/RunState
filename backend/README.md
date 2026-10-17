@@ -237,6 +237,52 @@ JSON body. Only requests containing a cue receive an additional `songCueId` in t
 equal to that request's cue identifier. Clients check this acknowledgment before using the reply
 with the corresponding local passage; old request/response shapes remain unchanged.
 
+### Optional automatic song analysis (Musixmatch)
+
+The backend can now look up an identified, unprepared song automatically before generating its
+reflection. Set `MUSIXMATCH_API_KEY` in the backend environment to enable this path. Without that
+key, reflection behavior stays unchanged. Keep this credential out of Android, Git, request bodies
+and logs. For a local check, a key saved in Windows **User** environment settings must be explicitly
+loaded into the terminal/service environment before starting Java; a previously running server
+does not inherit later environment changes. Hosted Render configuration is separate.
+
+For MUSIC with both title and artist and no existing curated cue, the adapter calls the documented
+`matcher.track.get` endpoint, verifies the returned title/artist without removing recording-version
+suffixes, then calls `track.lyrics.analysis.get` for its numeric Musixmatch track ID. Each HTTPS
+request has a four-second deadline and a 128 KiB response limit, with no redirects, retries or cache.
+Both HTTP status and the provider's embedded status must succeed. Authentication, access, missing
+analysis, mismatched identity or malformed responses fall back to the ordinary reflection path.
+
+Only bounded `themes.main_themes[].theme` and `moods.main_moods` labels are retained. Quotes,
+free-text meaning/explanations, entities and lyric text are discarded. Only title/artist and the
+matched provider ID go to Musixmatch; no run IDs, metrics, Energy, weather, route or listening-history
+list is sent there. Prompt v1.6 receives a backend-added `music_context.song_analysis` object with
+`source`, `track_title`, `artist_name`, `provider_track_id`, `themes`, and `moods`. These are data about
+the song, never instructions or evidence of the runner's feelings/performance. The mobile input
+contract and the four-candidate output schema are unchanged. An accepted curated cue takes
+precedence and performs no additional provider lookup.
+
+This implements automatic song information for the one supplied identity. It does not rank a whole
+run's songs, find hook timestamps, create a local playback plan, or select another Spotify track.
+An explicit live check passed for **Lovely Day / Bill Withers** using the actual account and no
+prepared song notes. It verified that fetched themes/moods entered the actual Claude request and
+generated four nonblank candidates for synthetic 3-mile/32-minute sample facts. This proves that
+one automatic connection, not whole-catalog coverage or subjective quality. The normal suite passed
+79 checks with the additional opt-in case skipped; that live case then passed separately. Manley
+handles the approved $49/month Basic purchase, not the application.
+
+To repeat this paid integration check deliberately, provide both backend environment keys and run:
+
+```powershell
+mvn '-Dtest=AnthropicReflectionProviderTest#liveUnpreparedSongAnalysisFeedsTheRealReflectionRequest' `
+    '-Drunstate.liveMusicAnalysis=true' test
+```
+
+It makes real matcher/analysis calls and one real Claude generation, stopping before Claude if
+analysis is unavailable. Default tests make no live calls. Its bounded report contains public song
+labels and one sample reply, no keys or raw provider bodies. Hosted activation requires pushed
+backend code, Render's own `MUSIXMATCH_API_KEY` and deployment; Windows User settings apply locally.
+
 Success response shape:
 
 ```json

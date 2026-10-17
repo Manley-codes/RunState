@@ -37,6 +37,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 
 /** Anthropic Messages API adapter for the versioned mobile reflection prompt. */
@@ -61,24 +62,43 @@ public final class AnthropicReflectionProvider implements ReflectionProvider {
     private final ProviderConfiguration configuration;
     private final Transport transport;
     private final String systemPrompt;
+    private final SongAnalysisLookup songAnalysisLookup;
+
+    /** Only independently fetched song labels enter here; no lyrics or run history are requested. */
+    @FunctionalInterface
+    interface SongAnalysisLookup {
+        Optional<MusixmatchSongAnalysis.Analysis> lookup(String trackTitle, String artistName);
+    }
 
     /** Builds the production adapter from backend-only environment configuration. */
     public AnthropicReflectionProvider() throws ReflectionProviderException {
-        this(configurationFrom(System.getenv()));
+        this(configurationFrom(System.getenv()), configuredSongAnalysis(System.getenv()));
     }
 
-    private AnthropicReflectionProvider(ProviderConfiguration configuration)
+    private AnthropicReflectionProvider(ProviderConfiguration configuration, SongAnalysisLookup songAnalysisLookup)
             throws ReflectionProviderException {
         this(
                 configuration,
-                new JdkTransport(configuration.connectionTimeout())
+                productionTransport(configuration),
+                songAnalysisLookup
         );
     }
 
     AnthropicReflectionProvider(ProviderConfiguration configuration, Transport transport)
             throws ReflectionProviderException {
+        this(configuration, transport, (title, artist) -> Optional.empty());
+    }
+
+    /** Shares the unchanged production HTTP path with the explicitly enabled live integration check. */
+    static Transport productionTransport(ProviderConfiguration configuration) {
+        return new JdkTransport(configuration.connectionTimeout());
+    }
+
+    AnthropicReflectionProvider(ProviderConfiguration configuration, Transport transport,
+                               SongAnalysisLookup songAnalysisLookup) throws ReflectionProviderException {
         this.configuration = Objects.requireNonNull(configuration, "configuration");
         this.transport = Objects.requireNonNull(transport, "transport");
+        this.songAnalysisLookup = Objects.requireNonNull(songAnalysisLookup, "songAnalysisLookup");
         this.systemPrompt = loadSystemPrompt();
     }
 
@@ -160,6 +180,18 @@ public final class AnthropicReflectionProvider implements ReflectionProvider {
         );
     }
 
+    private static SongAnalysisLookup configuredSongAnalysis(Map<String, String> environment)
+            throws ReflectionProviderException {
+        try {
+            return MusixmatchSongAnalysis.fromEnvironment(environment)
+                    .<SongAnalysisLookup>map(client -> client::lookup)
+                    .orElse((title, artist) -> Optional.empty());
+        } catch (IllegalArgumentException invalidConfiguration) {
+            throw new ReflectionProviderException(FailureType.CONFIGURATION,
+                    "MUSIXMATCH_API_KEY must contain a valid backend API key.");
+        }
+    }
+
     private String buildRequestBody(CompletedRunEvidence evidence) {
         JsonObject request = new JsonObject();
         request.addProperty("model", configuration.model());
@@ -168,7 +200,9 @@ public final class AnthropicReflectionProvider implements ReflectionProvider {
 
         JsonObject message = new JsonObject();
         message.addProperty("role", "user");
-        message.addProperty("content", serializeEvidence(evidence).toString());
+        JsonObject serialized = serializeEvidence(evidence);
+        enrichSongLabels(evidence.musicContext(), serialized.getAsJsonObject("music_context"));
+        message.addProperty("content", serialized.toString());
         JsonArray messages = new JsonArray();
         messages.add(message);
         request.add("messages", messages);
@@ -181,6 +215,40 @@ public final class AnthropicReflectionProvider implements ReflectionProvider {
         request.add("output_config", outputConfiguration);
 
         return request.toString();
+    }
+
+    private void enrichSongLabels(MusicContext music, JsonObject serializedMusic) {
+        if (music.state() != ReflectionContract.MusicState.MUSIC || music.songCue() != null
+                || music.trackTitle() == null || music.artistName() == null) return;
+        try {
+            Optional<MusixmatchSongAnalysis.Analysis> result = songAnalysisLookup.lookup(
+                    music.trackTitle(), music.artistName());
+            if (result == null || result.isEmpty()) return;
+            MusixmatchSongAnalysis.Analysis analysis = result.get();
+            if (!sameSongText(music.trackTitle(), analysis.trackTitle())
+                    || !sameSongText(music.artistName(), analysis.artistName())
+                    || analysis.themes().isEmpty() && analysis.moods().isEmpty()) return;
+            JsonObject labels = new JsonObject();
+            labels.addProperty("source", "MUSIXMATCH");
+            labels.addProperty("track_title", analysis.trackTitle());
+            labels.addProperty("artist_name", analysis.artistName());
+            labels.addProperty("provider_track_id", analysis.providerTrackId());
+            JsonArray themes = new JsonArray();
+            analysis.themes().forEach(themes::add);
+            JsonArray moods = new JsonArray();
+            analysis.moods().forEach(moods::add);
+            labels.add("themes", themes);
+            labels.add("moods", moods);
+            serializedMusic.add("song_analysis", labels);
+        } catch (RuntimeException unavailable) {
+            // Optional enrichment cannot block saving or the existing reflection path.
+            // Never log a provider exception: its URL may contain an API key.
+        }
+    }
+
+    private static boolean sameSongText(String expected, String actual) {
+        return expected != null && actual != null && expected.strip().replaceAll("\\s+", " ")
+                .equalsIgnoreCase(actual.strip().replaceAll("\\s+", " "));
     }
 
     private static JsonObject serializeEvidence(CompletedRunEvidence evidence) {

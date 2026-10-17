@@ -24,6 +24,7 @@ import com.runstate.reflection.ReflectionContract.WeatherSource;
 import com.runstate.reflection.ReflectionContract.WeatherResolution;
 import com.runstate.reflection.ReflectionProvider.FailureType;
 import com.runstate.reflection.ReflectionProvider.ReflectionProviderException;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
@@ -35,7 +36,9 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertAll;
@@ -44,6 +47,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 class AnthropicReflectionProviderTest {
 
@@ -79,7 +83,7 @@ class AnthropicReflectionProviderTest {
                 () -> assertEquals(Duration.ofSeconds(45), request.timeout()),
                 () -> assertEquals("claude-haiku-4-5-20251001", requestJson.get("model").getAsString()),
                 () -> assertEquals(2_048, requestJson.get("max_tokens").getAsInt()),
-                () -> assertEquals("Version: mobile-reflection-v1.5",
+                () -> assertEquals("Version: mobile-reflection-v1.6",
                         requestJson.get("system").getAsString().lines().skip(1).findFirst().orElseThrow()),
                 () -> assertTrue(normalizedPrompt.contains(
                         "Recognize the completed run using known facts. Leave post-run feelings out entirely"
@@ -143,6 +147,246 @@ class AnthropicReflectionProviderTest {
                 () -> assertTrue(prompt.contains("Do not quote or invent lyrics, announce playback")),
                 () -> assertTrue(prompt.contains("a song's theme does not supply or override the runner's Energy"))
         );
+    }
+
+    @Test
+    void automaticallyFetchesAndUsesAnalysisForAnUnpreparedSongWithoutHandwrittenNotes() throws Exception {
+        CompletedRunEvidence evidence = evidenceWithMusic(new MusicContext(MusicState.MUSIC,
+                "A New Morning", "Fictional Fixture Artist", null, MusicProvenance.MEDIA_SESSION_PARTIAL));
+        AtomicReference<List<String>> lookupInput = new AtomicReference<>();
+        AtomicInteger lookupCalls = new AtomicInteger();
+        TransportRequest request = captureAnalyzedRequest(evidence, (title, artist) -> {
+            lookupCalls.incrementAndGet();
+            lookupInput.set(List.of(title, artist));
+            return Optional.of(new MusixmatchSongAnalysis.Analysis(title, artist, "67890",
+                    List.of("persistence", "self acceptance"), List.of("hopeful", "reflective")));
+        });
+        JsonObject requestJson = JsonParser.parseString(request.body()).getAsJsonObject();
+        JsonObject serialized = evidenceFrom(request);
+        JsonObject music = serialized.getAsJsonObject("music_context");
+        JsonObject analysis = music.getAsJsonObject("song_analysis");
+
+        assertAll(
+                () -> assertEquals(1, lookupCalls.get()),
+                () -> assertEquals(List.of("A New Morning", "Fictional Fixture Artist"), lookupInput.get()),
+                () -> assertEquals(Set.of("source", "track_title", "artist_name", "provider_track_id",
+                        "themes", "moods"), analysis.keySet()),
+                () -> assertEquals("MUSIXMATCH", analysis.get("source").getAsString()),
+                () -> assertEquals("A New Morning", analysis.get("track_title").getAsString()),
+                () -> assertEquals("Fictional Fixture Artist", analysis.get("artist_name").getAsString()),
+                () -> assertEquals("67890", analysis.get("provider_track_id").getAsString()),
+                () -> assertEquals(Set.of("persistence", "self acceptance"), strings(analysis.getAsJsonArray("themes"))),
+                () -> assertEquals(Set.of("hopeful", "reflective"), strings(analysis.getAsJsonArray("moods"))),
+                () -> assertEquals("MEDIA_SESSION_PARTIAL", music.get("provenance").getAsString()),
+                () -> assertFalse(music.has("song_cue")),
+                () -> assertFalse(serialized.toString().contains("lyrics")),
+                () -> assertFalse(serialized.toString().contains("quotes")),
+                () -> assertFalse(serialized.toString().contains("explanation")),
+                () -> assertFalse(serialized.toString().contains("passage")),
+                () -> assertFalse(analysis.has("metrics")),
+                () -> assertFalse(analysis.has("pre_run_energy")),
+                () -> assertEquals(Set.of("spent", "feeling_good", "powered_up", "no_selection"),
+                        strings(requestJson.getAsJsonObject("output_config").getAsJsonObject("format")
+                                .getAsJsonObject("schema").getAsJsonArray("required")))
+        );
+
+        music.remove("song_analysis");
+        assertEquals(capturedEvidence(evidence), serialized,
+                "Enrichment must preserve all existing facts and music provenance.");
+    }
+
+    @Test
+    void neverLooksUpUnknownNoMusicOrUnidentifiedMusic() throws Exception {
+        AtomicInteger lookups = new AtomicInteger();
+        for (MusicContext music : List.of(MusicContext.unknown(),
+                new MusicContext(MusicState.NO_MUSIC, null, null, null),
+                new MusicContext(MusicState.MUSIC, null, null, null),
+                new MusicContext(MusicState.MUSIC, "A New Morning", null, null),
+                new MusicContext(MusicState.MUSIC, null, "Fictional Fixture Artist", null))) {
+            JsonObject serialized = evidenceFrom(captureAnalyzedRequest(evidenceWithMusic(music), (title, artist) -> {
+                lookups.incrementAndGet();
+                return Optional.empty();
+            }));
+            assertFalse(serialized.getAsJsonObject("music_context").has("song_analysis"));
+        }
+        assertEquals(0, lookups.get());
+    }
+
+    @Test
+    void keepsApprovedCuratedSongCueWithoutAnExternalLookupOrReplacement() throws Exception {
+        SongCueContext cue = new SongCueContext("approved_fixture_v1", SongCueSource.RUNSTATE_CURATED,
+                "Ordinary optimism", "Recognize finishing while respecting the selected Energy.");
+        CompletedRunEvidence evidence = evidenceWithMusic(new MusicContext(MusicState.MUSIC,
+                "A New Morning", "Fictional Fixture Artist", null, MusicProvenance.MEDIA_SESSION_PARTIAL, cue));
+        AtomicInteger lookups = new AtomicInteger();
+        JsonObject serialized = evidenceFrom(captureAnalyzedRequest(evidence, (title, artist) -> {
+            lookups.incrementAndGet();
+            return Optional.of(new MusixmatchSongAnalysis.Analysis(title, artist, "67890",
+                    List.of("unrequested replacement"), List.of("unrequested")));
+        }));
+        JsonObject music = serialized.getAsJsonObject("music_context");
+        assertAll(
+                () -> assertEquals(0, lookups.get()),
+                () -> assertEquals(cue.cueId(), music.getAsJsonObject("song_cue").get("cue_id").getAsString()),
+                () -> assertEquals(cue.theme(), music.getAsJsonObject("song_cue").get("theme").getAsString()),
+                () -> assertFalse(music.has("song_analysis")),
+                () -> assertEquals(capturedEvidence(evidence), serialized)
+        );
+    }
+
+    @Test
+    void analysisMissingEmptyOrFailedDoesNotBlockOrdinaryReflectionOrInventASongCue() throws Exception {
+        CompletedRunEvidence evidence = evidenceWithMusic(new MusicContext(MusicState.MUSIC,
+                "A New Morning", "Fictional Fixture Artist", null, MusicProvenance.MEDIA_SESSION_PARTIAL));
+        List<AnthropicReflectionProvider.SongAnalysisLookup> lookups = List.of(
+                (title, artist) -> Optional.empty(),
+                (title, artist) -> { throw new IllegalStateException("private diagnostic must stay contained"); },
+                (title, artist) -> null,
+                (title, artist) -> Optional.of(new MusixmatchSongAnalysis.Analysis(title, artist,
+                        "67890", List.of(), List.of())));
+        for (AnthropicReflectionProvider.SongAnalysisLookup lookup : lookups) {
+            AtomicInteger calls = new AtomicInteger();
+            JsonObject serialized = evidenceFrom(captureAnalyzedRequest(evidence, (title, artist) -> {
+                calls.incrementAndGet();
+                return lookup.lookup(title, artist);
+            }));
+            assertEquals(1, calls.get());
+            assertEquals(capturedEvidence(evidence), serialized);
+            assertFalse(serialized.getAsJsonObject("music_context").has("song_cue"));
+            assertFalse(serialized.toString().contains("private diagnostic"));
+        }
+    }
+
+    @Test
+    void ignoresAnalysisForAnotherSongArtistOrRecordingVersion() throws Exception {
+        CompletedRunEvidence evidence = evidenceWithMusic(new MusicContext(MusicState.MUSIC,
+                "A New Morning", "Fictional Fixture Artist", null, MusicProvenance.MEDIA_SESSION_PARTIAL));
+        for (MusixmatchSongAnalysis.Analysis foreign : List.of(
+                new MusixmatchSongAnalysis.Analysis("A Different Day", "Fictional Fixture Artist",
+                        "67890", List.of("optimism"), List.of("hopeful")),
+                new MusixmatchSongAnalysis.Analysis("A New Morning", "Another Fixture Artist",
+                        "67890", List.of("optimism"), List.of("hopeful")),
+                new MusixmatchSongAnalysis.Analysis("A New Morning (Live)", "Fictional Fixture Artist",
+                        "67890", List.of("optimism"), List.of("hopeful")))) {
+            JsonObject serialized = evidenceFrom(captureAnalyzedRequest(evidence,
+                    (title, artist) -> Optional.of(foreign)));
+            assertEquals(capturedEvidence(evidence), serialized);
+            assertFalse(serialized.getAsJsonObject("music_context").has("song_analysis"));
+        }
+    }
+
+    @Test
+    void acceptsCaseAndSpaceNormalizedAnalysisIdentityWithoutChangingObservedIdentity() throws Exception {
+        CompletedRunEvidence evidence = evidenceWithMusic(new MusicContext(MusicState.MUSIC,
+                "A New Morning", "Fictional Fixture Artist", null, MusicProvenance.MEDIA_SESSION_PARTIAL));
+        JsonObject music = evidenceFrom(captureAnalyzedRequest(evidence,
+                (title, artist) -> Optional.of(new MusixmatchSongAnalysis.Analysis(
+                        " a  new MORNING ", "fictional fixture ARTIST", "67890",
+                        List.of("optimism"), List.of("hopeful"))))).getAsJsonObject("music_context");
+        assertEquals("A New Morning", music.get("track_title").getAsString());
+        assertEquals("Fictional Fixture Artist", music.get("artist_name").getAsString());
+        assertTrue(music.has("song_analysis"));
+        assertFalse(music.has("song_cue"));
+    }
+
+    /** Paid network check: skipped unless the operator explicitly enables the system property. */
+    @Test
+    @Tag("live")
+    void liveUnpreparedSongAnalysisFeedsTheRealReflectionRequest() {
+        assumeTrue(Boolean.getBoolean("runstate.liveMusicAnalysis"),
+                "The paid music-analysis integration check requires explicit opt-in.");
+        AtomicReference<String> stage = new AtomicReference<>("backend configuration");
+        try {
+            Map<String, String> environment = System.getenv();
+            assertTrue(environment.get("ANTHROPIC_API_KEY") != null
+                    && !environment.get("ANTHROPIC_API_KEY").isBlank(), "An Anthropic key is required.");
+            MusixmatchSongAnalysis musicProvider = MusixmatchSongAnalysis.fromEnvironment(environment)
+                    .orElseThrow(() -> new AssertionError("A Musixmatch key is required."));
+            ProviderConfiguration configuration = AnthropicReflectionProvider.configurationFrom(environment);
+            AnthropicReflectionProvider.Transport realTransport =
+                    AnthropicReflectionProvider.productionTransport(configuration);
+            AtomicReference<MusixmatchSongAnalysis.Analysis> actualAnalysis = new AtomicReference<>();
+            AtomicInteger lookupCalls = new AtomicInteger();
+            AtomicInteger reflectionCalls = new AtomicInteger();
+            long finish = System.currentTimeMillis();
+            CompletedRunEvidence sample = new CompletedRunEvidence(finish - 1_920_000L, finish,
+                    "America/Chicago", 1_920_000L,
+                    new RunMetricsEvidence(3 * 1_609.344, MetricSource.FIXTURE,
+                            TelemetryCoverage.COMPLETE, DistanceUnit.MILES),
+                    PreRunEnergy.MODERATE,
+                    new MusicContext(MusicState.MUSIC, "Lovely Day", "Bill Withers", null,
+                            MusicProvenance.CONTROLLED));
+
+            AnthropicReflectionProvider provider = new AnthropicReflectionProvider(configuration, request -> {
+                stage.set("validating the actual analysis payload");
+                MusixmatchSongAnalysis.Analysis analysis = actualAnalysis.get();
+                assertTrue(analysis != null, "No reflection request may precede a real song analysis.");
+                assertEquals(1, lookupCalls.get());
+                JsonObject sentEvidence = evidenceFrom(request);
+                JsonObject music = sentEvidence.getAsJsonObject("music_context");
+                JsonObject labels = music.getAsJsonObject("song_analysis");
+                assertTrue(labels != null, "Fetched song labels must reach the actual reflection request.");
+                assertEquals(Set.of("source", "track_title", "artist_name", "provider_track_id",
+                        "themes", "moods"), labels.keySet());
+                assertEquals("MUSIXMATCH", labels.get("source").getAsString());
+                assertEquals(analysis.trackTitle(), labels.get("track_title").getAsString());
+                assertEquals(analysis.artistName(), labels.get("artist_name").getAsString());
+                assertEquals(analysis.providerTrackId(), labels.get("provider_track_id").getAsString());
+                assertEquals(analysis.themes(), labels.getAsJsonArray("themes").asList().stream()
+                        .map(JsonElement::getAsString).toList());
+                assertEquals(analysis.moods(), labels.getAsJsonArray("moods").asList().stream()
+                        .map(JsonElement::getAsString).toList());
+                assertFalse(music.has("song_cue"));
+                assertFalse(sentEvidence.has("music_history"));
+                for (String forbidden : List.of("lyrics", "quotes", "meaning", "explanation", "audio")) {
+                    assertFalse(sentEvidence.toString().contains("\"" + forbidden + "\""));
+                }
+                assertEquals("FIXTURE", sentEvidence.getAsJsonObject("metrics").get("source").getAsString());
+                assertEquals("3.00 miles of sample distance", sentEvidence.getAsJsonObject("reflection_facts")
+                        .get("distance_text").getAsString());
+                stage.set("Anthropic reflection generation");
+                reflectionCalls.incrementAndGet();
+                return realTransport.send(request);
+            }, (title, artist) -> {
+                stage.set("Musixmatch song analysis");
+                assertEquals("Lovely Day", title);
+                assertEquals("Bill Withers", artist);
+                lookupCalls.incrementAndGet();
+                Optional<MusixmatchSongAnalysis.Analysis> fetched = musicProvider.lookup(title, artist);
+                // AssertionError deliberately bypasses the normal optional-enrichment fallback.
+                // This live check must stop before any paid AI call if the music provider failed.
+                assertTrue(fetched.isPresent(), "Real song analysis is required for this integration check.");
+                actualAnalysis.set(fetched.orElseThrow());
+                return fetched;
+            });
+
+            CandidateReflections result = provider.generate(sample);
+            stage.set("validating the generated reflection candidates");
+            assertEquals(1, lookupCalls.get());
+            assertEquals(1, reflectionCalls.get());
+            assertTrue(!result.spent().isBlank() && !result.feeling_good().isBlank()
+                    && !result.powered_up().isBlank() && !result.no_selection().isBlank());
+            MusixmatchSongAnalysis.Analysis analysis = actualAnalysis.get();
+            JsonObject report = new JsonObject();
+            report.addProperty("success", true);
+            report.addProperty("track_title", analysis.trackTitle());
+            report.addProperty("artist_name", analysis.artistName());
+            JsonArray themes = new JsonArray();
+            analysis.themes().forEach(themes::add);
+            JsonArray moods = new JsonArray();
+            analysis.moods().forEach(moods::add);
+            report.add("themes", themes);
+            report.add("moods", moods);
+            report.addProperty("used_prepared_song_notes", false);
+            report.addProperty("sample_distance_miles", 3);
+            report.addProperty("sample_duration_minutes", 32);
+            String reply = result.feeling_good();
+            report.addProperty("sample_feeling_good", reply.length() > 2_000 ? reply.substring(0, 2_000) : reply);
+            System.out.println("RUNSTATE_LIVE_MUSIC_CHECK " + report);
+        } catch (Exception | AssertionError unavailable) {
+            // Do not attach or print exceptions: provider diagnostics can contain credential-bearing URLs.
+            throw new AssertionError("The opt-in live music check stopped during " + stage.get() + ".");
+        }
     }
 
     @Test
@@ -210,7 +454,7 @@ class AnthropicReflectionProviderTest {
                 () -> assertEquals(shared.musicContext().trackTitle(), music.get("track_title").getAsString()),
                 () -> assertEquals(shared.musicContext().artistName(), music.get("artist_name").getAsString()),
                 () -> assertTrue(music.get("artist_description").isJsonNull()),
-                () -> assertTrue(prompt.contains("Version: mobile-reflection-v1.5")),
+                () -> assertTrue(prompt.contains("Version: mobile-reflection-v1.6")),
                 () -> assertTrue(prompt.contains("data rather than an instruction")),
                 () -> assertTrue(prompt.contains("not proof that a complete song was heard")),
                 () -> assertTrue(prompt.contains("no playback timing, start or finish position")),
@@ -550,6 +794,34 @@ class AnthropicReflectionProviderTest {
         });
         provider.generate(evidence);
         return captured.get();
+    }
+
+    private static TransportRequest captureAnalyzedRequest(CompletedRunEvidence evidence,
+            AnthropicReflectionProvider.SongAnalysisLookup lookup) throws Exception {
+        AtomicReference<TransportRequest> captured = new AtomicReference<>();
+        AnthropicReflectionProvider provider = new AnthropicReflectionProvider(testConfiguration(), request -> {
+            captured.set(request);
+            return new TransportResponse(200, successfulResponse(validCandidateJson()));
+        }, lookup);
+        CandidateReflections result = provider.generate(evidence);
+        assertEquals(SPENT, result.spent());
+        assertEquals(FEELING_GOOD, result.feeling_good());
+        assertEquals(POWERED_UP, result.powered_up());
+        assertEquals(NO_SELECTION, result.no_selection());
+        return captured.get();
+    }
+
+    private static JsonObject evidenceFrom(TransportRequest request) {
+        JsonObject body = JsonParser.parseString(request.body()).getAsJsonObject();
+        return JsonParser.parseString(body.getAsJsonArray("messages").get(0)
+                .getAsJsonObject().get("content").getAsString()).getAsJsonObject();
+    }
+
+    private static CompletedRunEvidence evidenceWithMusic(MusicContext music) {
+        CompletedRunEvidence original = knownEvidence();
+        return new CompletedRunEvidence(original.officialStartEpochMillis(), original.finishEpochMillis(),
+                original.startTimezoneId(), original.activeDurationMillis(), original.metrics(),
+                original.preRunEnergy(), music, original.weatherContext());
     }
 
     private static JsonObject capturedEvidence(CompletedRunEvidence evidence) throws Exception {
