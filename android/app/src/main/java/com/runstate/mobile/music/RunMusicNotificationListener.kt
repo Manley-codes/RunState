@@ -3,7 +3,6 @@ package com.runstate.mobile.music
 import android.content.ComponentName
 import android.media.MediaMetadata
 import android.media.session.MediaController
-import android.media.session.MediaSession
 import android.media.session.MediaSessionManager
 import android.media.session.PlaybackState
 import android.os.Handler
@@ -43,22 +42,36 @@ internal class RunMusicNotificationListener : NotificationListenerService() {
     private var runId: String? = null
     private var captureJob: Job? = null
     private var captureScope: CoroutineScope? = null
-    private var watchingSessions = false
-    private val controllers = mutableMapOf<MediaSession.Token, WatchedController>()
-
-    private data class WatchedController(
-        val controller: MediaController,
-        val callback: MediaController.Callback
+    private var sessionsChanged: MediaSessionManager.OnActiveSessionsChangedListener? = null
+    private val controllers = MusicSessionRegistry<WatchedController>(
+        onObservation = { ownerRunId, watched, kind -> capture(ownerRunId, watched.controller, kind) },
+        onControllerFailure = { Log.w(TAG, "A media controller did not provide a usable observation.") },
+        onAccessLost = { stopCapture() }
     )
 
-    private val sessionsChanged = MediaSessionManager.OnActiveSessionsChangedListener { active ->
-        if (runId != null) {
-            try {
-                reconcileControllers(active.orEmpty())
-            } catch (_: RuntimeException) {
-                Log.w(TAG, "Media-session observation stopped after a controller error.")
-                stopCapture()
+    private inner class WatchedController(val controller: MediaController) : MusicSessionHandle {
+        override val token: Any get() = controller.sessionToken
+        override val isOwnApp: Boolean get() = controller.packageName == packageName
+        private var callback: MediaController.Callback? = null
+
+        override fun registerCallback(onEvent: (MusicObservationKind) -> Unit) {
+            val next = object : MediaController.Callback() {
+                override fun onMetadataChanged(metadata: MediaMetadata?) {
+                    onEvent(MusicObservationKind.METADATA_CHANGED)
+                }
+
+                override fun onPlaybackStateChanged(state: PlaybackState?) {
+                    onEvent(MusicObservationKind.PLAYBACK_CHANGED)
+                }
             }
+            callback = next
+            controller.registerCallback(next, callbackHandler)
+        }
+
+        override fun unregisterCallback() {
+            val previous = callback ?: return
+            callback = null
+            controller.unregisterCallback(previous)
         }
     }
 
@@ -94,16 +107,27 @@ internal class RunMusicNotificationListener : NotificationListenerService() {
         if (runId == nextRunId) return
         stopCapture()
         runId = nextRunId
-        captureJob = SupervisorJob(scope.coroutineContext[Job])
-        captureScope = CoroutineScope(captureJob!! + Dispatchers.Main.immediate)
+        val ownerJob = SupervisorJob(scope.coroutineContext[Job])
+        captureJob = ownerJob
+        captureScope = CoroutineScope(ownerJob + Dispatchers.Main.immediate)
+        controllers.start(nextRunId)
+        val listener = MediaSessionManager.OnActiveSessionsChangedListener { active ->
+            // Session-list callbacks can also arrive after pause/reconnect, even for the same run.
+            if (captureJob === ownerJob && runId == nextRunId) {
+                controllers.reconcile(active.orEmpty().map { WatchedController(it) })
+            }
+        }
+        sessionsChanged = listener
         try {
             sessionManager.addOnActiveSessionsChangedListener(
-                sessionsChanged,
+                listener,
                 component,
                 callbackHandler
             )
-            watchingSessions = true
-            reconcileControllers(sessionManager.getActiveSessions(component))
+            controllers.reconcile(sessionManager.getActiveSessions(component).map { WatchedController(it) })
+        } catch (cancelled: CancellationException) {
+            stopCapture()
+            throw cancelled
         } catch (_: SecurityException) {
             // A revoked or unavailable grant leaves an honest gap, never a fake song.
             stopCapture()
@@ -117,75 +141,34 @@ internal class RunMusicNotificationListener : NotificationListenerService() {
         captureJob?.cancel()
         captureJob = null
         captureScope = null
-        controllers.values.forEach { watched ->
+        controllers.stop()
+        val listener = sessionsChanged
+        sessionsChanged = null
+        if (listener != null) {
             try {
-                watched.controller.unregisterCallback(watched.callback)
-            } catch (_: RuntimeException) {
-                // The controller may already have died; no session state is inferred.
-            }
-        }
-        controllers.clear()
-        if (watchingSessions) {
-            try {
-                sessionManager.removeOnActiveSessionsChangedListener(sessionsChanged)
+                sessionManager.removeOnActiveSessionsChangedListener(listener)
             } catch (_: RuntimeException) {
                 // The listener may already have been disconnected by Android.
             }
-            watchingSessions = false
         }
     }
 
-    private fun reconcileControllers(active: List<MediaController>) {
-        val byToken = active
-            .filter { it.packageName != packageName }
-            .associateBy { it.sessionToken }
-        controllers.keys.filter { it !in byToken }.forEach { token ->
-            controllers.remove(token)?.let { watched ->
-                try {
-                    watched.controller.unregisterCallback(watched.callback)
-                } catch (_: RuntimeException) {
-                    // The removed controller may already have been destroyed.
-                }
-            }
-        }
-        byToken.forEach { (token, controller) ->
-            if (token !in controllers) {
-                val callback = object : MediaController.Callback() {
-                    override fun onMetadataChanged(metadata: MediaMetadata?) {
-                        capture(controller, MusicObservationKind.METADATA_CHANGED)
-                    }
-
-                    override fun onPlaybackStateChanged(state: PlaybackState?) {
-                        capture(controller, MusicObservationKind.PLAYBACK_CHANGED)
-                    }
-                }
-                controller.registerCallback(callback, callbackHandler)
-                controllers[token] = WatchedController(controller, callback)
-                capture(controller, MusicObservationKind.SESSION_SNAPSHOT)
-            }
-        }
-    }
-
-    private fun capture(controller: MediaController, kind: MusicObservationKind) {
-        val currentRunId = runId ?: return
+    private fun capture(ownerRunId: String, controller: MediaController, kind: MusicObservationKind) {
+        if (runId != ownerRunId) return
         val currentScope = captureScope ?: return
-        val observation = try {
-            val metadata = controller.metadata
-            RunMusicObservation(
-                runId = currentRunId,
-                observationKey = UUID.randomUUID().toString(),
-                observedAtEpochMillis = System.currentTimeMillis(),
-                elapsedRealtimeNanos = SystemClock.elapsedRealtimeNanos(),
-                sourcePackage = controller.packageName,
-                title = metadata?.getString(MediaMetadata.METADATA_KEY_TITLE)?.takeIf(String::isNotBlank),
-                artist = metadata?.getString(MediaMetadata.METADATA_KEY_ARTIST)?.takeIf(String::isNotBlank),
-                playbackState = playbackStateOf(controller.playbackState),
-                eventKind = kind
-            )
-        } catch (_: RuntimeException) {
-            Log.w(TAG, "A media controller did not provide a readable snapshot.")
-            return
-        }
+        // The registry handles unreadable snapshots per controller and stops on permission loss.
+        val metadata = controller.metadata
+        val observation = RunMusicObservation(
+            runId = ownerRunId,
+            observationKey = UUID.randomUUID().toString(),
+            observedAtEpochMillis = System.currentTimeMillis(),
+            elapsedRealtimeNanos = SystemClock.elapsedRealtimeNanos(),
+            sourcePackage = controller.packageName,
+            title = metadata?.getString(MediaMetadata.METADATA_KEY_TITLE)?.takeIf(String::isNotBlank),
+            artist = metadata?.getString(MediaMetadata.METADATA_KEY_ARTIST)?.takeIf(String::isNotBlank),
+            playbackState = playbackStateOf(controller.playbackState),
+            eventKind = kind
+        )
         currentScope.launch {
             try {
                 app.database.musicObservationDao().recordObservation(observation)
