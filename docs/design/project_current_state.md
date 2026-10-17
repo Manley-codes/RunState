@@ -7,6 +7,43 @@ metadata:
 
 ## Current Android checkpoint — October 16, 2026
 
+### Automatic song-information connection — real unprepared-song trial passed
+
+Manley explicitly asked to execute the provider integration rather than repeat creative/manual
+pairing tests. Musixmatch is the first route. Its live Basic page and Stripe checkout showed
+$49/month with 100 analysis calls/day; Manley explicitly approved that recurring plan and reported
+checkout complete/API dashboard available. He handles checkout, terms and key creation privately.
+One earlier checkout-navigation attempt was stopped by automatic approval review because the
+charge had not yet been explicitly approved; it proceeded only after his explicit approval.
+
+New `backend/src/main/java/com/runstate/reflection/MusixmatchSongAnalysis.java` implements the
+documented automatic title/artist matcher → provider track-ID analysis path. It verifies identity
+and keeps only bounded theme/mood labels, never lyrics/quotes/free-text interpretation. The existing
+Anthropic provider now requests these labels for an unprepared identified song when its backend
+environment contains `MUSIXMATCH_API_KEY`; prompt v1.6 can use them with unchanged run evidence and
+conditional Energy. Known curated cues remain unchanged. Missing/failed analysis preserves ordinary
+reflection generation. No native contract, schema, playback plan, UI or phone-preference change.
+
+**79 normal backend tests passed**, including 15 new adapter cases and six integration cases;
+the additional explicit live case is skipped by default. After Manley saved the key, that live case
+**passed separately in 4.938 seconds** for **Lovely Day / Bill Withers**, with no prepared song notes.
+Musixmatch returned themes **optimism and positivity; love and support** and moods **love; joy;
+empowerment; reflection; inspiration**. A request witness verified that these exact actual labels
+reached the real Claude request with synthetic 3.00 miles of sample distance/32 minutes and
+conditional Energy. Four nonblank candidates were generated. This proves one automatic song-data
+connection, not whole-run ranking, whole-catalog coverage, passage selection or creative acceptance.
+No phone history was sent and no listening/field test was needed.
+
+The only necessary new files in this slice are the adapter above and its fake-transport unit tests
+at `backend/src/test/java/com/runstate/reflection/MusixmatchSongAnalysisTest.java`. Existing provider,
+prompt, tests and documentation are extended. No dependency changes, Git mutation, deployment or new
+secret file. Manley was shown a hidden-prompt PowerShell block to store the key in Windows User
+environment settings (outside the repository), which he confirmed saved; it persists until removed.
+Both API keys were used only in memory/child-process environment and neither was printed or put in
+source. The existing Anthropic key came from the previously authorized private document. The live
+test exited normally, with no server, USB route or phone change. Hosted activation still requires
+pushed code, Render's own `MUSIXMATCH_API_KEY` and deployment.
+
 ### Automated song-passage first version — real automated phone check passed
 
 **Latest listening feedback / adjustment:** Manley heard both automatically and said the handoff

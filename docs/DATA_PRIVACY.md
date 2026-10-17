@@ -13,6 +13,15 @@ console statement that RunState has no server does **not** apply to the Android 
 
 ## Android curated song passage — October 16, 2026
 
+**Optional backend analysis integration:** a backend configured with `MUSIXMATCH_API_KEY` can send
+the single supplied song title/artist to Musixmatch and request analysis for its matched provider
+track ID. It sends no run ID, GPS, weather, metrics, Energy or listening-history list to Musixmatch.
+Only short theme/mood labels are passed onward to Anthropic with the existing reflection context;
+quotes, lyric text, free-text explanations and entities are discarded, with no analysis cache or new
+song-history storage. Known curated cues bypass this lookup. The integration is disabled without
+the backend key. Local credential setup and the real provider trial do not activate Render or
+change phone preferences. Hosted activation and any broader tester-facing consent remain separate.
+
 The first automated passage version uses the existing optional music-observation and separate
 reflection-sharing choices. A known song must appear in eligible same-run Spotify observations.
 Selection stays local and sends one approved title/artist with partial-report provenance, plus

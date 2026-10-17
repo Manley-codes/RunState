@@ -9,6 +9,48 @@ metadata:
 
 # Music-aware reflection generation research
 
+## Automatic provider integration — October 16, 2026 (current)
+
+Manley approved executing the missing song-information connection, explicitly distinguishing it
+from repeated manual reflection/music quality experiments. The live official schema was retrieved
+successfully: server `https://api.musixmatch.com`; `GET /ws/1.1/matcher.track.get` with `q_track` and
+`q_artist`, then `GET /ws/1.1/track.lyrics.analysis.get` with matched `track_id`; query authentication
+is `apikey`. Relevant response fields and embedded status were checked without relying on guesses.
+
+The new adapter and existing Anthropic provider/prompt v1.6 now implement this path for a supplied
+unprepared identity. Only short theme/mood labels are used; raw lyric text, quotes, explanations and
+entities are discarded. No whole-run ranking, arbitrary Spotify song selection or automatic hook
+detection is claimed. Known curated cues bypass external lookup, and failures leave the established
+reflection path usable. All **79 normal backend tests** passed with synthetic transport responses;
+the explicitly gated live case is skipped by default.
+
+The live Basic page and Stripe checkout showed **$49/month / 100 analysis calls per day**. Manley
+explicitly approved the plan and then reported checkout complete/API dashboard available. He handles
+the purchase/terms/key creation; no purchase was performed by assistant. An initial checkout click
+was auto-review blocked before explicit price approval and retried only after that approval. He was
+given a hidden-prompt PowerShell block to save `MUSIXMATCH_API_KEY` in Windows User environment
+settings outside Git, with no secret file, and he confirmed it saved.
+
+**Real automatic integration proved:** the opt-in live check passed in **4.938 seconds** for
+**Lovely Day / Bill Withers**, a public song with no prepared catalog notes. Musixmatch returned
+themes **optimism and positivity; love and support** and moods **love; joy; empowerment; reflection;
+inspiration**. A witness asserted that those exact real labels were in the request forwarded by
+the production Claude transport, with no lyric/quote/explanation/audio fields or handwritten cue.
+Four nonblank candidates were generated from synthetic **3.00 miles of sample distance in 32
+minutes**, with conditional Energy. No phone history, listening test or phone configuration change.
+Credentials stayed in memory/process environment; none were printed or stored in source. The
+process exited normally and left no server or USB route running.
+
+Sample Feeling Good output, retained as engineering evidence rather than creative acceptance:
+
+> 3.00 miles of sample distance in 32 minutes, finishing around 11 p.m. feeling good. You came in at
+> moderate energy and turned that into a quality evening run.
+
+This proves one real automatic song-information→reflection connection, not whole-catalog coverage,
+user acceptance of this reply, whole-run ranking, hook timing or earlier-track playback. Provider
+agreement was not independently cleared. Hosted activation still requires pushed code, Render's
+own `MUSIXMATCH_API_KEY` and deployment. No repeat manual-pairing test is needed.
+
 ## Execution checkpoint — October 16, 2026
 
 **User review and follow-up:** Manley heard the automated sequence and said it went well. The
