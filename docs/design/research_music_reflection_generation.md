@@ -734,6 +734,26 @@ reliable generation or cross-artist quality. Nothing is integrated.
 
 ### Provisional listening setup and review order
 
+**October 16 implementation decision:** Manley now wants this voice to speak app reflections,
+while the existing generic Android voice continues to speak saved-run facts. A read-only connected
+ElevenLabs account lookup confirmed the exact saved name `1st test voice` and voice ID
+`DocoybWhaSQMUIs7gLNe`. Preserve the prior Eleven Multilingual v2 delivery initially. This is a
+chosen integration direction, not an installed change: backend credentials, bounded exact-text
+speech delivery and cancellation-safe audio playback remain to implement after hosted music
+activation. Only the selected final reflection should be synthesized, followed by the existing
+song handoff; do not synthesize all four Energy candidates or restart manual pairing experiments.
+
+**October 17 implementation checkpoint:** the reflection-only backend/Android path is now built
+and installed on Moto, with the fixed voice/model above, stored voice settings preserved and
+transient in-memory audio. Facts remain local. Normal backend tests passed 101 checks/one paid-live
+skip; Android passed 496 JVM tests per variant, all APKs, and 23 silent device cases/two deliberate
+live skips. All 32 saved runs/fields stayed unchanged. Manley saved the private backend key on
+Render; user commit/push, Render deployment, provider acceptance and actual hearing proof remain.
+The current Live music backend does not yet
+advertise voice support, so the installed app retains local fallback. Manley creates the speech-only
+key privately; the prepared 10,000-credit limit caps usage per refresh period and buys no credits.
+See the current-state record for the five necessary new source/test files and exact boundaries.
+
 - **ElevenLabs:** Manley generates and auditions recordings there using his saved designed voice,
   `1st test voice`, and **Eleven Multilingual v2**. His description: "A middle-aged African American male,
   friendly, confident, conversational, fun, productive and motivational energy."

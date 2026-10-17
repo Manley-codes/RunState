@@ -19,6 +19,13 @@ not built into the APK. The Anthropic key belongs only in the backend environmen
 Java records are used as small immutable data holders. A record exposes its values through generated
 accessor methods and does not offer setters; its constructor can still reject invalid combinations.
 
+**Latest hosted checkpoint (October 16):** `bfc64ad` is Live on the existing Render service. Its
+public health check passed; a private check inside that instance used Render's saved Musixmatch
+key to retrieve actual Lovely Day/Bill Withers themes and moods. A separate silent Moto check
+returned four real candidates through its existing hosted connection in 8.478 seconds, with
+fictional facts and all 32 saved runs/fields unchanged. These checks complement the earlier local
+request witness: the public health/response envelopes deliberately do not expose analysis data.
+
 ## Contract included
 
 - `RequestIdentifiers` carries a canonical request UUID and the canonical Android run UUID.
@@ -100,7 +107,47 @@ Backend environment configuration:
 - `ANTHROPIC_MODEL` is optional. It defaults to the pinned Haiku 4.5 model
   `claude-haiku-4-5-20251001` and can be changed without editing code.
 
-The initial limits are a 10-second connection timeout, a 45-second request timeout, and 2,048 output
+### Optional reflection voice (ElevenLabs)
+
+The selected reflection can use Manley's existing designed **`1st test voice`**, fixed voice ID
+`DocoybWhaSQMUIs7gLNe` and model `eleven_multilingual_v2`. This does not change the Android
+saved-run-facts voice or generate new reflection wording. Configure `ELEVENLABS_API_KEY` only on
+the backend; a missing key disables cloud speech and does not prevent ordinary reflections.
+`--fake` never enables the real speech provider. The Android app uses the same saved hosted
+connection/access code and requires no ElevenLabs credential of its own.
+
+`GET /health` adds `X-RunState-Reflection-Voice: 1` only when configured. The new guarded endpoint
+is `POST /api/reflections/speech`, accepting exactly `{"text":"Exact selected reflection"}`.
+Text must be nonblank valid Unicode and at most 4,000 characters; it is not trimmed or rewritten.
+Existing Host/Origin, remote bearer, method, query, media/encoding and 64 KiB request limits apply
+before synthesis. Successful responses are `audio/mpeg`, nonempty and at most 2 MiB, with
+`Cache-Control: no-store` and `X-Content-Type-Options: nosniff`. Failures use the existing sanitized
+JSON error style. Voice generation shares the existing two-provider-call admission limit and
+creates no request cache or durable audio/text storage.
+
+`ElevenLabsReflectionSpeech` uses the fixed official HTTPS conversion endpoint, an API-key header,
+MP3 44.1 kHz/128 kbps, a three-second connect timeout and a twenty-second complete-response budget.
+It follows no redirects and performs no automatic retries. Only `text` and `model_id` are sent in
+the JSON body. Voice settings are not overridden, preserving the voice's stored settings.
+Provider exceptions, bodies, keys and selected text are not logged. Provider-side retention still
+follows the ElevenLabs account/service settings; request-scoped memory in RunState does not mean
+zero retention at ElevenLabs. The documented zero-retention option is enterprise-only, so this
+implementation does not claim or request it. See the official
+[speech endpoint documentation](https://elevenlabs.io/docs/api-reference/text-to-speech/convert).
+
+Android synthesizes only the final selected text when speech is requested, not all four Energy
+candidates. Facts use local Android TTS. Reflection audio is played from memory, and genuine
+completion feeds the existing music handoff. Missing/older/unavailable service or an unplayable
+response can fall back to local speech before cloud audio starts. Errors after audible playback,
+Stop, navigation and focus loss never repeat speech or start music. History Read uses reflection
+speech without music. New requests, including deliberate repeated History reads, can consume
+ElevenLabs credits; there is no durable audio cache. Configure a usage limit on the separate
+speech-only RunState API key. Backend tests use fake speech transports, not paid synthesis.
+The voice code is tested locally and the Android update is installed; Render's private key is
+saved. It still needs the user to commit/push this voice implementation and deploy that copy.
+No live custom-voice generation or hearing result is claimed yet.
+
+The Anthropic adapter's initial limits are a 10-second connection timeout, a 45-second request timeout, and 2,048 output
 tokens. These are starting safety bounds, not measured latency or quality guarantees. Failures are
 reported explicitly; the adapter performs no automatic retry and returns no successful canned fallback.
 
@@ -282,6 +329,7 @@ It makes real matcher/analysis calls and one real Claude generation, stopping be
 analysis is unavailable. Default tests make no live calls. Its bounded report contains public song
 labels and one sample reply, no keys or raw provider bodies. Hosted activation requires pushed
 backend code, Render's own `MUSIXMATCH_API_KEY` and deployment; Windows User settings apply locally.
+That hosted setup was separately completed at `bfc64ad`, as recorded above.
 
 Success response shape:
 

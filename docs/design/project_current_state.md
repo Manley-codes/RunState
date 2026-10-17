@@ -7,6 +7,99 @@ metadata:
 
 ## Current Android checkpoint — October 16, 2026
 
+### Separate reflection voice built and installed — October 17 follow-up
+
+The bounded voice integration is implemented in the working copy and installed on the Moto.
+Saved-run facts retain local Android speech. Only the exact selected reflection goes to the
+optional voice endpoint, using Manley's `1st test voice` / `eleven_multilingual_v2`; four unused
+candidates are not synthesized. Cloud speech does not depend on local TTS initialization.
+Missing/older/unavailable service can fall back once before audio starts; errors after playback,
+Stop, navigation, focus loss and stale callbacks cannot repeat the reflection or start music.
+Genuine completion retains the existing Spotify/instrumental handoff. History Read uses reflection
+speech without music. Generated audio stays in request/player memory, with no audio files, cache
+or Room migration. No new SDK dependency or phone credential.
+
+The authenticated backend speech endpoint preserves existing Host/Origin/media/body guards,
+accepts only bounded exact text, returns at most 2 MiB MP3, shares the existing provider admission
+limit and never logs text/keys/provider bodies. A fixed HTTPS provider route and model prevent
+client-selected voices/settings. Health advertises the optional route only when the backend key
+is configured. Android uses its current encrypted hosted connection or the separately guarded
+debug-only loopback route. Settings are not overridden from the voice's saved configuration.
+
+**Verification:** 101 backend checks passed, with one paid live-analysis case deliberately skipped;
+both Android JVM suites passed **496 tests each**, and debug/release/instrumentation APKs built.
+The Moto ran 25 selected device cases: **23 passed; two explicitly gated live/audio cases skipped**.
+These silent checks cover the new voice split and existing receipt/music/History cancellation.
+All 32 saved runs and all seven inspected tables retained the checksum recorded below. Temporary
+inspection copies and the disposable test APK were removed; normal RunState reopened. Independent
+source review found no material defect. No live ElevenLabs synthesis or hearing proof is claimed.
+The existing new voice test file also contains a separately compiled, default-off
+`realHostedReflectionUsesCustomVoiceAfterLocalFactsAndBeforeInstrumental` check. After deployment
+and listening readiness, explicitly enabling `allowRealHostedVoice=yes` generates fictional sample
+reflection evidence and witnesses actual local facts → hosted custom-voice MP3 → instrumental,
+rejecting local reflection fallback. It adds no saved run and has not yet been executed.
+
+**Activation remains:** Manley privately created/copied his ElevenLabs key and saved it in Render;
+the masked `ELEVENLABS_API_KEY` row is verified, without revealing its value. He must commit/push the
+new code, then deploy that GitHub copy to Render. The current Live `bfc64ad` remains the verified
+music-analysis version; it does not yet serve the custom voice. Its absent voice capability causes
+the installed app to keep its working local voice fallback. A speech-only key form was prepared
+with a 10,000-credit cap per refresh period; this is a usage limit, not a credit purchase or plan
+change. Manley handled key creation/copying/entry himself; provider acceptance is not established
+until the first real speech request. No key has been printed or put in source.
+
+**Only five necessary new source/test files:**
+
+- `backend/src/main/java/com/runstate/reflection/ElevenLabsReflectionSpeech.java` isolates the
+  backend-only credential and bounded speech transport.
+- `backend/src/test/java/com/runstate/reflection/ElevenLabsReflectionSpeechTest.java` verifies that
+  provider boundary with fake responses and no paid synthesis.
+- `android/app/src/main/java/com/runstate/mobile/reflection/ReflectionSpeechGateway.kt` separates
+  exact-text audio networking from the speech/player owner.
+- `android/app/src/test/java/com/runstate/mobile/reflection/ReflectionSpeechGatewayTest.kt` checks
+  same-origin authentication, limits, compatibility and cancellation without a real service.
+- `android/app/src/androidTest/java/com/runstate/mobile/ui/ReflectionVoiceSpeechTest.kt` checks local
+  facts versus reflection voice ownership, fallback and single music handoff silently on Android.
+
+All paths are under `C:/Users/Owner/IdeaProjects/RunState`. Existing source/tests/docs were extended.
+Normal generated APK/test reports remain under ignored `android/app/build/`; public Maven build
+dependencies remain in ignored `backend/.m2/`. Masked browser proof screenshots were saved outside
+the repository in `C:/Users/Owner/.codex/visualizations/2026/10/03/01a103b6-bff0-72d1-8008-7b8b20f78035/`.
+No song downloads, secret files, commits, pushes or unrelated feature edits were made.
+
+### Hosted activation and separate reflection voice — October 16 follow-up
+
+Manley committed and pushed the backend and verification documentation through `bfc64ad`.
+He privately added `MUSIXMATCH_API_KEY` to Render and saved it. The existing paid service was
+manually deployed from that commit; Render reports **Deploy succeeded | Live** and the public
+health check returned **200**, `{"status":"ok"}`, and `X-RunState-Song-Cue: 1`. The existing
+Anthropic key and access-code rows were neither revealed nor changed. Health proves liveness and
+song-cue capability alone. A separate bounded check inside the deployed Render instance then
+successfully matched **Lovely Day / Bill Withers** and retrieved the real themes **optimism and
+positivity; love and support** and moods **love; joy; empowerment; reflection; inspiration**, using
+Render's own saved key without revealing it. The Moto's gated silent hosted test also passed in
+**8.478 seconds**, returning four real-provider candidates from synthetic 3.00-mile/32-minute sample
+facts through its existing encrypted connection. The HTTP response deliberately does not expose an
+analysis receipt; the earlier witnessed local request remains the direct proof of labels reaching
+the Claude payload. These are separate checks, not an inference from theme-sounding output.
+All 32 saved runs and all fields in the seven inspected SQLite tables were unchanged, checksum
+`7ed81df2214070f8d0dd3bae6a86358c0be1ef283ba6a1ec015f49399a53baac`
+(this audit includes Android metadata as well as the six user tables). Necessary temporary private
+inspection copies were removed. The disposable test APK was removed and normal RunState reopened;
+there was no audio, run start, History write or phone preference change.
+
+Manley also explicitly chose separate voices: the existing generic Android voice reads saved-run
+facts, then his custom ElevenLabs voice reads the exact final reflection. The connected account
+contains **`1st test voice`**, voice ID **`DocoybWhaSQMUIs7gLNe`**, matching his earlier project
+reference and description. Preserve the previously auditioned **Eleven Multilingual v2** model
+initially; slider settings are not recorded. This is an original designed voice, not an artist clone.
+The app has not switched voices yet. The implementation path is the existing authenticated backend calling
+ElevenLabs for only the selected reflection text, transient Android audio playback, then the existing
+Spotify/instrumental completion handoff. It needs server-side ElevenLabs credentials; connected
+tool access alone does not configure Render. Generate one selected branch, preserve cancellation,
+and keep local facts speech independent of cloud speech availability. History's Read can share the
+reflection voice while remaining music-free. This addition must not interrupt the music activation.
+
 ### Automatic song-information connection — real unprepared-song trial passed
 
 Manley explicitly asked to execute the provider integration rather than repeat creative/manual
