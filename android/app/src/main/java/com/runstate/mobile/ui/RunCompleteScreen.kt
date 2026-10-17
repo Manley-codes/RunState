@@ -68,10 +68,16 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.testTag
+import androidx.compose.ui.text.LinkAnnotation
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextLinkStyles
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.withLink
 import androidx.compose.ui.unit.constrainHeight
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
@@ -174,7 +180,9 @@ internal fun RunCompleteScreen(
     onStopReflectionAudio: () -> Unit = {},
     savedPreRunEnergy: PreRunEnergy? = null,
     completionDateLabel: String? = null,
-    onReflectionPresentationHoldChange: (Boolean) -> Unit = {}
+    onReflectionPresentationHoldChange: (Boolean) -> Unit = {},
+    weatherSummary: String? = null,
+    reflectionSongLabel: String? = null
 ) {
     val distance = splitMetric(metrics?.distance ?: "—")
     val pace = splitMetric(metrics?.averagePace ?: "—")
@@ -288,6 +296,14 @@ internal fun RunCompleteScreen(
                     intakeTime = { if (intake != null) intakeTime.value else null },
                     ringModifier = ringModifier
                 )
+                weatherSummary?.let { summary ->
+                    Text(text = summary, color = CompletionMutedInk, fontSize = 11.sp,
+                        lineHeight = 17.sp,
+                        modifier = Modifier.fillMaxWidth().padding(top = 10.dp, bottom = 2.dp)
+                            .testTag("runCompleteWeather"))
+                    RunWeatherCredit(color = CompletionMutedInk,
+                        modifier = Modifier.padding(bottom = 6.dp))
+                }
                 CompletionEnergySummary(
                     before = savedPreRunEnergy,
                     after = selectedEnergy,
@@ -353,7 +369,8 @@ internal fun RunCompleteScreen(
                     )
                     if (reflectionAudioActive) {
                         Text(
-                            "Voice, then a short RunState instrumental (Eleven Music)",
+                            reflectionSongLabel?.let { "Voice, then a Spotify passage when available · $it" }
+                                ?: "Voice, then a short RunState instrumental (Eleven Music)",
                             color = CompletionMutedInk,
                             fontSize = 13.sp,
                             lineHeight = 19.sp,
@@ -1324,6 +1341,25 @@ internal fun CompletionAtmosphere(modifier: Modifier = Modifier) {
         }
         drawPath(lowerFacet, Color(0xFFE1E7E1).copy(alpha = 0.32f))
     }
+}
+
+/** Keep the provider and data licence linked beside both displays of optional weather. */
+@Composable
+internal fun RunWeatherCredit(color: Color, modifier: Modifier = Modifier) {
+    val links = remember {
+        val style = TextLinkStyles(style = SpanStyle(textDecoration = TextDecoration.Underline))
+        buildAnnotatedString {
+            withLink(LinkAnnotation.Url("https://open-meteo.com/", styles = style)) {
+                append("Open-Meteo")
+            }
+            append(" · ")
+            withLink(LinkAnnotation.Url("https://creativecommons.org/licenses/by/4.0/", styles = style)) {
+                append("CC BY 4.0")
+            }
+        }
+    }
+    Text(text = links, color = color, fontSize = 10.sp, lineHeight = 16.sp,
+        modifier = modifier)
 }
 
 private data class MetricParts(val value: String, val unit: String)

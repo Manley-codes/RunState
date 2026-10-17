@@ -14,6 +14,9 @@ import com.runstate.mobile.data.local.StoredRunState
 import com.runstate.mobile.data.local.TelemetryCoverage
 import com.runstate.mobile.run.RunTimeline
 import com.runstate.mobile.run.TransitionHistoryCoverage
+import com.runstate.mobile.weather.RunWeatherSnapshot
+import com.runstate.mobile.music.SongReflectionPlan
+import com.runstate.mobile.music.selectSongReflectionPlan
 import java.io.ByteArrayOutputStream
 import java.io.InputStream
 import java.io.StringReader
@@ -47,7 +50,9 @@ internal data class CompletedRunEvidence(
     val activeDurationMillis: Long?,
     val metrics: ReflectionMetricsEvidence,
     val preRunEnergy: String = "UNKNOWN",
-    val musicContext: ReflectionMusicContext = ReflectionMusicContext()
+    val musicContext: ReflectionMusicContext = ReflectionMusicContext(),
+    val weatherContext: RunWeatherSnapshot? = null,
+    val songPassage: SongReflectionPlan? = null
 )
 
 internal data class ReflectionMetricsEvidence(
@@ -62,7 +67,16 @@ internal data class ReflectionMusicContext(
     val trackTitle: String? = null,
     val artistName: String? = null,
     val artistDescription: String? = null,
-    val provenance: String? = null
+    val provenance: String? = null,
+    val songCue: ReflectionSongCue? = null
+)
+
+/** Independent editorial interpretation, separate from the partial listening report. */
+internal data class ReflectionSongCue(
+    val cueId: String,
+    val source: String,
+    val theme: String,
+    val connectionNote: String
 )
 
 /** All four candidates are validated before the no-selection branch may be displayed. */
@@ -71,7 +85,8 @@ internal data class ReflectionCandidates(
     val feelingGood: String,
     val poweredUp: String,
     val noSelection: String,
-    val isTestData: Boolean = true
+    val isTestData: Boolean = true,
+    val songCueId: String? = null
 )
 
 /** A narrow seam that keeps HTTP out of the process-owned coordinator's tests. */
@@ -90,7 +105,8 @@ internal fun reflectionRequestFromSavedRun(
     requestId: String,
     run: RunEntity,
     transitions: List<RunTransitionEntity>,
-    musicObservations: List<RunMusicObservationEntity> = emptyList()
+    musicObservations: List<RunMusicObservationEntity> = emptyList(),
+    weather: RunWeatherSnapshot? = null
 ): ReflectionApiRequest {
     require(UUID.fromString(requestId).toString() == requestId) {
         "requestId must be canonical lowercase UUID text."
@@ -100,6 +116,9 @@ internal fun reflectionRequestFromSavedRun(
     }
     val finishEpochMillis = requireNotNull(run.finishEpochMillis) {
         "Reflection evidence requires a durable finish time."
+    }
+    require(weather == null || weather.targetEpochMillis == run.officialStartEpochMillis) {
+        "Weather must describe the completed run's start time."
     }
 
     // A GPS service gap can leave a RUNNING row and complete transition history behind.
@@ -138,6 +157,13 @@ internal fun reflectionRequestFromSavedRun(
         )
     }
 
+    val song = selectSongReflectionPlan(run, finishEpochMillis, musicObservations)
+    val musicContext = if (song == null) {
+        reflectionMusicContextFromSavedRun(run, finishEpochMillis, musicObservations)
+    } else ReflectionMusicContext(
+        state = "MUSIC", trackTitle = song.title, artistName = song.artist,
+        provenance = "MEDIA_SESSION_PARTIAL", songCue = song.cue
+    )
     return ReflectionApiRequest(
         requestId = requestId,
         runId = run.runId,
@@ -148,7 +174,9 @@ internal fun reflectionRequestFromSavedRun(
             activeDurationMillis = activeDurationMillis,
             metrics = metrics,
             preRunEnergy = run.preRunEnergy?.name ?: "UNKNOWN",
-            musicContext = reflectionMusicContextFromSavedRun(run, finishEpochMillis, musicObservations)
+            musicContext = musicContext,
+            weatherContext = weather,
+            songPassage = song?.plan()
         )
     )
 }
@@ -205,8 +233,35 @@ internal class HostedReflectionHttpClient(
     private val connectionFactory: (URL) -> HttpURLConnection = { it.openConnection() as HttpURLConnection },
     private val gson: Gson = GsonBuilder().serializeNulls().create()
 ) : ReflectionGateway {
-    override suspend fun request(request: ReflectionApiRequest): ReflectionCandidates =
-        postReflectionRequest(URL(config.endpoint), request, gson, connectionFactory, config.accessCode)
+    private var songCueSupported: Boolean? = null
+
+    override suspend fun request(request: ReflectionApiRequest): ReflectionCandidates = withContext(Dispatchers.IO) {
+        val sendCue = request.evidence.musicContext.songCue != null && supportsSongCue()
+        postReflectionRequest(URL(config.endpoint), request, gson, connectionFactory, config.accessCode, sendCue)
+    }
+
+    /** A cheap, credential-free capability check keeps the currently deployed strict server usable. */
+    private fun supportsSongCue(): Boolean {
+        songCueSupported?.let { return it }
+        var connection: HttpURLConnection? = null
+        val supported = try {
+            connection = connectionFactory(URL(URL(config.endpoint), "/health"))
+            if (connection !is HttpsURLConnection) false else {
+                connection.requestMethod = "GET"
+                connection.instanceFollowRedirects = false
+                connection.connectTimeout = 2_000
+                connection.readTimeout = 2_000
+                val response = connection.responseCode
+                val ready = response == HttpURLConnection.HTTP_OK &&
+                    connection.getHeaderField("X-RunState-Song-Cue") == "1"
+                try { connection.inputStream?.close() } catch (_: Exception) { }
+                ready
+            }
+        } catch (_: Exception) { false }
+        finally { try { connection?.disconnect() } catch (_: RuntimeException) { } }
+        songCueSupported = supported
+        return supported
+    }
 }
 
 private suspend fun postReflectionRequest(
@@ -214,12 +269,21 @@ private suspend fun postReflectionRequest(
     request: ReflectionApiRequest,
     gson: Gson,
     connectionFactory: (URL) -> HttpURLConnection,
-    accessCode: String?
+    accessCode: String?,
+    includeSongCue: Boolean = true
 ): ReflectionCandidates = withContext(Dispatchers.IO) {
     val hosted = accessCode != null
     var connection: HttpURLConnection? = null
     try {
-        val body = gson.toJson(request).toByteArray(StandardCharsets.UTF_8)
+        // Older hosted servers reject unknown fields, including explicit null. Preserve their
+        // existing wire shape whenever weather was not captured for this evidence snapshot.
+        val json = gson.toJsonTree(request).asJsonObject
+        val evidence = json.getAsJsonObject("evidence")
+        evidence.remove("songPassage") // Local timing/transport instructions never go to the model.
+        if (request.evidence.weatherContext == null) evidence.remove("weatherContext")
+        val expectedCueId = request.evidence.musicContext.songCue?.cueId?.takeIf { includeSongCue }
+        if (expectedCueId == null) evidence.getAsJsonObject("musicContext").remove("songCue")
+        val body = gson.toJson(json).toByteArray(StandardCharsets.UTF_8)
         connection = connectionFactory(endpoint)
         if (hosted && connection !is HttpsURLConnection) {
             throw ReflectionBridgeException("The hosted reflection connection requires HTTPS.")
@@ -247,12 +311,12 @@ private suspend fun postReflectionRequest(
         val responseBody = connection.inputStream.use { readBoundedUtf8(it, hosted) }
         if (hosted) {
             try {
-                parseReflectionResponse(responseBody, request.requestId, request.runId)
+                parseReflectionResponse(responseBody, request.requestId, request.runId, expectedCueId)
             } catch (invalid: ReflectionBridgeException) {
                 throw ReflectionBridgeException("The hosted reflection response was invalid.")
             }
         } else {
-            parseReflectionResponse(responseBody, request.requestId, request.runId)
+            parseReflectionResponse(responseBody, request.requestId, request.runId, expectedCueId)
         }
     } catch (known: ReflectionBridgeException) {
         throw known
@@ -300,7 +364,8 @@ private const val MAX_RESPONSE_BYTES = 64 * 1_024
 internal fun parseReflectionResponse(
     rawJson: String,
     expectedRequestId: String,
-    expectedRunId: String
+    expectedRunId: String,
+    expectedCueId: String? = null
 ): ReflectionCandidates {
     try {
         JsonReader(StringReader(rawJson)).use { reader ->
@@ -310,6 +375,7 @@ internal fun parseReflectionResponse(
             var requestId: String? = null
             var runId: String? = null
             var generationMode: String? = null
+            var songCueId: String? = null
             var candidates: ReflectionCandidates? = null
             while (reader.hasNext()) {
                 when (val name = reader.nextName()) {
@@ -329,20 +395,30 @@ internal fun parseReflectionResponse(
                         requireUnique(seen, name)
                         candidates = reader.readCandidates()
                     }
+                    "songCueId" -> {
+                        requireUnique(seen, name)
+                        songCueId = reader.requireString()
+                        require(expectedCueId != null && songCueId == expectedCueId) {
+                            "The song pairing does not match the request."
+                        }
+                    }
                     else -> throw ReflectionBridgeException("The local reflection response was invalid.")
                 }
             }
             reader.endObject()
-            require(reader.peek() == JsonToken.END_DOCUMENT && seen.size == 4) {
+            require(reader.peek() == JsonToken.END_DOCUMENT &&
+                seen.containsAll(setOf("requestId", "runId", "generationMode", "candidates")) &&
+                seen.size == if (songCueId == null) 4 else 5) {
                 "The local reflection response was invalid."
             }
+            require(songCueId == expectedCueId) { "The reflection song pairing was not acknowledged." }
             require(requestId == expectedRequestId && runId == expectedRunId) {
                 "Reflection response identifiers do not match the request."
             }
             require(generationMode == "FAKE" || generationMode == "ANTHROPIC") {
                 "The local reflection generation mode was invalid."
             }
-            return requireNotNull(candidates).copy(isTestData = generationMode == "FAKE")
+            return requireNotNull(candidates).copy(isTestData = generationMode == "FAKE", songCueId = songCueId)
         }
     } catch (known: ReflectionBridgeException) {
         throw known

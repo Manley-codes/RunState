@@ -2,6 +2,8 @@ package com.runstate.mobile.reflection
 
 import com.google.gson.GsonBuilder
 import com.runstate.mobile.data.local.*
+import com.runstate.mobile.weather.RunWeatherSnapshot
+import com.runstate.mobile.music.SongPassageRequest
 import java.util.UUID
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -14,7 +16,7 @@ internal sealed interface RunReflectionState {
     data object Idle : RunReflectionState
     data class Preparing(val runId: String, val energy: ReflectionBranch? = null) : RunReflectionState
     data class Ready(val runId: String, val text: String, val energy: ReflectionBranch? = null,
-        val isTestData: Boolean = true) : RunReflectionState
+        val isTestData: Boolean = true, val passage: SongPassageRequest? = null) : RunReflectionState
     data class Failed(val runId: String, val energy: ReflectionBranch? = null) : RunReflectionState
 }
 
@@ -31,11 +33,13 @@ internal interface ReflectionStore {
     suspend fun fail(runId: String, requestId: String): Boolean
     suspend fun retry(runId: String, requestId: String): RunReflectionEntity?
     suspend fun musicObservations(runId: String): List<RunMusicObservationEntity> = emptyList()
+    suspend fun weatherSnapshot(runId: String): RunWeatherSnapshot? = null
 }
 
 internal class RoomReflectionStore(
     private val dao: ReflectionDao,
-    private val musicDao: MusicObservationDao? = null
+    private val musicDao: MusicObservationDao? = null,
+    private val weatherDao: WeatherDao? = null
 ) : ReflectionStore {
     override suspend fun find(runId: String) = dao.findByRunId(runId)
     override suspend fun all() = dao.all()
@@ -48,6 +52,7 @@ internal class RoomReflectionStore(
     override suspend fun fail(runId: String, requestId: String) = dao.markFailed(runId, requestId)
     override suspend fun retry(runId: String, requestId: String) = dao.retry(runId, requestId)
     override suspend fun musicObservations(runId: String) = musicDao?.observationsFor(runId).orEmpty()
+    override suspend fun weatherSnapshot(runId: String) = weatherDao?.find(runId)?.readySnapshot()
 }
 
 /**
@@ -73,6 +78,9 @@ internal class RunReflectionCoordinator(
     private val effortSheetHolds = mutableSetOf<String>()
     // A very fast or unavailable voice engine can finish before Saved creates its row.
     private val finishedReceipts = mutableMapOf<String, Long>()
+    // Completed Room rows intentionally discard the four unused candidates. Keep the server's
+    // pairing acknowledgement only for this process's one automatic arrival playback attempt.
+    private val completedSongCues = mutableMapOf<String, Pair<String, String>>()
     private var activeRunId: String? = null
     private val mutableState = MutableStateFlow<RunReflectionState>(RunReflectionState.Idle)
     val state: StateFlow<RunReflectionState> = mutableState.asStateFlow()
@@ -118,8 +126,13 @@ internal class RunReflectionCoordinator(
                             catch (cancelled: CancellationException) { throw cancelled }
                             catch (_: Exception) { emptyList() }
                         } else emptyList()
+                        val weather = try { store.weatherSnapshot(runId)?.takeIf {
+                            it.targetEpochMillis == run.officialStartEpochMillis
+                        } }
+                        catch (cancelled: CancellationException) { throw cancelled }
+                        catch (_: Exception) { null }
                         val request = reflectionRequestFromSavedRun(
-                            requestIdSupplier().toString(), run, runDao.transitionsFor(runId), music)
+                            requestIdSupplier().toString(), run, runDao.transitionsFor(runId), music, weather)
                         val receiptFinishedAt = finishedReceipts[runId]
                         record = store.ensure(RunReflectionEntity(
                             runId = runId, requestId = request.requestId,
@@ -314,19 +327,43 @@ internal class RunReflectionCoordinator(
             ReflectionBranch.POWERED_UP -> candidates.poweredUp
             ReflectionBranch.NO_SELECTION -> candidates.noSelection
         }
-        store.ready(runId, record.requestId, branch, text, nowMillis())
+        if (store.ready(runId, record.requestId, branch, text, nowMillis())) {
+            candidates.songCueId?.let { completedSongCues[runId] = record.requestId to it }
+        }
     }
 
     private fun publish(record: RunReflectionEntity) {
         if (activeRunId != record.runId) return
         mutableState.value = when (record.status) {
             ReflectionStatus.PENDING -> RunReflectionState.Preparing(record.runId, record.postRunEnergy)
-            ReflectionStatus.READY -> RunReflectionState.Ready(record.runId, requireNotNull(record.text), record.postRunEnergy, record.isTestData)
+            ReflectionStatus.READY -> RunReflectionState.Ready(record.runId, requireNotNull(record.text),
+                record.postRunEnergy, record.isTestData, pairedPassageFor(record,
+                    completedSongCues[record.runId]?.takeIf { it.first == record.requestId }?.second))
             ReflectionStatus.FAILED -> RunReflectionState.Failed(record.runId, record.postRunEnergy)
         }
     }
 
     private fun publishFailure(runId: String) {
         if (activeRunId == runId) mutableState.value = RunReflectionState.Failed(runId)
+    }
+}
+
+/** Only a server-acknowledged cue paired with this frozen evidence can launch recorded music. */
+internal fun pairedPassageFor(record: RunReflectionEntity, acknowledgedCueId: String? = null): SongPassageRequest? {
+    if (record.status != ReflectionStatus.READY || record.isTestData) return null
+    return try {
+        val gson = GsonBuilder().create()
+        val evidence = gson.fromJson(record.evidenceJson, CompletedRunEvidence::class.java)
+        val plan = evidence.songPassage ?: return null
+        val music = evidence.musicContext
+        val cue = music.songCue ?: return null
+        if (acknowledgedCueId != cue.cueId || cue.cueId != plan.cueId ||
+            music.state != "MUSIC" || music.provenance != "MEDIA_SESSION_PARTIAL" ||
+            music.trackTitle != plan.trackTitle || music.artistName != plan.artistName ||
+            cue.source != "RUNSTATE_CURATED") return null
+        plan.passage()
+    } catch (_: Exception) {
+        // Old or damaged optional metadata never prevents reading the exact saved reflection.
+        null
     }
 }

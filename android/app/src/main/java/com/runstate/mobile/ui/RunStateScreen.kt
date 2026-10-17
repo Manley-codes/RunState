@@ -2,22 +2,34 @@ package com.runstate.mobile.ui
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -27,6 +39,7 @@ import com.runstate.mobile.data.local.ReflectionBranch
 import com.runstate.mobile.data.local.PostRunEffort
 import com.runstate.mobile.data.local.PreRunEnergy
 import com.runstate.mobile.location.GpsSignalStatus
+import com.runstate.mobile.location.GpsMapEvidence
 import com.runstate.mobile.ui.theme.RunStateTheme
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
@@ -107,7 +120,19 @@ internal fun RunStateScreen(
     gpsReady: Boolean = false,
     setupLoading: Boolean = false,
     reflectionSetupRequired: Boolean = false,
-    gpsSignalStatus: GpsSignalStatus = GpsSignalStatus.ACQUIRING
+    gpsSignalStatus: GpsSignalStatus = GpsSignalStatus.ACQUIRING,
+    onOpenRunMap: () -> Unit = {},
+    liveMapEnabled: Boolean = false,
+    mapEvidence: GpsMapEvidence? = null,
+    nativeMapsEnabled: Boolean = false,
+    loadStreetTiles: Boolean = true,
+    previewMapStatus: String? = null,
+    onRequestMapLocation: (() -> Unit)? = null,
+    mapExpanded: Boolean = false,
+    onCloseRunMap: () -> Unit = {},
+    onOpenSpotify: () -> Unit = {},
+    weatherSummary: String? = null,
+    reflectionSongLabel: String? = null
 ) {
     val state = model.state
 
@@ -149,14 +174,92 @@ internal fun RunStateScreen(
             effortError = effortError,
             onEffortSheetOpenChange = onEffortSheetOpenChange,
             reflectionAudioActive = reflectionAudioActive,
+            reflectionSongLabel = reflectionSongLabel,
             onStopReflectionAudio = onStopReflectionAudio,
             savedPreRunEnergy = savedPreRunEnergy,
             completionDateLabel = completionDateLabel,
+            weatherSummary = weatherSummary,
             onReflectionPresentationHoldChange = onReflectionPresentationHoldChange
         )
         return
     }
 
+    val mapAvailable = liveMapEnabled && when (state) {
+        RunUiState.ReadyToStart -> gpsSelected
+        RunUiState.ActiveRunning, RunUiState.ActivePaused -> isGpsRun
+        else -> false
+    }
+    val showLiveMap = mapAvailable && mapExpanded
+    var mapAvailability by remember(showLiveMap) { mutableStateOf<String?>(null) }
+    var mapHeaderHeight by remember { mutableIntStateOf(0) }
+    var mapFooterHeight by remember { mutableIntStateOf(0) }
+    val density = LocalDensity.current
+    val mapStatus = mapAvailability ?: if (state == RunUiState.ReadyToStart || state == RunUiState.Countdown)
+        previewMapStatus else mapEvidence?.let(::recordedMapStatus)
+    BackHandler(showLiveMap, onBack = onCloseRunMap)
+
+    // The map exists only after an explicit open. Closing restores the original illustrated
+    // screens and disposes tile rendering; recording itself stays with the run coordinator.
+    Column(modifier.fillMaxSize()) {
+    Box(Modifier.weight(1f).fillMaxWidth()) {
+        if (showLiveMap) {
+            RecordedRunMapBackground(
+                evidence = mapEvidence,
+                modifier = Modifier.fillMaxSize(),
+                enableNativeMap = nativeMapsEnabled,
+                loadStreetTiles = loadStreetTiles,
+                showControls = true,
+                controlsPadding = with(density) {
+                    PaddingValues(top = mapHeaderHeight.toDp(), bottom = mapFooterHeight.toDp())
+                },
+                onStatusChange = { mapAvailability = it }
+            )
+        }
+        if (showLiveMap) {
+            Column(Modifier.fillMaxSize().testTag(ACTIVE_RUN_MAP_DIALOG_TAG)) {
+                Column(Modifier.fillMaxWidth().onSizeChanged { mapHeaderHeight = it.height }) {
+                Row(Modifier.fillMaxWidth().background(Color(0xEDF9FAF5)).padding(12.dp),
+                    verticalAlignment = Alignment.CenterVertically) {
+                    Text(when (state) {
+                        RunUiState.ReadyToStart -> "Location preview"
+                        RunUiState.ActivePaused -> "Recorded run map"
+                        else -> "Live run map"
+                    },
+                        modifier = Modifier.weight(1f))
+                    TextButton(onClick = onCloseRunMap) { Text("Close map") }
+                }
+                Text(mapStatus ?: "Waiting for a trustworthy GPS location.",
+                    modifier = Modifier.fillMaxWidth().background(Color(0xEDF9FAF5)).padding(12.dp))
+                }
+                Box(Modifier.weight(1f))
+                Column(Modifier.fillMaxWidth().onSizeChanged { mapFooterHeight = it.height }
+                    .background(Color(0xEDF9FAF5)).padding(12.dp)) {
+                    if (model.actionFailed) Text(ACTION_FAILED_MESSAGE)
+                    if (state == RunUiState.ReadyToStart) {
+                        if (onRequestMapLocation != null) {
+                            TextButton(onClick = onRequestMapLocation, enabled = actionsEnabled,
+                                modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
+                                    .testTag(START_MAP_LOCATION_ACCESS_TAG)) {
+                                Text("Enable location")
+                            }
+                        }
+                        Button(onClick = onStart, enabled = actionsEnabled && !setupLoading,
+                            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
+                                .testTag(START_RUN_MAP_START_TAG)) {
+                            Text("Start")
+                        }
+                    } else if (state == RunUiState.ActiveRunning || state == RunUiState.ActivePaused) {
+                        Button(onClick = if (state == RunUiState.ActivePaused) onResume else onPause,
+                            enabled = runControlsEnabled, modifier = Modifier.fillMaxWidth()) {
+                            Text(if (state == RunUiState.ActivePaused) "Resume" else "Pause")
+                        }
+                    }
+                    Text("Map tiles from OpenFreeMap. Viewed map areas and your IP address go to the provider; your recorded route stays on this phone.",
+                        style = MaterialTheme.typography.bodySmall)
+                }
+            }
+            return@Box
+        }
     if (state == RunUiState.ReadyToStart) {
         StartRunScreen(
             selectedPreRunEnergy = selectedPreRunEnergy,
@@ -169,13 +272,16 @@ internal fun RunStateScreen(
             gpsMessage = gpsMessage,
             musicSelected = musicSelected,
             musicAccessGranted = musicAccessGranted,
+            onOpenSpotify = onOpenSpotify,
             onOpenRunSettings = onOpenRunSettings,
             gpsReady = gpsReady,
             setupLoading = setupLoading,
             reflectionSetupRequired = reflectionSetupRequired,
-            modifier = modifier
+            modifier = Modifier,
+            liveMapBackground = false,
+            onOpenMap = if (mapAvailable) onOpenRunMap else null
         )
-        return
+        return@Box
     }
 
     if (state == RunUiState.ActiveRunning || state == RunUiState.ActivePaused) {
@@ -192,14 +298,17 @@ internal fun RunStateScreen(
             gpsSignalStatus = gpsSignalStatus,
             gpsMessage = gpsMessage,
             onResumeGpsTracking = onResumeGpsTracking,
-            modifier = modifier
+            onOpenRunMap = onOpenRunMap,
+            modifier = Modifier,
+            liveMapBackground = false
         )
-        return
+        return@Box
     }
 
     Column(
-        modifier = modifier
+        modifier = Modifier
             .fillMaxSize()
+            .background(Color(0xBFF9FAF5))
             .padding(24.dp),
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally
@@ -259,6 +368,9 @@ internal fun RunStateScreen(
             RunUiState.StartingRun,
             RunUiState.StorageInconsistent -> Unit
         }
+    }
+    }
+    if (showLiveMap) RecordedMapAttribution(Modifier.fillMaxWidth().background(Color(0xFFF9FAF5)))
     }
 }
 

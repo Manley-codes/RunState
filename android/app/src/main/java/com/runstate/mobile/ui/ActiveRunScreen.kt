@@ -46,6 +46,9 @@ import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
+import com.runstate.mobile.location.GpsMapEvidence
 import com.runstate.mobile.R
 import com.runstate.mobile.location.GpsSignalStatus
 
@@ -56,6 +59,8 @@ internal const val ACTIVE_RUN_ELAPSED_TAG = "activeRunElapsed"
 internal const val ACTIVE_RUN_METRICS_TAG = "activeRunMetrics"
 internal const val ACTIVE_RUN_PACE_TAG = "activeRunPace"
 internal const val ACTIVE_RUN_ACTIVE_TAG = "activeRunActive"
+internal const val ACTIVE_RUN_MAP_BUTTON_TAG = "activeRunMapButton"
+internal const val ACTIVE_RUN_MAP_DIALOG_TAG = "activeRunMapDialog"
 
 private val ActiveInk = Color(0xFF293326)
 private val ActiveForest = Color(0xFF263222)
@@ -110,8 +115,8 @@ internal fun ShortRunDecisionDialog(
 }
 
 /**
- * The Start map becomes an active-time instrument. It remains an illustration in every mode;
- * all displayed measurements and GPS states come from the existing run owner.
+ * Measurements and GPS states come from the existing run owner. The illustrated instrument
+ * stays explicit, while the map action reports an optional view request to the journey owner.
  */
 @Composable
 internal fun ActiveRunScreen(
@@ -127,17 +132,31 @@ internal fun ActiveRunScreen(
     gpsMessage: String? = null,
     onResumeGpsTracking: () -> Unit = {},
     modifier: Modifier = Modifier,
-    gpsSignalStatus: GpsSignalStatus = GpsSignalStatus.ACQUIRING
+    gpsSignalStatus: GpsSignalStatus = GpsSignalStatus.ACQUIRING,
+    onOpenRunMap: () -> Unit = {},
+    liveMapBackground: Boolean = false,
+    liveMapStatus: String? = null
 ) {
     BoxWithConstraints(
         modifier = modifier
             .fillMaxSize()
             .testTag(ACTIVE_RUN_SCREEN_TAG)
-            .background(Brush.verticalGradient(listOf(ActiveCream, Color(0xFFF0F3EB))))
+            .then(if (liveMapBackground) Modifier else Modifier.background(
+                Brush.verticalGradient(listOf(ActiveCream, Color(0xFFF0F3EB)))))
     ) {
-        val circleSize = (maxWidth - 48.dp).coerceIn(120.dp, 240.dp)
+        val circleSize = (maxWidth - 48.dp).coerceIn(120.dp,
+            if (liveMapBackground) 160.dp else 240.dp)
         val largeText = LocalDensity.current.fontScale > 1.3f
-        val mapStatus = when {
+        val mapStatus = if (liveMapBackground) liveMapStatus ?: when {
+            !gpsServicePresent -> "GPS STOPPED"
+            paused -> "GPS PAUSED · LAST RECORDED POSITION"
+            else -> when (gpsSignalStatus) {
+                GpsSignalStatus.ACQUIRING -> "WAITING FOR GPS"
+                GpsSignalStatus.RECORDING -> "GPS RECORDING"
+                GpsSignalStatus.WEAK -> "GPS WEAK SIGNAL"
+                GpsSignalStatus.STALE -> "GPS SIGNAL UNAVAILABLE"
+            }
+        } else when {
             !isGpsRun -> "ILLUSTRATIVE MAP · LOCATION OFF"
             !gpsServicePresent -> "ILLUSTRATIVE MAP · GPS STOPPED"
             paused -> "ILLUSTRATIVE MAP · GPS PAUSED"
@@ -147,6 +166,17 @@ internal fun ActiveRunScreen(
                 GpsSignalStatus.WEAK -> "ILLUSTRATIVE MAP · GPS WEAK SIGNAL"
                 GpsSignalStatus.STALE -> "ILLUSTRATIVE MAP · GPS SIGNAL UNAVAILABLE"
             }
+        }
+
+        if (liveMapBackground) {
+            Box(Modifier.fillMaxSize().background(Brush.verticalGradient(
+                0f to ActiveCream.copy(alpha = 0.92f),
+                0.25f to ActiveCream.copy(alpha = 0.75f),
+                0.43f to ActiveCream.copy(alpha = 0.06f),
+                0.7f to ActiveCream.copy(alpha = 0.1f),
+                1f to ActiveCream.copy(alpha = 0.65f)
+            )))
+            RunMapTreeShadows(Modifier.fillMaxSize())
         }
 
         // Controls take their natural height. The body scrolls in the remaining space,
@@ -213,21 +243,25 @@ internal fun ActiveRunScreen(
 
                 Box(
                     modifier = Modifier
+                        .align(if (liveMapBackground) Alignment.End else Alignment.CenterHorizontally)
                         .size(circleSize)
                         .clip(CircleShape)
-                        .background(Color.White)
+                        .background(Color.White.copy(alpha = if (liveMapBackground) 0.72f else 1f))
                         .testTag(ACTIVE_RUN_CIRCLE_TAG),
                     contentAlignment = Alignment.Center
                 ) {
-                    Image(
-                        painter = painterResource(R.drawable.start_map_reference),
-                        contentDescription = null,
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier.fillMaxSize()
-                    )
-                    Box(Modifier.fillMaxSize().background(ActiveCream.copy(alpha = 0.8f)))
+                    if (!liveMapBackground) {
+                        Image(
+                            painter = painterResource(R.drawable.start_map_reference),
+                            contentDescription = null,
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier.fillMaxSize()
+                        )
+                        Box(Modifier.fillMaxSize().background(ActiveCream.copy(alpha = 0.8f)))
+                    }
                     Column(
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 28.dp),
+                        modifier = Modifier.fillMaxWidth().padding(horizontal =
+                            if (liveMapBackground) 16.dp else 28.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         Text(
@@ -241,7 +275,7 @@ internal fun ActiveRunScreen(
                         Spacer(Modifier.height(8.dp))
                         ActiveFittedValue(
                             value = metrics?.active ?: "—",
-                            maximumSize = 68,
+                            maximumSize = if (liveMapBackground) 48 else 68,
                             modifier = Modifier.testTag(ACTIVE_RUN_ACTIVE_TAG)
                         )
                     }
@@ -261,6 +295,16 @@ internal fun ActiveRunScreen(
                         .background(Color.White.copy(alpha = 0.7f))
                         .padding(horizontal = 12.dp, vertical = 8.dp)
                 )
+                if (isGpsRun) {
+                    TextButton(
+                        onClick = onOpenRunMap,
+                        modifier = Modifier.heightIn(min = 48.dp).testTag(ACTIVE_RUN_MAP_BUTTON_TAG)
+                    ) {
+                        Text(if (liveMapBackground) "Expand map"
+                            else if (paused) "View recorded map" else "View live map", color = ActiveForest,
+                            fontWeight = FontWeight.Bold)
+                    }
+                }
                 if (paused) {
                     Text(
                         text = "Active time and distance are paused. Total time includes breaks.",
@@ -359,6 +403,50 @@ internal fun ActiveRunScreen(
                     )
                 }
             }
+        }
+    }
+}
+
+/** Optional street-map presentation; the existing run owner still owns every control. */
+@Composable
+internal fun ActiveRunMapDialog(
+    evidence: GpsMapEvidence?,
+    paused: Boolean,
+    actionsEnabled: Boolean,
+    actionFailed: Boolean,
+    onPause: () -> Unit,
+    onResume: () -> Unit,
+    onDismiss: () -> Unit,
+    enableNativeMap: Boolean = false
+) {
+    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+        Column(
+            Modifier.fillMaxSize().padding(12.dp).clip(RoundedCornerShape(24.dp))
+                .background(ActiveCream).padding(16.dp).testTag(ACTIVE_RUN_MAP_DIALOG_TAG)
+        ) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween) {
+                Text(if (paused) "Recorded map" else "Live run map", color = ActiveInk,
+                    fontSize = 20.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                TextButton(onClick = onDismiss, modifier = Modifier.heightIn(min = 48.dp)) { Text("Close") }
+            }
+            if (evidence == null) {
+                Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                    Text("Loading recorded GPS…", color = ActiveInk)
+                }
+            } else {
+                RecordedRunMap(evidence, Modifier.weight(1f).fillMaxWidth(), enableNativeMap)
+            }
+            if (actionFailed) Text(ACTION_FAILED_MESSAGE, color = Color(0xFF8B392D),
+                fontSize = 12.sp, modifier = Modifier.padding(top = 8.dp))
+            Button(onClick = if (paused) onResume else onPause, enabled = actionsEnabled,
+                modifier = Modifier.fillMaxWidth().padding(top = 8.dp).heightIn(min = 48.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = ActiveForest)) {
+                Text(if (paused) "Resume run" else "Pause run")
+            }
+            Text("Close the map to finish your run. Map tiles from OpenFreeMap. Viewed map areas and your IP address go to the provider; your recorded route stays on this phone.",
+                color = ActiveInk, fontSize = 11.sp, lineHeight = 16.sp,
+                modifier = Modifier.padding(top = 8.dp))
         }
     }
 }

@@ -35,6 +35,7 @@ internal const val SETTINGS_REFLECTION_SETUP_TAG = "runSettingsReflectionSetup"
 internal const val SETTINGS_DEMO_MODE_TAG = "runSettingsDemoMode"
 internal const val SETTINGS_DONE_TAG = "runSettingsDone"
 internal const val SETTINGS_RETRY_PREFERENCES_TAG = "runSettingsRetryPreferences"
+internal const val SETTINGS_WEATHER_TAG = "runSettingsWeather"
 
 private val SettingsInk = Color(0xFF293326)
 private val SettingsCream = Color(0xFFF9FAF5)
@@ -61,7 +62,9 @@ internal fun RunSettingsDialog(
     settingsError: String? = null,
     actionsEnabled: Boolean = true,
     preferencesAvailable: Boolean = true,
-    onRetryPreferences: () -> Unit = {}
+    onRetryPreferences: () -> Unit = {},
+    weatherEnabled: Boolean = false,
+    onSetWeather: (Boolean) -> Unit = {}
 ) {
     val controlsEnabled = actionsEnabled && !settingsLoading
     val preferenceControlsEnabled = controlsEnabled && preferencesAvailable
@@ -76,7 +79,7 @@ internal fun RunSettingsDialog(
                     .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(14.dp)
             ) {
-                SettingsDescription("Regular runs use GPS. Music choices are remembered for future runs.")
+                SettingsDescription("Regular runs use GPS. Your optional choices are remembered for future runs.")
                 if (settingsLoading) {
                     SettingsDescription(if (preferencesAvailable) "Saving your preferences…"
                         else "Loading preferences…")
@@ -163,6 +166,19 @@ internal fun RunSettingsDialog(
                     !musicReflectionSharingAvailable -> SettingsDescription("A reflection connection is needed to use observed music in reflections.")
                 }
 
+                SettingsDivider()
+                SettingsSectionTitle("WEATHER")
+                SettingsPreference(
+                    title = "Weather near my run",
+                    description = "Send one approximate start location (rounded to about 1 km) to Open-Meteo " +
+                        "to save an hourly weather estimate for your run's start time. The provider also sees your IP address. " +
+                        "Saved weather facts can be included in reflections; your route is not sent. " +
+                        "Turning this on applies to future GPS runs.",
+                    checked = weatherEnabled,
+                    enabled = preferenceControlsEnabled,
+                    onCheckedChange = onSetWeather,
+                    tag = SETTINGS_WEATHER_TAG
+                )
                 SettingsDivider()
                 SettingsSectionTitle("REFLECTION CONNECTION")
                 if (reflectionConnectionLabel != null) SettingsDescription(reflectionConnectionLabel)

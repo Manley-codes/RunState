@@ -21,8 +21,11 @@ import com.runstate.mobile.data.local.RunTransitionEntity
 import com.runstate.mobile.data.local.RunTrackingMode
 import com.runstate.mobile.data.local.StoredRunState
 import com.runstate.mobile.data.local.TelemetryCoverage
+import com.runstate.mobile.data.local.RunWeatherEntity
+import com.runstate.mobile.data.local.RunWeatherStatus
 import com.runstate.mobile.run.RunMetrics
 import com.runstate.mobile.run.RunTimeline
+import kotlinx.coroutines.CancellationException
 import com.runstate.mobile.run.TransitionHistoryCoverage
 import java.time.DateTimeException
 import java.time.Instant
@@ -131,6 +134,65 @@ internal fun completionDateLabelFor(run: RunEntity): String? {
     } catch (_: DateTimeException) {
         null
     }
+}
+
+/** Labels the saved provider hour, never a fresh lookup or the conditions for an entire run. */
+internal fun weatherSummaryFor(run: RunEntity, record: RunWeatherEntity?): String? {
+    if (record == null || record.runId != run.runId || record.status == RunWeatherStatus.DISABLED) return null
+    // A process may have ended while a request was pending. Never promise ongoing work from
+    // a saved status alone; a genuinely late READY snapshot will refresh this display.
+    if (record.status == RunWeatherStatus.PENDING) return "Weather near start · Unavailable"
+    val weather = record.readySnapshot()?.takeIf { it.targetEpochMillis == run.officialStartEpochMillis }
+        ?: return "Weather near start · Unavailable"
+    val metric = run.displayDistanceUnit == DistanceUnit.KILOMETERS
+    fun temperature(value: Double) = String.format(Locale.US, "%.0f°%s",
+        if (metric) value else value * 9.0 / 5.0 + 32.0, if (metric) "C" else "F")
+    val condition = when (weather.weatherCode) {
+        0 -> "Clear sky"
+        1 -> "Mainly clear"
+        2 -> "Partly cloudy"
+        3 -> "Overcast"
+        45, 48 -> "Fog"
+        51, 53, 55 -> "Drizzle"
+        56, 57 -> "Freezing drizzle"
+        61, 63, 65 -> "Rain"
+        66, 67 -> "Freezing rain"
+        71, 73, 75, 77 -> "Snow"
+        80, 81, 82 -> "Rain showers"
+        85, 86 -> "Snow showers"
+        95, 96, 99 -> "Thunderstorm"
+        else -> return "Weather near start · Unavailable"
+    }
+    val time = try {
+        DateTimeFormatter.ofPattern("h:mm a", Locale.US).format(
+            Instant.ofEpochMilli(weather.validFromEpochMillis).atZone(ZoneId.of(run.startTimezoneId)))
+    } catch (_: DateTimeException) { return "Weather near start · Unavailable" }
+    val wind = String.format(Locale.US, "%.0f %s",
+        if (metric) weather.windSpeedKmh else weather.windSpeedKmh / 1.609344,
+        if (metric) "km/h" else "mph")
+    return "${temperature(weather.temperatureCelsius)} · $condition\n" +
+        "Near start · $time hourly estimate\n" +
+        "Feels like ${temperature(weather.apparentTemperatureCelsius)} · " +
+        "Humidity ${String.format(Locale.US, "%.0f", weather.relativeHumidityPercent)}% · Wind $wind"
+}
+
+/** An optional music read must not erase otherwise readable run and reflection history. */
+internal suspend fun historyItemWithOptionalMusic(
+    run: RunEntity,
+    transitions: List<RunTransitionEntity>,
+    reflection: RunReflectionEntity?,
+    loadMusic: suspend () -> List<RunMusicObservationEntity>
+): RunHistoryItem {
+    val observations = if (!run.musicObservationRequested) emptyList() else try {
+        loadMusic()
+    } catch (cancelled: CancellationException) {
+        throw cancelled
+    } catch (_: Exception) {
+        null
+    }
+    return historyItemFor(run, transitions, reflection, observations.orEmpty()).copy(
+        musicObservationsUnavailable = observations == null
+    )
 }
 
 /** Uses only durable facts; opening History never asks the reflection provider to write again. */

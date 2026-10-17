@@ -137,6 +137,7 @@ internal class RunTrackingService : Service() {
     /** Invalidates callbacks queued before a pause, provider change, or registration removal. */
     private var locationGeneration = 0L
     private var runId: String? = null
+    private var weatherRunId: String? = null
     private var storedState: StoredRunState? = null
     private var gpsEnabled = false
     private var cpuWakeLease: RunCpuWakeLease? = null
@@ -486,6 +487,18 @@ internal class RunTrackingService : Service() {
                 )
             )
             if (!ownsObservation(id, observationPolicy, callbackListener, deliveredGeneration)) return
+            // Optional weather work owns its own application job and cannot delay GPS writes.
+            if (stored.acceptedForDistance && weatherRunId != id) {
+                app.applicationScope.launch {
+                    try {
+                        val weatherRun = app.database.runDao().findById(id) ?: return@launch
+                        val handled = app.runWeatherCapture.onPoint(weatherRun, stored,
+                            app.runPreferences.value?.captureWeather == true)
+                        if (handled && runId == id) weatherRunId = id
+                    } catch (cancelled: CancellationException) { throw cancelled }
+                    catch (_: Exception) { /* Missing optional context never affects tracking. */ }
+                }
+            }
             // Room rechecks the durable run state and checkpoint. If it downgrades a
             // callback that the in-memory filter liked, the next fix must be a fresh
             // anchor rather than measuring from a point storage refused.

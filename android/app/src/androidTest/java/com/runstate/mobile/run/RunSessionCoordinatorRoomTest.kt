@@ -15,6 +15,8 @@ import com.runstate.mobile.data.local.RunTrackingMode
 import com.runstate.mobile.data.local.RunTransitionType
 import com.runstate.mobile.data.local.StoredRunState
 import com.runstate.mobile.data.local.TelemetryCoverage
+import com.runstate.mobile.location.GpsMapMarkerState
+import com.runstate.mobile.location.GpsSignalStatus
 import com.runstate.mobile.ui.RunUiModel
 import com.runstate.mobile.ui.RunUiState
 import com.runstate.mobile.ui.runUiModelFor
@@ -227,6 +229,80 @@ class RunSessionCoordinatorRoomTest {
         assertEquals(MetricSource.FIXTURE, restored.metricSource)
         assertEquals(TelemetryCoverage.COMPLETE, restored.telemetryCoverage)
         assertEquals(true, restored.transitionHistoryComplete)
+    }
+
+    @Test
+    fun liveMapReadsCommittedGpsWithoutAMetricsReadAndKeepsPauseBoundaries() = runBlocking {
+        val clock = SettableClock(OFFICIAL_START)
+        val owner = coordinator(clock) { RunTimingMark(clock.nowMillis - OFFICIAL_START, RUN_ID) }
+        assertNull(owner.runMapEvidence(GpsSignalStatus.RECORDING))
+        owner.initialize()
+        owner.beginCountdown()
+        owner.requestStart(trackingMode = RunTrackingMode.GPS).await()
+        database.locationDao().recordObservation(gpsObservation("map-anchor", OFFICIAL_START + 1_000L))
+        database.locationDao().recordObservation(gpsObservation("map-segment", OFFICIAL_START + 2_000L, 3.0))
+        clock.nowMillis = OFFICIAL_START + 3_000L
+        val live = requireNotNull(owner.runMapEvidence(GpsSignalStatus.RECORDING))
+        assertEquals(listOf(2), live.sections.map { it.size })
+        assertEquals(GpsMapMarkerState.CURRENT, live.marker?.state)
+        assertEquals(live, owner.runMapEvidence(GpsSignalStatus.RECORDING))
+        assertEquals(3.0, owner.runMetrics()?.distanceMeters)
+        assertEquals(2, database.locationDao().pointsFor(RUN_ID).size)
+
+        clock.nowMillis = OFFICIAL_START + 4_000L
+        owner.requestAction(RunActionKind.PAUSE).await()
+        assertEquals(GpsMapMarkerState.PAUSED, owner.runMapEvidence(GpsSignalStatus.RECORDING)?.marker?.state)
+        clock.nowMillis = OFFICIAL_START + 8_000L
+        owner.requestAction(RunActionKind.RESUME).await()
+        assertEquals(GpsMapMarkerState.LAST_KNOWN, owner.runMapEvidence(GpsSignalStatus.RECORDING)?.marker?.state)
+        database.locationDao().recordObservation(gpsObservation("map-new-anchor", OFFICIAL_START + 9_000L))
+        database.locationDao().recordObservation(gpsObservation("map-new-segment", OFFICIAL_START + 10_000L, 3.0))
+        clock.nowMillis = OFFICIAL_START + 11_000L
+        val resumed = requireNotNull(owner.runMapEvidence(GpsSignalStatus.RECORDING))
+        assertEquals(listOf(2, 2), resumed.sections.map { it.size })
+        assertEquals(GpsMapMarkerState.CURRENT, resumed.marker?.state)
+        assertEquals(6.0, owner.runMetrics()?.distanceMeters)
+        assertEquals(GpsMapMarkerState.LAST_KNOWN, owner.runMapEvidence(GpsSignalStatus.STALE)?.marker?.state)
+
+        owner.requestAction(RunActionKind.PAUSE).await()
+        owner.requestAction(RunActionKind.COMPLETE).await()
+        assertNull(owner.runMapEvidence(GpsSignalStatus.RECORDING))
+        owner.prepareAnotherRun()
+        assertNull(owner.runMapEvidence(GpsSignalStatus.RECORDING))
+        assertEquals(4, database.locationDao().pointsFor(RUN_ID).size)
+    }
+
+    @Test
+    fun sampleRunMapHasNoCoordinatesAndMapReadFailureDoesNotChangeGpsLifecycle() = runBlocking {
+        val clock = SettableClock(OFFICIAL_START)
+        val owner = coordinator(clock) { RunTimingMark(clock.nowMillis - OFFICIAL_START, RUN_ID) }
+        owner.initialize()
+        owner.beginCountdown()
+        owner.requestStart(trackingMode = RunTrackingMode.FIXTURE).await()
+        val sample = requireNotNull(owner.runMapEvidence(GpsSignalStatus.RECORDING))
+        assertFalse(sample.isGpsRun)
+        assertTrue(sample.sections.isEmpty())
+        assertNull(sample.marker)
+        clock.nowMillis += 1_000L
+        owner.requestAction(RunActionKind.PAUSE).await()
+        owner.requestDiscard(RUN_ID).await()
+
+        owner.beginCountdown()
+        owner.requestStart(trackingMode = RunTrackingMode.GPS).await()
+        database.locationDao().recordObservation(gpsObservation("unreadable-map-point", OFFICIAL_START + 2_000L))
+        // Corrupt only this isolated test row so Room reconstruction raises an ordinary
+        // validation failure. Closing Room instead cancels its jobs, which must propagate.
+        database.openHelper.writableDatabase.execSQL(
+            "UPDATE run_location_points SET latitude = 100 WHERE run_id = ? AND observation_key = ?",
+            arrayOf<Any>(RUN_ID, "unreadable-map-point")
+        )
+        val before = owner.journeySnapshot()
+        val failed = requireNotNull(owner.runMapEvidence(GpsSignalStatus.RECORDING))
+        assertTrue(failed.evidenceUnavailable)
+        assertTrue(failed.sections.isEmpty())
+        assertNull(failed.marker)
+        assertEquals(before, owner.journeySnapshot())
+        assertEquals(StoredRunState.RUNNING, database.runDao().findById(RUN_ID)?.state)
     }
 
     @Test

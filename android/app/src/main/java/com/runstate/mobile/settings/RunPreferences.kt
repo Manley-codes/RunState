@@ -7,7 +7,8 @@ import android.content.SharedPreferences
 internal data class RunPreferences(
     val observeMusic: Boolean = false,
     val shareMusicInReflection: Boolean = false,
-    val musicSetupComplete: Boolean = false
+    val musicSetupComplete: Boolean = false,
+    val captureWeather: Boolean = false
 ) {
     init {
         require(!shareMusicInReflection || observeMusic) {
@@ -38,7 +39,8 @@ internal class StoredRunPreferences(
             // An inconsistent old/corrupted combination never grants sharing by itself.
             shareMusicInReflection = observeMusic &&
                 (values.readBoolean(SHARE_MUSIC_IN_REFLECTION) ?: false),
-            musicSetupComplete = values.readBoolean(MUSIC_SETUP_COMPLETE) ?: false
+            musicSetupComplete = values.readBoolean(MUSIC_SETUP_COMPLETE) ?: false,
+            captureWeather = values.readBoolean(CAPTURE_WEATHER) ?: false
         )
     }
 
@@ -46,7 +48,8 @@ internal class StoredRunPreferences(
         check(values.commit(mapOf(
             OBSERVE_MUSIC to preferences.observeMusic,
             SHARE_MUSIC_IN_REFLECTION to preferences.shareMusicInReflection,
-            MUSIC_SETUP_COMPLETE to preferences.musicSetupComplete
+            MUSIC_SETUP_COMPLETE to preferences.musicSetupComplete,
+            CAPTURE_WEATHER to preferences.captureWeather
         )))
     }
 
@@ -60,6 +63,7 @@ internal class StoredRunPreferences(
         const val OBSERVE_MUSIC = "observe_music"
         const val SHARE_MUSIC_IN_REFLECTION = "share_music_in_reflection"
         const val MUSIC_SETUP_COMPLETE = "music_setup_complete"
+        const val CAPTURE_WEATHER = "capture_weather"
     }
 }
 

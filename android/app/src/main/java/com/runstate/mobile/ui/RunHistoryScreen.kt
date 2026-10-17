@@ -78,6 +78,16 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.runstate.mobile.data.local.PostRunEffort
 import com.runstate.mobile.data.local.TelemetryCoverage
 import com.runstate.mobile.R
+import com.runstate.mobile.music.AndroidSpotifyPassageSession
+import com.runstate.mobile.music.SongPassageRequest
+import com.runstate.mobile.music.SongPassageStatus
+import com.runstate.mobile.music.SpotifySongPassageController
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 import java.util.UUID
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ensureActive
@@ -97,6 +107,14 @@ internal const val RUN_HISTORY_ENERGY_CHOICE_TAG_PREFIX = "runHistoryEnergyChoic
 /** Kept injectable so screen behavior can be checked without a device voice engine. */
 internal interface ReflectionSpeaker {
     fun speak(text: String)
+    fun speakWithSongPassage(
+        text: String,
+        passage: SongPassageRequest,
+        canPlayPassage: () -> Boolean = { true },
+        onFinished: () -> Unit
+    ) {
+        try { speak(text) } finally { onFinished() }
+    }
     fun speakWithInstrumental(
         text: String,
         canPlayInstrumental: () -> Boolean = { true },
@@ -118,6 +136,14 @@ internal interface ReflectionSpeechPlatform {
     fun initialize(onReady: (Boolean) -> Unit, onDone: (String) -> Unit, onError: (String) -> Unit)
     fun requestAudioFocus(utteranceId: String, onFocusLost: (String) -> Unit): Boolean
     fun speak(utteranceId: String, text: String, rate: Float): Boolean
+    fun playSongPassage(
+        utteranceId: String,
+        passage: SongPassageRequest,
+        onDone: (String) -> Unit,
+        onError: (String) -> Unit,
+        onFocusLost: (String) -> Unit
+    ): Boolean = false
+    fun stopSongPassage() = Unit
     fun playInstrumental(
         utteranceId: String,
         onDone: (String) -> Unit,
@@ -145,6 +171,7 @@ internal class AndroidReflectionSpeaker(
         val rate: Float,
         val onFinished: (() -> Unit)?,
         val canPlayInstrumental: (() -> Boolean)?,
+        val songPassage: SongPassageRequest? = null,
         var phase: SpeechPhase = SpeechPhase.WAITING_FOR_ENGINE
     )
 
@@ -180,6 +207,15 @@ internal class AndroidReflectionSpeaker(
         submit(text, rate = 0.94f, onFinished = null, canPlayInstrumental = null)
     }
 
+    override fun speakWithSongPassage(
+        text: String,
+        passage: SongPassageRequest,
+        canPlayPassage: () -> Boolean,
+        onFinished: () -> Unit
+    ) {
+        submit(text, 0.94f, onFinished, canPlayPassage, passage)
+    }
+
     override fun speakWithInstrumental(
         text: String,
         canPlayInstrumental: () -> Boolean,
@@ -196,7 +232,8 @@ internal class AndroidReflectionSpeaker(
         text: String,
         rate: Float,
         onFinished: (() -> Unit)?,
-        canPlayInstrumental: (() -> Boolean)?
+        canPlayInstrumental: (() -> Boolean)?,
+        songPassage: SongPassageRequest? = null
     ) {
         stop()
         if (closed || initializationFailed || text.isBlank() ||
@@ -204,7 +241,8 @@ internal class AndroidReflectionSpeaker(
             onFinished?.invoke()
             return
         }
-        val next = SpeechRequest(UUID.randomUUID().toString(), text, rate, onFinished, canPlayInstrumental)
+        val next = SpeechRequest(UUID.randomUUID().toString(), text, rate, onFinished,
+            canPlayInstrumental, songPassage)
         request = next
         // Cold engine startup has its own deadline; it must not consume audible playback time.
         if (initialized) speakPending() else armTimeout(next.id, 15_000L)
@@ -274,20 +312,17 @@ internal class AndroidReflectionSpeaker(
         current.phase = SpeechPhase.INSTRUMENTAL
         clearTimeout()
         releaseFocus()
-        armTimeout(current.id, 15_000L)
+        armTimeout(current.id, if (current.songPassage != null) 30_000L else 15_000L)
         try {
-            val accepted = platform.playInstrumental(
-                current.id,
-                onDone = { id -> onMain {
+            val done: (String) -> Unit = { id -> onMain {
                     if (request?.id == id && request?.phase == SpeechPhase.INSTRUMENTAL) finish(id)
-                } },
-                onError = { id -> onMain {
-                    if (request?.id == id && request?.phase == SpeechPhase.INSTRUMENTAL) stop()
-                } },
-                onFocusLost = { id -> onMain {
+                } }
+            val error: (String) -> Unit = { id -> onMain {
                     if (request?.id == id && request?.phase == SpeechPhase.INSTRUMENTAL) stop()
                 } }
-            )
+            val accepted = if (current.songPassage != null) {
+                platform.playSongPassage(current.id, current.songPassage, done, error, error)
+            } else platform.playInstrumental(current.id, done, error, error)
             if (!accepted && request === current) finish(current.id)
         } catch (_: RuntimeException) {
             if (request === current) stop()
@@ -325,6 +360,7 @@ internal class AndroidReflectionSpeaker(
     }
 
     private fun stopInstrumental() {
+        try { platform.stopSongPassage() } catch (_: RuntimeException) { }
         try { platform.stopInstrumental() }
         catch (_: RuntimeException) { /* Saved text remains available without music playback. */ }
     }
@@ -344,6 +380,12 @@ internal class AndroidReflectionSpeechPlatform(context: Context) : ReflectionSpe
     )
 
     private val appContext = context.applicationContext
+    private val passageScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    private val passageController by lazy {
+        SpotifySongPassageController(AndroidSpotifyPassageSession(appContext))
+    }
+    private var passageJob: Job? = null
+    private var passageId: String? = null
     private val mainHandler = Handler(Looper.getMainLooper())
     private val audioManager = appContext.getSystemService(AudioManager::class.java)
     private val speechAttributes = AudioAttributes.Builder()
@@ -459,6 +501,45 @@ internal class AndroidReflectionSpeechPlatform(context: Context) : ReflectionSpe
         }
     }
 
+    override fun playSongPassage(
+        utteranceId: String,
+        passage: SongPassageRequest,
+        onDone: (String) -> Unit,
+        onError: (String) -> Unit,
+        onFocusLost: (String) -> Unit
+    ): Boolean {
+        stopSongPassage()
+        if (closed) return false
+        passageId = utteranceId
+        passageJob = passageScope.launch {
+            try {
+                val result = passageController.play(passage)
+                if (passageId == utteranceId && !closed) {
+                    passageId = null
+                    passageJob = null
+                    if (result.status == SongPassageStatus.FINISHED) onDone(utteranceId)
+                    else onError(utteranceId)
+                }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: RuntimeException) {
+                if (passageId == utteranceId && !closed) {
+                    passageId = null
+                    passageJob = null
+                    onError(utteranceId)
+                }
+            }
+        }
+        return true
+    }
+
+    override fun stopSongPassage() {
+        passageId = null
+        passageController.stop()
+        passageJob?.cancel()
+        passageJob = null
+    }
+
     override fun stopInstrumental() {
         instrumental?.let(::releaseInstrumental)
     }
@@ -484,6 +565,8 @@ internal class AndroidReflectionSpeechPlatform(context: Context) : ReflectionSpe
     }
     override fun close() {
         closed = true
+        stopSongPassage()
+        passageScope.cancel()
         stopInstrumental()
         try { releaseAudioFocus() } catch (_: RuntimeException) { }
         val owned = engine
@@ -504,11 +587,13 @@ internal data class RunHistoryItem(
     val preRunEnergyLabel: String? = null,
     val musicObservationRequested: Boolean = false,
     val musicObservationCount: Int = 0,
+    val musicObservationsUnavailable: Boolean = false,
     val lastObservedMedia: String? = null,
     val effort: PostRunEffort? = null,
     val isGpsRun: Boolean = false,
     val energy: ReflectionBranch? = null,
     val reflectionMusicSummary: String? = null,
+    val weatherSummary: String? = null,
     /** Frozen at completion; path geometry never infers complete recording by itself. */
     val telemetryCoverage: TelemetryCoverage? = null
 )
@@ -1063,6 +1148,14 @@ private fun HistoryRow(
                         .padding(top = 9.dp, bottom = 10.dp)
                         .testTag(RUN_HISTORY_REFLECTION_TAG_PREFIX + item.runId)
                 )
+                item.weatherSummary?.let { summary ->
+                    Text(text = summary, color = rowInk.copy(alpha = 0.8f),
+                        fontSize = 12.sp, lineHeight = 19.sp,
+                        modifier = Modifier.padding(top = 12.dp, bottom = 2.dp)
+                            .testTag("historyWeather:" + item.runId))
+                    RunWeatherCredit(color = rowInk.copy(alpha = 0.8f),
+                        modifier = Modifier.padding(bottom = 10.dp))
+                }
                 if (item.musicObservationRequested) {
                     HistoryObservedMusic(item)
                 } else {
@@ -1226,7 +1319,8 @@ private fun HistoryObservedMusic(item: RunHistoryItem) {
                 }
             }
             Text(
-                text = "OBSERVED MEDIA · PARTIAL",
+                text = if (item.musicObservationsUnavailable) "OBSERVED MEDIA · UNAVAILABLE"
+                    else "OBSERVED MEDIA · PARTIAL",
                 color = HistoryGold,
                 fontSize = 9.sp,
                 fontWeight = FontWeight.Bold,
@@ -1236,7 +1330,9 @@ private fun HistoryObservedMusic(item: RunHistoryItem) {
             )
         }
         Text(
-            text = if (item.musicObservationCount == 0) {
+            text = if (item.musicObservationsUnavailable) {
+                "Song details couldn't load. Reopen History to try again. Your run is saved."
+            } else if (item.musicObservationCount == 0) {
                 "No media session was observed. Music remains unknown."
             } else {
                 "Last observed · ${item.lastObservedMedia ?: "Unknown media"}"

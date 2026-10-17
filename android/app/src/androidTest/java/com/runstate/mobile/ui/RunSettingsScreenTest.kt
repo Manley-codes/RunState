@@ -17,6 +17,7 @@ import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.captureToImage
+import androidx.compose.ui.test.click
 import androidx.compose.ui.test.isDialog
 import androidx.compose.ui.test.junit4.StateRestorationTester
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
@@ -145,6 +146,62 @@ class RunSettingsScreenTest {
         assertEquals(1, done)
         assertEquals(0, observationChanges)
         assertEquals(0, sharingChanges)
+    }
+
+    @Test
+    fun weatherSharingDefaultsOffNeedsItsOwnTapAndIsBlockedWhilePreferencesArePending() {
+        val weatherChoices = mutableListOf<Boolean>()
+        var otherActions = 0
+        var loading by mutableStateOf(false)
+        var preferencesAvailable by mutableStateOf(true)
+        compose.setContent {
+            StartRunScreen(
+                selectedPreRunEnergy = null,
+                onSelectPreRunEnergy = { otherActions++ },
+                onStart = { otherActions++ }, actionsEnabled = true,
+                onViewHistory = { otherActions++ }, showHistory = true
+            )
+            RunSettingsDialog(
+                gpsReady = false, gpsMessage = null,
+                musicObservationEnabled = false, musicAccessGranted = false,
+                musicReflectionSharingEnabled = false, musicReflectionSharingAvailable = false,
+                reflectionConnectionLabel = null, demoMode = false,
+                onDismiss = { otherActions++ }, onRequestLocationSetup = { otherActions++ },
+                onSetMusicObservation = { otherActions++ }, onRequestMusicAccess = { otherActions++ },
+                onSetMusicReflectionSharing = { otherActions++ }, onSetDemoMode = { otherActions++ },
+                onOpenReflectionSetup = { otherActions++ }, settingsLoading = loading,
+                preferencesAvailable = preferencesAvailable,
+                onSetWeather = { weatherChoices += it }
+                // weatherEnabled intentionally uses its default, independent of location/music access.
+            )
+        }
+        compose.onNodeWithTag(SETTINGS_WEATHER_TAG).performScrollTo().assertIsOff().assertIsEnabled()
+        compose.onNodeWithText("Send one approximate start location (rounded to about 1 km) to Open-Meteo",
+            substring = true).performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("The provider also sees your IP address.", substring = true).assertExists()
+        compose.onNodeWithText("your route is not sent", substring = true).assertExists()
+        compose.runOnIdle { assertTrue(weatherChoices.isEmpty()); assertEquals(0, otherActions) }
+
+        compose.onNodeWithTag(SETTINGS_WEATHER_TAG).performScrollTo().performClick()
+        compose.runOnIdle {
+            assertEquals(listOf(true), weatherChoices)
+            assertEquals(0, otherActions)
+            loading = true
+        }
+        compose.onNodeWithTag(SETTINGS_WEATHER_TAG).performScrollTo().assertIsNotEnabled()
+            .performTouchInput { click() }
+        compose.runOnIdle {
+            assertEquals(listOf(true), weatherChoices)
+            assertEquals(0, otherActions)
+            loading = false
+            preferencesAvailable = false
+        }
+        compose.onNodeWithTag(SETTINGS_WEATHER_TAG).performScrollTo().assertIsNotEnabled()
+            .performTouchInput { click() }
+        compose.runOnIdle {
+            assertEquals(listOf(true), weatherChoices)
+            assertEquals(0, otherActions)
+        }
     }
 
     @Test

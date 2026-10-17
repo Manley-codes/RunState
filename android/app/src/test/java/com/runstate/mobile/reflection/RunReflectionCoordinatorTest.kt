@@ -1,7 +1,9 @@
 package com.runstate.mobile.reflection
 
 import com.google.gson.GsonBuilder
+import com.google.gson.JsonParser
 import com.runstate.mobile.data.local.*
+import com.runstate.mobile.weather.RunWeatherSnapshot
 import java.util.UUID
 import kotlinx.coroutines.*
 import org.junit.After
@@ -52,6 +54,9 @@ class RunReflectionCoordinatorTest {
         var musicReads = 0
         var observedMusic: List<RunMusicObservationEntity> = emptyList()
         var musicReadFailure: Exception? = null
+        var weatherReads = 0
+        var savedWeather: RunWeatherSnapshot? = null
+        var weatherReadFailure: Exception? = null
 
         override suspend fun find(runId: String) = rows[runId]
         override suspend fun all() = rows.values.toList()
@@ -59,6 +64,11 @@ class RunReflectionCoordinatorTest {
             musicReads++
             musicReadFailure?.let { throw it }
             return observedMusic
+        }
+        override suspend fun weatherSnapshot(runId: String): RunWeatherSnapshot? {
+            weatherReads++
+            weatherReadFailure?.let { throw it }
+            return savedWeather
         }
 
         override suspend fun ensure(record: RunReflectionEntity): RunReflectionEntity =
@@ -640,6 +650,165 @@ class RunReflectionCoordinatorTest {
         assertEquals(1, store.musicReads)
         assertEquals(ReflectionMusicContext(), requests.single().evidence.musicContext)
         assertEquals(RunReflectionState.Ready(RUN_ID, NO_SELECTION_TEXT), coordinator.state.value)
+    }
+
+    @Test fun weatherSnapshotRemainsFrozenAcrossRetryLaterWeatherAndProcessReopen() {
+        val dao = completedDao()
+        val firstWeather = sampleWeather()
+        val store = MemoryReflectionStore().apply { savedWeather = firstWeather }
+        val ids = ArrayDeque(listOf(UUID.fromString(FIRST_REQUEST_ID), UUID.fromString(SECOND_REQUEST_ID)))
+        val requests = mutableListOf<ReflectionApiRequest>()
+        val gateway = ReflectionGateway { request ->
+            requests += request
+            if (requests.size == 1) error("forced first-attempt failure")
+            candidates()
+        }
+        val coordinator = RunReflectionCoordinator(
+            runDao = dao, store = store, gateway = gateway, applicationScope = scope(),
+            requestIdSupplier = { ids.removeFirst() }, quietWindowMillis = 0L, nowMillis = { 100L }
+        )
+        coordinator.onSavedVisible(RUN_ID)
+        assertEquals(ReflectionStatus.FAILED, store.rows.getValue(RUN_ID).status)
+        val originalEvidence = store.rows.getValue(RUN_ID).evidenceJson
+        assertEquals(firstWeather, requests.single().evidence.weatherContext)
+
+        store.savedWeather = firstWeather.copy(temperatureCelsius = 35.0, fetchedAtEpochMillis = FINISH + 1_000L)
+        coordinator.retry(RUN_ID)
+        val ready = store.rows.getValue(RUN_ID)
+        val reopened = RunReflectionCoordinator(
+            runDao = dao, store = store, gateway = gateway, applicationScope = scope(),
+            quietWindowMillis = 0L, nowMillis = { 100L }
+        )
+        reopened.onSavedVisible(RUN_ID)
+
+        assertEquals(2, requests.size)
+        assertNotEquals(requests[0].requestId, requests[1].requestId)
+        assertEquals(firstWeather, requests[1].evidence.weatherContext)
+        assertEquals(originalEvidence, store.rows.getValue(RUN_ID).evidenceJson)
+        assertEquals(ready, store.rows.getValue(RUN_ID))
+        assertEquals(1, store.weatherReads)
+        assertEquals(1, dao.runReads)
+        assertEquals(1, store.creations)
+        assertEquals(RunReflectionState.Ready(RUN_ID, NO_SELECTION_TEXT), reopened.state.value)
+    }
+
+    @Test fun lateWeatherCannotReplaceTheUnknownEvidenceFrozenBeforeTheServiceWasReady() {
+        val dao = completedDao()
+        val store = MemoryReflectionStore()
+        val requests = mutableListOf<ReflectionApiRequest>()
+        val first = RunReflectionCoordinator(
+            runDao = dao, store = store, gateway = ReflectionGateway { error("bridge not ready") },
+            applicationScope = scope(), requestIdSupplier = { UUID.fromString(FIRST_REQUEST_ID) },
+            quietWindowMillis = 0L, nowMillis = { 100L }
+        )
+        first.onSavedVisible(RUN_ID, bridgeReady = false)
+        val originalEvidence = store.rows.getValue(RUN_ID).evidenceJson
+        assertNull(gson.fromJson(originalEvidence, CompletedRunEvidence::class.java).weatherContext)
+        store.savedWeather = sampleWeather()
+
+        val reopened = RunReflectionCoordinator(
+            runDao = dao, store = store,
+            gateway = ReflectionGateway { request -> requests += request; candidates() },
+            applicationScope = scope(), requestIdSupplier = { UUID.fromString(SECOND_REQUEST_ID) },
+            quietWindowMillis = 0L, nowMillis = { 100L }
+        )
+        reopened.onSavedVisible(RUN_ID)
+        assertTrue(requests.isEmpty()) // Recovery waits for explicit Retry rather than billing again.
+        reopened.retry(RUN_ID)
+
+        assertNull(requests.single().evidence.weatherContext)
+        assertEquals(originalEvidence, store.rows.getValue(RUN_ID).evidenceJson)
+        assertEquals(1, store.weatherReads)
+        assertEquals(1, dao.runReads)
+        assertEquals(RunReflectionState.Ready(RUN_ID, NO_SELECTION_TEXT), reopened.state.value)
+    }
+
+    @Test fun unavailableOptionalWeatherReadStillGeneratesTheSavedRunWithoutWeather() {
+        val store = MemoryReflectionStore().apply { weatherReadFailure = IllegalStateException("weather unavailable") }
+        val requests = mutableListOf<ReflectionApiRequest>()
+        val coordinator = RunReflectionCoordinator(
+            runDao = completedDao(), store = store,
+            gateway = ReflectionGateway { request -> requests += request; candidates() },
+            applicationScope = scope(), quietWindowMillis = 0L, nowMillis = { 100L }
+        )
+        coordinator.onSavedVisible(RUN_ID)
+        assertEquals(1, store.weatherReads)
+        assertNull(requests.single().evidence.weatherContext)
+        assertEquals(1, store.creations)
+        assertEquals(RunReflectionState.Ready(RUN_ID, NO_SELECTION_TEXT), coordinator.state.value)
+    }
+
+    @Test fun preWeatherSavedEvidenceRetriesUnchangedWithoutReadingNewWeather() {
+        val dao = completedDao()
+        val oldEvidence = JsonParser.parseString(gson.toJson(reflectionRequestFromSavedRun(
+            FIRST_REQUEST_ID, dao.inserted.single(),
+            listOf(RunTransitionEntity(RUN_ID, 1, RunTransitionType.PAUSE, PAUSE))
+        ).evidence)).asJsonObject.apply { remove("weatherContext") }.toString()
+        val store = MemoryReflectionStore(listOf(RunReflectionEntity(
+            runId = RUN_ID, requestId = FIRST_REQUEST_ID, evidenceJson = oldEvidence,
+            selectionDeadlineEpochMillis = 100L, selectedBranch = ReflectionBranch.NO_SELECTION,
+            status = ReflectionStatus.FAILED
+        ))).apply { savedWeather = sampleWeather() }
+        val requests = mutableListOf<ReflectionApiRequest>()
+        val reopened = RunReflectionCoordinator(
+            runDao = dao, store = store,
+            gateway = ReflectionGateway { request -> requests += request; candidates() },
+            applicationScope = scope(), requestIdSupplier = { UUID.fromString(SECOND_REQUEST_ID) },
+            quietWindowMillis = 0L, nowMillis = { 100L }
+        )
+        reopened.onSavedVisible(RUN_ID)
+        assertTrue(requests.isEmpty())
+        reopened.retry(RUN_ID)
+
+        assertNull(requests.single().evidence.weatherContext)
+        assertEquals(oldEvidence, store.rows.getValue(RUN_ID).evidenceJson)
+        assertEquals(0, store.weatherReads)
+        assertEquals(0, dao.runReads)
+        assertEquals(0, store.creations)
+        assertEquals(RunReflectionState.Ready(RUN_ID, NO_SELECTION_TEXT), reopened.state.value)
+    }
+
+    @Test fun weatherForAnotherStartIsOmittedWithoutBlockingTheRunReflection() {
+        val store = MemoryReflectionStore().apply {
+            savedWeather = sampleWeather().copy(targetEpochMillis = START + 1L)
+        }
+        val requests = mutableListOf<ReflectionApiRequest>()
+        val coordinator = RunReflectionCoordinator(
+            runDao = completedDao(), store = store,
+            gateway = ReflectionGateway { request -> requests += request; candidates() },
+            applicationScope = scope(), quietWindowMillis = 0L, nowMillis = { 100L }
+        )
+        coordinator.onSavedVisible(RUN_ID)
+
+        assertEquals(1, store.weatherReads)
+        assertNull(requests.single().evidence.weatherContext)
+        assertEquals(1, store.creations)
+        assertEquals(RunReflectionState.Ready(RUN_ID, NO_SELECTION_TEXT), coordinator.state.value)
+    }
+
+    @Test fun cancelledWeatherReadDoesNotCreateARequestOrPublishAWeatherFailure() {
+        val store = MemoryReflectionStore().apply { weatherReadFailure = CancellationException("cancelled read") }
+        var calls = 0
+        val coordinator = RunReflectionCoordinator(
+            runDao = completedDao(), store = store,
+            gateway = ReflectionGateway { calls++; candidates() }, applicationScope = scope(),
+            quietWindowMillis = 0L, nowMillis = { 100L }
+        )
+        val work = coordinator.onSavedVisible(RUN_ID)
+        assertTrue(work.isCancelled)
+        assertEquals(1, store.weatherReads)
+        assertEquals(0, calls)
+        assertEquals(0, store.creations)
+        assertTrue(store.rows.isEmpty())
+        assertEquals(RunReflectionState.Idle, coordinator.state.value)
+    }
+
+    private fun sampleWeather(): RunWeatherSnapshot {
+        val hour = START / 3_600_000L * 3_600_000L
+        return RunWeatherSnapshot(targetEpochMillis = START, validFromEpochMillis = hour,
+            validToEpochMillis = hour + 3_600_000L, fetchedAtEpochMillis = FINISH,
+            temperatureCelsius = 21.5, apparentTemperatureCelsius = 20.0,
+            relativeHumidityPercent = 48.5, windSpeedKmh = 8.0, weatherCode = 0)
     }
 
     @Test fun bridgeCanWaitForPermissionThenRetryTheSameSavedRun() {

@@ -237,3 +237,21 @@ val MIGRATION_10_11 = object : Migration(10, 11) {
         connection.execSQL("ALTER TABLE `run_transitions` ADD COLUMN `timing_session_id` TEXT")
     }
 }
+
+/** Weather is optional new evidence; no previous run receives a fabricated attempt or snapshot. */
+val MIGRATION_11_12 = object : Migration(11, 12) {
+    override fun migrate(connection: SQLiteConnection) {
+        connection.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS `run_weather` (
+                `run_id` TEXT NOT NULL,
+                `status` TEXT NOT NULL,
+                `snapshot_json` TEXT,
+                PRIMARY KEY(`run_id`),
+                FOREIGN KEY(`run_id`) REFERENCES `runs`(`run_id`)
+                    ON UPDATE NO ACTION ON DELETE CASCADE
+            )
+            """.trimIndent()
+        )
+    }
+}

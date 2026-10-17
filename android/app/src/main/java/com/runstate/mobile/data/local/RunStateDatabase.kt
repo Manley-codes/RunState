@@ -17,6 +17,8 @@ import androidx.room.RoomDatabase
  * Version 8 stores optional post-run Effort without inferring answers for older runs.
  * Version 9 starts the reflection selection window after the spoken save receipt.
  * Version 10 records separate music-reflection sharing consent, off for every older run.
+ * Version 11 adds nullable measured timing evidence without changing older runs.
+ * Version 12 adds run-owned optional weather attempts without backfilling older runs.
  * Each exported schema under `android/app/schemas` stays unchanged as the record of what
  * that version looked like. Every future version increment requires an explicitly
  * written migration; destructive migration is not configured here and must not be added
@@ -47,9 +49,10 @@ import androidx.room.RoomDatabase
         RunTransitionEntity::class,
         RunReflectionEntity::class,
         RunLocationPointEntity::class,
-        RunMusicObservationEntity::class
+        RunMusicObservationEntity::class,
+        RunWeatherEntity::class
     ],
-    version = 11,
+    version = 12,
     exportSchema = true
 )
 abstract class RunStateDatabase : RoomDatabase() {
@@ -61,6 +64,8 @@ abstract class RunStateDatabase : RoomDatabase() {
     abstract fun locationDao(): LocationDao
 
     abstract fun musicObservationDao(): MusicObservationDao
+
+    abstract fun weatherDao(): WeatherDao
 }
 
 /**
@@ -98,6 +103,6 @@ internal fun buildRunStateDatabase(
         .addMigrations(
             MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5,
             MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10,
-            MIGRATION_10_11
+            MIGRATION_10_11, MIGRATION_11_12
         )
         .build()

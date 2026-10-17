@@ -11,6 +11,7 @@ import android.location.LocationManager
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
+import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -51,6 +52,9 @@ import com.runstate.mobile.run.RunSessionCoordinator
 import com.runstate.mobile.location.RunTrackingService
 import com.runstate.mobile.location.RunTrackingServiceState
 import com.runstate.mobile.location.GpsSignalStatus
+import com.runstate.mobile.location.GpsMapEvidence
+import com.runstate.mobile.location.rememberForegroundGpsPreview
+import com.runstate.mobile.location.ForegroundGpsPreviewStatus
 import com.runstate.mobile.music.RunMusicNotificationListener
 import com.runstate.mobile.ui.RunMetricsDisplay
 import com.runstate.mobile.ui.RunMetricsTicker
@@ -68,7 +72,8 @@ import com.runstate.mobile.ui.RunUiModel
 import com.runstate.mobile.ui.RunUiState
 import com.runstate.mobile.ui.rememberLifecycleCountdown
 import com.runstate.mobile.ui.runMetricsDisplayFor
-import com.runstate.mobile.ui.historyItemFor
+import com.runstate.mobile.ui.historyItemWithOptionalMusic
+import com.runstate.mobile.ui.weatherSummaryFor
 import com.runstate.mobile.ui.completionDateLabelFor
 import com.runstate.mobile.ui.savedRunReceiptFor
 import com.runstate.mobile.ui.gpsRoutePreviewFor
@@ -80,6 +85,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.catch
 
 /**
  * The app's one screen, wired to the process-scoped coordinator.
@@ -128,6 +134,7 @@ class MainActivity : ComponentActivity() {
                         onSaveRunPreferences = runStateApplication::saveRunPreferences,
                         onRetryRunPreferences = runStateApplication::initializeRunPreferences,
                         runSettingsSessionId = runStateApplication.runSettingsSessionId,
+                        nativeMapsEnabled = true,
 
                         // The Activity's own lifecycle gates the countdown, so nothing counts
                         // down — and no run is started — while the app is in the background.
@@ -184,7 +191,8 @@ internal fun RunJourneyRoot(
     onSaveRunPreferences: suspend (RunPreferences) -> Unit = {},
     onRetryRunPreferences: () -> Unit = {},
     runSettingsSessionId: String = "isolated-preview",
-    musicAccessProvider: (Context) -> Boolean = ::hasMusicAccess
+    musicAccessProvider: (Context) -> Boolean = ::hasMusicAccess,
+    nativeMapsEnabled: Boolean = false
 ) {
 
     val reflectionRequestsAvailable = reflectionConnection is ReflectionConnectionState.Hosted ||
@@ -202,6 +210,8 @@ internal fun RunJourneyRoot(
     var completedRunId by remember { mutableStateOf<String?>(null) }
     var activeRunId by remember { mutableStateOf<String?>(null) }
     var activeTrackingMode by remember { mutableStateOf<RunTrackingMode?>(null) }
+    var mapRunId by rememberSaveable { mutableStateOf<String?>(null) }
+    var mapEvidence by remember { mutableStateOf<GpsMapEvidence?>(null) }
 
     // Navigation survives rotation; every saved value still comes from Room.
     var historyVisible by rememberSaveable { mutableStateOf(false) }
@@ -259,8 +269,12 @@ internal fun RunJourneyRoot(
         .collectAsState(initial = null)
     val storedReflections by remember(database) { database.reflectionDao().observeAll() }
         .collectAsState(initial = null)
+    val storedWeather by remember(database) {
+        database.weatherDao().observeAll().catch { emit(emptyList()) }
+    }.collectAsState(initial = emptyList())
+    val weatherByRun = remember(storedWeather) { storedWeather.associateBy { it.runId } }
 
-    LaunchedEffect(historyVisible, completedRuns, storedReflections, reflectionCoordinator) {
+    LaunchedEffect(historyVisible, completedRuns, storedReflections, storedWeather, reflectionCoordinator) {
         if (!historyVisible || completedRuns == null || storedReflections == null) return@LaunchedEffect
         try {
             // Repair older pending rows locally even when Run Complete is no longer visible.
@@ -268,12 +282,12 @@ internal fun RunJourneyRoot(
             reflectionCoordinator?.initialize()
             val reflectionsByRun = storedReflections.orEmpty().associateBy { it.runId }
             historyItems = completedRuns.orEmpty().map { run ->
-                historyItemFor(
+                historyItemWithOptionalMusic(
                     run,
                     database.runDao().transitionsFor(run.runId),
-                    reflectionsByRun[run.runId],
-                    database.musicObservationDao().observationsFor(run.runId)
-                )
+                    reflectionsByRun[run.runId]
+                ) { database.musicObservationDao().observationsFor(run.runId) }
+                    .copy(weatherSummary = weatherSummaryFor(run, weatherByRun[run.runId]))
             }
             historyError = null
         } catch (cancelled: CancellationException) { throw cancelled }
@@ -287,6 +301,25 @@ internal fun RunJourneyRoot(
         activeCoordinator.state.collectAsState().value
     }
     val trackingState by trackingFlow.collectAsState()
+    val activeMapAvailable = !historyVisible && activeTrackingMode == RunTrackingMode.GPS &&
+        (model.state == RunUiState.ActiveRunning || model.state == RunUiState.ActivePaused)
+    val mapVisible = mapRunId != null && (mapRunId == activeRunId && activeMapAvailable ||
+        mapRunId == "foreground-gps-preview" && !historyVisible && gpsSelected &&
+        model.state == RunUiState.ReadyToStart)
+    val activeMapVisible = mapVisible && activeMapAvailable
+    val mapSignal = (trackingState as? RunTrackingServiceState.Tracking)
+        ?.takeIf { it.runId == activeRunId }?.signalStatus
+    LaunchedEffect(activeMapVisible, activeRunId, model.state, mapSignal) {
+        if (!activeMapVisible) mapEvidence = null
+        else {
+            val requestedId = activeRunId
+            mapEvidence = coordinator.runMapEvidence(mapSignal)?.takeIf { it.runId == requestedId }
+        }
+    }
+    val previewEnabled = nativeMapsEnabled && mapVisible && mapRunId == "foreground-gps-preview" &&
+        gpsSelected && activeRunId == null && model.state == RunUiState.ReadyToStart
+    val previewController = rememberForegroundGpsPreview(previewEnabled, lifecycle, model.state)
+    val gpsPreview by previewController
     val context = LocalContext.current
     fun preciseLocationReady(): Boolean =
         ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) ==
@@ -558,6 +591,10 @@ internal fun RunJourneyRoot(
     ) && !model.actionInProgress
     RunMetricsTicker(active = metricsTicking, lifecycle = lifecycle) {
         metrics = coordinator.runMetrics()?.let(::runMetricsDisplayFor)
+        if (activeMapVisible) {
+            val requestedId = activeRunId
+            mapEvidence = coordinator.runMapEvidence(mapSignal)?.takeIf { it.runId == requestedId }
+        }
     }
 
     // Refuse to overlap, run the request, and always release the guard — even if the call
@@ -619,6 +656,7 @@ internal fun RunJourneyRoot(
                     try {
                         // The visible Activity launches the foreground service before any
                         // asynchronous Room insert; that service owns this GPS start.
+                        previewController.stopBeforeRun()
                         RunTrackingService.startNew(context, preRunEnergy, observeMusicForRun,
                             shareMusicForRun)
                     } catch (_: RuntimeException) {
@@ -833,6 +871,10 @@ internal fun RunJourneyRoot(
                     requestGpsPermissions()
                 }
                 else -> runGuarded {
+                    // Opening the map is optional. Beginning a run closes that preview before
+                    // countdown, and the existing service remains the sole run recorder.
+                    previewController.stopBeforeRun()
+                    mapRunId = null
                     coordinator.beginCountdown()
                     refresh()
                 }
@@ -866,6 +908,7 @@ internal fun RunJourneyRoot(
             if (gpsSelected) {
                 if (preciseLocationReady()) {
                     try {
+                        previewController.stopBeforeRun()
                         RunTrackingService.startNew(
                             context,
                             preRunEnergy,
@@ -924,7 +967,27 @@ internal fun RunJourneyRoot(
         gpsMessage = gpsMessage,
         musicSelected = musicSelected,
         musicAccessGranted = musicAccessGranted,
+        onOpenSpotify = {
+            if (!openSpotify(context)) {
+                Toast.makeText(context,
+                    "Spotify couldn't open. Check that it is installed on this phone.",
+                    Toast.LENGTH_LONG).show()
+            }
+        },
         isGpsRun = activeTrackingMode == RunTrackingMode.GPS,
+        onOpenRunMap = { mapRunId = activeRunId ?: "foreground-gps-preview" },
+        liveMapEnabled = true,
+        mapEvidence = if (activeMapVisible) mapEvidence?.takeIf { it.runId == activeRunId }
+            else if (previewEnabled) gpsPreview.toMapEvidence() else null,
+        nativeMapsEnabled = nativeMapsEnabled,
+        previewMapStatus = gpsPreview.explanation,
+        onRequestMapLocation = if (gpsPreview.status == ForegroundGpsPreviewStatus.PERMISSION_NEEDED ||
+            gpsPreview.status == ForegroundGpsPreviewStatus.LOCATION_OFF) ({ requestGpsPermissions() }) else null,
+        mapExpanded = mapVisible,
+        onCloseRunMap = {
+            previewController.stopBeforeRun()
+            mapRunId = null
+        },
         gpsServicePresent = when (val service = trackingState) {
             is RunTrackingServiceState.Tracking -> service.runId == activeRunId
             is RunTrackingServiceState.Paused -> service.runId == activeRunId
@@ -969,14 +1032,23 @@ internal fun RunJourneyRoot(
         },
         energyEnabled = reflectionCoordinator != null,
         isTestData = (activeReflection as? RunReflectionState.Ready)?.isTestData == true,
-        onViewHistory = { stopCompletionAudio?.invoke(); historyVisible = true },
+        onViewHistory = {
+            stopCompletionAudio?.invoke()
+            previewController.stopBeforeRun()
+            mapRunId = null
+            historyVisible = true
+        },
         reflectionAudioActive = completionAudioActive,
+        reflectionSongLabel = (reflectionState as? RunReflectionState.Ready)
+            ?.takeIf { it.runId == completedRunId }?.passage
+            ?.let { "${it.trackTitle} · ${it.artistName}" },
         onStopReflectionAudio = { stopCompletionAudio?.invoke() },
         showHistory = true,
         actionsEnabled = !actionInFlight && !reflectionConnectionSaving,
         modifier = modifier,
         savedPreRunEnergy = completedRun?.preRunEnergy,
         completionDateLabel = completedRun?.let(::completionDateLabelFor),
+        weatherSummary = completedRun?.let { weatherSummaryFor(it, weatherByRun[it.runId]) },
         onReflectionPresentationHoldChange = { held ->
             if (held) completionPresentationHeldRunId = presentedRunId
             else if (completionPresentationHeldRunId == presentedRunId) completionPresentationHeldRunId = null
@@ -1000,6 +1072,10 @@ internal fun RunJourneyRoot(
             musicAccessGranted = musicAccessGranted,
             musicReflectionSharingEnabled = musicReflectionSharingSelected,
             musicReflectionSharingAvailable = reflectionRequestsAvailable,
+            weatherEnabled = runPreferences?.captureWeather == true,
+            onSetWeather = { enabled ->
+                runPreferences?.let { saved -> savePreferences(saved.copy(captureWeather = enabled)) }
+            },
             reflectionConnectionLabel = when (reflectionConnection) {
                 ReflectionConnectionState.Loading -> "Loading reflection connection…"
                 ReflectionConnectionState.Local -> "Computer connection selected"
@@ -1042,6 +1118,8 @@ internal fun RunJourneyRoot(
                 }
             },
             onSetDemoMode = { demo ->
+                previewController.stopBeforeRun()
+                mapRunId = null
                 gpsSelected = !demo
                 gpsMessage = null
             },
@@ -1224,19 +1302,22 @@ internal fun RunCompleteSpeechEffect(
         try {
             val activeSpeaker = speaker ?: speakerFactory(context).also { speaker = it }
             val runId = completedRunId
-            activeSpeaker.speakWithInstrumental(
-                exactText,
-                canPlayInstrumental = {
-                    activeAttempt === attempt && speaker === activeSpeaker &&
-                        currentVisible && currentRunId == runId
-                },
-                onFinished = {
-                    if (activeAttempt === attempt) {
-                        activeAttempt = null
-                        audioCallback(false)
-                    }
+            val canPlay = {
+                activeAttempt === attempt && speaker === activeSpeaker &&
+                    currentVisible && currentRunId == runId
+            }
+            val finished = {
+                if (activeAttempt === attempt) {
+                    activeAttempt = null
+                    audioCallback(false)
                 }
-            )
+            }
+            val passage = (reflectionState as? RunReflectionState.Ready)?.passage
+            if (passage != null) {
+                activeSpeaker.speakWithSongPassage(exactText, passage, canPlay, finished)
+            } else {
+                activeSpeaker.speakWithInstrumental(exactText, canPlay, finished)
+            }
         } catch (_: RuntimeException) {
             stopAudio()
             // Consume this arrival attempt once; a missing engine never replays on resume.
@@ -1259,6 +1340,21 @@ internal fun readyCompletionSpeechText(
 }
 
 private const val LOCAL_NETWORK_PERMISSION = "android.permission.ACCESS_LOCAL_NETWORK"
+
+/** Opens Spotify only on a deliberate tap; no account access or playback command is sent. */
+private fun openSpotify(context: Context): Boolean = try {
+    context.startActivity(
+        Intent(Intent.ACTION_MAIN)
+            .addCategory(Intent.CATEGORY_LAUNCHER)
+            .setPackage("com.spotify.music")
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    )
+    true
+} catch (_: ActivityNotFoundException) {
+    false
+} catch (_: SecurityException) {
+    false
+}
 
 private fun musicListenerComponent(context: Context): ComponentName =
     ComponentName(context, RunMusicNotificationListener::class.java)

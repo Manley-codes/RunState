@@ -8,6 +8,17 @@ import org.junit.Test
 
 class RunPreferencesTest {
     @Test
+    fun weatherRequiresItsOwnSavedChoiceAndDoesNotEnableMusicSharing() {
+        val values = FakeValues(mutableMapOf("music_setup_complete" to true))
+        assertFalse(StoredRunPreferences(values).load().captureWeather)
+        StoredRunPreferences(values).save(RunPreferences(musicSetupComplete = true, captureWeather = true))
+        val reopened = StoredRunPreferences(values).load()
+        assertTrue(reopened.captureWeather)
+        assertFalse(reopened.observeMusic)
+        assertFalse(reopened.shareMusicInReflection)
+    }
+
+    @Test
     fun unsetPreferencesDoNotInferMusicConsentOrCompletedSetup() {
         val values = FakeValues()
 
@@ -22,7 +33,8 @@ class RunPreferencesTest {
         val enabled = RunPreferences(
             observeMusic = true,
             shareMusicInReflection = true,
-            musicSetupComplete = true
+            musicSetupComplete = true,
+            captureWeather = true
         )
         StoredRunPreferences(values).save(enabled)
         assertEquals(enabled, StoredRunPreferences(values).load())
@@ -32,7 +44,7 @@ class RunPreferencesTest {
 
         assertEquals(disabled, StoredRunPreferences(values).load())
         assertEquals(2, values.commits)
-        assertEquals(setOf("observe_music", "share_music_in_reflection", "music_setup_complete"),
+        assertEquals(setOf("observe_music", "share_music_in_reflection", "music_setup_complete", "capture_weather"),
             values.saved.keys)
     }
 

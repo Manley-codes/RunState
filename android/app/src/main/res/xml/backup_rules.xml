@@ -25,6 +25,11 @@
 -->
 <full-backup-content>
     <exclude domain="database" path="." />
+    <!-- MapLibre's files-domain cache can reveal viewed areas; keep it on this device. -->
+    <exclude domain="file" path="mbgl-offline.db" />
+    <exclude domain="file" path="mbgl-offline.db-wal" />
+    <exclude domain="file" path="mbgl-offline.db-shm" />
+    <exclude domain="file" path="mbgl-offline.db-journal" />
     <!-- The access code is encrypted with a device-bound key; never back it up separately. -->
     <exclude domain="sharedpref" path="reflection_connection.xml" />
 </full-backup-content>

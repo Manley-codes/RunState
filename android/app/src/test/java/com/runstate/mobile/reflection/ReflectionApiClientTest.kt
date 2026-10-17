@@ -1,8 +1,10 @@
 package com.runstate.mobile.reflection
 
 import com.google.gson.JsonObject
+import com.google.gson.JsonParser
 import com.google.gson.GsonBuilder
 import com.runstate.mobile.data.local.*
+import com.runstate.mobile.weather.RunWeatherSnapshot
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.InputStream
@@ -112,6 +114,20 @@ class ReflectionApiClientTest {
         assertEquals("MODERATE", evidence.preRunEnergy)
     }
 
+    @Test fun savedWeatherMustBelongToTheOfficialStartRatherThanAnotherTimeInTheHour() {
+        val weather = weatherSnapshot()
+        val request = reflectionRequestFromSavedRun(
+            REQUEST_ID, completedRun(), completedTransitions(), weather = weather
+        )
+        assertEquals(weather, request.evidence.weatherContext)
+        assertThrows(IllegalArgumentException::class.java) {
+            reflectionRequestFromSavedRun(
+                REQUEST_ID, completedRun(), completedTransitions(),
+                weather = weather.copy(targetEpochMillis = START + 1)
+            )
+        }
+    }
+
     @Test fun localCaptureDoesNotAuthorizeCloudMusicSharing() {
         val observed = listOf(musicObservation())
         listOf(
@@ -182,7 +198,8 @@ class ReflectionApiClientTest {
         val gson = GsonBuilder().serializeNulls().create()
         val json = gson.toJsonTree(request).asJsonObject
         val music = json.getAsJsonObject("evidence").getAsJsonObject("musicContext")
-        assertEquals(setOf("state", "trackTitle", "artistName", "artistDescription", "provenance"), music.keySet())
+        assertEquals(setOf("state", "trackTitle", "artistName", "artistDescription", "provenance", "songCue"), music.keySet())
+        assertTrue(music.get("songCue").isJsonNull)
         assertEquals("Reported title", music.get("trackTitle").asString)
         assertEquals("Reported artist", music.get("artistName").asString)
         assertEquals("MEDIA_SESSION_PARTIAL", music.get("provenance").asString)
@@ -301,9 +318,47 @@ class ReflectionApiClientTest {
         assertEquals(60_000, fake.readTimeout)
         assertFalse(fake.instanceFollowRedirects)
         assertTrue(fake.sent.toString(StandardCharsets.UTF_8.name()).contains(REQUEST_ID))
+        val body = JsonParser.parseString(fake.sent.toString(StandardCharsets.UTF_8.name())).asJsonObject
+        assertEquals(setOf("officialStartEpochMillis", "finishEpochMillis", "startTimezoneId",
+            "activeDurationMillis", "metrics", "preRunEnergy", "musicContext"),
+            body.getAsJsonObject("evidence").keySet())
+        assertFalse(body.getAsJsonObject("evidence").has("weatherContext"))
         assertEquals("[FAKE] None.", result.noSelection)
         assertFalse(result.isTestData)
         assertTrue(fake.wasDisconnected)
+    }
+
+    @Test fun hostedClientSendsExactKnownWeatherWithoutLookupCoordinates() = runBlocking {
+        val config = ReflectionConnectionConfig(
+            "https://reflection.example.com/api/reflections/candidates", "W".repeat(43)
+        )
+        val fake = FakeHttpsConnection(URL(config.endpoint), response(generationMode = "ANTHROPIC"))
+        val snapshot = weatherSnapshot()
+        HostedReflectionHttpClient(config, { fake }).request(reflectionRequestFromSavedRun(
+            REQUEST_ID, completedRun(), completedTransitions(), weather = snapshot
+        ))
+        val serialized = fake.sent.toString(StandardCharsets.UTF_8.name())
+        val weather = JsonParser.parseString(serialized).asJsonObject.getAsJsonObject("evidence")
+            .getAsJsonObject("weatherContext")
+        assertEquals(setOf("source", "resolution", "targetEpochMillis", "validFromEpochMillis",
+            "validToEpochMillis", "fetchedAtEpochMillis", "temperatureCelsius",
+            "apparentTemperatureCelsius", "relativeHumidityPercent", "windSpeedKmh", "weatherCode"),
+            weather.keySet())
+        assertEquals(snapshot, RunWeatherSnapshot.fromJson(weather.toString()))
+        assertEquals(START, weather.get("targetEpochMillis").asLong)
+        assertEquals(FINISH, weather.get("fetchedAtEpochMillis").asLong)
+        assertEquals(48.5, weather.get("relativeHumidityPercent").asDouble, 0.0)
+        assertFalse(serialized.contains("latitude"))
+        assertFalse(serialized.contains("longitude"))
+        assertTrue(fake.wasDisconnected)
+    }
+
+    private fun weatherSnapshot(): RunWeatherSnapshot {
+        val hour = START / 3_600_000L * 3_600_000L
+        return RunWeatherSnapshot(targetEpochMillis = START, validFromEpochMillis = hour,
+            validToEpochMillis = hour + 3_600_000L, fetchedAtEpochMillis = FINISH,
+            temperatureCelsius = 21.5, apparentTemperatureCelsius = 20.0,
+            relativeHumidityPercent = 48.5, windSpeedKmh = 8.0, weatherCode = 0)
     }
 
     @Test fun hostedClientRejectsRedirectHttpDowngradeAndOversizeResponse() = runBlocking {
@@ -354,7 +409,60 @@ class ReflectionApiClientTest {
         })
     }
 
-    private class FakeHttpsConnection(url: URL, private val body: String, private val status: Int = 200) :
+    @Test fun hostedOldServerOmitsSongCueAndNeverReceivesLocalPassageInstructions() = runBlocking {
+        val request = knownSongRequest()
+        val config = ReflectionConnectionConfig("https://reflection.example.com/api/reflections/candidates",
+            "K".repeat(43))
+        val health = FakeHttpsConnection(URL("https://reflection.example.com/health"), "{\"status\":\"ok\"}")
+        val post = FakeHttpsConnection(URL(config.endpoint), response(generationMode = "ANTHROPIC"))
+        val result = HostedReflectionHttpClient(config, { if (it.path == "/health") health else post }).request(request)
+        val sent = JsonParser.parseString(post.sent.toString("UTF-8")).asJsonObject.getAsJsonObject("evidence")
+        assertNull(result.songCueId)
+        assertFalse(sent.has("songPassage"))
+        assertFalse(sent.getAsJsonObject("musicContext").has("songCue"))
+        assertNull(health.getRequestProperty("Authorization"))
+        assertTrue(health.wasDisconnected)
+    }
+
+    @Test fun capableServerAcknowledgesExactSongAndReceivesOnlyEditorialCueFields() = runBlocking {
+        val request = knownSongRequest()
+        val cue = requireNotNull(request.evidence.musicContext.songCue)
+        val config = ReflectionConnectionConfig("https://reflection.example.com/api/reflections/candidates",
+            "K".repeat(43))
+        val reply = JsonParser.parseString(response(generationMode = "ANTHROPIC")).asJsonObject.apply {
+            addProperty("songCueId", cue.cueId)
+        }.toString()
+        val health = FakeHttpsConnection(URL("https://reflection.example.com/health"), "{}", cueCapability = "1")
+        val post = FakeHttpsConnection(URL(config.endpoint), reply)
+        val result = HostedReflectionHttpClient(config, { if (it.path == "/health") health else post }).request(request)
+        val sent = JsonParser.parseString(post.sent.toString("UTF-8")).asJsonObject.getAsJsonObject("evidence")
+        assertEquals(cue.cueId, result.songCueId)
+        assertFalse(sent.has("songPassage"))
+        assertEquals(setOf("cueId", "source", "theme", "connectionNote"),
+            sent.getAsJsonObject("musicContext").getAsJsonObject("songCue").keySet())
+        assertFalse(post.sent.toString("UTF-8").contains("startPositionMillis"))
+        assertFalse(post.sent.toString("UTF-8").contains("spotify:track"))
+    }
+
+    @Test fun songAcknowledgementCannotBeMissingForeignOrUnrequested() {
+        val reply = JsonParser.parseString(response()).asJsonObject
+        assertThrows(ReflectionBridgeException::class.java) {
+            parseReflectionResponse(reply.toString(), REQUEST_ID, RUN_ID, "expected")
+        }
+        reply.addProperty("songCueId", "foreign")
+        assertThrows(ReflectionBridgeException::class.java) {
+            parseReflectionResponse(reply.toString(), REQUEST_ID, RUN_ID, "expected")
+        }
+        assertThrows(ReflectionBridgeException::class.java) {
+            parseReflectionResponse(reply.toString(), REQUEST_ID, RUN_ID)
+        }
+    }
+
+    private fun knownSongRequest() = reflectionRequestFromSavedRun(REQUEST_ID, sharingRun(),
+        completedTransitions(), listOf(musicObservation().copy(title = "Sunday Best", artist = "Surfaces")))
+
+    private class FakeHttpsConnection(url: URL, private val body: String, private val status: Int = 200,
+        private val cueCapability: String? = null) :
         HttpsURLConnection(url) {
         val sent = ByteArrayOutputStream()
         var wasDisconnected = false
@@ -368,6 +476,8 @@ class ReflectionApiClientTest {
         override fun getInputStream(): InputStream =
             ByteArrayInputStream(body.toByteArray(StandardCharsets.UTF_8))
         override fun getResponseCode(): Int = status
+        override fun getHeaderField(name: String?): String? =
+            if (name.equals("X-RunState-Song-Cue", ignoreCase = true)) cueCapability else null
     }
 
     private fun response(

@@ -1,5 +1,5 @@
-RunState bundled visual assets
-Reviewed October 15, 2026
+RunState bundled visual assets and map dependencies
+Reviewed October 16, 2026
 
 Material Design Icons: shoe-sneaker
 Source: https://github.com/Templarian/MaterialDesign
@@ -20,7 +20,7 @@ October 15, 2026: edited with the built-in image tool at the user's request to g
 the runner natural dark-brown exposed skin while preserving the trail scene.
 The bundled photograph is an AI-edited derivative, not the unmodified Pexels original.
 
-Apache License 2.0 (for the shoe icon)
+Apache License 2.0 (for the shoe icon and OkHttp; individual notices below)
 
 
                                  Apache License
@@ -324,3 +324,101 @@ INCLUDING ANY GENERAL, SPECIAL, INDIRECT, INCIDENTAL, OR CONSEQUENTIAL
 DAMAGES, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
 FROM, OUT OF THE USE OR INABILITY TO USE THE FONT SOFTWARE OR FROM
 OTHER DEALINGS IN THE FONT SOFTWARE.
+
+MapLibre Native Android 13.7.1 (OpenGL)
+Artifact: org.maplibre.gl:android-sdk-opengl:13.7.1
+Source: https://github.com/maplibre/maplibre-native/tree/android-v13.7.1
+License source: https://github.com/maplibre/maplibre-native/blob/android-v13.7.1/LICENSE.md
+The SDK is used unmodified to render optional Start/Active street maps and local overlays.
+
+BSD 2-Clause License
+
+Copyright (c) 2021 MapLibre contributors
+
+Copyright (c) 2018-2021 MapTiler.com
+
+Copyright (c) 2014-2020 Mapbox
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are
+met:
+* Redistributions of source code must retain the above copyright
+  notice, this list of conditions and the following disclaimer.
+* Redistributions in binary form must reproduce the above copyright
+  notice, this list of conditions and the following disclaimer in
+  the documentation and/or other materials provided with the
+  distribution.
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS
+IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO,
+THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR
+CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
+EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
+PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
+LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
+NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+OpenFreeMap vector maps; OpenMapTiles schema; OpenStreetMap data
+Attribution: OpenFreeMap · © OpenMapTiles · Data from OpenStreetMap contributors
+Provider: https://openfreemap.org/
+Integration guide: https://openfreemap.org/quick_start/
+TileJSON source: https://tiles.openfreemap.org/planet
+The stable TileJSON identifies the current weekly vector-tile set.
+Schema: https://openmaptiles.org/docs/schema/
+Schema license: CC BY 4.0; https://github.com/openmaptiles/openmaptiles/blob/master/LICENSE.md
+Copyright and database license: https://www.openstreetmap.org/copyright
+Provider terms: https://openfreemap.org/tos/
+Provider privacy: https://openfreemap.org/privacy/
+RunState authors its own inline map style. It does not bundle or modify the hosted
+Liberty style, sprites or terrain assets. Source geometry receives separate landscape,
+building, water, road and path colors; local recorded-run overlays remain separate.
+Tiles are requested only for an explicitly opened Live map and cached locally under
+HTTP caching rules. The normal Start view uses its static illustration. RunState does
+not bundle a tile archive or offer area downloads. Linked attribution appears beside
+the map. The public service is provided without an availability guarantee.
+
+Noto Sans Regular — remote map-label glyphs
+Glyph source: https://tiles.openfreemap.org/fonts/Noto%20Sans%20Regular/{range}.pbf
+Provider source record: https://github.com/hyperknot/openfreemap-styles/tree/main/fonts
+The provider's font scripts use processed Noto Sans glyphs from MapLibre demotiles:
+https://github.com/maplibre/demotiles/tree/gh-pages/font
+Provider license record: https://github.com/hyperknot/openfreemap-styles/blob/main/LICENSE.md
+License: SIL Open Font License 1.1; https://openfontlicense.org/
+Only glyph ranges needed for visible map labels are downloaded and cached. No Noto
+font binary or glyph archive is bundled in the APK or modified by RunState. The full
+SIL Open Font License 1.1 text appears earlier in this file under Barlow Condensed
+and also applies to these Noto glyph resources under the provider's license record.
+
+OkHttp 4.12.0
+Artifact: com.squareup.okhttp3:okhttp:4.12.0
+Source: https://github.com/square/okhttp/tree/parent-4.12.0
+License source: https://github.com/square/okhttp/blob/parent-4.12.0/LICENSE.txt
+Copyright 2019 Square, Inc.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+   http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+
+The full Apache License 2.0 text appears earlier in this file.
+
+Open-Meteo hourly weather data
+Provider and attribution: Weather data by Open-Meteo.com — https://open-meteo.com/
+API: https://api.open-meteo.com/v1/forecast
+Data source and licence record: https://open-meteo.com/en/licence
+Data licence: Creative Commons Attribution 4.0 International (CC BY 4.0)
+Licence: https://creativecommons.org/licenses/by/4.0/
+RunState selects the modeled hour containing the run start, translates condition codes
+into plain text and converts/rounds displayed units. These display changes do not make
+the data a phone-sensor measurement or imply provider endorsement. Provider and licence
+links appear beside the weather display. Public free API service terms are separate
+from the data licence: https://open-meteo.com/en/terms

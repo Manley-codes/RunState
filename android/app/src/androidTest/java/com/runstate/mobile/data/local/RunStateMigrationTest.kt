@@ -59,6 +59,157 @@ class RunStateMigrationTest {
     private val context = InstrumentationRegistry.getInstrumentation().targetContext
 
     @Test
+    fun versionElevenMigrationPreservesEveryStoredFieldAndStartsWithNoWeather() {
+        val databaseName = "runstate-v11-weather-migration-test.db"
+        val activeId = "03689ffc-65d9-4907-ae77-7a17b3ad77a6"
+        val pausedId = "8c405ab0-4a80-4be9-9bfb-19f2517ec2ba"
+        val finish = OFFICIAL_START + 60_000L
+        val exactReply = "  Exact saved reply.\nUnicode — 🌤 stays.  "
+        val oldDatabase = helper.createDatabase(databaseName, 11)
+        oldDatabase.apply {
+            insertVersionTwoRun(state = "COMPLETED", lastCheckpointEpochMillis = finish, finishEpochMillis = finish)
+            insertVersionTwoRun(runId = activeId, state = "RUNNING",
+                lastCheckpointEpochMillis = OFFICIAL_START, finishEpochMillis = null)
+            insertVersionTwoRun(runId = pausedId, state = "PAUSED",
+                lastCheckpointEpochMillis = OFFICIAL_START + 30_000L, finishEpochMillis = null)
+            execSQL("""
+                UPDATE runs SET final_distance_meters=12.34, metric_source='GPS',
+                    telemetry_coverage='PARTIAL', display_distance_unit='MILES',
+                    transition_history_complete=1, pre_run_energy='LOW', tracking_mode='GPS',
+                    music_observation_requested=1, post_run_effort='WORKING',
+                    music_reflection_sharing_allowed=1, start_elapsed_realtime_millis=123000,
+                    timing_session_id='original-clock' WHERE run_id=?
+            """.trimIndent(), arrayOf(RUN_ID))
+            execSQL("""
+                UPDATE runs SET tracking_mode='GPS', transition_history_complete=1,
+                    pre_run_energy='HIGH', start_elapsed_realtime_millis=456000,
+                    timing_session_id='active-clock' WHERE run_id=?
+            """.trimIndent(), arrayOf(activeId))
+            execSQL("""
+                INSERT INTO run_transitions (run_id,sequence_number,transition_type,
+                    occurred_at_epoch_millis,elapsed_realtime_millis,timing_session_id)
+                VALUES (?,1,'PAUSE',?,153000,'original-clock')
+            """.trimIndent(), arrayOf<Any>(RUN_ID, OFFICIAL_START + 30_000L))
+            execSQL("""
+                INSERT INTO run_location_points (run_id,sequence_number,observation_key,
+                    observed_at_epoch_millis,elapsed_realtime_nanos,latitude,longitude,horizontal_accuracy_meters,
+                    altitude_meters,speed_meters_per_second,bearing_degrees,
+                    accepted_for_distance,rejection_reason,segment_distance_meters,cumulative_distance_meters)
+                VALUES (?,1,'anchor',?,1000000000,40.0,-75.0,3.0,25.0,1.5,90.0,1,NULL,NULL,NULL),
+                       (?,2,'rejected',?,2000000000,40.0001,-75.0,99.0,NULL,NULL,NULL,0,'POOR_ACCURACY',NULL,NULL)
+            """.trimIndent(), arrayOf<Any>(RUN_ID, OFFICIAL_START + 1_000L, RUN_ID, OFFICIAL_START + 2_000L))
+            execSQL("""
+                INSERT INTO run_music_observations (run_id,sequence_number,observation_key,
+                    observed_at_epoch_millis,elapsed_realtime_nanos,source_package,title,artist,playback_state,event_kind)
+                VALUES (?,1,'music',?,2000000000,'test.player','Stored track','Stored artist','PLAYING','SESSION_SNAPSHOT')
+            """.trimIndent(), arrayOf<Any>(RUN_ID, OFFICIAL_START + 2_000L))
+            execSQL("""
+                INSERT INTO run_reflections (run_id,request_id,evidence_json,selection_deadline_epoch_millis,
+                    status,selected_branch,post_run_energy,candidates_json,text,finalized_at_epoch_millis,
+                    is_test_data,selection_window_started)
+                VALUES (?,?,'{"preserve":"exact evidence"}',?,'READY','SPENT','SPENT',
+                    '{"preserve":"exact candidates"}',?,?,0,1)
+            """.trimIndent(), arrayOf<Any>(RUN_ID, pausedId, finish + 6_000L, exactReply, finish + 7_000L))
+        }
+        val tableNames = listOf("runs", "run_transitions", "run_location_points", "run_music_observations", "run_reflections")
+        fun rows(database: SupportSQLiteDatabase, table: String, columns: List<String>): List<List<String?>> =
+            database.query("SELECT ${columns.joinToString(",") { "`$it`" }} FROM `$table` ORDER BY 1, 2").use { cursor ->
+                buildList {
+                    while (cursor.moveToNext()) {
+                        add(columns.indices.map { index -> if (cursor.isNull(index)) null else cursor.getString(index) })
+                    }
+                }
+            }
+        val oldColumns = tableNames.associateWith { table ->
+            oldDatabase.query("SELECT * FROM `$table` LIMIT 0").use { it.columnNames.toList() }
+        }
+        val before = tableNames.associateWith { rows(oldDatabase, it, oldColumns.getValue(it)) }
+        oldDatabase.close()
+
+        helper.runMigrationsAndValidate(databaseName, 12, true, MIGRATION_11_12).use { migrated ->
+            tableNames.forEach { table ->
+                assertEquals(table, before.getValue(table), rows(migrated, table, oldColumns.getValue(table)))
+            }
+            migrated.query("SELECT COUNT(*) FROM run_weather").use { cursor ->
+                assertTrue(cursor.moveToFirst())
+                assertEquals(0, cursor.getInt(0))
+            }
+
+            // A weather row follows only its own run through deletion.
+            migrated.execSQL("PRAGMA foreign_keys=ON")
+            migrated.execSQL("INSERT INTO run_weather (run_id,status,snapshot_json) VALUES (?,'READY','{}')",
+                arrayOf(activeId))
+            migrated.execSQL("DELETE FROM runs WHERE run_id=?", arrayOf(activeId))
+            migrated.query("SELECT COUNT(*) FROM run_weather").use { cursor ->
+                assertTrue(cursor.moveToFirst())
+                assertEquals(0, cursor.getInt(0))
+            }
+            migrated.query("SELECT COUNT(*) FROM runs").use { cursor ->
+                assertTrue(cursor.moveToFirst())
+                assertEquals(2, cursor.getInt(0))
+            }
+        }
+    }
+
+    @Test
+    fun productionFactoryMigratesVersionElevenAndWeatherAttemptsSettleOnlyOnce() {
+        val databaseName = "runstate-v11-weather-factory-test.db"
+        val completedId = "03689ffc-65d9-4907-ae77-7a17b3ad77a6"
+        val disabledId = "8c405ab0-4a80-4be9-9bfb-19f2517ec2ba"
+        val abandonedId = "17b32e6c-8ec5-4f58-ad11-360816ab4729"
+        val fixtureId = "8ba990b9-51f8-4449-9d2f-a38460af0ba0"
+        val pausedId = "cd6fde6d-3f7a-4c3b-938b-dd38e79a255f"
+        helper.createDatabase(databaseName, 11).apply {
+            listOf(RUN_ID, disabledId, abandonedId, fixtureId).forEach { id ->
+                insertVersionTwoRun(runId = id, state = "RUNNING",
+                    lastCheckpointEpochMillis = OFFICIAL_START, finishEpochMillis = null)
+            }
+            insertVersionTwoRun(runId = pausedId, state = "PAUSED",
+                lastCheckpointEpochMillis = OFFICIAL_START, finishEpochMillis = null)
+            insertVersionTwoRun(runId = completedId, state = "COMPLETED",
+                lastCheckpointEpochMillis = OFFICIAL_START + 60_000L,
+                finishEpochMillis = OFFICIAL_START + 60_000L)
+            execSQL("UPDATE runs SET tracking_mode='GPS', start_elapsed_realtime_millis=123000, timing_session_id='2280842d-649a-4f15-aa80-6c7fe621a52e'")
+            execSQL("UPDATE runs SET tracking_mode='FIXTURE' WHERE run_id=?", arrayOf(fixtureId))
+            close()
+        }
+
+        val migrated = openDatabaseThroughFactory(databaseName)
+        runBlocking {
+            val restored = requireNotNull(migrated.runDao().findById(RUN_ID))
+            assertEquals(OFFICIAL_START, restored.officialStartEpochMillis)
+            assertEquals(123000L, restored.startElapsedRealtimeMillis)
+            assertEquals("2280842d-649a-4f15-aa80-6c7fe621a52e", restored.timingSessionId)
+            val weather = migrated.weatherDao()
+            assertNull(weather.find(RUN_ID))
+            assertEquals(false, weather.claim(completedId, allowed = true))
+            assertNull(weather.find(completedId))
+            assertEquals(false, weather.claim(fixtureId, allowed = true))
+            assertNull(weather.find(fixtureId))
+            assertEquals(false, weather.claim(pausedId, allowed = true))
+            assertNull(weather.find(pausedId))
+            assertEquals(false, weather.claim(disabledId, allowed = false))
+            assertEquals(false, weather.claim(disabledId, allowed = true))
+            weather.finish(disabledId, "{}")
+            assertEquals(RunWeatherStatus.DISABLED, weather.find(disabledId)?.status)
+
+            assertTrue(weather.claim(RUN_ID, allowed = true))
+            assertEquals(RunWeatherStatus.PENDING, weather.find(RUN_ID)?.status)
+            weather.finish(RUN_ID, "{\"preserve\":\"first snapshot\"}")
+            weather.finish(RUN_ID, null)
+            assertEquals(false, weather.claim(RUN_ID, allowed = true))
+            assertEquals(RunWeatherEntity(RUN_ID, RunWeatherStatus.READY,
+                "{\"preserve\":\"first snapshot\"}"), weather.find(RUN_ID))
+            assertNull(weather.find(RUN_ID)?.readySnapshot())
+
+            assertTrue(weather.claim(abandonedId, allowed = true))
+            assertEquals(false, weather.claim(abandonedId, allowed = true))
+            weather.finish(abandonedId, "{\"too\":\"late\"}")
+            assertEquals(RunWeatherEntity(abandonedId, RunWeatherStatus.UNAVAILABLE), weather.find(abandonedId))
+        }
+    }
+
+    @Test
     fun versionTenMigrationPreservesEveryStoredFieldAndLeavesTimingUnknown() {
         val databaseName = "runstate-v10-timing-migration-test.db"
         val activeId = "03689ffc-65d9-4907-ae77-7a17b3ad77a6"

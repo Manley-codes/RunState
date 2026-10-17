@@ -20,6 +20,7 @@ import com.runstate.mobile.run.PreparedRunFactory
 import com.runstate.mobile.run.RunSessionCoordinator
 import com.runstate.mobile.settings.AndroidRunPreferencesStore
 import com.runstate.mobile.settings.RunPreferences
+import com.runstate.mobile.weather.RunWeatherCapture
 import java.time.Clock
 import android.os.SystemClock
 import com.runstate.mobile.run.RunTimingMark
@@ -174,6 +175,9 @@ class RunStateApplication : Application() {
     private var pendingRunPreferencesSaves = 0
     private val mutableRunPreferences = MutableStateFlow<RunPreferences?>(null)
     internal val runPreferences: StateFlow<RunPreferences?> = mutableRunPreferences.asStateFlow()
+    internal val runWeatherCapture: RunWeatherCapture by lazy {
+        RunWeatherCapture(applicationScope, database.weatherDao())
+    }
     private val mutableRunPreferencesSaving = MutableStateFlow(false)
     internal val runPreferencesSaving: StateFlow<Boolean> = mutableRunPreferencesSaving.asStateFlow()
     private val mutableRunPreferencesError = MutableStateFlow<String?>(null)
@@ -343,7 +347,8 @@ class RunStateApplication : Application() {
             return synchronized(this) {
                 reflectionOwner ?: RunReflectionCoordinator(
                     runDao = database.runDao(),
-                    store = RoomReflectionStore(database.reflectionDao(), database.musicObservationDao()),
+                    store = RoomReflectionStore(database.reflectionDao(), database.musicObservationDao(),
+                        database.weatherDao()),
                     gateway = ReflectionGateway { request ->
                         when (val connection = mutableReflectionConnection.value) {
                             is ReflectionConnectionState.Hosted ->

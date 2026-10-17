@@ -11,6 +11,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -47,18 +48,26 @@ import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.draw.blur
+import androidx.compose.ui.draw.BlurredEdgeTreatment
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.PathFillType
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
@@ -92,6 +101,7 @@ import kotlin.math.roundToInt
 
 internal const val START_RUN_SCREEN_TAG = "startRunScreen"
 internal const val START_RUN_BUTTON_TAG = "startRunButton"
+internal const val START_RUN_MAP_START_TAG = "startMapStart"
 internal const val START_HISTORY_TAG = "startHistory"
 internal const val START_ENERGY_LOW_TAG = "startEnergyLow"
 internal const val START_ENERGY_MODERATE_TAG = "startEnergyModerate"
@@ -102,10 +112,18 @@ internal const val START_AGENT_VISUALIZER_TAG = "startAgentVisualizer"
 internal const val START_ENERGY_INTAKE_TAG = "startEnergyIntake"
 internal const val START_GPS_TOGGLE_TAG = "startGpsToggle"
 internal const val START_MUSIC_TOGGLE_TAG = "startMusicToggle"
+internal const val START_OPEN_SPOTIFY_TAG = "startOpenSpotify"
 internal const val START_MUSIC_SHARING_TOGGLE_TAG = "startMusicSharingToggle"
 internal const val START_REFLECTION_SETUP_TAG = "startReflectionSetup"
 internal const val START_RUN_SETTINGS_TAG = "startRunSettings"
 internal const val START_RUN_STATUS_TAG = "startRunStatus"
+internal const val START_RUN_UPPER_CONTENT_TAG = "startRunUpperContent"
+internal const val START_RUN_FALLBACK_SCROLL_TAG = "startRunFallbackScroll"
+internal const val START_AGENT_CARD_TAG = "startAgentCard"
+internal const val START_ENERGY_CHOICES_TAG = "startEnergyChoices"
+internal const val START_FOOTER_TAG = "startFooter"
+internal const val START_MAP_STATUS_TAG = "startMapStatus"
+internal const val START_MAP_LOCATION_ACCESS_TAG = "startMapLocationAccess"
 internal const val REFLECTION_CONNECTION_DIALOG_TAG = "reflectionConnectionDialog"
 internal const val REFLECTION_CONNECTION_ADDRESS_TAG = "reflectionConnectionAddress"
 internal const val REFLECTION_CONNECTION_CODE_TAG = "reflectionConnectionCode"
@@ -132,8 +150,8 @@ private val IntakeTravelEase = CubicBezierEasing(0.5f, 0.02f, 0.28f, 1f)
 private val IntakeFadeEase = CubicBezierEasing(0.4f, 0f, 1f, 1f)
 
 /**
- * A native version of the Start prototype's visual foundation. The map is a static illustration
- * taken from the user's prototype. It never implies that location or route tracking is active.
+ * The original illustrated Start foundation remains explicit. The journey owner opens the
+ * separate live map only after its action is tapped; viewing a map never starts a recorded run.
  * Only choices backed by the current run flow receive click handlers.
  */
 @Composable
@@ -152,7 +170,12 @@ internal fun StartRunScreen(
     onOpenRunSettings: () -> Unit = {},
     gpsReady: Boolean = false,
     setupLoading: Boolean = false,
-    reflectionSetupRequired: Boolean = false
+    reflectionSetupRequired: Boolean = false,
+    liveMapBackground: Boolean = false,
+    liveMapStatus: String? = null,
+    onRequestMapLocation: (() -> Unit)? = null,
+    onOpenMap: (() -> Unit)? = null,
+    onOpenSpotify: () -> Unit = {}
 ) {
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     val view = LocalView.current
@@ -199,189 +222,276 @@ internal fun StartRunScreen(
                 rootBounds = bounds
             }
     ) {
-        val screenHeight = maxHeight
         val agentRingSize = if (maxWidth < 400.dp) 84.dp else 100.dp
-        Image(
-            painter = painterResource(R.drawable.start_map_reference),
-            contentDescription = null,
-            contentScale = ContentScale.Crop,
-            modifier = Modifier.fillMaxSize()
-        )
-        Box(
-            Modifier
-                .fillMaxSize()
-                .background(
-                    Brush.verticalGradient(
+        // A very short landscape window cannot keep both controls and upper details visible.
+        // In that case use one continuous flow; regular phone heights retain the anchored layout.
+        val fallbackHeight = 400.dp + 60.dp * (LocalDensity.current.fontScale - 1f).coerceAtLeast(0f)
+        val scrollWholeStack = maxHeight < fallbackHeight
+        val wholeStackScroll = rememberScrollState()
+        val upperDetailsScroll = rememberScrollState()
+        if (!liveMapBackground) {
+            Image(
+                painter = painterResource(R.drawable.start_map_reference),
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize()
+            )
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .background(Brush.verticalGradient(
                         0f to Color.White.copy(alpha = 0.08f),
                         0.55f to Color.White.copy(alpha = 0.02f),
                         1f to Color.White.copy(alpha = 0.52f)
-                    )
-                )
-        )
+                    ))
+            )
+        }
 
-        // The main action stays fixed. On a short viewport the card and energy choices can scroll.
+        // Energy and the measured footer own separate space, so neither can slide over the other.
+        // Upper details handle ordinary overflow; only very short windows scroll the entire flow.
         Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 20.dp)
-                .padding(top = 26.dp, bottom = 184.dp),
+            modifier = Modifier.fillMaxSize().then(if (scrollWholeStack) Modifier
+                .testTag(START_RUN_FALLBACK_SCROLL_TAG).verticalScroll(wholeStackScroll) else Modifier),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            AgentReadyCard(
-                selectedEnergy = selectedPreRunEnergy,
-                ringSize = agentRingSize,
-                phase = ringPhase,
-                intakeTime = { if (intake != null) intakeTime.value else null },
-                ringModifier = Modifier.onGloballyPositioned { coordinates ->
-                    val bounds = coordinates.boundsInRoot()
-                    if (ringBounds != null && ringBounds != bounds) intake = null
-                    ringBounds = bounds
-                }
-            )
-            Row(
+            Column(
                 modifier = Modifier
+                    .then(if (scrollWholeStack) Modifier else Modifier.weight(1f))
                     .fillMaxWidth()
-                    .padding(top = 10.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
+                    .testTag(START_RUN_UPPER_CONTENT_TAG)
+                    .then(if (scrollWholeStack) Modifier else Modifier.verticalScroll(upperDetailsScroll))
+                    .padding(horizontal = 20.dp)
+                    .padding(top = 26.dp, bottom = 12.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Text(
-                    text = "ILLUSTRATIVE MAP",
-                    color = StartInk,
-                    fontSize = 9.sp,
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = 0.8.sp,
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(50))
-                        .background(StartCream.copy(alpha = 0.89f))
-                        .padding(horizontal = 10.dp, vertical = 8.dp)
+                AgentReadyCard(
+                    selectedEnergy = selectedPreRunEnergy,
+                    ringSize = agentRingSize,
+                    phase = ringPhase,
+                    intakeTime = { if (intake != null) intakeTime.value else null },
+                    ringModifier = Modifier.onGloballyPositioned { coordinates ->
+                        val bounds = coordinates.boundsInRoot()
+                        if (ringBounds != null && ringBounds != bounds) intake = null
+                        ringBounds = bounds
+                    }
                 )
-                if (showHistory) {
-                    TextButton(
-                        onClick = onViewHistory,
-                        enabled = actionsEnabled,
-                        modifier = Modifier
-                            .heightIn(min = 48.dp)
-                            .testTag(START_HISTORY_TAG)
-                    ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column(Modifier.weight(1f).padding(end = 8.dp)) {
                         Text(
-                            "Log History",
+                            text = if (liveMapBackground) liveMapStatus ?: "Finding your location…"
+                                else "ILLUSTRATIVE MAP",
                             color = StartInk,
-                            fontWeight = FontWeight.SemiBold,
-                            fontSize = 12.sp
+                            fontSize = 9.sp,
+                            lineHeight = 14.sp,
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 0.8.sp,
+                            modifier = Modifier
+                                .testTag(START_MAP_STATUS_TAG)
+                                .clip(RoundedCornerShape(14.dp))
+                                .background(StartCream.copy(alpha = 0.92f))
+                                .padding(horizontal = 10.dp, vertical = 8.dp)
                         )
+                        if (liveMapBackground && onRequestMapLocation != null) {
+                            TextButton(
+                                onClick = onRequestMapLocation,
+                                enabled = actionsEnabled && !setupLoading,
+                                modifier = Modifier.heightIn(min = 48.dp)
+                                    .testTag(START_MAP_LOCATION_ACCESS_TAG)
+                            ) {
+                                Text("Enable location", color = StartInk, fontSize = 12.sp,
+                                    fontWeight = FontWeight.SemiBold)
+                            }
+                        } else if (onOpenMap != null) {
+                            TextButton(onClick = onOpenMap,
+                                modifier = Modifier.heightIn(min = 48.dp).testTag("startExpandMap")) {
+                                Text("Live map", color = StartInk, fontSize = 12.sp,
+                                    fontWeight = FontWeight.SemiBold)
+                            }
+                        }
+                    }
+                    if (showHistory) {
+                        TextButton(
+                            onClick = onViewHistory,
+                            enabled = actionsEnabled,
+                            modifier = Modifier
+                                .heightIn(min = 48.dp)
+                                .testTag(START_HISTORY_TAG)
+                        ) {
+                            Text(
+                                "Log History",
+                                color = StartInk,
+                                fontWeight = FontWeight.SemiBold,
+                                fontSize = 12.sp
+                            )
+                        }
                     }
                 }
-            }
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 4.dp)
-                    .testTag(START_RUN_STATUS_TAG),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalAlignment = Alignment.Top
-            ) {
-                Column(Modifier.weight(1f).padding(top = 12.dp)) {
-                    Text(
-                        text = when {
-                            setupLoading -> "Loading run preferences…"
-                            !gpsSelected -> "Sample demo · simulated distance"
-                            gpsReady -> "GPS ready"
-                            else -> "Location setup on Start"
-                        },
-                        color = StartInk,
-                        fontSize = 12.sp,
-                        lineHeight = 17.sp,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                    if (!setupLoading) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 4.dp)
+                        .testTag(START_RUN_STATUS_TAG),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.Top
+                ) {
+                    Column(Modifier.weight(1f).padding(top = 12.dp)) {
                         Text(
                             text = when {
-                                !musicSelected -> "Music observation off"
-                                !musicAccessGranted -> "Music observation needs access"
-                                else -> "Music observation on"
+                                setupLoading -> "Loading run preferences…"
+                                !gpsSelected -> "Sample demo · simulated distance"
+                                gpsReady -> if (liveMapBackground) "GPS run selected" else "GPS ready"
+                                else -> "Location setup on Start"
                             },
-                            color = StartInk.copy(alpha = 0.72f),
-                            fontSize = 11.sp,
-                            lineHeight = 16.sp
+                            color = StartInk,
+                            fontSize = 12.sp,
+                            lineHeight = 17.sp,
+                            fontWeight = FontWeight.SemiBold
                         )
-                        if (reflectionSetupRequired) {
+                        if (!setupLoading) {
                             Text(
-                                "Set up reflections in Run settings",
+                                text = when {
+                                    !musicSelected -> "Music observation off"
+                                    !musicAccessGranted -> "Music observation needs access"
+                                    else -> "Music observation on"
+                                },
                                 color = StartInk.copy(alpha = 0.72f),
                                 fontSize = 11.sp,
                                 lineHeight = 16.sp
                             )
-                        }
-                        if (gpsMessage != null) {
-                            Text(
-                                gpsMessage,
-                                color = StartInk,
-                                fontSize = 11.sp,
-                                lineHeight = 16.sp,
-                                modifier = Modifier.padding(top = 3.dp)
-                            )
+                            if (reflectionSetupRequired) {
+                                Text(
+                                    "Set up reflections in Run settings",
+                                    color = StartInk.copy(alpha = 0.72f),
+                                    fontSize = 11.sp,
+                                    lineHeight = 16.sp
+                                )
+                            }
+                            if (gpsMessage != null) {
+                                Text(
+                                    gpsMessage,
+                                    color = StartInk,
+                                    fontSize = 11.sp,
+                                    lineHeight = 16.sp,
+                                    modifier = Modifier.padding(top = 3.dp)
+                                )
+                            }
                         }
                     }
-                }
-                TextButton(
-                    onClick = onOpenRunSettings,
-                    enabled = actionsEnabled && !setupLoading,
-                    modifier = Modifier.heightIn(min = 48.dp).testTag(START_RUN_SETTINGS_TAG)
-                ) {
-                    Text("Run settings", color = StartInk, fontSize = 12.sp,
-                        fontWeight = FontWeight.SemiBold)
+                    TextButton(
+                        onClick = onOpenRunSettings,
+                        enabled = actionsEnabled && !setupLoading,
+                        modifier = Modifier.heightIn(min = 48.dp).testTag(START_RUN_SETTINGS_TAG)
+                    ) {
+                        Text("Run settings", color = StartInk, fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold)
+                    }
                 }
             }
-            val energySpacerBase = 580.dp + if (gpsMessage != null) 24.dp else 0.dp
-            Spacer(modifier = Modifier.height((screenHeight - energySpacerBase).coerceAtLeast(24.dp)))
-            PreRunEnergyChoices(
-                selected = selectedPreRunEnergy,
-                onSelect = selection@{ energy ->
-                    // Keep the real value synchronous, even if Start is tapped before arrival.
-                    if (energy != null && (selectedPreRunEnergy != null || intake != null)) {
-                        return@selection
-                    }
-                    if (energy == null) {
-                        intake = null
-                    } else if (selectedPreRunEnergy == null && intake == null) {
-                        val root = rootBounds
-                        val ring = ringBounds
-                        val allTiles = StartEnergyLevels.associateWith { tileBounds[it] }
-                        if (lifecycleStarted && animationsEnabled && ringVisible && root != null &&
-                            ring != null && allTiles.values.all { it != null && it.width > 0f && it.height > 0f }) {
-                            intake = EnergyIntake(
-                                energy,
-                                allTiles.mapValues { (_, bounds) -> bounds!!.translate(-root.topLeft) },
-                                ring.center - root.topLeft
-                            )
+            Box(Modifier.fillMaxWidth().padding(horizontal = 20.dp)
+                .padding(top = 12.dp, bottom = 12.dp)) {
+                PreRunEnergyChoices(
+                    selected = selectedPreRunEnergy,
+                    onSelect = selection@{ energy ->
+                        // Keep the real value synchronous, even if Start is tapped before arrival.
+                        if (energy != null && (selectedPreRunEnergy != null || intake != null)) {
+                            return@selection
                         }
+                        if (energy == null) {
+                            intake = null
+                        } else if (selectedPreRunEnergy == null && intake == null) {
+                            val root = rootBounds
+                            val ring = ringBounds
+                            val allTiles = StartEnergyLevels.associateWith { tileBounds[it] }
+                            if (lifecycleStarted && animationsEnabled && ringVisible && root != null &&
+                                ring != null && allTiles.values.all { it != null && it.width > 0f && it.height > 0f }) {
+                                intake = EnergyIntake(
+                                    energy,
+                                    allTiles.mapValues { (_, bounds) -> bounds!!.translate(-root.topLeft) },
+                                    ring.center - root.topLeft
+                                )
+                            }
+                        }
+                        onSelectPreRunEnergy(energy)
+                    },
+                    enabled = actionsEnabled,
+                    intake = intake,
+                    intakeTime = { intakeTime.value },
+                    onTileBounds = { energy, bounds ->
+                        if (tileBounds[energy] != null && tileBounds[energy] != bounds) intake = null
+                        tileBounds[energy] = bounds
                     }
-                    onSelectPreRunEnergy(energy)
-                },
-                enabled = actionsEnabled,
-                intake = intake,
-                intakeTime = { intakeTime.value },
-                onTileBounds = { energy, bounds ->
-                    if (tileBounds[energy] != null && tileBounds[energy] != bounds) intake = null
-                    tileBounds[energy] = bounds
-                }
+                )
+            }
+
+            StartFooter(
+                onStart = onStart,
+                enabled = actionsEnabled && !setupLoading,
+                gpsSelected = gpsSelected,
+                energySelected = selectedPreRunEnergy != null,
+                phase = ringPhase,
+                onOpenSpotify = onOpenSpotify,
+                musicEnabled = actionsEnabled
             )
         }
-
-        StartFooter(
-            onStart = onStart,
-            enabled = actionsEnabled && !setupLoading,
-            gpsSelected = gpsSelected,
-            energySelected = selectedPreRunEnergy != null,
-            phase = ringPhase,
-            modifier = Modifier.align(Alignment.BottomCenter)
-        )
 
         intake?.let { current ->
             EnergyIntakeOverlay(current, time = { intakeTime.value })
         }
+    }
+}
+
+/** Original, decorative branch silhouettes; they contain no map or location information. */
+@Composable
+internal fun RunMapTreeShadows(modifier: Modifier = Modifier) {
+    Canvas(modifier.blur(8.dp, edgeTreatment = BlurredEdgeTreatment.Unbounded)
+        .clearAndSetSemantics { }) {
+        val branchSize = size.width.coerceAtMost(520.dp.toPx())
+        val shadow = Color(0xFF55736B).copy(alpha = 0.26f)
+        fun androidx.compose.ui.graphics.drawscope.DrawScope.branch() {
+            val stem = Path().apply {
+                moveTo(-0.08f * branchSize, 0.01f * branchSize)
+                cubicTo(0.04f * branchSize, 0.07f * branchSize,
+                    0.28f * branchSize, 0.11f * branchSize,
+                    0.49f * branchSize, 0.29f * branchSize)
+            }
+            drawPath(stem, shadow.copy(alpha = 0.12f), style = Stroke(0.011f * branchSize,
+                cap = StrokeCap.Round))
+            val leaves = listOf(
+                Triple(0.03f, 0.05f, -66f), Triple(0.09f, 0.08f, 28f),
+                Triple(0.17f, 0.1f, -42f), Triple(0.22f, 0.13f, 48f),
+                Triple(0.3f, 0.16f, -30f), Triple(0.36f, 0.2f, 62f),
+                Triple(0.43f, 0.24f, -22f)
+            )
+            leaves.forEachIndexed { index, (x, y, angle) ->
+                withTransform({
+                    translate(x * branchSize, y * branchSize)
+                    rotate(angle, pivot = Offset.Zero)
+                }) {
+                    val length = branchSize * (if (index % 2 == 0) 0.17f else 0.14f)
+                    val breadth = length * 0.38f
+                    val leaf = Path().apply {
+                        moveTo(0f, 0f)
+                        cubicTo(length * 0.28f, -breadth, length * 0.82f, -breadth * 0.55f,
+                            length, 0f)
+                        cubicTo(length * 0.7f, breadth * 0.8f, length * 0.25f, breadth * 0.7f,
+                            0f, 0f)
+                        close()
+                    }
+                    drawPath(leaf, shadow)
+                }
+            }
+        }
+        branch()
+        withTransform({
+            translate(size.width, size.height)
+            rotate(180f, pivot = Offset.Zero)
+        }) { branch() }
     }
 }
 
@@ -463,8 +573,13 @@ private fun AgentReadyCard(
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .testTag(START_AGENT_CARD_TAG)
+            .shadow(10.dp, RoundedCornerShape(24.dp), clip = false,
+                ambientColor = Color(0xFF49645C).copy(alpha = 0.16f),
+                spotColor = Color(0xFF49645C).copy(alpha = 0.22f))
             .clip(RoundedCornerShape(24.dp))
-            .background(Color.White.copy(alpha = 0.96f))
+            .background(Color.White)
+            .border(1.dp, Color(0xFFDDE7E2), RoundedCornerShape(24.dp))
             .padding(horizontal = 20.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -545,7 +660,9 @@ private fun PreRunEnergyChoices(
     intakeTime: () -> Float,
     onTileBounds: (PreRunEnergy, Rect) -> Unit
 ) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+    val tileHeight = 82.dp + 40.dp * (LocalDensity.current.fontScale - 1f).coerceAtLeast(0f)
+    Column(modifier = Modifier.testTag(START_ENERGY_CHOICES_TAG),
+        horizontalAlignment = Alignment.CenterHorizontally) {
         Text(
             text = "PRE-RUN ENERGY",
             color = Color.White,
@@ -567,7 +684,7 @@ private fun PreRunEnergyChoices(
         )
         Spacer(Modifier.height(10.dp))
         // Preserve the existing row height and Undo position while the tiles leave for the agent.
-        Box(Modifier.fillMaxWidth().height(82.dp), contentAlignment = Alignment.Center) {
+        Box(Modifier.fillMaxWidth().height(tileHeight), contentAlignment = Alignment.Center) {
             if (selected == null || intake != null) {
                 Row(
                     modifier = Modifier.fillMaxWidth()
@@ -588,7 +705,8 @@ private fun PreRunEnergyChoices(
                                 PreRunEnergy.LOW -> START_ENERGY_LOW_TAG
                                 PreRunEnergy.MODERATE -> START_ENERGY_MODERATE_TAG
                                 PreRunEnergy.HIGH -> START_ENERGY_HIGH_TAG
-                            } else null
+                            } else null,
+                            tileHeight = tileHeight
                         )
                     }
                 }
@@ -598,7 +716,7 @@ private fun PreRunEnergyChoices(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    Spacer(Modifier.width(106.dp).height(82.dp))
+                    Spacer(Modifier.width(106.dp).height(tileHeight))
                     TextButton(
                         onClick = { onSelect(null) },
                         enabled = enabled,
@@ -623,7 +741,8 @@ private fun EnergyTile(
     modifier: Modifier,
     tag: String?,
     interactive: Boolean = true,
-    labelAlpha: () -> Float = { 1f }
+    labelAlpha: () -> Float = { 1f },
+    tileHeight: Dp = 82.dp
 ) {
     val label = when (energy) {
         PreRunEnergy.LOW -> "LOW"
@@ -637,9 +756,14 @@ private fun EnergyTile(
     }
     Column(
         modifier = modifier
-            .height(82.dp)
+            .height(tileHeight)
             .clip(RoundedCornerShape(17.dp))
             .background(StartInk.copy(alpha = if (enabled) 0.89f else 0.95f))
+            .then(if (interactive && enabled) Modifier.pointerInput(Unit) {
+                // A swipe within a stationary tile is not an Energy answer. Consuming movement
+                // only after touch slop cancels the selectable tap without changing its semantics.
+                detectDragGestures { change, _ -> change.consume() }
+            } else Modifier)
             .then(if (interactive) Modifier.selectable(
                 selected = selected,
                 enabled = enabled,
@@ -681,7 +805,8 @@ private fun EnergyTile(
             fontSize = if (energy == PreRunEnergy.MODERATE) 11.sp else 13.sp,
             fontWeight = FontWeight.Black,
             letterSpacing = 1.1.sp,
-            modifier = Modifier.graphicsLayer { alpha = labelAlpha() }
+            textAlign = TextAlign.Center,
+            modifier = Modifier.padding(horizontal = 3.dp).graphicsLayer { alpha = labelAlpha() }
         )
     }
 }
@@ -754,6 +879,8 @@ private fun StartFooter(
     gpsSelected: Boolean,
     energySelected: Boolean,
     phase: State<Float>,
+    onOpenSpotify: () -> Unit,
+    musicEnabled: Boolean,
     modifier: Modifier = Modifier
 ) {
     val readyGlow by animateFloatAsState(
@@ -761,19 +888,21 @@ private fun StartFooter(
         animationSpec = tween(500, easing = IntakeMarkEase),
         label = "startReadyGlow"
     )
-    Box(modifier = modifier.fillMaxWidth().height(184.dp)) {
-        Canvas(Modifier.fillMaxSize()) {
+    Box(modifier = modifier.fillMaxWidth().heightIn(min = 184.dp).testTag(START_FOOTER_TAG)) {
+        Canvas(Modifier.matchParentSize()) {
             val boundary = Path().apply {
-                moveTo(0f, size.height * 0.23f)
+                // Lift the side shoulders, not the controls: the music keeps its size and gains
+                // clear space below the crest without changing the measured Energy/footer gap.
+                moveTo(0f, size.height * 0.16f)
                 cubicTo(
-                    size.width * 0.21f, size.height * 0.35f,
-                    size.width * 0.37f, size.height * 0.02f,
-                    size.width * 0.5f, size.height * 0.08f
+                    size.width * 0.21f, size.height * 0.24f,
+                    size.width * 0.37f, size.height * 0.06f,
+                    size.width * 0.5f, size.height * 0.06f
                 )
                 cubicTo(
-                    size.width * 0.68f, 0f,
-                    size.width * 0.82f, size.height * 0.36f,
-                    size.width, size.height * 0.23f
+                    size.width * 0.63f, size.height * 0.06f,
+                    size.width * 0.82f, size.height * 0.23f,
+                    size.width, size.height * 0.16f
                 )
                 lineTo(size.width, size.height)
                 lineTo(0f, size.height)
@@ -799,7 +928,8 @@ private fun StartFooter(
             modifier = Modifier
                 .fillMaxWidth()
                 .align(Alignment.BottomCenter)
-                .padding(horizontal = 20.dp, vertical = 13.dp),
+                .padding(horizontal = 20.dp)
+                .padding(top = 18.dp, bottom = 13.dp),
             verticalAlignment = Alignment.Bottom,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
@@ -834,27 +964,70 @@ private fun StartFooter(
                     modifier = Modifier.padding(top = 2.dp)
                 )
             }
-            FooterLabel("MUSIC", "LATER", R.drawable.start_music_orb, artwork = true)
+            FooterLabel("MUSIC", "SPOTIFY", R.drawable.start_music_orb, artwork = true,
+                modifier = Modifier
+                    .clickable(enabled = musicEnabled, role = Role.Button,
+                        onClickLabel = "Open Spotify", onClick = onOpenSpotify)
+                    .testTag(START_OPEN_SPOTIFY_TAG))
         }
     }
 }
 
 @Composable
-private fun FooterLabel(label: String, sublabel: String, icon: Int, artwork: Boolean = false) {
+private fun FooterLabel(
+    label: String,
+    sublabel: String,
+    icon: Int,
+    artwork: Boolean = false,
+    modifier: Modifier = Modifier
+) {
     Column(
-        modifier = Modifier
+        modifier = modifier
             .width(72.dp)
             .padding(bottom = 6.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Box(
             modifier = Modifier.size(if (artwork) 64.dp else 52.dp)
-                .clip(CircleShape)
-                .background(Color(0xFF172115).copy(alpha = 0.82f))
-                .then(if (artwork) Modifier else Modifier
-                    .border(1.dp, Color(0xFF9DAF74).copy(alpha = 0.45f), CircleShape)),
+                .then(if (artwork) Modifier.clip(CircleShape) else Modifier),
             contentAlignment = Alignment.Center
         ) {
+            if (!artwork) {
+                Canvas(Modifier.matchParentSize()) {
+                    val w = size.width
+                    val h = size.height
+                    drawOval(
+                        brush = Brush.radialGradient(
+                            listOf(Color.Black.copy(alpha = 0.24f), Color.Transparent),
+                            center = Offset(w * 0.5f, h * 0.72f), radius = w * 0.48f
+                        ),
+                        topLeft = Offset(w * 0.02f, h * 0.43f),
+                        size = Size(w * 0.96f, h * 0.55f)
+                    )
+                    val pebble = Path().apply {
+                        moveTo(w * 0.46f, h * 0.06f)
+                        cubicTo(w * 0.68f, h * 0.01f, w * 0.91f, h * 0.17f, w * 0.92f, h * 0.40f)
+                        cubicTo(w * 0.98f, h * 0.63f, w * 0.79f, h * 0.85f, w * 0.55f, h * 0.89f)
+                        cubicTo(w * 0.32f, h * 0.97f, w * 0.08f, h * 0.79f, w * 0.07f, h * 0.55f)
+                        cubicTo(w * 0.02f, h * 0.32f, w * 0.22f, h * 0.10f, w * 0.46f, h * 0.06f)
+                        close()
+                    }
+                    drawPath(pebble, Brush.linearGradient(
+                        0f to Color(0xFF4A5535),
+                        0.48f to Color(0xFF303D24),
+                        1f to Color(0xFF192416),
+                        start = Offset(w * 0.2f, 0f), end = Offset(w * 0.72f, h)
+                    ))
+                    // Light catches only the upper shoulder; there is no enclosing outline.
+                    val shoulder = Path().apply {
+                        moveTo(w * 0.15f, h * 0.28f)
+                        cubicTo(w * 0.31f, h * 0.06f, w * 0.65f, h * 0.02f, w * 0.82f, h * 0.22f)
+                    }
+                    drawPath(shoulder, Brush.horizontalGradient(listOf(
+                        Color.Transparent, Color(0xFFDCE5BE).copy(alpha = 0.20f), Color.Transparent
+                    )), style = Stroke(0.8.dp.toPx(), cap = StrokeCap.Round))
+                }
+            }
             Image(
                 painter = painterResource(icon),
                 contentDescription = null,
@@ -877,6 +1050,17 @@ private fun StartDial(modifier: Modifier = Modifier, glow: () -> Float = { 0f })
         val outerRadius = size.minDimension * 0.49f
         val r = outerRadius * 0.9f
         val illumination = glow().coerceIn(0f, 1f)
+        val shadowCenter = center + Offset(0f, 2.dp.toPx())
+        val shadowRadius = outerRadius - 2.dp.toPx()
+        drawCircle(
+            brush = Brush.radialGradient(
+                0f to Color.Black.copy(alpha = 0.30f),
+                0.76f to Color.Black.copy(alpha = 0.20f),
+                1f to Color.Transparent,
+                center = shadowCenter, radius = shadowRadius
+            ),
+            radius = shadowRadius, center = shadowCenter
+        )
         if (illumination > 0f) {
             drawCircle(
                 brush = Brush.radialGradient(
@@ -893,9 +1077,21 @@ private fun StartDial(modifier: Modifier = Modifier, glow: () -> Float = { 0f })
                 radius = r + 0.7.dp.toPx(),
                 style = androidx.compose.ui.graphics.drawscope.Stroke(1.4.dp.toPx()))
         }
-        val dialInk = Color(0xFF182116)
-        drawCircle(dialInk, radius = r)
-        drawCircle(Color.White.copy(alpha = 0.10f), radius = r, style = androidx.compose.ui.graphics.drawscope.Stroke(1.dp.toPx()))
+        drawCircle(Brush.radialGradient(
+            0f to Color(0xFF3B4733),
+            0.52f to Color(0xFF232E1E),
+            1f to Color(0xFF151E13),
+            center = center + Offset(-r * 0.45f, -r * 0.7f), radius = r * 2.2f
+        ), radius = r)
+        drawArc(
+            brush = Brush.linearGradient(
+                listOf(Color.Transparent, Color(0xFFE4EBD7).copy(alpha = 0.20f), Color.Transparent),
+                start = center - Offset(r, r), end = center + Offset(r, -r * 0.3f)
+            ),
+            startAngle = 205f, sweepAngle = 105f, useCenter = false,
+            topLeft = center - Offset(r, r), size = Size(r * 2f, r * 2f),
+            style = Stroke(1.dp.toPx(), cap = StrokeCap.Round)
+        )
         repeat(12) { index ->
             val angle = index * PI / 6.0 - PI / 2.0
             val direction = Offset(cos(angle).toFloat(), sin(angle).toFloat())
@@ -908,19 +1104,18 @@ private fun StartDial(modifier: Modifier = Modifier, glow: () -> Float = { 0f })
             )
         }
         val triangle = Path().apply {
+            fillType = PathFillType.EvenOdd
             moveTo(center.x - r * 0.23f, center.y - r * 0.36f)
             lineTo(center.x + r * 0.42f, center.y)
             lineTo(center.x - r * 0.23f, center.y + r * 0.36f)
             close()
-        }
-        drawPath(triangle, Color.White)
-        val inset = Path().apply {
+            // A real opening lets the shaded dial show through the play symbol.
             moveTo(center.x - r * 0.12f, center.y - r * 0.20f)
             lineTo(center.x + r * 0.24f, center.y)
             lineTo(center.x - r * 0.12f, center.y + r * 0.20f)
             close()
         }
-        drawPath(inset, dialInk)
+        drawPath(triangle, Color.White)
         drawLine(Color(0xFFF5BE37),
             Offset(center.x - r * 0.05f, center.y),
             Offset(center.x + r * 0.12f, center.y),

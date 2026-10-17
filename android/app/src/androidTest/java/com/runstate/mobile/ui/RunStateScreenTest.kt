@@ -1,8 +1,11 @@
 package com.runstate.mobile.ui
 
 import android.media.MediaMetadataRetriever
+import android.view.View
+import android.view.ViewGroup
 import androidx.activity.ComponentActivity
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.material3.Text
 import androidx.compose.runtime.CompositionLocalProvider
@@ -12,16 +15,19 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.captureToImage
+import androidx.compose.ui.test.click
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.junit4.StateRestorationTester
 import androidx.compose.ui.test.onAllNodesWithText
@@ -35,6 +41,7 @@ import androidx.compose.ui.test.performScrollToIndex
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.swipe
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
@@ -56,6 +63,10 @@ import com.runstate.mobile.data.local.RunStateDatabase
 import com.runstate.mobile.data.local.StoredRunState
 import com.runstate.mobile.location.RunTrackingServiceState
 import com.runstate.mobile.location.GpsSignalStatus
+import com.runstate.mobile.location.GpsMapEvidence
+import com.runstate.mobile.location.GpsMapCoordinate
+import com.runstate.mobile.location.GpsMapMarker
+import com.runstate.mobile.location.GpsMapMarkerState
 import com.runstate.mobile.run.PreparedRunFactory
 import com.runstate.mobile.run.RunActionKind
 import com.runstate.mobile.run.RunSessionCoordinator
@@ -67,6 +78,7 @@ import com.runstate.mobile.reflection.RunReflectionState
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
+import org.junit.Assert.assertSame
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -76,6 +88,11 @@ import java.time.Instant
 import java.time.ZoneId
 import java.time.ZoneOffset
 import java.util.UUID
+import java.util.concurrent.atomic.AtomicReference
+import org.maplibre.android.maps.MapLibreMap
+import org.maplibre.android.maps.MapView
+import org.maplibre.android.style.sources.GeoJsonSource
+import org.maplibre.geojson.Point
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -364,6 +381,185 @@ class RunStateScreenTest {
         assertEquals(1, historyOpens)
     }
 
+    @Test
+    fun startBlankAndEnergySwipesKeepNormalPhoneLayoutFixedAndIntakeUndoWorks() {
+        composeTestRule.mainClock.autoAdvance = false
+        var selected by mutableStateOf<PreRunEnergy?>(null)
+        var selectedAtStart: PreRunEnergy? = null
+        var densityValue = 1f
+        composeTestRule.setContent {
+            val density = LocalDensity.current
+            densityValue = density.density
+            CompositionLocalProvider(LocalDensity provides Density(density.density, 1f)) {
+                StartRunScreen(
+                    selectedPreRunEnergy = selected, onSelectPreRunEnergy = { selected = it },
+                    onStart = { selectedAtStart = selected }, actionsEnabled = true,
+                    onViewHistory = {}, showHistory = true, gpsReady = true,
+                    onOpenMap = {}, modifier = Modifier.fillMaxSize().systemBarsPadding()
+                )
+            }
+        }
+        composeTestRule.mainClock.advanceTimeByFrame()
+        val fixedTags = listOf(START_AGENT_CARD_TAG, START_AGENT_VISUALIZER_TAG,
+            START_ENERGY_CHOICES_TAG, START_ENERGY_LOW_TAG, START_ENERGY_MODERATE_TAG,
+            START_ENERGY_HIGH_TAG, START_FOOTER_TAG, START_RUN_BUTTON_TAG)
+        val boundsBefore = fixedTags.associateWith { tag ->
+            composeTestRule.onNodeWithTag(tag).assertIsDisplayed().fetchSemanticsNode().boundsInRoot
+        }
+        fun assertFixed() {
+            fixedTags.forEach { tag ->
+                assertEquals("A swipe must not move $tag on the normal Start screen",
+                    boundsBefore.getValue(tag),
+                    composeTestRule.onNodeWithTag(tag).fetchSemanticsNode().boundsInRoot)
+            }
+            val moderate = composeTestRule.onNodeWithTag(START_ENERGY_MODERATE_TAG)
+                .fetchSemanticsNode().boundsInRoot
+            val footer = composeTestRule.onNodeWithTag(START_FOOTER_TAG).fetchSemanticsNode().boundsInRoot
+            val start = composeTestRule.onNodeWithTag(START_RUN_BUTTON_TAG).fetchSemanticsNode().boundsInRoot
+            assertTrue("Moderate must clear the entire footer, including its crest, by 12 dp",
+                moderate.bottom + 12f * densityValue <= footer.top + 1f)
+            assertTrue("The Start action must remain inside its own footer", start.top >= footer.top)
+        }
+        assertFixed()
+
+        // Swipes originate in the unoccupied lower part of the upper content viewport.
+        for (upward in listOf(true, false)) {
+            composeTestRule.onNodeWithTag(START_RUN_UPPER_CONTENT_TAG).performTouchInput {
+                val high = Offset(width * 0.9f, height * 0.68f)
+                val low = Offset(width * 0.9f, height * 0.9f)
+                swipe(if (upward) low else high, if (upward) high else low, durationMillis = 350)
+            }
+            composeTestRule.mainClock.advanceTimeBy(400L)
+            assertFixed()
+        }
+        for (tag in listOf(START_ENERGY_LOW_TAG, START_ENERGY_MODERATE_TAG, START_ENERGY_HIGH_TAG)) {
+            for (upward in listOf(true, false)) {
+                composeTestRule.onNodeWithTag(tag).performTouchInput {
+                    val high = Offset(width * 0.5f, height * 0.15f)
+                    val low = Offset(width * 0.5f, height * 0.85f)
+                    swipe(if (upward) low else high, if (upward) high else low, durationMillis = 350)
+                }
+                composeTestRule.mainClock.advanceTimeBy(400L)
+                assertFixed()
+                composeTestRule.runOnIdle { assertEquals(null, selected) }
+            }
+        }
+
+        composeTestRule.onNodeWithTag(START_ENERGY_MODERATE_TAG).performTouchInput { click() }
+        composeTestRule.mainClock.advanceTimeBy(200L)
+        composeTestRule.onNodeWithTag(START_ENERGY_INTAKE_TAG).assertIsDisplayed()
+        composeTestRule.onNodeWithTag(START_RUN_BUTTON_TAG).performClick()
+        composeTestRule.runOnIdle { assertEquals(PreRunEnergy.MODERATE, selectedAtStart) }
+        composeTestRule.onNodeWithTag(START_ENERGY_UNDO_TAG).assertIsDisplayed().performTouchInput { click() }
+        composeTestRule.mainClock.advanceTimeByFrame()
+        composeTestRule.onNodeWithTag(START_ENERGY_INTAKE_TAG).assertDoesNotExist()
+        composeTestRule.runOnIdle { assertEquals(null, selected) }
+        assertFixed()
+    }
+
+    @Test
+    fun shortLargeTextStartKeepsEnergyAndStartFixedWhileUpperActionsRemainReachable() {
+        var selected by mutableStateOf<PreRunEnergy?>(null)
+        var fontScale by mutableStateOf(1.5f)
+        var settingsOpens = 0
+        var historyOpens = 0
+        var selectedAtStart: PreRunEnergy? = null
+        var densityValue = 1f
+        composeTestRule.setContent {
+            val density = LocalDensity.current
+            densityValue = density.density
+            CompositionLocalProvider(LocalDensity provides Density(density.density, fontScale)) {
+                StartRunScreen(
+                    selectedPreRunEnergy = selected, onSelectPreRunEnergy = { selected = it },
+                    onStart = { selectedAtStart = selected }, actionsEnabled = true,
+                    onViewHistory = { historyOpens++ }, showHistory = true,
+                    onOpenRunSettings = { settingsOpens++ },
+                    onOpenMap = {}, modifier = Modifier.size(360.dp, 480.dp)
+                )
+            }
+        }
+        for (scale in listOf(1.5f, 2f)) {
+            composeTestRule.runOnIdle { fontScale = scale }
+            listOf(START_ENERGY_LOW_TAG, START_ENERGY_MODERATE_TAG, START_ENERGY_HIGH_TAG)
+                .forEach { composeTestRule.onNodeWithTag(it).assertIsDisplayed().assertIsEnabled() }
+            composeTestRule.onNodeWithTag(START_RUN_BUTTON_TAG).assertIsDisplayed().assertIsEnabled()
+            val footer = composeTestRule.onNodeWithTag(START_FOOTER_TAG).fetchSemanticsNode().boundsInRoot
+            val start = composeTestRule.onNodeWithTag(START_RUN_BUTTON_TAG).fetchSemanticsNode().boundsInRoot
+            val choices = composeTestRule.onNodeWithTag(START_ENERGY_CHOICES_TAG).fetchSemanticsNode().boundsInRoot
+            val moderate = composeTestRule.onNodeWithTag(START_ENERGY_MODERATE_TAG).fetchSemanticsNode().boundsInRoot
+            assertTrue("Large-text Energy must remain above the measured footer",
+                moderate.bottom + 12f * densityValue <= footer.top + 1f)
+
+            composeTestRule.onNodeWithTag(START_RUN_SETTINGS_TAG).performScrollTo()
+                .assertIsDisplayed().performClick()
+            composeTestRule.onNodeWithTag(START_HISTORY_TAG).performScrollTo()
+                .assertIsDisplayed().performClick()
+            assertEquals(footer, composeTestRule.onNodeWithTag(START_FOOTER_TAG).fetchSemanticsNode().boundsInRoot)
+            assertEquals(start, composeTestRule.onNodeWithTag(START_RUN_BUTTON_TAG).fetchSemanticsNode().boundsInRoot)
+            assertEquals(choices, composeTestRule.onNodeWithTag(START_ENERGY_CHOICES_TAG).fetchSemanticsNode().boundsInRoot)
+
+            composeTestRule.onNodeWithTag(START_ENERGY_MODERATE_TAG).performClick()
+            composeTestRule.onNodeWithTag(START_RUN_BUTTON_TAG).performClick()
+            composeTestRule.runOnIdle { assertEquals(PreRunEnergy.MODERATE, selectedAtStart) }
+            composeTestRule.onNodeWithTag(START_ENERGY_UNDO_TAG).assertIsDisplayed().performClick()
+            composeTestRule.runOnIdle { assertEquals(null, selected) }
+        }
+        composeTestRule.runOnIdle {
+            assertEquals(2, settingsOpens)
+            assertEquals(2, historyOpens)
+        }
+    }
+
+    @Test
+    fun landscapeStartScrollsOneStackWithoutLosingEnergyFooterOrUpperActions() {
+        var selected by mutableStateOf<PreRunEnergy?>(null)
+        var selectedAtStart: PreRunEnergy? = null
+        var starts = 0
+        var settingsOpens = 0
+        var historyOpens = 0
+        composeTestRule.setContent {
+            // A logical landscape viewport without rotating the user's phone or writing settings.
+            CompositionLocalProvider(LocalDensity provides Density(1f, 1.5f)) {
+                StartRunScreen(
+                    selectedPreRunEnergy = selected, onSelectPreRunEnergy = { selected = it },
+                    onStart = { starts++; selectedAtStart = selected }, actionsEnabled = true,
+                    onViewHistory = { historyOpens++ }, showHistory = true,
+                    onOpenRunSettings = { settingsOpens++ },
+                    onOpenMap = {}, modifier = Modifier.size(640.dp, 320.dp)
+                )
+            }
+        }
+        composeTestRule.onNodeWithTag(START_RUN_FALLBACK_SCROLL_TAG).assertIsDisplayed()
+        composeTestRule.onNodeWithTag(START_RUN_SETTINGS_TAG).performScrollTo()
+            .assertIsDisplayed().performTouchInput { click() }
+        composeTestRule.onNodeWithTag(START_HISTORY_TAG).performScrollTo()
+            .assertIsDisplayed().performTouchInput { click() }
+        composeTestRule.onNodeWithTag(START_ENERGY_MODERATE_TAG).performScrollTo()
+            .assertIsDisplayed().performTouchInput { click() }
+        composeTestRule.runOnIdle { assertEquals(PreRunEnergy.MODERATE, selected) }
+        composeTestRule.onNodeWithTag(START_ENERGY_UNDO_TAG).performScrollTo()
+            .assertIsDisplayed().performTouchInput { click() }
+        composeTestRule.runOnIdle { assertEquals(null, selected) }
+
+        composeTestRule.onNodeWithTag(START_FOOTER_TAG).performScrollTo().assertIsDisplayed()
+        val moderate = composeTestRule.onNodeWithTag(START_ENERGY_MODERATE_TAG)
+            .assertIsDisplayed().fetchSemanticsNode().boundsInRoot
+        val footer = composeTestRule.onNodeWithTag(START_FOOTER_TAG).fetchSemanticsNode().boundsInRoot
+        val start = composeTestRule.onNodeWithTag(START_RUN_BUTTON_TAG)
+            .assertIsDisplayed().fetchSemanticsNode().boundsInRoot
+        assertTrue("The scrolling landscape stack preserves the Energy/footer gap",
+            moderate.bottom + 12f <= footer.top + 1f)
+        assertTrue("The Start control remains inside the same measured footer", start.top >= footer.top)
+        composeTestRule.onNodeWithTag(START_ENERGY_MODERATE_TAG).performTouchInput { click() }
+        composeTestRule.onNodeWithTag(START_RUN_BUTTON_TAG).performTouchInput { click() }
+        composeTestRule.runOnIdle {
+            assertEquals(PreRunEnergy.MODERATE, selectedAtStart)
+            assertEquals(1, starts)
+            assertEquals(1, settingsOpens)
+            assertEquals(1, historyOpens)
+        }
+    }
+
     /** The visible agent changes shape over time without moving its layout or nearby controls. */
     @Test
     fun startAgentActuallyAnimatesInsideStableBounds() {
@@ -554,6 +750,58 @@ class RunStateScreenTest {
         composeTestRule.runOnIdle { gpsReady = true }
         composeTestRule.onNodeWithText("GPS ready").assertExists()
         composeTestRule.onNodeWithText("Sample demo · simulated distance").assertDoesNotExist()
+    }
+
+    @Test
+    fun startSpotifyLauncherOnlyReportsDeliberateTapAndRespectsDisabledActions() {
+        val actions = RecordedActions()
+        var actionsEnabled by mutableStateOf(true)
+        var selected by mutableStateOf<PreRunEnergy?>(PreRunEnergy.HIGH)
+        var energyChanges = 0
+        var spotifyOpens = 0
+        var settingsOpens = 0
+        composeTestRule.setContent {
+            RunStateScreen(
+                model = RunUiModel(RunUiState.ReadyToStart), countdownDigit = null,
+                onStart = { actions.starts++ }, onCancelCountdown = { actions.cancels++ },
+                onRetryInitialization = { actions.initializationRetries++ },
+                onRetryStart = { actions.startRetries++ }, onPause = { actions.pauses++ },
+                onResume = { actions.resumes++ }, onStop = { actions.stops++ },
+                onStartAnother = { actions.startAnothers++ }, actionsEnabled = actionsEnabled,
+                selectedPreRunEnergy = selected,
+                onSelectPreRunEnergy = { selected = it; energyChanges++ },
+                onOpenSpotify = { spotifyOpens++ }, onOpenRunSettings = { settingsOpens++ },
+                onViewHistory = { actions.historyOpens++ }, showHistory = true
+            )
+        }
+
+        val music = composeTestRule.onNodeWithTag(START_OPEN_SPOTIFY_TAG)
+            .assertIsDisplayed().assertIsEnabled().assertTextEquals("MUSIC", "SPOTIFY")
+        assertEquals(Role.Button, music.fetchSemanticsNode().config[SemanticsProperties.Role])
+        composeTestRule.runOnIdle { assertEquals(0, spotifyOpens) }
+        music.performTouchInput { click() }
+        composeTestRule.runOnIdle {
+            assertEquals(1, spotifyOpens)
+            assertEquals(PreRunEnergy.HIGH, selected)
+            assertEquals(0, energyChanges)
+            assertEquals(0, actions.total)
+            assertEquals(0, actions.historyOpens)
+            assertEquals(0, settingsOpens)
+            actionsEnabled = false
+        }
+        composeTestRule.onNodeWithText("Music observation off").assertExists()
+        composeTestRule.onNodeWithTag(START_ENERGY_UNDO_TAG).assertExists()
+        music.assertIsNotEnabled().performTouchInput { click() }
+        composeTestRule.runOnIdle {
+            assertEquals(1, spotifyOpens)
+            assertEquals(PreRunEnergy.HIGH, selected)
+            assertEquals(0, energyChanges)
+            assertEquals(0, actions.total)
+            actionsEnabled = true
+        }
+        music.assertIsEnabled()
+        composeTestRule.onNodeWithTag(START_RUN_BUTTON_TAG).assertIsEnabled()
+        composeTestRule.runOnIdle { assertEquals(1, spotifyOpens) }
     }
 
     @Test
@@ -2524,6 +2772,339 @@ class RunStateScreenTest {
         composeTestRule.onNodeWithText("ILLUSTRATIVE MAP · GPS RECORDING").assertDoesNotExist()
         composeTestRule.onNodeWithTag(ACTIVE_RUN_DISTANCE_TAG).assertTextEquals("0.03 mi")
         composeTestRule.onNodeWithText(PAUSE).assertIsEnabled()
+    }
+
+    @Test
+    fun liveMapEntryExistsOnlyForGpsAndForwardsTheAction() {
+        var gps by mutableStateOf(true)
+        var paused by mutableStateOf(false)
+        var opens = 0
+        composeTestRule.setContent {
+            RunStateScreen(
+                model = RunUiModel(if (paused) RunUiState.ActivePaused else RunUiState.ActiveRunning),
+                metrics = fixtureMetrics(), countdownDigit = null,
+                onStart = {}, onCancelCountdown = {}, onRetryInitialization = {}, onRetryStart = {},
+                onPause = {}, onResume = {}, onStop = {}, onStartAnother = {},
+                isGpsRun = gps, gpsServicePresent = true, onOpenRunMap = { opens++ })
+        }
+        composeTestRule.onNodeWithTag(ACTIVE_RUN_MAP_BUTTON_TAG).performScrollTo().performClick()
+        composeTestRule.runOnIdle { assertEquals(1, opens); paused = true }
+        composeTestRule.onNodeWithText("View recorded map").performScrollTo().assertIsDisplayed()
+        composeTestRule.runOnIdle { gps = false }
+        composeTestRule.onNodeWithTag(ACTIVE_RUN_MAP_BUTTON_TAG).assertDoesNotExist()
+        composeTestRule.onNodeWithText(RESUME).assertIsEnabled()
+    }
+
+    @Test
+    fun mapDialogKeepsControlsAndDistinguishesStaleAndPausedLocations() {
+        var state by mutableStateOf(GpsMapMarkerState.CURRENT)
+        var paused by mutableStateOf(false)
+        var open by mutableStateOf(true)
+        composeTestRule.setContent {
+            if (open) ActiveRunMapDialog(
+                GpsMapEvidence("map-ui-test", true, marker = GpsMapMarker(
+                    GpsMapCoordinate(29.7174, -95.3905), 8.0, state)),
+                paused = paused, actionsEnabled = true, actionFailed = false,
+                onPause = { paused = true; state = GpsMapMarkerState.PAUSED },
+                onResume = { paused = false; state = GpsMapMarkerState.LAST_KNOWN },
+                onDismiss = { open = false })
+        }
+        composeTestRule.onNodeWithTag(RECORDED_RUN_MAP_STATUS_TAG)
+            .assertTextEquals("Current recorded location")
+        composeTestRule.runOnIdle { state = GpsMapMarkerState.LAST_KNOWN }
+        composeTestRule.onNodeWithTag(RECORDED_RUN_MAP_STATUS_TAG)
+            .assertTextEquals("Last recorded location · current position is unknown")
+        composeTestRule.onNodeWithText("Pause run").performClick()
+        composeTestRule.onNodeWithTag(RECORDED_RUN_MAP_STATUS_TAG)
+            .assertTextEquals("Paused · last recorded location")
+        composeTestRule.onNodeWithText("Resume run").performClick()
+        composeTestRule.onNodeWithText("Pause run").assertIsEnabled()
+        composeTestRule.onNodeWithText("Close").performClick()
+        composeTestRule.onNodeWithTag(ACTIVE_RUN_MAP_DIALOG_TAG).assertDoesNotExist()
+    }
+
+    @Test
+    fun mapWithoutUsableEvidenceStillOffersPauseAndCloseAtLargeText() {
+        var paused = false
+        var closed = false
+        composeTestRule.setContent {
+            CompositionLocalProvider(LocalDensity provides Density(1f, 1.8f)) {
+                ActiveRunMapDialog(GpsMapEvidence("map-unavailable-test", true, evidenceUnavailable = true),
+                    paused = false, actionsEnabled = true, actionFailed = false,
+                    onPause = { paused = true }, onResume = {}, onDismiss = { closed = true })
+            }
+        }
+        composeTestRule.onNodeWithText("Pause run").assertIsDisplayed().performClick()
+        composeTestRule.onNodeWithText("Close").assertIsDisplayed().performClick()
+        composeTestRule.runOnIdle { assertTrue(paused); assertTrue(closed) }
+    }
+
+    @Test
+    fun nativeMapRendersLocalRouteAndMarkerAcrossBackgroundWithoutTileRequests() {
+        val first = GpsMapCoordinate(29.7174, -95.3905)
+        val second = GpsMapCoordinate(29.7184, -95.3905)
+        var visible by mutableStateOf(true)
+        composeTestRule.setContent {
+            if (visible) RecordedRunMap(
+                GpsMapEvidence("native-map-test", true, sections = listOf(listOf(first, second)),
+                    marker = GpsMapMarker(second, 6.0, GpsMapMarkerState.CURRENT)),
+                Modifier.fillMaxSize().systemBarsPadding(), enableNativeMap = true,
+                loadStreetTiles = false)
+        }
+        composeTestRule.onNodeWithTag(RECORDED_RUN_MAP_RECENTER_TAG).assertIsDisplayed()
+        // This is a native renderer check, not a request to the community tile service.
+        composeTestRule.waitUntil(15_000L) {
+            val bitmap = InstrumentationRegistry.getInstrumentation().uiAutomation.takeScreenshot()
+            if (bitmap == null) false else {
+                try {
+                    var markerPixels = 0
+                    for (y in 0 until bitmap.height step 3) {
+                        for (x in 0 until bitmap.width step 3) {
+                            val pixel = bitmap.getPixel(x, y)
+                            if (kotlin.math.abs(android.graphics.Color.red(pixel) - 22) < 6 &&
+                                kotlin.math.abs(android.graphics.Color.green(pixel) - 116) < 6 &&
+                                kotlin.math.abs(android.graphics.Color.blue(pixel) - 154) < 6) markerPixels++
+                        }
+                    }
+                    markerPixels > 10
+                } finally { bitmap.recycle() }
+            }
+        }
+        composeTestRule.activityRule.scenario.moveToState(Lifecycle.State.CREATED)
+        composeTestRule.activityRule.scenario.moveToState(Lifecycle.State.RESUMED)
+        composeTestRule.onNodeWithTag(RECORDED_RUN_MAP_RECENTER_TAG).performClick()
+        composeTestRule.onNodeWithTag(RECORDED_RUN_MAP_STATUS_TAG)
+            .assertTextEquals("Current recorded location")
+        composeTestRule.runOnIdle { visible = false }
+        composeTestRule.onNodeWithTag(RECORDED_RUN_MAP_TAG).assertDoesNotExist()
+        composeTestRule.runOnIdle { visible = true }
+        composeTestRule.onNodeWithTag(RECORDED_RUN_MAP_RECENTER_TAG).assertIsDisplayed()
+    }
+
+    @Test
+    fun optionalStartMapLocationAndCloseDoNotStartAndOnlyStartBeginsCountdown() {
+        var locationRequests = 0
+        var starts = 0
+        var open by mutableStateOf(false)
+        var gpsSelected by mutableStateOf(true)
+        var state by mutableStateOf(RunUiState.ReadyToStart)
+        composeTestRule.setContent {
+            RunStateScreen(
+                model = RunUiModel(state), countdownDigit = 3,
+                onStart = { starts++; state = RunUiState.Countdown },
+                onCancelCountdown = {}, onRetryInitialization = {},
+                onRetryStart = {}, onPause = {}, onResume = {}, onStop = {}, onStartAnother = {},
+                gpsSelected = gpsSelected, liveMapEnabled = true, mapEvidence = null,
+                nativeMapsEnabled = true, loadStreetTiles = false,
+                previewMapStatus = "Enable precise location to show your position.",
+                onRequestMapLocation = { locationRequests++ },
+                onOpenRunMap = { open = true }, mapExpanded = open,
+                onCloseRunMap = { open = false },
+                modifier = Modifier.fillMaxSize().systemBarsPadding()
+            )
+        }
+        composeTestRule.onNodeWithTag(START_RUN_BUTTON_TAG).assertIsDisplayed()
+        composeTestRule.onNodeWithTag(START_MAP_LOCATION_ACCESS_TAG).assertDoesNotExist()
+        composeTestRule.onNodeWithTag(ACTIVE_RUN_MAP_DIALOG_TAG).assertDoesNotExist()
+        composeTestRule.onNodeWithText("© OpenStreetMap contributors").assertDoesNotExist()
+        assertTrue(nativeMapViewsInActivity().isEmpty())
+
+        composeTestRule.onNodeWithTag("startExpandMap").performScrollTo().performClick()
+        composeTestRule.onNodeWithTag(ACTIVE_RUN_MAP_DIALOG_TAG).assertIsDisplayed()
+        composeTestRule.onNodeWithText("Enable precise location to show your position.").assertIsDisplayed()
+        composeTestRule.onNodeWithText("© OpenStreetMap contributors").assertIsDisplayed()
+        composeTestRule.onNodeWithTag(START_MAP_LOCATION_ACCESS_TAG).assertIsDisplayed().performClick()
+        composeTestRule.runOnIdle {
+            assertEquals(1, locationRequests)
+            assertEquals(0, starts)
+        }
+        assertTrue(nativeMapViewsInActivity().isEmpty())
+
+        composeTestRule.onNodeWithText("Close map").performClick()
+        composeTestRule.onNodeWithTag(ACTIVE_RUN_MAP_DIALOG_TAG).assertDoesNotExist()
+        composeTestRule.onNodeWithTag(START_MAP_LOCATION_ACCESS_TAG).assertDoesNotExist()
+        composeTestRule.onNodeWithTag(START_RUN_BUTTON_TAG).assertIsDisplayed()
+        composeTestRule.onNodeWithText("© OpenStreetMap contributors").assertDoesNotExist()
+        composeTestRule.runOnIdle {
+            assertEquals(0, starts)
+            gpsSelected = false
+        }
+        composeTestRule.onNodeWithTag("startExpandMap").assertDoesNotExist()
+        assertTrue(nativeMapViewsInActivity().isEmpty())
+        composeTestRule.runOnIdle { gpsSelected = true; open = true }
+        composeTestRule.onNodeWithTag(START_RUN_MAP_START_TAG).assertIsDisplayed().performClick()
+        composeTestRule.onNodeWithText(COUNTDOWN).assertIsDisplayed()
+        // A stale expanded flag cannot put a live preview behind the countdown.
+        composeTestRule.onNodeWithTag(ACTIVE_RUN_MAP_DIALOG_TAG).assertDoesNotExist()
+        composeTestRule.onNodeWithText("© OpenStreetMap contributors").assertDoesNotExist()
+        composeTestRule.runOnIdle { assertEquals(1, starts) }
+        assertTrue(nativeMapViewsInActivity().isEmpty())
+    }
+
+    @Test
+    fun nativeMapsOpenOnlyOnRequestAndActiveMapUsesItsOwnEvidence() {
+        // Deliberately synthetic public-park coordinates. No Room run, device location engine,
+        // community map tiles, reflection provider or audio is used by this integrated check.
+        val previewPoint = GpsMapCoordinate(29.7174, -95.3905)
+        val runStart = GpsMapCoordinate(29.7180, -95.3900)
+        val runPoint = GpsMapCoordinate(29.7185, -95.3897)
+        var state by mutableStateOf(RunUiState.ReadyToStart)
+        var evidence by mutableStateOf<GpsMapEvidence?>(GpsMapEvidence(
+            "foreground-gps-preview", true,
+            marker = GpsMapMarker(previewPoint, 6.0, GpsMapMarkerState.CURRENT)))
+        var expanded by mutableStateOf(false)
+        var starts = 0
+        var pauses = 0
+        var resumes = 0
+        composeTestRule.setContent {
+            RunStateScreen(
+                model = RunUiModel(state), countdownDigit = 3,
+                metrics = fixtureMetrics().copy(sourceLabel = "GPS metrics · partial", gpsDistanceAvailable = true),
+                onStart = { starts++; expanded = false; state = RunUiState.Countdown },
+                onCancelCountdown = {},
+                onRetryInitialization = {}, onRetryStart = {},
+                onPause = {
+                    pauses++
+                    state = RunUiState.ActivePaused
+                    evidence = evidence?.copy(marker = evidence?.marker?.copy(state = GpsMapMarkerState.PAUSED))
+                },
+                onResume = {
+                    resumes++
+                    state = RunUiState.ActiveRunning
+                    evidence = evidence?.copy(marker = evidence?.marker?.copy(state = GpsMapMarkerState.LAST_KNOWN))
+                }, onStop = {}, onStartAnother = {},
+                gpsSelected = true, gpsReady = true, isGpsRun = true, gpsServicePresent = true,
+                gpsSignalStatus = GpsSignalStatus.RECORDING,
+                liveMapEnabled = true, mapEvidence = evidence, nativeMapsEnabled = true,
+                loadStreetTiles = false, previewMapStatus = "Current preview location",
+                onOpenRunMap = { expanded = true }, mapExpanded = expanded,
+                onCloseRunMap = { expanded = false },
+                modifier = Modifier.fillMaxSize().systemBarsPadding().testTag("syntheticLiveMapJourney")
+            )
+        }
+        // Even an immediately available GPS preview cannot create a native map before a tap.
+        composeTestRule.onNodeWithTag(START_RUN_BUTTON_TAG).assertIsDisplayed()
+        composeTestRule.onNodeWithTag(ACTIVE_RUN_MAP_DIALOG_TAG).assertDoesNotExist()
+        composeTestRule.onNodeWithText("© OpenStreetMap contributors").assertDoesNotExist()
+        assertTrue(nativeMapViewsInActivity().isEmpty())
+        saveNativePreview("syntheticLiveMapJourney", "start-live-map-preview.png")
+        composeTestRule.onNodeWithTag("startExpandMap").performScrollTo().performClick()
+        composeTestRule.waitUntil(15_000L) { nativeMapViewsInActivity().size == 1 }
+        val firstView = nativeMapViewsInActivity().single()
+        val map = AtomicReference<MapLibreMap?>(null)
+        composeTestRule.runOnUiThread { firstView.getMapAsync { map.set(it) } }
+
+        fun assertInteractiveMap() {
+            composeTestRule.runOnUiThread {
+                val settings = checkNotNull(map.get()).uiSettings
+                assertTrue("The explicitly opened map allows panning", settings.isScrollGesturesEnabled)
+                assertTrue("The explicitly opened map allows zooming", settings.isZoomGesturesEnabled)
+                assertFalse("The running map stays north-up", settings.isRotateGesturesEnabled)
+                assertFalse("The running map stays flat", settings.isTiltGesturesEnabled)
+            }
+        }
+
+        fun awaitOverlay(marker: GpsMapCoordinate?, hasRoute: Boolean) {
+            composeTestRule.waitUntil(15_000L) {
+                var matches = false
+                composeTestRule.runOnUiThread {
+                    val style = map.get()?.style
+                    val markerSource = style?.getSourceAs<GeoJsonSource>("runstate-marker")
+                    val routeSource = style?.getSourceAs<GeoJsonSource>("runstate-route")
+                    val anchorSource = style?.getSourceAs<GeoJsonSource>("runstate-anchors")
+                    if (markerSource != null && routeSource != null && anchorSource != null) {
+                        val points = markerSource.querySourceFeatures(null).mapNotNull { it.geometry() as? Point }
+                        val markerMatches = if (marker == null) points.isEmpty() else points.isNotEmpty() && points.all {
+                            kotlin.math.abs(it.latitude() - marker.latitude) < 0.0001 &&
+                                kotlin.math.abs(it.longitude() - marker.longitude) < 0.0001
+                        }
+                        val routeMatches = routeSource.querySourceFeatures(null).isNotEmpty() == hasRoute
+                        val noOldAnchors = marker != null || anchorSource.querySourceFeatures(null).isEmpty()
+                        matches = markerMatches && routeMatches && noOldAnchors
+                    }
+                }
+                matches
+            }
+        }
+
+        awaitOverlay(previewPoint, hasRoute = false)
+        assertInteractiveMap()
+        composeTestRule.onNodeWithText("© OpenStreetMap contributors").assertIsDisplayed()
+        composeTestRule.onNodeWithTag(START_RUN_BUTTON_TAG).assertDoesNotExist()
+        composeTestRule.runOnIdle { assertEquals(0, starts) }
+
+        composeTestRule.onNodeWithText("Close map").performClick()
+        composeTestRule.onNodeWithTag(ACTIVE_RUN_MAP_DIALOG_TAG).assertDoesNotExist()
+        composeTestRule.onNodeWithTag(START_RUN_BUTTON_TAG).assertIsDisplayed()
+        composeTestRule.onNodeWithText("© OpenStreetMap contributors").assertDoesNotExist()
+        composeTestRule.waitUntil(15_000L) { nativeMapViewsInActivity().isEmpty() }
+
+        composeTestRule.onNodeWithTag(START_RUN_BUTTON_TAG).assertIsDisplayed().performClick()
+        composeTestRule.onNodeWithText(COUNTDOWN).assertIsDisplayed()
+        composeTestRule.runOnIdle { assertEquals(1, starts) }
+        assertTrue(nativeMapViewsInActivity().isEmpty())
+
+        composeTestRule.runOnIdle {
+            state = RunUiState.ActiveRunning
+            evidence = GpsMapEvidence("synthetic-running-owner", true)
+        }
+        composeTestRule.onNodeWithText(PAUSE).assertIsEnabled()
+        composeTestRule.onNodeWithTag(ACTIVE_RUN_MAP_DIALOG_TAG).assertDoesNotExist()
+        assertTrue(nativeMapViewsInActivity().isEmpty())
+        saveNativePreview("syntheticLiveMapJourney", "active-live-map-preview.png")
+        composeTestRule.onNodeWithTag(ACTIVE_RUN_MAP_BUTTON_TAG).performScrollTo().performClick()
+        composeTestRule.onNodeWithTag(ACTIVE_RUN_MAP_DIALOG_TAG).assertIsDisplayed()
+        composeTestRule.onNodeWithText(PAUSE).assertIsEnabled()
+        // The old preview must not be recycled as this run's first location.
+        assertTrue(nativeMapViewsInActivity().isEmpty())
+
+        composeTestRule.runOnIdle {
+            evidence = GpsMapEvidence("synthetic-running-owner", true,
+                sections = listOf(listOf(runStart, runPoint)),
+                marker = GpsMapMarker(runPoint, 6.0, GpsMapMarkerState.CURRENT))
+        }
+        composeTestRule.waitUntil(15_000L) { nativeMapViewsInActivity().size == 1 }
+        val activeView = nativeMapViewsInActivity().single()
+        assertFalse("Closing Start must dispose its renderer", firstView === activeView)
+        map.set(null)
+        composeTestRule.runOnUiThread { activeView.getMapAsync { map.set(it) } }
+        awaitOverlay(runPoint, hasRoute = true)
+        assertInteractiveMap()
+        composeTestRule.onNodeWithTag(RECORDED_RUN_MAP_RECENTER_TAG).assertIsDisplayed().performClick()
+        composeTestRule.onNodeWithText(PAUSE).performClick()
+        composeTestRule.onNodeWithText(RESUME).assertIsEnabled()
+        composeTestRule.runOnIdle { assertEquals(1, pauses) }
+
+        composeTestRule.activityRule.scenario.moveToState(Lifecycle.State.CREATED)
+        composeTestRule.activityRule.scenario.moveToState(Lifecycle.State.RESUMED)
+        composeTestRule.onNodeWithText(RESUME).assertIsEnabled()
+        assertSame(activeView, nativeMapViewsInActivity().single())
+        assertInteractiveMap()
+        awaitOverlay(runPoint, hasRoute = true)
+        composeTestRule.onNodeWithText(RESUME).performClick()
+        composeTestRule.onNodeWithText(PAUSE).assertIsEnabled()
+        composeTestRule.runOnIdle { assertEquals(1, resumes) }
+        composeTestRule.runOnIdle { evidence = null }
+        awaitOverlay(null, hasRoute = false)
+        composeTestRule.onNodeWithText("Close map").performClick()
+        composeTestRule.onNodeWithTag(ACTIVE_RUN_MAP_DIALOG_TAG).assertDoesNotExist()
+        composeTestRule.onNodeWithText(PAUSE).assertIsEnabled()
+        composeTestRule.onNodeWithTag(ACTIVE_RUN_MAP_BUTTON_TAG).assertIsDisplayed()
+        composeTestRule.onNodeWithText("© OpenStreetMap contributors").assertDoesNotExist()
+        composeTestRule.waitUntil(15_000L) { nativeMapViewsInActivity().isEmpty() }
+    }
+
+    /** Inspect the real Android view tree, rather than counting a Compose placeholder tag. */
+    private fun nativeMapViewsInActivity(): List<MapView> {
+        val found = mutableListOf<MapView>()
+        composeTestRule.runOnUiThread {
+            fun visit(view: View) {
+                if (view is MapView) found.add(view)
+                if (view is ViewGroup) for (index in 0 until view.childCount) visit(view.getChildAt(index))
+            }
+            visit(composeTestRule.activity.window.decorView)
+        }
+        return found
     }
 
     @Test

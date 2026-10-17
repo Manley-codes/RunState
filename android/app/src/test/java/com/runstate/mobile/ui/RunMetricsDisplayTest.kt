@@ -16,11 +16,17 @@ import com.runstate.mobile.data.local.RunTransitionType
 import com.runstate.mobile.data.local.RunTrackingMode
 import com.runstate.mobile.data.local.StoredRunState
 import com.runstate.mobile.data.local.TelemetryCoverage
+import com.runstate.mobile.data.local.RunWeatherEntity
+import com.runstate.mobile.data.local.RunWeatherStatus
+import com.runstate.mobile.weather.RunWeatherSnapshot
 import com.runstate.mobile.run.RunMetrics
 import java.time.Instant
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /** Checks metric text without Compose, a database or an Android device. */
@@ -29,6 +35,84 @@ class RunMetricsDisplayTest {
     private val historyRunId = "123e4567-e89b-12d3-a456-426614174000"
     private val historyRequestId = "123e4567-e89b-12d3-a456-426614174001"
     private val historyStart = Instant.parse("2026-10-12T01:30:00Z").toEpochMilli()
+
+    @Test
+    fun `saved weather uses the provider hour and run timezone with honest units`() {
+        val run = sharingHistoryRun()
+        val hour = historyStart / 3_600_000L * 3_600_000L
+        val snapshot = RunWeatherSnapshot(targetEpochMillis = historyStart,
+            validFromEpochMillis = hour, validToEpochMillis = hour + 3_600_000L,
+            fetchedAtEpochMillis = historyStart + 5_000L, temperatureCelsius = 20.0,
+            apparentTemperatureCelsius = 21.0, relativeHumidityPercent = 60.0,
+            windSpeedKmh = 16.09344, weatherCode = 0)
+        val record = RunWeatherEntity(run.runId, RunWeatherStatus.READY, snapshot.toJson())
+        assertEquals("68°F · Clear sky\nNear start · 8:00 PM hourly estimate\n" +
+            "Feels like 70°F · Humidity 60% · Wind 10 mph", weatherSummaryFor(run, record))
+        assertTrue(requireNotNull(weatherSummaryFor(run.copy(startTimezoneId = "UTC"), record))
+            .contains("1:00 AM hourly estimate"))
+        assertTrue(requireNotNull(weatherSummaryFor(run.copy(displayDistanceUnit = DistanceUnit.KILOMETERS,
+            metricSource = MetricSource.FIXTURE, telemetryCoverage = TelemetryCoverage.PARTIAL,
+            finalDistanceMeters = 1_000.0), record))
+            .contains("20°C · Clear sky"))
+    }
+
+    @Test
+    fun `old disabled pending and damaged weather never invent weather values`() {
+        val run = sharingHistoryRun()
+        assertNull(weatherSummaryFor(run, null))
+        assertNull(weatherSummaryFor(run, RunWeatherEntity(run.runId, RunWeatherStatus.DISABLED)))
+        assertEquals("Weather near start · Unavailable",
+            weatherSummaryFor(run, RunWeatherEntity(run.runId, RunWeatherStatus.PENDING)))
+        assertEquals("Weather near start · Unavailable",
+            weatherSummaryFor(run, RunWeatherEntity(run.runId, RunWeatherStatus.READY, "not json")))
+        assertEquals("Weather near start · Unavailable",
+            weatherSummaryFor(run, RunWeatherEntity(run.runId, RunWeatherStatus.UNAVAILABLE)))
+    }
+
+    @Test
+    fun `optional music read failure preserves saved run and reflection history`() = runBlocking {
+        val run = sharingHistoryRun()
+        val reflection = musicSnapshotReflection("{\"state\":\"UNKNOWN\"}").copy(
+            status = ReflectionStatus.READY,
+            selectedBranch = ReflectionBranch.FEELING_GOOD,
+            postRunEnergy = ReflectionBranch.FEELING_GOOD,
+            text = "Your saved reflection.\nExactly as delivered.",
+            finalizedAtEpochMillis = historyStart + 607_000L,
+            isTestData = false
+        )
+        val expected = historyItemFor(run, emptyList(), reflection)
+        val item = historyItemWithOptionalMusic(run, emptyList(), reflection) {
+            throw IllegalStateException("Unavailable music store")
+        }
+
+        assertEquals(expected.copy(musicObservationsUnavailable = true), item)
+        assertTrue(item.musicObservationsUnavailable)
+        assertNull(item.lastObservedMedia)
+    }
+
+    @Test
+    fun `empty music result is unknown evidence rather than a loading failure`() = runBlocking {
+        val item = historyItemWithOptionalMusic(sharingHistoryRun(), emptyList(), null) { emptyList() }
+        assertFalse(item.musicObservationsUnavailable)
+        assertEquals(0, item.musicObservationCount)
+    }
+
+    @Test
+    fun `history does not query optional music for an opted out run`() = runBlocking {
+        val run = historyRun(finish = historyStart + 600_000L, historyComplete = false)
+        val item = historyItemWithOptionalMusic(run, emptyList(), null) {
+            throw AssertionError("Opted-out music must not be read")
+        }
+        assertEquals(historyItemFor(run, emptyList(), null), item)
+    }
+
+    @Test(expected = CancellationException::class)
+    fun `leaving history cancels its music read instead of showing unavailable data`() = runBlocking {
+        historyItemWithOptionalMusic(sharingHistoryRun(), emptyList(), null) {
+            throw CancellationException("History closed")
+        }
+        Unit
+    }
 
     @Test
     fun `completion date uses saved finish and timezone across the utc date boundary`() {

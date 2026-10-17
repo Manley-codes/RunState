@@ -75,6 +75,8 @@ dependencies {
     // left to arrive through Compose and Lifecycle.
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.gson)
+    implementation(libs.maplibre)
+    implementation(libs.okhttp)
 
     ksp(libs.androidx.room.compiler)
     testImplementation(libs.junit)

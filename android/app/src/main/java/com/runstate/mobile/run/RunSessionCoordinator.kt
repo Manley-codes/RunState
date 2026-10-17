@@ -8,6 +8,9 @@ import com.runstate.mobile.data.local.RunDao
 import com.runstate.mobile.data.local.RunEntity
 import com.runstate.mobile.data.local.RunLocationPointEntity
 import com.runstate.mobile.location.GpsCoverageEvaluator
+import com.runstate.mobile.location.GpsMapEvidence
+import com.runstate.mobile.location.GpsSignalStatus
+import com.runstate.mobile.location.gpsMapEvidenceFor
 import com.runstate.mobile.data.local.PreRunEnergy
 import com.runstate.mobile.data.local.RunTransitionEntity
 import com.runstate.mobile.data.local.RunTrackingMode
@@ -653,6 +656,39 @@ internal class RunSessionCoordinator(
         lastPublishedMetrics = published
         published
     }
+
+    /**
+     * Optional map evidence for the same live owner. This read never starts location collection,
+     * writes a run or relies on a previous metrics read. Its append-only cache is shared under the
+     * same lock, and disappears when that run retires. A failed map read cannot stop the run.
+     */
+    suspend fun runMapEvidence(signalStatus: GpsSignalStatus? = null): GpsMapEvidence? =
+        coordinatorLock.withLock {
+            if (initializationStatus != InitializationStatus.Completed ||
+                inconsistentActiveRuns.isNotEmpty()
+            ) return@withLock null
+            val session = activeSession ?: return@withLock null
+            val run = metricRun?.takeIf { it.runId == session.runId } ?: return@withLock null
+            if (run.state == StoredRunState.COMPLETED) return@withLock null
+            if (run.trackingMode != RunTrackingMode.GPS) {
+                return@withLock GpsMapEvidence(run.runId, isGpsRun = false)
+            }
+            try {
+                val store = locationDao ?: return@withLock GpsMapEvidence(
+                    run.runId, isGpsRun = true, evidenceUnavailable = true)
+                val transitions = metricTransitions ?: runDao.transitionsFor(run.runId).toList()
+                    .also { metricTransitions = it }
+                metricGpsPoints.addAll(store.pointsAfter(run.runId,
+                    metricGpsPoints.lastOrNull()?.sequenceNumber ?: 0))
+                val now = preparedRunFactory.readTime()
+                gpsMapEvidenceFor(run, transitions, metricGpsPoints, now.epochMillis,
+                    now.timingMark, signalStatus)
+            } catch (cancellation: CancellationException) {
+                throw cancellation
+            } catch (_: Exception) {
+                GpsMapEvidence(run.runId, isGpsRun = true, evidenceUnavailable = true)
+            }
+        }
 
     /** Both answers from the current fields. Only ever called with [coordinatorLock] held. */
     private fun snapshotUnderLock(): RunJourneySnapshot {
