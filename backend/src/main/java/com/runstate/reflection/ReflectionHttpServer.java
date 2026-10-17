@@ -35,10 +35,13 @@ import java.util.concurrent.atomic.AtomicInteger;
 public final class ReflectionHttpServer implements AutoCloseable {
 
     public static final String CANDIDATES_PATH = "/api/reflections/candidates";
+    public static final String SPEECH_PATH = "/api/reflections/speech";
     public static final String HEALTH_PATH = "/health";
     public static final String SONG_CUE_CAPABILITY_HEADER = "X-RunState-Song-Cue";
+    public static final String REFLECTION_VOICE_CAPABILITY_HEADER = "X-RunState-Reflection-Voice";
     public static final int MAX_REQUEST_BYTES = 64 * 1024;
     public static final int MAX_RESPONSE_BYTES = 64 * 1024;
+    public static final int MAX_AUDIO_RESPONSE_BYTES = 2 * 1024 * 1024;
     public static final int MAX_CONCURRENT_PROVIDER_CALLS = 2;
     public static final int MAX_CACHED_REQUESTS = 256;
 
@@ -46,6 +49,12 @@ public final class ReflectionHttpServer implements AutoCloseable {
     public enum GenerationMode {
         FAKE,
         ANTHROPIC
+    }
+
+    /** Injected voice generation receives only the selected reflection's exact text. */
+    @FunctionalInterface
+    public interface SpeechProvider {
+        byte[] synthesize(String text) throws ReflectionProviderException;
     }
 
     private static final String JSON_CONTENT_TYPE = "application/json; charset=utf-8";
@@ -58,6 +67,7 @@ public final class ReflectionHttpServer implements AutoCloseable {
     );
 
     private final ReflectionProvider provider;
+    private final SpeechProvider speechProvider;
     private final GenerationMode generationMode;
     private final HttpServer server;
     private final ExecutorService executor;
@@ -74,9 +84,11 @@ public final class ReflectionHttpServer implements AutoCloseable {
             GenerationMode generationMode,
             RemoteAccess remoteAccess,
             int maxConcurrentProviderCalls,
-            int maxCachedRequests
+            int maxCachedRequests,
+            SpeechProvider speechProvider
     ) throws IOException {
         this.provider = Objects.requireNonNull(provider, "provider");
+        this.speechProvider = speechProvider;
         this.generationMode = Objects.requireNonNull(generationMode, "generationMode");
         requirePort(port);
         if (maxConcurrentProviderCalls < 1 || maxConcurrentProviderCalls >= SERVER_THREADS ||
@@ -110,8 +122,14 @@ public final class ReflectionHttpServer implements AutoCloseable {
             int port,
             GenerationMode generationMode
     ) throws IOException {
+        return create(provider, port, generationMode, null);
+    }
+
+    /** Voice is optional; legacy callers keep their existing reflection-only behavior. */
+    public static ReflectionHttpServer create(ReflectionProvider provider, int port,
+            GenerationMode generationMode, SpeechProvider speechProvider) throws IOException {
         return new ReflectionHttpServer(provider, port, generationMode, null,
-                MAX_CONCURRENT_PROVIDER_CALLS, MAX_CACHED_REQUESTS);
+                MAX_CONCURRENT_PROVIDER_CALLS, MAX_CACHED_REQUESTS, speechProvider);
     }
 
     /**
@@ -125,8 +143,14 @@ public final class ReflectionHttpServer implements AutoCloseable {
             GenerationMode generationMode,
             RemoteAccess remoteAccess
     ) throws IOException {
+        return createRemote(provider, port, generationMode, remoteAccess, null);
+    }
+
+    public static ReflectionHttpServer createRemote(ReflectionProvider provider, int port,
+            GenerationMode generationMode, RemoteAccess remoteAccess, SpeechProvider speechProvider)
+            throws IOException {
         return createRemote(provider, port, generationMode, remoteAccess,
-                MAX_CONCURRENT_PROVIDER_CALLS, MAX_CACHED_REQUESTS);
+                MAX_CONCURRENT_PROVIDER_CALLS, MAX_CACHED_REQUESTS, speechProvider);
     }
 
     /** Smaller limits let loopback tests prove admission without filling the demo cache. */
@@ -138,9 +162,16 @@ public final class ReflectionHttpServer implements AutoCloseable {
             int maxConcurrentProviderCalls,
             int maxCachedRequests
     ) throws IOException {
+        return createRemote(provider, port, generationMode, remoteAccess,
+                maxConcurrentProviderCalls, maxCachedRequests, null);
+    }
+
+    static ReflectionHttpServer createRemote(ReflectionProvider provider, int port,
+            GenerationMode generationMode, RemoteAccess remoteAccess, int maxConcurrentProviderCalls,
+            int maxCachedRequests, SpeechProvider speechProvider) throws IOException {
         return new ReflectionHttpServer(provider, port, generationMode,
                 Objects.requireNonNull(remoteAccess, "remoteAccess"),
-                maxConcurrentProviderCalls, maxCachedRequests);
+                maxConcurrentProviderCalls, maxCachedRequests, speechProvider);
     }
 
     private static void requirePort(int port) {
@@ -220,13 +251,17 @@ public final class ReflectionHttpServer implements AutoCloseable {
             }
             // Liveness only: no provider call, credentials, run data, or configuration disclosure.
             exchange.getResponseHeaders().set(SONG_CUE_CAPABILITY_HEADER, "1");
+            if (speechProvider != null) {
+                exchange.getResponseHeaders().set(REFLECTION_VOICE_CAPABILITY_HEADER, "1");
+            }
             return new EndpointResponse(200, "{\"status\":\"ok\"}");
         }
         if (remoteAccess != null && !remoteAccess.authorizes(exchange)) {
             exchange.getResponseHeaders().set("WWW-Authenticate", "Bearer");
             return error(401, "unauthorized", "A valid demo access token is required.");
         }
-        if (!CANDIDATES_PATH.equals(exchange.getRequestURI().getRawPath())) {
+        boolean speech = SPEECH_PATH.equals(exchange.getRequestURI().getRawPath());
+        if (!speech && !CANDIDATES_PATH.equals(exchange.getRequestURI().getRawPath())) {
             return error(404, "not_found", "The requested endpoint does not exist.");
         }
         if (exchange.getRequestURI().getRawQuery() != null) {
@@ -254,6 +289,9 @@ public final class ReflectionHttpServer implements AutoCloseable {
         }
 
         byte[] body = readBoundedBody(exchange);
+        if (speech) {
+            return synthesizeSpeech(ReflectionApiJson.parseSpeechRequest(body));
+        }
         ApiRequest request = ReflectionApiJson.parseRequest(body);
         return generateOnce(request);
     }
@@ -346,6 +384,39 @@ public final class ReflectionHttpServer implements AutoCloseable {
                     "The reflection request could not be completed."
             );
         }
+    }
+
+    private EndpointResponse synthesizeSpeech(String text) {
+        if (speechProvider == null) {
+            return error(503, "provider_unavailable", "The reflection voice is not configured.");
+        }
+        if (!providerSlots.tryAcquire()) {
+            return error(503, "server_busy", "The reflection service is busy. Try again later.");
+        }
+        try {
+            byte[] audio = speechProvider.synthesize(text);
+            if (audio == null || audio.length == 0 || audio.length > MAX_AUDIO_RESPONSE_BYTES) {
+                return speechProviderFailure(FailureType.INVALID_RESPONSE);
+            }
+            // Audio remains request-scoped: no cache entry, filename or durable storage.
+            return new EndpointResponse(200, audio, "audio/mpeg");
+        } catch (ReflectionProviderException failure) {
+            return speechProviderFailure(failure.failureType());
+        } catch (RuntimeException unexpected) {
+            return error(500, "internal_error", "The reflection voice could not be generated.");
+        } finally {
+            providerSlots.release();
+        }
+    }
+
+    private static EndpointResponse speechProviderFailure(FailureType failureType) {
+        return switch (failureType) {
+            case TIMEOUT -> error(504, "provider_timeout", "The reflection voice provider timed out.");
+            case CONFIGURATION, TRANSPORT -> error(503, "provider_unavailable",
+                    "The reflection voice provider is unavailable.");
+            case PROVIDER_ERROR, REFUSAL, TRUNCATED, INVALID_RESPONSE -> error(502, "provider_failure",
+                    "The reflection voice provider could not produce valid audio.");
+        };
     }
 
     private static EndpointResponse providerFailure(FailureType failureType) {
@@ -512,8 +583,8 @@ public final class ReflectionHttpServer implements AutoCloseable {
 
     private static void writeResponse(HttpExchange exchange, EndpointResponse response)
             throws IOException {
-        byte[] body = response.body().getBytes(StandardCharsets.UTF_8);
-        exchange.getResponseHeaders().set("Content-Type", JSON_CONTENT_TYPE);
+        byte[] body = response.body();
+        exchange.getResponseHeaders().set("Content-Type", response.contentType());
         exchange.getResponseHeaders().set("Cache-Control", "no-store");
         exchange.getResponseHeaders().set("X-Content-Type-Options", "nosniff");
         try {
@@ -530,7 +601,10 @@ public final class ReflectionHttpServer implements AutoCloseable {
     ) {
     }
 
-    private record EndpointResponse(int status, String body) {
+    private record EndpointResponse(int status, byte[] body, String contentType) {
+        EndpointResponse(int status, String body) {
+            this(status, body.getBytes(StandardCharsets.UTF_8), JSON_CONTENT_TYPE);
+        }
     }
 
     private static final class RequestTooLargeException extends Exception {

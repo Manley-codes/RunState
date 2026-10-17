@@ -40,6 +40,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertAll;
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -64,6 +65,227 @@ class ReflectionHttpServerTest {
     private final HttpClient client = HttpClient.newBuilder()
             .connectTimeout(Duration.ofSeconds(2))
             .build();
+
+    @Test
+    void reflectionSpeechPreservesExactTextAndReturnsOnlyUncachedMp3Bytes() throws Exception {
+        String exact = "  Your exact reflection.\nA second line — unchanged.  ";
+        byte[] audio = new byte[]{'I', 'D', '3', 0, (byte) 0xff, 1};
+        AtomicReference<String> spoken = new AtomicReference<>();
+        AtomicInteger reflections = new AtomicInteger();
+        try (ReflectionHttpServer server = ReflectionHttpServer.create(evidence -> {
+            reflections.incrementAndGet();
+            return exactCandidates();
+        }, 0, ReflectionHttpServer.GenerationMode.ANTHROPIC, text -> {
+            spoken.set(text);
+            return audio;
+        })) {
+            server.start();
+            HttpResponse<byte[]> response = client.send(speechRequest(server, speechBody(exact)),
+                    HttpResponse.BodyHandlers.ofByteArray());
+            HttpResponse<String> health = client.send(HttpRequest.newBuilder(URI.create("http://127.0.0.1:"
+                    + server.address().getPort() + ReflectionHttpServer.HEALTH_PATH)).GET().build(),
+                    HttpResponse.BodyHandlers.ofString());
+            assertAll(
+                    () -> assertEquals(200, response.statusCode()),
+                    () -> assertArrayEquals(audio, response.body()),
+                    () -> assertEquals(exact, spoken.get()),
+                    () -> assertEquals("audio/mpeg", response.headers().firstValue("Content-Type").orElseThrow()),
+                    () -> assertEquals("no-store", response.headers().firstValue("Cache-Control").orElseThrow()),
+                    () -> assertEquals("nosniff", response.headers().firstValue("X-Content-Type-Options").orElseThrow()),
+                    () -> assertEquals("1", health.headers().firstValue(
+                            ReflectionHttpServer.REFLECTION_VOICE_CAPABILITY_HEADER).orElseThrow()),
+                    () -> assertEquals("{\"status\":\"ok\"}", health.body()),
+                    () -> assertEquals(0, reflections.get())
+            );
+        }
+    }
+
+    @Test
+    void missingSpeechProviderDoesNotAdvertiseVoiceAndFailsWithoutCallingReflection() throws Exception {
+        AtomicInteger calls = new AtomicInteger();
+        try (ReflectionHttpServer server = start(evidence -> {
+            calls.incrementAndGet();
+            return exactCandidates();
+        })) {
+            HttpResponse<String> response = client.send(speechRequest(server, speechBody("Exact reflection.")),
+                    HttpResponse.BodyHandlers.ofString());
+            HttpResponse<String> health = client.send(HttpRequest.newBuilder(URI.create("http://127.0.0.1:"
+                    + server.address().getPort() + ReflectionHttpServer.HEALTH_PATH)).GET().build(),
+                    HttpResponse.BodyHandlers.ofString());
+            assertEquals(503, response.statusCode());
+            assertTrue(health.headers().firstValue(ReflectionHttpServer.REFLECTION_VOICE_CAPABILITY_HEADER).isEmpty());
+            assertEquals(0, calls.get());
+        }
+    }
+
+    @Test
+    void invalidSpeechJsonTypesExtrasDuplicatesLengthAndUnicodeNeverReachProvider() throws Exception {
+        AtomicInteger calls = new AtomicInteger();
+        try (ReflectionHttpServer server = startSpeech(text -> {
+            calls.incrementAndGet();
+            return "ID3fixture".getBytes(StandardCharsets.US_ASCII);
+        })) {
+            List<String> badJson = List.of("not-json", "[]", "{\"text\":\"first\",\"text\":\"second\"}",
+                    "{\"text\":\"valid\"} trailing");
+            for (String body : badJson) {
+                assertEquals(400, client.send(speechRequest(server, body), HttpResponse.BodyHandlers.ofString()).statusCode());
+            }
+            for (String body : List.of("{}", "{\"text\":null}", "{\"text\":3}", "{\"text\":[]}",
+                    "{\"text\":\"exact\",\"voice_id\":\"unrequested\"}", speechBody(""), speechBody("  \t\n"),
+                    speechBody("x".repeat(4_001)), "{\"text\":\"" + "\\" + "ud800\"}")) {
+                assertEquals(400, client.send(speechRequest(server, body), HttpResponse.BodyHandlers.ofString()).statusCode());
+            }
+            HttpRequest malformedUtf8 = HttpRequest.newBuilder(URI.create("http://127.0.0.1:"
+                    + server.address().getPort() + ReflectionHttpServer.SPEECH_PATH))
+                    .header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofByteArray(new byte[]{(byte) 0xc3, 0x28})).build();
+            assertEquals(400, client.send(malformedUtf8, HttpResponse.BodyHandlers.ofString()).statusCode());
+            assertEquals(0, calls.get());
+            assertEquals(200, client.send(speechRequest(server, speechBody("x".repeat(4_000))),
+                    HttpResponse.BodyHandlers.ofString()).statusCode());
+            assertEquals(1, calls.get());
+        }
+    }
+
+    @Test
+    void speechRetainsRemoteAuthenticationHostOriginAndHttpGuardsBeforeCallingProvider() throws Exception {
+        AtomicInteger calls = new AtomicInteger();
+        try (ReflectionHttpServer server = startRemoteSpeech(evidence -> exactCandidates(), text -> {
+            calls.incrementAndGet();
+            return "ID3fixture".getBytes(StandardCharsets.US_ASCII);
+        }, 1, 4)) {
+            String path = ReflectionHttpServer.SPEECH_PATH;
+            String body = speechBody("Exact reflection.");
+            assertError(rawRequest(server, "POST", path, List.of("Host: " + DEMO_HOST), "{"),
+                    401, "unauthorized");
+            for (List<String> headers : List.of(
+                    List.of("Host: " + DEMO_HOST, "Authorization: Bearer incorrect"),
+                    List.of("Host: " + DEMO_HOST, "Authorization: Bearer " + DUMMY_DEMO_TOKEN,
+                            "Authorization: Bearer " + DUMMY_DEMO_TOKEN))) {
+                assertError(rawRequest(server, "POST", path, headers, body), 401, "unauthorized");
+            }
+            for (List<String> headers : List.of(
+                    List.of("Host: foreign.example", "Authorization: Bearer " + DUMMY_DEMO_TOKEN),
+                    List.of("Host: " + DEMO_HOST, "Authorization: Bearer " + DUMMY_DEMO_TOKEN, "Origin: null"),
+                    List.of("Host: " + DEMO_HOST, "Authorization: Bearer " + DUMMY_DEMO_TOKEN, "Origin:"))) {
+                assertError(rawRequest(server, "POST", path, headers, body), 403, "request_rejected");
+            }
+            assertError(rawRequest(server, "GET", path, remoteHeaders(), body), 405, "method_not_allowed");
+            assertError(rawRequest(server, "POST", path + "?text=ignored", remoteHeaders(), body), 400, "invalid_request");
+            assertError(rawRequest(server, "POST", path, List.of("Host: " + DEMO_HOST,
+                    "Authorization: Bearer " + DUMMY_DEMO_TOKEN, "Content-Type: text/plain"), body),
+                    415, "unsupported_media_type");
+            assertError(rawRequest(server, "POST", path, List.of("Host: " + DEMO_HOST,
+                    "Authorization: Bearer " + DUMMY_DEMO_TOKEN, "Content-Encoding: gzip"), body),
+                    415, "unsupported_media_type");
+            assertError(rawRequest(server, "POST", path, remoteHeaders(),
+                    "x".repeat(ReflectionHttpServer.MAX_REQUEST_BYTES + 1)), 413, "request_too_large");
+            assertEquals(0, calls.get());
+            assertEquals(200, rawRequest(server, "POST", path, remoteHeaders(), body).status());
+            assertEquals(1, calls.get());
+        }
+    }
+
+    @Test
+    void speechDoesNotCacheTextAudioOrConsumeTheReflectionRequestCache() throws Exception {
+        AtomicInteger calls = new AtomicInteger();
+        try (ReflectionHttpServer server = startRemoteSpeech(evidence -> exactCandidates(), text -> {
+            calls.incrementAndGet();
+            return "ID3fixture".getBytes(StandardCharsets.US_ASCII);
+        }, 1, 1)) {
+            for (int index = 0; index < 3; index++) {
+                assertEquals(200, rawRequest(server, "POST", ReflectionHttpServer.SPEECH_PATH,
+                        remoteHeaders(), speechBody("Same exact reflection.")).status());
+            }
+            assertEquals(3, calls.get());
+            assertEquals(200, rawPost(server, remoteHeaders(), validRequest()).status());
+        }
+    }
+
+    @Test
+    void speechAndReflectionGenerationShareTheSameBoundedProviderSlots() throws Exception {
+        for (boolean firstIsSpeech : List.of(true, false)) {
+            CountDownLatch entered = new CountDownLatch(1);
+            CountDownLatch release = new CountDownLatch(1);
+            ReflectionProvider reflections = evidence -> {
+                if (!firstIsSpeech) {
+                    entered.countDown();
+                    try { release.await(5, TimeUnit.SECONDS); }
+                    catch (InterruptedException interrupted) { Thread.currentThread().interrupt(); }
+                }
+                return exactCandidates();
+            };
+            ReflectionHttpServer.SpeechProvider speech = text -> {
+                if (firstIsSpeech) {
+                    entered.countDown();
+                    try { release.await(5, TimeUnit.SECONDS); }
+                    catch (InterruptedException interrupted) { Thread.currentThread().interrupt(); }
+                }
+                return "ID3fixture".getBytes(StandardCharsets.US_ASCII);
+            };
+            try (ReflectionHttpServer server = startRemoteSpeech(reflections, speech, 1, 4)) {
+                CompletableFuture<RawHttpResponse> running = CompletableFuture.supplyAsync(() -> {
+                    try {
+                        return firstIsSpeech ? rawRequest(server, "POST", ReflectionHttpServer.SPEECH_PATH,
+                                remoteHeaders(), speechBody("Exact reflection.")) : rawPost(server, remoteHeaders(), validRequest());
+                    } catch (Exception failure) { throw new CompletionException(failure); }
+                });
+                try {
+                    assertTrue(entered.await(2, TimeUnit.SECONDS));
+                    RawHttpResponse busy = firstIsSpeech ? rawPost(server, remoteHeaders(), validRequest())
+                            : rawRequest(server, "POST", ReflectionHttpServer.SPEECH_PATH,
+                                    remoteHeaders(), speechBody("Exact reflection."));
+                    assertError(busy, 503, "server_busy");
+                } finally {
+                    release.countDown();
+                }
+                assertEquals(200, running.get(3, TimeUnit.SECONDS).status());
+            }
+        }
+    }
+
+    @Test
+    void speechFailuresAreSanitizedReleaseSlotsAndDoNotCacheFailures() throws Exception {
+        for (FailureType type : FailureType.values()) {
+            AtomicInteger calls = new AtomicInteger();
+            try (ReflectionHttpServer server = startSpeech(text -> {
+                if (calls.incrementAndGet() == 1) {
+                    throw new ReflectionProviderException(type, "private-voice-text-and-key");
+                }
+                return "ID3fixture".getBytes(StandardCharsets.US_ASCII);
+            })) {
+                HttpResponse<String> failed = client.send(speechRequest(server, speechBody("Exact reflection.")),
+                        HttpResponse.BodyHandlers.ofString());
+                assertEquals(type == FailureType.TIMEOUT ? 504
+                        : type == FailureType.CONFIGURATION || type == FailureType.TRANSPORT ? 503 : 502,
+                        failed.statusCode());
+                assertFalse(failed.body().contains("private-voice-text-and-key"));
+                assertFalse(failed.body().contains("Exact reflection."));
+                assertTrue(failed.headers().firstValue("Content-Type").orElseThrow().startsWith("application/json"));
+                assertEquals(200, client.send(speechRequest(server, speechBody("Exact reflection.")),
+                        HttpResponse.BodyHandlers.ofString()).statusCode());
+                assertEquals(2, calls.get());
+            }
+        }
+    }
+
+    @Test
+    void emptyOversizedOrUnexpectedSpeechOutputReturnsSanitizedJsonErrors() throws Exception {
+        for (byte[] audio : List.of(new byte[0], new byte[ReflectionHttpServer.MAX_AUDIO_RESPONSE_BYTES + 1])) {
+            try (ReflectionHttpServer server = startSpeech(text -> audio)) {
+                assertEquals(502, client.send(speechRequest(server, speechBody("Exact reflection.")),
+                        HttpResponse.BodyHandlers.ofString()).statusCode());
+            }
+        }
+        try (ReflectionHttpServer server = startSpeech(text -> {
+            throw new IllegalStateException("private-voice-text-and-key");
+        })) {
+            HttpResponse<String> response = client.send(speechRequest(server, speechBody("Exact reflection.")),
+                    HttpResponse.BodyHandlers.ofString());
+            assertEquals(500, response.statusCode());
+            assertFalse(response.body().contains("private-voice-text-and-key"));
+        }
+    }
 
     @Test
     void localFakeSmokePreservesIdentifiersEvidenceAndExactCandidateText() throws Exception {
@@ -909,6 +1131,36 @@ class ReflectionHttpServerTest {
                         ("HTTP/1.1 200 OK\r\nX-Padding: " + "x".repeat(16 * 1024))
                                 .getBytes(StandardCharsets.US_ASCII))))
         );
+    }
+
+    private ReflectionHttpServer startSpeech(ReflectionHttpServer.SpeechProvider speech) throws Exception {
+        ReflectionHttpServer server = ReflectionHttpServer.create(evidence -> exactCandidates(), 0,
+                ReflectionHttpServer.GenerationMode.ANTHROPIC, speech);
+        server.start();
+        return server;
+    }
+
+    private ReflectionHttpServer startRemoteSpeech(ReflectionProvider provider,
+            ReflectionHttpServer.SpeechProvider speech, int providerCalls, int cachedRequests) throws Exception {
+        ReflectionHttpServer server = ReflectionHttpServer.createRemote(provider, 0,
+                ReflectionHttpServer.GenerationMode.ANTHROPIC,
+                new ReflectionHttpServer.RemoteAccess("127.0.0.1", DEMO_HOST, DUMMY_DEMO_TOKEN),
+                providerCalls, cachedRequests, speech);
+        server.start();
+        return server;
+    }
+
+    private static String speechBody(String text) {
+        JsonObject body = new JsonObject();
+        body.addProperty("text", text);
+        return body.toString();
+    }
+
+    private static HttpRequest speechRequest(ReflectionHttpServer server, String body) {
+        return HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + server.address().getPort()
+                        + ReflectionHttpServer.SPEECH_PATH)).timeout(Duration.ofSeconds(5))
+                .header("Content-Type", "application/json; charset=utf-8")
+                .POST(HttpRequest.BodyPublishers.ofString(body, StandardCharsets.UTF_8)).build();
     }
 
     private ReflectionHttpServer startRemote(ReflectionProvider provider, int providerCalls, int cachedRequests)

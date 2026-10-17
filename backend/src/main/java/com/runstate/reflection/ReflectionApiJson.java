@@ -94,6 +94,27 @@ final class ReflectionApiJson {
         return new ApiRequest(identifiers, evidence);
     }
 
+    /** Speech is an exact-text boundary, not a second prompt or a route to arbitrary voice settings. */
+    static String parseSpeechRequest(byte[] utf8Json) throws InvalidJsonException {
+        JsonObject root = parseStrictObject(decodeUtf8(utf8Json));
+        requireFields(root, Set.of("text"), Set.of("text"), "speech request");
+        String text = requiredString(root, "text");
+        if (text.isBlank() || text.length() > 4_000) {
+            throw new IllegalArgumentException("Speech text must contain 1 to 4000 characters.");
+        }
+        for (int index = 0; index < text.length(); index++) {
+            char character = text.charAt(index);
+            if (Character.isHighSurrogate(character)) {
+                if (++index >= text.length() || !Character.isLowSurrogate(text.charAt(index))) {
+                    throw new IllegalArgumentException("Speech text must contain valid Unicode.");
+                }
+            } else if (Character.isLowSurrogate(character)) {
+                throw new IllegalArgumentException("Speech text must contain valid Unicode.");
+            }
+        }
+        return text;
+    }
+
     static String success(
             ApiRequest request,
             CandidateReflections candidates,
