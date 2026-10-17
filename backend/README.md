@@ -144,8 +144,13 @@ speech without music. New requests, including deliberate repeated History reads,
 ElevenLabs credits; there is no durable audio cache. Configure a usage limit on the separate
 speech-only RunState API key. Backend tests use fake speech transports, not paid synthesis.
 The voice code is tested locally and the Android update is installed; Render's private key is
-saved. It still needs the user to commit/push this voice implementation and deploy that copy.
-No live custom-voice generation or hearing result is claimed yet.
+saved. Manley committed/pushed through `cb23da6`; that version deployed successfully in 55.2 seconds
+and public health advertises voice support. A separate gated real Moto check passed in 40.732
+seconds: local sample facts completed, actual cloud MP3 was accepted and naturally completed with
+no local reflection fallback, then the instrumental completed. Manley confirmed all three sounded
+right. All 32 saved runs/fields were unchanged and temporary test material was removed. Capability
+alone does not establish synthesis; this separate real check does. It proves the selected voice
+sequence, not song ranking or automatic passage selection for other recordings.
 
 The Anthropic adapter's initial limits are a 10-second connection timeout, a 45-second request timeout, and 2,048 output
 tokens. These are starting safety bounds, not measured latency or quality guarantees. Failures are

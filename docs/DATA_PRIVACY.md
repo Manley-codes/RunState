@@ -23,18 +23,20 @@ the backend key. Manley separately saved that key on Render and deployed `bfc64a
 credential settings alone do not configure hosting. No phone preference changed. Broader
 tester-facing consent remains separate.
 
-**Selected reflection voice, built but not yet activated online:** Manley chose his existing ElevenLabs
+**Selected reflection voice, live and verified October 17:** Manley chose his existing ElevenLabs
 designed voice for reflections while retaining local Android speech for saved facts. The optional
 server-side speech path sends the exact selected reflection text to ElevenLabs; that text can
 contain approved run/weather/music context already used in the reflection. It does not need the
 route, a full listening-history list or all four unused candidates. Connected-account voice lookup
-was read-only; no reflection text was synthesized or sent to ElevenLabs in this follow-up. Android
+was read-only. After Manley privately created/saved the backend key and pushed the voice code,
+the hosted phone check sent one selected, newly generated fictional sample reflection to
+ElevenLabs and played its returned audio successfully; no saved History was uploaded. Android
 plays the returned bounded audio from memory and releases it on completion/cancellation; neither
 the phone nor backend writes or caches generated audio. This does not remove provider-side
 retention under the ElevenLabs account/service settings. The standard request does not opt into
 enterprise-only zero-retention mode. Deliberate repeated Read requests can consume speech credits.
-Manley saved the backend key privately on Render; deployment, actual hearing and broader
-tester-facing disclosure remain. No provider key is sent to or stored on the phone.
+Manley saved the backend key privately on Render; deployment and hearing passed at `cb23da6`.
+Broader tester-facing disclosure remains separate. No provider key is sent to or stored on the phone.
 
 The first automated passage version uses the existing optional music-observation and separate
 reflection-sharing choices. A known song must appear in eligible same-run Spotify observations.

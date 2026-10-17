@@ -5,7 +5,33 @@ metadata:
   type: project
 ---
 
-## Current Android checkpoint — October 16, 2026
+## Current Android checkpoint — October 17, 2026
+
+### Custom reflection voice deployed — October 17
+
+Manley committed/pushed the bounded voice change in three groups: backend `25f2637`, Android
+`eb793cd`, documentation `cb23da6`. The repository was clean and HEAD matched its upstream before
+deployment. Render manually deployed `cb23da6`, deployment `dep-db9g9961egvs73f5sg10`, successfully
+in **55.2 seconds**. Public health returned **200/ok**, `X-RunState-Reflection-Voice: 1`, and retained
+`X-RunState-Song-Cue: 1`. Existing provider/access-code values were neither revealed nor changed.
+The explicitly gated real hosted voice check then **passed in 40.732 seconds** after Manley
+confirmed ready to listen. It generated four live candidates from fictional 3.00-mile/32-minute
+sample facts and controlled Lovely Day/Bill Withers context, selected Feeling Good, and witnessed
+natural completion of **local saved facts → actual ElevenLabs MP3 → instrumental**. The test
+required accepted and naturally completed cloud audio and rejected any local reflection fallback.
+This also establishes that Render's saved speech key worked with the configured voice/model.
+Manley confirmed **"Yes, all three sounded right."** No hand-written reflection or manual music
+pairing was used. This is voice/sequence acceptance, not automatic passage selection for new songs.
+
+All 32 saved runs and every field in all seven inspected SQLite tables retained checksum
+`7ed81df2214070f8d0dd3bae6a86358c0be1ef283ba6a1ec015f49399a53baac` before and after. Private
+inspection copies and the disposable test APK were removed, and normal RunState reopened.
+No run, preference, Spotify queue, route or stored reflection was changed; generated speech
+remained transient memory. No new source file or Git mutation. A browser proof screenshot was
+saved outside the repository as `render-reflection-voice-live.png` in the visualization folder
+listed in the build checkpoint below. Only verification documentation changed after the push.
+The earlier pre-deployment/pending-hearing statements below describe the build checkpoint and
+are superseded by this live result. Whole-run song ranking and automatic hook selection remain.
 
 ### Separate reflection voice built and installed — October 17 follow-up
 

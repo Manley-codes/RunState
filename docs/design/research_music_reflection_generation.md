@@ -754,6 +754,17 @@ advertise voice support, so the installed app retains local fallback. Manley cre
 key privately; the prepared 10,000-credit limit caps usage per refresh period and buys no credits.
 See the current-state record for the five necessary new source/test files and exact boundaries.
 
+**October 17 activation/acceptance supersedes the pending status above:** Manley pushed through
+`cb23da6`; Render deployed it successfully in 55.2 seconds and retained song-cue support alongside
+voice capability. The explicitly opted-in real hosted Moto check then passed in **40.732 seconds**.
+It automatically generated a new sample Feeling Good reflection with controlled Lovely Day/Bill
+Withers context, spoke local sample facts, played actual custom-voice MP3 with natural completion
+and no local fallback, then completed the instrumental. Manley confirmed **"Yes, all three sounded
+right."** All 32 saved runs/every inspected field remained unchanged; private inspection copies and
+the temporary test APK were removed. No hand-written reflection, manual pairing, song download,
+source edit or Git mutation in activation. This proves the chosen voice transition, not automated
+vocal-hook discovery or whole-run song ranking. The existing Sunday Best passage remains separate.
+
 - **ElevenLabs:** Manley generates and auditions recordings there using his saved designed voice,
   `1st test voice`, and **Eleven Multilingual v2**. His description: "A middle-aged African American male,
   friendly, confident, conversational, fun, productive and motivational energy."
