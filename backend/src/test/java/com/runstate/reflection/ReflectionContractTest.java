@@ -15,6 +15,8 @@ import static com.runstate.reflection.ReflectionContract.MusicState;
 import static com.runstate.reflection.ReflectionContract.PreRunEnergy;
 import static com.runstate.reflection.ReflectionContract.RequestIdentifiers;
 import static com.runstate.reflection.ReflectionContract.RunMetricsEvidence;
+import static com.runstate.reflection.ReflectionContract.SongCueContext;
+import static com.runstate.reflection.ReflectionContract.SongCueSource;
 import static com.runstate.reflection.ReflectionContract.TelemetryCoverage;
 import static com.runstate.reflection.ReflectionContract.WeatherContext;
 import static com.runstate.reflection.ReflectionContract.WeatherSource;
@@ -255,6 +257,56 @@ class ReflectionContractTest {
                 () -> assertThrows(IllegalArgumentException.class,
                         () -> new MusicContext(MusicState.NO_MUSIC, null, null, null,
                                 MusicProvenance.CONTROLLED))
+        );
+    }
+
+    @Test
+    void curatedSongCueKeepsItsIndependentSourceWithoutPromotingPartialMusic() {
+        SongCueContext cue = new SongCueContext("run_it_up_v1", SongCueSource.RUNSTATE_CURATED,
+                "  Self-directed momentum  ", "Recognize completing the run without claiming a personal record.");
+        MusicContext music = new MusicContext(MusicState.MUSIC, "Run It Up", "Offset & Key Glock", null,
+                MusicProvenance.MEDIA_SESSION_PARTIAL, cue);
+        assertAll(
+                () -> assertEquals(cue, music.songCue()),
+                () -> assertEquals("  Self-directed momentum  ", music.songCue().theme()),
+                () -> assertEquals(MusicProvenance.MEDIA_SESSION_PARTIAL, music.provenance()),
+                () -> assertNull(music.artistDescription()),
+                () -> assertNull(new MusicContext(MusicState.MUSIC, "Title", "Artist", null,
+                        MusicProvenance.MEDIA_SESSION_PARTIAL).songCue()),
+                () -> assertNull(new MusicContext(MusicState.MUSIC, "Title", "Artist", null).songCue())
+        );
+    }
+
+    @Test
+    void curatedSongCueRequiresBoundedEditorialTextAndAnIdentifiedMusicContext() {
+        SongCueContext cue = new SongCueContext("a".repeat(80), SongCueSource.RUNSTATE_CURATED,
+                "t".repeat(120), "n".repeat(400));
+        for (String id : Arrays.asList(null, "", "UPPERCASE", "contains space", "path/to/cue", "a".repeat(81))) {
+            assertThrows(IllegalArgumentException.class,
+                    () -> new SongCueContext(id, SongCueSource.RUNSTATE_CURATED, "Theme", "Note"));
+        }
+        for (String text : Arrays.asList(null, "", " \n\t")) {
+            assertThrows(IllegalArgumentException.class,
+                    () -> new SongCueContext("cue", SongCueSource.RUNSTATE_CURATED, text, "Note"));
+            assertThrows(IllegalArgumentException.class,
+                    () -> new SongCueContext("cue", SongCueSource.RUNSTATE_CURATED, "Theme", text));
+        }
+        assertAll(
+                () -> assertEquals(400, cue.connectionNote().length()),
+                () -> assertThrows(IllegalArgumentException.class,
+                        () -> new SongCueContext("cue", null, "Theme", "Note")),
+                () -> assertThrows(IllegalArgumentException.class,
+                        () -> new SongCueContext("cue", SongCueSource.RUNSTATE_CURATED, "t".repeat(121), "Note")),
+                () -> assertThrows(IllegalArgumentException.class,
+                        () -> new SongCueContext("cue", SongCueSource.RUNSTATE_CURATED, "Theme", "n".repeat(401))),
+                () -> assertThrows(IllegalArgumentException.class,
+                        () -> new MusicContext(MusicState.UNKNOWN, null, null, null, null, cue)),
+                () -> assertThrows(IllegalArgumentException.class,
+                        () -> new MusicContext(MusicState.NO_MUSIC, null, null, null, null, cue)),
+                () -> assertThrows(IllegalArgumentException.class,
+                        () -> new MusicContext(MusicState.MUSIC, null, "Artist", null, null, cue)),
+                () -> assertThrows(IllegalArgumentException.class,
+                        () -> new MusicContext(MusicState.MUSIC, "Title", null, null, null, cue))
         );
     }
 

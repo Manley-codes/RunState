@@ -11,6 +11,8 @@ import com.runstate.reflection.ReflectionContract.MusicProvenance;
 import com.runstate.reflection.ReflectionContract.MusicState;
 import com.runstate.reflection.ReflectionContract.PreRunEnergy;
 import com.runstate.reflection.ReflectionContract.RunMetricsEvidence;
+import com.runstate.reflection.ReflectionContract.SongCueContext;
+import com.runstate.reflection.ReflectionContract.SongCueSource;
 import com.runstate.reflection.ReflectionContract.TelemetryCoverage;
 import com.runstate.reflection.ReflectionProvider.FailureType;
 import com.runstate.reflection.ReflectionProvider.ReflectionProviderException;
@@ -147,6 +149,87 @@ class ReflectionHttpServerTest {
                             MusicProvenance.MEDIA_SESSION_PARTIAL), captured.get().musicContext())
             );
         }
+    }
+
+    @Test
+    void optionalCuratedSongCueReachesProviderAndLegacyMusicStillParses() throws Exception {
+        AtomicReference<CompletedRunEvidence> captured = new AtomicReference<>();
+        JsonObject request = JsonParser.parseString(validRequest()).getAsJsonObject();
+        JsonObject music = request.getAsJsonObject("evidence").getAsJsonObject("musicContext");
+        music.remove("artistDescription");
+        music.addProperty("provenance", "MEDIA_SESSION_PARTIAL");
+        music.add("songCue", validSongCue());
+        try (ReflectionHttpServer server = start(evidence -> {
+            captured.set(evidence);
+            return exactCandidates();
+        })) {
+            HttpResponse<String> response = post(server, request.toString());
+            assertEquals(200, response.statusCode());
+            assertEquals("controlled_cue_v1", JsonParser.parseString(response.body()).getAsJsonObject()
+                    .get("songCueId").getAsString());
+            assertAll(
+                    () -> assertEquals(new SongCueContext("controlled_cue_v1", SongCueSource.RUNSTATE_CURATED,
+                            "Self-directed momentum", "Recognize completing this run without inventing struggle."),
+                            captured.get().musicContext().songCue()),
+                    () -> assertEquals(MusicProvenance.MEDIA_SESSION_PARTIAL,
+                            captured.get().musicContext().provenance()),
+                    () -> assertNull(captured.get().musicContext().artistDescription())
+            );
+        }
+        music.remove("songCue");
+        assertNull(ReflectionApiJson.parseRequest(request.toString().getBytes(StandardCharsets.UTF_8))
+                .evidence().musicContext().songCue());
+        music.add("songCue", null);
+        assertNull(ReflectionApiJson.parseRequest(request.toString().getBytes(StandardCharsets.UTF_8))
+                .evidence().musicContext().songCue());
+    }
+
+    @Test
+    void invalidSongCueBodiesNeverCallProviderOrAcceptLyricsAndAudioFields() throws Exception {
+        AtomicInteger providerCalls = new AtomicInteger();
+        try (ReflectionHttpServer server = start(evidence -> {
+            providerCalls.incrementAndGet();
+            return exactCandidates();
+        })) {
+            for (String field : List.of("cueId", "source", "theme", "connectionNote")) {
+                JsonObject missing = validSongCue();
+                missing.remove(field);
+                JsonObject nullField = validSongCue();
+                nullField.add(field, null);
+                JsonObject wrongType = validSongCue();
+                wrongType.addProperty(field, 12);
+                for (JsonObject invalid : List.of(missing, nullField, wrongType)) {
+                    JsonObject request = JsonParser.parseString(validRequest()).getAsJsonObject();
+                    request.getAsJsonObject("evidence").getAsJsonObject("musicContext").add("songCue", invalid);
+                    assertError(post(server, request.toString()), 400, "invalid_request");
+                }
+            }
+            for (String field : List.of("lyrics", "audioUri", "passageStartMillis")) {
+                JsonObject extra = validSongCue();
+                extra.addProperty(field, "not accepted");
+                JsonObject request = JsonParser.parseString(validRequest()).getAsJsonObject();
+                request.getAsJsonObject("evidence").getAsJsonObject("musicContext").add("songCue", extra);
+                assertError(post(server, request.toString()), 400, "invalid_request");
+            }
+            for (String invalid : List.of("[]", "\"not an object\"", "false",
+                    validSongCue().toString().replace("RUNSTATE_CURATED", "SPOTIFY"),
+                    validSongCue().toString().replace("controlled_cue_v1", "../unbounded-catalog"))) {
+                JsonObject request = JsonParser.parseString(validRequest()).getAsJsonObject();
+                request.getAsJsonObject("evidence").getAsJsonObject("musicContext")
+                        .add("songCue", JsonParser.parseString(invalid));
+                assertError(post(server, request.toString()), 400, "invalid_request");
+            }
+        }
+        assertEquals(0, providerCalls.get());
+    }
+
+    private static JsonObject validSongCue() {
+        JsonObject cue = new JsonObject();
+        cue.addProperty("cueId", "controlled_cue_v1");
+        cue.addProperty("source", "RUNSTATE_CURATED");
+        cue.addProperty("theme", "Self-directed momentum");
+        cue.addProperty("connectionNote", "Recognize completing this run without inventing struggle.");
+        return cue;
     }
 
     @Test
@@ -730,6 +813,28 @@ class ReflectionHttpServerTest {
             assertEquals(response, rawPost(server, remoteHeaders(), validRequest()));
             assertTrue(response.body().getBytes(StandardCharsets.UTF_8).length < ReflectionHttpServer.MAX_RESPONSE_BYTES);
             assertEquals(1, calls.get());
+        }
+    }
+
+    @Test
+    void localHealthAdvertisesSongCueWithoutChangingBodyOrCallingProvider() throws Exception {
+        AtomicInteger providerCalls = new AtomicInteger();
+        try (ReflectionHttpServer server = start(evidence -> {
+            providerCalls.incrementAndGet();
+            return exactCandidates();
+        })) {
+            HttpResponse<String> response = HttpClient.newHttpClient().send(
+                    HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + server.address().getPort() + "/health"))
+                            .GET().build(), HttpResponse.BodyHandlers.ofString());
+            assertAll(
+                    () -> assertEquals(200, response.statusCode()),
+                    () -> assertEquals("{\"status\":\"ok\"}", response.body()),
+                    () -> assertEquals("1", response.headers().firstValue(
+                            ReflectionHttpServer.SONG_CUE_CAPABILITY_HEADER).orElseThrow()),
+                    () -> assertEquals(0, providerCalls.get())
+            );
+            JsonObject oldResponse = JsonParser.parseString(post(server, validRequest()).body()).getAsJsonObject();
+            assertFalse(oldResponse.has("songCueId"));
         }
     }
 

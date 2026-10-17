@@ -18,6 +18,8 @@ import com.runstate.reflection.ReflectionContract.MusicState;
 import com.runstate.reflection.ReflectionContract.PreRunEnergy;
 import com.runstate.reflection.ReflectionContract.RequestIdentifiers;
 import com.runstate.reflection.ReflectionContract.RunMetricsEvidence;
+import com.runstate.reflection.ReflectionContract.SongCueContext;
+import com.runstate.reflection.ReflectionContract.SongCueSource;
 import com.runstate.reflection.ReflectionContract.TelemetryCoverage;
 import com.runstate.reflection.ReflectionContract.WeatherContext;
 import com.runstate.reflection.ReflectionContract.WeatherSource;
@@ -64,7 +66,11 @@ final class ReflectionApiJson {
             "trackTitle",
             "artistName",
             "artistDescription",
-            "provenance"
+            "provenance",
+            "songCue"
+    );
+    private static final Set<String> SONG_CUE_FIELDS = Set.of(
+            "cueId", "source", "theme", "connectionNote"
     );
     private static final Set<String> WEATHER_FIELDS = Set.of(
             "source", "resolution", "targetEpochMillis", "validFromEpochMillis", "validToEpochMillis",
@@ -103,6 +109,9 @@ final class ReflectionApiJson {
         response.addProperty("requestId", request.identifiers().requestId());
         response.addProperty("runId", request.identifiers().runId());
         response.addProperty("generationMode", generationMode.name());
+        if (request.evidence().musicContext().songCue() != null) {
+            response.addProperty("songCueId", request.evidence().musicContext().songCue().cueId());
+        }
         response.add("candidates", candidateJson);
         return response.toString();
     }
@@ -167,7 +176,26 @@ final class ReflectionApiJson {
                 optionalString(music, "trackTitle"),
                 optionalString(music, "artistName"),
                 optionalString(music, "artistDescription"),
-                optionalEnum(music, "provenance", MusicProvenance.class)
+                optionalEnum(music, "provenance", MusicProvenance.class),
+                optionalSongCue(music, "songCue")
+        );
+    }
+
+    private static SongCueContext optionalSongCue(JsonObject parent, String key) {
+        JsonElement value = parent.get(key);
+        if (value == null || value.isJsonNull()) {
+            return null;
+        }
+        if (!value.isJsonObject()) {
+            throw new IllegalArgumentException(key + " must be an object or null");
+        }
+        JsonObject cue = value.getAsJsonObject();
+        requireFields(cue, SONG_CUE_FIELDS, SONG_CUE_FIELDS, key);
+        return new SongCueContext(
+                requiredString(cue, "cueId"),
+                optionalEnum(cue, "source", SongCueSource.class),
+                requiredString(cue, "theme"),
+                requiredString(cue, "connectionNote")
         );
     }
 

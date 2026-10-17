@@ -36,6 +36,7 @@ public final class ReflectionHttpServer implements AutoCloseable {
 
     public static final String CANDIDATES_PATH = "/api/reflections/candidates";
     public static final String HEALTH_PATH = "/health";
+    public static final String SONG_CUE_CAPABILITY_HEADER = "X-RunState-Song-Cue";
     public static final int MAX_REQUEST_BYTES = 64 * 1024;
     public static final int MAX_RESPONSE_BYTES = 64 * 1024;
     public static final int MAX_CONCURRENT_PROVIDER_CALLS = 2;
@@ -209,7 +210,7 @@ public final class ReflectionHttpServer implements AutoCloseable {
                     "The request is not allowed by this server."
             );
         }
-        if (remoteAccess != null && HEALTH_PATH.equals(exchange.getRequestURI().getRawPath())) {
+        if (HEALTH_PATH.equals(exchange.getRequestURI().getRawPath())) {
             if (exchange.getRequestURI().getRawQuery() != null) {
                 return error(400, "invalid_request", "This endpoint does not accept query parameters.");
             }
@@ -218,6 +219,7 @@ public final class ReflectionHttpServer implements AutoCloseable {
                 return error(405, "method_not_allowed", "Only GET is supported for this endpoint.");
             }
             // Liveness only: no provider call, credentials, run data, or configuration disclosure.
+            exchange.getResponseHeaders().set(SONG_CUE_CAPABILITY_HEADER, "1");
             return new EndpointResponse(200, "{\"status\":\"ok\"}");
         }
         if (remoteAccess != null && !remoteAccess.authorizes(exchange)) {

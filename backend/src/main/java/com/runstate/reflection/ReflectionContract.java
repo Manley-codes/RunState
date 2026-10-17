@@ -61,6 +61,29 @@ public final class ReflectionContract {
         MEDIA_SESSION_PARTIAL
     }
 
+    /** Editorial song context is supplied independently of the device's playback observation. */
+    public enum SongCueSource { RUNSTATE_CURATED }
+
+    /**
+     * A bounded editorial connection for one identified song, without lyrics or audio instructions.
+     * The cue does not establish that a passage was heard or that later playback will succeed.
+     */
+    public record SongCueContext(
+            String cueId,
+            SongCueSource source,
+            String theme,
+            String connectionNote
+    ) {
+        public SongCueContext {
+            require(cueId != null && cueId.matches("[a-z0-9][a-z0-9_-]{0,79}"),
+                    "cueId must be a lowercase catalog identifier of at most 80 characters");
+            require(source == SongCueSource.RUNSTATE_CURATED,
+                    "song cue requires RUNSTATE_CURATED provenance");
+            requireBoundedText(theme, 120, "theme");
+            requireBoundedText(connectionNote, 400, "connectionNote");
+        }
+    }
+
     /** This slice accepts one modeled hourly snapshot near the run's start. */
     public enum WeatherSource { OPEN_METEO }
     public enum WeatherResolution { HOURLY }
@@ -150,7 +173,8 @@ public final class ReflectionContract {
             String trackTitle,
             String artistName,
             String artistDescription,
-            MusicProvenance provenance
+            MusicProvenance provenance,
+            SongCueContext songCue
     ) {
 
         public MusicContext {
@@ -164,6 +188,8 @@ public final class ReflectionContract {
                         state + " music context cannot include track or artist details");
                 require(provenance == null,
                         state + " music context cannot include music provenance");
+                require(songCue == null,
+                        state + " music context cannot include a song cue");
             } else {
                 // Older controlled clients omitted this field; device observations must opt in explicitly.
                 provenance = provenance == null ? MusicProvenance.CONTROLLED : provenance;
@@ -178,6 +204,14 @@ public final class ReflectionContract {
 
             require(artistDescription == null || artistName != null,
                     "artistDescription requires an artistName");
+            require(songCue == null || (trackTitle != null && artistName != null),
+                    "song cue requires trackTitle and artistName");
+        }
+
+        /** Keeps existing music clients source compatible without adding editorial evidence. */
+        public MusicContext(MusicState state, String trackTitle, String artistName,
+                String artistDescription, MusicProvenance provenance) {
+            this(state, trackTitle, artistName, artistDescription, provenance, null);
         }
 
         /** Keeps the pre-provenance controlled-music contract source compatible. */
@@ -284,6 +318,11 @@ public final class ReflectionContract {
     private static void requireOptionalText(String candidate, String fieldName) {
         require(candidate == null || !candidate.isBlank(),
                 fieldName + " must be absent or contain nonblank text");
+    }
+
+    private static void requireBoundedText(String candidate, int maximum, String fieldName) {
+        require(candidate != null && !candidate.isBlank() && candidate.length() <= maximum,
+                fieldName + " must contain nonblank text of at most " + maximum + " characters");
     }
 
     private static void requireFiniteRange(double value, double minimum, double maximum, String fieldName) {

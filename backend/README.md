@@ -208,6 +208,35 @@ Example request shape using controlled values:
 }
 ```
 
+### Optional curated song cue
+
+An optional `musicContext.songCue` adds independently curated song context for the same identified
+track. It is omitted or null for older clients and contains exactly:
+
+```json
+{
+  "cueId": "run_it_up_v1",
+  "source": "RUNSTATE_CURATED",
+  "theme": "Self-directed momentum",
+  "connectionNote": "Recognize completing this run without inventing struggle."
+}
+```
+
+`cueId` is a lowercase catalog identifier (`[a-z0-9][a-z0-9_-]{0,79}`). The theme and connection
+note are nonblank, at most 120 and 400 characters respectively, and require MUSIC with a title and
+artist. They are original editorial notes, never lyrics, recording URLs, passage offsets or
+playback instructions. MEDIA_SESSION_PARTIAL remains partial even when a cue is present. Prompt
+v1.5 can use those notes to land the ending around the song's theme without promising playback,
+inventing musical effects on the runner or overriding the selected Energy. Playback ownership,
+passage timing and matching the local plan to this frozen cue remain Android responsibilities;
+the response still contains exactly the same four candidate strings. Existing clients remain
+accepted. A client must omit this field when talking to an older strict server.
+
+`GET /health` advertises support through `X-RunState-Song-Cue: 1`, preserving the existing health
+JSON body. Only requests containing a cue receive an additional `songCueId` in the success envelope,
+equal to that request's cue identifier. Clients check this acknowledgment before using the reply
+with the corresponding local passage; old request/response shapes remain unchanged.
+
 Success response shape:
 
 ```json

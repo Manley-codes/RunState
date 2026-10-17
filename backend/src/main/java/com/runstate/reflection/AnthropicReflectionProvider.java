@@ -207,6 +207,14 @@ public final class AnthropicReflectionProvider implements ReflectionProvider {
         addNullableString(serializedMusic, "track_title", music.trackTitle());
         addNullableString(serializedMusic, "artist_name", music.artistName());
         addNullableString(serializedMusic, "artist_description", music.artistDescription());
+        if (music.songCue() != null) {
+            JsonObject cue = new JsonObject();
+            cue.addProperty("cue_id", music.songCue().cueId());
+            cue.addProperty("source", music.songCue().source().name());
+            cue.addProperty("theme", music.songCue().theme());
+            cue.addProperty("connection_note", music.songCue().connectionNote());
+            serializedMusic.add("song_cue", cue);
+        }
         serialized.add("music_context", serializedMusic);
         if (evidence.weatherContext() != null) {
             WeatherContext weather = evidence.weatherContext();
