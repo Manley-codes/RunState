@@ -19,12 +19,16 @@ not built into the APK. The Anthropic key belongs only in the backend environmen
 Java records are used as small immutable data holders. A record exposes its values through generated
 accessor methods and does not offer setters; its constructor can still reject invalid combinations.
 
-**Latest hosted checkpoint (October 16):** `bfc64ad` is Live on the existing Render service. Its
-public health check passed; a private check inside that instance used Render's saved Musixmatch
-key to retrieve actual Lovely Day/Bill Withers themes and moods. A separate silent Moto check
-returned four real candidates through its existing hosted connection in 8.478 seconds, with
-fictional facts and all 32 saved runs/fields unchanged. These checks complement the earlier local
-request witness: the public health/response envelopes deliberately do not expose analysis data.
+**Latest hosted checkpoint (October 17):** `cb23da6` is Live on the existing Render service with
+Musixmatch enrichment and the separate ElevenLabs reflection voice. A real hosted Moto check and
+listener confirmation passed: generic facts → custom reflection voice → instrumental. All 32
+saved runs/fields stayed unchanged. Earlier hosted Musixmatch checks used actual Lovely Day/Bill
+Withers labels and returned four real candidates; the public response deliberately exposes no
+analysis receipt. Local prompt v1.8 and the music composition pipeline below are **unfinished**:
+Manley still rejects the writing and actual outputs contain unsupported run claims. A local
+checkpoint commit preserves this work; it is not deployment approval. Work is paused at his
+request. Do not push the unfinished backend to Render's tracked branch or deploy it as an
+accepted repair during this pause; the current Auto Deploy setting has not been checked.
 
 ## Contract included
 
@@ -305,14 +309,44 @@ request has a four-second deadline and a 128 KiB response limit, with no redirec
 Both HTTP status and the provider's embedded status must succeed. Authentication, access, missing
 analysis, mismatched identity or malformed responses fall back to the ordinary reflection path.
 
-Only bounded `themes.main_themes[].theme` and `moods.main_moods` labels are retained. Quotes,
-free-text meaning/explanations, entities and lyric text are discarded. Only title/artist and the
+Bounded `themes.main_themes[].theme` and `moods.main_moods` labels are retained, plus optional
+`meaning.explanation` (up to 1,200 raw characters). Paired straight/curly double-quoted passages
+are removed from that explanation; malformed, oversized or unmatched-quotation prose is omitted
+without losing valid labels. This does not identify all unquoted lyric fragments or establish a
+licensing exemption. Lyric, quotation and entity fields are never retained or requested separately.
+Only title/artist and the
 matched provider ID go to Musixmatch; no run IDs, metrics, Energy, weather, route or listening-history
-list is sent there. Prompt v1.6 receives a backend-added `music_context.song_analysis` object with
-`source`, `track_title`, `artist_name`, `provider_track_id`, `themes`, and `moods`. These are data about
+list is sent there. The prompt receives a backend-added `music_context.song_analysis` object with
+`source`, `track_title`, `artist_name`, `provider_track_id`, `themes`, `moods`, and optional
+`meaning_explanation`. These are data about
 the song, never instructions or evidence of the runner's feelings/performance. The mobile input
 contract and the four-candidate output schema are unchanged. An accepted curated cue takes
 precedence and performs no additional provider lookup.
+
+Prompt v1.8 makes actual analysis drive a bounded composition pipeline:
+
+1. A music writer selects actual song labels and an available factual anchor for each Energy
+   branch, explains the proposed connection and drafts the reflection. The song's meaning provides
+   specific context for broad labels. Missing/weak connections may be omitted honestly.
+2. An editor receives the unchanged source evidence plus explicitly untrusted proposals. It can
+   rewrite or replace a generic/unsupported draft. Direct naming, brief connections, implicit
+   atmosphere and original wordplay remain available; no absolute deletion/gloss test is restored.
+3. A separate factual reviewer receives original evidence and the proposed four strings, without
+   the planning prose. It repairs invented effort, progress, causes, feelings and time claims while
+   preserving grounded musical expression. Only this reviewed result is returned.
+
+All three music steps use `claude-sonnet-4-6` by default, configurable through
+`ANTHROPIC_MUSIC_EDITOR_MODEL`. The factual reviewer uses its own independent instructions and
+never receives the planning prose. Ordinary reflections (`ANTHROPIC_MODEL`, default Haiku) retain
+their single-call route. The three music calls share one 45-second deadline after the bounded
+Musixmatch lookup, not three full timeouts. No automatic retry or unreviewed-draft fallback occurs;
+typed failures use the existing app retry path. Missing analysis and accepted curated cues retain
+the single-call route. No new client/Room schema, voice or playback behavior is introduced.
+
+Exact-label/anchor validation proves source ownership, not semantic truth or creative quality.
+Actual generated text and listening feedback remain separate checks. Earlier label-only v1.7
+requests worked mechanically but remained generic; Manley explicitly rejected the first Stronger
+audition as sounding unchanged from the pre-Musixmatch version.
 
 This implements automatic song information for the one supplied identity. It does not rank a whole
 run's songs, find hook timestamps, create a local playback plan, or select another Spotify track.
@@ -330,11 +364,40 @@ mvn '-Dtest=AnthropicReflectionProviderTest#liveUnpreparedSongAnalysisFeedsTheRe
     '-Drunstate.liveMusicAnalysis=true' test
 ```
 
-It makes real matcher/analysis calls and one real Claude generation, stopping before Claude if
+It makes real matcher/analysis calls and three real Claude generations, stopping before Claude if
 analysis is unavailable. Default tests make no live calls. Its bounded report contains public song
 labels and one sample reply, no keys or raw provider bodies. Hosted activation requires pushed
 backend code, Render's own `MUSIXMATCH_API_KEY` and deployment; Windows User settings apply locally.
 That hosted setup was separately completed at `bfc64ad`, as recorded above.
+
+For an explicitly approved creative comparison, the existing provider test also supports:
+
+```powershell
+mvn '-Dtest=AnthropicReflectionProviderTest#liveMusicAnalysisComparisonUsesIdenticalFactsAndPrompt' `
+    '-Drunstate.liveMusicComparison=true' test
+```
+
+This makes one real Sunday Best/Surfaces analysis lookup and four real Claude calls: one baseline
+without analysis, then composition, editing and factual review with analysis. Source run facts
+stay identical and no prepared cue is supplied; prompts, workflow and music-writing model now
+differ deliberately. This is an end-to-end workflow comparison, not a labels-only causal test,
+despite the retained legacy method name. Its bounded report includes selected connections,
+proposed/final text and whether actual meaning context reached the writer. It is skipped by default and should
+not be run repeatedly without a concrete review purpose. A separate explicitly gated Android
+audition can consume an already generated reply without making another reflection request.
+
+For the fixed **Stronger / Kanye West** fictional scenario, add
+`'-Drunstate.liveMusicScenario=stronger'` to that comparison command. It uses 4.2 miles of
+controlled COMPLETE GPS evidence, 42 minutes elapsed/40 active, October 17 at 07:00–07:42 Chicago,
+pre-run Moderate and a Powered Up review focus. Only `sunday_best` (default) and `stronger` are
+accepted, before any network call. The report includes actual source, elapsed/active minutes and
+timestamps rather than assuming sample-distance facts. The earlier one-call comparison passed
+in 9.901 seconds, but Manley judged its writing unchanged; current pipeline evidence is recorded
+in the music research notebook rather than claimed by that historical pass.
+The optional phone audition can use the fixed matching scenario. After comparing 30-second and
+24-second entrances, Manley preferred the **recording opening (0–10 seconds)** with the native
+650 ms post-reflection pause. This remains local test data, not an automatically selected hook
+or a production Stronger catalog addition. Its writing is not accepted by that entrance choice.
 
 Success response shape:
 
@@ -472,6 +535,7 @@ or Git changes:
 | `RUNSTATE_REFLECTION_PORT` | Optional internal port, 1–65535. It takes priority over the hosting platform's `PORT`. Remote mode uses `PORT` when provided; otherwise it uses `8787`. Local mode ignores `PORT`. |
 | `ANTHROPIC_API_KEY` | Backend-only secret for live provider mode. Not needed for `--remote --fake`. |
 | `ANTHROPIC_MODEL` | Optional model override, unchanged from local live mode. |
+| `ANTHROPIC_MUSIC_EDITOR_MODEL` | Optional model for music composition, editing and factual review; defaults to `claude-sonnet-4-6`. |
 
 The Android endpoint is `https://<configured-public-host>/api/reflections/candidates`, with
 `Authorization: Bearer <demo-access-code>`. The code must match the server's `RUNSTATE_DEMO_TOKEN`.

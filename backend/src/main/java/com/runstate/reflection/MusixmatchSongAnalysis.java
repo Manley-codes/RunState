@@ -22,7 +22,9 @@ import java.nio.charset.CharacterCodingException;
 import java.nio.charset.CodingErrorAction;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Deque;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
@@ -37,7 +39,7 @@ import java.util.concurrent.Flow;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
-/** Optional server-side song labels. Never returns lyrics, quoted lines or analysis explanations. */
+/** Optional server-side song analysis. Does not retain lyric, quotation or entity fields. */
 public final class MusixmatchSongAnalysis {
     static final int MAX_RESPONSE_BYTES = 128 * 1024;
     static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(4);
@@ -46,6 +48,7 @@ public final class MusixmatchSongAnalysis {
     private static final String MATCH_PATH = "/ws/1.1/matcher.track.get";
     private static final String ANALYSIS_PATH = "/ws/1.1/track.lyrics.analysis.get";
     private static final int MAX_LABELS = 8;
+    private static final int MAX_MEANING_CHARACTERS = 1200;
     private final String apiKey;
     private final Transport transport;
 
@@ -84,10 +87,12 @@ public final class MusixmatchSongAnalysis {
             JsonObject analysis = object(analysisBody, "analysis");
             List<String> themes = labels(analysis, "themes", "main_themes", true);
             List<String> moods = labels(analysis, "moods", "main_moods", false);
-            if (themes.isEmpty() && moods.isEmpty()) {
+            String meaningExplanation = meaningExplanation(analysis);
+            if (themes.isEmpty() && moods.isEmpty() && meaningExplanation == null) {
                 return Optional.empty();
             }
-            return Optional.of(new Analysis(matchedTitle, matchedArtist, trackId, themes, moods));
+            return Optional.of(new Analysis(matchedTitle, matchedArtist, trackId, themes, moods,
+                    meaningExplanation));
         } catch (InterruptedException interrupted) {
             Thread.currentThread().interrupt();
             return Optional.empty();
@@ -103,11 +108,67 @@ public final class MusixmatchSongAnalysis {
     }
 
     public record Analysis(String trackTitle, String artistName, String providerTrackId,
-                           List<String> themes, List<String> moods) {
+                           List<String> themes, List<String> moods, String meaningExplanation) {
         public Analysis {
             themes = List.copyOf(themes);
             moods = List.copyOf(moods);
+            meaningExplanation = sanitizedMeaning(meaningExplanation);
         }
+
+        public Analysis(String trackTitle, String artistName, String providerTrackId,
+                        List<String> themes, List<String> moods) {
+            this(trackTitle, artistName, providerTrackId, themes, moods, null);
+        }
+    }
+
+    private static String meaningExplanation(JsonObject analysis) {
+        JsonElement meaning = analysis.get("meaning");
+        if (meaning == null || !meaning.isJsonObject()) {
+            return null;
+        }
+        JsonElement explanation = meaning.getAsJsonObject().get("explanation");
+        if (explanation == null || !explanation.isJsonPrimitive()
+                || !explanation.getAsJsonPrimitive().isString()) {
+            return null;
+        }
+        return sanitizedMeaning(explanation.getAsString());
+    }
+
+    /** Quotation removal limits forwarded text; it cannot identify unquoted lyric fragments. */
+    private static String sanitizedMeaning(String raw) {
+        if (raw == null || raw.length() > MAX_MEANING_CHARACTERS
+                || raw.codePoints().anyMatch(c -> Character.isISOControl(c)
+                        && !Character.isWhitespace(c))) {
+            return null;
+        }
+        StringBuilder prose = new StringBuilder();
+        Deque<Character> closingQuotes = new ArrayDeque<>();
+        for (int index = 0; index < raw.length(); index++) {
+            char value = raw.charAt(index);
+            if (value == '"') {
+                if (!closingQuotes.isEmpty() && closingQuotes.peek() == '"') {
+                    closingQuotes.pop();
+                } else {
+                    closingQuotes.push('"');
+                }
+                prose.append(' ');
+            } else if (value == '\u201c') {
+                closingQuotes.push('\u201d');
+                prose.append(' ');
+            } else if (value == '\u201d') {
+                if (closingQuotes.isEmpty() || closingQuotes.pop() != '\u201d') {
+                    return null;
+                }
+                prose.append(' ');
+            } else if (closingQuotes.isEmpty()) {
+                prose.append(value);
+            }
+        }
+        if (!closingQuotes.isEmpty()) {
+            return null;
+        }
+        String explanation = prose.toString().replaceAll("(?U)\\s+", " ").strip();
+        return explanation.isBlank() ? null : explanation;
     }
 
     private TransportResponse request(String path, String query) throws IOException, InterruptedException {

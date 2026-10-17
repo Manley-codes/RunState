@@ -34,6 +34,7 @@ import java.net.URI;
 import java.net.http.HttpTimeoutException;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -56,6 +57,38 @@ class AnthropicReflectionProviderTest {
     private static final String FEELING_GOOD = "Feeling good line one.\nLine two.\tStill exact.";
     private static final String POWERED_UP = "Powered up — exact punctuation.";
     private static final String NO_SELECTION = "No selection stays unknown.";
+
+    @Test
+    void passesBoundedSongMeaningToAllThreeStagesWithoutChangingRunEvidence() throws Exception {
+        CompletedRunEvidence evidence = evidenceWithMusic(new MusicContext(MusicState.MUSIC,
+                "A New Morning", "Fictional Fixture Artist", null, MusicProvenance.MEDIA_SESSION_PARTIAL));
+        for (List<String> themes : List.of(List.of("self acceptance"), List.<String>of())) {
+            AtomicInteger calls = new AtomicInteger();
+            String meaning = "The song contrasts an imperfect day with keeping a sense of possibility.";
+            AnthropicReflectionProvider provider = new AnthropicReflectionProvider(testConfiguration(), request -> {
+                JsonObject input = evidenceFrom(request);
+                JsonObject labels = input.getAsJsonObject("music_context").getAsJsonObject("song_analysis");
+                assertEquals(meaning, labels.get("meaning_explanation").getAsString());
+                assertEquals("MEDIA_SESSION_PARTIAL", input.getAsJsonObject("music_context")
+                        .get("provenance").getAsString());
+                if (calls.incrementAndGet() == 1) {
+                    JsonObject plan = compositionFixture(request);
+                    return new TransportResponse(200, successfulResponse(plan.toString()));
+                }
+                assertTrue(calls.get() == 2 || calls.get() == 3);
+                input.remove("music_composition");
+                input.remove("proposed_reflections");
+                labels.remove("meaning_explanation");
+                labels.remove("themes");
+                labels.remove("moods");
+                assertFalse(input.has("lyrics"));
+                return new TransportResponse(200, successfulResponse(validCandidateJson()));
+            }, (title, artist) -> Optional.of(new MusixmatchSongAnalysis.Analysis(title, artist,
+                    "67890", themes, List.of(), meaning)));
+            assertEquals(POWERED_UP, provider.generate(evidence).powered_up());
+            assertEquals(3, calls.get());
+        }
+    }
 
     @Test
     void requestsOneStructuredFourBranchResponseAndPreservesExactText() throws Exception {
@@ -83,7 +116,7 @@ class AnthropicReflectionProviderTest {
                 () -> assertEquals(Duration.ofSeconds(45), request.timeout()),
                 () -> assertEquals("claude-haiku-4-5-20251001", requestJson.get("model").getAsString()),
                 () -> assertEquals(2_048, requestJson.get("max_tokens").getAsInt()),
-                () -> assertEquals("Version: mobile-reflection-v1.6",
+                () -> assertEquals("Version: mobile-reflection-v1.8",
                         requestJson.get("system").getAsString().lines().skip(1).findFirst().orElseThrow()),
                 () -> assertTrue(normalizedPrompt.contains(
                         "Recognize the completed run using known facts. Leave post-run feelings out entirely"
@@ -165,6 +198,7 @@ class AnthropicReflectionProviderTest {
         JsonObject serialized = evidenceFrom(request);
         JsonObject music = serialized.getAsJsonObject("music_context");
         JsonObject analysis = music.getAsJsonObject("song_analysis");
+        String prompt = requestJson.get("system").getAsString().replaceAll("\\s+", " ");
 
         assertAll(
                 () -> assertEquals(1, lookupCalls.get()),
@@ -185,6 +219,12 @@ class AnthropicReflectionProviderTest {
                 () -> assertFalse(serialized.toString().contains("passage")),
                 () -> assertFalse(analysis.has("metrics")),
                 () -> assertFalse(analysis.has("pre_run_energy")),
+                () -> assertTrue(prompt.contains("choose at most one relevant theme or mood")),
+                () -> assertTrue(prompt.contains("one supported detail of this run")),
+                () -> assertTrue(prompt.contains("Do not recite the labels")),
+                () -> assertTrue(prompt.contains("it must not assign a feeling to the runner")),
+                () -> assertFalse(prompt.contains("FICTIONAL CALIBRATION EXAMPLES")),
+                () -> assertTrue(prompt.contains("A mood can shape delivery, not diagnose feelings")),
                 () -> assertEquals(Set.of("spent", "feeling_good", "powered_up", "no_selection"),
                         strings(requestJson.getAsJsonObject("output_config").getAsJsonObject("format")
                                 .getAsJsonObject("schema").getAsJsonArray("required")))
@@ -289,6 +329,340 @@ class AnthropicReflectionProviderTest {
         assertFalse(music.has("song_cue"));
     }
 
+    @Test
+    void composesAndEditsThenReturnsOnlyTheGroundingReviewedExactText() throws Exception {
+        CompletedRunEvidence evidence = evidenceWithMusic(new MusicContext(MusicState.MUSIC,
+                "A New Morning", "Fictional Fixture Artist", null, MusicProvenance.MEDIA_SESSION_PARTIAL));
+        List<TransportRequest> requests = new ArrayList<>();
+        AtomicInteger lookups = new AtomicInteger();
+        AtomicReference<JsonObject> generatedPlan = new AtomicReference<>();
+        AnthropicReflectionProvider provider = new AnthropicReflectionProvider(testConfiguration(), request -> {
+            requests.add(request);
+            if (requests.size() == 1) {
+                assertTrue(systemFrom(request).contains("MUSIC_COMPOSITION_STAGE"));
+                JsonObject plan = compositionFixture(request);
+                plan.getAsJsonObject("powered_up").addProperty("anchor_id", "conditional_post_energy");
+                plan.getAsJsonObject("powered_up").addProperty("connection", "A generated creative interpretation, not a new fact.");
+                generatedPlan.set(plan.deepCopy());
+                return new TransportResponse(200, successfulResponse(plan.toString()));
+            }
+            assertTrue(requests.size() == 2 || requests.size() == 3);
+            JsonObject editedInput = evidenceFrom(request);
+            if (requests.size() == 2) {
+                assertTrue(systemFrom(request).contains("MUSIC_EDITING_STAGE"));
+                JsonObject composition = editedInput.remove("music_composition").getAsJsonObject();
+                assertEquals(Set.of("status", "branches"), composition.keySet());
+                assertEquals("MODEL_GENERATED_NOT_EVIDENCE", composition.get("status").getAsString());
+                assertEquals(generatedPlan.get(), composition.getAsJsonObject("branches"));
+            } else {
+                assertTrue(systemFrom(request).contains("MUSIC_GROUNDING_REVIEW_STAGE"));
+                assertFalse(editedInput.has("music_composition"),
+                        "Factual review must not receive generated planning prose as evidence.");
+                assertEquals(JsonParser.parseString(editedProposalJson()), editedInput.remove("proposed_reflections"));
+            }
+            assertEquals(evidenceFrom(requests.get(0)), editedInput,
+                    "Both later stages receive unchanged source evidence, never model-written replacement facts.");
+            assertEquals(requests.get(0).apiKey(), request.apiKey());
+            assertEquals(requests.get(0).endpoint(), request.endpoint());
+            assertEquals(AnthropicReflectionProvider.DEFAULT_MUSIC_EDITOR_MODEL,
+                    JsonParser.parseString(requests.get(0).body()).getAsJsonObject().get("model").getAsString());
+            assertEquals(AnthropicReflectionProvider.DEFAULT_MUSIC_EDITOR_MODEL,
+                    JsonParser.parseString(request.body()).getAsJsonObject().get("model").getAsString());
+            return new TransportResponse(200, successfulResponse(
+                    requests.size() == 2 ? editedProposalJson() : validCandidateJson()));
+        }, (title, artist) -> {
+            lookups.incrementAndGet();
+            return fixtureAnalysis().lookup(title, artist);
+        });
+
+        CandidateReflections result = provider.generate(evidence);
+        assertAll(
+                () -> assertEquals(1, lookups.get()),
+                () -> assertEquals(3, requests.size()),
+                () -> assertEquals(SPENT, result.spent()),
+                () -> assertEquals(FEELING_GOOD, result.feeling_good()),
+                () -> assertEquals(POWERED_UP, result.powered_up()),
+                () -> assertEquals(NO_SELECTION, result.no_selection()),
+                () -> assertFalse(result.powered_up().contains("generated creative interpretation"))
+        );
+    }
+
+    @Test
+    void rejectsForgedLabelsUnknownAnchorsAndMalformedCompositionBeforeCallingTheEditor() throws Exception {
+        List<java.util.function.Consumer<JsonObject>> invalidPlans = List.of(
+                plan -> plan.getAsJsonObject("spent").addProperty("selected_theme", "a theme not returned by Musixmatch"),
+                plan -> plan.getAsJsonObject("spent").addProperty("selected_mood", "a mood not returned by Musixmatch"),
+                plan -> plan.getAsJsonObject("spent").addProperty("anchor_id", "verified_personal_best"),
+                plan -> plan.getAsJsonObject("no_selection").addProperty("anchor_id", "conditional_post_energy"),
+                plan -> plan.getAsJsonObject("spent").remove("draft"),
+                plan -> plan.getAsJsonObject("spent").addProperty("extra_fact", "unsupported"),
+                plan -> plan.getAsJsonObject("spent").addProperty("draft", " "),
+                plan -> plan.getAsJsonObject("spent").addProperty("draft", "x".repeat(1_401)),
+                plan -> plan.getAsJsonObject("spent").addProperty("connection", "x".repeat(601)),
+                plan -> plan.getAsJsonObject("spent").addProperty("connection", " "),
+                plan -> plan.getAsJsonObject("spent").addProperty("anchor_id", "none"),
+                plan -> plan.getAsJsonObject("spent").addProperty("selected_theme", 7),
+                plan -> plan.getAsJsonObject("spent").add("selected_mood", com.google.gson.JsonNull.INSTANCE),
+                plan -> plan.add("fifth_branch", new JsonObject()),
+                plan -> plan.remove("no_selection")
+        );
+        for (java.util.function.Consumer<JsonObject> invalid : invalidPlans) {
+            AtomicInteger calls = new AtomicInteger();
+            AnthropicReflectionProvider provider = new AnthropicReflectionProvider(testConfiguration(), request -> {
+                calls.incrementAndGet();
+                JsonObject plan = compositionFixture(request);
+                invalid.accept(plan);
+                return new TransportResponse(200, successfulResponse(plan.toString()));
+            }, fixtureAnalysis());
+            ReflectionProviderException failure = assertThrows(ReflectionProviderException.class,
+                    () -> provider.generate(knownEvidence()));
+            assertEquals(FailureType.INVALID_RESPONSE, failure.failureType());
+            assertEquals(1, calls.get(), "Invalid composition must not cause an editor request or retry.");
+        }
+    }
+
+    @Test
+    void doesNotAllowAnAnchorForAbsentMetricsEnergyOrWeather() throws Exception {
+        CompletedRunEvidence unknown = unknownEvidence();
+        CompletedRunEvidence evidence = new CompletedRunEvidence(unknown.officialStartEpochMillis(),
+                unknown.finishEpochMillis(), unknown.startTimezoneId(), null, null, null,
+                new MusicContext(MusicState.MUSIC, "A New Morning", "Fictional Fixture Artist", null));
+        for (String unavailable : List.of("distance", "active_duration", "pre_run_energy", "weather_near_start")) {
+            AtomicInteger calls = new AtomicInteger();
+            AnthropicReflectionProvider provider = new AnthropicReflectionProvider(testConfiguration(), request -> {
+                calls.incrementAndGet();
+                JsonObject plan = compositionFixture(request);
+                plan.getAsJsonObject("spent").addProperty("anchor_id", unavailable);
+                return new TransportResponse(200, successfulResponse(plan.toString()));
+            }, fixtureAnalysis());
+            assertEquals(FailureType.INVALID_RESPONSE, assertThrows(ReflectionProviderException.class,
+                    () -> provider.generate(evidence)).failureType());
+            assertEquals(1, calls.get());
+        }
+    }
+
+    @Test
+    void allowsExplicitlyUngroundedMusicOmissionOnlyWithNoSelectedLabelOrConnection() throws Exception {
+        AtomicInteger calls = new AtomicInteger();
+        AnthropicReflectionProvider provider = new AnthropicReflectionProvider(testConfiguration(), request -> {
+            if (calls.incrementAndGet() == 1) {
+                JsonObject plan = compositionFixture(request);
+                for (String branch : plan.keySet()) {
+                    JsonObject composition = plan.getAsJsonObject(branch);
+                    composition.addProperty("selected_theme", "");
+                    composition.addProperty("selected_mood", "");
+                    composition.addProperty("anchor_id", "no_selection".equals(branch) ? "completed_run" : "none");
+                    composition.addProperty("connection", "");
+                }
+                return new TransportResponse(200, successfulResponse(plan.toString()));
+            }
+            return new TransportResponse(200, successfulResponse(validCandidateJson()));
+        }, fixtureAnalysis());
+        assertEquals(POWERED_UP, provider.generate(knownEvidence()).powered_up());
+        assertEquals(3, calls.get());
+
+        AtomicInteger invalidCalls = new AtomicInteger();
+        AnthropicReflectionProvider invalid = new AnthropicReflectionProvider(testConfiguration(), request -> {
+            invalidCalls.incrementAndGet();
+            JsonObject plan = compositionFixture(request);
+            plan.getAsJsonObject("spent").addProperty("selected_theme", "");
+            plan.getAsJsonObject("spent").addProperty("selected_mood", "");
+            return new TransportResponse(200, successfulResponse(plan.toString()));
+        }, fixtureAnalysis());
+        assertEquals(FailureType.INVALID_RESPONSE, assertThrows(ReflectionProviderException.class,
+                () -> invalid.generate(knownEvidence())).failureType());
+        assertEquals(1, invalidCalls.get());
+    }
+
+    @Test
+    void missingOrCuratedAnalysisStaysOnTheOneRequestPath() throws Exception {
+        AtomicInteger calls = new AtomicInteger();
+        AnthropicReflectionProvider provider = new AnthropicReflectionProvider(testConfiguration(), request -> {
+            calls.incrementAndGet();
+            assertFalse(systemFrom(request).contains("MUSIC_COMPOSITION_STAGE"));
+            assertFalse(systemFrom(request).contains("MUSIC_EDITING_STAGE"));
+            assertFalse(systemFrom(request).contains("MUSIC_GROUNDING_REVIEW_STAGE"));
+            assertFalse(evidenceFrom(request).has("music_composition"));
+            return new TransportResponse(200, successfulResponse(validCandidateJson()));
+        }, (title, artist) -> Optional.empty());
+        assertEquals(SPENT, provider.generate(knownEvidence()).spent());
+        assertEquals(1, calls.get());
+        SongCueContext cue = new SongCueContext("approved_fixture_v1", SongCueSource.RUNSTATE_CURATED,
+                "Ordinary optimism", "Recognize finishing with the selected Energy.");
+        CompletedRunEvidence curated = evidenceWithMusic(new MusicContext(MusicState.MUSIC,
+                "A New Morning", "Fictional Fixture Artist", null, MusicProvenance.MEDIA_SESSION_PARTIAL, cue));
+        AnthropicReflectionProvider curatedProvider = new AnthropicReflectionProvider(testConfiguration(), request -> {
+            calls.incrementAndGet();
+            assertFalse(systemFrom(request).contains("MUSIC_COMPOSITION_STAGE"));
+            return new TransportResponse(200, successfulResponse(validCandidateJson()));
+        }, (title, artist) -> { throw new AssertionError("Curated evidence must not trigger a lookup."); });
+        assertEquals(SPENT, curatedProvider.generate(curated).spent());
+        assertEquals(2, calls.get());
+    }
+
+    @Test
+    void editorProviderTimeoutAndTransportFailuresNeverReturnTheDraftOrRetry() throws Exception {
+        for (FailureType expected : List.of(FailureType.PROVIDER_ERROR, FailureType.TIMEOUT,
+                FailureType.TRANSPORT, FailureType.INVALID_RESPONSE)) {
+            AtomicInteger calls = new AtomicInteger();
+            AnthropicReflectionProvider provider = new AnthropicReflectionProvider(testConfiguration(), request -> {
+                if (calls.incrementAndGet() == 1) {
+                    return new TransportResponse(200, successfulResponse(compositionFixture(request).toString()));
+                }
+                return switch (expected) {
+                    case PROVIDER_ERROR -> new TransportResponse(529, "private provider diagnostic");
+                    case TIMEOUT -> throw new HttpTimeoutException("simulated timeout");
+                    case TRANSPORT -> throw new ConnectException("simulated connection failure");
+                    default -> new TransportResponse(200, successfulResponse("{\"spent\":\"unvalidated\"}"));
+                };
+            }, fixtureAnalysis());
+            ReflectionProviderException failure = assertThrows(ReflectionProviderException.class,
+                    () -> provider.generate(knownEvidence()));
+            assertEquals(expected, failure.failureType());
+            assertEquals(2, calls.get());
+            assertFalse(failure.getMessage().contains("private provider diagnostic"));
+        }
+    }
+
+    @Test
+    void groundingReviewFailureNeverReturnsTheCreativeEditorsProposalOrRetries() throws Exception {
+        for (FailureType expected : List.of(FailureType.PROVIDER_ERROR, FailureType.TIMEOUT,
+                FailureType.TRANSPORT, FailureType.INVALID_RESPONSE)) {
+            AtomicInteger calls = new AtomicInteger();
+            AnthropicReflectionProvider provider = new AnthropicReflectionProvider(testConfiguration(), request -> {
+                int call = calls.incrementAndGet();
+                if (call == 1) {
+                    return new TransportResponse(200, successfulResponse(compositionFixture(request).toString()));
+                }
+                if (call == 2) return new TransportResponse(200, successfulResponse(editedProposalJson()));
+                assertEquals(3, call);
+                assertTrue(systemFrom(request).contains("MUSIC_GROUNDING_REVIEW_STAGE"));
+                return switch (expected) {
+                    case PROVIDER_ERROR -> new TransportResponse(529, "private grounding diagnostic");
+                    case TIMEOUT -> throw new HttpTimeoutException("simulated review timeout");
+                    case TRANSPORT -> throw new ConnectException("simulated review connection failure");
+                    default -> new TransportResponse(200, successfulResponse("{\"spent\":\"unvalidated\"}"));
+                };
+            }, fixtureAnalysis());
+            ReflectionProviderException failure = assertThrows(ReflectionProviderException.class,
+                    () -> provider.generate(knownEvidence()));
+            assertEquals(expected, failure.failureType());
+            assertEquals(3, calls.get());
+            assertFalse(failure.getMessage().contains("private grounding diagnostic"));
+        }
+    }
+
+    @Test
+    void cancellationAfterEditingStopsBeforeTheGroundingReviewRequest() throws Exception {
+        AtomicInteger calls = new AtomicInteger();
+        AnthropicReflectionProvider provider = new AnthropicReflectionProvider(testConfiguration(), request -> {
+            int call = calls.incrementAndGet();
+            if (call == 1) {
+                return new TransportResponse(200, successfulResponse(compositionFixture(request).toString()));
+            }
+            assertEquals(2, call);
+            Thread.currentThread().interrupt();
+            return new TransportResponse(200, successfulResponse(editedProposalJson()));
+        }, fixtureAnalysis());
+        try {
+            assertEquals(FailureType.TRANSPORT, assertThrows(ReflectionProviderException.class,
+                    () -> provider.generate(knownEvidence())).failureType());
+            assertEquals(2, calls.get());
+            assertTrue(Thread.currentThread().isInterrupted());
+        } finally {
+            Thread.interrupted();
+        }
+    }
+
+    @Test
+    void compositionFailureAndCancellationStopBeforeAnyEditorRequest() throws Exception {
+        AtomicInteger failures = new AtomicInteger();
+        AnthropicReflectionProvider failed = new AnthropicReflectionProvider(testConfiguration(), request -> {
+            failures.incrementAndGet();
+            return new TransportResponse(503, "private provider diagnostic");
+        }, fixtureAnalysis());
+        assertEquals(FailureType.PROVIDER_ERROR, assertThrows(ReflectionProviderException.class,
+                () -> failed.generate(knownEvidence())).failureType());
+        assertEquals(1, failures.get());
+
+        AtomicInteger interruptedCalls = new AtomicInteger();
+        AnthropicReflectionProvider interrupted = new AnthropicReflectionProvider(testConfiguration(), request -> {
+            interruptedCalls.incrementAndGet();
+            throw new InterruptedException("simulated cancellation");
+        }, fixtureAnalysis());
+        try {
+            assertEquals(FailureType.TRANSPORT, assertThrows(ReflectionProviderException.class,
+                    () -> interrupted.generate(knownEvidence())).failureType());
+            assertEquals(1, interruptedCalls.get());
+            assertTrue(Thread.currentThread().isInterrupted());
+        } finally {
+            Thread.interrupted();
+        }
+
+        AtomicInteger cancelledCalls = new AtomicInteger();
+        AnthropicReflectionProvider cancelledAfterComposition = new AnthropicReflectionProvider(testConfiguration(), request -> {
+            cancelledCalls.incrementAndGet();
+            JsonObject composition = compositionFixture(request);
+            Thread.currentThread().interrupt();
+            return new TransportResponse(200, successfulResponse(composition.toString()));
+        }, fixtureAnalysis());
+        try {
+            assertEquals(FailureType.TRANSPORT, assertThrows(ReflectionProviderException.class,
+                    () -> cancelledAfterComposition.generate(knownEvidence())).failureType());
+            assertEquals(1, cancelledCalls.get(), "Cancellation between stages must not issue the editor request.");
+            assertTrue(Thread.currentThread().isInterrupted());
+        } finally {
+            Thread.interrupted();
+        }
+    }
+
+    @Test
+    void sharesOneDeadlineAcrossCompositionEditingAndReviewInsteadOfThreeFullTimeouts() throws Exception {
+        ProviderConfiguration timed = new ProviderConfiguration(testConfiguration().endpoint(), DUMMY_API_KEY,
+                testConfiguration().model(), Duration.ofSeconds(1), Duration.ofSeconds(1), 2_048);
+        List<TransportRequest> requests = new ArrayList<>();
+        AnthropicReflectionProvider provider = new AnthropicReflectionProvider(timed, request -> {
+            requests.add(request);
+            if (requests.size() == 1) {
+                Thread.sleep(20);
+                return new TransportResponse(200, successfulResponse(compositionFixture(request).toString()));
+            }
+            assertTrue(request.timeout().compareTo(Duration.ZERO) > 0);
+            assertTrue(request.timeout().compareTo(requests.get(requests.size() - 2).timeout()) < 0,
+                    "Each later stage must consume the remaining shared budget.");
+            if (requests.size() == 2) Thread.sleep(20);
+            return new TransportResponse(200, successfulResponse(validCandidateJson()));
+        }, fixtureAnalysis());
+        assertEquals(SPENT, provider.generate(knownEvidence()).spent());
+        assertEquals(3, requests.size());
+
+        ProviderConfiguration expired = new ProviderConfiguration(testConfiguration().endpoint(), DUMMY_API_KEY,
+                testConfiguration().model(), Duration.ofSeconds(1), Duration.ofMillis(5), 2_048);
+        AtomicInteger expiredCalls = new AtomicInteger();
+        AnthropicReflectionProvider overBudget = new AnthropicReflectionProvider(expired, request -> {
+            expiredCalls.incrementAndGet();
+            Thread.sleep(30);
+            return new TransportResponse(200, successfulResponse(compositionFixture(request).toString()));
+        }, fixtureAnalysis());
+        assertEquals(FailureType.TIMEOUT, assertThrows(ReflectionProviderException.class,
+                () -> overBudget.generate(knownEvidence())).failureType());
+        assertEquals(1, expiredCalls.get());
+
+        ProviderConfiguration expiresAfterEdit = new ProviderConfiguration(testConfiguration().endpoint(), DUMMY_API_KEY,
+                testConfiguration().model(), Duration.ofSeconds(1), Duration.ofMillis(100), 2_048);
+        AtomicInteger editCalls = new AtomicInteger();
+        AnthropicReflectionProvider editOverBudget = new AnthropicReflectionProvider(expiresAfterEdit, request -> {
+            if (editCalls.incrementAndGet() == 1) {
+                return new TransportResponse(200, successfulResponse(compositionFixture(request).toString()));
+            }
+            Thread.sleep(150);
+            return new TransportResponse(200, successfulResponse(editedProposalJson()));
+        }, fixtureAnalysis());
+        assertEquals(FailureType.TIMEOUT, assertThrows(ReflectionProviderException.class,
+                () -> editOverBudget.generate(knownEvidence())).failureType());
+        assertEquals(2, editCalls.get(), "An expired editing budget must not start factual review.");
+    }
+
     /** Paid network check: skipped unless the operator explicitly enables the system property. */
     @Test
     @Tag("live")
@@ -308,6 +682,9 @@ class AnthropicReflectionProviderTest {
             AtomicReference<MusixmatchSongAnalysis.Analysis> actualAnalysis = new AtomicReference<>();
             AtomicInteger lookupCalls = new AtomicInteger();
             AtomicInteger reflectionCalls = new AtomicInteger();
+            AtomicReference<JsonObject> compositionPlan = new AtomicReference<>();
+            AtomicReference<JsonObject> editedProposal = new AtomicReference<>();
+            AtomicReference<JsonObject> sourceEvidence = new AtomicReference<>();
             long finish = System.currentTimeMillis();
             CompletedRunEvidence sample = new CompletedRunEvidence(finish - 1_920_000L, finish,
                     "America/Chicago", 1_920_000L,
@@ -326,8 +703,7 @@ class AnthropicReflectionProviderTest {
                 JsonObject music = sentEvidence.getAsJsonObject("music_context");
                 JsonObject labels = music.getAsJsonObject("song_analysis");
                 assertTrue(labels != null, "Fetched song labels must reach the actual reflection request.");
-                assertEquals(Set.of("source", "track_title", "artist_name", "provider_track_id",
-                        "themes", "moods"), labels.keySet());
+                assertAnalysisKeys(labels, analysis);
                 assertEquals("MUSIXMATCH", labels.get("source").getAsString());
                 assertEquals(analysis.trackTitle(), labels.get("track_title").getAsString());
                 assertEquals(analysis.artistName(), labels.get("artist_name").getAsString());
@@ -344,9 +720,31 @@ class AnthropicReflectionProviderTest {
                 assertEquals("FIXTURE", sentEvidence.getAsJsonObject("metrics").get("source").getAsString());
                 assertEquals("3.00 miles of sample distance", sentEvidence.getAsJsonObject("reflection_facts")
                         .get("distance_text").getAsString());
-                stage.set("Anthropic reflection generation");
-                reflectionCalls.incrementAndGet();
-                return realTransport.send(request);
+                int call = reflectionCalls.incrementAndGet();
+                JsonObject source = sentEvidence.deepCopy();
+                if (call == 1) {
+                    assertTrue(systemFrom(request).contains("MUSIC_COMPOSITION_STAGE"));
+                    sourceEvidence.set(source);
+                } else if (call == 2) {
+                    assertTrue(systemFrom(request).contains("MUSIC_EDITING_STAGE"));
+                    JsonObject composition = source.remove("music_composition").getAsJsonObject();
+                    assertEquals(compositionPlan.get(), composition.getAsJsonObject("branches"));
+                    assertEquals(sourceEvidence.get(), source);
+                } else {
+                    assertEquals(3, call);
+                    assertTrue(systemFrom(request).contains("MUSIC_GROUNDING_REVIEW_STAGE"));
+                    assertFalse(source.has("music_composition"));
+                    assertEquals(editedProposal.get(), source.remove("proposed_reflections"));
+                    assertEquals(sourceEvidence.get(), source);
+                }
+                stage.set("Anthropic reflection stage " + call);
+                TransportResponse response = realTransport.send(request);
+                if (call == 1 && response.statusCode() == 200) {
+                    compositionPlan.set(modelObjectFrom(response));
+                } else if (call == 2 && response.statusCode() == 200) {
+                    editedProposal.set(modelObjectFrom(response));
+                }
+                return response;
             }, (title, artist) -> {
                 stage.set("Musixmatch song analysis");
                 assertEquals("Lovely Day", title);
@@ -363,7 +761,9 @@ class AnthropicReflectionProviderTest {
             CandidateReflections result = provider.generate(sample);
             stage.set("validating the generated reflection candidates");
             assertEquals(1, lookupCalls.get());
-            assertEquals(1, reflectionCalls.get());
+            assertEquals(3, reflectionCalls.get());
+            assertTrue(compositionPlan.get() != null);
+            assertTrue(editedProposal.get() != null);
             assertTrue(!result.spent().isBlank() && !result.feeling_good().isBlank()
                     && !result.powered_up().isBlank() && !result.no_selection().isBlank());
             MusixmatchSongAnalysis.Analysis analysis = actualAnalysis.get();
@@ -377,6 +777,10 @@ class AnthropicReflectionProviderTest {
             analysis.moods().forEach(moods::add);
             report.add("themes", themes);
             report.add("moods", moods);
+            report.add("music_composition", compositionPlan.get());
+            report.add("edited_proposal", editedProposal.get());
+            report.add("final_reflections", candidateObject(result));
+            report.addProperty("anthropic_calls", reflectionCalls.get());
             report.addProperty("used_prepared_song_notes", false);
             report.addProperty("sample_distance_miles", 3);
             report.addProperty("sample_duration_minutes", 32);
@@ -386,6 +790,227 @@ class AnthropicReflectionProviderTest {
         } catch (Exception | AssertionError unavailable) {
             // Do not attach or print exceptions: provider diagnostics can contain credential-bearing URLs.
             throw new AssertionError("The opt-in live music check stopped during " + stage.get() + ".");
+        }
+    }
+
+    /** Four paid calls: ordinary baseline versus composition/editing/grounding with the same source facts.
+     * This compares two workflows, not a single-variable test of labels alone. */
+    @Test
+    @Tag("live")
+    void liveMusicAnalysisComparisonUsesIdenticalFactsAndPrompt() {
+        assumeTrue(Boolean.getBoolean("runstate.liveMusicComparison"),
+                "The paid music comparison requires explicit opt-in.");
+        AtomicReference<String> stage = new AtomicReference<>("scenario selection");
+        try {
+            String scenario = System.getProperty("runstate.liveMusicScenario", "sunday_best");
+            assertTrue(Set.of("sunday_best", "stronger").contains(scenario),
+                    "Only the fixed public comparison scenarios are supported.");
+            boolean stronger = "stronger".equals(scenario);
+            String trackTitle = stronger ? "Stronger" : "Sunday Best";
+            String artistName = stronger ? "Kanye West" : "Surfaces";
+            double distanceMiles = stronger ? 4.2 : 3.0;
+            long elapsedMillis = (stronger ? 42L : 32L) * 60_000L;
+            long activeMillis = (stronger ? 40L : 32L) * 60_000L;
+            MetricSource source = stronger ? MetricSource.GPS : MetricSource.FIXTURE;
+            PreRunEnergy preRunEnergy = stronger ? PreRunEnergy.MODERATE : PreRunEnergy.LOW;
+            String expectedDistance = stronger ? "4.20 miles" : "3.00 miles of sample distance";
+            // Fixed fictional 07:00–07:42 Chicago CDT for Stronger, never a recorded phone run.
+            long finish = stronger ? Instant.parse("2026-10-17T12:42:00Z").toEpochMilli()
+                    : System.currentTimeMillis();
+            stage.set("backend configuration");
+            Map<String, String> environment = System.getenv();
+            ProviderConfiguration configuration = AnthropicReflectionProvider.configurationFrom(environment);
+            MusixmatchSongAnalysis musicProvider = MusixmatchSongAnalysis.fromEnvironment(environment)
+                    .orElseThrow(() -> new AssertionError("A Musixmatch key is required."));
+            AnthropicReflectionProvider.Transport productionTransport =
+                    AnthropicReflectionProvider.productionTransport(configuration);
+            AtomicInteger realLookups = new AtomicInteger();
+            AtomicInteger realGenerations = new AtomicInteger();
+            stage.set("Musixmatch song analysis");
+            realLookups.incrementAndGet();
+            MusixmatchSongAnalysis.Analysis actualAnalysis = musicProvider.lookup(trackTitle, artistName)
+                    .orElseThrow(() -> new AssertionError("Actual song labels are required before generation."));
+            assertTrue(!actualAnalysis.themes().isEmpty() || !actualAnalysis.moods().isEmpty()
+                    || actualAnalysis.meaningExplanation() != null);
+            CompletedRunEvidence sample = new CompletedRunEvidence(finish - elapsedMillis, finish,
+                    "America/Chicago", activeMillis,
+                    new RunMetricsEvidence(distanceMiles * 1_609.344, source,
+                            TelemetryCoverage.COMPLETE, DistanceUnit.MILES),
+                    preRunEnergy,
+                    new MusicContext(MusicState.MUSIC, actualAnalysis.trackTitle(), actualAnalysis.artistName(),
+                            null, MusicProvenance.CONTROLLED));
+            AtomicReference<TransportRequest> baselineRequest = new AtomicReference<>();
+            AtomicReference<String> promptVersion = new AtomicReference<>();
+            AtomicReference<JsonObject> compositionPlan = new AtomicReference<>();
+            AtomicReference<JsonObject> editedProposal = new AtomicReference<>();
+            AtomicInteger enrichedCalls = new AtomicInteger();
+
+            AnthropicReflectionProvider baseline = new AnthropicReflectionProvider(configuration, request -> {
+                stage.set("validating the baseline request");
+                JsonObject body = JsonParser.parseString(request.body()).getAsJsonObject();
+                JsonObject evidence = evidenceFrom(request);
+                JsonObject music = evidence.getAsJsonObject("music_context");
+                assertFalse(music.has("song_cue"));
+                assertFalse(music.has("song_analysis"));
+                assertTrue(music.get("artist_description").isJsonNull());
+                for (String forbidden : List.of("lyrics", "quotes", "meaning", "explanation", "audio")) {
+                    assertFalse(evidence.toString().contains("\"" + forbidden + "\""));
+                }
+                assertEquals(preRunEnergy.name(), evidence.get("pre_run_energy").getAsString());
+                assertEquals(source.name(), evidence.getAsJsonObject("metrics").get("source").getAsString());
+                assertEquals(elapsedMillis / 1_000L, evidence.getAsJsonObject("reflection_facts")
+                        .get("elapsed_duration_seconds").getAsLong());
+                assertEquals(activeMillis / 1_000L, evidence.getAsJsonObject("reflection_facts")
+                        .get("active_duration_seconds").getAsLong());
+                assertEquals(expectedDistance, evidence.getAsJsonObject("reflection_facts")
+                        .get("distance_text").getAsString());
+                if (stronger) {
+                    assertEquals("2026-10-17T07:00:00-05:00", evidence.getAsJsonObject("reflection_facts")
+                            .get("start_local_datetime").getAsString());
+                    assertEquals("2026-10-17T07:42:00-05:00", evidence.getAsJsonObject("reflection_facts")
+                            .get("finish_local_datetime").getAsString());
+                }
+                String version = body.get("system").getAsString().lines().skip(1).findFirst().orElseThrow();
+                assertEquals("Version: mobile-reflection-v1.8", version);
+                promptVersion.set(version.substring("Version: ".length()));
+                baselineRequest.set(request);
+                stage.set("baseline Claude generation");
+                realGenerations.incrementAndGet();
+                return productionTransport.send(request);
+            }, (title, artist) -> Optional.empty());
+            CandidateReflections withoutAnalysis = baseline.generate(sample);
+
+            AnthropicReflectionProvider enriched = new AnthropicReflectionProvider(configuration, request -> {
+                stage.set("validating the enriched request");
+                assertTrue(baselineRequest.get() != null);
+                JsonObject evidence = evidenceFrom(request);
+                JsonObject music = evidence.getAsJsonObject("music_context");
+                JsonObject labels = music.getAsJsonObject("song_analysis");
+                assertTrue(labels != null);
+                assertAnalysisKeys(labels, actualAnalysis);
+                assertEquals("MUSIXMATCH", labels.get("source").getAsString());
+                assertEquals(actualAnalysis.trackTitle(), labels.get("track_title").getAsString());
+                assertEquals(actualAnalysis.artistName(), labels.get("artist_name").getAsString());
+                assertEquals(actualAnalysis.providerTrackId(), labels.get("provider_track_id").getAsString());
+                assertEquals(actualAnalysis.themes(), labels.getAsJsonArray("themes").asList().stream()
+                        .map(JsonElement::getAsString).toList());
+                assertEquals(actualAnalysis.moods(), labels.getAsJsonArray("moods").asList().stream()
+                        .map(JsonElement::getAsString).toList());
+                assertFalse(music.has("song_cue"));
+                for (String forbidden : List.of("lyrics", "quotes", "meaning", "explanation", "audio")) {
+                    assertFalse(evidence.toString().contains("\"" + forbidden + "\""));
+                }
+                JsonObject withoutLabels = evidence.deepCopy();
+                withoutLabels.remove("music_composition");
+                withoutLabels.remove("proposed_reflections");
+                withoutLabels.getAsJsonObject("music_context").remove("song_analysis");
+                assertEquals(evidenceFrom(baselineRequest.get()), withoutLabels);
+                JsonObject baselineBody = JsonParser.parseString(baselineRequest.get().body()).getAsJsonObject();
+                JsonObject enrichedBody = JsonParser.parseString(request.body()).getAsJsonObject();
+                int call = enrichedCalls.incrementAndGet();
+                assertEquals(configuration.musicEditorModel(),
+                        enrichedBody.get("model").getAsString());
+                if (call == 1) {
+                    assertTrue(systemFrom(request).contains("MUSIC_COMPOSITION_STAGE"));
+                    assertFalse(evidence.has("music_composition"));
+                } else if (call == 2) {
+                    assertTrue(systemFrom(request).contains("MUSIC_EDITING_STAGE"));
+                    JsonObject composition = evidence.getAsJsonObject("music_composition");
+                    assertEquals("MODEL_GENERATED_NOT_EVIDENCE", composition.get("status").getAsString());
+                    assertEquals(compositionPlan.get(), composition.getAsJsonObject("branches"));
+                } else {
+                    assertEquals(3, call);
+                    assertTrue(systemFrom(request).contains("MUSIC_GROUNDING_REVIEW_STAGE"));
+                    assertFalse(evidence.has("music_composition"));
+                    assertEquals(editedProposal.get(), evidence.getAsJsonObject("proposed_reflections"));
+                }
+                String stageName = call == 1 ? "composition" : call == 2 ? "editing" : "grounding review";
+                stage.set("enriched Claude " + stageName);
+                realGenerations.incrementAndGet();
+                TransportResponse response = productionTransport.send(request);
+                stage.set("enriched " + stageName + " response HTTP " + response.statusCode());
+                if (response.statusCode() == 200) {
+                    JsonObject envelope = JsonParser.parseString(response.body()).getAsJsonObject();
+                    String stop = envelope.has("stop_reason") ? envelope.get("stop_reason").getAsString() : "missing";
+                    stage.set(stage.get() + (Set.of("end_turn", "max_tokens", "refusal").contains(stop)
+                            ? " stop=" + stop : " unexpected stop"));
+                    if (call == 1 && "end_turn".equals(stop)) {
+                        compositionPlan.set(modelObjectFrom(response));
+                        System.out.println("RUNSTATE_LIVE_COMPOSITION_DRAFT " + compositionPlan.get());
+                    } else if (call == 2 && "end_turn".equals(stop)) {
+                        editedProposal.set(modelObjectFrom(response));
+                        System.out.println("RUNSTATE_LIVE_EDITED_PROPOSAL " + editedProposal.get());
+                    }
+                }
+                return response;
+            }, (title, artist) -> {
+                assertEquals(actualAnalysis.trackTitle(), title);
+                assertEquals(actualAnalysis.artistName(), artist);
+                return Optional.of(actualAnalysis);
+            });
+            CandidateReflections withAnalysis = enriched.generate(sample);
+            stage.set("validating the creative comparison report");
+            assertEquals(1, realLookups.get());
+            assertEquals(4, realGenerations.get());
+            assertEquals(3, enrichedCalls.get());
+            assertTrue(compositionPlan.get() != null);
+            assertTrue(editedProposal.get() != null);
+            List<String> baselineCandidates = List.of(withoutAnalysis.spent(), withoutAnalysis.feeling_good(),
+                    withoutAnalysis.powered_up(), withoutAnalysis.no_selection());
+            List<String> enrichedCandidates = List.of(withAnalysis.spent(), withAnalysis.feeling_good(),
+                    withAnalysis.powered_up(), withAnalysis.no_selection());
+            JsonObject pairs = new JsonObject();
+            List<String> branches = List.of("spent", "feeling_good", "powered_up", "no_selection");
+            for (int index = 0; index < branches.size(); index++) {
+                String original = baselineCandidates.get(index);
+                String interpreted = enrichedCandidates.get(index);
+                assertTrue(!original.isBlank() && !interpreted.isBlank());
+                JsonObject pair = new JsonObject();
+                pair.addProperty("without_analysis", original.length() > 2_000 ? original.substring(0, 2_000) : original);
+                pair.addProperty("edited_proposal", editedProposal.get().get(branches.get(index)).getAsString());
+                pair.addProperty("with_analysis", interpreted.length() > 2_000 ? interpreted.substring(0, 2_000) : interpreted);
+                pairs.add(branches.get(index), pair);
+            }
+            JsonObject report = new JsonObject();
+            report.addProperty("track_title", actualAnalysis.trackTitle());
+            report.addProperty("artist_name", actualAnalysis.artistName());
+            report.addProperty("prompt_version", promptVersion.get());
+            report.addProperty("scenario", scenario);
+            report.addProperty("selected_branch", stronger ? "POWERED_UP" : "FEELING_GOOD");
+            report.addProperty("comparison_scope", "same source facts; baseline versus richer analysis/composition/stronger editor/grounding-review workflow");
+            report.addProperty("composition_model", configuration.musicEditorModel());
+            report.addProperty("editor_model", configuration.musicEditorModel());
+            report.addProperty("grounding_model", configuration.musicEditorModel());
+            report.addProperty("anthropic_calls", realGenerations.get());
+            report.add("music_composition", compositionPlan.get());
+            report.add("edited_proposal", editedProposal.get());
+            report.add("final_reflections", candidateObject(withAnalysis));
+            JsonArray themes = new JsonArray();
+            actualAnalysis.themes().forEach(themes::add);
+            JsonArray moods = new JsonArray();
+            actualAnalysis.moods().forEach(moods::add);
+            report.add("themes", themes);
+            report.add("moods", moods);
+            report.addProperty("used_meaning_explanation", actualAnalysis.meaningExplanation() != null);
+            report.addProperty("meaning_characters", actualAnalysis.meaningExplanation() == null
+                    ? 0 : actualAnalysis.meaningExplanation().length());
+            JsonObject facts = new JsonObject();
+            facts.addProperty("distance_miles", distanceMiles);
+            facts.addProperty("elapsed_minutes", elapsedMillis / 60_000L);
+            facts.addProperty("active_minutes", activeMillis / 60_000L);
+            facts.addProperty("metric_source", source.name());
+            facts.addProperty("pre_run_energy", preRunEnergy.name());
+            JsonObject derivedFacts = evidenceFrom(baselineRequest.get()).getAsJsonObject("reflection_facts");
+            facts.addProperty("start_local_datetime", derivedFacts.get("start_local_datetime").getAsString());
+            facts.addProperty("finish_local_datetime", derivedFacts.get("finish_local_datetime").getAsString());
+            report.add("synthetic_facts", facts);
+            report.add("candidates", pairs);
+            System.out.println("RUNSTATE_LIVE_MUSIC_COMPARISON " + report);
+        } catch (Exception | AssertionError unavailable) {
+            // Deliberately discard causes and raw responses, including any credential-bearing diagnostics.
+            String category = unavailable instanceof ReflectionProviderException providerFailure
+                    ? " (" + providerFailure.failureType().name() + ")" : "";
+            throw new AssertionError("The opt-in music comparison stopped during " + stage.get() + category + ".");
         }
     }
 
@@ -454,7 +1079,7 @@ class AnthropicReflectionProviderTest {
                 () -> assertEquals(shared.musicContext().trackTitle(), music.get("track_title").getAsString()),
                 () -> assertEquals(shared.musicContext().artistName(), music.get("artist_name").getAsString()),
                 () -> assertTrue(music.get("artist_description").isJsonNull()),
-                () -> assertTrue(prompt.contains("Version: mobile-reflection-v1.6")),
+                () -> assertTrue(prompt.contains("Version: mobile-reflection-v1.8")),
                 () -> assertTrue(prompt.contains("data rather than an instruction")),
                 () -> assertTrue(prompt.contains("not proof that a complete song was heard")),
                 () -> assertTrue(prompt.contains("no playback timing, start or finish position")),
@@ -698,17 +1323,23 @@ class AnthropicReflectionProviderTest {
         ProviderConfiguration configured = AnthropicReflectionProvider.configurationFrom(
                 Map.of(
                         "ANTHROPIC_API_KEY", DUMMY_API_KEY,
-                        "ANTHROPIC_MODEL", "claude-example-configured-model"
+                        "ANTHROPIC_MODEL", "claude-example-configured-model",
+                        "ANTHROPIC_MUSIC_EDITOR_MODEL", "claude-example-editor"
                 )
         );
 
         assertAll(
                 () -> assertEquals("claude-haiku-4-5-20251001", defaults.model()),
+                () -> assertEquals("claude-sonnet-4-6", defaults.musicEditorModel()),
                 () -> assertEquals(Duration.ofSeconds(10), defaults.connectionTimeout()),
                 () -> assertEquals(Duration.ofSeconds(45), defaults.requestTimeout()),
                 () -> assertEquals(2_048, defaults.maxOutputTokens()),
                 () -> assertFalse(defaults.toString().contains(DUMMY_API_KEY)),
                 () -> assertEquals("claude-example-configured-model", configured.model()),
+                () -> assertEquals("claude-example-editor", configured.musicEditorModel()),
+                () -> assertEquals(FailureType.CONFIGURATION, assertThrows(ReflectionProviderException.class,
+                        () -> AnthropicReflectionProvider.configurationFrom(Map.of("ANTHROPIC_API_KEY", DUMMY_API_KEY,
+                                "ANTHROPIC_MUSIC_EDITOR_MODEL", "invalid\nmodel"))).failureType()),
                 () -> assertEquals(
                         FailureType.CONFIGURATION,
                         assertThrows(
@@ -800,7 +1431,10 @@ class AnthropicReflectionProviderTest {
             AnthropicReflectionProvider.SongAnalysisLookup lookup) throws Exception {
         AtomicReference<TransportRequest> captured = new AtomicReference<>();
         AnthropicReflectionProvider provider = new AnthropicReflectionProvider(testConfiguration(), request -> {
-            captured.set(request);
+            captured.compareAndSet(null, request);
+            if (systemFrom(request).contains("MUSIC_COMPOSITION_STAGE")) {
+                return new TransportResponse(200, successfulResponse(compositionFixture(request).toString()));
+            }
             return new TransportResponse(200, successfulResponse(validCandidateJson()));
         }, lookup);
         CandidateReflections result = provider.generate(evidence);
@@ -809,6 +1443,49 @@ class AnthropicReflectionProviderTest {
         assertEquals(POWERED_UP, result.powered_up());
         assertEquals(NO_SELECTION, result.no_selection());
         return captured.get();
+    }
+
+    private static String systemFrom(TransportRequest request) {
+        return JsonParser.parseString(request.body()).getAsJsonObject().get("system").getAsString();
+    }
+
+    private static void assertAnalysisKeys(JsonObject labels, MusixmatchSongAnalysis.Analysis analysis) {
+        Set<String> expected = new java.util.HashSet<>(Set.of("source", "track_title", "artist_name",
+                "provider_track_id", "themes", "moods"));
+        if (analysis.meaningExplanation() != null) {
+            expected.add("meaning_explanation");
+            assertEquals(analysis.meaningExplanation(), labels.get("meaning_explanation").getAsString());
+        }
+        assertEquals(expected, labels.keySet());
+    }
+
+    private static JsonObject modelObjectFrom(TransportResponse response) {
+        String text = JsonParser.parseString(response.body()).getAsJsonObject().getAsJsonArray("content")
+                .get(0).getAsJsonObject().get("text").getAsString();
+        return JsonParser.parseString(text).getAsJsonObject();
+    }
+
+    private static JsonObject compositionFixture(TransportRequest request) {
+        JsonObject analysis = evidenceFrom(request).getAsJsonObject("music_context")
+                .getAsJsonObject("song_analysis");
+        JsonArray themes = analysis.getAsJsonArray("themes");
+        JsonArray moods = analysis.getAsJsonArray("moods");
+        JsonObject plan = new JsonObject();
+        for (String branch : List.of("spent", "feeling_good", "powered_up", "no_selection")) {
+            JsonObject composition = new JsonObject();
+            composition.addProperty("selected_theme", themes.isEmpty() ? "" : themes.get(0).getAsString());
+            composition.addProperty("selected_mood", moods.isEmpty() ? "" : moods.get(0).getAsString());
+            composition.addProperty("anchor_id", "completed_run");
+            composition.addProperty("connection", "Use the supplied theme as an original lens on completion.");
+            composition.addProperty("draft", "A complete run deserves a moment of recognition.");
+            plan.add(branch, composition);
+        }
+        return plan;
+    }
+
+    private static AnthropicReflectionProvider.SongAnalysisLookup fixtureAnalysis() {
+        return (title, artist) -> Optional.of(new MusixmatchSongAnalysis.Analysis(title, artist, "67890",
+                List.of("persistence", "self acceptance"), List.of("hopeful", "reflective")));
     }
 
     private static JsonObject evidenceFrom(TransportRequest request) {
@@ -963,6 +1640,16 @@ class AnthropicReflectionProviderTest {
 
     private static String validCandidateJson() {
         return candidateJson(SPENT, FEELING_GOOD, POWERED_UP, NO_SELECTION);
+    }
+
+    private static String editedProposalJson() {
+        return candidateJson("Unreviewed spent proposal.", "Unreviewed feeling-good proposal.",
+                "Unreviewed powered-up proposal.", "Unreviewed no-selection proposal.");
+    }
+
+    private static JsonObject candidateObject(CandidateReflections result) {
+        return JsonParser.parseString(candidateJson(result.spent(), result.feeling_good(),
+                result.powered_up(), result.no_selection())).getAsJsonObject();
     }
 
     private static String candidateJson(

@@ -45,6 +45,8 @@ class MusixmatchSongAnalysisTest {
                 () -> assertEquals("12345", result.providerTrackId()),
                 () -> assertEquals(List.of("everyday optimism", "perseverance"), result.themes()),
                 () -> assertEquals(List.of("uplifting", "reflective"), result.moods()),
+                () -> assertEquals("The song connects everyday optimism with continuing forward.",
+                        result.meaningExplanation()),
                 () -> assertEquals(2, requests.size()),
                 () -> assertEquals("https", requests.get(0).endpoint().getScheme()),
                 () -> assertEquals("api.musixmatch.com", requests.get(0).endpoint().getHost()),
@@ -205,8 +207,8 @@ class MusixmatchSongAnalysisTest {
     }
 
     @Test
-    void requiresRealLabelArraysAndDoesNotUseMeaningOrQuotesAsFallback() {
-        for (String raw : List.of("[]", "{}", "{\"meaning\":{\"explanation\":\"DISCARDED explanation\"}}",
+    void rejectsMalformedLabelsAndDoesNotUseQuotesAsFallback() {
+        for (String raw : List.of("[]", "{}", "{\"meaning\":{\"quotes\":[\"DISCARDED quote\"]}}",
                 "{\"themes\":{\"main_themes\":\"optimism\"}}",
                 "{\"themes\":{\"main_themes\":[\"optimism\"]}}",
                 "{\"themes\":{\"main_themes\":[{\"quotes\":[\"DISCARDED quote\"]}]}}",
@@ -259,6 +261,109 @@ class MusixmatchSongAnalysisTest {
         }
     }
 
+    @Test
+    void allowsMeaningOnlyContextFromTheSameMatchedAnalysisRequest() {
+        JsonObject analysis = new JsonObject();
+        JsonObject meaning = new JsonObject();
+        meaning.addProperty("explanation", "  The song\n\tconnects  everyday optimism with continuing forward.  ");
+        analysis.add("meaning", meaning);
+        List<TransportRequest> requests = new ArrayList<>();
+        MusixmatchSongAnalysis provider = provider(request -> {
+            requests.add(request);
+            JsonObject body = new JsonObject();
+            body.add("analysis", analysis);
+            return requests.size() == 1 ? matched("Sunday Best", "Surfaces") : envelope(200, body);
+        });
+
+        Analysis result = provider.lookup("Sunday Best", "Surfaces").orElseThrow();
+
+        assertEquals(List.of(), result.themes());
+        assertEquals(List.of(), result.moods());
+        assertEquals("The song connects everyday optimism with continuing forward.", result.meaningExplanation());
+        assertEquals(2, requests.size());
+        assertEquals("/ws/1.1/track.lyrics.analysis.get", requests.get(1).endpoint().getPath());
+    }
+
+    @Test
+    void removesPairedStraightCurlyAndNestedDoubleQuotedPassagesWithoutJoiningWords() {
+        for (String explanation : List.of(
+                "The \"DISCARDED quote\"song connects everyday optimism with continuing forward.",
+                "The song \u201cDISCARDED quote\u201d connects everyday optimism with continuing forward.",
+                "The song \u201cDISCARDED \"NESTED\" quote\u201d connects everyday optimism with continuing forward.",
+                "The song \"DISCARDED \u201cNESTED\u201d quote\" connects everyday optimism with continuing forward.")) {
+            Analysis result = new Analysis("Sunday Best", "Surfaces", "12345", List.of(), List.of(), explanation);
+            assertEquals("The song connects everyday optimism with continuing forward.", result.meaningExplanation());
+            assertFalse(result.toString().contains("DISCARDED"));
+            assertFalse(result.toString().contains("NESTED"));
+        }
+    }
+
+    @Test
+    void keepsValidLabelsWhenMeaningIsMissingMalformedOversizedOrHasUnmatchedQuotes() {
+        for (String meaningJson : List.of("null", "[]", "true", "\"wrong container\"", "{}",
+                "{\"explanation\":null}", "{\"explanation\":123}", "{\"explanation\":[]}",
+                "{\"explanation\":{}}", "{\"explanation\":\"   \\t\\n\"}",
+                "{\"explanation\":\"text \\u0000 control\"}",
+                "{\"explanation\":\"text \\u007f control\"}",
+                "{\"explanation\":\"text \\\"unclosed\"}",
+                "{\"explanation\":\"text \u201cunclosed\"}",
+                "{\"explanation\":\"unmatched\u201d text\"}",
+                "{\"explanation\":\"text \u201cmismatched\\\" text\"}",
+                "{\"explanation\":\"\\\"quoted only\\\"\"}",
+                "{\"explanation\":\"" + "a".repeat(1201) + "\"}")) {
+            JsonObject analysis = validAnalysis();
+            analysis.add("meaning", com.google.gson.JsonParser.parseString(meaningJson));
+            AtomicInteger calls = new AtomicInteger();
+            Analysis result = lookupAnalysis(analysis, calls).orElseThrow();
+            assertEquals(null, result.meaningExplanation(), meaningJson);
+            assertEquals(List.of("everyday optimism", "perseverance"), result.themes());
+            assertEquals(List.of("uplifting", "reflective"), result.moods());
+            assertEquals(2, calls.get());
+        }
+    }
+
+    @Test
+    void preservesLabelOnlyBehaviorAndTheFiveArgumentConstructor() {
+        JsonObject analysis = validAnalysis();
+        analysis.remove("meaning");
+        Analysis fromProvider = lookupAnalysis(analysis, new AtomicInteger()).orElseThrow();
+        Analysis oldConstructor = new Analysis("Sunday Best", "Surfaces", "12345",
+                List.of("everyday optimism", "perseverance"), List.of("uplifting", "reflective"));
+        assertEquals(oldConstructor, fromProvider);
+        assertEquals(null, oldConstructor.meaningExplanation());
+    }
+
+    @Test
+    void acceptsTheExplanationLimitAndNeverCopiesLyricsQuoteOrEntityFields() {
+        JsonObject analysis = validAnalysis();
+        analysis.getAsJsonObject("meaning").addProperty("explanation", "a".repeat(1200));
+        analysis.addProperty("lyrics", "DISCARDED lyric fixture");
+        analysis.addProperty("snippet", "DISCARDED snippet fixture");
+        analysis.addProperty("explanation", "DISCARDED root explanation fixture");
+        AtomicInteger calls = new AtomicInteger();
+        Analysis result = lookupAnalysis(analysis, calls).orElseThrow();
+        assertEquals("a".repeat(1200), result.meaningExplanation());
+        assertFalse(result.toString().contains("DISCARDED"));
+        assertEquals(2, calls.get());
+    }
+
+    @Test
+    void unavailableMeaningWithoutLabelsDoesNotInventSongContext() {
+        JsonObject analysis = new JsonObject();
+        JsonObject meaning = new JsonObject();
+        meaning.addProperty("explanation", "\"DISCARDED quote only\"");
+        analysis.add("meaning", meaning);
+        assertTrue(lookupAnalysis(analysis, new AtomicInteger()).isEmpty());
+    }
+
+    private static Optional<Analysis> lookupAnalysis(JsonObject analysis, AtomicInteger calls) {
+        JsonObject body = new JsonObject();
+        body.add("analysis", analysis);
+        return provider(request -> calls.incrementAndGet() == 1
+                ? matched("Sunday Best", "Surfaces") : envelope(200, body))
+                .lookup("Sunday Best", "Surfaces");
+    }
+
     private static MusixmatchSongAnalysis provider(Transport transport) {
         return new MusixmatchSongAnalysis(DUMMY_KEY, transport);
     }
@@ -307,7 +412,7 @@ class MusixmatchSongAnalysisTest {
         JsonObject moodContainer = new JsonObject();
         moodContainer.add("main_moods", moods);
         JsonObject meaning = new JsonObject();
-        meaning.addProperty("explanation", "DISCARDED fictional explanation fixture");
+        meaning.addProperty("explanation", "The song \u201cDISCARDED title fixture\u201d connects everyday optimism with continuing forward.");
         JsonObject analysis = new JsonObject();
         analysis.add("themes", themeContainer);
         analysis.add("moods", moodContainer);
