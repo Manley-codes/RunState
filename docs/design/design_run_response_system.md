@@ -7,6 +7,44 @@ metadata:
 
 Every successfully saved run gets a contextual response. No exceptions.
 
+## Music composition repair — October 17, 2026
+
+Manley rejected the first Stronger audition as sounding the same as the pre-Musixmatch replies.
+Song analysis must be a central creative input, not optional decoration on a stats recap. Quality
+currently takes precedence over generation speed. The local v1.8 backend now retains optional
+bounded Musixmatch song-meaning prose as well as themes/moods, then separates composition,
+editing and final factual review. Generated connections/drafts never become source evidence;
+only the reviewed four-branch result can leave the provider. The original facts voice, custom
+reflection voice, intake/selection ownership and Spotify handoff stay unchanged.
+
+No lyric body/quotation/entity fields are retained. Double-quoted passages are removed from the
+optional meaning prose, but this cannot guarantee absence of unquoted lyric fragments or resolve
+the provider-contract uncertainty. Original wording and factual safeguards still apply. Old
+absolute delete-the-music/never-explain-meaning tests are not restored. Actual outputs, observed
+failures and subjective quality are recorded separately in the research notebook; a successful
+schema/request alone is not proof of a good reflection. Manley still rejects the writing; the
+local pipeline remains unfinished and is not approved for hosted activation. He paused work
+after a separate freer-persona experiment, also unaccepted and not installed. Resume the music
+reflection's creative/factual quality before considering a deployment.
+
+## Spoken delivery roles — clarified October 17, 2026
+
+The first generic voice announces saved run facts only: current implementation covers distance,
+elapsed time and average pace when complete saved evidence supports it. Energy selections,
+Effort, song commentary and interpretation belong outside that factual receipt. Unavailable
+metrics, including the not-yet-built calorie estimate, stay omitted. The selected reflection
+then uses the custom ElevenLabs voice, followed by the appropriate existing music path.
+The receipt has its own modestly quieter/slower local delivery; it does not change phone volume.
+After Manley's Stronger replay feedback, selected Spotify passages now have a **650 ms pause**
+after natural reflection completion. Speech focus is retained until the handoff; Stop, close,
+replacement or focus loss cancels it, and current eligibility is rechecked before playback.
+Both cloud reflection voice and local fallback use this owner-controlled pause. The delay is
+native playback timing, never a prompt instruction or a change to the saved reflection text.
+Manley confirmed the revised three-part sequence flowed well. A soft Spotify passage fade remains
+open; current transport does not provide RunState an isolated gain control. Playback-stop
+regressions, the intermittent failed check and subsequent verified replay are recorded in
+`project_current_state.md` and `research_music_reflection_generation.md`.
+
 ## First functional Android reflection version — approved direction October 3, 2026
 
 **October 14 Spotify follow-up — one physical compatibility pass:** Manley started Spotify, then

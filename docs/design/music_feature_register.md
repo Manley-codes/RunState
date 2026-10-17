@@ -7,6 +7,24 @@ metadata:
 
 # Music feature register — LIVE
 
+**October 17 creative direction:** Manley accepts the Stronger opening but still rejects the
+reflection as too similar to pre-Musixmatch replies. Strong persona is a priority; try less
+prescribed writing before adding more constraints. The actual one-pass experiment with three
+distinct narrator attitudes is recorded in the research notebook. It shows more expressive
+range but also invented run claims, so it is not production-ready or accepted writing. Current
+Musixmatch context is a short interpretation plus themes/moods, not a full song or artist
+biography. No production prompt or artist-persona sourcing changed in this experiment.
+
+**October 17 passage-entry direction:** a meaningful musical entrance is part of the pairing,
+separate from the pause after speech. Prefer a recognizable hook, vocal phrase or musical opening
+that supports the reflection rather than an arbitrary offset. Manley identified Stronger's entry
+point as the flow issue and requested about **24 seconds**, then asked to try the **recording
+opening instead**. Both **24–34 s** and **0–10 s** auditions passed their transport/restoration
+checks. Manley preferred the opening, calling it **“much better,”** and requested an identical
+replay. Retain the exact reflection, voices and 650 ms gap. This accepts the entrance for this
+auditioned recording/sequence, not broader writing quality or suitability for other recordings.
+The test-specific offset is 0 s, not automatic hook recognition or a production Stronger cue.
+
 **Latest October 16 listening direction — revised entrance confirmed on Moto:** the initial
 automated handoff sounded good, but its opening beat did not reveal the connection. Cue v2 for
 Sunday Best now uses the auditioned 15.5–25.5 s early vocal hook and clearer editorial recognition,

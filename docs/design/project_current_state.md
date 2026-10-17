@@ -7,6 +7,351 @@ metadata:
 
 ## Current Android checkpoint — October 17, 2026
 
+### Paused at Manley's request — October 17
+
+Close out documentation and grouped commit advice only; no new feature work, provider calls,
+phone replay or deployment during this pause. Resume with **music-reflection quality**, not
+another entrance audition: Stronger's opening (0–10 s) and current 650 ms gap are accepted for
+the tested sequence. The writing still needs meaningful improvement and stronger persona.
+The three freer outputs are unedited experimental material with factual failures; Manley has
+not chosen one of those personalities. Do not silently adopt them or restart manual pairing.
+
+When resumed, preserve expressive freedom while distinguishing imagery from actual runner
+claims, and assess what the actual Musixmatch interpretation adds. It is a short interpretation
+plus theme/mood labels, not full audio/lyrics or verified artist-persona data. Artist-persona
+sourcing, broader song ranking and automatic hook selection remain separate unfinished work.
+
+Current local backend v1.8 remains a **work-in-progress checkpoint**, with known factual and
+creative misses. The last verified hosted implementation is `cb23da6`; no deployment occurred
+for these local changes. Commit advice separates eight Android speech/playback files, six
+backend experiment files, and five documentation files. Local checkpoint commits can preserve
+the work; do not push this unfinished backend to the deployment branch or deploy it as an
+accepted repair during the pause. No staging, commit, push or branch change was performed by
+the assistant. All 19 changed files already exist; no new permanent file was required.
+
+### Freer creative experiment — October 17
+
+Manley confirmed Stronger's opening works much better, but the reflection remains unimpressive
+and too similar to pre-Musixmatch writing. He requested a less restrictive, persona-led experiment.
+One real Musixmatch analysis lookup (plus matching) and one Sonnet 4.6 request, using the same
+fictional Powered Up run and 428-character interpretation, produced three distinct narrator takes
+in **22.234 seconds**. The current three-stage production writer and calibration examples were
+not used; no subsequent editing pass or retry was applied. See the research notebook for the
+exact brief, actual excerpts and factual failures. Stronger personality is visible, but invented
+weather, motives and growth make these experimental outputs unsuitable as app-ready reflections.
+User judgment and a grounded implementation remain open. This does not isolate the value added
+by Musixmatch, supply a full song/artist biography or change the actual app/backend prompts.
+Only existing notes changed; no new permanent file, phone data, deployment or Git mutation.
+
+### Stronger musical entrance audition — October 17
+
+After the spacing replay, Manley identified the musical starting point as the flow issue. He
+requested trying about **24 seconds**, at the robotic sample, with the recording opening as
+another candidate. Only the existing opted-in Stronger phone test's offset changed, from 30 s
+to **24 s**; the exact generated reflection, facts/custom voices, **650 ms gap** and **ten-second
+passage duration** stayed unchanged. This adds no production Stronger cue or automatic hook finder.
+
+The test APK rebuilt successfully. The real automatic sequence **passed in 45.408 seconds**,
+with a **657 ms** voice-completion-to-controller-handoff gap, confirmed passage stop and original
+paused-recording/position restoration with zero reported error. All 32 saved runs/every field in
+the seven inspected tables retained the prior checksum. The temporary test package was removed
+and normal RunState reopened. Manley then requested trying the **song's opening instead**.
+The same existing audition now uses **0–10 s**, keeping text, voices and gap unchanged. Its rebuilt
+test APK and real automatic sequence **passed in 44.033 seconds**, witnessing **656 ms** to
+controller handoff, confirmed stop and original paused-position restoration with zero reported
+error. All 32 runs/every inspected field again matched the original checksum; the temporary test
+package was removed and normal RunState reopened. Manley preferred the opening, calling it
+**“much better,”** and requested an identical replay. This accepts the entrance for this recording
+and sequence; broader musical writing quality remains unconfirmed. No new permanent file,
+Claude/Musixmatch generation, database write, deployment or Git mutation.
+
+The identical requested opening replay **passed in 44.062 seconds**, with the same **656 ms**
+controller-handoff gap, ten-second stop and original paused-position restoration with zero
+reported error. All 32 runs/every inspected field again matched the pre-replay checksum. The
+temporary test package was removed and normal RunState reopened. No code or timing change,
+new Claude/Musixmatch generation, permanent file or Git mutation was needed for this replay.
+
+### Reflection-to-song breathing room installed — October 17
+
+After the enriched Stronger replay, Manley reported that the song entered too quickly after the
+reflection and requested a slight pause. This is pacing feedback, not acceptance of the musical
+writing. The native speaker now waits **650 ms** after natural reflection completion before
+starting a selected Spotify passage. Both cloud voice and local fallback share that handoff.
+The existing speech focus is retained during the gap, then released at music entry. One owned
+scheduled callback is invalidated on Stop, close, replacement or focus loss; delayed entry also
+rechecks lifecycle/request identity and the current playback-eligibility closure. Duplicate/late
+voice callbacks cannot reschedule or start music. Receipt and voice-only behavior stay immediate;
+the instrumental path does not gain the Spotify-specific gap. No passage offset/duration, text,
+volume, voice, server generation or saved-data contract was changed by this pacing slice.
+
+Debug/release each passed **510 JVM tests**, and all three APK builds passed. The updated Moto
+passed **21 silent cases**, with **four real checks gated off** (25 reported total, **27.229 s**).
+These cover the gap/focus retention, Stop/close/replacement/focus-loss cancellation, revoked or
+throwing eligibility and stale callbacks across local/cloud voice, plus existing instrumental
+ownership. The live audition now witnesses the measured voice-completion-to-song-handoff gap.
+All 32 runs/all fields in seven tables retained the existing checksum after install/silent checks.
+Only the existing native speaker file, two existing instrumentation-test files and existing docs
+were extended; no new permanent file, schema, secret, backend edit or Git mutation. Listener
+check followed after Manley refreshed Spotify and confirmed readiness. The unchanged exact
+generated reflection → Spotify passage sequence **passed in 44.034 seconds**, witnessing
+**656 ms from cloud voice completion to song-controller handoff**. This measures the inserted
+gap, not total seek/buffering time to audible sound. The ten-second passage stopped and the
+same paused recording/original position was restored with zero reported error. All 32 saved
+records/all seven-table fields stayed unchanged; the temporary test package was removed and
+normal RunState reopened. Manley's requested identical replay also **passed in 44.026 seconds**,
+witnessing **657 ms** to song-controller handoff and the same confirmed stop/restoration. After
+the replay, all 32 saved records/every inspected field still matched the original checksum.
+The temporary test package was removed again and normal updated RunState reopened. Timing
+feedback subsequently identified the song entrance as the issue; see the 24 s audition above.
+No new Claude/Musixmatch generation or text change was used for either listen. Subjective writing
+acceptance remains separate from this playback correction.
+
+### Richer Musixmatch composition implemented locally — October 17
+
+Manley rejected the first Stronger reflection as unchanged from the pre-Musixmatch version and
+asked for actual song information to be central, with quality before latency. Inspection confirmed
+that optional broad theme/mood labels were the only retained semantic input. The same documented
+analysis endpoint also supplies `meaning.explanation`; the adapter now optionally retains up to
+1,200 raw characters, removing paired straight/curly double-quoted passages. Malformed, oversized
+or unmatched-quotation prose is omitted without losing labels. Lyric/quote/entity fields are not
+retained, but this is not proof that unquoted fragments cannot remain or that provider terms are
+resolved. No new music endpoint, private data sharing or provider purchase was introduced.
+
+Local prompt **v1.8** now uses three bounded music steps: Sonnet composition develops an actual
+label/meaning-to-known-run connection and draft for each Energy branch; Sonnet editing can replace
+a weak idea; independent Sonnet grounding receives original evidence and edited proposals only.
+Only the final review response is returned. Exact label/anchor/shape validation runs before editing;
+generated plans never replace source evidence. All three use `claude-sonnet-4-6`, configurable through
+`ANTHROPIC_MUSIC_EDITOR_MODEL`, with one shared 45-second budget after the bounded lookup and no
+automatic retries/unreviewed-draft fallback. Missing analysis/accepted curated cues retain the
+ordinary single-call model. Old recap calibration examples are excluded from music stages.
+External four-candidate JSON, Android/Room, saved-run facts voice, custom voice and Spotify controls
+are unchanged. Hosted `cb23da6` remains the older implementation until a user push/deployment.
+
+All **118 normal backend tests passed**, with **two paid cases skipped**. The final real Stronger
+comparison **passed in 29.341 seconds** (lookup + one baseline + three music calls, not normal
+in-app latency). Actual **428-character meaning** reached all three music requests alongside the
+real themes/moods, with no handwritten cue. The selected Powered Up output was:
+
+> Powered up after 4.20 miles — worth noticing. "Stronger" is built around ambition and hard work
+> as a source of energy, not a drain. That framing had some company on this run.
+
+This is an actual generated/reviewed candidate, not operator-authored text. Its connection is more
+visible but its delivery remains somewhat explanatory. **Writing acceptance is NOT established**:
+the final Spent text still infers effort/difficulty, and Feeling Good still suggests a causal
+benefit. Earlier revisions were more generic or retained unsupported growth/energy comparisons;
+mechanical passes are not described as quality passes. Do not deploy as a proven factual/creative
+repair. Listener review of the exact selected candidate is pending. No new phone run, phone write,
+credential file, source schema, permanent file or Git mutation occurred in this continuation.
+
+Only existing provider/analysis/prompt, their two test files and existing documentation were
+extended. Detailed generated outputs, intermediate failures and source limitations are preserved
+in the music research notebook. After Manley confirmed readiness, the first optional phone
+audition stopped at its recording/session precondition in **1.967 seconds**, before any voice
+or network request. Android exposed no active Spotify session, so no song sequence was played.
+The connected Moto's 32 saved runs/all seven-table fields still matched the existing checksum
+before this attempt. The existing temporary test package is installed for a retry; normal
+RunState was reopened. Manley was asked to briefly Play/Pause Stronger in Spotify and return.
+He confirmed the refresh. The exact final Powered Up text then **passed the real phone audition
+in 43.494 seconds**: facts-only local voice → actual custom cloud reflection voice → Spotify
+30–40 s passage → confirmed pause and original paused recording/position restored (zero reported
+position error). No speech fallback, instrumental substitution or operator emergency pause was
+used on this successful attempt, and no new reflection generation was made. Manley's requested
+identical replay also **passed in 41.240 seconds**, with confirmed stop/restoration and zero
+reported position error. All 32 runs/every field in all seven inspected tables retained the exact
+pre-test checksum. Temporary inspection copies and the test package were removed; normal RunState
+was reopened. No production APK/preference, saved run/reflection, source file, deployment or Git
+mutation was introduced by these listening checks. Creative feedback remains pending.
+
+### Stronger / Kanye West comparison and audition — October 17
+
+Manley requested another Musixmatch creative test with fitting fictional run facts. The existing
+gated backend comparison gained the fixed `stronger` scenario: 4.2 miles COMPLETE GPS, 42 minutes
+elapsed/40 active, Saturday 07:00–07:42 Chicago, pre-run Moderate, review branch Powered Up.
+No run was recorded/saved and no PR, injury, adversity or artist persona was supplied.
+Actual Musixmatch themes/moods reached one of two otherwise identical real Claude requests;
+the comparison **passed in 9.901 seconds**. Both primary replies and all other branches are
+preserved in the music research notebook, including writing misses.
+
+Exact enriched Powered Up reply:
+
+> 4.20 miles on a Saturday morning, and you finished powered up. You brought something to this
+> run and it showed.
+
+This supplied the existing optional on-device audition unchanged. After Manley confirmed the
+original recording paused and phone ready, actual facts → custom voice → Spotify 30–40 s passage
+**passed in 37.521 seconds**, including confirmed pause and original paused recording/position
+restoration, with no emergency stop/fallback/instrumental substitution. The entrance is provisional,
+not an established hook or automatic selection. Manley subsequently reported that the reflection
+sounded unchanged from before Musixmatch and requested richer, central song-analysis use with
+quality before latency. The pair shows
+working real analysis but no established clear creative benefit; its recognition is still general.
+
+All 101 normal backend tests passed/two paid cases skipped; updated test APK built and seven
+silent voice cases passed/two gated skips. Production Android/source/model/prompt/catalog and
+the earlier 510-test-per-variant baseline were unchanged. All 32 runs/all seven-table fields kept
+the same checksum. Existing test/doc files only; no new permanent file, schema, secret, phone
+preference, History write, deployment or Git mutation. Keys remained private in process memory.
+The temporary test package was removed and the normal RunState app reopened after the audition.
+
+### Listener acceptance and stronger Spotify stop safeguards — October 17
+
+Manley confirmed the quieter facts-only voice was **better**. That audition's facts and custom
+reflection voices completed, but the Spotify passage failed its completion assertion at **22.088
+seconds**; Manley reported the song kept playing. The operator paused it. This failed attempt is
+retained as a real playback defect, not described as a successful end-to-end check.
+
+An optional, identity-free diagnostic observer now exposes stage/reason enums and bounded timing
+differences only. A checked replay then **passed in 30.957 seconds**: entrance → ten-second passage
+→ confirmed pause → original paused recording/position restored. No operator stop was needed.
+Manley confirmed **“Yes and this time all 3 flowed well.”** That replay did not reproduce the
+earlier cause; no exact cause is claimed. No new Claude/Musixmatch generation was needed.
+
+Review independently demonstrated three cleanup escapes, now hardened: cancel RunState's
+unconfirmed play command on the same valid recording even at an unexpected position; cancel
+mid-passage buffering still within the owned trajectory; attempt the end/cleanup pause even when
+Spotify temporarily stops advertising that action. Actual PAUSED confirmation is still required
+for successful completion/restoration. Changed songs/sessions and user seeks after confirmed
+playback retain their existing protection; the 1,500 ms trajectory tolerance was not enlarged.
+During the short unconfirmed-play handshake, cancelling our outstanding play may pause a
+same-recording seek, but never restores its position or resumes it. If Spotify ignores pause
+commands, the result remains interrupted, never a false success or unrequested restore/resume.
+
+Final debug/release JVM suites each passed **510 tests**, and all three APK builds passed. Final
+Moto silent checks passed **18 cases with four gated cases not executed** (22 reported total,
+31.326 seconds). No additional listening was requested after the cleanup hardening. All 32 runs
+and every field in all seven inspected tables retained checksum
+`7ed81df2214070f8d0dd3bae6a86358c0be1ef283ba6a1ec015f49399a53baac` through the final update.
+Temporary private inspection copies and the test package were removed; normal RunState reopened.
+Nine
+new tests across diagnostic/cleanup behavior cover wrong entrances, buffering, missing advertised
+pause, ignored commands, identity/seek boundaries and observer isolation. The source changes are
+limited to existing files; no new file, schema, secret, provider call, deployment or Git mutation.
+The smooth Spotify fade remains open for the reasons below; the accepted voice change is installed.
+
+### Facts-only, gentler saved-run voice — October 17
+
+Manley heard the actual Musixmatch-assisted reflection and Spotify hook and said it **worked well,
+with a few tweaks**. The first voice sounded abrupt, repeated the Feeling Good choice, and the
+Spotify passage stopped abruptly. This is positive sequence feedback, not proof the analysis
+caused better writing than the comparison arm.
+
+The repeated Energy wording was in the optional audition's hardcoded announcement, not the
+normal saved-run receipt. Both optional voice-check announcements now contain only fictional
+distance/time facts. Production receipts remain separate from generated reflections: no Energy,
+Effort, song details or instructions. The completion path now reads actual saved transition rows
+alongside the completed run, allowing the receipt to append **average pace** only when complete
+distance/timeline evidence and a display unit support it. Pace uses active time including the
+real pause/resume history, never an elapsed-time shortcut. Missing, partial, malformed or legacy
+evidence omits pace; distance/time can still be spoken. Calories remain a separate unbuilt estimate
+and are not invented for the announcement.
+
+The local facts voice now uses rate **0.96** and per-utterance volume **0.8**. These are modest
+delivery adjustments, not a new voice or a proven onset fade. The phone's media-volume setting is
+unchanged. Reflection cloud speech and its existing local fallback retain their previous behavior.
+A dedicated platform method keeps this receipt-only level from leaking into reflection speech.
+
+Both Android variants passed **501 JVM tests each**; debug, release and test APK builds passed.
+The Moto was updated without clearing data. **18 silent phone cases passed, four gated cases were
+not executed** (22 reported total), including receipt focus/startup/teardown and cloud/song order.
+Two new test fixtures initially lacked the required final saved PAUSE; correcting those fixtures
+preserved the existing strict completed-timeline guard. Manley confirmed the first voice sounded
+better; the later successful replay and stop safeguards are recorded above.
+
+Spotify fade finding: the current Android media-session route exposes transport but not a private
+gain envelope for Spotify's local player. Local session volume commands affect the appropriate
+system stream; `VolumeShaper` applies to an owned player, not Spotify's process. A real fade was
+**not added**, and no phone/media-volume change, audio capture, new SDK, account or subscription
+was attempted. Owned, appropriately licensed preview playback could support a future controlled
+fade; that would be a separate playback path. See the source-backed music notebook entry.
+
+Existing files only: MainActivity receipt wiring, receipt/pace formatting and its existing JVM
+test, speech-platform delivery and the existing optional voice instrumentation test. No database
+schema, saved reflection, new permanent file, backend deployment or Git mutation.
+
+### Actual music-context comparison and automated audition — October 17
+
+Manley requested judging a real generated reflection with Musixmatch rather than only testing
+that its fields arrived. An opt-in case in the existing `AnthropicReflectionProviderTest.java`
+retrieved actual Sunday Best / Surfaces analysis once, then made two real Claude generations.
+Both used identical v1.7 prompt/model/settings, the same immutable fictional 3.00-mile/32-minute
+sample run with pre-run Low, and no prepared cue/artist description. An outbound-request witness
+proved the only JSON difference was `music_context.song_analysis`. This deliberately exercises
+the backend analysis path; normal native Sunday Best selection still uses its curated cue.
+
+The comparison **passed in 8.277 seconds**. Actual themes were **positivity and resilience;
+self-acceptance**, moods **joy; hope; empowerment; inspiration; celebration**. Both four-branch
+sets are recorded in the research notebook. For Feeling Good:
+
+- Without analysis: “You started low on energy; now you're feeling good. Three miles at just past
+  midnight, and you finished strong. That's the kind of turnaround worth recognizing.”
+- With analysis: “You started low on energy and finished feeling good after 3.00 miles of sample
+  distance. That's a real turnaround in a single run.”
+
+The observed pair does not establish a clear creative improvement. Baseline loses sample-distance
+provenance and invents “finished strong”; enriched keeps provenance but still implies a turnaround.
+Its Powered Up branch also claims the run shifts the whole night. These are writing misses to
+address, not Musixmatch transport failures or proof a richer label list guarantees better writing.
+One stochastic pair is a bounded review, not a reliable causal quality measurement.
+
+The existing `ReflectionVoiceSpeechTest.kt` gained one explicitly gated audition method. It
+accepts the exact already-generated fictional reflection via bounded strict UTF-8/base64 input,
+loads the hosted speech connection privately on-device, and uses production speech/Spotify
+playback. It makes no second Claude or Musixmatch request and writes no run or preferences.
+Before sound, it requires the paused original Sunday Best recording; after sound it verifies
+generic sample facts → actual ElevenLabs voice → original 15.5–25.5 s vocal passage, with no local
+reflection fallback/instrumental substitution and the same paused recording/position restored.
+
+Backend checks passed **101 normal cases, two live skips**. The Android test APK built; the
+selected silent run passed **13 cases with four gated cases not executed** (17 reported total).
+After Manley confirmed phone/song ready, the actual audition **passed in 34.724 seconds**.
+He reported hearing it and requested one replay; the same exact sequence **passed again in
+34.226 seconds**, without a new Claude or Musixmatch request. Manley then said it worked well,
+with the facts-voice/repetition/music-ending refinements recorded above. This does not establish
+general creative-quality improvement. All 32 runs/all seven-table fields retained checksum
+`7ed81df2214070f8d0dd3bae6a86358c0be1ef283ba6a1ec015f49399a53baac` after the first audition.
+The checksum remained identical after replay. The disposable test APK was removed and normal
+RunState reopened. Temporary private inspection copies were removed automatically. No new source/media/secret/doc
+file, production Android edit, deployment or Git mutation. The comparison's exact text crosses
+to the existing hosted speech endpoint only; it does not deploy local prompt v1.7 to Render.
+
+### Musixmatch creative-use instructions — local v1.7, not deployed
+
+Manley asked to use Musixmatch more effectively and explain the Spotify/Musixmatch/Anthropic
+workflow. The existing connection already supplies real theme/mood labels for one unprepared
+song identity. Local prompt v1.7 now gives a positive writing method: choose at most one relevant
+theme/mood, connect it to supported run facts or conditional Energy, and write original recognition
+rather than explaining the song or reciting its labels. The separate saved-run facts receipt means
+the reflection need not repeat distance/time merely because they are available. Two fictional
+calibration examples illustrate a known pre/post answer juxtaposition and unknown post-run Energy.
+Neither establishes a measured Energy increase, music causation or a feeling the runner did not report.
+Existing provenance, partial GPS, lyric/persona, curated-song and four-branch boundaries remain.
+
+All **101 normal backend tests passed**, with the one paid live case skipped. The sandbox initially
+prevented Java's temporary loopback connections; the same suite passed with authorized networking,
+without changing application code for that environment failure. The existing opt-in real automatic
+check then **passed in 4.462 seconds** using fictional 3.00-mile/32-minute sample facts and
+Lovely Day / Bill Withers. Musixmatch returned themes **optimism and positivity; love and support**
+and moods **love; joy; empowerment; reflection; inspiration**. A request witness verified those
+exact labels reached the actual Claude generation with no prepared cue or lyric fields.
+
+The generated Feeling Good text was still largely a recap:
+
+> You started moderate on a late night and finished 3.00 miles of sample distance feeling good.
+> That's a solid run.
+
+This is evidence of a working automatic connection, **not established creative improvement**.
+One output does not prove broad quality or coverage; no repeated paid/manual-pairing loop was run.
+The current app supplies one known curated match or latest eligible Spotify identity, not the
+best thematic match across every song heard. Broader song selection and passage/hook selection
+remain separate work. Musixmatch labels supply neither an audio clip nor hook timestamps.
+
+Only the existing prompt, provider test and four existing documentation files changed. No new
+source, secret, media or documentation file was created. Credentials stayed in the launcher/child
+process memory, with no values printed. No phone operation, listening test, History upload or Git
+mutation was performed. Current Render Live `cb23da6` still uses v1.6; v1.7 needs the user's
+commit/push and a subsequent deployment before it affects the phone's hosted reflections.
+
 ### Custom reflection voice deployed — October 17
 
 Manley committed/pushed the bounded voice change in three groups: backend `25f2637`, Android
