@@ -14,18 +14,23 @@ import com.runstate.mobile.data.local.RunReflectionEntity
 import com.runstate.mobile.data.local.RunTransitionEntity
 import com.runstate.mobile.data.local.RunTransitionType
 import com.runstate.mobile.data.local.RunTrackingMode
+import com.runstate.mobile.data.local.RunSplitEntity
+import com.runstate.mobile.data.local.RunSplitSnapshotEntity
+import com.runstate.mobile.data.local.RunSplitStatus
 import com.runstate.mobile.data.local.StoredRunState
 import com.runstate.mobile.data.local.TelemetryCoverage
 import com.runstate.mobile.data.local.RunWeatherEntity
 import com.runstate.mobile.data.local.RunWeatherStatus
 import com.runstate.mobile.weather.RunWeatherSnapshot
 import com.runstate.mobile.run.RunMetrics
+import com.runstate.mobile.run.RunSplitCalculator
 import java.time.Instant
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -35,6 +40,172 @@ class RunMetricsDisplayTest {
     private val historyRunId = "123e4567-e89b-12d3-a456-426614174000"
     private val historyRequestId = "123e4567-e89b-12d3-a456-426614174001"
     private val historyStart = Instant.parse("2026-10-12T01:30:00Z").toEpochMilli()
+
+    @Test
+    fun `history passes typed starting energy and metric source independently of display strings`() {
+        val run = historyRun(historyStart + 600_000L, 2_000.0,
+            TelemetryCoverage.PARTIAL, true).copy(preRunEnergy = PreRunEnergy.MODERATE,
+            metricSource = MetricSource.GPS, trackingMode = RunTrackingMode.GPS)
+        val item = historyItemFor(run, emptyList(), null)
+        assertEquals(PreRunEnergy.MODERATE, item.preRunEnergy)
+        assertEquals(MetricSource.GPS, item.metricSource)
+        assertEquals("Moderate", item.preRunEnergyLabel)
+        assertTrue(item.isGpsRun)
+        assertTrue(item.insightEligible)
+
+        val old = historyItemFor(historyRun(null, historyComplete = false), emptyList(), null)
+        assertNull(old.preRunEnergy)
+        assertNull(old.metricSource)
+        assertNull(old.energy)
+    }
+
+    @Test
+    fun `reported energy contributes while reflection is pending or failed`() {
+        val run = historyRun(historyStart + 600_000L, 1_000.0,
+            TelemetryCoverage.COMPLETE, true).copy(preRunEnergy = PreRunEnergy.LOW,
+            metricSource = MetricSource.GPS, trackingMode = RunTrackingMode.GPS)
+        for (status in listOf(ReflectionStatus.PENDING, ReflectionStatus.FAILED)) {
+            val reflection = musicSnapshotReflection("{}").copy(status = status,
+                postRunEnergy = ReflectionBranch.FEELING_GOOD, isTestData = true)
+            val item = historyItemFor(run, emptyList(), reflection)
+            assertFalse(item.isTestData)
+            assertTrue(item.insightEligible)
+            assertEquals(PreRunEnergy.LOW, item.preRunEnergy)
+            assertEquals(ReflectionBranch.FEELING_GOOD, item.energy)
+
+            val genuine = historyItemFor(run, emptyList(), reflection.copy(isTestData = false))
+            assertTrue(genuine.insightEligible)
+            assertFalse(genuine.isTestData)
+            assertNotNull(runnerStateInsightFor((1..3).map { number ->
+                item.copy(runId = "223e4567-e89b-12d3-a456-${number.toString().padStart(12, '0')}")
+            }))
+        }
+    }
+
+    @Test
+    fun `a confirmed fake reflection remains excluded from personal energy learning`() {
+        val run = historyRun(historyStart + 600_000L, 1_000.0,
+            TelemetryCoverage.COMPLETE, true).copy(preRunEnergy = PreRunEnergy.LOW,
+            metricSource = MetricSource.GPS, trackingMode = RunTrackingMode.GPS)
+        val fake = musicSnapshotReflection("{}").copy(status = ReflectionStatus.READY,
+            selectedBranch = ReflectionBranch.FEELING_GOOD,
+            postRunEnergy = ReflectionBranch.FEELING_GOOD,
+            text = "Fixture reflection.", finalizedAtEpochMillis = historyStart + 601_000L,
+            isTestData = true)
+        val item = historyItemFor(run, emptyList(), fake)
+        assertTrue(item.isTestData)
+        assertFalse(item.insightEligible)
+        assertNull(runnerStateInsightFor((1..3).map { number ->
+            item.copy(runId = "223e4567-e89b-12d3-a456-${number.toString().padStart(12, '0')}")
+        }))
+    }
+
+    @Test
+    fun `split snapshot absence pending and unavailable stay distinct without exposing stale rows`() {
+        val row = splitRow()
+        assertEquals(HistorySplitDisplay.NotRecorded, historySplitsFor(null, listOf(row)))
+        assertEquals(HistorySplitDisplay.Pending,
+            historySplitsFor(splitSnapshot(RunSplitStatus.PENDING), listOf(row)))
+        assertEquals(HistorySplitDisplay.Unavailable,
+            historySplitsFor(splitSnapshot(RunSplitStatus.UNAVAILABLE), listOf(row)))
+    }
+
+    @Test
+    fun `mile split table sorts frozen rows and labels a final quarter mile with its actual time`() {
+        val mile = splitRow(endDistance = 1_609.344, endActive = 600_000L)
+        val partial = splitRow(number = 2, startDistance = 1_609.344, endDistance = 2_011.68,
+            startActive = 600_000L, endActive = 750_000L, partial = true)
+        assertEquals(HistorySplitDisplay.Ready(listOf(
+            RunSplitDisplayRow("1 mi", "10:00", "10:00/mi"),
+            RunSplitDisplayRow("Final 0.25 mi", "2:30", "10:00/mi")
+        ), "mi"), historySplitsFor(splitSnapshot(), listOf(partial, mile)))
+    }
+
+    @Test
+    fun `kilometer split table uses the snapshot unit and rounds pace without discarding hours`() {
+        val row = splitRow(endDistance = 1_000.0, endActive = 3_661_000L)
+        assertEquals(HistorySplitDisplay.Ready(listOf(
+            RunSplitDisplayRow("1 km", "1:01:01", "1:01:01/km")
+        ), "km"), historySplitsFor(splitSnapshot(unit = DistanceUnit.KILOMETERS), listOf(row)))
+    }
+
+    @Test
+    fun `tiny final split never rounds its distance or time to zero`() {
+        val row = splitRow(endDistance = 1.0, endActive = 500L, partial = true)
+        assertEquals(HistorySplitDisplay.Ready(listOf(
+            RunSplitDisplayRow("Final <0.01 km", "<0:01", "8:20/km")
+        ), "km"), historySplitsFor(splitSnapshot(unit = DistanceUnit.KILOMETERS), listOf(row)))
+    }
+
+    @Test
+    fun `empty ready snapshots and unknown derivation versions fail without pretending no splits exist`() {
+        assertEquals(HistorySplitDisplay.Failed, historySplitsFor(splitSnapshot(), emptyList()))
+        assertEquals(HistorySplitDisplay.Failed, historySplitsFor(
+            splitSnapshot().copy(derivationVersion = RunSplitCalculator.DERIVATION_VERSION + 1),
+            listOf(splitRow())))
+    }
+
+    @Test
+    fun `foreign identity bad indices and nonfinite or nonpositive split facts fail safely`() {
+        val valid = splitRow()
+        val invalid = listOf(
+            valid.copy(runId = historyRequestId),
+            valid.copy(splitNumber = 0),
+            valid.copy(splitNumber = 2),
+            valid.copy(startDistanceMeters = Double.NaN),
+            valid.copy(endDistanceMeters = Double.POSITIVE_INFINITY),
+            valid.copy(endDistanceMeters = 0.0),
+            valid.copy(startActiveMillis = 1L),
+            valid.copy(endActiveMillis = 0L),
+            valid.copy(paceSecondsPerMeter = Double.NaN),
+            valid.copy(paceSecondsPerMeter = Double.POSITIVE_INFINITY),
+            valid.copy(paceSecondsPerMeter = 0.0),
+            valid.copy(paceSecondsPerMeter = -1.0))
+        invalid.forEachIndexed { index, row ->
+            assertEquals("Malformed split $index", HistorySplitDisplay.Failed,
+                historySplitsFor(splitSnapshot(), listOf(row)))
+        }
+    }
+
+    @Test
+    fun `split gaps duplicate numbers and a partial row before the last one fail safely`() {
+        val first = splitRow()
+        val second = splitRow(number = 2, startDistance = first.endDistanceMeters,
+            endDistance = first.endDistanceMeters * 2, startActive = first.endActiveMillis,
+            endActive = first.endActiveMillis * 2)
+        val invalid = listOf(
+            listOf(first, second.copy(splitNumber = 1)),
+            listOf(first, second.copy(startDistanceMeters = first.endDistanceMeters + 1.0)),
+            listOf(first, second.copy(startActiveMillis = first.endActiveMillis + 1)),
+            listOf(first.copy(isPartial = true), second))
+        invalid.forEach { rows ->
+            assertEquals(HistorySplitDisplay.Failed, historySplitsFor(splitSnapshot(), rows))
+        }
+    }
+
+    @Test
+    fun `an unrepresentable derived pace remains unknown instead of overflowing the display`() {
+        val row = splitRow().copy(paceSecondsPerMeter = Double.MAX_VALUE)
+        val display = historySplitsFor(splitSnapshot(), listOf(row)) as HistorySplitDisplay.Ready
+        assertEquals("—", display.rows.single().pace)
+        assertEquals("10:00", display.rows.single().time)
+    }
+
+    private fun splitSnapshot(
+        status: RunSplitStatus = RunSplitStatus.READY,
+        unit: DistanceUnit = DistanceUnit.MILES
+    ) = RunSplitSnapshotEntity(historyRunId, status, RunSplitCalculator.DERIVATION_VERSION, unit)
+
+    private fun splitRow(
+        number: Int = 1,
+        startDistance: Double = 0.0,
+        endDistance: Double = 1_609.344,
+        startActive: Long = 0L,
+        endActive: Long = 600_000L,
+        partial: Boolean = false
+    ) = RunSplitEntity(historyRunId, number, startDistance, endDistance, startActive, endActive,
+        historyStart + startActive, historyStart + endActive, partial,
+        (endActive - startActive) / 1_000.0 / (endDistance - startDistance))
 
     @Test
     fun `saved weather uses the provider hour and run timezone with honest units`() {

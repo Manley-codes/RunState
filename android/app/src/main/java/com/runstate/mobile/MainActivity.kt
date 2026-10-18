@@ -77,6 +77,7 @@ import com.runstate.mobile.ui.weatherSummaryFor
 import com.runstate.mobile.ui.completionDateLabelFor
 import com.runstate.mobile.ui.savedRunReceiptFor
 import com.runstate.mobile.ui.gpsRoutePreviewFor
+import com.runstate.mobile.ui.historySplitsFor
 import com.runstate.mobile.ui.runUiModelFor
 import com.runstate.mobile.ui.theme.RunStateTheme
 import kotlinx.coroutines.CancellationException
@@ -109,6 +110,7 @@ class MainActivity : ComponentActivity() {
         val database = runStateApplication.database
         runStateApplication.initializeReflectionConnection()
         runStateApplication.initializeRunPreferences()
+        runStateApplication.initializeRunSplits()
 
         setContent {
             RunStateTheme {
@@ -135,6 +137,7 @@ class MainActivity : ComponentActivity() {
                         onRetryRunPreferences = runStateApplication::initializeRunPreferences,
                         runSettingsSessionId = runStateApplication.runSettingsSessionId,
                         nativeMapsEnabled = true,
+                        onRetrySplits = runStateApplication::retryRunSplits,
 
                         // The Activity's own lifecycle gates the countdown, so nothing counts
                         // down — and no run is started — while the app is in the background.
@@ -192,7 +195,8 @@ internal fun RunJourneyRoot(
     onRetryRunPreferences: () -> Unit = {},
     runSettingsSessionId: String = "isolated-preview",
     musicAccessProvider: (Context) -> Boolean = ::hasMusicAccess,
-    nativeMapsEnabled: Boolean = false
+    nativeMapsEnabled: Boolean = false,
+    onRetrySplits: suspend (String) -> Unit = {}
 ) {
 
     val reflectionRequestsAvailable = reflectionConnection is ReflectionConnectionState.Hosted ||
@@ -273,8 +277,12 @@ internal fun RunJourneyRoot(
         database.weatherDao().observeAll().catch { emit(emptyList()) }
     }.collectAsState(initial = emptyList())
     val weatherByRun = remember(storedWeather) { storedWeather.associateBy { it.runId } }
+    val storedSplits by remember(database) {
+        database.splitDao().observeAllSnapshots().catch { emit(emptyList()) }
+    }.collectAsState(initial = emptyList())
+    val splitsByRun = remember(storedSplits) { storedSplits.associateBy { it.runId } }
 
-    LaunchedEffect(historyVisible, completedRuns, storedReflections, storedWeather, reflectionCoordinator) {
+    LaunchedEffect(historyVisible, completedRuns, storedReflections, storedWeather, storedSplits, reflectionCoordinator) {
         if (!historyVisible || completedRuns == null || storedReflections == null) return@LaunchedEffect
         try {
             // Repair older pending rows locally even when Run Complete is no longer visible.
@@ -287,7 +295,8 @@ internal fun RunJourneyRoot(
                     database.runDao().transitionsFor(run.runId),
                     reflectionsByRun[run.runId]
                 ) { database.musicObservationDao().observationsFor(run.runId) }
-                    .copy(weatherSummary = weatherSummaryFor(run, weatherByRun[run.runId]))
+                    .copy(weatherSummary = weatherSummaryFor(run, weatherByRun[run.runId]),
+                        splitStatus = splitsByRun[run.runId]?.status)
             }
             historyError = null
         } catch (cancelled: CancellationException) { throw cancelled }
@@ -838,6 +847,12 @@ internal fun RunJourneyRoot(
                 val points = database.locationDao().pointsFor(runId)
                 withContext(Dispatchers.Default) { gpsRoutePreviewFor(runId, points) }
             },
+            splitLoader = { runId ->
+                val snapshot = database.splitDao().snapshotFor(runId)
+                val rows = database.splitDao().rowsFor(runId)
+                withContext(Dispatchers.Default) { historySplitsFor(snapshot, rows) }
+            },
+            onRetrySplits = onRetrySplits,
             isLoading = completedRuns == null || storedReflections == null,
             error = historyError,
             modifier = modifier

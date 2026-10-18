@@ -266,6 +266,11 @@ internal fun historyItemFor(
             PreRunEnergy.HIGH -> "High"
             null -> null
         },
+        preRunEnergy = run.preRunEnergy,
+        metricSource = run.metricSource,
+        // PENDING defaults to a conservative voice flag, not proof that a real GPS run is fake.
+        // A saved Energy check-in must not wait for the reflection provider to answer.
+        insightEligible = reflection?.takeIf { it.status == ReflectionStatus.READY }?.isTestData != true,
         musicObservationRequested = run.musicObservationRequested,
         musicObservationCount = musicObservations.size,
         lastObservedMedia = musicObservations.maxByOrNull { it.sequenceNumber }?.let { last ->

@@ -59,6 +59,91 @@ class RunStateMigrationTest {
     private val context = InstrumentationRegistry.getInstrumentation().targetContext
 
     @Test
+    fun versionTwelveMigrationPreservesEveryAppFieldWithoutBackfillingSplits() {
+        val name = "runstate-v12-split-migration-test.db"
+        val activeId = "03689ffc-65d9-4907-ae77-7a17b3ad77a6"
+        val sampleId = "8c405ab0-4a80-4be9-9bfb-19f2517ec2ba"
+        val finish = OFFICIAL_START + 60_000L
+        val old = helper.createDatabase(name, 12)
+        old.apply {
+            insertVersionTwoRun(state = "COMPLETED", lastCheckpointEpochMillis = finish, finishEpochMillis = finish)
+            insertVersionTwoRun(runId = activeId, state = "PAUSED",
+                lastCheckpointEpochMillis = OFFICIAL_START + 30_000L, finishEpochMillis = null)
+            insertVersionTwoRun(runId = sampleId, state = "COMPLETED",
+                lastCheckpointEpochMillis = finish, finishEpochMillis = finish)
+            execSQL("""
+                UPDATE runs SET final_distance_meters=150.5, metric_source='GPS',
+                    telemetry_coverage='COMPLETE', display_distance_unit='MILES',
+                    transition_history_complete=1, pre_run_energy='HIGH', tracking_mode='GPS',
+                    music_observation_requested=1, post_run_effort='SMOOTH',
+                    music_reflection_sharing_allowed=1, start_elapsed_realtime_millis=123000,
+                    timing_session_id='2280842d-649a-4f15-aa80-6c7fe621a52e' WHERE run_id=?
+            """.trimIndent(), arrayOf(RUN_ID))
+            execSQL("UPDATE runs SET tracking_mode='FIXTURE' WHERE run_id=?", arrayOf(sampleId))
+            execSQL("""
+                INSERT INTO run_transitions (run_id,sequence_number,transition_type,
+                    occurred_at_epoch_millis,elapsed_realtime_millis,timing_session_id)
+                VALUES (?,1,'PAUSE',?,153000,'2280842d-649a-4f15-aa80-6c7fe621a52e')
+            """.trimIndent(), arrayOf<Any>(RUN_ID, OFFICIAL_START + 30_000))
+            execSQL("""
+                INSERT INTO run_location_points (run_id,sequence_number,observation_key,
+                    observed_at_epoch_millis,elapsed_realtime_nanos,latitude,longitude,
+                    horizontal_accuracy_meters,accepted_for_distance,segment_distance_meters,cumulative_distance_meters)
+                VALUES (?,1,'preserved-location',?,123000000000,40.0,-75.0,3.0,1,150.5,150.5)
+            """.trimIndent(), arrayOf<Any>(RUN_ID, OFFICIAL_START + 1_000))
+            execSQL("""
+                INSERT INTO run_music_observations (run_id,sequence_number,observation_key,
+                    observed_at_epoch_millis,elapsed_realtime_nanos,source_package,title,artist,playback_state,event_kind)
+                VALUES (?,1,'preserved-music',?,123000000000,'test.player','Stored title','Stored artist','PLAYING','SESSION_SNAPSHOT')
+            """.trimIndent(), arrayOf<Any>(RUN_ID, OFFICIAL_START + 1_000))
+            execSQL("""
+                INSERT INTO run_reflections (run_id,request_id,evidence_json,selection_deadline_epoch_millis,
+                    status,selected_branch,post_run_energy,candidates_json,text,finalized_at_epoch_millis,
+                    is_test_data,selection_window_started)
+                VALUES (?,?,'{"keep":"evidence"}',?,'READY','FEELING_GOOD','FEELING_GOOD',
+                    '{"keep":"candidates"}',?,?,0,1)
+            """.trimIndent(), arrayOf<Any>(RUN_ID, activeId, finish + 6_000, "  Exact saved text.\nUnicode — 🏃  ", finish + 7_000))
+            execSQL("INSERT INTO run_weather (run_id,status,snapshot_json) VALUES (?,'READY',?)",
+                arrayOf<Any>(RUN_ID, "{\"keep\":\"weather payload\"}"))
+        }
+        val tables = listOf("runs", "run_transitions", "run_location_points", "run_music_observations", "run_reflections", "run_weather")
+        val columns = tables.associateWith { table ->
+            old.query("SELECT * FROM `$table` LIMIT 0").use { it.columnNames.toList() }
+        }
+        fun rows(db: SupportSQLiteDatabase, table: String): List<List<String?>> =
+            db.query("SELECT * FROM `$table` ORDER BY 1, 2").use { cursor -> buildList {
+                while (cursor.moveToNext()) add(columns.getValue(table).indices.map { index ->
+                    if (cursor.isNull(index)) null else cursor.getString(index)
+                })
+            } }
+        val before = tables.associateWith { rows(old, it) }
+        old.close()
+        helper.runMigrationsAndValidate(name, 13, true, MIGRATION_12_13).use { migrated ->
+            tables.forEach { table ->
+                migrated.query("SELECT * FROM `$table` LIMIT 0").use {
+                    assertEquals(table, columns.getValue(table), it.columnNames.toList())
+                }
+                assertEquals(table, before.getValue(table), rows(migrated, table))
+            }
+            listOf("run_split_snapshots", "run_splits").forEach { table ->
+                migrated.query("SELECT COUNT(*) FROM `$table`").use {
+                    assertTrue(it.moveToFirst())
+                    assertEquals("No historical run may gain split evidence.", 0, it.getInt(0))
+                }
+            }
+        }
+        val upgraded = openDatabaseThroughFactory(name)
+        runBlocking {
+            assertEquals(3, upgraded.runDao().countRuns())
+            val saved = requireNotNull(upgraded.runDao().findById(RUN_ID))
+            assertEquals(150.5, requireNotNull(saved.finalDistanceMeters), 0.0)
+            assertEquals("2280842d-649a-4f15-aa80-6c7fe621a52e", saved.timingSessionId)
+            assertTrue(upgraded.splitDao().pendingRunIds().isEmpty())
+            assertNull(upgraded.splitDao().snapshotFor(RUN_ID))
+        }
+    }
+
+    @Test
     fun versionElevenMigrationPreservesEveryStoredFieldAndStartsWithNoWeather() {
         val databaseName = "runstate-v11-weather-migration-test.db"
         val activeId = "03689ffc-65d9-4907-ae77-7a17b3ad77a6"

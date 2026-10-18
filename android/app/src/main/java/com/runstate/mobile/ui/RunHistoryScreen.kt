@@ -78,6 +78,9 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.runstate.mobile.data.local.PostRunEffort
 import com.runstate.mobile.data.local.TelemetryCoverage
+import com.runstate.mobile.data.local.PreRunEnergy
+import com.runstate.mobile.data.local.MetricSource
+import com.runstate.mobile.data.local.RunSplitStatus
 import com.runstate.mobile.R
 import com.runstate.mobile.RunStateApplication
 import com.runstate.mobile.reflection.ReflectionSpeechGateway
@@ -808,7 +811,11 @@ internal data class RunHistoryItem(
     val reflectionMusicSummary: String? = null,
     val weatherSummary: String? = null,
     /** Frozen at completion; path geometry never infers complete recording by itself. */
-    val telemetryCoverage: TelemetryCoverage? = null
+    val telemetryCoverage: TelemetryCoverage? = null,
+    val preRunEnergy: PreRunEnergy? = null,
+    val metricSource: MetricSource? = null,
+    val insightEligible: Boolean = true,
+    val splitStatus: RunSplitStatus? = null
 )
 
 internal sealed interface HistoryRouteDisplay {
@@ -841,7 +848,9 @@ internal fun RunHistoryScreen(
     energySavingRunId: String? = null,
     energyError: Pair<String, String>? = null,
     routeLoader: (suspend (String) -> GpsRoutePreviewData)? = null,
-    speechLifecycle: Lifecycle = LocalLifecycleOwner.current.lifecycle
+    speechLifecycle: Lifecycle = LocalLifecycleOwner.current.lifecycle,
+    splitLoader: (suspend (String) -> HistorySplitDisplay)? = null,
+    onRetrySplits: suspend (String) -> Unit = {}
 ) {
     val listState = rememberLazyListState()
     // A newly saved run is inserted above the old first row. LazyColumn's stable row keys
@@ -864,6 +873,11 @@ internal fun RunHistoryScreen(
     var speaker by remember { mutableStateOf<ReflectionSpeaker?>(null) }
     var route by remember { mutableStateOf<Pair<String, HistoryRouteDisplay>?>(null) }
     val currentRouteLoader by rememberUpdatedState(routeLoader)
+    var splitDetails by remember { mutableStateOf<Pair<String, HistorySplitDisplay>?>(null) }
+    var splitLoadAttempt by remember { mutableStateOf(0) }
+    var retrySplitsForRun by remember { mutableStateOf<String?>(null) }
+    val currentSplitLoader by rememberUpdatedState(splitLoader)
+    val currentSplitRetry by rememberUpdatedState(onRetrySplits)
     val context = LocalContext.current
 
     fun closeSpeaker() {
@@ -876,6 +890,24 @@ internal fun RunHistoryScreen(
     }
 
     val expandedGpsRun = items.firstOrNull { it.runId == expandedRunId }?.isGpsRun == true
+    val expandedSplitStatus = items.firstOrNull { it.runId == expandedRunId }?.splitStatus
+    LaunchedEffect(expandedRunId, expandedGpsRun, expandedSplitStatus, splitLoadAttempt) {
+        splitDetails = null
+        val id = expandedRunId ?: return@LaunchedEffect
+        if (!expandedGpsRun) return@LaunchedEffect
+        splitDetails = id to HistorySplitDisplay.Loading
+        val retryRequested = retrySplitsForRun == id
+        retrySplitsForRun = null
+        try {
+            if (retryRequested) currentSplitRetry(id)
+            val display = currentSplitLoader?.invoke(id) ?: if (expandedSplitStatus == null) {
+                HistorySplitDisplay.NotRecorded
+            } else HistorySplitDisplay.Failed
+            coroutineContext.ensureActive()
+            splitDetails = id to display
+        } catch (cancelled: CancellationException) { throw cancelled }
+        catch (_: Exception) { splitDetails = id to HistorySplitDisplay.Failed }
+    }
     LaunchedEffect(expandedRunId, expandedGpsRun) {
         route = null
         val id = expandedRunId ?: return@LaunchedEffect
@@ -934,6 +966,9 @@ internal fun RunHistoryScreen(
     }
     val summaryItem = visibleItems.firstOrNull { it.runId == expandedRunId }
         ?: visibleItems.firstOrNull()
+    val stateInsight = remember(items, isLoading, error) {
+        if (isLoading || error != null) null else runnerStateInsightFor(items)
+    }
 
     BoxWithConstraints(
         modifier = modifier
@@ -1036,6 +1071,9 @@ internal fun RunHistoryScreen(
                 verticalArrangement = Arrangement.spacedBy(8.dp),
                 modifier = Modifier.fillMaxWidth().weight(1f).testTag(RUN_HISTORY_LIST_TAG)
             ) {
+                if (filter != HistoryFilter.SAMPLES && stateInsight != null) {
+                    item(key = "runner-state-insight") { RunnerStateInsightPanel(stateInsight) }
+                }
                 if (isLoading) {
                     item(key = "loading") {
                         HistoryMessage("Loading your saved runs…")
@@ -1105,7 +1143,12 @@ internal fun RunHistoryScreen(
                         onEditEnergy = { editingEnergyRunId = item.runId },
                         energySaving = energySavingRunId == item.runId,
                         energyError = energyError?.takeIf { it.first == item.runId }?.second,
-                        route = route?.takeIf { it.first == item.runId }?.second
+                        route = route?.takeIf { it.first == item.runId }?.second,
+                        splits = splitDetails?.takeIf { it.first == item.runId }?.second,
+                        onRetrySplits = {
+                            retrySplitsForRun = item.runId
+                            splitLoadAttempt += 1
+                        }
                     )
                 }
             }
@@ -1239,7 +1282,9 @@ private fun HistoryRow(
     onEditEnergy: () -> Unit,
     energySaving: Boolean,
     energyError: String?,
-    route: HistoryRouteDisplay?
+    route: HistoryRouteDisplay?,
+    splits: HistorySplitDisplay?,
+    onRetrySplits: () -> Unit
 ) {
     val shape = RoundedCornerShape(13.dp)
     val rowInk = if (expanded) HistoryLightInk else CompletionStrongInk
@@ -1414,6 +1459,7 @@ private fun HistoryRow(
                     lineHeight = 18.sp,
                     modifier = Modifier.padding(top = 4.dp)
                 )
+                if (item.isGpsRun) HistorySplitsPanel(splits, onRetrySplits)
                 if (item.preRunEnergyLabel != null) {
                     Text(
                         text = "Before run · ${item.preRunEnergyLabel}",

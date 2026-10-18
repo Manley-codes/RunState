@@ -255,3 +255,37 @@ val MIGRATION_11_12 = object : Migration(11, 12) {
         )
     }
 }
+
+/** Split derivation is opt-in by a new completion marker, never migration-time backfill. */
+val MIGRATION_12_13 = object : Migration(12, 13) {
+    override fun migrate(connection: SQLiteConnection) {
+        connection.execSQL("""
+            CREATE TABLE IF NOT EXISTS `run_split_snapshots` (
+                `run_id` TEXT NOT NULL,
+                `status` TEXT NOT NULL,
+                `derivation_version` INTEGER NOT NULL,
+                `display_unit` TEXT NOT NULL,
+                PRIMARY KEY(`run_id`),
+                FOREIGN KEY(`run_id`) REFERENCES `runs`(`run_id`)
+                    ON UPDATE NO ACTION ON DELETE CASCADE
+            )
+        """.trimIndent())
+        connection.execSQL("""
+            CREATE TABLE IF NOT EXISTS `run_splits` (
+                `run_id` TEXT NOT NULL,
+                `split_number` INTEGER NOT NULL,
+                `start_distance_meters` REAL NOT NULL,
+                `end_distance_meters` REAL NOT NULL,
+                `start_active_millis` INTEGER NOT NULL,
+                `end_active_millis` INTEGER NOT NULL,
+                `start_epoch_millis` INTEGER NOT NULL,
+                `end_epoch_millis` INTEGER NOT NULL,
+                `is_partial` INTEGER NOT NULL,
+                `pace_seconds_per_meter` REAL NOT NULL,
+                PRIMARY KEY(`run_id`, `split_number`),
+                FOREIGN KEY(`run_id`) REFERENCES `run_split_snapshots`(`run_id`)
+                    ON UPDATE NO ACTION ON DELETE CASCADE
+            )
+        """.trimIndent())
+    }
+}

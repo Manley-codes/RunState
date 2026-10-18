@@ -236,6 +236,12 @@ open class FakeRunDao : RunDao() {
         }
     }
 
+    override suspend fun insertPendingSplitSnapshot(
+        runId: String, pendingStatus: RunSplitStatus, derivationVersion: Int,
+        displayUnit: DistanceUnit, completedState: StoredRunState,
+        gpsMode: RunTrackingMode, gpsSource: MetricSource
+    ): Long = -1L // Split persistence is exercised against actual Room in its own tests.
+
     override suspend fun highestSequenceNumber(runId: String): Int? =
         transitions.filter { it.runId == runId }.maxOfOrNull { it.sequenceNumber }
 

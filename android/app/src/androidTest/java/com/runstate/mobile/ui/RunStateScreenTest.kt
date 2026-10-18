@@ -73,6 +73,8 @@ import com.runstate.mobile.run.RunSessionCoordinator
 import com.runstate.mobile.data.local.ReflectionBranch
 import com.runstate.mobile.data.local.PostRunEffort
 import com.runstate.mobile.data.local.PreRunEnergy
+import com.runstate.mobile.data.local.MetricSource
+import com.runstate.mobile.data.local.RunSplitStatus
 import com.runstate.mobile.data.local.TelemetryCoverage
 import com.runstate.mobile.reflection.RunReflectionState
 import org.junit.Assert.assertEquals
@@ -1681,6 +1683,207 @@ class RunStateScreenTest {
         composeTestRule.onNodeWithTag(RUN_COMPLETE_EFFORT_TAG).performScrollTo()
             .assertTextEquals("EFFORT · SMOOTH").assertIsNotEnabled()
         composeTestRule.onNodeWithText("Saving Effort…").assertExists()
+    }
+
+    @Test
+    fun historyEnergyInsightRendersSavedCountsWithoutStartingSpeech() {
+        composeTestRule.setContent {
+            RunHistoryScreen(
+                items = listOf(energyInsightHistoryRun(1), energyInsightHistoryRun(2),
+                    energyInsightHistoryRun(3), energyInsightHistoryRun(4, ReflectionBranch.SPENT)),
+                onBack = {},
+                onRetryReflection = { throw AssertionError("Insight must not generate a reflection") },
+                speakerFactory = { throw AssertionError("Insight must not start speech") }
+            )
+        }
+
+        composeTestRule.onNodeWithTag(RUNNER_STATE_INSIGHT_TAG).assertIsDisplayed()
+        composeTestRule.onNodeWithText("After starting Low").assertExists()
+        composeTestRule.onNodeWithText(
+            "You finished Feeling Good in 3 of 4 runs you logged with Low starting Energy."
+        ).assertExists()
+        composeTestRule.onNodeWithText(
+            "Based on your Energy check-ins. 4 of your latest 4 GPS runs have both answers."
+        ).assertExists()
+        saveNativePreview(RUN_HISTORY_SCREEN_TAG, "qa-energy-insight.png")
+    }
+
+    @Test
+    fun historyEnergyInsightWaitsForThreePairsAndStaysOutOfSamples() {
+        val sample = energyInsightHistoryRun(99).copy(isGpsRun = false,
+            metricSource = MetricSource.FIXTURE, isTestData = true, metrics = fixtureMetrics())
+        var rows by mutableStateOf(listOf(energyInsightHistoryRun(1), energyInsightHistoryRun(2), sample))
+        composeTestRule.setContent {
+            RunHistoryScreen(rows, onBack = {},
+                onRetryReflection = { throw AssertionError("Insight must not generate a reflection") },
+                speakerFactory = { throw AssertionError("Insight must not start speech") })
+        }
+        composeTestRule.onNodeWithTag(RUNNER_STATE_INSIGHT_TAG).assertDoesNotExist()
+        composeTestRule.runOnIdle { rows = rows + energyInsightHistoryRun(3) }
+        composeTestRule.onNodeWithTag(RUNNER_STATE_INSIGHT_TAG).assertExists()
+
+        composeTestRule.onNodeWithTag("runHistoryFilter:SAMPLES").performClick()
+        composeTestRule.onNodeWithTag(RUNNER_STATE_INSIGHT_TAG).assertDoesNotExist()
+        composeTestRule.onNodeWithTag("runHistoryFilter:GPS").performClick()
+        composeTestRule.onNodeWithTag(RUNNER_STATE_INSIGHT_TAG).assertExists()
+        composeTestRule.onNodeWithTag("runHistoryFilter:ALL").performClick()
+        composeTestRule.onNodeWithText(
+            "Based on your Energy check-ins. 3 of your latest 3 GPS runs have both answers."
+        ).assertExists()
+    }
+
+    @Test
+    fun historyEnergyInsightRecomputesAfterSavedAnswerChanges() {
+        var rows by mutableStateOf((1..3).map { energyInsightHistoryRun(it) })
+        composeTestRule.setContent {
+            RunHistoryScreen(rows, onBack = {},
+                onRetryReflection = { throw AssertionError("Insight must not generate a reflection") },
+                speakerFactory = { throw AssertionError("Insight must not start speech") })
+        }
+        val original = "You finished Feeling Good in 3 of 3 runs you logged with Low starting Energy."
+        composeTestRule.onNodeWithText(original).assertExists()
+        composeTestRule.runOnIdle {
+            rows = rows.mapIndexed { index, row ->
+                if (index == 0) row.copy(energy = ReflectionBranch.SPENT, energyLabel = "Spent") else row
+            }
+        }
+        composeTestRule.onNodeWithText(original).assertDoesNotExist()
+        composeTestRule.onNodeWithText(
+            "You finished Feeling Good in 2 of 3 runs you logged with Low starting Energy."
+        ).assertExists()
+        composeTestRule.runOnIdle {
+            rows = rows.mapIndexed { index, row -> if (index == 0) row.copy(preRunEnergy = null) else row }
+        }
+        composeTestRule.onNodeWithTag(RUNNER_STATE_INSIGHT_TAG).assertDoesNotExist()
+    }
+
+    @Test
+    fun historyEnergyInsightHidesDuringLoadingOrFailedRead() {
+        val rows = (1..3).map { energyInsightHistoryRun(it) }
+        var loading by mutableStateOf(true)
+        var loadError by mutableStateOf<String?>(null)
+        composeTestRule.setContent {
+            RunHistoryScreen(rows, onBack = {}, isLoading = loading, error = loadError,
+                onRetryReflection = { throw AssertionError("Insight must not generate a reflection") },
+                speakerFactory = { throw AssertionError("Insight must not start speech") })
+        }
+        composeTestRule.onNodeWithTag(RUNNER_STATE_INSIGHT_TAG).assertDoesNotExist()
+        composeTestRule.runOnIdle { loading = false }
+        composeTestRule.onNodeWithTag(RUNNER_STATE_INSIGHT_TAG).assertExists()
+        composeTestRule.runOnIdle { loadError = "Saved runs are temporarily unavailable." }
+        composeTestRule.onNodeWithTag(RUNNER_STATE_INSIGHT_TAG).assertDoesNotExist()
+        composeTestRule.runOnIdle { loadError = null }
+        composeTestRule.onNodeWithTag(RUNNER_STATE_INSIGHT_TAG).assertExists()
+    }
+
+    private fun energyInsightHistoryRun(
+        number: Int,
+        post: ReflectionBranch = ReflectionBranch.FEELING_GOOD
+    ) = RunHistoryItem(
+        runId = "223e4567-e89b-12d3-a456-${number.toString().padStart(12, '0')}",
+        dateLabel = "Oct 17, 2026 · 7:00 AM",
+        metrics = fixtureMetrics().copy(sourceLabel = "GPS metrics", gpsDistanceAvailable = true),
+        reflectionStatus = "READY",
+        reflectionText = "Saved reflection remains unchanged.",
+        energyLabel = when (post) {
+            ReflectionBranch.SPENT -> "Spent"
+            ReflectionBranch.FEELING_GOOD -> "Feeling Good"
+            ReflectionBranch.POWERED_UP -> "Powered Up"
+            ReflectionBranch.NO_SELECTION -> null
+        },
+        isTestData = false,
+        isGpsRun = true,
+        energy = post,
+        preRunEnergy = PreRunEnergy.LOW,
+        metricSource = MetricSource.GPS
+    )
+
+    @Test
+    fun historySplitsReadyTableShowsFinalPartialAndPauseExplanation() {
+        composeTestRule.setContent {
+            HistorySplitsPanel(HistorySplitDisplay.Ready(listOf(
+                RunSplitDisplayRow("1 mi", "10:12", "10:12/mi"),
+                RunSplitDisplayRow("Final 0.25 mi", "2:33", "10:12/mi")
+            ), "mi"), onRetry = { throw AssertionError("Ready splits do not need retry") })
+        }
+        composeTestRule.onNodeWithTag("historySplits").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Distance").assertExists()
+        composeTestRule.onNodeWithText("Time").assertExists()
+        composeTestRule.onNodeWithText("Pace").assertExists()
+        composeTestRule.onNodeWithText("1 mi").assertExists()
+        composeTestRule.onNodeWithText("Final 0.25 mi").assertExists()
+        composeTestRule.onNodeWithText("2:33").assertExists()
+        composeTestRule.onNodeWithText("Estimated from recorded GPS. Times exclude pauses.").assertExists()
+        composeTestRule.onNodeWithTag("historySplitsRetry").assertDoesNotExist()
+    }
+
+    @Test
+    fun historySplitLoadFailureRetriesWithoutRepeatingSpeechOrChangingSavedReply() {
+        val item = energyInsightHistoryRun(1).copy(splitStatus = RunSplitStatus.READY,
+            reflectionText = "Exact saved reflection.")
+        val spoken = mutableListOf<String>()
+        val retries = mutableListOf<String>()
+        var reads = 0
+        composeTestRule.setContent {
+            RunHistoryScreen(listOf(item), onBack = {},
+                onRetryReflection = { throw AssertionError("Split retry must not generate a reflection") },
+                speakerFactory = { object : ReflectionSpeaker {
+                    override fun speak(text: String) { spoken += text }
+                    override fun stop() = Unit
+                    override fun close() = Unit
+                } },
+                splitLoader = { id ->
+                    assertEquals(item.runId, id)
+                    reads++
+                    if (reads == 1) throw IllegalStateException("Optional split read unavailable")
+                    HistorySplitDisplay.Ready(listOf(RunSplitDisplayRow("1 mi", "10:12", "10:12/mi")), "mi")
+                },
+                onRetrySplits = { retries += it })
+        }
+        composeTestRule.onNodeWithTag(RUN_HISTORY_ROW_TAG_PREFIX + item.runId).performClick()
+        composeTestRule.onNodeWithText("Split details couldn’t load. Your run is saved.").assertExists()
+        composeTestRule.onNodeWithTag("historySplitsRetry").performScrollTo().performClick()
+        composeTestRule.onNodeWithText("1 mi").assertExists()
+        composeTestRule.onNodeWithTag("historySplitsRetry").assertDoesNotExist()
+        composeTestRule.onNodeWithTag(RUN_HISTORY_REFLECTION_TAG_PREFIX + item.runId)
+            .assertTextEquals("Exact saved reflection.")
+        composeTestRule.runOnIdle {
+            assertEquals(2, reads)
+            assertEquals(listOf(item.runId), retries)
+            assertEquals(listOf("Exact saved reflection."), spoken)
+        }
+        composeTestRule.onNodeWithTag("historySplits").performScrollTo()
+        saveNativePreview(RUN_HISTORY_SCREEN_TAG, "qa-history-splits.png")
+    }
+
+    @Test
+    fun historySplitDetailsLoadOnlyForExpandedGpsAndStayHiddenForSamples() {
+        val gps = energyInsightHistoryRun(1).copy(reflectionStatus = null,
+            reflectionText = null, splitStatus = RunSplitStatus.READY)
+        val sample = energyInsightHistoryRun(2).copy(reflectionStatus = null,
+            reflectionText = null, isGpsRun = false, metricSource = MetricSource.FIXTURE,
+            isTestData = true, metrics = fixtureMetrics(), splitStatus = RunSplitStatus.READY)
+        val reads = mutableListOf<String>()
+        composeTestRule.setContent {
+            RunHistoryScreen(listOf(gps, sample), onBack = {},
+                onRetryReflection = { throw AssertionError("Split view must not generate a reflection") },
+                speakerFactory = { throw AssertionError("These rows have no reflection to speak") },
+                splitLoader = { id ->
+                    reads += id
+                    HistorySplitDisplay.Ready(listOf(RunSplitDisplayRow("1 mi", "10:12", "10:12/mi")), "mi")
+                })
+        }
+        composeTestRule.onNodeWithTag("historySplits").assertDoesNotExist()
+        composeTestRule.runOnIdle { assertTrue(reads.isEmpty()) }
+        composeTestRule.onNodeWithTag(RUN_HISTORY_ROW_TAG_PREFIX + sample.runId).performScrollTo().performClick()
+        composeTestRule.onNodeWithTag("historySplits").assertDoesNotExist()
+        composeTestRule.runOnIdle { assertTrue(reads.isEmpty()) }
+        composeTestRule.onNodeWithTag(RUN_HISTORY_ROW_TAG_PREFIX + gps.runId).performScrollTo().performClick()
+        composeTestRule.onNodeWithTag("historySplits").assertExists()
+        composeTestRule.runOnIdle { assertEquals(listOf(gps.runId), reads) }
+        composeTestRule.onNodeWithTag(RUN_HISTORY_ROW_TAG_PREFIX + gps.runId).performScrollTo().performClick()
+        composeTestRule.onNodeWithTag("historySplits").assertDoesNotExist()
+        composeTestRule.runOnIdle { assertEquals(listOf(gps.runId), reads) }
     }
 
     @Test

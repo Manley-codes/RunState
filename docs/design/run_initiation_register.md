@@ -527,8 +527,18 @@ Accurate stationary fixes provide coverage without distance.
 Rejected/missing evidence, clock disagreement or a different process leaves pace unavailable.
 Completion freezes the assessed coverage and metrics; History and reflection use that snapshot.
 These initial conservative limits still need real-route availability and accuracy checks; COMPLETE
-means the recording meets this policy, not independently proven distance accuracy. Automatic splits
-below remain the intended contract, not an implemented feature.
+means the recording meets this policy, not independently proven distance accuracy.
+
+**October 17 splits implementation:** Room 13 now stores a pending snapshot for future completed
+GPS runs only; old completions are not backfilled. Separate local work revalidates the accepted
+timeline and freezes mile/km splits, active durations, estimated boundary times, pace and a
+derivation version, including the final partial. Stationary Running time counts; pauses do not.
+The first row starts at official run start, and the last row includes the final active tail,
+including an exact-unit finish. READY/UNAVAILABLE snapshots are immutable. Failed preparation
+remains retryable independently of the saved run. Expanded History shows the frozen rows and
+an independent retry action. Current reflection requests do not yet carry split fields, and
+live split announcements/song correlation remain unimplemented. See the project checkpoint for
+the 576-per-variant unit checks, real migration/Room/UI proof and pending Moto field validation.
 
 - Total distance is derived from accepted Running observations. The visible distance counter is a
   view of that saved evidence, not a separate source of truth.

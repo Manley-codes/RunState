@@ -20,6 +20,8 @@ import com.runstate.mobile.reflection.RunReflectionCoordinator
 import com.runstate.mobile.reflection.reflectionBridgeEnabledForBuild
 import com.runstate.mobile.run.PreparedRunFactory
 import com.runstate.mobile.run.RunSessionCoordinator
+import com.runstate.mobile.run.RunSplitCalculator
+import com.runstate.mobile.data.local.RunSplitStatus
 import com.runstate.mobile.settings.AndroidRunPreferencesStore
 import com.runstate.mobile.settings.RunPreferences
 import com.runstate.mobile.weather.RunWeatherCapture
@@ -31,6 +33,7 @@ import java.util.UUID
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.async
@@ -40,6 +43,9 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.collect
 
 /** Configuration is distinct from proof that a server is currently reachable. */
 internal sealed interface ReflectionConnectionState {
@@ -179,6 +185,47 @@ class RunStateApplication : Application() {
     internal val runPreferences: StateFlow<RunPreferences?> = mutableRunPreferences.asStateFlow()
     internal val runWeatherCapture: RunWeatherCapture by lazy {
         RunWeatherCapture(applicationScope, database.weatherDao())
+    }
+    private var runSplitsJob: Job? = null
+    private val runSplitsLock = Mutex()
+
+    /** Derivation starts explicitly with the app, never inside the critical run-save transaction. */
+    @Synchronized
+    internal fun initializeRunSplits() {
+        if (runSplitsJob?.isActive == true) return
+        runSplitsJob = applicationScope.launch {
+            try {
+                database.splitDao().observeAllSnapshots()
+                    .map { rows -> rows.filter { it.status == RunSplitStatus.PENDING }.map { it.runId } }
+                    .distinctUntilChanged()
+                    .collect { ids ->
+                        ids.forEach { id ->
+                            try { retryRunSplits(id) }
+                            catch (cancelled: CancellationException) { throw cancelled }
+                            catch (_: Exception) { /* Keep PENDING for explicit retry or the next launch. */ }
+                        }
+                    }
+            } catch (cancelled: CancellationException) { throw cancelled }
+            catch (_: Exception) { /* Optional splits cannot stop run tracking or saving. */ }
+        }
+    }
+
+    /** The application owns accepted retries across Activity rotation; settled snapshots stay immutable. */
+    internal suspend fun retryRunSplits(runId: String) {
+        applicationScope.async {
+            runSplitsLock.withLock {
+                val snapshot = database.splitDao().snapshotFor(runId)
+                if (snapshot?.status != RunSplitStatus.PENDING ||
+                    snapshot.derivationVersion != RunSplitCalculator.DERIVATION_VERSION) return@withLock
+                val run = database.runDao().findById(runId) ?: return@withLock
+                val transitions = database.runDao().transitionsFor(runId)
+                val points = database.locationDao().pointsFor(runId)
+                val calculated = withContext(Dispatchers.Default) {
+                    RunSplitCalculator.calculate(run, transitions, points)
+                }
+                database.splitDao().publishIfPending(runId, calculated)
+            }
+        }.await()
     }
     private val mutableRunPreferencesSaving = MutableStateFlow(false)
     internal val runPreferencesSaving: StateFlow<Boolean> = mutableRunPreferencesSaving.asStateFlow()

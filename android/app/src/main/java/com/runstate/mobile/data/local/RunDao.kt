@@ -7,6 +7,7 @@ import androidx.room.Query
 import androidx.room.Transaction
 import com.runstate.mobile.run.RunTimingMark
 import com.runstate.mobile.run.RunTimeline
+import com.runstate.mobile.run.RunSplitCalculator
 import com.runstate.mobile.run.TransitionHistoryCoverage
 import kotlinx.coroutines.flow.Flow
 
@@ -281,9 +282,8 @@ abstract class RunDao {
     /**
      * Durably completes a run that storage still believes is PAUSED.
      *
-     * No child event is written. Completion is not something that happened *during* the
-     * run; it is the run's end, and the parent's COMPLETED state plus its finish time
-     * already say so completely.
+     * No lifecycle event is written. New GPS completions receive only a PENDING split
+     * marker in this transaction; optional derivation happens after the run is saved.
      *
      * Unlike the entity, which tolerates a null finish on a row inherited from version
      * 1, this path always writes one. Storage may contain an old unknown; it may not
@@ -313,7 +313,28 @@ abstract class RunDao {
         )
 
         requireSingleRowUpdated(rowsUpdated, runId)
+        insertPendingSplitSnapshot(
+            runId, RunSplitStatus.PENDING, RunSplitCalculator.DERIVATION_VERSION,
+            finalMetrics.displayUnit, StoredRunState.COMPLETED,
+            RunTrackingMode.GPS, MetricSource.GPS
+        )
     }
+
+    @Query("""
+        INSERT OR IGNORE INTO run_split_snapshots (run_id,status,derivation_version,display_unit)
+        SELECT run_id,:pendingStatus,:derivationVersion,:displayUnit FROM runs
+        WHERE run_id = :runId AND state = :completedState AND tracking_mode = :gpsMode
+            AND metric_source = :gpsSource AND display_distance_unit = :displayUnit
+    """)
+    protected abstract suspend fun insertPendingSplitSnapshot(
+        runId: String,
+        pendingStatus: RunSplitStatus,
+        derivationVersion: Int,
+        displayUnit: DistanceUnit,
+        completedState: StoredRunState,
+        gpsMode: RunTrackingMode,
+        gpsSource: MetricSource
+    ): Long
 
     /**
      * The shared body of pause and resume: check, allocate, update the run, record the
