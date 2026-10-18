@@ -48,6 +48,122 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ReflectionHttpServerTest {
+    private static JsonObject snippetRequest() {
+        JsonObject request = multiSongRequest(); request.addProperty("allowSongSnippetLookup", true);
+        for (var element : request.getAsJsonArray("songCandidates")) {
+            JsonObject recording = new JsonObject(); recording.addProperty("albumName", "Observed Album");
+            recording.addProperty("durationMillis", 180_000); element.getAsJsonObject().add("recording", recording);
+        }
+        return request;
+    }
+
+    private static ReflectionContract.SongSnippet generatedSnippet(ReflectionContract.SongCandidate song) {
+        return new ReflectionContract.SongSnippet("lrclib_v1_42_10000_15000", "LRCLIB", "42",
+                song.musicContext().trackTitle(), song.musicContext().artistName(), song.recording().albumName(),
+                song.recording().durationMillis(), 10_000, 5_000,
+                ReflectionContract.SongSnippetSelectionMethod.TITLE_HOOK, 1);
+    }
+
+    private static ReflectionProvider snippetProvider(AtomicInteger calls) {
+        return new ReflectionProvider() {
+            @Override public CandidateReflections generate(CompletedRunEvidence evidence) { return exactCandidates(); }
+            @Override public boolean supportsSongSelection() { return true; }
+            @Override public boolean supportsSongSnippets() { return true; }
+            @Override public GeneratedReflections generateForDelivery(CompletedRunEvidence evidence, String preparationId,
+                    List<ReflectionContract.SongCandidate> songs, boolean allowLookup) {
+                calls.incrementAndGet(); assertTrue(allowLookup);
+                var snippet = generatedSnippet(songs.get(1));
+                return new GeneratedReflections(exactCandidates(), snippet.cueId(), "2", SongSelectionMethod.CONTEXT_MATCH, snippet);
+            }
+        };
+    }
+
+    @Test void dynamicSnippetConsentRecordingAndExactOutputAreAuthenticatedAndIdempotent() throws Exception {
+        AtomicInteger calls = new AtomicInteger();
+        try (var server = startRemote(snippetProvider(calls), 2, 8)) {
+            var request = snippetRequest();
+            assertError(rawPost(server, List.of("Host: " + DEMO_HOST), request.toString()), 401, "unauthorized");
+            assertEquals(0, calls.get());
+            var first = rawPost(server, remoteHeaders(), request.toString()); assertEquals(200, first.status());
+            var body = JsonParser.parseString(first.body()).getAsJsonObject();
+            assertEquals("2", body.get("selectedSongId").getAsString());
+            assertEquals("lrclib_v1_42_10000_15000", body.get("songCueId").getAsString());
+            JsonObject snippet = body.getAsJsonObject("songSnippet");
+            assertEquals(java.util.Set.of("cueId", "source", "sourceId", "trackTitle", "artistName", "albumName",
+                    "trackDurationMillis", "startPositionMillis", "durationMillis", "selectionMethod", "version"), snippet.keySet());
+            assertEquals("LRCLIB", snippet.get("source").getAsString()); assertEquals("42", snippet.get("sourceId").getAsString());
+            assertEquals(first, rawPost(server, remoteHeaders(), request.toString())); assertEquals(1, calls.get());
+            for (String change : List.of("consent", "album", "duration")) {
+                JsonObject altered = request.deepCopy();
+                if (change.equals("consent")) altered.addProperty("allowSongSnippetLookup", false);
+                if (change.equals("album")) altered.getAsJsonArray("songCandidates").get(1).getAsJsonObject()
+                        .getAsJsonObject("recording").addProperty("albumName", "Another Album");
+                if (change.equals("duration")) altered.getAsJsonArray("songCandidates").get(1).getAsJsonObject()
+                        .getAsJsonObject("recording").addProperty("durationMillis", 181_000);
+                assertError(rawPost(server, remoteHeaders(), altered.toString()), 409, "request_id_conflict");
+            }
+            assertEquals(1, calls.get());
+        }
+    }
+
+    @Test void snippetCapabilityExistsOnHealthAndDeliveryOnlyWhenSupported() throws Exception {
+        for (boolean supported : List.of(false, true)) {
+            try (var server = start(supported ? snippetProvider(new AtomicInteger()) : selectingProvider(new AtomicInteger()))) {
+                var health = client.send(HttpRequest.newBuilder(URI.create("http://127.0.0.1:"
+                        + server.address().getPort() + "/health")).GET().build(), HttpResponse.BodyHandlers.ofString());
+                assertEquals(supported ? "1" : null, health.headers().firstValue(ReflectionHttpServer.SONG_SNIPPETS_CAPABILITY_HEADER).orElse(null));
+                var delivery = post(server, snippetRequest().toString());
+                assertEquals(supported ? 200 : 503, delivery.statusCode());
+                assertEquals(supported ? "1" : null, delivery.headers().firstValue(ReflectionHttpServer.SONG_SNIPPETS_CAPABILITY_HEADER).orElse(null));
+                if (supported) assertEquals("1", delivery.headers().firstValue(ReflectionHttpServer.SONG_STUDY_CAPABILITY_HEADER).orElse(null));
+            }
+        }
+    }
+
+    @Test void snippetRequestRejectsImplicitConsentUnknownRecordingFieldsAndInvalidDurations() throws Exception {
+        List<JsonObject> invalid = new java.util.ArrayList<>();
+        for (String value : List.of("null", "\"true\"", "1", "{}")) {
+            var request = snippetRequest(); request.add("allowSongSnippetLookup", JsonParser.parseString(value)); invalid.add(request);
+        }
+        var noSongs = snippetRequest(); noSongs.remove("songCandidates"); invalid.add(noSongs);
+        for (String recording : List.of("null", "{}", "{\"durationMillis\":999}", "{\"durationMillis\":3600001}",
+                "{\"durationMillis\":180000.5}", "{\"durationMillis\":\"180000\"}",
+                "{\"durationMillis\":180000,\"albumName\":null}", "{\"durationMillis\":180000,\"albumName\":\"\"}",
+                "{\"durationMillis\":180000,\"spotifyUri\":\"private\"}")) {
+            var request = snippetRequest(); request.getAsJsonArray("songCandidates").get(1).getAsJsonObject()
+                    .add("recording", JsonParser.parseString(recording)); invalid.add(request);
+        }
+        AtomicInteger calls = new AtomicInteger();
+        try (var server = start(snippetProvider(calls))) {
+            for (var request : invalid) assertError(post(server, request.toString()), 400, "invalid_request");
+            assertEquals(0, calls.get());
+        }
+        var parsed = ReflectionApiJson.parseRequest(multiSongRequest().toString().getBytes(StandardCharsets.UTF_8));
+        assertFalse(parsed.allowSongSnippetLookup());
+    }
+
+    @Test void dynamicSnippetCannotAcknowledgeAnotherCandidateRecordingOrUnapprovedProvider() throws Exception {
+        var request = snippetRequest();
+        var parsed = ReflectionApiJson.parseRequest(request.toString().getBytes(StandardCharsets.UTF_8));
+        var snippet = generatedSnippet(parsed.songCandidates().get(1));
+        var method = ReflectionProvider.SongSelectionMethod.CONTEXT_MATCH;
+        assertThrows(IllegalArgumentException.class, () -> ReflectionApiJson.success(parsed,
+                new ReflectionProvider.GeneratedReflections(exactCandidates(), snippet.cueId(), "1", method, snippet),
+                ReflectionHttpServer.GenerationMode.ANTHROPIC));
+        request.addProperty("allowSongSnippetLookup", false);
+        var noConsent = ReflectionApiJson.parseRequest(request.toString().getBytes(StandardCharsets.UTF_8));
+        assertThrows(IllegalArgumentException.class, () -> ReflectionApiJson.success(noConsent,
+                new ReflectionProvider.GeneratedReflections(exactCandidates(), snippet.cueId(), "2", method, snippet),
+                ReflectionHttpServer.GenerationMode.ANTHROPIC));
+        assertThrows(IllegalArgumentException.class, () -> new ReflectionProvider.GeneratedReflections(exactCandidates(), "wrong", "2", method, snippet));
+        request = snippetRequest(); request.getAsJsonArray("songCandidates").get(1).getAsJsonObject()
+                .getAsJsonObject("recording").addProperty("durationMillis", 180_500);
+        var wrongDuration = ReflectionApiJson.parseRequest(request.toString().getBytes(StandardCharsets.UTF_8));
+        assertThrows(IllegalArgumentException.class, () -> ReflectionApiJson.success(wrongDuration,
+                new ReflectionProvider.GeneratedReflections(exactCandidates(), snippet.cueId(), "2", method, snippet),
+                ReflectionHttpServer.GenerationMode.ANTHROPIC));
+    }
+
     private static JsonObject multiSongRequest() {
         JsonObject request = JsonParser.parseString(validRequest()).getAsJsonObject();
         com.google.gson.JsonArray songs = new com.google.gson.JsonArray();

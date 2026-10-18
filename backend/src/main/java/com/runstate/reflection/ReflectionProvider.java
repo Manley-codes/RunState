@@ -24,9 +24,17 @@ public interface ReflectionProvider {
 
     default boolean supportsSongSelection() { return false; }
 
+    default boolean supportsSongSnippets() { return false; }
+
     default GeneratedReflections generateForDelivery(CompletedRunEvidence evidence, String songPreparationId,
             java.util.List<ReflectionContract.SongCandidate> songCandidates) throws ReflectionProviderException {
         return generateForDelivery(evidence, songPreparationId);
+    }
+
+    default GeneratedReflections generateForDelivery(CompletedRunEvidence evidence, String songPreparationId,
+            java.util.List<ReflectionContract.SongCandidate> songCandidates, boolean allowSongSnippetLookup)
+            throws ReflectionProviderException {
+        return generateForDelivery(evidence, songPreparationId, songCandidates);
     }
 
     default SongPreparationState prepareSong(ReflectionContract.SongPreparationRequest request)
@@ -44,9 +52,14 @@ public interface ReflectionProvider {
     enum SongSelectionMethod { CONTEXT_MATCH, AVAILABLE_FALLBACK }
 
     record GeneratedReflections(CandidateReflections candidates, String songCueId,
-                                String selectedSongId, SongSelectionMethod songSelectionMethod) {
+                                String selectedSongId, SongSelectionMethod songSelectionMethod,
+                                ReflectionContract.SongSnippet songSnippet) {
+        public GeneratedReflections(CandidateReflections candidates, String songCueId,
+                                    String selectedSongId, SongSelectionMethod songSelectionMethod) {
+            this(candidates, songCueId, selectedSongId, songSelectionMethod, null);
+        }
         public GeneratedReflections(CandidateReflections candidates, String songCueId) {
-            this(candidates, songCueId, null, null);
+            this(candidates, songCueId, null, null, null);
         }
         public GeneratedReflections {
             java.util.Objects.requireNonNull(candidates, "candidates");
@@ -56,6 +69,9 @@ public interface ReflectionProvider {
             if ((selectedSongId == null) != (songSelectionMethod == null)
                     || selectedSongId != null && !selectedSongId.matches("(?:0|[1-9][0-9]{0,9})")) {
                 throw new IllegalArgumentException("Invalid song selection acknowledgement.");
+            }
+            if (songSnippet != null && (selectedSongId == null || !songSnippet.cueId().equals(songCueId))) {
+                throw new IllegalArgumentException("A generated snippet requires its selected song and exact cue.");
             }
         }
         @Override public String toString() { return "GeneratedReflections[content=redacted, paired=" + (songCueId != null) + "]"; }

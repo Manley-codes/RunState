@@ -40,7 +40,11 @@ public final class ReflectionContract {
     }
 
     /** One distinct, observed song eligible for selection, without invented listening duration. */
-    public record SongCandidate(String candidateId, MusicContext musicContext, String songPreparationId) {
+    public record SongCandidate(String candidateId, MusicContext musicContext, String songPreparationId,
+                                SongRecording recording) {
+        public SongCandidate(String candidateId, MusicContext musicContext, String songPreparationId) {
+            this(candidateId, musicContext, songPreparationId, null);
+        }
         public SongCandidate {
             require(candidateId != null && candidateId.matches("(?:0|[1-9][0-9]{0,9})"),
                     "candidateId must be a canonical observation sequence of at most ten digits");
@@ -53,6 +57,52 @@ public final class ReflectionContract {
             if (songPreparationId != null) requireCanonicalUuid(songPreparationId, "songPreparationId");
         }
         @Override public String toString() { return "SongCandidate[identity=redacted]"; }
+    }
+
+    /** Recording metadata, not listening duration. Device playback identifiers never cross this boundary. */
+    public record SongRecording(String albumName, long durationMillis) {
+        public SongRecording {
+            if (albumName != null) requireVisibleSongText(albumName, "albumName");
+            require(durationMillis >= 1_000 && durationMillis <= 3_600_000,
+                    "Recording duration must be between one second and one hour");
+        }
+        @Override public String toString() { return "SongRecording[metadata=redacted]"; }
+    }
+
+    public enum SongSnippetSelectionMethod { TITLE_HOOK, REPEATED_HOOK }
+
+    /** Source-derived playback coordinates only: no lyrics, audio URL, or device playback identifier. */
+    public record SongSnippet(String cueId, String source, String sourceId, String trackTitle,
+                              String artistName, String albumName, long trackDurationMillis,
+                              long startPositionMillis, long durationMillis,
+                              SongSnippetSelectionMethod selectionMethod, int version) {
+        public SongSnippet {
+            require("LRCLIB".equals(source) && version == 1, "Unsupported song snippet source/version");
+            require(sourceId != null && sourceId.matches("[1-9][0-9]{0,18}"), "Invalid timing source identifier");
+            requireVisibleSongText(trackTitle, "trackTitle");
+            requireVisibleSongText(artistName, "artistName");
+            new SongRecording(albumName, trackDurationMillis);
+            require(startPositionMillis >= 0 && durationMillis >= 2_000 && durationMillis <= 10_000
+                            && startPositionMillis <= trackDurationMillis - durationMillis,
+                    "Snippet must fit within the observed recording");
+            require(selectionMethod != null, "A source-derived selection method is required");
+            require(("lrclib_v1_" + sourceId + "_" + startPositionMillis + "_"
+                    + (startPositionMillis + durationMillis)).equals(cueId), "Invalid generated snippet cue");
+        }
+        public boolean matches(SongCandidate candidate) {
+            return candidate != null && candidate.recording() != null
+                    && normalizeSongIdentity(trackTitle).equals(normalizeSongIdentity(candidate.musicContext().trackTitle()))
+                    && normalizeSongIdentity(artistName).equals(normalizeSongIdentity(candidate.musicContext().artistName()))
+                    && java.util.Objects.equals(albumName, candidate.recording().albumName())
+                    && trackDurationMillis == candidate.recording().durationMillis();
+        }
+        @Override public String toString() { return "SongSnippet[metadata=redacted, source=LRCLIB]"; }
+    }
+
+    private static void requireVisibleSongText(String text, String field) {
+        requireBoundedText(text, 200, field);
+        require(text.codePoints().noneMatch(value -> Character.isISOControl(value)
+                        || value >= 0xd800 && value <= 0xdfff), "Invalid visible song metadata");
     }
 
     public static List<SongCandidate> validatedSongCandidates(List<SongCandidate> candidates) {

@@ -42,7 +42,7 @@ final class ReflectionApiJson {
 
     private static final int MAX_JSON_DEPTH = 32;
     private static final Set<String> REQUIRED_REQUEST_FIELDS = Set.of("requestId", "runId", "evidence");
-    private static final Set<String> REQUEST_FIELDS = Set.of("requestId", "runId", "evidence", "songPreparationId", "songCandidates");
+    private static final Set<String> REQUEST_FIELDS = Set.of("requestId", "runId", "evidence", "songPreparationId", "songCandidates", "allowSongSnippetLookup");
     private static final Set<String> EVIDENCE_FIELDS = Set.of(
             "officialStartEpochMillis",
             "finishEpochMillis",
@@ -111,14 +111,30 @@ final class ReflectionApiJson {
             for (JsonElement element : array.getAsJsonArray()) {
                 if (!element.isJsonObject()) throw new IllegalArgumentException("A song candidate must be an object");
                 JsonObject candidate = element.getAsJsonObject();
-                requireFields(candidate, Set.of("candidateId", "musicContext", "songPreparationId"),
+                requireFields(candidate, Set.of("candidateId", "musicContext", "songPreparationId", "recording"),
                         Set.of("candidateId", "musicContext"), "song candidate");
+                ReflectionContract.SongRecording recording = null;
+                if (candidate.has("recording")) {
+                    JsonObject value = requiredObject(candidate, "recording");
+                    requireFields(value, Set.of("albumName", "durationMillis"), Set.of("durationMillis"), "recording");
+                    recording = new ReflectionContract.SongRecording(value.has("albumName")
+                            ? requiredString(value, "albumName") : null, requiredLong(value, "durationMillis"));
+                }
                 candidates.add(new ReflectionContract.SongCandidate(requiredString(candidate, "candidateId"),
                         optionalMusic(candidate, "musicContext"),
-                        candidate.has("songPreparationId") ? requiredString(candidate, "songPreparationId") : null));
+                        candidate.has("songPreparationId") ? requiredString(candidate, "songPreparationId") : null,
+                        recording));
             }
         }
-        return new ApiRequest(identifiers, evidence, preparationId, candidates);
+        boolean allowSnippets = false;
+        if (root.has("allowSongSnippetLookup")) {
+            JsonElement value = root.get("allowSongSnippetLookup");
+            if (!value.isJsonPrimitive() || !value.getAsJsonPrimitive().isBoolean()) {
+                throw new IllegalArgumentException("Song snippet lookup requires an explicit boolean");
+            }
+            allowSnippets = value.getAsBoolean();
+        }
+        return new ApiRequest(identifiers, evidence, preparationId, candidates, allowSnippets);
     }
 
     static ReflectionContract.SongPreparationRequest parseSongPreparationRequest(byte[] utf8Json)
@@ -177,15 +193,21 @@ final class ReflectionApiJson {
         CandidateReflections candidates = generated.candidates();
         String acknowledgedCueId = generated.songCueId();
         MusicContext selectedMusic = request.evidence().musicContext();
+        ReflectionContract.SongCandidate selectedCandidate = null;
         if (generated.selectedSongId() != null) {
-            selectedMusic = request.songCandidates().stream()
+            selectedCandidate = request.songCandidates().stream()
                     .filter(candidate -> candidate.candidateId().equals(generated.selectedSongId()))
-                    .findFirst().orElseThrow(() -> new IllegalArgumentException("Selected song is not an offered candidate"))
-                    .musicContext();
+                    .findFirst().orElseThrow(() -> new IllegalArgumentException("Selected song is not an offered candidate"));
+            selectedMusic = selectedCandidate.musicContext();
         } else if (!request.songCandidates().isEmpty() && acknowledgedCueId != null) {
             throw new IllegalArgumentException("Multi-song delivery cannot acknowledge an unselected cue");
         }
-        if (acknowledgedCueId != null && (selectedMusic.songCue() == null
+        if (generated.songSnippet() != null) {
+            if (!request.allowSongSnippetLookup() || !generated.songSnippet().matches(selectedCandidate)
+                    || selectedMusic.songCue() != null) {
+                throw new IllegalArgumentException("Generated snippet must match the opted-in selected recording");
+            }
+        } else if (acknowledgedCueId != null && (selectedMusic.songCue() == null
                 || !acknowledgedCueId.equals(selectedMusic.songCue().cueId()))) {
             throw new IllegalArgumentException("Acknowledged cue must match the request.");
         }
@@ -205,6 +227,20 @@ final class ReflectionApiJson {
         if (generated.selectedSongId() != null) {
             response.addProperty("selectedSongId", generated.selectedSongId());
             response.addProperty("songSelectionMethod", generated.songSelectionMethod().name());
+        }
+        if (generated.songSnippet() != null) {
+            var snippet = generated.songSnippet();
+            JsonObject value = new JsonObject();
+            value.addProperty("cueId", snippet.cueId()); value.addProperty("source", snippet.source());
+            value.addProperty("sourceId", snippet.sourceId()); value.addProperty("trackTitle", snippet.trackTitle());
+            value.addProperty("artistName", snippet.artistName());
+            if (snippet.albumName() != null) value.addProperty("albumName", snippet.albumName());
+            value.addProperty("trackDurationMillis", snippet.trackDurationMillis());
+            value.addProperty("startPositionMillis", snippet.startPositionMillis());
+            value.addProperty("durationMillis", snippet.durationMillis());
+            value.addProperty("selectionMethod", snippet.selectionMethod().name());
+            value.addProperty("version", snippet.version());
+            response.add("songSnippet", value);
         }
         response.add("candidates", candidateJson);
         return response.toString();
@@ -501,8 +537,17 @@ final class ReflectionApiJson {
     }
 
     record ApiRequest(RequestIdentifiers identifiers, CompletedRunEvidence evidence, String songPreparationId,
-                      List<ReflectionContract.SongCandidate> songCandidates) {
-        ApiRequest { songCandidates = ReflectionContract.validatedSongCandidates(songCandidates); }
+                      List<ReflectionContract.SongCandidate> songCandidates, boolean allowSongSnippetLookup) {
+        ApiRequest {
+            songCandidates = ReflectionContract.validatedSongCandidates(songCandidates);
+            if (allowSongSnippetLookup && songCandidates.isEmpty()) {
+                throw new IllegalArgumentException("Song snippet lookup requires shared observed candidates");
+            }
+        }
+        ApiRequest(RequestIdentifiers identifiers, CompletedRunEvidence evidence, String songPreparationId,
+                   List<ReflectionContract.SongCandidate> songCandidates) {
+            this(identifiers, evidence, songPreparationId, songCandidates, false);
+        }
         ApiRequest(RequestIdentifiers identifiers, CompletedRunEvidence evidence) { this(identifiers, evidence, null, List.of()); }
         ApiRequest(RequestIdentifiers identifiers, CompletedRunEvidence evidence, String songPreparationId) {
             this(identifiers, evidence, songPreparationId, List.of());

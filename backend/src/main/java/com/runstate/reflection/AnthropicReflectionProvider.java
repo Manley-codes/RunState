@@ -77,6 +77,7 @@ public final class AnthropicReflectionProvider implements ReflectionProvider {
     private final Transport transport;
     private final String systemPrompt;
     private final SongMaterialLookup songAnalysisLookup;
+    private final SongSnippetLookup songSnippetLookup;
     static final int MAX_PREPARED_SONGS = 32;
     static final Duration SONG_PREPARATION_TTL = Duration.ofHours(2);
     private final Object preparationLock = new Object();
@@ -106,6 +107,12 @@ public final class AnthropicReflectionProvider implements ReflectionProvider {
         Optional<MusixmatchSongAnalysis.SongMaterial> lookup(String trackTitle, String artistName);
     }
 
+    @FunctionalInterface
+    interface SongSnippetLookup {
+        Optional<ReflectionContract.SongSnippet> lookup(ReflectionContract.SongCandidate candidate,
+                MusixmatchSongAnalysis.SongMaterial material, Duration remaining);
+    }
+
     /** Builds the production adapter from backend-only environment configuration. */
     public AnthropicReflectionProvider() throws ReflectionProviderException {
         this(configurationFrom(System.getenv()), configuredSongAnalysis(System.getenv()));
@@ -116,7 +123,7 @@ public final class AnthropicReflectionProvider implements ReflectionProvider {
         this(
                 configuration,
                 productionTransport(configuration),
-                songAnalysisLookup
+                songAnalysisLookup, new LrclibSongSnippets()::lookup
         );
     }
 
@@ -136,13 +143,29 @@ public final class AnthropicReflectionProvider implements ReflectionProvider {
                 MAX_PREPARED_SONGS, SONG_PREPARATION_TTL);
     }
 
+    AnthropicReflectionProvider(ProviderConfiguration configuration, Transport transport,
+                               SongMaterialLookup songAnalysisLookup, SongSnippetLookup songSnippetLookup)
+            throws ReflectionProviderException {
+        this(configuration, transport, songAnalysisLookup, System::nanoTime, MAX_PREPARED_SONGS,
+                SONG_PREPARATION_TTL, songSnippetLookup);
+    }
+
     /** Fake monotonic time and smaller capacity let offline tests prove bounded expiry/admission. */
     AnthropicReflectionProvider(ProviderConfiguration configuration, Transport transport,
                                SongMaterialLookup songAnalysisLookup, LongSupplier preparationClock,
                                int preparationCapacity, Duration preparationTtl) throws ReflectionProviderException {
+        this(configuration, transport, songAnalysisLookup, preparationClock, preparationCapacity, preparationTtl,
+                (candidate, material, remaining) -> Optional.empty());
+    }
+
+    private AnthropicReflectionProvider(ProviderConfiguration configuration, Transport transport,
+                               SongMaterialLookup songAnalysisLookup, LongSupplier preparationClock,
+                               int preparationCapacity, Duration preparationTtl, SongSnippetLookup songSnippetLookup)
+            throws ReflectionProviderException {
         this.configuration = Objects.requireNonNull(configuration, "configuration");
         this.transport = Objects.requireNonNull(transport, "transport");
         this.songAnalysisLookup = Objects.requireNonNull(songAnalysisLookup, "songAnalysisLookup");
+        this.songSnippetLookup = Objects.requireNonNull(songSnippetLookup, "songSnippetLookup");
         this.systemPrompt = loadSystemPrompt();
         this.preparationClock = Objects.requireNonNull(preparationClock);
         if (preparationCapacity < 1 || preparationCapacity > MAX_PREPARED_SONGS
@@ -171,6 +194,7 @@ public final class AnthropicReflectionProvider implements ReflectionProvider {
     }
 
     @Override public boolean supportsSongSelection() { return true; }
+    @Override public boolean supportsSongSnippets() { return true; }
 
     private record SelectionMaterial(ReflectionContract.SongCandidate candidate,
                                      MusixmatchSongAnalysis.SongMaterial material,
@@ -182,6 +206,13 @@ public final class AnthropicReflectionProvider implements ReflectionProvider {
     @Override
     public GeneratedReflections generateForDelivery(CompletedRunEvidence evidence, String songPreparationId,
             List<ReflectionContract.SongCandidate> songCandidates) throws ReflectionProviderException {
+        return generateForDelivery(evidence, songPreparationId, songCandidates, false);
+    }
+
+    @Override
+    public GeneratedReflections generateForDelivery(CompletedRunEvidence evidence, String songPreparationId,
+            List<ReflectionContract.SongCandidate> songCandidates, boolean allowSongSnippetLookup)
+            throws ReflectionProviderException {
         List<ReflectionContract.SongCandidate> candidates = ReflectionContract.validatedSongCandidates(songCandidates);
         if (candidates.isEmpty()) return generateForDelivery(evidence, songPreparationId);
         long started = System.nanoTime();
@@ -258,9 +289,24 @@ public final class AnthropicReflectionProvider implements ReflectionProvider {
         CompletedRunEvidence selectedEvidence = new CompletedRunEvidence(evidence.officialStartEpochMillis(),
                 evidence.finishEpochMillis(), evidence.startTimezoneId(), evidence.activeDurationMillis(),
                 evidence.metrics(), evidence.preRunEnergy(), music, evidence.weatherContext());
-        GeneratedReflections generated = writeMatchedSong(selectedEvidence, selected.material(), selected.studied(), started);
+        ReflectionContract.SongSnippet snippet = null;
+        if (allowSongSnippetLookup && selected.candidate().recording() != null && music.songCue() == null) {
+            try {
+                Duration remaining = remainingSongTimeout(started);
+                Duration timeout = remaining.compareTo(LrclibSongSnippets.MAX_TIMEOUT) > 0
+                        ? LrclibSongSnippets.MAX_TIMEOUT : remaining;
+                Optional<ReflectionContract.SongSnippet> found = songSnippetLookup.lookup(selected.candidate(), selected.material(), timeout);
+                if (found != null && found.isPresent() && found.get().matches(selected.candidate())) snippet = found.get();
+            } catch (RuntimeException unavailable) {
+                // The optional timing source cannot invalidate an otherwise grounded reflection.
+            }
+        }
+        if (Thread.currentThread().isInterrupted()) {
+            throw new ReflectionProviderException(FailureType.TRANSPORT, "Song reflection was interrupted.");
+        }
+        GeneratedReflections generated = writeMatchedSong(selectedEvidence, selected.material(), selected.studied(), started, snippet);
         return new GeneratedReflections(generated.candidates(), generated.songCueId(),
-                selected.candidate().candidateId(), method);
+                selected.candidate().candidateId(), method, snippet);
     }
 
     private List<SelectionMaterial> selectionMaterial(List<ReflectionContract.SongCandidate> candidates, long started)
@@ -412,14 +458,29 @@ public final class AnthropicReflectionProvider implements ReflectionProvider {
     private GeneratedReflections writeMatchedSong(CompletedRunEvidence evidence,
             MusixmatchSongAnalysis.SongMaterial material, SongReflectionTrial.StudiedSong studied, long started)
             throws ReflectionProviderException {
+        return writeMatchedSong(evidence, material, studied, started, null);
+    }
+
+    private GeneratedReflections writeMatchedSong(CompletedRunEvidence evidence,
+            MusixmatchSongAnalysis.SongMaterial material, SongReflectionTrial.StudiedSong studied, long started,
+            ReflectionContract.SongSnippet snippet) throws ReflectionProviderException {
         SongReflectionTrial.PassageLanding landing = acceptedLanding(evidence.musicContext());
+        if (landing == null && snippet != null) {
+            landing = new SongReflectionTrial.PassageLanding(material.trackTitle(), material.artistName(),
+                    snippet.selectionMethod() == ReflectionContract.SongSnippetSelectionMethod.TITLE_HOOK
+                            ? "A brief recurring title hook with a source-timed line boundary."
+                            : "A brief repeated vocal phrase with a source-timed line boundary.",
+                    "Let this short musical response finish the thought naturally. Use the matched song context and this run's facts; do not announce playback, quote lyrics, or claim the timing was auditioned.",
+                    "TIMED_SOURCE_DERIVED_HOOK_NOT_AUDITIONED_OR_RUN_EVIDENCE");
+        }
         SongReflectionTrial engine = songEngine(evidence, started);
         SongReflectionTrial.TrialResult result = studied == null ? engine.generate(evidence, material, landing)
                 : engine.write(evidence, studied, landing, SongReflectionTrial.CreativeApproach.AUTO);
         if (!result.reviewWarnings().isEmpty()) {
             throw invalidResponse("The song reflection did not pass its bounded output checks.");
         }
-        return new GeneratedReflections(result.reflections(), landing == null ? null : evidence.musicContext().songCue().cueId());
+        return new GeneratedReflections(result.reflections(), landing == null ? null
+                : snippet != null ? snippet.cueId() : evidence.musicContext().songCue().cueId());
     }
 
     private GeneratedReflections ordinaryReflection(CompletedRunEvidence evidence, long started)

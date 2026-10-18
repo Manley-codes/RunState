@@ -109,7 +109,7 @@ final class SongReflectionTrial {
             target.addProperty("artist_name", material.artistName());
             target.addProperty("musical_moment", landing.musicalMoment());
             target.addProperty("intended_effect", landing.intendedEffect());
-            target.addProperty("provenance", "EDITORIAL_AUDITION_DESCRIPTION_NOT_LYRICS_TIMING_OR_RUN_EVIDENCE");
+            target.addProperty("provenance", landing.provenance());
             writerInput.add("passage_landing", target);
         }
         JsonObject branches = exchange.exchange(writerInput,
@@ -146,11 +146,20 @@ final class SongReflectionTrial {
     }
 
     /** An editorial listening target, never a lyric source, timestamp or claim about the runner. */
-    record PassageLanding(String trackTitle, String artistName, String musicalMoment, String intendedEffect) {
+    record PassageLanding(String trackTitle, String artistName, String musicalMoment, String intendedEffect,
+                          String provenance) {
+        PassageLanding(String trackTitle, String artistName, String musicalMoment, String intendedEffect) {
+            this(trackTitle, artistName, musicalMoment, intendedEffect,
+                    "EDITORIAL_AUDITION_DESCRIPTION_NOT_LYRICS_TIMING_OR_RUN_EVIDENCE");
+        }
         PassageLanding {
             if (!validLandingText(trackTitle, 200) || !validLandingText(artistName, 200)
                     || !validLandingText(musicalMoment, 400) || !validLandingText(intendedEffect, 400)) {
                 throw new IllegalArgumentException("Invalid bounded passage landing.");
+            }
+            if (!Set.of("EDITORIAL_AUDITION_DESCRIPTION_NOT_LYRICS_TIMING_OR_RUN_EVIDENCE",
+                    "TIMED_SOURCE_DERIVED_HOOK_NOT_AUDITIONED_OR_RUN_EVIDENCE").contains(provenance)) {
+                throw new IllegalArgumentException("Unknown passage landing provenance.");
             }
         }
 

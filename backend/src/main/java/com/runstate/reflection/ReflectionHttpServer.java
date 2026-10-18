@@ -42,6 +42,7 @@ public final class ReflectionHttpServer implements AutoCloseable {
     public static final String SONG_STUDY_CAPABILITY_HEADER = "X-RunState-Song-Study";
     public static final String SONG_PREPARATION_CAPABILITY_HEADER = "X-RunState-Song-Preparation";
     public static final String SONG_SELECTION_CAPABILITY_HEADER = "X-RunState-Song-Selection";
+    public static final String SONG_SNIPPETS_CAPABILITY_HEADER = "X-RunState-Song-Snippets";
     public static final String REFLECTION_VOICE_CAPABILITY_HEADER = "X-RunState-Reflection-Voice";
     public static final int MAX_REQUEST_BYTES = 64 * 1024;
     public static final int MAX_RESPONSE_BYTES = 64 * 1024;
@@ -266,6 +267,9 @@ public final class ReflectionHttpServer implements AutoCloseable {
             if (provider.supportsSongSelection()) {
                 exchange.getResponseHeaders().set(SONG_SELECTION_CAPABILITY_HEADER, "1");
             }
+            if (provider.supportsSongSnippets()) {
+                exchange.getResponseHeaders().set(SONG_SNIPPETS_CAPABILITY_HEADER, "1");
+            }
             if (speechProvider != null) {
                 exchange.getResponseHeaders().set(REFLECTION_VOICE_CAPABILITY_HEADER, "1");
             }
@@ -312,6 +316,11 @@ public final class ReflectionHttpServer implements AutoCloseable {
             return prepareSongOnce(ReflectionApiJson.parseSongPreparationRequest(body));
         }
         ApiRequest request = ReflectionApiJson.parseRequest(body);
+        if (provider.supportsSongSnippets()) {
+            exchange.getResponseHeaders().set(SONG_SNIPPETS_CAPABILITY_HEADER, "1");
+        } else if (request.allowSongSnippetLookup()) {
+            return error(503, "provider_unavailable", "Song snippet lookup is not configured.");
+        }
         if (!request.songCandidates().isEmpty() && !provider.supportsSongSelection()) {
             return error(503, "provider_unavailable", "Song selection is not configured.");
         }
@@ -389,7 +398,7 @@ public final class ReflectionHttpServer implements AutoCloseable {
     private EndpointResponse callProvider(ApiRequest request) {
         try {
             ReflectionProvider.GeneratedReflections generated = provider.generateForDelivery(
-                    request.evidence(), request.songPreparationId(), request.songCandidates());
+                    request.evidence(), request.songPreparationId(), request.songCandidates(), request.allowSongSnippetLookup());
             String body = ReflectionApiJson.success(request, generated, generationMode);
             if (body.getBytes(StandardCharsets.UTF_8).length > MAX_RESPONSE_BYTES) {
                 return providerFailure(FailureType.INVALID_RESPONSE);

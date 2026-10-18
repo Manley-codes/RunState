@@ -46,9 +46,118 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.fail;
 
 class AnthropicReflectionProviderTest {
     private static final String PREPARATION_ID = "09bf1430-b193-49b9-a9c3-4f3577dc67b6";
+
+    private static ReflectionContract.SongCandidate recordedSong(String id, String title) {
+        return new ReflectionContract.SongCandidate(id, observedSong(id, title).musicContext(), null,
+                new ReflectionContract.SongRecording("Fixture Album", 180_000));
+    }
+
+    private static ReflectionContract.SongSnippet snippet(ReflectionContract.SongCandidate song) {
+        return new ReflectionContract.SongSnippet("lrclib_v1_42_10000_15000", "LRCLIB", "42",
+                song.musicContext().trackTitle(), song.musicContext().artistName(), song.recording().albumName(),
+                song.recording().durationMillis(), 10_000, 5_000,
+                ReflectionContract.SongSnippetSelectionMethod.REPEATED_HOOK, 1);
+    }
+
+    @Test
+    void optionalTimingUsesOnlyTheChosenRecordingBeforeTheUnchangedWriterWithoutRawLyrics() throws Exception {
+        AtomicInteger lookups = new AtomicInteger();
+        AtomicInteger calls = new AtomicInteger();
+        var provider = new AnthropicReflectionProvider(testConfiguration(), request -> {
+            calls.incrementAndGet(); JsonObject input = evidenceFrom(request);
+            if (input.has("song_candidates")) {
+                assertFalse(input.toString().contains("durationMillis"));
+                return songResponse(JsonParser.parseString("{\"candidateId\":\"8\"}").getAsJsonObject());
+            }
+            if (input.has("run_facts")) {
+                assertEquals(1, lookups.get());
+                JsonObject landing = input.getAsJsonObject("passage_landing");
+                assertEquals("TIMED_SOURCE_DERIVED_HOOK_NOT_AUDITIONED_OR_RUN_EVIDENCE", landing.get("provenance").getAsString());
+                assertFalse(landing.toString().contains("10000")); assertFalse(landing.toString().contains("lrclib"));
+                assertFalse(landing.toString().contains("A fresh start"));
+                assertEquals("Second", landing.get("track_title").getAsString());
+                return songResponse(writerBranches());
+            }
+            return songResponse(studyNotes());
+        }, (title, artist) -> Optional.of(songMaterial(title, artist)), (song, material, remaining) -> {
+            lookups.incrementAndGet(); assertEquals("8", song.candidateId()); assertEquals("Second", material.trackTitle());
+            assertTrue(remaining.compareTo(Duration.ofSeconds(5)) <= 0); return Optional.of(snippet(song));
+        });
+        var result = provider.generateForDelivery(knownEvidence(), null,
+                List.of(recordedSong("1", "First"), recordedSong("8", "Second")), true);
+        assertEquals("8", result.selectedSongId()); assertEquals(snippet(recordedSong("8", "Second")), result.songSnippet());
+        assertEquals(result.songSnippet().cueId(), result.songCueId()); assertEquals(3, calls.get());
+    }
+
+    @Test
+    void optionalTimingNeverRunsWithoutConsentOrRecordingAndRejectsWrongRecordingResult() throws Exception {
+        for (String mode : List.of("off", "no_recording", "wrong_recording", "unavailable", "exception")) {
+            AtomicInteger lookups = new AtomicInteger();
+            var provider = new AnthropicReflectionProvider(testConfiguration(), request -> {
+                var input = evidenceFrom(request);
+                if (input.has("run_facts")) assertFalse(input.has("passage_landing"));
+                return songResponse(input.has("run_facts") ? writerBranches() : studyNotes());
+            }, (title, artist) -> Optional.of(songMaterial(title, artist)), (song, material, remaining) -> {
+                lookups.incrementAndGet();
+                if (mode.equals("exception")) throw new IllegalArgumentException("Private detail");
+                return mode.equals("unavailable") ? Optional.empty() : Optional.of(snippet(recordedSong("3", "Wrong")));
+            });
+            var song = mode.equals("no_recording") ? observedSong("2", "Selected") : recordedSong("2", "Selected");
+            var result = provider.generateForDelivery(knownEvidence(), null, List.of(song), !mode.equals("off"));
+            assertNull(result.songSnippet()); assertNull(result.songCueId()); assertEquals("2", result.selectedSongId());
+            assertEquals(mode.equals("off") || mode.equals("no_recording") ? 0 : 1, lookups.get());
+        }
+    }
+
+    @Test
+    void knownSongTitlesWithoutAnAuditedCueUseTheExactRecordingTimingLookup() throws Exception {
+        for (String[] identity : List.of(new String[]{"Lovely Day", "Bill Withers"},
+                new String[]{"Stronger", "Kanye West"}, new String[]{"Good as Hell", "Lizzo"},
+                new String[]{"God's Plan", "Drake"}, new String[]{"Sunday Best", "Surfaces"})) {
+            var song = new ReflectionContract.SongCandidate("2", new MusicContext(MusicState.MUSIC,
+                    identity[0], identity[1], null, MusicProvenance.MEDIA_SESSION_PARTIAL), null,
+                    new ReflectionContract.SongRecording("Fixture Album", 180_000));
+            AtomicInteger calls = new AtomicInteger();
+            var provider = new AnthropicReflectionProvider(testConfiguration(), request -> {
+                var input = evidenceFrom(request);
+                if (input.has("run_facts")) assertEquals("TIMED_SOURCE_DERIVED_HOOK_NOT_AUDITIONED_OR_RUN_EVIDENCE",
+                        input.getAsJsonObject("passage_landing").get("provenance").getAsString());
+                return songResponse(input.has("run_facts") ? writerBranches() : studyNotes());
+            },
+                    (title, artist) -> Optional.of(songMaterial(title, artist)), (candidate, material, remaining) -> {
+                calls.incrementAndGet(); return Optional.of(snippet(candidate));
+            });
+            var generated = provider.generateForDelivery(knownEvidence(), null, List.of(song), true);
+            assertEquals(snippet(song), generated.songSnippet()); assertEquals(1, calls.get());
+        }
+    }
+
+    @Test
+    void anAuditedCuratedCueKeepsItsExactLandingWithoutAnyTimingLookup() throws Exception {
+        SongCueContext cue = new SongCueContext("lovely_day_bill_withers_v1", SongCueSource.RUNSTATE_CURATED,
+                "A compact sequence of the recognizable repeated-title chorus.",
+                "A warm affirmative musical response to one concrete part of this completed run. Keep reported feelings conditional on each branch, without claiming perfect weather or a perfect whole day.");
+        var song = new ReflectionContract.SongCandidate("2", new MusicContext(MusicState.MUSIC,
+                "Lovely Day", "Bill Withers", null, MusicProvenance.MEDIA_SESSION_PARTIAL, cue), null,
+                new ReflectionContract.SongRecording("Menagerie", 257_000));
+        var provider = new AnthropicReflectionProvider(testConfiguration(), request -> {
+            var input = evidenceFrom(request);
+            if (input.has("run_facts")) {
+                assertEquals(cue.theme(), input.getAsJsonObject("passage_landing").get("musical_moment").getAsString());
+                assertEquals("EDITORIAL_AUDITION_DESCRIPTION_NOT_LYRICS_TIMING_OR_RUN_EVIDENCE",
+                        input.getAsJsonObject("passage_landing").get("provenance").getAsString());
+            }
+            return songResponse(input.has("run_facts") ? writerBranches() : studyNotes());
+        }, (title, artist) -> Optional.of(songMaterial(title, artist)), (candidate, material, remaining) -> {
+            fail("An audited curated cue must not call the timing provider"); return Optional.empty();
+        });
+        var generated = provider.generateForDelivery(knownEvidence(), null, List.of(song), true);
+        assertNull(generated.songSnippet()); assertEquals(cue.cueId(), generated.songCueId());
+    }
 
     private static ReflectionContract.SongCandidate observedSong(String id, String title) {
         return new ReflectionContract.SongCandidate(id, new MusicContext(MusicState.MUSIC, title,
