@@ -8,6 +8,18 @@ import org.junit.Test
 
 class RunPreferencesTest {
     @Test
+    fun songSnippetLookupNeedsItsOwnChoiceAndSharing() {
+        val values = FakeValues(mutableMapOf("observe_music" to true, "share_music_in_reflection" to true))
+        assertFalse(StoredRunPreferences(values).load().findSongSnippets)
+        val enabled = RunPreferences(observeMusic = true, shareMusicInReflection = true, findSongSnippets = true)
+        StoredRunPreferences(values).save(enabled)
+        assertEquals(enabled, StoredRunPreferences(values).load())
+        values.saved["share_music_in_reflection"] = false
+        assertFalse(StoredRunPreferences(values).load().findSongSnippets)
+        assertThrows(IllegalArgumentException::class.java) { RunPreferences(findSongSnippets = true) }
+    }
+
+    @Test
     fun weatherRequiresItsOwnSavedChoiceAndDoesNotEnableMusicSharing() {
         val values = FakeValues(mutableMapOf("music_setup_complete" to true))
         assertFalse(StoredRunPreferences(values).load().captureWeather)
@@ -44,7 +56,7 @@ class RunPreferencesTest {
 
         assertEquals(disabled, StoredRunPreferences(values).load())
         assertEquals(2, values.commits)
-        assertEquals(setOf("observe_music", "share_music_in_reflection", "music_setup_complete", "capture_weather"),
+        assertEquals(setOf("observe_music", "share_music_in_reflection", "music_setup_complete", "capture_weather", "find_song_snippets"),
             values.saved.keys)
     }
 

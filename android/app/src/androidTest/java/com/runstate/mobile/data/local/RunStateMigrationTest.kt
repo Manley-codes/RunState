@@ -59,6 +59,76 @@ class RunStateMigrationTest {
     private val context = InstrumentationRegistry.getInstrumentation().targetContext
 
     @Test
+    fun versionFifteenMigrationPreservesOldFieldsAndDoesNotInventRecordingOrLookupConsent() {
+        val name = "runstate-v15-recording-migration-test.db"
+        val old = helper.createDatabase(name, 15)
+        val activeId = "03689ffc-65d9-4907-ae77-7a17b3ad77a6"
+        val finish = OFFICIAL_START + 1_920_000L
+        old.insertVersionTwoRun(state = "COMPLETED", lastCheckpointEpochMillis = finish,
+            finishEpochMillis = finish)
+        old.insertVersionTwoRun(runId = activeId, state = "RUNNING",
+            lastCheckpointEpochMillis = OFFICIAL_START + 30_000L, finishEpochMillis = null)
+        old.execSQL("UPDATE runs SET transition_history_complete=1, music_observation_requested=1, " +
+            "music_reflection_sharing_allowed=1, pre_run_energy='MODERATE', tracking_mode='GPS'")
+        old.execSQL("UPDATE runs SET final_distance_meters=4828.032, metric_source='GPS', " +
+            "telemetry_coverage='COMPLETE', display_distance_unit='MILES', post_run_effort='WORKING' WHERE run_id=?",
+            arrayOf(RUN_ID))
+        old.execSQL("""
+            INSERT INTO run_music_observations (run_id,sequence_number,observation_key,
+                observed_at_epoch_millis,elapsed_realtime_nanos,source_package,title,artist,playback_state,event_kind)
+            VALUES (?,1,'old-song',?,1000000,'com.spotify.music','Exact old title','Exact old artist','PLAYING','SESSION_SNAPSHOT')
+        """.trimIndent(), arrayOf<Any>(RUN_ID, OFFICIAL_START + 1_000L))
+        old.execSQL("""
+            INSERT INTO run_song_preparations (run_id,preparation_id,track_title,artist_name,
+                observation_sequence_number,destination_fingerprint,claimed_at_epoch_millis,status)
+            VALUES (?,?,'Exact old title','Exact old artist',1,?,?,'READY')
+        """.trimIndent(), arrayOf<Any>(RUN_ID, "a8ddf13c-316b-44c4-bfa0-740012266a82",
+            "a".repeat(64), OFFICIAL_START + 30_000L))
+        val tables = listOf("runs", "run_transitions", "run_location_points", "run_music_observations",
+            "run_reflections", "run_weather", "run_split_snapshots", "run_splits", "run_song_preparations")
+        val oldColumns = tables.associateWith { table ->
+            old.query("SELECT * FROM `$table` LIMIT 0").use { it.columnNames.toList() }
+        }
+        fun originalRows(db: SupportSQLiteDatabase, table: String): List<List<String?>> {
+            val projection = oldColumns.getValue(table).joinToString(",") { "`$it`" }
+            return db.query("SELECT $projection FROM `$table` ORDER BY 1,2").use { cursor -> buildList {
+                while (cursor.moveToNext()) add(oldColumns.getValue(table).indices.map { index ->
+                    if (cursor.isNull(index)) null else cursor.getString(index)
+                })
+            } }
+        }
+        val before = tables.associateWith { originalRows(old, it) }
+        old.close()
+        helper.runMigrationsAndValidate(name, 16, true, MIGRATION_15_16).use { migrated ->
+            tables.forEach { table -> assertEquals(table, before.getValue(table), originalRows(migrated, table)) }
+            migrated.query("SELECT song_snippet_lookup_allowed FROM runs").use { cursor ->
+                var count = 0
+                while (cursor.moveToNext()) {
+                    assertEquals(0, cursor.getInt(0))
+                    count++
+                }
+                assertEquals(2, count)
+            }
+            migrated.query("SELECT spotify_track_uri,album_name,track_duration_millis FROM run_music_observations").use {
+                assertTrue(it.moveToFirst())
+                assertTrue(it.isNull(0) && it.isNull(1) && it.isNull(2))
+            }
+        }
+        val reopened = openDatabaseThroughFactory(name)
+        runBlocking {
+            val restored = requireNotNull(reopened.runDao().findById(RUN_ID))
+            assertTrue(restored.musicReflectionSharingAllowed)
+            assertEquals(false, restored.songSnippetLookupAllowed)
+            val observation = reopened.musicObservationDao().observationsFor(RUN_ID).single()
+            assertNull(observation.spotifyTrackUri)
+            assertNull(observation.albumName)
+            assertNull(observation.trackDurationMillis)
+            assertEquals(SongPreparationClaimStatus.READY,
+                reopened.musicObservationDao().preparationsFor(RUN_ID).single().status)
+        }
+    }
+
+    @Test
     fun versionFourteenMigrationPreservesAllFieldsAndEveryPreparationState() {
         val name = "runstate-v14-multi-song-migration-test.db"
         val old = helper.createDatabase(name, 14)

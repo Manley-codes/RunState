@@ -1010,7 +1010,8 @@ internal class RunSessionCoordinator(
         preRunEnergy: PreRunEnergy? = null,
         trackingMode: RunTrackingMode = RunTrackingMode.FIXTURE,
         musicObservationRequested: Boolean = false,
-        musicReflectionSharingAllowed: Boolean = false
+        musicReflectionSharingAllowed: Boolean = false,
+        songSnippetLookupAllowed: Boolean = false
     ): Deferred<ActiveRunSession> = coordinatorLock.withLock {
         require(!musicReflectionSharingAllowed || musicObservationRequested) {
             "Music reflection sharing requires this run's music observation opt-in."
@@ -1060,7 +1061,8 @@ internal class RunSessionCoordinator(
             preRunEnergy,
             trackingMode,
             musicObservationRequested,
-            musicReflectionSharingAllowed
+            musicReflectionSharingAllowed,
+            songSnippetLookupAllowed
         )
             .also { preparedRun = it }
 

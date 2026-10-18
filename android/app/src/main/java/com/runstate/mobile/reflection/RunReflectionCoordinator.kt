@@ -404,7 +404,20 @@ internal fun pairedPassageFor(record: RunReflectionEntity, acknowledgedCueId: St
         if (acknowledgedCueId != cue.cueId || cue.cueId != plan.cueId ||
             music.state != "MUSIC" || music.provenance != "MEDIA_SESSION_PARTIAL" ||
             music.trackTitle != plan.trackTitle || music.artistName != plan.artistName ||
-            cue.source != "RUNSTATE_CURATED") return null
+            cue.source !in setOf("RUNSTATE_CURATED", "LRCLIB")) return null
+        if (cue.source == "LRCLIB") {
+            val candidate = evidence.songCandidates.orEmpty().singleOrNull { it.candidateId == evidence.selectedSongId }
+                ?: return null
+            val recording = candidate.recording ?: return null
+            if (!evidence.songSnippetLookupAllowed || plan.timingSource != "LRCLIB" || plan.timingVersion != 1 ||
+                plan.songStudyVersion < 1 || !plan.allowTrackSwitch ||
+                plan.spotifyTrackUri != recording.spotifyTrackUri || plan.observedDurationMillis != recording.durationMillis ||
+                music.trackTitle != candidate.musicContext.trackTitle || music.artistName != candidate.musicContext.artistName ||
+                plan.timingSourceId?.matches(Regex("[1-9][0-9]{0,18}")) != true ||
+                plan.startPositionMillis < 0 || plan.durationMillis !in 2_000..10_000 ||
+                plan.startPositionMillis > recording.durationMillis - plan.durationMillis ||
+                plan.cueId != "lrclib_v1_${plan.timingSourceId}_${plan.startPositionMillis}_${plan.startPositionMillis + plan.durationMillis}") return null
+        }
         plan.passage()
     } catch (_: Exception) {
         // Old or damaged optional metadata never prevents reading the exact saved reflection.

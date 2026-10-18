@@ -14,9 +14,17 @@ internal data class SongReflectionPlan(
     val startPositionMillis: Long,
     val durationMillis: Long,
     /** Frozen locally so an older server cannot authorize a new pairing with its legacy writer. */
-    val songStudyVersion: Int = 0
+    val songStudyVersion: Int = 0,
+    val spotifyTrackUri: String? = null,
+    val observedDurationMillis: Long? = null,
+    val allowTrackSwitch: Boolean = false,
+    val timingSource: String = "RUNSTATE_CURATED",
+    val timingSourceId: String? = null,
+    val timingVersion: Int = 0
 ) {
-    fun passage() = SongPassageRequest(trackTitle, artistName, startPositionMillis, durationMillis)
+    fun passage() = SongPassageRequest(trackTitle, artistName, startPositionMillis, durationMillis,
+        spotifyMediaId = spotifyTrackUri, allowTrackSwitch = allowTrackSwitch,
+        observedDurationMillis = observedDurationMillis)
 }
 
 internal data class CuratedReflectionSong(
@@ -25,7 +33,9 @@ internal data class CuratedReflectionSong(
     val artist: String,
     val startPositionMillis: Long,
     val durationMillis: Long = 10_000,
-    val songStudyVersion: Int = 0
+    val songStudyVersion: Int = 0,
+    /** IDs documented by the accepted auditions; unknown editions use source lookup before loading. */
+    val verifiedSpotifyTrackUris: Set<String> = emptySet()
 ) {
     fun plan() = SongReflectionPlan(cue.cueId, title, artist, startPositionMillis, durationMillis,
         songStudyVersion)
@@ -61,7 +71,8 @@ internal val reflectionSongCatalog = listOf(
                 "or a perfect whole day."
         ),
         title = "Lovely Day", artist = "Bill Withers", startPositionMillis = 58_030,
-        durationMillis = 5_870, songStudyVersion = 1
+        durationMillis = 5_870, songStudyVersion = 1,
+        verifiedSpotifyTrackUris = setOf("spotify:track:0bRXwKfigvpKZUurwqAlEh")
     ),
     CuratedReflectionSong(
         cue = ReflectionSongCue(
@@ -71,7 +82,8 @@ internal val reflectionSongCatalog = listOf(
                 "carry the connection without names, quoted lyrics or claimed training gains."
         ),
         title = "Stronger", artist = "Kanye West", startPositionMillis = 0,
-        durationMillis = 10_000, songStudyVersion = 1
+        durationMillis = 10_000, songStudyVersion = 1,
+        verifiedSpotifyTrackUris = setOf("spotify:track:4fzsfWzRhPawzqhX8Qt9F3")
     ),
     CuratedReflectionSong(
         cue = ReflectionSongCue(
@@ -82,7 +94,8 @@ internal val reflectionSongCatalog = listOf(
                 "training gains or a relationship story."
         ),
         title = "Good as Hell", artist = "Lizzo", startPositionMillis = 48_910,
-        durationMillis = 4_640, songStudyVersion = 1
+        durationMillis = 4_640, songStudyVersion = 1,
+        verifiedSpotifyTrackUris = setOf("spotify:track:6KgBpzTuTRPebChN0VTyzV")
     ),
     CuratedReflectionSong(
         cue = ReflectionSongCue(

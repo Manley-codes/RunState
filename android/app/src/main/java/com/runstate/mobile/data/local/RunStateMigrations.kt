@@ -345,3 +345,13 @@ val MIGRATION_14_15 = object : Migration(14, 15) {
             "ON `run_song_preparations` (`preparation_id`)")
     }
 }
+
+/** Keep historical observations unknown and require an explicit choice on each new run. */
+val MIGRATION_15_16 = object : Migration(15, 16) {
+    override fun migrate(connection: SQLiteConnection) {
+        connection.execSQL("ALTER TABLE `run_music_observations` ADD COLUMN `spotify_track_uri` TEXT")
+        connection.execSQL("ALTER TABLE `run_music_observations` ADD COLUMN `album_name` TEXT")
+        connection.execSQL("ALTER TABLE `run_music_observations` ADD COLUMN `track_duration_millis` INTEGER")
+        connection.execSQL("ALTER TABLE `runs` ADD COLUMN `song_snippet_lookup_allowed` INTEGER NOT NULL DEFAULT 0")
+    }
+}

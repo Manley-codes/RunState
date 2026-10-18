@@ -162,6 +162,7 @@ internal class RunMusicNotificationListener : NotificationListenerService() {
         val currentScope = captureScope ?: return
         // The registry handles unreadable snapshots per controller and stops on permission loss.
         val metadata = controller.metadata
+        val recording = spotifyObservationRecording(controller.packageName, metadata)
         val observation = RunMusicObservation(
             runId = ownerRunId,
             observationKey = UUID.randomUUID().toString(),
@@ -171,7 +172,10 @@ internal class RunMusicNotificationListener : NotificationListenerService() {
             title = metadata?.getString(MediaMetadata.METADATA_KEY_TITLE)?.takeIf(String::isNotBlank),
             artist = metadata?.getString(MediaMetadata.METADATA_KEY_ARTIST)?.takeIf(String::isNotBlank),
             playbackState = playbackStateOf(controller.playbackState),
-            eventKind = kind
+            eventKind = kind,
+            spotifyTrackUri = recording?.trackUri,
+            albumName = recording?.albumName,
+            trackDurationMillis = recording?.durationMillis
         )
         currentScope.launch {
             try {
@@ -198,4 +202,27 @@ internal class RunMusicNotificationListener : NotificationListenerService() {
     private companion object {
         const val TAG = "RunMusicObservation"
     }
+}
+
+/** Optional recording evidence is Spotify-only and never repaired from a title/search guess. */
+internal data class SpotifyObservationRecording(
+    val trackUri: String?,
+    val albumName: String?,
+    val durationMillis: Long?
+)
+
+internal fun spotifyObservationRecording(
+    sourcePackage: String,
+    metadata: MediaMetadata?
+): SpotifyObservationRecording? {
+    if (sourcePackage != "com.spotify.music" || metadata == null) return null
+    val uri = canonicalSpotifyTrackUri(metadata.getString(MediaMetadata.METADATA_KEY_MEDIA_ID))
+        ?: canonicalSpotifyTrackUri(metadata.getString(MediaMetadata.METADATA_KEY_MEDIA_URI))
+    val album = metadata.getString(MediaMetadata.METADATA_KEY_ALBUM)?.trim()?.takeIf {
+        it.isNotBlank() && it.length <= 200 && it.none(Char::isISOControl)
+    }
+    val duration = metadata.getLong(MediaMetadata.METADATA_KEY_DURATION).takeIf {
+        it in 1_000L..86_400_000L
+    }
+    return SpotifyObservationRecording(uri, album, duration)
 }

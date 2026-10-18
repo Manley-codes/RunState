@@ -5,6 +5,7 @@ import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
+import org.junit.Assert.assertNull
 import org.junit.Assert.fail
 import org.junit.Test
 
@@ -31,6 +32,13 @@ class SpotifySongPassageTest {
         var ignorePause = false
         var seekOffsetMillis = 0L
         var playingReportDelayMillis = 0L
+        val tracks = mutableMapOf<String, SongPassageSnapshot>()
+        var ignoreTrackLoad = false
+        var trackLoadDelayMillis = 0L
+        var ignoreEntranceSeek = false
+        var ignorePendingLoadCancellation = false
+        private var pendingTrack: SongPassageSnapshot? = null
+        private var trackLoadsAt = 0L
         private var playingReportedAt = 0L
         var bufferPlayCalls = emptySet<Int>()
         private var playCalls = 0
@@ -38,6 +46,10 @@ class SpotifySongPassageTest {
         val commands = mutableListOf<String>()
         override fun snapshot(): SongPassageSnapshot {
             if (denied) throw SecurityException("No session access")
+            pendingTrack?.takeIf { clock.time >= trackLoadsAt }?.let {
+                pendingTrack = null
+                replace(it)
+            }
             val advance = if (current.playback == PassagePlayback.PLAYING) clock.time - changedAt else 0
             return current.copy(positionMillis = current.positionMillis + advance,
                 playback = if (current.playback == PassagePlayback.PLAYING && clock.time < playingReportedAt)
@@ -48,10 +60,12 @@ class SpotifySongPassageTest {
             commands += "pause"
             if (ignorePause) return
             pendingPlay = false
+            pendingTrack = null
             replace(snapshot().copy(playback = PassagePlayback.PAUSED, canPlay = true, canPause = false))
         }
         override fun seekTo(positionMillis: Long) {
             commands += "seek:$positionMillis"
+            if (ignoreEntranceSeek && commands.count { it.startsWith("seek:") } == 1) return
             // Apply the simulated seek error only to the passage entrance, never restoration.
             replace(snapshot().copy(positionMillis = positionMillis +
                 if (commands.count { it.startsWith("seek:") } == 1) seekOffsetMillis else 0L))
@@ -83,9 +97,298 @@ class SpotifySongPassageTest {
             pendingPlay = true
             replace(snapshot().copy(playback = PassagePlayback.OTHER, canPause = false, canPlay = false))
         }
+        override fun prepareFromTrackUri(uri: String): Boolean = loadTrack(uri, true)
+        override fun playFromTrackUri(uri: String): Boolean = loadTrack(uri, false)
+        override fun cancelPendingTrackLoad() {
+            val uncooperativePending = pendingTrack
+            pause()
+            if (ignorePendingLoadCancellation) pendingTrack = uncooperativePending
+        }
+        private fun loadTrack(uri: String, prepare: Boolean): Boolean {
+            commands += if (prepare) "prepareTrack:$uri" else "playTrack:$uri"
+            val target = tracks[uri] ?: return false
+            if (ignoreTrackLoad) return true
+            val loaded = target.copy(positionMillis = 0L,
+                playback = if (prepare) PassagePlayback.PAUSED else PassagePlayback.PLAYING,
+                canPlay = prepare, canPause = !prepare)
+            if (trackLoadDelayMillis > 0L) {
+                pendingTrack = loaded
+                trackLoadsAt = clock.time + trackLoadDelayMillis
+            } else replace(loaded)
+            return true
+        }
     }
 
     private val request = SongPassageRequest("Test title", "Test artist", 5_000)
+    private val originalUri = "spotify:track:" + "A".repeat(22)
+    private val selectedUri = "spotify:track:" + "B".repeat(22)
+    private val selectedRequest = SongPassageRequest("Chosen title", "Chosen artist", 45_000,
+        durationMillis = 4_000, spotifyMediaId = selectedUri, allowTrackSwitch = true,
+        observedDurationMillis = 210_000)
+
+    private fun Session.enableTrackSelection(prepare: Boolean = true, originallyPlaying: Boolean = true) {
+        current = current.copy(mediaId = originalUri, canPrepareTrack = prepare, canPlayTrack = true,
+            playback = if (originallyPlaying) PassagePlayback.PLAYING else PassagePlayback.PAUSED,
+            canPause = originallyPlaying, canPlay = !originallyPlaying)
+        tracks[originalUri] = current
+        tracks[selectedUri] = current.copy(mediaId = selectedUri, title = "Chosen title",
+            artist = "Chosen artist", durationMillis = 210_000)
+    }
+
+    @Test fun chosenObservedTrackLoadsSilentlyAndRestoresPriorTrackPositionAndPlayingState() = runBlocking {
+        val clock = Clock()
+        val session = Session(clock).apply { enableTrackSelection() }
+        val result = SpotifySongPassageController(session, clock).play(selectedRequest)
+        assertEquals(SongPassageResult(SongPassageStatus.FINISHED, true), result)
+        assertEquals(listOf("pause", "prepareTrack:$selectedUri", "seek:45000", "play", "pause",
+            "prepareTrack:$originalUri", "seek:60000", "play"), session.commands)
+        assertEquals(originalUri, session.snapshot().mediaId)
+        assertEquals(60_000L, session.snapshot().positionMillis)
+        assertEquals(PassagePlayback.PLAYING, session.snapshot().playback)
+        assertEquals(4_000L, clock.time)
+    }
+
+    @Test fun chosenTrackRestoresAnOriginallyPausedSongWithoutResumingIt() = runBlocking {
+        val clock = Clock()
+        val session = Session(clock).apply { enableTrackSelection(originallyPlaying = false) }
+        assertEquals(SongPassageResult(SongPassageStatus.FINISHED, true),
+            SpotifySongPassageController(session, clock).play(selectedRequest))
+        assertEquals(listOf("prepareTrack:$selectedUri", "seek:45000", "play", "pause",
+            "prepareTrack:$originalUri", "seek:60000"), session.commands)
+        assertEquals(originalUri, session.snapshot().mediaId)
+        assertEquals(PassagePlayback.PAUSED, session.snapshot().playback)
+    }
+
+    @Test fun advertisedPlayFromFallbackImmediatelyContainsLoadedPlaybackBeforeSeeking() = runBlocking {
+        val clock = Clock()
+        val session = Session(clock).apply { enableTrackSelection(prepare = false) }
+        assertEquals(SongPassageResult(SongPassageStatus.FINISHED, true),
+            SpotifySongPassageController(session, clock).play(selectedRequest))
+        assertEquals(listOf("pause", "playTrack:$selectedUri", "pause", "seek:45000", "play", "pause",
+            "playTrack:$originalUri", "pause", "seek:60000", "play"), session.commands)
+        assertEquals(originalUri, session.snapshot().mediaId)
+    }
+
+    @Test fun missingLoadingCapabilityOrUnrestorablePriorIdentityNeverTouchesPlayback() = runBlocking {
+        for (missingCapability in listOf(true, false)) {
+            val clock = Clock()
+            val session = Session(clock).apply {
+                enableTrackSelection()
+                current = if (missingCapability) current.copy(canPrepareTrack = false, canPlayTrack = false)
+                    else current.copy(mediaId = "not-an-exact-spotify-track")
+            }
+            assertEquals(SongPassageStatus.UNAVAILABLE,
+                SpotifySongPassageController(session, clock).play(selectedRequest).status)
+            assertTrue(session.commands.isEmpty())
+        }
+    }
+
+    @Test fun currentSongPathDoesNotImplicitlyGainPermissionToSwitchTracks() = runBlocking {
+        val clock = Clock()
+        val session = Session(clock).apply { enableTrackSelection() }
+        assertEquals(SongPassageStatus.UNAVAILABLE, SpotifySongPassageController(session, clock)
+            .play(selectedRequest.copy(allowTrackSwitch = false)).status)
+        assertTrue(session.commands.isEmpty())
+    }
+
+    @Test fun canonicalTrackIdentityRejectsUrlsAlbumsEpisodesWhitespaceAndMalformedIds() {
+        assertEquals(selectedUri, canonicalSpotifyTrackUri(selectedUri))
+        for (value in listOf(null, " $selectedUri", "$selectedUri ", "spotify:track:" + "B".repeat(21),
+            "spotify:album:" + "B".repeat(22), "spotify:episode:" + "B".repeat(22),
+            "https://open.spotify.com/track/" + "B".repeat(22), "spotify:track:" + "_".repeat(22)))
+            assertNull(canonicalSpotifyTrackUri(value))
+        assertEquals(selectedUri, spotifySessionMediaId(null, selectedUri))
+        assertEquals(selectedUri, spotifySessionMediaId("legacy-provider-id", selectedUri))
+        assertEquals(originalUri, spotifySessionMediaId(originalUri, selectedUri))
+        assertEquals("legacy-provider-id", spotifySessionMediaId("legacy-provider-id", null))
+    }
+
+    @Test fun wrongLoadedMetadataOrDurationCannotBecomeTheRequestedPassage() = runBlocking {
+        for (mismatch in listOf("title", "artist", "duration", "session")) {
+            val clock = Clock()
+            val session = Session(clock).apply {
+                enableTrackSelection(prepare = false)
+                tracks[selectedUri] = requireNotNull(tracks[selectedUri]).let {
+                    when (mismatch) {
+                        "title" -> it.copy(title = "Different recording")
+                        "artist" -> it.copy(artist = "Different artist")
+                        "duration" -> it.copy(durationMillis = 210_002)
+                        else -> it.copy(sessionKey = "replacement-session")
+                    }
+                }
+            }
+            val result = SpotifySongPassageController(session, clock).play(selectedRequest)
+            assertEquals(mismatch, SongPassageStatus.INTERRUPTED, result.status)
+            assertFalse(result.playbackRestored)
+            assertFalse(session.commands.any { it.startsWith("seek:") })
+            if (mismatch != "session") assertEquals(mismatch, PassagePlayback.PAUSED, session.snapshot().playback)
+        }
+    }
+
+    @Test fun ignoredLoadHasBoundedTimeoutAndCancelsOnlyItsOwnPendingSelection() = runBlocking {
+        val clock = Clock()
+        val session = Session(clock).apply { enableTrackSelection(); ignoreTrackLoad = true }
+        val result = SpotifySongPassageController(session, clock).play(selectedRequest)
+        assertEquals(SongPassageStatus.INTERRUPTED, result.status)
+        assertFalse(result.playbackRestored)
+        assertEquals(5_000L, clock.time)
+        assertEquals(listOf("pause", "prepareTrack:$selectedUri", "pause"), session.commands)
+        assertEquals(originalUri, session.snapshot().mediaId)
+    }
+
+    @Test fun cooperativePlayerHonorsPendingLoadPauseWhenCoroutineIsCancelled() = runBlocking {
+        val clock = Clock()
+        val session = Session(clock).apply { enableTrackSelection(prepare = false); trackLoadDelayMillis = 1_000L }
+        clock.onWait = { throw CancellationException("Leave screen") }
+        try {
+            SpotifySongPassageController(session, clock).play(selectedRequest)
+            fail("Cancellation must propagate")
+        } catch (_: CancellationException) { }
+        assertEquals(listOf("pause", "playTrack:$selectedUri", "pause"), session.commands)
+        clock.time = 5_000L
+        assertEquals(originalUri, session.snapshot().mediaId)
+        assertEquals(PassagePlayback.PAUSED, session.snapshot().playback)
+    }
+
+    @Test fun ignoredCancellationRequestNeverClaimsThatTheForeignPlayerStoppedOrRestored() = runBlocking {
+        val clock = Clock()
+        val session = Session(clock).apply {
+            enableTrackSelection(prepare = false)
+            trackLoadDelayMillis = 1_000L
+            ignorePendingLoadCancellation = true
+        }
+        val controller = SpotifySongPassageController(session, clock)
+        clock.onWait = { controller.stop() }
+        assertEquals(SongPassageResult(SongPassageStatus.INTERRUPTED, false), controller.play(selectedRequest))
+        assertEquals(listOf("pause", "playTrack:$selectedUri", "pause"), session.commands)
+        clock.time = 5_000L
+        // Android sends a request, not a remote cancellation guarantee. An uncooperative
+        // provider may still start later; the result must never call this completed/restored.
+        assertEquals(selectedUri, session.snapshot().mediaId)
+        assertEquals(PassagePlayback.PLAYING, session.snapshot().playback)
+    }
+
+    @Test fun incompleteLoadingMetadataWaitsForFullIdentityBeforeAnySeekOrPassage() = runBlocking {
+        val clock = Clock()
+        val session = Session(clock).apply {
+            enableTrackSelection()
+            tracks[selectedUri] = requireNotNull(tracks[selectedUri]).copy(title = null, durationMillis = 0L)
+        }
+        clock.onWait = {
+            if (clock.time == 200L) session.replace(session.current.copy(title = "Chosen title", durationMillis = 210_000L))
+        }
+        assertEquals(SongPassageResult(SongPassageStatus.FINISHED, true),
+            SpotifySongPassageController(session, clock).play(selectedRequest))
+        assertEquals(4_200L, clock.time)
+        assertEquals(originalUri, session.snapshot().mediaId)
+    }
+
+    @Test fun distantUserSeekOnThePendingTargetIsNotOverriddenByCleanup() = runBlocking {
+        val clock = Clock()
+        val session = Session(clock).apply {
+            enableTrackSelection(prepare = false)
+            tracks[selectedUri] = requireNotNull(tracks[selectedUri]).copy(title = "Metadata mismatch")
+        }
+        val controller = SpotifySongPassageController(session, clock) { event ->
+            if (event.reason == SongPassageReason.TITLE_CHANGED)
+                session.replace(session.current.copy(positionMillis = 120_000))
+        }
+        assertEquals(SongPassageStatus.INTERRUPTED, controller.play(selectedRequest).status)
+        assertEquals(listOf("pause", "playTrack:$selectedUri"), session.commands)
+        assertEquals(120_000L, session.snapshot().positionMillis)
+    }
+
+    @Test fun userSeekWhileSelectedRecordingMetadataLoadsWinsOverPassageAdmission() = runBlocking {
+        for (prepare in listOf(true, false)) {
+            val clock = Clock()
+            val session = Session(clock).apply {
+                enableTrackSelection(prepare = prepare)
+                tracks[selectedUri] = requireNotNull(tracks[selectedUri]).copy(title = null)
+            }
+            var commandsAtUserSeek = 0
+            clock.onWait = {
+                if (session.current.mediaId == selectedUri && session.current.title == null) {
+                    session.replace(session.current.copy(title = "Chosen title", positionMillis = 120_000))
+                    commandsAtUserSeek = session.commands.size
+                }
+            }
+            assertEquals(SongPassageResult(SongPassageStatus.INTERRUPTED, false),
+                SpotifySongPassageController(session, clock).play(selectedRequest))
+            assertTrue(commandsAtUserSeek > 0)
+            assertEquals(commandsAtUserSeek, session.commands.size)
+            assertFalse(session.commands.any { it.startsWith("seek:") })
+            assertEquals(120_000L, session.snapshot().positionMillis)
+        }
+    }
+
+    @Test fun userSeekWhilePriorRecordingReloadsWinsOverAutomaticRestoration() = runBlocking {
+        for (prepare in listOf(true, false)) {
+            val clock = Clock()
+            val session = Session(clock).apply {
+                enableTrackSelection(prepare = prepare)
+                tracks[originalUri] = requireNotNull(tracks[originalUri]).copy(title = null)
+            }
+            var commandsAtUserSeek = 0
+            clock.onWait = {
+                if (session.current.mediaId == originalUri && session.current.title == null) {
+                    session.replace(session.current.copy(title = "Test title", positionMillis = 120_000))
+                    commandsAtUserSeek = session.commands.size
+                }
+            }
+            assertEquals(SongPassageResult(SongPassageStatus.INTERRUPTED, false),
+                SpotifySongPassageController(session, clock).play(selectedRequest))
+            assertTrue(commandsAtUserSeek > 0)
+            assertEquals(commandsAtUserSeek, session.commands.size)
+            assertFalse(session.commands.contains("seek:60000"))
+            assertEquals(originalUri, session.snapshot().mediaId)
+            assertEquals(120_000L, session.snapshot().positionMillis)
+        }
+    }
+
+    @Test fun userTrackChangeDuringLoadingIsNotPausedOrReplacedByCleanup() = runBlocking {
+        val clock = Clock()
+        val session = Session(clock).apply { enableTrackSelection(); ignoreTrackLoad = true }
+        clock.onWait = { session.replace(session.current.copy(mediaId = "spotify:track:" + "C".repeat(22),
+            title = "User choice", playback = PassagePlayback.PLAYING)) }
+        assertEquals(SongPassageStatus.INTERRUPTED, SpotifySongPassageController(session, clock).play(selectedRequest).status)
+        assertEquals(listOf("pause", "prepareTrack:$selectedUri"), session.commands)
+        assertEquals("User choice", session.snapshot().title)
+        assertEquals(PassagePlayback.PLAYING, session.snapshot().playback)
+    }
+
+    @Test fun ignoredEntranceSeekRecoversPriorTrackOnlyWhileOurChosenTrackRemainsPaused() = runBlocking {
+        val clock = Clock()
+        val session = Session(clock).apply { enableTrackSelection(); ignoreEntranceSeek = true }
+        val result = SpotifySongPassageController(session, clock).play(selectedRequest)
+        assertEquals(SongPassageResult(SongPassageStatus.INTERRUPTED, true), result)
+        assertEquals(listOf("pause", "prepareTrack:$selectedUri", "seek:45000",
+            "prepareTrack:$originalUri", "seek:60000", "play"), session.commands)
+        assertEquals(originalUri, session.snapshot().mediaId)
+        assertEquals(60_000L, session.snapshot().positionMillis)
+    }
+
+    @Test fun userSeekDuringFailedEntrancePreventsAutomaticRestoration() = runBlocking {
+        val clock = Clock()
+        val session = Session(clock).apply { enableTrackSelection(); ignoreEntranceSeek = true }
+        clock.onWait = { session.replace(session.current.copy(positionMillis = 120_000)) }
+        val result = SpotifySongPassageController(session, clock).play(selectedRequest)
+        assertFalse(result.playbackRestored)
+        assertEquals(listOf("pause", "prepareTrack:$selectedUri", "seek:45000"), session.commands)
+        assertEquals(selectedUri, session.snapshot().mediaId)
+        assertEquals(120_000L, session.snapshot().positionMillis)
+    }
+
+    @Test fun newUserSongDuringSelectedPassageWinsOverAutomaticRestoration() = runBlocking {
+        val clock = Clock()
+        val session = Session(clock).apply { enableTrackSelection() }
+        clock.onWait = { session.replace(session.current.copy(mediaId = "spotify:track:" + "C".repeat(22),
+            title = "User choice", positionMillis = 0)) }
+        val result = SpotifySongPassageController(session, clock).play(selectedRequest)
+        assertEquals(SongPassageStatus.INTERRUPTED, result.status)
+        assertFalse(result.playbackRestored)
+        assertEquals(listOf("pause", "prepareTrack:$selectedUri", "seek:45000", "play"), session.commands)
+        assertEquals("User choice", session.snapshot().title)
+    }
 
     @Test fun completedPassageRestoresOriginalPlayingPositionAndUsesBoundedCommands() = runBlocking {
         val clock = Clock()

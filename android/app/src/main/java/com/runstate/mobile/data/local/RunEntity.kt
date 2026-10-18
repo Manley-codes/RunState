@@ -227,7 +227,11 @@ data class RunEntity(
 
     /** Process identity for [startElapsedRealtimeMillis], never inferred for old runs. */
     @ColumnInfo(name = "timing_session_id")
-    val timingSessionId: String? = null
+    val timingSessionId: String? = null,
+
+    /** Frozen permission for external song-passage lookup; never granted to older runs. */
+    @ColumnInfo(name = "song_snippet_lookup_allowed", defaultValue = "0")
+    val songSnippetLookupAllowed: Boolean = false
 ) {
     init {
 
@@ -255,6 +259,9 @@ data class RunEntity(
         }
         require(!musicReflectionSharingAllowed || musicObservationRequested) {
             "Music reflection sharing requires this run's music observation opt-in."
+        }
+        require(!songSnippetLookupAllowed || musicReflectionSharingAllowed) {
+            "Song snippet lookup requires this run's music reflection sharing opt-in."
         }
 
         require(

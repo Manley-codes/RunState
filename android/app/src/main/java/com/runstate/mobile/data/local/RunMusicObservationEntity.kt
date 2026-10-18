@@ -4,6 +4,7 @@ import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.ForeignKey
 import androidx.room.Index
+import com.runstate.mobile.music.canonicalSpotifyTrackUri
 import java.util.Locale
 import java.util.UUID
 
@@ -93,11 +94,16 @@ data class RunMusicObservationEntity(
     @ColumnInfo(name = "title") val title: String?,
     @ColumnInfo(name = "artist") val artist: String?,
     @ColumnInfo(name = "playback_state") val playbackState: MusicPlaybackState,
-    @ColumnInfo(name = "event_kind") val eventKind: MusicObservationKind
+    @ColumnInfo(name = "event_kind") val eventKind: MusicObservationKind,
+    /** Exact recording identity reported by Spotify; never inferred for old observations. */
+    @ColumnInfo(name = "spotify_track_uri") val spotifyTrackUri: String? = null,
+    @ColumnInfo(name = "album_name") val albumName: String? = null,
+    @ColumnInfo(name = "track_duration_millis") val trackDurationMillis: Long? = null
 ) {
     init {
         require(sequenceNumber >= 1) { "Music observation sequence must begin at 1." }
         validateMusicObservation(observationKey, observedAtEpochMillis, elapsedRealtimeNanos, sourcePackage)
+        validateSpotifyRecording(sourcePackage, spotifyTrackUri, albumName, trackDurationMillis)
     }
 }
 
@@ -111,10 +117,35 @@ data class RunMusicObservation(
     val title: String?,
     val artist: String?,
     val playbackState: MusicPlaybackState,
-    val eventKind: MusicObservationKind
+    val eventKind: MusicObservationKind,
+    val spotifyTrackUri: String? = null,
+    val albumName: String? = null,
+    val trackDurationMillis: Long? = null
 ) {
     init {
         validateMusicObservation(observationKey, observedAtEpochMillis, elapsedRealtimeNanos, sourcePackage)
+        validateSpotifyRecording(sourcePackage, spotifyTrackUri, albumName, trackDurationMillis)
+    }
+}
+
+private fun validateSpotifyRecording(
+    sourcePackage: String,
+    trackUri: String?,
+    album: String?,
+    durationMillis: Long?
+) {
+    require(sourcePackage == "com.spotify.music" ||
+        (trackUri == null && album == null && durationMillis == null)) {
+        "Recording details are supported only for an observed Spotify session."
+    }
+    require(trackUri == null || canonicalSpotifyTrackUri(trackUri) == trackUri) {
+        "A Spotify recording requires a canonical track URI."
+    }
+    require(album == null || validPreparationIdentity(album)) {
+        "An observed album must be bounded, nonblank text."
+    }
+    require(durationMillis == null || durationMillis in 1_000L..86_400_000L) {
+        "An observed track duration must be between one second and 24 hours."
     }
 }
 

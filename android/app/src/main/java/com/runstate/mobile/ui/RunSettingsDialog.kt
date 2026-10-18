@@ -36,6 +36,7 @@ internal const val SETTINGS_DEMO_MODE_TAG = "runSettingsDemoMode"
 internal const val SETTINGS_DONE_TAG = "runSettingsDone"
 internal const val SETTINGS_RETRY_PREFERENCES_TAG = "runSettingsRetryPreferences"
 internal const val SETTINGS_WEATHER_TAG = "runSettingsWeather"
+internal const val SETTINGS_SONG_SNIPPETS_TAG = "runSettingsSongSnippets"
 
 private val SettingsInk = Color(0xFF293326)
 private val SettingsCream = Color(0xFFF9FAF5)
@@ -64,7 +65,9 @@ internal fun RunSettingsDialog(
     preferencesAvailable: Boolean = true,
     onRetryPreferences: () -> Unit = {},
     weatherEnabled: Boolean = false,
-    onSetWeather: (Boolean) -> Unit = {}
+    onSetWeather: (Boolean) -> Unit = {},
+    songSnippetsEnabled: Boolean = false,
+    onSetSongSnippets: (Boolean) -> Unit = {}
 ) {
     val controlsEnabled = actionsEnabled && !settingsLoading
     val preferenceControlsEnabled = controlsEnabled && preferencesAvailable
@@ -127,7 +130,7 @@ internal fun RunSettingsDialog(
                 SettingsSectionTitle("MUSIC")
                 SettingsPreference(
                     title = "Observe music",
-                    description = "Save available song title, artist and app while Running. " +
+                    description = "Save available song title, artist, album, duration and Spotify recording ID while Running. " +
                         "These observations stay on your phone unless you separately choose music in reflections. " +
                         "No audio is recorded.",
                     checked = musicObservationEnabled,
@@ -167,6 +170,18 @@ internal fun RunSettingsDialog(
                     !musicAccessGranted -> SettingsDescription("Music access is needed before any song can be observed or shared.")
                     !musicReflectionSharingAvailable -> SettingsDescription("A reflection connection is needed to use observed music in reflections.")
                 }
+                SettingsPreference(
+                    title = "Find song snippets",
+                    description = "For future runs, send the chosen song's title, artist, album and duration " +
+                        "through RunState to LRCLIB to find a short vocal hook. Timing is community supplied " +
+                        "and may be unavailable or imperfect. No lyrics are saved to your run. " +
+                        "After your reflection, RunState may briefly switch Spotify to that recording; " +
+                        "restoring the previous song is best effort and the queue may change.",
+                    checked = songSnippetsEnabled,
+                    enabled = preferenceControlsEnabled && (songSnippetsEnabled || musicReflectionSharingEnabled),
+                    onCheckedChange = onSetSongSnippets,
+                    tag = SETTINGS_SONG_SNIPPETS_TAG
+                )
 
                 SettingsDivider()
                 SettingsSectionTitle("WEATHER")

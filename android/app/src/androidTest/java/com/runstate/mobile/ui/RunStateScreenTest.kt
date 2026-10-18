@@ -1111,7 +1111,7 @@ class RunStateScreenTest {
                         remember { MutableStateFlow<RunTrackingServiceState>(RunTrackingServiceState.Idle) },
                         lifecycleOwner.lifecycle, completionSpeakerFactory = { silentSpeaker },
                         musicAccessProvider = { false }, gpsPreviewSourceOverride = source,
-                        gpsLocationReady = { locationReady && source.currentAvailability == GpsPreviewAvailability.READY }, startGpsRun = { _, _, _, _ ->
+                        gpsLocationReady = { locationReady && source.currentAvailability == GpsPreviewAvailability.READY }, startGpsRun = { _, _, _, _, _ ->
                             listenersAtHandoff += source.activeListeners
                             rowsAtHandoff += rowCount()
                             serviceStarts++

@@ -87,7 +87,10 @@ abstract class MusicObservationDao {
             title = observation.title,
             artist = observation.artist,
             playbackState = observation.playbackState,
-            eventKind = observation.eventKind
+            eventKind = observation.eventKind,
+            spotifyTrackUri = observation.spotifyTrackUri,
+            albumName = observation.albumName,
+            trackDurationMillis = observation.trackDurationMillis
         )
         insert(row)
         return row

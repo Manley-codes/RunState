@@ -18,6 +18,125 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class ReflectionApiClientTest {
+    @Test fun recordingIdentityCanFillInLaterButConflictingVersionsCannotAuthorizeLoading() {
+        val first = musicObservation(1).copy(title = "Stronger", artist = "Kanye West")
+        val complete = first.copy(sequenceNumber = 2, observationKey = "later", spotifyTrackUri = "spotify:track:4fzsfWzRhPawzqhX8Qt9F3",
+            albumName = "Graduation", trackDurationMillis = 312_000)
+        val run = sharingRun().copy(songSnippetLookupAllowed = true)
+        val chosen = reflectionSongCandidates(run, FINISH, listOf(first, complete)).single()
+        assertEquals("1", chosen.candidateId)
+        assertEquals(complete.spotifyTrackUri, chosen.songPassage?.spotifyTrackUri)
+        assertTrue(chosen.songPassage!!.allowTrackSwitch)
+        val ambiguous = complete.copy(sequenceNumber = 3, observationKey = "version", spotifyTrackUri = "spotify:track:" + "b".repeat(22))
+        assertNull(reflectionSongCandidates(run, FINISH, listOf(first, complete, ambiguous)).single().recording)
+        for (partialConflict in listOf(
+            ambiguous.copy(albumName = null, trackDurationMillis = null),
+            ambiguous.copy(spotifyTrackUri = null, albumName = "Other edition", trackDurationMillis = null),
+            ambiguous.copy(spotifyTrackUri = null, albumName = null, trackDurationMillis = 320_000L))) {
+            val conflict = reflectionSongCandidates(run, FINISH, listOf(first, complete, partialConflict)).single()
+            assertNull(conflict.recording)
+            assertFalse(conflict.songPassage!!.allowTrackSwitch)
+        }
+        assertFalse(reflectionSongCandidates(sharingRun(), FINISH, listOf(complete)).single().songPassage!!.allowTrackSwitch)
+    }
+
+    @Test fun differentRecordingOfCuratedSongNeedsItsOwnTimingBeforeItCanBeLoaded() {
+        val otherEdition = musicObservation(1).copy(title = "Good as Hell", artist = "Lizzo",
+            spotifyTrackUri = "spotify:track:" + "a".repeat(22), albumName = "Different Edition", trackDurationMillis = 180_000L)
+        val chosen = reflectionSongCandidates(sharingRun().copy(songSnippetLookupAllowed = true), FINISH,
+            listOf(otherEdition)).single()
+        assertNotNull(chosen.recording)
+        assertNull(chosen.musicContext.songCue)
+        assertNull(chosen.songPassage)
+        // The older opt-out/current-track behavior and all accepted cue values remain intact.
+        val legacy = reflectionSongCandidates(sharingRun(), FINISH, listOf(otherEdition)).single()
+        assertNotNull(legacy.songPassage)
+        assertFalse(legacy.songPassage!!.allowTrackSwitch)
+    }
+
+    @Test fun sourcedSnippetIsBoundToTheSelectedRecordingAndFrozenWithoutLyrics() {
+        val request = snippetRequest()
+        val parsed = parseReflectionResponse(snippetResponse().toString(), REQUEST_ID, RUN_ID, null,
+            request.evidence.songCandidates!!, true)
+        val frozen = request.evidence.withSongSelection(parsed)
+        assertEquals("LRCLIB", frozen.musicContext.songCue!!.source)
+        assertEquals(32_000L, frozen.songPassage!!.startPositionMillis)
+        assertEquals(4_000L, frozen.songPassage.durationMillis)
+        assertTrue(frozen.songPassage.allowTrackSwitch)
+        assertEquals("spotify:track:" + "a".repeat(22), frozen.songPassage.passage().spotifyMediaId)
+        val ordinary = frozen.withSongSelection(ReflectionCandidates("S", "G", "P", "N"))
+        assertNull(ordinary.songPassage)
+        assertNull(ordinary.musicContext.songCue)
+        assertNull(ordinary.selectedSongId)
+    }
+
+    @Test fun mismatchedOrUnconsentedSnippetCannotStartPlayback() {
+        val songs = snippetRequest().evidence.songCandidates!!
+        assertThrows(ReflectionBridgeException::class.java) {
+            parseReflectionResponse(snippetResponse().toString(), REQUEST_ID, RUN_ID, null, songs, false)
+        }
+        listOf<Pair<String, Any>>("source" to "GUESSED", "version" to 2, "sourceId" to "../123",
+            "trackTitle" to "Another song", "artistName" to "Another artist", "albumName" to "Live edition",
+            "trackDurationMillis" to 200_000, "durationMillis" to 12_000, "startPositionMillis" to -1,
+            "cueId" to "wrong", "selectionMethod" to "MODEL_GUESS", "lyrics" to "unexpected text").forEach { (key, value) ->
+            val body = snippetResponse()
+            val snippet = body.getAsJsonObject("songSnippet")
+            when (value) { is Number -> snippet.addProperty(key, value); else -> snippet.addProperty(key, value.toString()) }
+            assertThrows("Should reject $key", ReflectionBridgeException::class.java) {
+                parseReflectionResponse(body.toString(), REQUEST_ID, RUN_ID, null, songs, true)
+            }
+        }
+        val duplicate = snippetResponse().toString().replace("\"sourceId\":\"123\"", "\"sourceId\":\"123\",\"sourceId\":\"123\"")
+        assertThrows(ReflectionBridgeException::class.java) { parseReflectionResponse(duplicate, REQUEST_ID, RUN_ID, null, songs, true) }
+        val fractional = snippetResponse().toString().replace("\"durationMillis\":4000", "\"durationMillis\":4000.0")
+        assertThrows(ReflectionBridgeException::class.java) { parseReflectionResponse(fractional, REQUEST_ID, RUN_ID, null, songs, true) }
+    }
+
+    @Test fun timingLookupWireNeedsConsentAndCapabilityAndNeverSendsSpotifyUri() = runBlocking {
+        val config = ReflectionConnectionConfig("https://reflection.example.com/api/reflections/candidates", "a".repeat(43))
+        for (consent in listOf(false, true)) for (capable in listOf(false, true)) {
+            val health = FakeHttpsConnection(URL("https://reflection.example.com/health"), "{}", cueCapability = "1",
+                studyCapability = "1", selectionCapability = "1", snippetsCapability = if (capable) "1" else null)
+            val post = FakeHttpsConnection(URL(config.endpoint), response(generationMode = "ANTHROPIC"))
+            val request = snippetRequest().let { it.copy(evidence = it.evidence.copy(songSnippetLookupAllowed = consent)) }
+            HostedReflectionHttpClient(config, { if (it.path == "/health") health else post }).request(request)
+            val raw = post.sent.toString("UTF-8")
+            val body = JsonParser.parseString(raw).asJsonObject
+            assertEquals(consent && capable, body.has("allowSongSnippetLookup"))
+            assertEquals(consent && capable, body.getAsJsonArray("songCandidates")[0].asJsonObject.has("recording"))
+            assertFalse(raw.contains("spotify:track:"))
+            assertFalse(raw.contains("songSnippetLookupAllowed"))
+        }
+    }
+
+    @Test fun actualDeliveryMustAcknowledgeTimingCapabilityBeforeSnippetCanBeUsed() = runBlocking {
+        val config = ReflectionConnectionConfig("https://reflection.example.com/api/reflections/candidates", "a".repeat(43))
+        for (delivered in listOf(false, true)) {
+            val health = FakeHttpsConnection(URL("https://reflection.example.com/health"), "{}", cueCapability = "1",
+                studyCapability = "1", selectionCapability = "1", snippetsCapability = "1")
+            val post = FakeHttpsConnection(URL(config.endpoint), snippetResponse().toString(), studyCapability = "1",
+                snippetsCapability = if (delivered) "1" else null)
+            val result = HostedReflectionHttpClient(config, { if (it.path == "/health") health else post }).request(snippetRequest())
+            assertEquals(delivered, result.songSnippet != null)
+            assertEquals(delivered, result.songCueId != null)
+        }
+    }
+
+    private fun snippetRequest(): ReflectionApiRequest {
+        val row = musicObservation().copy(title = "Example song", artist = "Example artist", albumName = "Example album",
+            spotifyTrackUri = "spotify:track:" + "a".repeat(22), trackDurationMillis = 180_000)
+        return reflectionRequestFromSavedRun(REQUEST_ID, sharingRun().copy(songSnippetLookupAllowed = true),
+            completedTransitions(), listOf(row))
+    }
+
+    private fun snippetResponse(): JsonObject = JsonParser.parseString(response(generationMode = "ANTHROPIC")).asJsonObject.apply {
+        addProperty("selectedSongId", "1")
+        addProperty("songSelectionMethod", "CONTEXT_MATCH")
+        addProperty("songCueId", "lrclib_v1_123_32000_36000")
+        add("songSnippet", GsonBuilder().create().toJsonTree(ReflectionSongSnippet("lrclib_v1_123_32000_36000",
+            "LRCLIB", "123", "Example song", "Example artist", "Example album", 180_000, 32_000, 4_000, "REPEATED_HOOK", 1)))
+    }
+
     @Test fun multiSongShortlistDeduplicatesReportsWithoutCountingCallbacksOrDroppingVersions() {
         val rows = listOf(
             musicObservation(1).copy(title = "Stronger", artist = "Kanye West"),
@@ -651,7 +770,8 @@ class ReflectionApiClientTest {
         private val studyCapability: String? = null,
         private val preparationCapability: String? = null,
         private val responseContentType: String? = null,
-        private val selectionCapability: String? = null) :
+        private val selectionCapability: String? = null,
+        private val snippetsCapability: String? = null) :
         HttpsURLConnection(url) {
         val sent = ByteArrayOutputStream()
         var wasDisconnected = false
@@ -670,6 +790,7 @@ class ReflectionApiClientTest {
             name.equals("X-RunState-Song-Study", ignoreCase = true) -> studyCapability
             name.equals("X-RunState-Song-Preparation", ignoreCase = true) -> preparationCapability
             name.equals("X-RunState-Song-Selection", ignoreCase = true) -> selectionCapability
+            name.equals("X-RunState-Song-Snippets", ignoreCase = true) -> snippetsCapability
             name.equals("Content-Type", ignoreCase = true) -> responseContentType
             else -> null
         }

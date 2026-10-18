@@ -209,7 +209,7 @@ internal fun RunJourneyRoot(
     onRetrySplits: suspend (String) -> Unit = {},
     gpsPreviewSourceOverride: ForegroundGpsPreviewSource? = null,
     gpsLocationReady: (Context) -> Boolean = ::preciseGpsLocationReady,
-    startGpsRun: (Context, PreRunEnergy?, Boolean, Boolean) -> Unit = RunTrackingService::startNew
+    startGpsRun: (Context, PreRunEnergy?, Boolean, Boolean, Boolean) -> Unit = RunTrackingService::startNew
 ) {
 
     val reflectionRequestsAvailable = reflectionConnection is ReflectionConnectionState.Hosted ||
@@ -770,7 +770,7 @@ internal fun RunJourneyRoot(
                         gpsStartDispatched = true
                         gpsStartRequested = false
                         startGpsRun(context, preRunEnergy, observeMusicForRun,
-                            shareMusicForRun)
+                            shareMusicForRun, shareMusicForRun && runPreferences?.findSongSnippets == true)
                     } catch (_: RuntimeException) {
                         gpsStartDispatched = false
                         gpsPreviewRestart++ // Retry even if dispatch failed within one frame.
@@ -787,7 +787,8 @@ internal fun RunJourneyRoot(
                         coordinator.requestStart(
                             preRunEnergy,
                             musicObservationRequested = observeMusicForRun,
-                            musicReflectionSharingAllowed = shareMusicForRun
+                            musicReflectionSharingAllowed = shareMusicForRun,
+                            songSnippetLookupAllowed = shareMusicForRun && runPreferences?.findSongSnippets == true
                         )
                     }
                 }
@@ -908,7 +909,7 @@ internal fun RunJourneyRoot(
                     scope.launch {
                         try {
                             runPreferences?.takeIf { it.shareMusicInReflection }?.let {
-                                onSaveRunPreferences(it.copy(shareMusicInReflection = false))
+                                onSaveRunPreferences(it.copy(shareMusicInReflection = false, findSongSnippets = false))
                             }
                             onSaveReflectionConnection(endpoint, accessCode)
                             connectionDialogVisible = false
@@ -929,7 +930,7 @@ internal fun RunJourneyRoot(
                     scope.launch {
                         try {
                             runPreferences?.takeIf { it.shareMusicInReflection }?.let {
-                                onSaveRunPreferences(it.copy(shareMusicInReflection = false))
+                                onSaveRunPreferences(it.copy(shareMusicInReflection = false, findSongSnippets = false))
                             }
                             onClearReflectionConnection()
                             connectionDialogVisible = false
@@ -1051,7 +1052,8 @@ internal fun RunJourneyRoot(
                             context,
                             preRunEnergy,
                             observeMusicForRun,
-                            shareMusicForRun
+                            shareMusicForRun,
+                            shareMusicForRun && runPreferences?.findSongSnippets == true
                         )
                     } catch (_: RuntimeException) {
                         gpsMessage = "Android could not restart GPS. Cancel and try again."
@@ -1065,7 +1067,8 @@ internal fun RunJourneyRoot(
                         coordinator.requestStart(
                             preRunEnergy,
                             musicObservationRequested = observeMusicForRun,
-                            musicReflectionSharingAllowed = shareMusicForRun
+                            musicReflectionSharingAllowed = shareMusicForRun,
+                            songSnippetLookupAllowed = shareMusicForRun && runPreferences?.findSongSnippets == true
                         )
                     }
                 }
@@ -1217,6 +1220,11 @@ internal fun RunJourneyRoot(
             musicReflectionSharingEnabled = musicReflectionSharingSelected,
             musicReflectionSharingAvailable = reflectionRequestsAvailable,
             weatherEnabled = runPreferences?.captureWeather == true,
+            songSnippetsEnabled = runPreferences?.findSongSnippets == true,
+            onSetSongSnippets = { enabled ->
+                runPreferences?.let { saved -> savePreferences(saved.copy(
+                    findSongSnippets = enabled && saved.shareMusicInReflection)) }
+            },
             onSetWeather = { enabled ->
                 runPreferences?.let { saved -> savePreferences(saved.copy(captureWeather = enabled)) }
             },
@@ -1248,7 +1256,8 @@ internal fun RunJourneyRoot(
             onSetMusicObservation = { enabled ->
                 runPreferences?.let { saved ->
                     savePreferences(saved.copy(observeMusic = enabled,
-                        shareMusicInReflection = enabled && saved.shareMusicInReflection))
+                        shareMusicInReflection = enabled && saved.shareMusicInReflection,
+                        findSongSnippets = enabled && saved.findSongSnippets))
                 }
             },
             onRequestMusicAccess = {
@@ -1258,7 +1267,8 @@ internal fun RunJourneyRoot(
             },
             onSetMusicReflectionSharing = { enabled ->
                 runPreferences?.let { saved ->
-                    savePreferences(saved.copy(shareMusicInReflection = enabled && saved.observeMusic))
+                    savePreferences(saved.copy(shareMusicInReflection = enabled && saved.observeMusic,
+                        findSongSnippets = enabled && saved.findSongSnippets))
                 }
             },
             onSetDemoMode = { demo ->

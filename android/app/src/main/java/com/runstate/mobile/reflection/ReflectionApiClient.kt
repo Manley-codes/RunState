@@ -19,6 +19,7 @@ import com.runstate.mobile.weather.RunWeatherSnapshot
 import com.runstate.mobile.music.SongReflectionPlan
 import com.runstate.mobile.music.selectSongReflectionPlan
 import com.runstate.mobile.music.reflectionSongCatalog
+import com.runstate.mobile.music.canonicalSpotifyTrackUri
 import java.util.Locale
 import java.io.ByteArrayOutputStream
 import java.io.InputStream
@@ -69,14 +70,28 @@ internal data class CompletedRunEvidence(
     /** Frozen local shortlist; only a capable, same-destination server receives it. */
     val songCandidates: List<ReflectionSongCandidate>? = null,
     val selectedSongId: String? = null,
-    val songSelectionMethod: String? = null
+    val songSelectionMethod: String? = null,
+    val songSnippetLookupAllowed: Boolean = false
 )
 
 internal data class ReflectionSongCandidate(
     val candidateId: String,
     val musicContext: ReflectionMusicContext,
     val songPassage: SongReflectionPlan? = null,
-    val preparationReference: SongPreparationReference? = null
+    val preparationReference: SongPreparationReference? = null,
+    /** Playback URI stays on the phone; only opted-in album/duration can reach the timing lookup. */
+    val recording: ReflectionSongRecording? = null
+)
+
+internal data class ReflectionSongRecording(val albumName: String, val durationMillis: Long,
+    val spotifyTrackUri: String)
+
+/** Numeric, source-derived timing only. No lyric text or remotely supplied playback URI. */
+internal data class ReflectionSongSnippet(
+    val cueId: String, val source: String, val sourceId: String,
+    val trackTitle: String, val artistName: String, val albumName: String,
+    val trackDurationMillis: Long, val startPositionMillis: Long, val durationMillis: Long,
+    val selectionMethod: String, val version: Int
 )
 
 internal data class SongPreparationReference(val preparationId: String, val destinationFingerprint: String) {
@@ -116,7 +131,8 @@ internal data class ReflectionCandidates(
     val isTestData: Boolean = true,
     val songCueId: String? = null,
     val selectedSongId: String? = null,
-    val songSelectionMethod: String? = null
+    val songSelectionMethod: String? = null,
+    val songSnippet: ReflectionSongSnippet? = null
 )
 
 /** A narrow seam that keeps HTTP out of the process-owned coordinator's tests. */
@@ -225,7 +241,8 @@ internal fun reflectionRequestFromSavedRun(
             songPreparationReference = songPreparation?.takeIf { pinnedObservation != null }?.let {
                 SongPreparationReference(it.preparationId, it.destinationFingerprint)
             },
-            songCandidates = reflectionSongCandidates(run, finishEpochMillis, musicObservations, songPreparations)
+            songCandidates = reflectionSongCandidates(run, finishEpochMillis, musicObservations, songPreparations),
+            songSnippetLookupAllowed = sharedMusicAllowed && run.songSnippetLookupAllowed
         )
     )
 }
@@ -245,31 +262,80 @@ internal fun reflectionSongCandidates(
         it.runId == run.runId && it.sourcePackage == "com.spotify.music" &&
             it.playbackState == MusicPlaybackState.PLAYING && it.sequenceNumber > 0 &&
             it.observedAtEpochMillis in run.officialStartEpochMillis..finishEpochMillis && valid(it.title) && valid(it.artist)
-    }.sortedBy { it.sequenceNumber }
-        .distinctBy { key(requireNotNull(it.title)) to key(requireNotNull(it.artist)) }
-        .take(12).map { row ->
+    }.sortedBy { it.sequenceNumber }.toList()
+        .groupBy { key(requireNotNull(it.title)) to key(requireNotNull(it.artist)) }
+        .values.take(12).map { rows ->
+            val row = rows.first()
             val title = requireNotNull(row.title).trim()
             val artist = requireNotNull(row.artist).trim()
-            val curated = reflectionSongCatalog.singleOrNull { key(it.title) == key(title) && key(it.artist) == key(artist) }
+            val knownSong = reflectionSongCatalog.singleOrNull { key(it.title) == key(title) && key(it.artist) == key(artist) }
             val preparation = preparations.firstOrNull {
                 it.runId == run.runId && key(it.trackTitle) == key(title) && key(it.artistName) == key(artist)
             }
+            // A later callback may fill missing metadata. Conflicting recording IDs or
+            // versions remain ambiguous; do not silently load an arbitrary recording.
+            val recordings = rows.mapNotNull { observed ->
+                val uri = canonicalSpotifyTrackUri(observed.spotifyTrackUri) ?: return@mapNotNull null
+                val album = observed.albumName?.trim()?.takeIf(::valid) ?: return@mapNotNull null
+                val duration = observed.trackDurationMillis?.takeIf { it in 1_000..3_600_000 } ?: return@mapNotNull null
+                ReflectionSongRecording(album, duration, uri)
+            }
+            val knownUris = rows.mapNotNull { canonicalSpotifyTrackUri(it.spotifyTrackUri) }.distinct()
+            val knownAlbums = rows.mapNotNull { it.albumName?.trim()?.takeIf(::valid)?.let(::key) }.distinct()
+            val knownDurations = rows.mapNotNull { it.trackDurationMillis?.takeIf { duration -> duration in 1_000..3_600_000 } }
+            val recording = recordings.lastOrNull()?.takeIf { last ->
+                knownUris.size <= 1 && knownAlbums.size <= 1 &&
+                    knownDurations.all { kotlin.math.abs(it - last.durationMillis) <= 1L } && recordings.all {
+                it.spotifyTrackUri == last.spotifyTrackUri && key(it.albumName) == key(last.albumName) &&
+                    kotlin.math.abs(it.durationMillis - last.durationMillis) <= 1L
+            } }
+            // Accepted timings are verified for specific recordings. With new lookup enabled,
+            // other complete editions must earn their own source timing instead of inheriting it.
+            val curated = knownSong?.takeIf { !run.songSnippetLookupAllowed || recording == null ||
+                recording.spotifyTrackUri in it.verifiedSpotifyTrackUris }
+            val plan = curated?.plan()?.let { plan -> if (recording == null) plan else plan.copy(
+                spotifyTrackUri = recording.spotifyTrackUri, observedDurationMillis = recording.durationMillis,
+                allowTrackSwitch = run.songSnippetLookupAllowed && recording.spotifyTrackUri in curated.verifiedSpotifyTrackUris) }
             ReflectionSongCandidate(row.sequenceNumber.toString(),
                 ReflectionMusicContext("MUSIC", curated?.title ?: title, curated?.artist ?: artist,
                     provenance = "MEDIA_SESSION_PARTIAL", songCue = curated?.cue),
-                curated?.plan(), preparation?.let { SongPreparationReference(it.preparationId, it.destinationFingerprint) })
+                plan, preparation?.let { SongPreparationReference(it.preparationId, it.destinationFingerprint) }, recording)
         }.toList()
 }
 
 /** Freeze the actual winner with the exact response; unused branch text is still discarded. */
 internal fun CompletedRunEvidence.withSongSelection(result: ReflectionCandidates): CompletedRunEvidence {
-    val id = result.selectedSongId ?: return copy(selectedSongId = null, songSelectionMethod = null)
+    val id = result.selectedSongId ?: return copy(selectedSongId = null, songSelectionMethod = null,
+        musicContext = if (musicContext.songCue?.source == "LRCLIB") musicContext.copy(songCue = null) else musicContext,
+        songPassage = if (musicContext.songCue?.source == "LRCLIB") null else songPassage)
     val selected = songCandidates.orEmpty().single { it.candidateId == id }
     require(result.songSelectionMethod in setOf("CONTEXT_MATCH", "AVAILABLE_FALLBACK"))
-    require(result.songCueId == null || result.songCueId == selected.musicContext.songCue?.cueId)
-    return copy(musicContext = selected.musicContext, songPassage = selected.songPassage,
+    val snippet = result.songSnippet
+    if (snippet != null) validateSongSnippet(snippet, selected, songSnippetLookupAllowed)
+    require(result.songCueId == null || result.songCueId == (snippet?.cueId ?: selected.musicContext.songCue?.cueId))
+    val context = if (snippet == null) selected.musicContext else selected.musicContext.copy(songCue = ReflectionSongCue(
+        snippet.cueId, "LRCLIB", "A short repeated vocal hook identified from published line timings.",
+        "Community timing; a musical response to the completed run, not a claim of perfect phrase alignment."))
+    val plan = if (snippet == null) selected.songPassage else SongReflectionPlan(snippet.cueId,
+        snippet.trackTitle, snippet.artistName, snippet.startPositionMillis, snippet.durationMillis, 1,
+        selected.recording!!.spotifyTrackUri, selected.recording.durationMillis, true,
+        snippet.source, snippet.sourceId, snippet.version)
+    return copy(musicContext = context, songPassage = plan,
         songPreparationReference = selected.preparationReference, selectedSongId = id,
         songSelectionMethod = result.songSelectionMethod)
+}
+
+internal fun validateSongSnippet(snippet: ReflectionSongSnippet, candidate: ReflectionSongCandidate, allowed: Boolean) {
+    val recording = requireNotNull(candidate.recording)
+    require(allowed && candidate.musicContext.songCue == null && snippet.source == "LRCLIB" && snippet.version == 1)
+    require(snippet.sourceId.matches(Regex("[1-9][0-9]{0,18}")))
+    require(snippet.trackTitle == candidate.musicContext.trackTitle && snippet.artistName == candidate.musicContext.artistName &&
+        snippet.albumName == recording.albumName && snippet.trackDurationMillis == recording.durationMillis)
+    require(canonicalSpotifyTrackUri(recording.spotifyTrackUri) != null && recording.durationMillis in 1_000..3_600_000)
+    require(snippet.startPositionMillis >= 0 && snippet.durationMillis in 2_000..10_000 &&
+        snippet.startPositionMillis <= recording.durationMillis - snippet.durationMillis)
+    require(snippet.selectionMethod in setOf("TITLE_HOOK", "REPEATED_HOOK"))
+    require(snippet.cueId == "lrclib_v1_${snippet.sourceId}_${snippet.startPositionMillis}_${snippet.startPositionMillis + snippet.durationMillis}")
 }
 
 /** Sharing is separate from local capture; one reported title never proves a whole song play. */
@@ -328,14 +394,14 @@ internal class HostedReflectionHttpClient(
     private val gson: Gson = GsonBuilder().serializeNulls().create()
 ) : ReflectionGateway {
     private data class SongCapabilities(val editorialCue: Boolean, val studyVersion: Int,
-        val preparation: Boolean, val selection: Boolean)
+        val preparation: Boolean, val selection: Boolean, val snippets: Boolean)
     private var songCapabilities: SongCapabilities? = null
 
     override suspend fun request(request: ReflectionApiRequest): ReflectionCandidates = withContext(Dispatchers.IO) {
         val reference = request.evidence.songPreparationReference
         val sameDestination = reference == null ||
             reference.destinationFingerprint == reflectionDestinationFingerprint(config)
-        val sendCue = sameDestination && request.evidence.musicContext.songCue != null &&
+        val sendCue = sameDestination && request.evidence.musicContext.songCue?.source == "RUNSTATE_CURATED" &&
             supportsSongCue(request.evidence.songPassage?.songStudyVersion ?: 0)
         val sendPreparation = sameDestination && reference != null &&
             (songCapabilities ?: readSongCapabilities())?.preparation == true
@@ -346,7 +412,8 @@ internal class HostedReflectionHttpClient(
             !request.evidence.songCandidates.isNullOrEmpty() &&
             (songCapabilities ?: readSongCapabilities())?.selection == true
         postReflectionRequest(URL(config.endpoint), request, gson, connectionFactory, config.accessCode,
-            sendCue, sendPreparation, sameDestination, sendSelection)
+            sendCue, sendPreparation, sameDestination, sendSelection,
+            sendSelection && request.evidence.songSnippetLookupAllowed && songCapabilities?.snippets == true)
     }
 
     /** A cheap, credential-free capability check keeps the currently deployed strict server usable. */
@@ -371,7 +438,8 @@ internal class HostedReflectionHttpClient(
                     studyVersion = connection.getHeaderField("X-RunState-Song-Study")?.toIntOrNull()
                         ?.takeIf { it >= 0 } ?: 0,
                     preparation = connection.getHeaderField("X-RunState-Song-Preparation") == "1",
-                    selection = connection.getHeaderField("X-RunState-Song-Selection") == "1"
+                    selection = connection.getHeaderField("X-RunState-Song-Selection") == "1",
+                    snippets = connection.getHeaderField("X-RunState-Song-Snippets") == "1"
                 ) else null
                 try { connection.inputStream?.close() } catch (_: Exception) { }
                 ready
@@ -394,7 +462,8 @@ private suspend fun postReflectionRequest(
     includeSongCue: Boolean = true,
     includeSongPreparation: Boolean = false,
     includeSharedMusic: Boolean = true,
-    includeSongSelection: Boolean = false
+    includeSongSelection: Boolean = false,
+    includeSongSnippets: Boolean = false
 ): ReflectionCandidates = withContext(Dispatchers.IO) {
     val hosted = accessCode != null
     var connection: HttpURLConnection? = null
@@ -408,15 +477,21 @@ private suspend fun postReflectionRequest(
         evidence.remove("songCandidates")
         evidence.remove("selectedSongId")
         evidence.remove("songSelectionMethod")
+        evidence.remove("songSnippetLookupAllowed")
         val sentSongs = request.evidence.songCandidates.orEmpty().takeIf { includeSharedMusic && includeSongSelection }.orEmpty()
         if (sentSongs.isNotEmpty()) {
             json.add("songCandidates", gson.toJsonTree(sentSongs.map { candidate ->
                 linkedMapOf<String, Any>("candidateId" to candidate.candidateId,
                     "musicContext" to candidate.musicContext).apply {
                     candidate.preparationReference?.let { put("songPreparationId", it.preparationId) }
+                    candidate.recording?.takeIf { includeSongSnippets }?.let {
+                        put("recording", mapOf("albumName" to it.albumName, "durationMillis" to it.durationMillis))
+                    }
                 }
             }))
         }
+        val snippetsAllowed = includeSongSnippets && sentSongs.isNotEmpty() && request.evidence.songSnippetLookupAllowed
+        if (snippetsAllowed) json.addProperty("allowSongSnippetLookup", true)
         if (!includeSharedMusic) evidence.add("musicContext", gson.toJsonTree(ReflectionMusicContext()))
         request.evidence.songPreparationReference?.takeIf { includeSongPreparation }?.let {
             require(UUID.fromString(it.preparationId).toString() == it.preparationId)
@@ -453,12 +528,12 @@ private suspend fun postReflectionRequest(
         val responseBody = connection.inputStream.use { readBoundedUtf8(it, hosted) }
         val parsed = if (hosted) {
             try {
-                parseReflectionResponse(responseBody, request.requestId, request.runId, expectedCueId, sentSongs)
+                parseReflectionResponse(responseBody, request.requestId, request.runId, expectedCueId, sentSongs, snippetsAllowed)
             } catch (invalid: ReflectionBridgeException) {
                 throw ReflectionBridgeException("The hosted reflection response was invalid.")
             }
         } else {
-            parseReflectionResponse(responseBody, request.requestId, request.runId, expectedCueId, sentSongs)
+            parseReflectionResponse(responseBody, request.requestId, request.runId, expectedCueId, sentSongs, snippetsAllowed)
         }
         val requiredStudyVersion = if (parsed.selectedSongId != null) sentSongs.single {
             it.candidateId == parsed.selectedSongId }.songPassage?.songStudyVersion ?: 0
@@ -467,8 +542,11 @@ private suspend fun postReflectionRequest(
             ?.toIntOrNull() ?: 0
         // Bind a new cue to this delivery, not just an earlier health check. A rolling
         // deployment or rollback may otherwise leave an older server echoing a new cue ID.
-        if (parsed.songCueId != null && requiredStudyVersion > deliveredStudyVersion) {
-            parsed.copy(songCueId = null)
+        if (parsed.songSnippet != null && (deliveredStudyVersion < 1 ||
+            connection.getHeaderField("X-RunState-Song-Snippets") != "1")) {
+            parsed.copy(songCueId = null, songSnippet = null)
+        } else if (parsed.songCueId != null && requiredStudyVersion > deliveredStudyVersion) {
+            parsed.copy(songCueId = null, songSnippet = null)
         } else parsed
     } catch (known: ReflectionBridgeException) {
         throw known
@@ -620,7 +698,8 @@ internal fun parseReflectionResponse(
     expectedRequestId: String,
     expectedRunId: String,
     expectedCueId: String? = null,
-    expectedSongs: List<ReflectionSongCandidate> = emptyList()
+    expectedSongs: List<ReflectionSongCandidate> = emptyList(),
+    allowSongSnippetLookup: Boolean = false
 ): ReflectionCandidates {
     try {
         JsonReader(StringReader(rawJson)).use { reader ->
@@ -633,6 +712,7 @@ internal fun parseReflectionResponse(
             var songCueId: String? = null
             var selectedSongId: String? = null
             var selectionMethod: String? = null
+            var songSnippet: ReflectionSongSnippet? = null
             var candidates: ReflectionCandidates? = null
             while (reader.hasNext()) {
                 when (val name = reader.nextName()) {
@@ -658,13 +738,15 @@ internal fun parseReflectionResponse(
                     }
                     "selectedSongId" -> { requireUnique(seen, name); selectedSongId = reader.requireString() }
                     "songSelectionMethod" -> { requireUnique(seen, name); selectionMethod = reader.requireString() }
+                    "songSnippet" -> { requireUnique(seen, name); songSnippet = reader.readSongSnippet() }
                     else -> throw ReflectionBridgeException("The local reflection response was invalid.")
                 }
             }
             reader.endObject()
             require(reader.peek() == JsonToken.END_DOCUMENT &&
                 seen.containsAll(setOf("requestId", "runId", "generationMode", "candidates")) &&
-                seen.size == 4 + (if (songCueId == null) 0 else 1) + (if (selectedSongId == null) 0 else 2)) {
+                seen.size == 4 + (if (songCueId == null) 0 else 1) + (if (selectedSongId == null) 0 else 2) +
+                    (if (songSnippet == null) 0 else 1)) {
                 "The local reflection response was invalid."
             }
             // A missing acknowledgement is an ordinary reflection fallback. It must remain
@@ -680,17 +762,49 @@ internal fun parseReflectionResponse(
             require((selectedSongId == null && selectionMethod == null) ||
                 selectionMethod in setOf("CONTEXT_MATCH", "AVAILABLE_FALLBACK"))
             require(expectedSongs.isEmpty() || songCueId == null || selectedSongId != null)
-            require(songCueId == null || songCueId == (winner?.musicContext?.songCue?.cueId ?: expectedCueId).takeIf {
+            if (songSnippet != null) {
+                require(generationMode == "ANTHROPIC" && songCueId == songSnippet.cueId)
+                validateSongSnippet(songSnippet, requireNotNull(winner), allowSongSnippetLookup)
+            }
+            require(songSnippet != null || songCueId == null || songCueId == (winner?.musicContext?.songCue?.cueId ?: expectedCueId).takeIf {
                 winner == null || winner.musicContext.songCue != null
             }) { "The song pairing does not match the selected song." }
             return requireNotNull(candidates).copy(isTestData = generationMode == "FAKE", songCueId = songCueId,
-                selectedSongId = selectedSongId, songSelectionMethod = selectionMethod)
+                selectedSongId = selectedSongId, songSelectionMethod = selectionMethod, songSnippet = songSnippet)
         }
     } catch (known: ReflectionBridgeException) {
         throw known
     } catch (invalid: Exception) {
         throw ReflectionBridgeException("The local reflection response was invalid.", invalid)
     }
+}
+
+private fun JsonReader.readSongSnippet(): ReflectionSongSnippet {
+    val strings = setOf("cueId", "source", "sourceId", "trackTitle", "artistName", "albumName", "selectionMethod")
+    val numbers = setOf("trackDurationMillis", "startPositionMillis", "durationMillis", "version")
+    val seen = mutableSetOf<String>()
+    val values = mutableMapOf<String, String>()
+    beginObject()
+    while (hasNext()) {
+        val name = nextName()
+        requireUnique(seen, name)
+        val value = when (name) {
+            in strings -> requireString().also { require(it.isNotBlank() && it.length <= 200 && it.none(Char::isISOControl)) }
+            in numbers -> {
+                require(peek() == JsonToken.NUMBER)
+                nextString().also { require(it.matches(Regex("0|[1-9][0-9]{0,15}"))) }
+            }
+            else -> error("Unexpected snippet field.")
+        }
+        values[name] = value
+    }
+    endObject()
+    require(seen == strings + numbers)
+    fun text(name: String) = values.getValue(name)
+    require(text("version") == "1")
+    return ReflectionSongSnippet(text("cueId"), text("source"), text("sourceId"), text("trackTitle"),
+        text("artistName"), text("albumName"), text("trackDurationMillis").toLong(),
+        text("startPositionMillis").toLong(), text("durationMillis").toLong(), text("selectionMethod"), 1)
 }
 
 private fun requireUnique(seen: MutableSet<String>, name: String) {

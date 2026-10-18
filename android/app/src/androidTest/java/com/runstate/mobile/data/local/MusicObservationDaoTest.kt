@@ -1,6 +1,7 @@
 package com.runstate.mobile.data.local
 
 import android.content.Context
+import android.media.MediaMetadata
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import kotlinx.coroutines.runBlocking
@@ -8,6 +9,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import java.util.UUID
+import com.runstate.mobile.music.spotifyObservationRecording
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -70,6 +72,86 @@ class MusicObservationDaoTest {
         database = buildRunStateDatabase(context, DATABASE_NAME)
 
         assertEquals(listOf(first, second), database.musicObservationDao().observationsFor(run.runId))
+    }
+
+    @Test
+    fun spotifyRecordingDetailsSurviveReopenAndDuplicateCallbacksKeepTheFirstSnapshot() = runBlocking {
+        database.runDao().insert(run.copy(musicReflectionSharingAllowed = true, songSnippetLookupAllowed = true))
+        val source = observation("spotify-recording", 1_000).copy(
+            sourcePackage = "com.spotify.music",
+            spotifyTrackUri = "spotify:track:0bRXwKfigvpKZUurwqAlEh",
+            albumName = "Menagerie",
+            trackDurationMillis = 254_000L
+        )
+        val saved = database.musicObservationDao().recordObservation(source)
+        assertEquals(saved, database.musicObservationDao().recordObservation(source.copy(
+            spotifyTrackUri = "spotify:track:4fzsfWzRhPawzqhX8Qt9F3",
+            albumName = "Different record", trackDurationMillis = 300_000L)))
+        database.close()
+        database = buildRunStateDatabase(context, DATABASE_NAME)
+        assertEquals(saved, database.musicObservationDao().observationsFor(run.runId).single())
+        assertTrue(requireNotNull(database.runDao().findById(run.runId)).songSnippetLookupAllowed)
+    }
+
+    @Test
+    fun snippetLookupDefaultsOffAndCannotBypassMusicSharing() {
+        assertEquals(false, run.songSnippetLookupAllowed)
+        assertThrows(IllegalArgumentException::class.java) { run.copy(songSnippetLookupAllowed = true) }
+        assertTrue(run.copy(musicReflectionSharingAllowed = true, songSnippetLookupAllowed = true)
+            .songSnippetLookupAllowed)
+    }
+
+    @Test
+    fun recordingFieldsRejectOtherAppsInvalidIdentitiesAndUnboundedMetadata() {
+        val base = observation("recording-validation", 1_000).copy(sourcePackage = "com.spotify.music")
+        listOf("spotify:episode:0bRXwKfigvpKZUurwqAlEh", "spotify:track:short",
+            " spotify:track:0bRXwKfigvpKZUurwqAlEh", "https://open.spotify.com/track/0bRXwKfigvpKZUurwqAlEh")
+            .forEach { uri -> assertThrows(IllegalArgumentException::class.java) { base.copy(spotifyTrackUri = uri) } }
+        listOf("", " album", "album\nname", "a".repeat(201)).forEach { album ->
+            assertThrows(IllegalArgumentException::class.java) { base.copy(albumName = album) }
+        }
+        listOf(0L, 999L, 86_400_001L).forEach { duration ->
+            assertThrows(IllegalArgumentException::class.java) { base.copy(trackDurationMillis = duration) }
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            base.copy(sourcePackage = "com.example.player", albumName = "Observed album")
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            base.copy(sourcePackage = "com.example.player", trackDurationMillis = 180_000L)
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            base.copy(sourcePackage = "com.example.player", spotifyTrackUri = "spotify:track:0bRXwKfigvpKZUurwqAlEh")
+        }
+    }
+
+    @Test
+    fun spotifyMetadataCaptureUsesCanonicalMediaIdentityAndDropsUnavailableFields() {
+        val primary = "spotify:track:0bRXwKfigvpKZUurwqAlEh"
+        val alternate = "spotify:track:4fzsfWzRhPawzqhX8Qt9F3"
+        val metadata = MediaMetadata.Builder()
+            .putString(MediaMetadata.METADATA_KEY_MEDIA_ID, primary)
+            .putString(MediaMetadata.METADATA_KEY_MEDIA_URI, alternate)
+            .putString(MediaMetadata.METADATA_KEY_ALBUM, "  Menagerie  ")
+            .putLong(MediaMetadata.METADATA_KEY_DURATION, 254_000L).build()
+        val captured = requireNotNull(spotifyObservationRecording("com.spotify.music", metadata))
+        assertEquals(primary, captured.trackUri)
+        assertEquals("Menagerie", captured.albumName)
+        assertEquals(254_000L, captured.durationMillis)
+        assertNull(spotifyObservationRecording("com.example.player", metadata))
+        assertNull(spotifyObservationRecording("com.spotify.music", null))
+
+        val partial = MediaMetadata.Builder(metadata)
+            .putString(MediaMetadata.METADATA_KEY_MEDIA_ID, "untrusted-id")
+            .putString(MediaMetadata.METADATA_KEY_ALBUM, "bad\nmetadata")
+            .putLong(MediaMetadata.METADATA_KEY_DURATION, Long.MAX_VALUE).build()
+        val fallback = requireNotNull(spotifyObservationRecording("com.spotify.music", partial))
+        assertEquals(alternate, fallback.trackUri)
+        assertNull(fallback.albumName)
+        assertNull(fallback.durationMillis)
+        val invalid = requireNotNull(spotifyObservationRecording("com.spotify.music",
+            MediaMetadata.Builder(partial).putString(MediaMetadata.METADATA_KEY_MEDIA_URI,
+                "https://open.spotify.com/track/0bRXwKfigvpKZUurwqAlEh").build()))
+        assertNull(invalid.trackUri)
     }
 
     @Test

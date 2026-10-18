@@ -223,6 +223,8 @@ internal class RunTrackingService : Service() {
                         intent?.getBooleanExtra(EXTRA_MUSIC_OBSERVATION_REQUESTED, false) == true
                     val musicReflectionSharingAllowed =
                         intent?.getBooleanExtra(EXTRA_MUSIC_REFLECTION_SHARING_ALLOWED, false) == true
+                    val songSnippetLookupAllowed = musicReflectionSharingAllowed &&
+                        intent?.getBooleanExtra(EXTRA_SONG_SNIPPET_LOOKUP_ALLOWED, false) == true
                     val snapshot = app.runSessionCoordinator.initialize()
                     check(snapshot.initializationStatus ==
                         com.runstate.mobile.run.InitializationStatus.Completed) {
@@ -240,7 +242,8 @@ internal class RunTrackingService : Service() {
                         energy,
                         RunTrackingMode.GPS,
                         musicObservationRequested,
-                        musicReflectionSharingAllowed
+                        musicReflectionSharingAllowed,
+                        songSnippetLookupAllowed
                     ).await().runId
                 } else {
                     val idToResume = requireNotNull(existingId)
@@ -766,6 +769,7 @@ internal class RunTrackingService : Service() {
         private const val EXTRA_PRE_RUN_ENERGY = "pre_run_energy"
         private const val EXTRA_MUSIC_OBSERVATION_REQUESTED = "music_observation_requested"
         private const val EXTRA_MUSIC_REFLECTION_SHARING_ALLOWED = "music_reflection_sharing_allowed"
+        private const val EXTRA_SONG_SNIPPET_LOOKUP_ALLOWED = "song_snippet_lookup_allowed"
         private const val EXTRA_RUN_ID = "run_id"
         private const val CHANNEL_ID = "active_run_tracking"
         private const val NOTIFICATION_ID = 3207
@@ -778,7 +782,8 @@ internal class RunTrackingService : Service() {
             context: Context,
             preRunEnergy: PreRunEnergy?,
             musicObservationRequested: Boolean = false,
-            musicReflectionSharingAllowed: Boolean = false
+            musicReflectionSharingAllowed: Boolean = false,
+            songSnippetLookupAllowed: Boolean = false
         ) {
             require(!musicReflectionSharingAllowed || musicObservationRequested) {
                 "Music reflection sharing requires this run's music observation opt-in."
@@ -788,6 +793,7 @@ internal class RunTrackingService : Service() {
                 .putExtra(EXTRA_PRE_RUN_ENERGY, preRunEnergy?.name)
                 .putExtra(EXTRA_MUSIC_OBSERVATION_REQUESTED, musicObservationRequested)
                 .putExtra(EXTRA_MUSIC_REFLECTION_SHARING_ALLOWED, musicReflectionSharingAllowed)
+                .putExtra(EXTRA_SONG_SNIPPET_LOOKUP_ALLOWED, songSnippetLookupAllowed && musicReflectionSharingAllowed)
             ContextCompat.startForegroundService(context, intent)
         }
 

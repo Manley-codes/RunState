@@ -1011,6 +1011,75 @@ class RunReflectionCoordinatorTest {
         assertEquals(saved.text, (reopened.state.value as RunReflectionState.Ready).text)
     }
 
+    @Test fun sourcedSnippetKeepsItsObservedRecordingAndTimingButDoesNotReplayAfterReopening() {
+        val dao = completedDao().apply {
+            inserted[0] = inserted[0].copy(musicObservationRequested = true,
+                musicReflectionSharingAllowed = true, songSnippetLookupAllowed = true)
+        }
+        val uri = "spotify:track:" + "a".repeat(22)
+        val store = MemoryReflectionStore().apply {
+            observedMusic = listOf(sampleMusicObservation().copy(title = "Example Song", artist = "Example Artist",
+                spotifyTrackUri = uri, albumName = "Example Album", trackDurationMillis = 180_000L))
+        }
+        val snippet = ReflectionSongSnippet("lrclib_v1_123_32000_36000", "LRCLIB", "123",
+            "Example Song", "Example Artist", "Example Album", 180_000L, 32_000L, 4_000L, "REPEATED_HOOK", 1)
+        val coordinator = RunReflectionCoordinator(dao, store, ReflectionGateway { request ->
+            candidates().copy(isTestData = false, selectedSongId = request.evidence.songCandidates!!.single().candidateId,
+                songSelectionMethod = "CONTEXT_MATCH", songCueId = snippet.cueId, songSnippet = snippet)
+        }, scope(), quietWindowMillis = 0L, nowMillis = { 100L })
+        coordinator.onSavedVisible(RUN_ID)
+        val passage = (coordinator.state.value as RunReflectionState.Ready).passage!!
+        assertEquals(uri, passage.spotifyMediaId)
+        assertEquals(32_000L, passage.startPositionMillis)
+        assertEquals(4_000L, passage.durationMillis)
+        assertTrue(passage.allowTrackSwitch)
+        val saved = store.rows.getValue(RUN_ID)
+        val evidence = gson.fromJson(saved.evidenceJson, CompletedRunEvidence::class.java)
+        assertEquals("LRCLIB", evidence.songPassage!!.timingSource)
+        assertEquals("123", evidence.songPassage!!.timingSourceId)
+        assertEquals(1, evidence.songPassage!!.timingVersion)
+        assertNull(saved.candidatesJson)
+        assertNull(pairedPassageFor(saved))
+        assertNull(pairedPassageFor(saved, "wrong-cue"))
+        val reopened = RunReflectionCoordinator(dao, store, ReflectionGateway { error("No regeneration") },
+            scope(), nowMillis = { 100L })
+        reopened.onSavedVisible(RUN_ID)
+        assertNull((reopened.state.value as RunReflectionState.Ready).passage)
+        assertEquals(saved.text, (reopened.state.value as RunReflectionState.Ready).text)
+    }
+
+    @Test fun failedLocalFinalizationThenFallbackCannotKeepASourcedSnippet() {
+        val dao = completedDao().apply {
+            inserted[0] = inserted[0].copy(musicObservationRequested = true,
+                musicReflectionSharingAllowed = true, songSnippetLookupAllowed = true)
+        }
+        val store = MemoryReflectionStore().apply {
+            observedMusic = listOf(sampleMusicObservation().copy(title = "Example Song", artist = "Example Artist",
+                spotifyTrackUri = "spotify:track:" + "a".repeat(22), albumName = "Example Album", trackDurationMillis = 180_000L))
+            failFinalizationOnce = true
+        }
+        val snippet = ReflectionSongSnippet("lrclib_v1_123_32000_36000", "LRCLIB", "123",
+            "Example Song", "Example Artist", "Example Album", 180_000L, 32_000L, 4_000L, "REPEATED_HOOK", 1)
+        var calls = 0
+        val coordinator = RunReflectionCoordinator(dao, store, ReflectionGateway { request ->
+            if (++calls == 1) candidates().copy(isTestData = false,
+                selectedSongId = request.evidence.songCandidates!!.single().candidateId,
+                songSelectionMethod = "CONTEXT_MATCH", songCueId = snippet.cueId, songSnippet = snippet)
+            else candidates().copy(isTestData = false)
+        }, scope(), quietWindowMillis = 0L, nowMillis = { 100L })
+        coordinator.onSavedVisible(RUN_ID)
+        assertEquals(ReflectionStatus.FAILED, store.rows.getValue(RUN_ID).status)
+        coordinator.retry(RUN_ID)
+        val saved = store.rows.getValue(RUN_ID)
+        assertEquals(ReflectionStatus.READY, saved.status)
+        val evidence = gson.fromJson(saved.evidenceJson, CompletedRunEvidence::class.java)
+        assertNull(evidence.selectedSongId)
+        assertNull(evidence.musicContext.songCue)
+        assertNull(evidence.songPassage)
+        assertNull((coordinator.state.value as RunReflectionState.Ready).passage)
+        assertEquals(2, calls)
+    }
+
     @Test fun retryFallbackClearsPreviousSelectionAfterLocalFinalizationFailure() {
         val dao = completedDao().apply {
             inserted[0] = inserted[0].copy(musicObservationRequested = true, musicReflectionSharingAllowed = true)

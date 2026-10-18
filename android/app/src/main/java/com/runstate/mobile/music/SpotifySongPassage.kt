@@ -5,6 +5,7 @@ import android.content.Context
 import android.media.MediaMetadata
 import android.media.session.MediaSessionManager
 import android.media.session.PlaybackState
+import android.net.Uri
 import android.os.SystemClock
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.NonCancellable
@@ -20,18 +21,31 @@ private const val MAX_TRACK_MILLIS = 24 * 60 * 60 * 1_000L
 private fun sameReportedDuration(first: Long, next: Long): Boolean =
     first in 1_000..MAX_TRACK_MILLIS && next in 1_000..MAX_TRACK_MILLIS && abs(first - next) <= 1L
 
-/** A passage of the currently selected Spotify recording; this never selects another song. */
+/** Only canonical track identities actually observed on the device may select another recording. */
+internal fun canonicalSpotifyTrackUri(value: String?): String? = value?.takeIf {
+    it.matches(Regex("spotify:track:[A-Za-z0-9]{22}"))
+}
+
+/** Match the listener's canonical ID/URI fallback, retaining old IDs only for current-song use. */
+internal fun spotifySessionMediaId(mediaId: String?, mediaUri: String?): String? =
+    canonicalSpotifyTrackUri(mediaId) ?: canonicalSpotifyTrackUri(mediaUri) ?: mediaId
+
+/** A short passage, with optional explicit permission to load its observed exact recording. */
 internal data class SongPassageRequest(
     val trackTitle: String,
     val artistName: String,
     val startPositionMillis: Long,
     val durationMillis: Long = 10_000,
-    val spotifyMediaId: String? = null
+    val spotifyMediaId: String? = null,
+    val allowTrackSwitch: Boolean = false,
+    val observedDurationMillis: Long? = null
 ) {
     init {
         require(trackTitle.isNotBlank() && artistName.isNotBlank())
         require(startPositionMillis >= 0 && durationMillis in 1_000..10_000)
         require(spotifyMediaId == null || spotifyMediaId.isNotBlank())
+        require(observedDurationMillis == null || observedDurationMillis in 1_000..MAX_TRACK_MILLIS)
+        require(!allowTrackSwitch || canonicalSpotifyTrackUri(spotifyMediaId) != null && observedDurationMillis != null)
     }
 }
 
@@ -41,14 +55,15 @@ internal enum class PassagePlayback { PLAYING, PAUSED, OTHER }
 
 /** Optional test diagnostics contain enums and bounded timing differences only, never media identity. */
 internal enum class SongPassageStage {
-    ADMISSION, INITIAL_PAUSE, ENTRANCE_SEEK, ENTRANCE_PLAY, PLAYING, ENDING_PAUSE,
-    RESTORE_SEEK, RESTORE_PLAY, CLEANUP
+    ADMISSION, INITIAL_PAUSE, TRACK_LOAD, ENTRANCE_SEEK, ENTRANCE_PLAY, PLAYING, ENDING_PAUSE,
+    RESTORE_TRACK, RESTORE_SEEK, RESTORE_PLAY, CLEANUP
 }
 internal enum class SongPassageReason {
     ENTERED, FINISHED, OWNER_BUSY, SESSION_MISSING, REQUEST_MISMATCH, INVALID_DURATION,
     INVALID_POSITION, PLAYBACK_CHANGED, POSITION_DRIFT, CAPABILITY_CHANGED, CONFIRM_TIMEOUT,
     STOPPED, CANCELLED, TRANSPORT_ERROR, SOURCE_CHANGED, SESSION_CHANGED, MEDIA_ID_CHANGED,
-    TITLE_CHANGED, ARTIST_CHANGED, DURATION_CHANGED, CLEANUP_PAUSE_SENT, CLEANUP_NOT_REQUIRED
+    TITLE_CHANGED, ARTIST_CHANGED, DURATION_CHANGED, CLEANUP_PAUSE_SENT, CLEANUP_NOT_REQUIRED,
+    TRACK_LOAD_UNSUPPORTED, TRACK_LOAD_TIMEOUT
 }
 internal data class SongPassageDiagnostic(
     val stage: SongPassageStage,
@@ -75,7 +90,9 @@ internal data class SongPassageSnapshot(
     val canPlay: Boolean,
     val canSeek: Boolean,
     /** Relative age of the player's position report; null means it supplied no usable clock. */
-    val positionUpdateAgeMillis: Long? = null
+    val positionUpdateAgeMillis: Long? = null,
+    val canPrepareTrack: Boolean = false,
+    val canPlayTrack: Boolean = false
 )
 
 internal interface SongPassageSession {
@@ -84,6 +101,11 @@ internal interface SongPassageSession {
     fun pause()
     fun seekTo(positionMillis: Long)
     fun play()
+    /** True means a supported command was dispatched, not that the requested song is loaded. */
+    fun prepareFromTrackUri(uri: String): Boolean = false
+    fun playFromTrackUri(uri: String): Boolean = false
+    /** Best-effort cancellation of our pending selection; a foreign player can ignore this request. */
+    fun cancelPendingTrackLoad() { pause() }
 }
 
 internal interface PassageClock {
@@ -98,7 +120,8 @@ private object RealPassageClock : PassageClock {
 
 /**
  * One foreground owner, called from the UI's coroutine. Stop/cancellation never resumes music.
- * Only an uninterrupted completed passage restores the prior position and playing/paused state.
+ * A completed passage restores the prior recording, position and playing/paused state. A failed
+ * entrance seek can recover that state only while the selected recording is still owned/paused.
  * No position, title, URI, or provider exception is logged. Timings are software bounds, not a
  * guarantee of sample-accurate audible playback from another app.
  */
@@ -107,7 +130,7 @@ internal class SpotifySongPassageController(
     private val clock: PassageClock = RealPassageClock,
     private val diagnosticObserver: (SongPassageDiagnostic) -> Unit = {}
 ) {
-    private class Owner(val initial: SongPassageSnapshot) {
+    private class Owner(var initial: SongPassageSnapshot) {
         @Volatile var stopped = false
         var changedPlayback = false
         var expectedPosition = initial.positionMillis
@@ -122,6 +145,10 @@ internal class SpotifySongPassageController(
         var lastPositionAge: Long? = null
         var lastDurationDelta: Long? = null
         var failureReason: SongPassageReason? = null
+        var switchedTrack = false
+        var restoreAttempted = false
+        var ownedPausedPosition = initial.positionMillis
+        var loadingFrom: SongPassageSnapshot? = null
     }
     private var owner: Owner? = null
 
@@ -139,13 +166,23 @@ internal class SpotifySongPassageController(
             report(null, SongPassageReason.SESSION_MISSING)
             return SongPassageResult(SongPassageStatus.UNAVAILABLE)
         }
-        if (!matches(request, initial) || initial.durationMillis !in 1_000..MAX_TRACK_MILLIS ||
+        val sameRequestedTrack = matches(request, initial)
+        val maySwitch = !sameRequestedTrack && request.allowTrackSwitch &&
+            canonicalSpotifyTrackUri(request.spotifyMediaId) != null &&
+            canonicalSpotifyTrackUri(initial.mediaId) != null && request.spotifyMediaId != initial.mediaId &&
+            initial.sourcePackage == SPOTIFY_PACKAGE && (initial.canPrepareTrack || initial.canPlayTrack)
+        val targetDuration = if (sameRequestedTrack) initial.durationMillis else request.observedDurationMillis ?: 0L
+        if ((!sameRequestedTrack && !maySwitch) || initial.durationMillis !in 1_000..MAX_TRACK_MILLIS ||
+            targetDuration !in 1_000..MAX_TRACK_MILLIS ||
+            (sameRequestedTrack && request.observedDurationMillis?.let { !sameReportedDuration(it, initial.durationMillis) } == true) ||
             initial.positionMillis !in 0..initial.durationMillis ||
             initial.playback == PassagePlayback.OTHER || !initial.canSeek ||
             (initial.playback == PassagePlayback.PLAYING && !initial.canPause) ||
-            request.startPositionMillis > initial.durationMillis - request.durationMillis - 2_000) {
+            request.startPositionMillis > targetDuration - request.durationMillis - 2_000) {
             val reason = when {
-                !matches(request, initial) -> SongPassageReason.REQUEST_MISMATCH
+                !sameRequestedTrack && !maySwitch -> if (request.allowTrackSwitch &&
+                    !initial.canPrepareTrack && !initial.canPlayTrack) SongPassageReason.TRACK_LOAD_UNSUPPORTED
+                    else SongPassageReason.REQUEST_MISMATCH
                 initial.durationMillis !in 1_000..MAX_TRACK_MILLIS -> SongPassageReason.INVALID_DURATION
                 initial.positionMillis !in 0..initial.durationMillis -> SongPassageReason.INVALID_POSITION
                 initial.playback == PassagePlayback.OTHER -> SongPassageReason.PLAYBACK_CHANGED
@@ -166,6 +203,16 @@ internal class SpotifySongPassageController(
                 current.changedPlayback = true
                 session.pause()
                 await(current) { it.playback == PassagePlayback.PAUSED }
+            }
+            if (maySwitch) {
+                val beforeLoad = checked(current)
+                if (beforeLoad.playback != PassagePlayback.PAUSED ||
+                    abs(beforeLoad.positionMillis - initial.positionMillis) > POSITION_TOLERANCE)
+                    throw PassageInterrupted(SongPassageReason.POSITION_DRIFT)
+                val expected = beforeLoad.copy(mediaId = request.spotifyMediaId, title = request.trackTitle,
+                    artist = request.artistName, durationMillis = targetDuration, positionMillis = 0L)
+                loadTrack(current, beforeLoad, expected, SongPassageStage.TRACK_LOAD)
+                current.switchedTrack = true
             }
             var paused = checked(current)
             if (paused.playback != PassagePlayback.PAUSED || !paused.canSeek || !paused.canPlay) {
@@ -225,25 +272,7 @@ internal class SpotifySongPassageController(
                     else -> SongPassageReason.POSITION_DRIFT
                 })
             }
-            enter(current, SongPassageStage.RESTORE_SEEK, initial.positionMillis)
-            session.seekTo(initial.positionMillis)
-            val restored = await(current) { it.playback == PassagePlayback.PAUSED &&
-                abs(it.positionMillis - initial.positionMillis) <= POSITION_TOLERANCE }
-            if (initial.playback == PassagePlayback.PLAYING) {
-                if (!restored.canPlay) throw PassageInterrupted(SongPassageReason.CAPABILITY_CHANGED)
-                checked(current)
-                current.expectedPosition = initial.positionMillis
-                current.expectedAt = clock.nowMillis()
-                current.expectsPlaying = true
-                current.pendingPlay = true
-                enter(current, SongPassageStage.RESTORE_PLAY)
-                session.play()
-                val resumed = await(current) { it.playback == PassagePlayback.PLAYING }
-                if (!isConfirmedPlay(current, resumed)) throw PassageInterrupted(playbackFailure(resumed))
-                current.pendingPlay = false
-                current.expectedPosition = resumed.positionMillis
-                current.expectedAt = clock.nowMillis()
-            }
+            restoreOriginal(current, initial)
             completed = true
             report(current, SongPassageReason.FINISHED)
             return SongPassageResult(SongPassageStatus.FINISHED, playbackRestored = true)
@@ -253,10 +282,13 @@ internal class SpotifySongPassageController(
         } catch (interrupted: PassageInterrupted) {
             current.failureReason = interrupted.reason
             report(current, interrupted.reason)
-            return SongPassageResult(SongPassageStatus.INTERRUPTED)
+            completed = recoverPausedSelection(current, initial, interrupted.reason)
+            return SongPassageResult(SongPassageStatus.INTERRUPTED, playbackRestored = completed)
         } catch (_: RuntimeException) {
+            current.failureReason = SongPassageReason.TRANSPORT_ERROR
             report(current, SongPassageReason.TRANSPORT_ERROR)
-            return SongPassageResult(SongPassageStatus.FAILED)
+            completed = recoverPausedSelection(current, initial, SongPassageReason.TRANSPORT_ERROR)
+            return SongPassageResult(SongPassageStatus.FAILED, playbackRestored = completed)
         } finally {
             // Leaving cannot resume music. Cancel our unconfirmed play on the same valid recording,
             // including a wrong reported entrance. Once confirmed, preserve a user seek by requiring
@@ -275,17 +307,30 @@ internal class SpotifySongPassageController(
                             (current.pendingPlay || snapshot.playback == PassagePlayback.PLAYING ||
                                 snapshot.playback == PassagePlayback.OTHER) &&
                             isOnExpectedTrajectory(current, snapshot)
-                        if (snapshot != null && (durationOnlyContainment ||
+                        val pendingSelectionContainment = snapshot != null && current.loadingFrom?.let { before ->
+                            sameRecording(before, snapshot) && snapshot.playback != PassagePlayback.PLAYING &&
+                                (snapshot.playback == PassagePlayback.OTHER ||
+                                    abs(snapshot.positionMillis - before.positionMillis) <= POSITION_TOLERANCE)
+                        } == true
+                        val pendingTargetContainment = snapshot != null && current.loadingFrom != null &&
+                            snapshot.sourcePackage == SPOTIFY_PACKAGE && snapshot.sessionKey == current.initial.sessionKey &&
+                            canonicalSpotifyTrackUri(snapshot.mediaId) != null && snapshot.mediaId == current.initial.mediaId &&
+                            (snapshot.positionMillis in 0..((clock.nowMillis() - current.expectedAt)
+                                .coerceAtLeast(0L) + POSITION_TOLERANCE) ||
+                                snapshot.playback == PassagePlayback.OTHER && snapshot.positionMillis < 0L)
+                        if (snapshot != null && (pendingSelectionContainment || pendingTargetContainment || durationOnlyContainment ||
                             (sameRecording(current.initial, snapshot) &&
                             (isOwnedPlaying(current, snapshot) ||
-                                (current.pendingPlay && snapshot.positionMillis in 0..snapshot.durationMillis) ||
+                                (current.pendingPlay && current.loadingFrom == null &&
+                                    snapshot.positionMillis in 0..snapshot.durationMillis) ||
                                 (snapshot.playback == PassagePlayback.OTHER &&
                                     isOnExpectedTrajectory(current, snapshot)))))) {
                             // The pause action may not be advertised until pending play completes.
                             // This command only cancels our outstanding play; it never resumes music.
                             // A duration-only failure still aborts the clip. It may cancel our own
                             // trajectory on the otherwise identical recording, never restore it.
-                            session.pause()
+                            if (pendingSelectionContainment || pendingTargetContainment) session.cancelPendingTrackLoad()
+                            else session.pause()
                             report(current, SongPassageReason.CLEANUP_PAUSE_SENT)
                         } else {
                             report(current, when {
@@ -302,6 +347,137 @@ internal class SpotifySongPassageController(
                 report(current, SongPassageReason.CLEANUP_NOT_REQUIRED)
             }
             if (owner === current) owner = null
+        }
+    }
+
+    /** Loading is a request, not proof. Only the exact requested recording can acquire ownership. */
+    private suspend fun loadTrack(current: Owner, before: SongPassageSnapshot,
+        expected: SongPassageSnapshot, stage: SongPassageStage) {
+        coroutineContext.ensureActive()
+        if (current.stopped || owner !== current) throw PassageInterrupted(SongPassageReason.STOPPED)
+        val uri = canonicalSpotifyTrackUri(expected.mediaId)
+            ?: throw PassageInterrupted(SongPassageReason.TRACK_LOAD_UNSUPPORTED)
+        if (!before.canPrepareTrack && !before.canPlayTrack)
+            throw PassageInterrupted(SongPassageReason.TRACK_LOAD_UNSUPPORTED)
+        enter(current, stage)
+        current.initial = expected
+        current.changedPlayback = true
+        // Even prepare implementations can misbehave; cleanup may pause only this exact target.
+        current.pendingPlay = true
+        current.expectsPlaying = true
+        current.expectedPosition = 0L
+        current.expectedAt = clock.nowMillis()
+        current.loadingFrom = before
+        val sent = if (before.canPrepareTrack) session.prepareFromTrackUri(uri) else session.playFromTrackUri(uri)
+        if (!sent) throw PassageInterrupted(SongPassageReason.TRACK_LOAD_UNSUPPORTED)
+        val until = clock.nowMillis() + TRACK_LOAD_TIMEOUT_MILLIS
+        do {
+            coroutineContext.ensureActive()
+            if (current.stopped || owner !== current) throw PassageInterrupted(SongPassageReason.STOPPED)
+            val snapshot = session.snapshot()
+            if (snapshot != null) {
+                sampleDiagnostic(current, snapshot)
+                if (snapshot.sourcePackage != SPOTIFY_PACKAGE || snapshot.sessionKey != before.sessionKey)
+                    throw PassageInterrupted(identityFailure(before, snapshot))
+                if (snapshot.mediaId == expected.mediaId) {
+                    // Loading metadata can arrive in pieces. It still cannot authorize a seek
+                    // or a passage until title, artist, duration and position are all confirmed.
+                    if (snapshot.title.isNullOrBlank() || snapshot.artist.isNullOrBlank() ||
+                        snapshot.durationMillis == 0L || snapshot.positionMillis < 0L) {
+                        clock.waitMillis(POLL_MILLIS)
+                        continue
+                    }
+                    if (!expected.title?.trim().equals(snapshot.title?.trim(), ignoreCase = true) ||
+                        !expected.artist?.trim().equals(snapshot.artist?.trim(), ignoreCase = true))
+                        throw PassageInterrupted(identityFailure(expected, snapshot))
+                    // Keep the observed duration as the fixed baseline; tolerance cannot accumulate.
+                    current.initial = expected.copy(title = snapshot.title, artist = snapshot.artist)
+                    if (!sameReportedDuration(expected.durationMillis, snapshot.durationMillis))
+                        throw PassageInterrupted(SongPassageReason.DURATION_CHANGED)
+                    if (snapshot.positionMillis in 0..snapshot.durationMillis) {
+                        // A distant seek while metadata arrives belongs to the user. Matching
+                        // the recording alone does not authorize replacing their position.
+                        if (!isAtLoadedEntrance(current, snapshot))
+                            throw PassageInterrupted(SongPassageReason.POSITION_DRIFT)
+                        val paused = if (snapshot.playback == PassagePlayback.PAUSED) snapshot else {
+                            // playFrom... can begin audibly before metadata arrives. Contain only the
+                            // verified requested recording, then seek to the deliberate passage.
+                            session.pause()
+                            await(current) { it.playback == PassagePlayback.PAUSED }
+                        }
+                        if (!isAtLoadedEntrance(current, paused))
+                            throw PassageInterrupted(SongPassageReason.POSITION_DRIFT)
+                        current.pendingPlay = false
+                        current.expectsPlaying = false
+                        current.expectedPosition = paused.positionMillis
+                        current.ownedPausedPosition = paused.positionMillis
+                        current.loadingFrom = null
+                        return
+                    }
+                } else if (!sameRecording(before, snapshot)) {
+                    throw PassageInterrupted(identityFailure(before, snapshot))
+                } else if (snapshot.playback == PassagePlayback.PLAYING ||
+                    snapshot.playback == PassagePlayback.PAUSED &&
+                    abs(snapshot.positionMillis - before.positionMillis) > POSITION_TOLERANCE) {
+                    // A user resumed or sought the previous recording while loading. They win.
+                    throw PassageInterrupted(playbackFailure(snapshot))
+                }
+            }
+            clock.waitMillis(POLL_MILLIS)
+        } while (clock.nowMillis() < until)
+        throw PassageInterrupted(SongPassageReason.TRACK_LOAD_TIMEOUT)
+    }
+
+    private suspend fun restoreOriginal(current: Owner, original: SongPassageSnapshot) {
+        current.restoreAttempted = true
+        if (current.switchedTrack) {
+            val before = checked(current)
+            if (before.playback != PassagePlayback.PAUSED)
+                throw PassageInterrupted(SongPassageReason.PLAYBACK_CHANGED)
+            loadTrack(current, before, original, SongPassageStage.RESTORE_TRACK)
+        }
+        val paused = checked(current)
+        if (paused.playback != PassagePlayback.PAUSED || !paused.canSeek)
+            throw PassageInterrupted(SongPassageReason.CAPABILITY_CHANGED)
+        enter(current, SongPassageStage.RESTORE_SEEK, original.positionMillis)
+        session.seekTo(original.positionMillis)
+        val restored = await(current) { it.playback == PassagePlayback.PAUSED &&
+            abs(it.positionMillis - original.positionMillis) <= POSITION_TOLERANCE }
+        if (original.playback == PassagePlayback.PLAYING) {
+            if (!restored.canPlay) throw PassageInterrupted(SongPassageReason.CAPABILITY_CHANGED)
+            checked(current)
+            current.expectedPosition = original.positionMillis
+            current.expectedAt = clock.nowMillis()
+            current.expectsPlaying = true
+            current.pendingPlay = true
+            enter(current, SongPassageStage.RESTORE_PLAY)
+            session.play()
+            val resumed = await(current) { it.playback == PassagePlayback.PLAYING }
+            if (!isConfirmedPlay(current, resumed)) throw PassageInterrupted(playbackFailure(resumed))
+            current.pendingPlay = false
+            current.expectedPosition = resumed.positionMillis
+            current.expectedAt = clock.nowMillis()
+        }
+    }
+
+    /** A failed entrance seek may recover the original song only while our target remains paused. */
+    private suspend fun recoverPausedSelection(current: Owner, original: SongPassageSnapshot,
+        reason: SongPassageReason): Boolean {
+        if (!current.switchedTrack || current.restoreAttempted || current.stopped || current.expectsPlaying ||
+            current.stage !in setOf(SongPassageStage.TRACK_LOAD, SongPassageStage.ENTRANCE_SEEK) ||
+            reason !in setOf(SongPassageReason.TRANSPORT_ERROR, SongPassageReason.CONFIRM_TIMEOUT,
+                SongPassageReason.CAPABILITY_CHANGED)) return false
+        return try {
+            val snapshot = checked(current)
+            val nearOwnedPosition = abs(snapshot.positionMillis - current.ownedPausedPosition) <= POSITION_TOLERANCE ||
+                current.diagnosticTarget?.let { abs(snapshot.positionMillis - it) <= POSITION_TOLERANCE } == true
+            if (snapshot.playback != PassagePlayback.PAUSED || !nearOwnedPosition) return false
+            restoreOriginal(current, original)
+            true
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: RuntimeException) {
+            false
         }
     }
 
@@ -329,6 +505,10 @@ internal class SpotifySongPassageController(
 
     private fun isOwnedPlaying(current: Owner, snapshot: SongPassageSnapshot): Boolean =
         snapshot.playback == PassagePlayback.PLAYING && isOnExpectedTrajectory(current, snapshot)
+
+    private fun isAtLoadedEntrance(current: Owner, snapshot: SongPassageSnapshot): Boolean =
+        snapshot.positionMillis in 0..((clock.nowMillis() - current.expectedAt).coerceAtLeast(0L) +
+            POSITION_TOLERANCE)
 
     private fun isConfirmedPlay(current: Owner, snapshot: SongPassageSnapshot): Boolean {
         // A transport command does not mean audio started immediately. The first PLAYING
@@ -409,6 +589,7 @@ internal class SpotifySongPassageController(
         const val SPOTIFY_PACKAGE = "com.spotify.music"
         const val POSITION_TOLERANCE = 1_500L
         const val CONFIRM_TIMEOUT_MILLIS = 3_000L
+        const val TRACK_LOAD_TIMEOUT_MILLIS = 5_000L
         const val POLL_MILLIS = 100L
     }
 }
@@ -436,7 +617,8 @@ internal class AndroidSpotifyPassageSession(context: Context) : SongPassageSessi
         } else 0L
         return SongPassageSnapshot(
             sessionKey = controller.sessionToken, sourcePackage = controller.packageName,
-            mediaId = metadata.getString(MediaMetadata.METADATA_KEY_MEDIA_ID),
+            mediaId = spotifySessionMediaId(metadata.getString(MediaMetadata.METADATA_KEY_MEDIA_ID),
+                metadata.getString(MediaMetadata.METADATA_KEY_MEDIA_URI)),
             title = metadata.getString(MediaMetadata.METADATA_KEY_TITLE),
             artist = metadata.getString(MediaMetadata.METADATA_KEY_ARTIST),
             durationMillis = duration, positionMillis = if (state.position < 0) -1 else state.position + advance,
@@ -448,20 +630,55 @@ internal class AndroidSpotifyPassageSession(context: Context) : SongPassageSessi
             canPause = state.actions and PlaybackState.ACTION_PAUSE != 0L,
             canPlay = state.actions and PlaybackState.ACTION_PLAY != 0L,
             canSeek = state.actions and PlaybackState.ACTION_SEEK_TO != 0L,
-            positionUpdateAgeMillis = reportAge
+            positionUpdateAgeMillis = reportAge,
+            canPrepareTrack = state.actions and (PlaybackState.ACTION_PREPARE_FROM_MEDIA_ID or
+                PlaybackState.ACTION_PREPARE_FROM_URI) != 0L,
+            canPlayTrack = state.actions and (PlaybackState.ACTION_PLAY_FROM_MEDIA_ID or
+                PlaybackState.ACTION_PLAY_FROM_URI) != 0L
         ).also { selected = it }
     }
 
-    private fun transport() = checkNotNull(controller()).also { controller ->
+    private fun transport(allowUnconfirmedDuration: Boolean = false) = checkNotNull(controller()).also { controller ->
         val expected = checkNotNull(selected)
         val metadata = checkNotNull(controller.metadata)
         check(controller.sessionToken == expected.sessionKey &&
-            metadata.getString(MediaMetadata.METADATA_KEY_MEDIA_ID) == expected.mediaId &&
+            spotifySessionMediaId(metadata.getString(MediaMetadata.METADATA_KEY_MEDIA_ID),
+                metadata.getString(MediaMetadata.METADATA_KEY_MEDIA_URI)) == expected.mediaId &&
             metadata.getString(MediaMetadata.METADATA_KEY_TITLE) == expected.title &&
             metadata.getString(MediaMetadata.METADATA_KEY_ARTIST) == expected.artist &&
-            sameReportedDuration(expected.durationMillis, metadata.getLong(MediaMetadata.METADATA_KEY_DURATION)))
+            (sameReportedDuration(expected.durationMillis, metadata.getLong(MediaMetadata.METADATA_KEY_DURATION)) ||
+                allowUnconfirmedDuration && canonicalSpotifyTrackUri(expected.mediaId) != null))
     }.transportControls
     override fun pause() { transport().pause() }
     override fun seekTo(positionMillis: Long) { transport().seekTo(positionMillis) }
     override fun play() { transport().play() }
+    override fun cancelPendingTrackLoad() { transport(allowUnconfirmedDuration = true).pause() }
+    override fun prepareFromTrackUri(uri: String): Boolean {
+        require(canonicalSpotifyTrackUri(uri) != null)
+        val transport = transport()
+        val actions = checkNotNull(controller()?.playbackState).actions
+        return when {
+            actions and PlaybackState.ACTION_PREPARE_FROM_MEDIA_ID != 0L -> {
+                transport.prepareFromMediaId(uri, null); true
+            }
+            actions and PlaybackState.ACTION_PREPARE_FROM_URI != 0L -> {
+                transport.prepareFromUri(Uri.parse(uri), null); true
+            }
+            else -> false
+        }
+    }
+    override fun playFromTrackUri(uri: String): Boolean {
+        require(canonicalSpotifyTrackUri(uri) != null)
+        val transport = transport()
+        val actions = checkNotNull(controller()?.playbackState).actions
+        return when {
+            actions and PlaybackState.ACTION_PLAY_FROM_MEDIA_ID != 0L -> {
+                transport.playFromMediaId(uri, null); true
+            }
+            actions and PlaybackState.ACTION_PLAY_FROM_URI != 0L -> {
+                transport.playFromUri(Uri.parse(uri), null); true
+            }
+            else -> false
+        }
+    }
 }
