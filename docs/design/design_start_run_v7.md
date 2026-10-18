@@ -8,6 +8,25 @@ status: CURRENT NATIVE DECISIONS plus dated prototype history; verification live
 
 # Start Run — where this screen actually is
 
+**October 18 corrected GPS Start direction — installed and checked:** Manley rejected
+the large Finding GPS interruption. The GPS Start screen quietly prepares location while visible,
+using existing precise permission. Start immediately enters the normal 3-second countdown; a weak
+or still-acquiring signal does not block it. Compact signal status replaces the readiness modal,
+20-second wait and Start anyway choice. Missing permission or disabled location still uses normal
+setup. GPS preparation stays active through map toggles, countdown and cancellation, and stops
+away from Start or before the recorder takes over. Nothing records or times a run before the
+official start. Pre-start points are never imported into the saved route.
+
+The static artwork remains default. Preparation does not open the live map or fetch its tiles.
+It uses battery while Start is visible and can improve readiness, but cannot guarantee a quick
+fix under poor satellite reception. Background/recreation cancels an unsent countdown; a
+same-session marker follows only an already-sent service start. Both replacement 632-test suites
+and all three APKs passed; all 31 unique phone checks passed across runs after a test-scheduling
+correction, preserving all 32 completed records/11-table fields/Room 14. The actual screen showed
+static artwork, available Start and small "GPS connecting…" status, with no readiness modal.
+Outdoor accuracy/pace/splits remain unverified. Earlier readiness-gate receipts are historical;
+exact current receipts live in `project_current_state.md`.
+
 **October 16 Spotify follow-up, installed after the returned run review:** the original music orb now has a deliberate
 `MUSIC / SPOTIFY` action that opens the installed Spotify app. It sends no playback command,
 starts no run and changes no observation/sharing preference. If Spotify cannot open, RunState
@@ -41,9 +60,10 @@ normal Active layout is restored too, with **View live map** / **View recorded m
 explicit options. This replaces the earlier always-visible background/Expand decision below.
 The fixed portrait Energy/footer layout, white card definition and drag cancellation remain.
 
-Only the opened Start map owns a foreground, memory-only preview listener. Close, History,
-backgrounding and changing mode stop it; opening again can reacquire. Starting from either
-screen closes/stops the preview before countdown, then the existing recorder owns the real run.
+The October 18 correction supersedes map-only acquisition: visible GPS Start and its optional
+map share one foreground, memory-only listener, retained through map toggles and countdown.
+History, Settings, backgrounding and Sample mode stop preparation. The existing recorder owns
+the official run; the foreground preview contributes no recorded points.
 During a run, hiding the map does not stop recording. No map tiles or native map renderer are
 requested by the static Start/Active views. Expanded maps show provider disclosure and linked
 OpenFreeMap/OpenMapTiles/OpenStreetMap attribution. Provider details live in `../DATA_PRIVACY.md`.

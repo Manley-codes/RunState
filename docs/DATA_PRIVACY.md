@@ -28,7 +28,7 @@ proof that a run caused a change. These calculations do not need AI and do not u
 history, split rows, aggregates or extra Energy data. Existing optional reflection sharing is
 unchanged; neither new feature adds a backend request field, provider account or permission.
 
-## Android early song study — approved October18,2026
+## Android early song study — approved October 18, 2026
 
 Manley approved an early cloud request after the first30 active seconds of a RUNNING run, with
 both frozen per-run music opt-ins, current music preferences, notification access and an unchanged
@@ -39,8 +39,14 @@ current, and weak networks may still leave a wait. The feature is locally verifi
 13→14 migration preserved all32 old records/every original field, adding only the empty claim
 table/Room identity. Silent53 checks passed/5 gated skips with no provider calls; every actual
 field matched afterward, private copies/test package were removed and normal app reopened on
-Room14. User commits/push, hosted activation and actual warm timing remain pending. No real early
-metadata request, measured speed gain or external-provider result is claimed for this feature yet.
+Room 14. Manley later committed/pushed the feature and Render deployed `afd1bb5` successfully;
+health confirmed the preparation capability. The complete controlled warm code-path check then
+passed, including an actual early metadata request, fresh final facts, one selected synthesis,
+song stop/restoration and exact-text reopen. Facts' natural completion to reflection player
+handoff measured 2,245 ms, not exact audible onset. All 32 actual saved records and inspected
+fields remained unchanged on Room 14, and private copies/test package were removed. The first
+generation failure and earlier playback failures remain recorded in `design/project_current_state.md`;
+this fixture is not genuine-run/full normal-UI proof and introduces no additional sharing scope.
 
 Room14 adds `run_song_preparations`, one claim per run. It stores the preparation UUID, selected
 title/artist, durable observation sequence, opaque destination fingerprint, claim time and status.
@@ -202,11 +208,35 @@ the street map or request its tiles. The illustration and corner tree shadows ar
 not evidence of the runner's surroundings. History's existing offline path preview remains
 separate and does not request street tiles.
 
-While the Start map is open, an eligible foreground GPS preview can use an accurate cached location no more
-than 30 minutes old, clearly labeled last known. Only a usable location whose source time is
-within 15 seconds is labeled current. The preview is memory-only: it does not create a saved
-run, route or distance before Start. It stops when the map closes, in History, in the background
-and in Sample mode, and hands off before run recording starts.
+**October 18 correction, installed and checked:** the visible GPS Start screen now
+prepares location automatically with the existing precise-location permission and location enabled.
+It requests foreground GPS updates at 1-second intervals even with the static artwork showing.
+This uses battery while Start is visible; it is not background tracking or automatic run detection.
+Opening/closing the optional map, countdown and countdown cancellation retain the same listener.
+History, Settings, backgrounding and Sample mode stop preparation, and it is removed before the
+official recorder takes over. The previous Finding GPS gate, timed wait and Start anyway choice
+are superseded: an intentional Start proceeds through countdown without waiting for signal quality.
+
+The preview stays in local memory: it creates no saved run row, route, distance or running clock,
+and sends no location to reflection/backend providers. Its points are never imported into the
+saved route. Map display can use an accurate cached location no more than 30 minutes old, clearly
+labeled last known; only a usable source fix within 15 seconds is labeled current. Static artwork
+does not initialize the map or request tiles; only an opened live map can request area resources
+as described below. Thus automatic foreground GPS preparation and map-provider network requests
+have different boundaries.
+
+Before service dispatch, backgrounding or recreation cancels an unsaved countdown and cannot
+start it later. Once the handoff has already been sent, a same-application-session marker can
+survive rotation only to track that existing handoff; it does not authorize another run. This
+correction adds no permission, provider, route-upload feature or database-schema change.
+Both replacement 632-test suites and three APKs passed. All 31 unique selected phone checks
+passed across runs after a test-only scheduling correction. Installation/checks preserved all
+32 completed records, every inspected field across 11 tables and Room 14; temporary private
+verification copies and the test package were removed. Actual Android foreground GPS registration
+was observed with no run recorder active. Normal ignored outputs under `android/app/build` were
+needed for builds/tests; no new permanent project file or schema was created. The earlier readiness
+gate's results are historical. Outdoor acquisition, distance accuracy, pace/splits and screen-off
+behavior remain unverified; receipts are in `design/project_current_state.md`.
 Missing location permission or evidence is not replaced with a fabricated position. During a
 run, the map uses the existing recorded GPS evidence; the renderer does not start a second
 location recorder.

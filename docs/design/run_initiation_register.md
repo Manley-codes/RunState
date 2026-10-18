@@ -7,6 +7,27 @@ metadata:
 
 # Run initiation register — LIVE
 
+**October 18 corrected GPS Start direction — installed and checked:** Manley rejected
+the large Finding GPS gate. With existing precise permission and location enabled, visible GPS
+Start quietly prepares a foreground location fix. Manual Start proceeds directly to the 3-second
+countdown regardless of signal quality; missing permission or a disabled provider still requires
+ordinary setup. There is no readiness modal, 20-second delay or Start anyway choice. Compact
+status communicates acquisition/weak reception without preventing an intentional start.
+
+The same listener remains through map opening/closing, countdown and its cancellation; leaving
+for History/Settings, backgrounding or Sample mode stops preparation. It stops before the official
+recorder takes over. Pre-start samples remain memory-only and never enter the recorded route;
+preparation creates no saved run or timer. Unsaved countdown intent cannot start later after
+backgrounding/recreation. The existing same-session already-sent handoff marker cannot authorize
+a duplicate start. Static artwork and the accepted music process remain. This is GPS preparation,
+not automatic start detection. It uses battery while Start is visible and guarantees no immediate
+satellite fix. Both replacement 632-test suites and three APKs passed. All 31 unique phone checks
+passed across runs after a test-scheduling correction; all 32 completed records, 11-table fields
+and Room 14 were preserved. Actual 1-second foreground GPS registration and compact Start status
+were observed. The earlier gate's 623-test/13-phone-case results are historical. Outdoor
+acquisition, distance accuracy, pace/splits and screen-off proof remain open. Exact implementation
+and receipts live in `project_current_state.md`.
+
 **October 15 opportunity emphasis:** Manley reaffirmed automatic start detection as an especially
 appealing problem-solving direction. [Runner problems and feature opportunities](runner_problems_and_feature_opportunities.md)
 captures its value and evaluation alongside music-respecting announcements. This does not change
@@ -528,6 +549,16 @@ Rejected/missing evidence, clock disagreement or a different process leaves pace
 Completion freezes the assessed coverage and metrics; History and reflection use that snapshot.
 These initial conservative limits still need real-route availability and accuracy checks; COMPLETE
 means the recording meets this policy, not independently proven distance accuracy.
+
+**October 18 correction:** exact monotonic lifecycle checkpoints determine source-fix membership
+when the current application timing session matches; legacy or mismatched-session data retains
+the conservative wall-clock fallback. Initial inaccurate acquisition fixes alone may fit within
+the existing 5-second/5% edge budget after timing validation. Later or resumed rejection, stale
+fixes, invalid fixes and a genuinely longer missing start remain disqualifying. Mock fixes are
+invalid evidence and reset the distance anchor. This does not weaken the existing gap/clock
+rules, fabricate initial distance, backfill older runs or migrate the schema. Whole-run pace and
+splits can therefore still be unavailable for PARTIAL evidence. Split interpolation around
+sub-threshold movement is deferred review, not a verified field defect or fixed behavior.
 
 **October 17 splits implementation:** Room 13 now stores a pending snapshot for future completed
 GPS runs only; old completions are not backfilled. Separate local work revalidates the accepted

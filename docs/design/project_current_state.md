@@ -5,6 +5,116 @@ metadata:
   type: project
 ---
 
+## Quiet GPS preparation and direct Start installed and checked — October 18, 2026
+
+Manley rejected the large Finding GPS interruption and the requirement to acquire a signal before
+countdown. The authorized correction prepares GPS quietly whenever the GPS Start screen is
+visible and RESUMED, with existing precise-location permission and location enabled. Start goes
+directly into the normal 3-second countdown regardless of signal quality. Missing permission or
+a disabled provider still use the ordinary setup flow. The readiness modal, 20-second wait and
+Start anyway choice are removed; compact signal feedback explains an acquiring or weak signal.
+
+One foreground listener requests updates at 1-second intervals and stays alive through opening
+or closing the optional map, countdown and countdown cancellation. It stops for background,
+History, Settings, Sample mode and before the recording service takes over. Preparation alone
+creates no run row, route, distance or timer and sends no coordinates to the backend. The existing
+static artwork remains default; map tiles are requested only by an opened live map. This trades
+some battery use while Start is visible for earlier acquisition. It cannot guarantee an immediate
+fix indoors or under poor satellite reception, and GPS reception is separate from map/network loading.
+
+Recording now uses exact monotonic start/pause/resume checkpoints when the current application
+timing session matches. A transient current-session ID connects the application/service to local
+storage; old or mismatched-session data keeps the conservative wall-clock fallback. The service
+still rejects fixes predating its listener registration. Mock fixes are recorded as invalid,
+cannot add distance/coverage and require a fresh real anchor before measured segments resume.
+
+Coverage can tolerate only initial inaccurate acquisition fixes inside the existing 5-second
+leading edge and 5% combined edge-omission limits, with validated timing. It does not excuse later,
+resumed, stale or invalid evidence. This avoids withholding pace/splits solely for a brief ordinary
+start acquisition while keeping genuine gaps visible. A longer or otherwise PARTIAL recording
+still has no trustworthy whole-run pace/splits; no missing route or distance is invented. Split
+interpolation around sub-threshold movement remains a separate review concern, not a measured
+field defect or a completed repair. No database-schema or music/reflection change is included.
+
+Final software checks passed in 52 s: 632 JVM tests each for debug and release, with zero
+failures/errors/skips, and all three APKs. The normal APK is installed on the Moto. The initial
+phone run passed 30 of 31 cases in 85.220 s device / 98.250 s host: all 14 storage-boundary cases
+and 16 of 17 UI cases. The remaining countdown-cancel/warm-listener test hit a test-clock/snapshot
+scheduling failure when a lifecycle effect ran off the main thread. The test-only correction uses
+Compose's supported StandardTestDispatcher for GPS-root tests; this keeps Room callbacks from
+triggering unconfined snapshot application on the wrong thread. Production lifecycle guards and
+assertions remain intact. The instrumentation-only rebuild took 6 s. All 14 affected cases then
+passed in 52.906 s device / 61.062 s host: 13 GPS-root cases and the status-row case with the default
+dispatcher. All 31 unique selected phone checks passed across runs, not in one clean suite.
+
+All 32 completed records, zero active runs, exact inspected fields across 11 tables and Room 14
+remained unchanged after both checks. Temporary private copies and the test package were removed,
+and the normal app reopened. Independent cleanup confirmed zero private verification folders,
+no test package and normal RunState focused/resumed. Git HEAD remained `af2ceb0`, with no staged
+or new untracked files. A
+memory-only screenshot confirmed static Start artwork, a small "GPS connecting…" status and
+available Start with no modal. Android's actual location registration showed RunState requesting
+high-accuracy 1-second GPS updates with no RunTrackingService running. This confirms foreground
+preparation registration, not a satellite-acquisition or distance-accuracy result.
+
+The older readiness-gate results below are historical and do not verify this replacement. Outdoor cold/warm
+acquisition, independently measured distance, pace/splits, pause/resume and screen-off behavior
+still need a focused real-run check before GPS can be called fully verified. Changes use existing
+source/documentation files; no Git mutation, backend/deployment change or music/cloud-provider request
+was performed. Necessary ignored APK/test outputs remain under `android/app/build`. Temporary
+`runstate-gps-check-*` folders were needed only to verify preservation of saved data and were
+removed after comparison; no new permanent source or documentation file was created.
+
+## Earlier GPS readiness gate — superseded October 18, 2026
+
+The implementation and verification below record the earlier gate that Manley subsequently
+rejected. Its Finding GPS / wait / Start anyway behavior is not the current product direction.
+
+Before this slice, Manley committed the previous Android music repair and checkpoint notes as
+`956fd26` and `af2ceb0`. The workspace was clean. Those changes needed no additional Render
+deployment; the accepted music process, voices, prompts and baseline remain unchanged.
+
+The authorized GPS change uses existing files only. Pressing Start in GPS mode first shows
+Finding GPS. By default, no countdown, official run/coordinator start, run row or timer begins
+until a fresh LIVE, non-mock fix is at most 5 seconds old with accuracy of 25 m or better. The
+explicit warned Start anyway option below is the exception. The same foreground
+preview listener stays registered through the 3-second countdown. At its end, readiness is
+checked again; a lost or stale fix returns to acquisition rather than starting an unready run.
+Preview points are never imported into the saved route.
+
+After 20 seconds without readiness, the choices are Keep waiting, Start anyway with an explicit
+warning, or Cancel. Start anyway does not bypass missing permission or a disabled location
+provider. Before service dispatch, backgrounding or recreation cancels the unsaved GPS intention;
+it cannot start later by itself. An already-sent service handoff can retain a marker through
+rotation only in the same application session, so the Activity can follow that existing handoff
+without issuing a new start. The recording service independently rejects fixes older than its exact registration
+time in elapsed-realtime nanoseconds before existing GPS policy or storage sees them.
+
+The default map stays static. GPS readiness does not require opening Live map or add a second
+recorder. Final production code passed 623 JVM tests per variant with 0 failures/errors/skips and
+all three APK builds in 30 s. Installation preserved all 32 actual saved records and every
+inspected field on Room 14.
+
+The first selected phone run passed 12 of 13 cases. The remaining pre-dispatch restoration case
+timed out because the test disabled automatic clock advancement while `StateRestorationTester`
+needed real composition disposal. The test-only correction temporarily advances the clock and
+asserts disposal/new-entry counters. Its APK rebuilt in 7 s. Both affected restoration cases then
+passed in 9.490 s device / 13.250 s host, verifying actual disposal/recreation, cancellation before
+dispatch and preservation of a single already-sent handoff. All 13 unique selected cases have now
+passed across the runs; this was not one clean 13-case run.
+
+Every actual saved field and Room 14 matched after both checks. Temporary private copies/test
+package were removed; independent cleanup confirmed zero private verification folders and no test
+package, with MainActivity in front. No real GPS run, audio/provider request, permission change,
+backend update or deployment occurred. No staging, commits or push were performed; Git was used
+read-only for verification. No new project files were created. Normal ignored outputs under
+`android/app/build` were needed for APKs, tests and reports. Temporary private copies were needed
+only to verify saved-field preservation and were removed after that comparison succeeded.
+Current files are `MainActivity.kt`, `StartRunScreen.kt`, `ForegroundGpsPreview.kt`
+and its tests, `RunTrackingService.kt`, `RunCpuWakeLeaseTest.kt`, `RunStateScreenTest.kt` and these
+existing design records. Outdoor acquisition, distance accuracy, pace/splits and screen-off field
+proof remain separate, unverified checks. The software checks do not establish field accuracy.
+
 ## Complete warm hosted code-path check passed — October 18, 2026
 
 The final actual warm normal-code-path check **passed in 46.465 s on the device / 50.469 s host**
@@ -29,8 +139,9 @@ identity guards. Four regressions cover delayed entrance/restore, outside bounds
 user seek. Final 613 JVM tests per variant passed with 0 failures/errors/skips; three APKs built in
 38 s, and installation preserved all 32 actual saved records and fields on Room 14. The existing instrumentation test
 also retains safe HTTP-category diagnostics. No new file, backend change, assistant Git or new
-deployment accompanies this repair. The existing Android repair/test diagnostics and these four
-checkpoint documents remain to commit; accepted prompts/models/voices/baseline/music gap stay intact.
+deployment accompanied this repair. Manley subsequently committed the Android repair/test
+diagnostics and checkpoint notes as `956fd26` and `af2ceb0`; no new Render deployment was needed.
+Accepted prompts/models/voices/baseline/music gap stay intact.
 
 ### Earlier warm attempts
 
