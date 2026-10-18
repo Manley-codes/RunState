@@ -120,6 +120,15 @@ final class ReflectionApiJson {
             CandidateReflections candidates,
             ReflectionHttpServer.GenerationMode generationMode
     ) {
+        return success(request, candidates, generationMode, null);
+    }
+
+    static String success(ApiRequest request, CandidateReflections candidates,
+                          ReflectionHttpServer.GenerationMode generationMode, String acknowledgedCueId) {
+        if (acknowledgedCueId != null && (request.evidence().musicContext().songCue() == null
+                || !acknowledgedCueId.equals(request.evidence().musicContext().songCue().cueId()))) {
+            throw new IllegalArgumentException("Acknowledged cue must match the request.");
+        }
         JsonObject candidateJson = new JsonObject();
         candidateJson.addProperty("spent", candidates.spent());
         candidateJson.addProperty("feeling_good", candidates.feeling_good());
@@ -130,8 +139,8 @@ final class ReflectionApiJson {
         response.addProperty("requestId", request.identifiers().requestId());
         response.addProperty("runId", request.identifiers().runId());
         response.addProperty("generationMode", generationMode.name());
-        if (request.evidence().musicContext().songCue() != null) {
-            response.addProperty("songCueId", request.evidence().musicContext().songCue().cueId());
+        if (acknowledgedCueId != null) {
+            response.addProperty("songCueId", acknowledgedCueId);
         }
         response.add("candidates", candidateJson);
         return response.toString();

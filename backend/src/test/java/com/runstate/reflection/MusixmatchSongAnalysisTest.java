@@ -33,6 +33,41 @@ class MusixmatchSongAnalysisTest {
     private static final String DUMMY_KEY = "not-a-real-key+secret=value";
 
     @Test
+    void promotedLookupChecksKnownOriginalIdsAndDoesNotStripRecordingVersions() {
+        Map<String, List<String>> originals = Map.of("460374491", List.of("Lovely Day", "Bill Withers"),
+                "176269002", List.of("Stronger", "Kanye West"), "445073103", List.of("Good as Hell", "Lizzo"),
+                "260345489", List.of("God's Plan", "Drake"));
+        for (var entry : originals.entrySet()) {
+            List<TransportRequest> calls = new ArrayList<>();
+            var client = provider(request -> {
+                calls.add(request);
+                if (calls.size() == 1) {
+                    assertEquals("/ws/1.1/track.get", request.endpoint().getPath());
+                    assertEquals(entry.getKey(), query(request).get("track_id"));
+                    JsonObject track = new JsonObject();
+                    track.addProperty("track_id", Long.parseLong(entry.getKey()));
+                    track.addProperty("track_name", entry.getValue().get(0));
+                    track.addProperty("artist_name", entry.getValue().get(1));
+                    JsonObject body = new JsonObject(); body.add("track", track);
+                    return envelope(200, body);
+                }
+                return calls.size() == 2 ? analysisResponse(materialAnalysis()) : envelope(404, new JsonObject());
+            });
+            assertEquals(entry.getKey(), client.lookupReflectionMaterial(entry.getValue().get(0),
+                    entry.getValue().get(1)).orElseThrow().providerTrackId());
+            assertEquals(3, calls.size());
+        }
+        AtomicInteger count = new AtomicInteger();
+        var client = provider(request -> {
+            count.incrementAndGet();
+            assertEquals("/ws/1.1/matcher.track.get", request.endpoint().getPath());
+            return envelope(404, new JsonObject());
+        });
+        assertTrue(client.lookupReflectionMaterial("Stronger (Live)", "Kanye West").isEmpty());
+        assertEquals(1, count.get());
+    }
+
+    @Test
     void usesDocumentedMatcherThenAnalysisWirePathsAndQueryAuthentication() {
         List<TransportRequest> requests = new ArrayList<>();
         MusixmatchSongAnalysis provider = provider(request -> {
@@ -401,6 +436,108 @@ class MusixmatchSongAnalysisTest {
         // Explicit whitelist records cannot carry the provider's matches, positions or URLs.
         assertEquals(List.of("name", "description", "categories"), Arrays.stream(EntityMaterial.class
                 .getRecordComponents()).map(java.lang.reflect.RecordComponent::getName).toList());
+    }
+
+    @Test
+    void explicitTrackIdTrialVerifiesIdentityThenReusesBoundedMaterialRequests() {
+        List<TransportRequest> requests = new ArrayList<>();
+        SongMaterial result = provider(request -> {
+            requests.add(request);
+            return switch (requests.size()) {
+                case 1 -> materialMatch();
+                case 2 -> analysisResponse(materialAnalysis());
+                default -> snippetResponse("FICTIONAL snippet text", 0, 0);
+            };
+        }).lookupMaterialByTrackId("  SUNDAY   BEST ", " surfaces ", "12345").orElseThrow();
+
+        assertAll(
+                () -> assertEquals("Sunday Best", result.trackTitle()),
+                () -> assertEquals("Surfaces", result.artistName()),
+                () -> assertEquals("12345", result.providerTrackId()),
+                () -> assertEquals(List.of("Pop", "R&B/Soul"), result.genres()),
+                () -> assertEquals("FICTIONAL snippet text", result.snippetText()),
+                () -> assertEquals(List.of("/ws/1.1/track.get", "/ws/1.1/track.lyrics.analysis.get",
+                        "/ws/1.1/track.snippet.get"), requests.stream().map(r -> r.endpoint().getPath()).toList()),
+                () -> assertTrue(requests.stream().allMatch(r ->
+                        query(r).equals(Map.of("track_id", "12345", "apikey", DUMMY_KEY))))
+        );
+    }
+
+    @Test
+    void explicitTrackIdTrialRejectsInvalidIdOrIdentityWithoutAnyRequest() {
+        AtomicInteger calls = new AtomicInteger();
+        MusixmatchSongAnalysis provider = provider(request -> {
+            calls.incrementAndGet();
+            return materialMatch();
+        });
+        for (String id : Arrays.asList(null, "", "0", "-1", "01", " 12345", "12345 ", "1.0", "1e3",
+                "123&apikey=other", "https://example.invalid/123", "10000000000000000000")) {
+            assertTrue(provider.lookupMaterialByTrackId("Sunday Best", "Surfaces", id).isEmpty());
+        }
+        assertTrue(provider.lookupMaterialByTrackId(null, "Surfaces", "12345").isEmpty());
+        assertTrue(provider.lookupMaterialByTrackId("Sunday Best", " ", "12345").isEmpty());
+        assertEquals(0, calls.get());
+    }
+
+    @Test
+    void explicitTrackIdTrialStopsBeforeAnalysisForWrongOrMissingReturnedIdentity() {
+        for (String invalidField : List.of("track_id", "track_name", "artist_name", "missing_id", "text_id")) {
+            JsonObject track = new JsonObject();
+            track.addProperty("track_id", 12345);
+            track.addProperty("track_name", "Sunday Best");
+            track.addProperty("artist_name", "Surfaces");
+            switch (invalidField) {
+                case "track_id" -> track.addProperty("track_id", 67890);
+                case "track_name" -> track.addProperty("track_name", "Sunday Best (Live)");
+                case "artist_name" -> track.addProperty("artist_name", "Surfaces feat. Another Artist");
+                case "missing_id" -> track.remove("track_id");
+                case "text_id" -> track.addProperty("track_id", "12345");
+            }
+            JsonObject body = new JsonObject();
+            body.add("track", track);
+            AtomicInteger calls = new AtomicInteger();
+            assertTrue(provider(request -> {
+                calls.incrementAndGet();
+                return envelope(200, body);
+            }).lookupMaterialByTrackId("Sunday Best", "Surfaces", "12345").isEmpty());
+            assertEquals(1, calls.get());
+        }
+    }
+
+    @Test
+    void explicitTrackIdTrialFailsClosedForMissingAnalysisAndTransportInterruption() {
+        AtomicInteger calls = new AtomicInteger();
+        assertTrue(provider(request -> calls.incrementAndGet() == 1
+                ? materialMatch() : envelope(404, new JsonObject()))
+                .lookupMaterialByTrackId("Sunday Best", "Surfaces", "12345").isEmpty());
+        assertEquals(2, calls.get());
+        assertTrue(provider(request -> null)
+                .lookupMaterialByTrackId("Sunday Best", "Surfaces", "12345").isEmpty());
+        for (int interruptedCall : List.of(1, 2, 3)) {
+            calls.set(0);
+            try {
+                assertTrue(provider(request -> {
+                    int call = calls.incrementAndGet();
+                    if (call == interruptedCall) throw new InterruptedException("secret URL");
+                    return call == 1 ? materialMatch() : analysisResponse(materialAnalysis());
+                }).lookupMaterialByTrackId("Sunday Best", "Surfaces", "12345").isEmpty());
+                assertTrue(Thread.currentThread().isInterrupted());
+                assertEquals(interruptedCall, calls.get());
+            } finally {
+                Thread.interrupted();
+            }
+        }
+        try {
+            Thread.currentThread().interrupt();
+            calls.set(0);
+            assertTrue(provider(request -> {
+                calls.incrementAndGet();
+                return materialMatch();
+            }).lookupMaterialByTrackId("Sunday Best", "Surfaces", "12345").isEmpty());
+            assertEquals(0, calls.get());
+        } finally {
+            Thread.interrupted();
+        }
     }
 
     @Test

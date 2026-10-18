@@ -28,8 +28,10 @@ import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-/** Two-call local experiment. Deliberately not a ReflectionProvider or reachable HTTP endpoint. */
+/** Shared two-call song-study and writer engine; retained trial entry points reproduce accepted auditions. */
 final class SongReflectionTrial {
+    enum CreativeApproach { AUTO, DIRECT, PERSONA_ONLY, BLEND }
+
     private static final List<String> BRANCHES = List.of("spent", "feeling_good", "powered_up", "no_selection");
     private static final Set<String> NOTE_FIELDS = Set.of("attitude", "delivery", "artist_context",
             "title_idea", "lyric_echoes", "imagery");
@@ -38,19 +40,42 @@ final class SongReflectionTrial {
     private static final Pattern NUMBER = Pattern.compile("(?<![\\p{L}\\p{N}])\\d+(?:[.:]\\d+)*(?![\\p{L}\\p{N}])");
     private static final Pattern BANNED = Pattern.compile(
             "(?i)\\b(testament|symphony|unleash\\w*|journey|fuel\\w*|crushed it|conquer\\w*|delve\\w*)\\b");
-    private final AnthropicReflectionProvider client;
+    @FunctionalInterface
+    interface SongExchange {
+        JsonObject exchange(JsonObject input, String prompt, JsonObject schema) throws ReflectionProviderException;
+    }
+    private final SongExchange exchange;
 
     SongReflectionTrial(AnthropicReflectionProvider client) {
-        this.client = java.util.Objects.requireNonNull(client);
+        this(java.util.Objects.requireNonNull(client)::exchangeForSongTrial);
+    }
+
+    SongReflectionTrial(SongExchange exchange) {
+        this.exchange = java.util.Objects.requireNonNull(exchange);
     }
 
     TrialResult generate(CompletedRunEvidence evidence, SongMaterial material) throws ReflectionProviderException {
+        return generate(evidence, material, null, CreativeApproach.AUTO);
+    }
+
+    TrialResult generate(CompletedRunEvidence evidence, SongMaterial material, PassageLanding landing)
+            throws ReflectionProviderException {
+        return generate(evidence, material, landing, CreativeApproach.AUTO);
+    }
+
+    TrialResult generate(CompletedRunEvidence evidence, SongMaterial material, PassageLanding landing,
+                         CreativeApproach approach) throws ReflectionProviderException {
+        java.util.Objects.requireNonNull(approach, "approach");
         if (evidence.musicContext().state() != MusicState.MUSIC
                 || !same(evidence.musicContext().trackTitle(), material.trackTitle())
                 || !same(evidence.musicContext().artistName(), material.artistName())) {
             throw invalid("The trial requires exact matched song material.");
         }
-        JsonObject notes = client.exchangeForSongTrial(songInput(material),
+        if (landing != null && (!same(landing.trackTitle(), material.trackTitle())
+                || !same(landing.artistName(), material.artistName()))) {
+            throw invalid("The passage landing requires exact matched song material.");
+        }
+        JsonObject notes = exchange.exchange(songInput(material),
                 prompt("song-study-trial-v1.txt"), notesSchema());
         validateNotes(notes, material);
         JsonObject facts = facts(evidence);
@@ -58,17 +83,53 @@ final class SongReflectionTrial {
         writerInput.add("run_facts", facts);
         writerInput.addProperty("song_title", material.trackTitle());
         writerInput.addProperty("artist_name", material.artistName());
+        writerInput.addProperty("creative_approach", approach.name().toLowerCase(Locale.ROOT));
         writerInput.addProperty("liner_notes_provenance", "MODEL_INTERPRETATION_NOT_RUN_EVIDENCE");
         writerInput.add("liner_notes", notes.deepCopy());
+        JsonObject context = new JsonObject();
+        context.addProperty("provenance", "MUSIXMATCH_INTERPRETATION_NOT_RUN_EVIDENCE");
+        context.add("themes", strings(material.themes().stream().map(MusixmatchSongAnalysis.ThemeMaterial::theme).toList()));
+        context.add("moods", strings(material.moods()));
+        if (material.meaningExplanation() != null) {
+            context.addProperty("meaning", material.meaningExplanation());
+        }
+        writerInput.add("song_context", context);
         writerInput.add("allowed_anchors", strings(anchors(evidence)));
-        JsonObject branches = client.exchangeForSongTrial(writerInput,
+        if (landing != null) {
+            JsonObject target = new JsonObject();
+            target.addProperty("track_title", material.trackTitle());
+            target.addProperty("artist_name", material.artistName());
+            target.addProperty("musical_moment", landing.musicalMoment());
+            target.addProperty("intended_effect", landing.intendedEffect());
+            target.addProperty("provenance", "EDITORIAL_AUDITION_DESCRIPTION_NOT_LYRICS_TIMING_OR_RUN_EVIDENCE");
+            writerInput.add("passage_landing", target);
+        }
+        JsonObject branches = exchange.exchange(writerInput,
                 prompt("song-writer-trial-v1.txt"), writerSchema(evidence));
-        List<String> warnings = validateBranches(branches, facts, evidence, notes, material);
+        List<String> warnings = validateBranches(branches, facts, evidence, notes, material, approach);
         return new TrialResult(notes, branches, new CandidateReflections(
                 branches.getAsJsonObject("spent").get("reflection").getAsString(),
                 branches.getAsJsonObject("feeling_good").get("reflection").getAsString(),
                 branches.getAsJsonObject("powered_up").get("reflection").getAsString(),
                 branches.getAsJsonObject("no_selection").get("reflection").getAsString()), warnings);
+    }
+
+    /** An editorial listening target, never a lyric source, timestamp or claim about the runner. */
+    record PassageLanding(String trackTitle, String artistName, String musicalMoment, String intendedEffect) {
+        PassageLanding {
+            if (!validLandingText(trackTitle, 200) || !validLandingText(artistName, 200)
+                    || !validLandingText(musicalMoment, 400) || !validLandingText(intendedEffect, 400)) {
+                throw new IllegalArgumentException("Invalid bounded passage landing.");
+            }
+        }
+
+        @Override
+        public String toString() { return "PassageLanding[editorialText=redacted]"; }
+    }
+
+    private static boolean validLandingText(String value, int maximum) {
+        return value != null && !value.isBlank() && value.length() <= maximum
+                && value.codePoints().noneMatch(Character::isISOControl);
     }
 
     private static JsonObject songInput(SongMaterial material) {
@@ -166,7 +227,7 @@ final class SongReflectionTrial {
     }
 
     private static List<String> validateBranches(JsonObject branches, JsonObject facts, CompletedRunEvidence evidence,
-                                         JsonObject notes, SongMaterial source)
+                                         JsonObject notes, SongMaterial source, CreativeApproach approach)
             throws ReflectionProviderException {
         exactFields(branches, Set.copyOf(BRANCHES));
         Set<String> allowedNumbers = numbers(facts.toString());
@@ -194,6 +255,12 @@ final class SongReflectionTrial {
                     .distinct().filter(words -> normalizedWords(reflection).contains(normalizedWords(words))).count();
             if (usedEchoes > 1) warnings.add(key + ":multiple_echo_matches_review_required");
             if (lead.equals("lyric_echo") && usedEchoes == 0) warnings.add(key + ":adapted_echo_review_required");
+            if (approach == CreativeApproach.PERSONA_ONLY) {
+                if (containsPhrase(reflection, source.trackTitle()) || containsPhrase(reflection, source.artistName())) {
+                    warnings.add(key + ":persona_only_identity_reference_review_required");
+                }
+                if (usedEchoes > 0) warnings.add(key + ":persona_only_lyric_echo_review_required");
+            }
             if (copiedSourceWords(reflection, source) > 8) warnings.add(key + ":source_overlap_exceeds_display_budget");
             // A numeric-token check is NOT a factual reviewer. This isolated result still needs judgment.
         }
@@ -207,6 +274,7 @@ final class SongReflectionTrial {
         List<String> passages = new ArrayList<>();
         source.themes().forEach(theme -> passages.addAll(theme.quotes()));
         if (source.snippetText() != null) passages.add(source.snippetText());
+        if (source.meaningExplanation() != null) passages.add(source.meaningExplanation());
         for (String passage : passages) {
             List<String> original = tokens(passage);
             for (int target = 0; target + 2 < words.size(); target++) {
@@ -228,6 +296,12 @@ final class SongReflectionTrial {
     }
 
     private static String normalizedWords(String text) { return " " + String.join(" ", tokens(text)) + " "; }
+
+    private static boolean containsPhrase(String text, String phrase) {
+        String quoted = Pattern.quote(phrase.strip().replaceAll("\\s+", " ")).replace(" ", "\\E\\s+\\Q");
+        return Pattern.compile("(?iu)(?<![\\p{L}\\p{N}])" + quoted + "(?![\\p{L}\\p{N}])")
+                .matcher(text).find();
+    }
 
     private static Set<String> numbers(String text) {
         Set<String> result = new HashSet<>();

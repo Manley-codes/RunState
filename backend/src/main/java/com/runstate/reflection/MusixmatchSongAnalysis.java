@@ -39,13 +39,14 @@ import java.util.concurrent.Flow;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
-/** Optional server-side analysis; only an explicit local trial can retain bounded request-only material. */
+/** Optional server-side analysis with bounded request-only song material; source text is never persisted here. */
 public final class MusixmatchSongAnalysis {
     static final int MAX_RESPONSE_BYTES = 128 * 1024;
     static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(4);
     private static final Duration CONNECTION_TIMEOUT = Duration.ofSeconds(2);
     private static final String API_ORIGIN = "https://api.musixmatch.com";
     private static final String MATCH_PATH = "/ws/1.1/matcher.track.get";
+    private static final String TRACK_PATH = "/ws/1.1/track.get";
     private static final String ANALYSIS_PATH = "/ws/1.1/track.lyrics.analysis.get";
     private static final String SNIPPET_PATH = "/ws/1.1/track.snippet.get";
     private static final int MAX_LABELS = 8;
@@ -110,8 +111,7 @@ public final class MusixmatchSongAnalysis {
     }
 
     /**
-     * Explicit local-trial lookup. Rich song material stays in memory and is never used by the
-     * ordinary reflection path. Snippets are optional lyric text, not audio or passage timing.
+     * Rich matched lookup. Song material stays only in memory for the shared song-study pipeline. Snippets are optional lyric text, not audio or passage timing.
      */
     public Optional<SongMaterial> lookupMaterial(String trackTitle, String artistName) {
         if (!validIdentity(trackTitle) || !validIdentity(artistName)
@@ -128,18 +128,7 @@ public final class MusixmatchSongAnalysis {
                 return Optional.empty();
             }
             String trackId = positiveInteger(track.get("track_id"));
-            JsonObject analysis = object(responseBody(request(ANALYSIS_PATH, "track_id=" + trackId)),
-                    "analysis");
-            List<ThemeMaterial> themes = materialThemes(analysis);
-            List<String> moods = materialMoods(analysis);
-            String meaning = optionalObjectText(analysis, "meaning", "explanation", MAX_MEANING_CHARACTERS);
-            // A matched catalog identity, entity or snippet alone does not establish usable analysis.
-            if (themes.isEmpty() && moods.isEmpty() && meaning == null) {
-                return Optional.empty();
-            }
-            return Optional.of(new SongMaterial(matchedTitle, matchedArtist, trackId,
-                    materialGenres(track), themes, moods, meaning, materialEntities(analysis),
-                    optionalSnippet(trackId)));
+            return materialFromTrack(track, matchedTitle, matchedArtist, trackId);
         } catch (InterruptedException interrupted) {
             Thread.currentThread().interrupt();
             return Optional.empty();
@@ -147,6 +136,67 @@ public final class MusixmatchSongAnalysis {
             // Never attach or log a credential-bearing transport exception or provider payload.
             return Optional.empty();
         }
+    }
+
+    /** Verify a supplied catalog ID and exact recording identity before requesting its analysis. */
+    public Optional<SongMaterial> lookupMaterialByTrackId(String trackTitle, String artistName,
+                                                        String providerTrackId) {
+        if (!validIdentity(trackTitle) || !validIdentity(artistName) || providerTrackId == null
+                || !providerTrackId.matches("[1-9][0-9]{0,18}") || Thread.currentThread().isInterrupted()) {
+            return Optional.empty();
+        }
+        try {
+            JsonObject track = object(responseBody(request(TRACK_PATH, "track_id=" + providerTrackId)), "track");
+            String matchedTitle = identity(track, "track_name");
+            String matchedArtist = identity(track, "artist_name");
+            JsonElement returnedId = track.get("track_id");
+            if (returnedId == null || !returnedId.isJsonPrimitive()
+                    || !returnedId.getAsJsonPrimitive().isNumber()
+                    || !providerTrackId.equals(returnedId.getAsBigDecimal().toBigIntegerExact().toString())
+                    || !normalize(trackTitle).equals(normalize(matchedTitle))
+                    || !normalize(artistName).equals(normalize(matchedArtist))
+                    || Thread.currentThread().isInterrupted()) {
+                return Optional.empty();
+            }
+            Optional<SongMaterial> material = materialFromTrack(track, matchedTitle, matchedArtist, providerTrackId);
+            return Thread.currentThread().isInterrupted() ? Optional.empty() : material;
+        } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
+            return Optional.empty();
+        } catch (IOException | RuntimeException unavailable) {
+            // Never attach or log a credential-bearing transport exception or provider payload.
+            return Optional.empty();
+        }
+    }
+
+    /** Known original catalog entries avoid an unavailable compilation; each returned ID/title/artist is rechecked. */
+    public Optional<SongMaterial> lookupReflectionMaterial(String trackTitle, String artistName) {
+        String title = trackTitle == null ? "" : normalize(trackTitle);
+        String artist = artistName == null ? "" : normalize(artistName);
+        String knownId = switch (title + "|" + artist) {
+            case "lovely day|bill withers" -> "460374491";
+            case "stronger|kanye west" -> "176269002";
+            case "good as hell|lizzo" -> "445073103";
+            case "god's plan|drake" -> "260345489";
+            default -> null;
+        };
+        return knownId == null ? lookupMaterial(trackTitle, artistName)
+                : lookupMaterialByTrackId(trackTitle, artistName, knownId);
+    }
+
+    private Optional<SongMaterial> materialFromTrack(JsonObject track, String matchedTitle,
+                                                    String matchedArtist, String trackId)
+            throws IOException, InterruptedException {
+        JsonObject analysis = object(responseBody(request(ANALYSIS_PATH, "track_id=" + trackId)), "analysis");
+        List<ThemeMaterial> themes = materialThemes(analysis);
+        List<String> moods = materialMoods(analysis);
+        String meaning = optionalObjectText(analysis, "meaning", "explanation", MAX_MEANING_CHARACTERS);
+        // A matched catalog identity, entity or snippet alone does not establish usable analysis.
+        if (themes.isEmpty() && moods.isEmpty() && meaning == null) {
+            return Optional.empty();
+        }
+        return Optional.of(new SongMaterial(matchedTitle, matchedArtist, trackId,
+                materialGenres(track), themes, moods, meaning, materialEntities(analysis), optionalSnippet(trackId)));
     }
 
     private String optionalSnippet(String trackId) {

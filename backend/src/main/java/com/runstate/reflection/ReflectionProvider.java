@@ -9,6 +9,21 @@ public interface ReflectionProvider {
 
     CandidateReflections generate(CompletedRunEvidence evidence) throws ReflectionProviderException;
 
+    /** Delivery metadata is an actual paired-generation result, never an echo of a client's request. */
+    default GeneratedReflections generateForDelivery(CompletedRunEvidence evidence) throws ReflectionProviderException {
+        return new GeneratedReflections(generate(evidence), null);
+    }
+
+    record GeneratedReflections(CandidateReflections candidates, String songCueId) {
+        public GeneratedReflections {
+            java.util.Objects.requireNonNull(candidates, "candidates");
+            if (songCueId != null && !songCueId.matches("[a-z0-9][a-z0-9_-]{0,79}")) {
+                throw new IllegalArgumentException("Invalid acknowledged song cue.");
+            }
+        }
+        @Override public String toString() { return "GeneratedReflections[content=redacted, paired=" + (songCueId != null) + "]"; }
+    }
+
     /** Small failure categories that callers can report without guessing from message text. */
     enum FailureType {
         CONFIGURATION,

@@ -38,6 +38,7 @@ public final class ReflectionHttpServer implements AutoCloseable {
     public static final String SPEECH_PATH = "/api/reflections/speech";
     public static final String HEALTH_PATH = "/health";
     public static final String SONG_CUE_CAPABILITY_HEADER = "X-RunState-Song-Cue";
+    public static final String SONG_STUDY_CAPABILITY_HEADER = "X-RunState-Song-Study";
     public static final String REFLECTION_VOICE_CAPABILITY_HEADER = "X-RunState-Reflection-Voice";
     public static final int MAX_REQUEST_BYTES = 64 * 1024;
     public static final int MAX_RESPONSE_BYTES = 64 * 1024;
@@ -251,6 +252,7 @@ public final class ReflectionHttpServer implements AutoCloseable {
             }
             // Liveness only: no provider call, credentials, run data, or configuration disclosure.
             exchange.getResponseHeaders().set(SONG_CUE_CAPABILITY_HEADER, "1");
+            exchange.getResponseHeaders().set(SONG_STUDY_CAPABILITY_HEADER, "1");
             if (speechProvider != null) {
                 exchange.getResponseHeaders().set(REFLECTION_VOICE_CAPABILITY_HEADER, "1");
             }
@@ -366,14 +368,14 @@ public final class ReflectionHttpServer implements AutoCloseable {
 
     private EndpointResponse callProvider(ApiRequest request) {
         try {
-            CandidateReflections candidates = provider.generate(request.evidence());
-            String body = ReflectionApiJson.success(request, candidates, generationMode);
+            ReflectionProvider.GeneratedReflections generated = provider.generateForDelivery(request.evidence());
+            String body = ReflectionApiJson.success(request, generated.candidates(), generationMode, generated.songCueId());
             if (body.getBytes(StandardCharsets.UTF_8).length > MAX_RESPONSE_BYTES) {
                 return providerFailure(FailureType.INVALID_RESPONSE);
             }
             return new EndpointResponse(
-                    200,
-                    body
+                    200, body.getBytes(StandardCharsets.UTF_8), JSON_CONTENT_TYPE,
+                    generated.songCueId() != null
             );
         } catch (ReflectionProviderException failure) {
             return providerFailure(failure.failureType());
@@ -585,6 +587,9 @@ public final class ReflectionHttpServer implements AutoCloseable {
             throws IOException {
         byte[] body = response.body();
         exchange.getResponseHeaders().set("Content-Type", response.contentType());
+        if (response.songStudyAcknowledged()) {
+            exchange.getResponseHeaders().set(SONG_STUDY_CAPABILITY_HEADER, "1");
+        }
         exchange.getResponseHeaders().set("Cache-Control", "no-store");
         exchange.getResponseHeaders().set("X-Content-Type-Options", "nosniff");
         try {
@@ -601,9 +606,12 @@ public final class ReflectionHttpServer implements AutoCloseable {
     ) {
     }
 
-    private record EndpointResponse(int status, byte[] body, String contentType) {
+    private record EndpointResponse(int status, byte[] body, String contentType, boolean songStudyAcknowledged) {
         EndpointResponse(int status, String body) {
-            this(status, body.getBytes(StandardCharsets.UTF_8), JSON_CONTENT_TYPE);
+            this(status, body.getBytes(StandardCharsets.UTF_8), JSON_CONTENT_TYPE, false);
+        }
+        EndpointResponse(int status, byte[] body, String contentType) {
+            this(status, body, contentType, false);
         }
     }
 

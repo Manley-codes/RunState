@@ -374,6 +374,47 @@ class ReflectionHttpServerTest {
     }
 
     @Test
+    void actualPairedGenerationAcknowledgementAndVersionSurviveIdempotentReplay() throws Exception {
+        AtomicInteger calls = new AtomicInteger();
+        JsonObject request = JsonParser.parseString(validRequest()).getAsJsonObject();
+        JsonObject music = request.getAsJsonObject("evidence").getAsJsonObject("musicContext");
+        music.remove("artistDescription");
+        music.addProperty("provenance", "MEDIA_SESSION_PARTIAL");
+        music.add("songCue", validSongCue());
+        ReflectionProvider paired = new ReflectionProvider() {
+            public CandidateReflections generate(CompletedRunEvidence evidence) {
+                throw new AssertionError("HTTP must use the delivery result, not infer an acknowledgement.");
+            }
+            public GeneratedReflections generateForDelivery(CompletedRunEvidence evidence) {
+                calls.incrementAndGet();
+                return new GeneratedReflections(exactCandidates(), evidence.musicContext().songCue().cueId());
+            }
+        };
+        try (ReflectionHttpServer server = start(paired)) {
+            HttpResponse<String> first = post(server, request.toString());
+            HttpResponse<String> duplicate = post(server, request.toString());
+            assertEquals(200, first.statusCode());
+            assertEquals(first.body(), duplicate.body());
+            assertEquals("controlled_cue_v1", JsonParser.parseString(first.body()).getAsJsonObject()
+                    .get("songCueId").getAsString());
+            assertEquals("1", first.headers().firstValue(ReflectionHttpServer.SONG_STUDY_CAPABILITY_HEADER).orElseThrow());
+            assertEquals("1", duplicate.headers().firstValue(ReflectionHttpServer.SONG_STUDY_CAPABILITY_HEADER).orElseThrow());
+            assertEquals(1, calls.get());
+        }
+        ReflectionProvider forged = new ReflectionProvider() {
+            public CandidateReflections generate(CompletedRunEvidence evidence) { return exactCandidates(); }
+            public GeneratedReflections generateForDelivery(CompletedRunEvidence evidence) {
+                return new GeneratedReflections(exactCandidates(), "another_cue_v1");
+            }
+        };
+        try (ReflectionHttpServer server = start(forged)) {
+            HttpResponse<String> response = post(server, request.toString());
+            assertEquals(500, response.statusCode());
+            assertFalse(response.headers().firstValue(ReflectionHttpServer.SONG_STUDY_CAPABILITY_HEADER).isPresent());
+        }
+    }
+
+    @Test
     void optionalCuratedSongCueReachesProviderAndLegacyMusicStillParses() throws Exception {
         AtomicReference<CompletedRunEvidence> captured = new AtomicReference<>();
         JsonObject request = JsonParser.parseString(validRequest()).getAsJsonObject();
@@ -387,8 +428,9 @@ class ReflectionHttpServerTest {
         })) {
             HttpResponse<String> response = post(server, request.toString());
             assertEquals(200, response.statusCode());
-            assertEquals("controlled_cue_v1", JsonParser.parseString(response.body()).getAsJsonObject()
-                    .get("songCueId").getAsString());
+            assertFalse(JsonParser.parseString(response.body()).getAsJsonObject().has("songCueId"),
+                    "A plain provider result must not echo an unacknowledged request cue.");
+            assertFalse(response.headers().firstValue(ReflectionHttpServer.SONG_STUDY_CAPABILITY_HEADER).isPresent());
             assertAll(
                     () -> assertEquals(new SongCueContext("controlled_cue_v1", SongCueSource.RUNSTATE_CURATED,
                             "Self-directed momentum", "Recognize completing this run without inventing struggle."),
@@ -1053,6 +1095,8 @@ class ReflectionHttpServerTest {
                     () -> assertEquals("{\"status\":\"ok\"}", response.body()),
                     () -> assertEquals("1", response.headers().firstValue(
                             ReflectionHttpServer.SONG_CUE_CAPABILITY_HEADER).orElseThrow()),
+                    () -> assertEquals("1", response.headers().firstValue(
+                            ReflectionHttpServer.SONG_STUDY_CAPABILITY_HEADER).orElseThrow()),
                     () -> assertEquals(0, providerCalls.get())
             );
             JsonObject oldResponse = JsonParser.parseString(post(server, validRequest()).body()).getAsJsonObject();
