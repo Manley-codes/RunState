@@ -7,6 +7,64 @@ metadata:
 
 # Music feature register — LIVE
 
+**October17 normal-app connection built locally:** the accepted two-call engine now handles
+normal music requests with separately configured Opus5.5 and unchanged, hash-pinned prompts.
+Five prepared current-song passages require actual matched source/cue/version acknowledgment.
+Source gaps keep ordinary text usable without a paired clip; no automatic song/hook selection
+claim. Both music choices, frozen evidence, cancellation and stop/restoration protections remain.
+148 backend tests,587 JVM tests per Android variant and three APK builds passed. User commits/push
+first; Render activation and a normal phone check remain. No live calls/Git/phone/deploy mutations.
+The [accepted baseline](music_reflection_accepted_baseline.md) preserves the exact recipe;
+[the development story](music_reflection_development_story.md) records how it was reached.
+
+**October17 all three range examples accepted:** After the final Lizzo replay, Manley says it was
+“so good” and all three examples are substantially better than previous versions. Preserve these
+exact text/passage pairings unchanged as accepted references for direct connection, personality
+alone and a blend. This completes the bounded range check; no additional song sweep is needed.
+Opus God's Plan pair also remains accepted as smoother and liked.
+The limited range check used Lovely Day/direct/fictional morningFeelingGood;
+Stronger/persona-only/fictional evening with unknown/unanswered Energy; Good as Hell/persona+detail/
+fictional late-morningPoweredUp. Explicit approaches are local audition controls, not a user-facing
+mode selector or production auto-selection policy. Lovely Day is accepted (“very good”). Stronger
+persona-only audio and requested replay also passed; Manley accepts it unchanged for the smooth
+reflection-to-song transition and matching vibe. Keep this short version: although he often wants
+more from a reflection, do not lengthen this one. Very short reflections are occasional variety,
+not common/default. Revised Lizzo blend audition passed35.474s/656ms with the verified original
+and48.91–53.55s passage, confirmed stop/paused-position restoration and all32 saved records/Room13/
+every inspected field unchanged. Requested identical Lizzo replay passed35.065s/657ms with the
+same restoration/data-preservation result. Temporary copies/test removed; final Lizzo pairing
+accepted after replay.
+No new cases or fresh writing for playback. Acceptance supports this creative direction; it does
+not isolate Musixmatch's or the model's contribution, prove all other branches, or complete normal
+app integration. Retain accepted God's Plan examples; cutoff polish stays parked. Exact facts,
+texts, source gaps and rejected Lizzo draft are in research.
+
+**LatestOctober17 acceptance:** Manley liked the previous Spent text when heard with the longer
+37.30–44.60s God's Plan hook/following statement. Its attitude and delivery made a connection,
+even without an explicit lyrical match. The residual cutoff is minor and parked by his request;
+focus returns to writing. Keep this exact pairing as an accepted reference, not a universal
+template or proof that the newer full-context drafts improved. Judge the complete spoken/music
+finish; do not require every reflection to mention the song or visibly explain its source.
+
+**October17 significant-passage direction:** Manley rejected the first God's Plan reflection as
+too general. A snippet should be an intentional, recognizable finish—a musical punchline—rather
+than sound like Spotify restarted the song. Very short is welcome; significance and a completed
+statement matter more than filling a fixed duration. A direct relationship to the reflection is
+preferred but not compulsory. His example of speed/distance meeting a running-related line is
+conceptual, not verified wording/timing or evidence of this fictional runner's speed.
+
+The next isolated trial supplies a matched, bounded editorial description of the incoming passage
+to the writer after the source-only song study. The writer should leave its payoff to the record,
+without announcing/explaining it or repeating its hook. This context is neither lyric text nor run
+evidence; no branch should invent achievements or force the same payoff. Actual passage selection
+and timing remain separate checks. Manley accepted the gentler voice entry; retain its320ms attack.
+
+Follow-up: the37.30–41.50s title-hook candidate was better, but bled into the following line and
+cut it off. The next7.30s candidate includes that whole statement. Writing remains generic even
+after actual full-context delivery and a shorter brief; the research notebook records rejected
+drafts and unsupported effort claims. Do not treat transport success, complete source inputs or
+the model's own fit label as creative acceptance.
+
 **October 17 creative direction:** Manley accepts the Stronger opening but still rejects the
 reflection as too similar to pre-Musixmatch replies. Strong persona is a priority; try less
 prescribed writing before adding more constraints. The actual one-pass experiment with three

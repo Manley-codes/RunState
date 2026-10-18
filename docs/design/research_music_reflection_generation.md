@@ -9,6 +9,449 @@ metadata:
 
 # Music-aware reflection generation research
 
+## Accepted process promoted to the normal request path locally — October17,2026
+
+After accepting all three range examples, Manley authorized normal-app integration and requested
+both preservation of the working recipe and a plain-English account of the development process.
+The two necessary new documents are `music_reflection_accepted_baseline.md` (exact texts/facts,
+sources, landing descriptions, models, prompts/fingerprints, audio sequence and replay limits)
+and `music_reflection_development_story.md` (experiments, mistakes, adjustments and platform roles).
+No source lyrics, provider payloads or credentials were archived. Future generated words can vary;
+the exact accepted references remain unchanged.
+
+The normal provider now reuses `SongReflectionTrial` with the same prompt bytes. Production
+selects `ANTHROPIC_SONG_WRITER_MODEL`, default `claude-opus-5-5`, for song-only study and writer;
+the ordinary model and explicit reproduction harness remain separate. Bounded original source
+context reaches the writer alongside validated notes. Production-only fact context explicitly
+preserves partial media and hourly weather; accepted fictional scenarios/prompts are unchanged.
+The former three-pass v1.8 composition is no longer the normal music path or a fallback.
+
+Four known original Musixmatch IDs are fetched and reverified; Sunday Best/other songs use exact
+matching. All five Android cue/landing definitions agree with the server. Successful matched
+generation, not request echo, produces the cue acknowledgment and POST study-version header.
+Client health negotiation plus delivery verification prevent an older/rolled-back writer from
+authorizing the new clip. Missing analysis returns ordinary readable text without paired playback.
+Invalid study/writer output and mechanical review warnings fail through existing retry; there is
+no hidden automatic rewriting. These checks remain bounds, not a semantic factual oracle.
+
+The phone freezes catalog entrance/length/version with existing evidence, requires both music
+choices and same-run PLAYING observation, and retains current-song/cancellation/stop/restoration
+controls. Earlier Sunday Best and God's Plan pairings remain available beside the three new
+references. Song ranking, arbitrary-track selection and automatic significant-hook discovery
+remain separate. Voice settings, accepted650ms gap/320ms entry and selected endpoints stay intact.
+
+Final offline verification:148 backend passed/0skips,587 JVM tests in each Android variant/0skips,
+all three APK builds passed. A read-only cross-contract review found no blocking defect after
+the five cue definitions/delivery handshake were reconciled. The Docker response budget needed
+raising from55 to95 seconds for the shared90-second music pipeline inside100-second Android
+reads; Docker CMD JSON and the deadline nesting were checked, without a container/hosted run.
+No live provider calls, phone/data changes, accounts, deployment or Git mutations occurred.
+Commit/push instructions come first; normal Render/Moto verification follows separately.
+
+## Accepted Opus reference and three-case range check — October17,2026
+
+**Final listener outcome:** after the Good as Hell replay, Manley says it was “so good” and all
+three examples are substantially better than previous versions. All three selected text/passage
+pairings are accepted unchanged: direct Lovely Day, persona-only Stronger and blended Good as
+Hell. The bounded range check is complete; preserve the exact references rather than generating
+more samples or lengthening the accepted short Stronger version. Its brevity stays occasional
+variety, not the default. This is listener acceptance of the complete pairings, not an isolated
+causal comparison of Musixmatch/model changes or proof for other branches/normal app integration.
+
+Manley accepts the Opus Spent version after replay: it sounded smoother, works and he likes it.
+Keep it as another accepted **pair**, without claiming why it sounded smoother or a universal
+model-quality win. He wants only enough additional tests to sense range: direct song connection,
+persona without song details, and persona with details, using different songs/circumstances.
+Exactly three additional cases were prepared; no open-ended song sweep or automatic replay loop.
+Residual God’s Plan endpoint polish stays parked.
+
+| Approach / song | Explicit fictional facts (Chicago) | Selected branch / candidate passage |
+| --- | --- | --- |
+| DIRECT / Lovely Day — Bill Withers | SatOct17 7:30–8:03AM,3.00mi,32active/33elapsed min,Moderate before | FeelingGood;58.03–63.90s title chorus |
+| PERSONA_ONLY / Stronger — Kanye West | WedOct14 6:20–7:05PM,4.00mi,43active/45elapsed min,starting Energy unknown | no_selection;previously auditioned0–10s opening |
+| BLEND / Good as Hell — Lizzo | SatOct17 9:10–9:40AM,2.75mi,28active/30elapsed min,Low before | PoweredUp;48.91–53.55s response before annotated gap |
+
+No Effort, historical comparison, PR, calories, route or real-weather evidence was added. These
+are controlled test runs, never saved history. The existing temporary phone test has the same
+whitelisted fact receipts, preserving facts-only first speech. Each complete four-branch set is
+generated, but only the explicitly selected conditional branch is auditioned.
+
+Implementation stays isolated: `CreativeApproach` AUTO/DIRECT/PERSONA_ONLY/BLEND reaches the writer
+only, while song study stays source-only. Persona-only title/artist/validated-echo mentions cause
+review warnings, not silent rewriting. Existing entry points default AUTO. Whitelisted manual
+run scenarios/selected branch and matching phone facts allow the three tests without new files.
+Backend156 reported:154 passed,two live skips; test APK build and diff check passed. Normal app
+writer/model/HTTP provider/production song catalog unchanged.
+
+Public/source preflight: Life Is Beautiful requested as Larry June returned the credited
+collaboration Larry June,2Chainz&TheAlchemist, with no exact solo-artist result; analysis was not
+assumed absent or silently assigned to Larry alone. Good as Hell exact445073103 has analysis200;
+Lovely Day460374491/Menagerie and Stronger176269002/Graduation also supplied material successfully.
+Spotify IDs0bRXwKfigvpKZUurwqAlEh,4fzsfWzRhPawzqhX8Qt9F3,6KgBpzTuTRPebChN0VTyzV respectively
+identify the intended originals after the Lizzo identity correction below. Public LRCLIB exact
+album metadata reports257s and160s for the new Lovely Day/Good as Hell timing candidates; these
+remain community line starts, not measured
+word endpoints. Existing Stronger opening is retained rather than restarting endpoint tuning.
+
+Actual Opus runs: Lovely Day21.229s, Stronger20.798s, initial Lizzo20.896s, each two calls. The initial
+Lizzo draft invented a door/departure/return setting and brunch, and conflated Energy with mood;
+it was rejected before audio. One automatic revised Lizzo run26.215s/two calls removed those
+claims. No handwritten text replacement. Exact selected outputs retained for auditions:
+
+- Lovely Day: “Saturday, just past eight, three miles behind you and feeling good. Some mornings
+  need a reason to face the day. You went out at seven-thirty and brought one back.”
+- Stronger: “Four miles. Wednesday. Done by five past seven. Clock out, chest out.”
+- Revised Good as Hell: “You started low and finished powered up, with twenty-eight active minutes
+  between those two answers. Go ahead, hair toss. You don't need me to name this feeling. Your
+  hype friend has it covered.”
+
+First two are plausible interpretive/figurative finishes, not proven directness/persona quality.
+The revised third uses a short musical invitation and narrator/record metaphor; it does not report
+a literal companion or measured Energy gain. All remain listener tests of selected branches,
+not certification of the other nine generated branch texts. Counts for this range slice:18
+Musixmatch requests,8 Claude requests,2 public timing lookups; no hidden generation retries.
+
+Manley confirmed readiness for Lovely Day. Its public Spotify link opened, but a native paused
+session did not appear immediately; UI hierarchy inspection failed. A temporary local screenshot
+`android/app/build/runstate-phone-check.png` was necessary to inspect Spotify’s visible controls
+and was deleted immediately. The temporary phone UI XML was also removed. The visible song was
+activated/paused, then native metadata confirmed Lovely Day/Bill Withers/Menagerie. This selects
+a different recording for the authorized test; no library/follow/playlist or volume change.
+
+First actual range audition **passed33.402s** (35.922s host invocation), with658ms handoff, matching
+fictional facts, exact generated FeelingGood text, short Lovely Day chorus and verified Spotify
+stop/original paused-position restoration with0ms error. All32 completed runs,zero active,Room13
+and every inspected stored field matched; private copies/test APK removed, normal RunState
+reopened. Manley answered “Yes, very good”: this selected direct Lovely Day pairing is accepted.
+Do not generalize that to every branch, song or deployed behavior.
+
+The second PERSONA_ONLY Stronger case then **passed32.712s** (36.078s host invocation), with656ms
+gap, matching four-mile/43active/45elapsed evening facts, exact “Clock out, chest out” reflection
+and the already auditioned opening. Confirmed stop/original paused-position restoration with0ms
+error; all32 saved records/Room13/every inspected field unchanged. Temporary copies/test APK
+removed, normal app reopened. Song-link setup needed a follow-up native metadata check to confirm
+the original Graduation recording was paused; no new screenshot or permanent file. Manley thinks
+he really likes this version and requested an identical replay before further judgment.
+
+That requested exact replay **passed32.651s** (37.125s host invocation), with656ms gap and verified
+stop/original paused-position restoration with0ms error. All32 fields/Room13 matched again; private
+copies/test package removed and normal app reopened. No fresh Musixmatch/Claude writing for either
+audition/replay. After replay, Manley accepts this short persona-only version unchanged. The smooth
+reflection-to-song transition, shared vibe and strong landing are the reasons he likes the pair.
+He would often prefer more from a reflection, but explicitly does not want this one lengthened or
+adjusted. Keep very short reflections as occasional variety rather than a common/default length;
+this acceptance does not replace the other accepted styles.
+No new permanent file, normal-app update, deployed-model change, Git or deployment mutation.
+
+For the final Lizzo setup, the initial URI6uAm7pG66O1XesXS9bpHSF resolved on the phone to an
+Ariana Grande remix/compilation, so the identity guard rejected it before any reflection played.
+The verified Spotify original6KgBpzTuTRPebChN0VTyzV then showed native Good as Hell/Lizzo/
+Cuz I Love You (Super Deluxe), paused. Only the test queue/case URI was corrected; no source
+code or production catalog changed.
+
+The final revised BLEND Lizzo audition **passed35.474s** (40.047s host invocation), with656ms
+reflection-to-song handoff, the verified original's48.91–53.55s passage and confirmed song stop/
+original paused-position restoration with0ms error. All32 completed runs,zero active,Room13 and
+every inspected database field remained unchanged. Private verification copies/test package were
+removed, normal RunState reopened. The exact prepared revised text used existing hosted cloud
+speech; no fresh Claude/Musixmatch writing. The limited three-case
+audio set is complete; do not initiate new cases. Transport success does not establish broader
+creative quality, acceptance of the other generated branches or normal-app integration.
+
+At Manley's request, the identical Lizzo replay **passed35.065s** (39.891s host invocation), with
+657ms handoff and verified song stop/original paused-position restoration with0ms error. All32
+completed records,zero active,Room13 and every inspected database field matched again. Temporary
+copies/test package removed, normal app reopened; no new Claude/Musixmatch writing or text change.
+After replay, Manley accepts the Lizzo example enthusiastically and judges all three range cases
+substantially better than the earlier reflections. No further audio, rewriting, provider call,
+normal-app change or new file is needed to record this result.
+
+## Bounded Opus pipeline comparison auditioned — October17,2026
+
+After Manley accepted the longer previous pairing and redirected focus to writing, one actual
+Opus5.5 study→writer trial used the same original Musixmatch entry, fictional run facts, short
+creative brief, branch-neutral passage description and source-copy budget. It completed21.136s
+in two Claude requests and three Musixmatch requests; no retries. All four branches were generated
+and reviewed, with no mechanical warnings. Because each model studies the song anew, this is a
+whole-pipeline comparison, **not** an isolated writer-model comparison with identical study notes.
+Normal model/account/provider settings remain unchanged; process-only model choice.
+
+The exact conditional Spent candidate, retained for a possible automatic phone audition, is:
+
+> Forty active minutes, and now you're spent. No speech required. The work is finished,
+> and the rest of this Saturday morning can be as quiet as you like.
+
+This is a plausible alternative invitation, not a measured improvement over the accepted pair.
+Other branches need care: Feeling Good generalizes about when most mornings get going; Powered Up
+uses an implicit energy-gain metaphor that must not become numeric pre/post subtraction. Do not
+promote all branches based on this Spent candidate or on the model's own fit labels. Judge truthful
+personal observation, natural spoken character and the finish with the same accepted passage;
+literal lyric/title mentions earn no automatic advantage.
+
+The generation step made no audio, phone installation/data/settings, code/new-file, Git or
+deployment change. Manley then confirmed he was ready to listen. Spotify's idle paused session
+was refreshed through the same visible recording's Play/Pause control, confirming its pause;
+temporary phone UI XML removed immediately. No song/queue/preference or global-volume change.
+
+The actual Moto exact-text Opus audition **passed37.659s** (40.375s host invocation), with658ms
+handoff, the same generic facts/custom voice/320ms entrance and unchanged37.30–44.60s passage.
+Confirmed Spotify stop and original paused-position restoration with0ms reported error; no local
+reflection fallback or instrumental substitution. All32 completed runs, zero active runs, Room13
+and every inspected database field were unchanged. Temporary private copies/test APK removed,
+normal RunState reopened. No new Musixmatch/Claude generation; only existing hosted voice synthesis.
+Listener comparison is pending, so neither model is declared better. The accepted earlier pairing
+stays the reference and residual snippet cutoff remains parked. No new permanent files/Git/deploy.
+
+Manley requested an identical replay before giving a preference. That exact-text replay
+**passed38.404s** (42.750s host invocation), with657ms gap and confirmed song stop/original
+paused-position restoration with0ms error. No fresh writing/source request. All32 saved records,
+Room13 and every inspected table field matched again; temporary copies/test APK removed and
+normal RunState reopened. Comparative listener judgment remains pending after this replay.
+
+## Seven-second pairing accepted; endpoint polish parked — October17,2026
+
+Manley now judges the **exact previous14.269s Spent reflection paired with37.30–44.60s God's
+Plan passage** good. He still heard a slight cutoff but explicitly considers it minor and wants
+to focus on writing. Keep that candidate rather than extending it again. The spoken text was:
+
+> 4.20 miles on a Saturday morning, and you finished spent. No rush to explain it,
+> nobody to convince. Just let it sit.
+
+It was replayed unchanged, not one of the newer full-context/short-brief drafts. Manley heard the
+voice's delivery/attitude meet the following musical statement and judged that combination good
+despite an indirect relationship. This supersedes the pending-quality status for this **pair**;
+it does not prove the text alone improved, that fuller context caused a gain, that every Energy
+branch fits, or that the unchanged normal app writer now uses the isolated trial.
+
+Useful calibration: assess the spoken words and selected musical response together. Direct
+lyrical matching is one useful route, not a universal requirement. Persona, delivery, contrast
+and atmosphere can provide a real connection. Do not reject every indirect line as generic before
+hearing its response, or force an artist/title mention. Unsupported factual claims remain a real
+problem regardless of taste. The previously unplayed drafts' factual failures remain recorded.
+Broader consistency and genuine-run evidence are still unverified. No new playback or provider
+request is required merely to record this acceptance.
+
+## Complete-line correction and full-context writing failure — October17,2026
+
+Manley judged the four-second God's Plan title-hook entrance **better / clear progress**, but
+heard the beginning of the following line before the cutoff. He wants that full statement to
+finish, not an arbitrary short duration. Writing still feels generic. Do not convert this into
+acceptance of the endpoint or creative quality. Gentler voice-entry acceptance remains.
+
+Reusing the existing community timings (no new timing request): title37.43–41.66, next line
+41.66–44.78, following44.78–47.87. The new timing-only candidate37.30–44.60 lasts7.30s and includes
+the following statement. These remain approximate starts, not word-end timestamps. Actual hearing
+already disproved syllable-accurate boundaries for the earlier candidate.
+
+Found a genuine input bottleneck: the writer got short study notes, not the original bounded
+Musixmatch meaning/themes/moods. The isolated writer now also receives `song_context` with those
+fields and interpretation-only provenance, keeping source quotes/snippet out of the extra context.
+Meaning is conservatively included in output source-overlap counts in case it contains lyrics.
+Three additional fake regressions verify context isolation, missing fields and overlap budgets.
+Backend153 reported:151 passed, two live skips; final short-brief resources were included in that
+last full run. No default provider/HTTP/deployed writer change.
+
+Actual God’s Plan context:3 themes,5 moods,347-character meaning,7 supporting passages. One
+bounded source audit paraphrased its particular tension as outside pressure versus dependable
+relationships/staying yourself; the run facts do not establish critics, companions or pressure.
+The passage-only restraint/assertiveness description captures delivery but not all that meaning.
+
+Three two-call Sonnet5.5 generations were reviewed before more audio:
+
+- Full-context Spent-only receipt16.115s: still a numeric recap followed by a defense of being
+  Spent. Rejected as a creative improvement, not played.
+- Same-context all-four review10.094s: now visible through opt-in `RUNSTATE_TRIAL_REVIEW_ALL`;
+  the four output texts share a conservative total8 copied-source-word display budget. Spent
+  invented maximal effort and calm/steady performance. Other branches remained generic. No
+  mechanical warning caught those semantic failures; none was played.
+- One shorter-brief experiment13.189s removed stat-heavy calibration and emphasized a specific
+  song idea meeting a real detail. Passage description became branch-neutral rather than calling
+  Spent outside its conditional branch. All four outputs still leaned on generic/run-only speech,
+  and some announced the incoming music despite the brief. Rejected; none was played. Their own
+  fit labels are not a quality verdict. No additional generation in this slice.
+
+This confirms source delivery, **not** stronger creative writing. It does not establish that
+condensed notes were the sole cause. Do not keep rerunning the same writing request or call this
+a solved reflection feature. A different writing approach/model can be considered separately;
+the current phone check reuses the previously heard14.269s trial's exact text solely to judge the
+longer song endpoint. Same fictional4.2mi/42elapsed/40active/Moderate→conditionalSpent facts; no
+branch/real-run feeling was silently substituted. This slice used10 Musixmatch requests (including
+the one-call source audit), six Claude requests, no extra timing call and no hidden model retry.
+No new permanent file, account/voice/global-volume setting, production cue, deployment or Git
+mutation. Temporary Spotify refresh snapshot is removed; a delayed pause was reconfirmed before
+starting the audition rather than assuming the immediate UI response succeeded.
+
+The actual extended timing-only audition **passed36.539s** (39.594s host invocation), with657ms
+gap, the unchanged previously heard reflection,37.30–44.60s passage and confirmed stop/original
+paused-position restoration with0ms reported error. All32 completed runs, zero active runs,
+Room13 and every inspected table field were unchanged. Temporary private copies/test package
+removed and normal RunState reopened. This is transport proof only: listener confirmation of
+the complete statement ending is pending; the new writing drafts remain rejected/unplayed.
+
+## Significant hook and passage-aware writer trial — October17,2026
+
+Manley judged the first God's Plan reflection too general and wants the song fragment to land
+like a deliberate punchline, potentially only a few seconds long, rather than resemble resumed
+normal playback. A strong recognizable passage is essential; its connection may be lyrical or
+atmospheric. He accepted the gentler voice entry. His illustrative running-related wording is not
+assumed to be a verified line from this recording, and no speed/PR fact was invented to fit it.
+
+Diagnosis: source-only study now reaches the writer, but the prior writer had no knowledge of
+which passage would follow. Added optional bounded `PassageLanding` to the isolated trial, with
+matched title/artist, editorial musical-moment/effect descriptions and explicit non-evidence
+provenance. It reaches only the writer, not the source-only study or run facts; invalid/mismatched
+cues fail before paid calls. Old two-argument path supplies no cue. Three new fake regressions
+verify isolation, identity/bounds and default behavior. Full backend150 reported:148 passed, two
+live skips. Existing test APK rebuilt with an optional expected-recording-duration guard.
+
+Official Musixmatch timing access remains403. One public [LRCLIB](https://lrclib.net/docs) lookup
+returned community synced text for exact God's Plan/Drake/Scorpion record22823,199seconds.
+No lyrics were printed or saved. Its repeated-title line starts37.43s; next line41.66s. Candidate
+audition37.30–41.50s adds a small entrance lead and ends before the next reported line. This is
+community line timing, not measured vocal offsets; Spotify's pause latency may still catch a
+syllable. The title hook is a chosen audition candidate, not automatic hook selection across songs.
+
+Using the same original Scorpion Musixmatch material and same fictional4.2mi/42elapsed/40active/
+Moderate→conditionalSpent facts, Sonnet5.5 generated all four branches in14.269s/two requests.
+No review warnings or handwritten rewriting. Exact selected output:
+
+> 4.20 miles on a Saturday morning, and you finished spent. No rush to explain it,
+> nobody to convince. Just let it sit.
+
+Its declared lead is persona, anchor distance, fit medium. The cue description frames the title
+refrain as an assured finish; it is editorial interpretation, not a divine-approval/destiny/run-speed
+claim. Listener taste and correlation remain unproven. This slice made3 Musixmatch requests,
+two Claude calls and one public timing lookup, with no hidden retries/baseline. No new permanent
+file, production writer/catalog change, account setting, deployment or Git mutation.
+
+The first actual passage-aware Moto attempt delivered both voices but failed at song admission:
+`SESSION_MISSING` after27.950s. The paused Spotify session had vanished between preflight and song
+handoff. It did not play a substitute. All32 saved runs/Room13/every inspected field stayed unchanged;
+temporary test package/private copies removed. Do not label this attempt an audio pass. The same
+song remained visible in Spotify. Codex reopened it, verified its displayed title/artist and used
+the visible Play/Pause control briefly to refresh the exact Scorpion recording, confirming PAUSED.
+No queue/track change or global volume adjustment. A temporary phone-only UI XML snapshot at
+`/sdcard/runstate-audition-ui.xml` was removed immediately after each inspection; no permanent
+local media/source file was created. The requested retry uses the exact generated text without
+new Musixmatch/Claude requests. This is a refreshed connection, not a general repair of session loss.
+
+The refreshed actual retry **passed in32.987s** (35.437s host invocation): same generic facts →
+exact new custom-voice text →660ms handoff →37.30–41.50s title-hook candidate → verified pause and
+original paused-position restoration with0ms reported error. No local-reflection or instrumental
+substitution. Expected199s recording-duration check passed. All32 completed runs, zero active,
+Room13 and every inspected table field matched before/after. Temporary private verification copies
+and test APK removed, normal RunState reopened. Voice onset acceptance is retained; user judgment
+of this specific hook endpoint and whether the new text sets it up remains pending. Transport pass
+does not establish creative improvement or a general automatic passage-selection solution.
+
+## Different-song trial: God's Plan catalog selection — October 17, 2026
+
+Manley selected and paused **God's Plan / Drake / Scorpion** on the Moto for a fresh automatic
+reflection. The first `lookupMaterial()` failed before any Claude call: Musixmatch's exact-title/
+artist matcher selected compilation ZERO REGRETS entry459785930, whose analysis returned404.
+A bounded exact catalog search found the original Scorpion entry260345489 with real analysis200.
+This is a concrete catalog-selection gap, not evidence the song lacks analysis everywhere.
+
+An explicit **local-trial-only** ID lookup now verifies the provider's returned numeric ID and
+exact normalized title/artist before analysis. The normal matcher/production writer stay unchanged;
+there is no automatic multi-entry fallback or arbitrary identity relaxation. Four fake regressions
+cover valid selection, invalid arguments without requests, mismatched/missing identity and source/
+interruption failures. Backend147 reported:145 passed, two opt-in live checks skipped. The manual
+trial accepts bounded title/artist/catalog-ID inputs, and the existing phone test accepts explicit
+custom-song identity/start/duration while retaining exact paused-session/media-ID/restore guards.
+The temporary Android test APK built successfully; no new permanent file was needed.
+
+The original entry supplied3 themes with7 supporting passages, optional snippet and song study
+material. Sonnet5.5 automatically generated all four branches in two requests/16.774s, with no
+mechanical review warnings. The selected conditional Spent reflection was:
+
+> Moderate at the start, spent at the finish, 4.20 miles done. Spent is a full finish.
+> Nothing left to steer now, just the plan and the record.
+
+These remain the same fictional4.2 miles/42 elapsed/40 active minutes, Moderate before, conditional
+Spent afterward. No handwritten rewrite or new saved run substitutes for automatic generation.
+An empty warning list is not a creativity/truth acceptance; the title connection is subtle and
+listener judgment remains necessary. Raw supporting lyrics/study prose remain out of reports/files.
+
+Both compilation and original catalog timing requests returned403 for subtitle/richsync; original
+availability flags do not establish this account's access. No checked phrase boundary was obtained.
+The first0–10s opening is explicitly a provisional listening cue, not phrase-aligned timing or an
+automatic hook/complete-sentence detector. User was told this before audio. Across the bounded
+diagnostics and trials,13 Musixmatch requests and two Claude requests were made; the initial failed
+lookup used zero Claude calls. Normal provider settings, hosted service and song catalog unchanged.
+
+The actual Moto automatic sequence **passed in43.539s** (47.922s host invocation), using this exact
+generated text: generic fictional facts → existing custom cloud voice with320ms amplitude attack
+→657ms handoff gap → provisional0–10s opening → verified Spotify pause/restore with0ms reported
+position error. No local-voice or instrumental substitution occurred. Room13, all32 completed runs,
+zero active runs and every inspected database table field matched before/after. Private verification
+copies under ignored `android/app/build/runstate-audition-*` and temporary test package were removed;
+normal RunState reopened. No saved run/preferences, new permanent file, Git or deployment mutation.
+User feedback on song specificity, gentler entrance and whether the endpoint cuts a line is pending.
+
+## Listener judgment and small audio refinement — October 17, 2026
+
+After the replay, Manley called the new reflection **much better**. He did not judge the
+correlation especially strong but does not want that to stall progress. He requests a softer,
+more introductory entrance for the custom voice (low priority if lengthy) and a short passage
+that ends on a complete statement. He confirmed this Stronger cutoff interrupted Kanye's line.
+
+Codex implemented a bounded client-side amplitude entrance: the individual reflection MP3 player
+ramps from0.68 through0.90 to1.0 over320ms using Android's per-player VolumeShaper. It does not
+change text, artist persona, saved ElevenLabs settings, facts speech or system/Spotify volume.
+This is an amplitude adjustment, not a claim of newly directed prosody. More sophisticated vocal
+delivery remains later if this small change is insufficient. The existing sequence/gap is retained.
+[Android's envelope documentation](https://developer.android.com/media/platform/volumeshaper)
+describes the scoped mechanism; [ElevenLabs request documentation](https://elevenlabs.io/docs/api-reference/text-to-speech/convert)
+was checked, but no synthesis override/model/voice/account change was made.
+
+A concrete Spotify timing error was also repaired: the selected passage now ends against its
+absolute song endpoint rather than extending after delayed PLAYING confirmation. Its10s wall cap,
+recording identity/clock checks, cancellation and verified pause/restoration remain. Early position
+reports may still hit the safety cap first; external pause latency is not sample-accurate control.
+This provides better timing for curated endpoints, not automatic phrase comprehension. The existing
+audition now accepts an explicit bounded duration; the proposed0–9s Stronger check remains unplayed
+and provisional because Manley chose to test a different song next. Do not guess an approved cue.
+
+Verification:579 JVM cases per variant and all APK builds passed. The phone update also installs
+the already committed GPS/splits/Energy work. Actual Room12→13 preserved all32 original run records
+and all inspected old-table values; new split tables were empty.17 silent phone checks passed and4
+live checks were gated off, with old data still unchanged afterward. Temporary copies/test package
+were removed. No new permanent source/media file, provider/AI call, deployment or Git mutation.
+Next: read the user's newly paused song, obtain its actual analysis if available, generate a fresh
+automatic reflection and check the softer entrance/complete-phrase endpoint by ear. Keep missing
+analysis honest and do not repeat an arbitrary10s cutoff as if it were phrase-aligned.
+
+## Exact new trial heard on Moto and replayed — October 17, 2026
+
+After the grouped-commit discussion, Manley explicitly asked to hear the new trial on the phone,
+connected/unlocked the Moto and refreshed the original Stronger recording to a paused session.
+The existing supplied-text audition used the **exact previously generated Sonnet5.5 Spent text**,
+without another Anthropic/Musixmatch request or a handwritten substitute. Fictional facts remain
+4.2 miles,42 elapsed/40 active minutes; facts voice, selected custom reflection voice, the existing
+650ms gap and Stronger's accepted0–10s opening are unchanged.
+
+The first actual check **passed in43.998s**, with a657ms reflection-completion-to-controller
+handoff and confirmed stop/restoration to the original paused position with zero reported error.
+Manley requested an identical replay rather than giving a quality verdict. That replay **passed
+in43.882s**, with a658ms handoff and zero reported restoration error. These are delivery checks,
+not measured seek-to-audible latencies or listener acceptance of writing/flow. His impression
+after the replay remains pending.
+
+Only the compatible temporary test APK was installed; the normal app was not updated and remains
+Room12. Each preflight found32 completed runs and zero active runs. Private before/after reads
+compared every stored field in the inspected main-database tables and matched exactly for both
+checks; run counts and schema were unchanged. Temporary main/WAL/SHM verification copies under
+`android/app/build/runstate-audition-*` and both temporary test installations were removed, and
+normal RunState was reopened. No new permanent source/media file, preference/permission change,
+saved run, production writer update, account configuration, deployment or Git mutation occurred.
+The existing hosted speech path was used; no provider credential was displayed or copied out.
+
+Manley clarified he wants PowerShell commands so he performs routine commits/pushes himself.
+The four commits already created were verified to use his configured author and committer with
+no AI attribution. Do not infer a future instruction to execute commits from a general request
+to prepare them. Remote push status was not independently checked during this phone audition.
+
 ## Rebuild handoff assessed and isolated trial built — October 17, 2026
 
 Manley supplied Claude's October 17 handoff, agrees with most of its direction and explicitly

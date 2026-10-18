@@ -30,6 +30,32 @@ unchanged; neither new feature adds a backend request field, provider account or
 
 ## Local experimental song study — October 17, 2026
 
+**Later October 17 — normal-app integration built locally:** Manley accepted the three selected
+listening examples and authorized connecting the same song-study/writer process to the app.
+The normal provider now requests bounded matched material even for supported curated songs:
+meaning, themes with supporting passages, moods, genres, whitelisted entities and an optional
+text snippet. Musixmatch receives only song identity/catalog lookup data, never run facts,
+coordinates, Energy, run IDs or a listening-history list. The first Anthropic call receives
+song-only material; the second receives bounded original song context, validated interpretive
+notes and the already approved completed-run evidence. Partial media and hourly weather retain
+their provenance. This supersedes the older label-only/no-curated-lookup description below.
+
+Raw provider material and study notes remain request-scoped and are neither returned in the app
+response nor saved in Room or logs. The existing four final candidate texts and frozen request
+continue to use the phone's existing reflection persistence. This makes no claim about retention
+by external providers. No new phone permission or provider key is added to Android. Both music
+choices and an eligible same-run PLAYING observation remain required. A server-confirmed matching
+cue and writer-version response are necessary before the new local passage can play; unavailable
+analysis may return ordinary readable text without a clip. Restart never automatically replays
+music. Five curated entrances do not establish whole-catalog song/hook selection.
+
+This integration is local source, not a new deployment or completed normal-phone verification.
+No live provider request or phone data change occurred during integration. The exact accepted
+reference and development story are in `docs/design/music_reflection_accepted_baseline.md` and
+`docs/design/music_reflection_development_story.md`.
+
+**Earlier isolated trial (historical):**
+
 The explicitly invoked `SongReflectionTrialTest` main harness is separate from the phone and
 hosted reflection path. It can request one matched song's bounded supporting theme passages,
 meaning, moods, genre, whitelisted entity descriptions and optional text snippet from Musixmatch.
