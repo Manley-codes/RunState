@@ -30,8 +30,20 @@ facts announcement. That change passed software and silent phone checks and is i
 studies one opted-in song after30 active seconds, then uses fresh final run facts at completion.
 It can incur charges even for discarded work, and the prepared song may no longer be current
 for the short playback. The Room14 upgrade preserved all32 old records/fields and created no
-historical preparation claims. Commits/push, hosted activation and actual warm timing still
-come next; no shorter wait has been measured yet.
+historical preparation claims. Manley committed/pushed the update, and Render deployed`afd1bb5`
+successfully on October18 with the new preparation capability confirmed by health. The first
+warm attempt prepared the song but failed final generation before voice, with its cause still
+unclassified. On a controlled retry, the reflection and custom voice worked; facts finishing
+to player handoff took about3.17seconds, which is not exact audible onset. Manley said, "The wait
+felt acceptable." The song entrance then failed a separate position guard and was paused safely.
+A bounded change let the first confirmed PLAYING report establish its starting point once,
+inside the original short admission window, while keeping the later playback/identity guards.
+The next complete warm check passed: early study, fresh reflection, custom voice, short song,
+stop/restoration and exact-text reopen. Facts finishing to player handoff was about 2.25 seconds;
+that is not an exact audible-onset measurement or a new wording rating. All 32 real saved runs
+and fields stayed unchanged on Room 14. Private verification folders and the test package were
+confirmed removed. This controlled fixture proves the code-path sequence;
+genuine runs and the full normal screen journey still need their own checks.
 
 ## The early experiments established the idea
 

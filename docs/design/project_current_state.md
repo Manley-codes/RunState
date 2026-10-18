@@ -5,7 +5,53 @@ metadata:
   type: project
 ---
 
-## Early song study verified and installed; hosted activation pending — October18,2026
+## Complete warm hosted code-path check passed — October 18, 2026
+
+The final actual warm normal-code-path check **passed in 46.465 s on the device / 50.469 s host**
+after the bounded Spotify admission repair. Early preparation took 6,120 ms, final generation
+13,043 ms, facts 13,001 ms and one reused synthesis 2,742 ms. Synthesis started before facts
+completed. Facts' natural finish to reflection player handoff measured 2,245 ms, not exact
+audible onset; reflection to song measured 657 ms. The preceding retry's 3,169 ms wait was explicitly acceptable to Manley;
+this latest transport pass does not add a new subjective rating of the generated wording.
+
+Every stage completed: matched cue/study acknowledgement, exact selected-text persistence,
+one final request/one synthesis, custom reflection voice, natural song stop and exact original
+paused-recording/position restoration. A recreated coordinator reopened the same text without
+regeneration or automatic replay. All 32 actual saved records, every inspected field and Room 14
+were unchanged; private copies/test package were removed. Independent cleanup verification found
+zero private verification folders and no test package. This is a controlled fictional-run fixture
+through real hosted/client/storage/audio paths, not a genuine GPS run or full normal-UI proof.
+
+The repair is confined to `SpotifySongPassage.kt` and its existing JVM test: the first PLAYING
+snapshot can re-anchor once inside the unchanged 3-second admission window, also when restoring
+prior playback. It does not expand ongoing-play tolerance, change the endpoint or weaken source/
+identity guards. Four regressions cover delayed entrance/restore, outside bounds and subsequent
+user seek. Final 613 JVM tests per variant passed with 0 failures/errors/skips; three APKs built in
+38 s, and installation preserved all 32 actual saved records and fields on Room 14. The existing instrumentation test
+also retains safe HTTP-category diagnostics. No new file, backend change, assistant Git or new
+deployment accompanies this repair. The existing Android repair/test diagnostics and these four
+checkpoint documents remain to commit; accepted prompts/models/voices/baseline/music gap stay intact.
+
+### Earlier warm attempts
+
+The first actual warm check returned preparationREADY in7577ms, then final generation failed
+after15887ms before voice. Its cause remains unclassified. A read-only backend audit found no
+deterministic warm-cache defect; this is not a diagnosis of the intermittent failure. The existing
+test gained a bounded HTTP-category whitelist for future diagnosis and rebuilt in12s; no backend
+source change was made for that investigation.
+
+The controlled retry returned preparation in6449ms and final generation in14196ms. Facts lasted
+13585ms, with one3306ms speech synthesis reused. Facts' natural finish to reflection player
+handoff measured3169ms; this is not an exact audible-onset measurement. Manley explicitly said,
+"The wait felt acceptable." Reflection and custom voice passed on this retry.
+
+The full sequence still **failed** separately at Spotify ENTRANCE_PLAY: POSITION_DRIFT−1873ms
+at2585ms, snapshot age0ms and duration delta+1ms. Cleanup sent Pause in8ms. At that point neither
+successful voice nor acceptable wait was a full warm-journey pass; the later bounded repair and
+passing check are recorded above.
+Both attempts preserved all32 actual saved records/every inspected field/Room14; private copies
+and test package were removed. Source/writer/voices/the650ms song pause and accepted baseline
+remain unchanged. No new files or assistant Git mutation were needed to document these results.
 
 Manley approved preparing song context during the run after being told that this can incur AI
 charges even for a discarded run, pin an earlier song instead of the last one, skip the snippet
@@ -42,7 +88,7 @@ generated `android/app/schemas/com.runstate.mobile.data.local.RunStateDatabase/1
 The additive13→14 migration leaves old fields intact and creates no historical claims; exported
 schemas1–13 remain unchanged.
 
-Final software proof:160 backend tests passed with0 failures/errors/skips after the last source
+Initial early-study software proof:160 backend tests passed with0 failures/errors/skips after the last source
 edit; application JAR was packaged and inspected for the prepared-study classes and frozen prompt
 resources. Standard Maven packaging downloaded its jar-plugin dependencies into ignored
 `backend/.m2`; the generated application JAR lives under ignored `backend/target`. Both Android
@@ -55,10 +101,12 @@ checks, all5 music DAO checks and32 selected voice/Completion checks. It made no
 All actual database fields matched after testing; private copies and test package were removed,
 normal RunState reopened on Room14, and cleanup was independently verified empty.
 
-Both remote branch tips still point to2f3e77c. Manley's three grouped commits/push, deliberate
-master promotion, Render deployment and one gated warm timing check remain. No actual early
-provider request, faster measured delivery, new hosted activation or assistant Git mutation is
-claimed. The warm check's `allowRealSongPreparation=yes` gate remains off in ordinary silent tests.
+Manley committed/pushed the three groups `9fbb5d9`, `16dd071` and `afd1bb5`. Root verified Render
+deployment `dep-dba5vmgm7kps73fk0rug` succeeded/Live at`afd1bb5` in55.0s on October18. Independent
+public health returned200 with Song-Preparation1,Song-Cue1,Song-Study1 and Reflection-Voice1.
+The actual warm attempts are recorded above; deployment/health alone did not establish their
+provider behavior or timing. No assistant Git mutation, new file or provider/phone call was needed
+to record the deployment. `allowRealSongPreparation=yes` remains off in ordinary silent tests.
 
 ## Hosted activation and complete isolated-fixture sequence verified — October17–18,2026
 

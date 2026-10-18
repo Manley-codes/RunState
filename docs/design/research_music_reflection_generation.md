@@ -9,7 +9,53 @@ metadata:
 
 # Music-aware reflection generation research
 
-## Early cloud study approved and implemented locally — October18,2026
+## Complete warm code-path check passed after bounded entrance repair — October 18, 2026
+
+Final actual warm check **passed in 46.465 s on the device / 50.469 s host**. Preparation took
+6,120 ms, final writer request 13,043 ms, facts 13,001 ms and one synthesis 2,742 ms, started
+before facts naturally finished. Facts' natural completion → reflection player handoff measured
+2,245 ms, which is not exact audible onset. Reflection → song measured 657 ms. This is a complete controlled-fixture transport/code-path
+pass, not a genuine outdoor run, full normal-UI proof or a new subjective verdict on its wording.
+Manley's earlier 3,169 ms retry wait remains explicitly accepted.
+
+The exact selected text was persisted with matching cue/study acknowledgement. One final request
+and one synthesis led through custom speech, natural passage stop and exact original paused
+recording/position restoration. Recreated coordinator reopened exact text with no regeneration
+or automatic replay. All 32 actual saved records, every inspected field and Room 14 were unchanged;
+temporary private copies/test package were removed. Independent cleanup verification confirmed
+zero private verification folders and no test package.
+
+The existing player now allows its first PLAYING snapshot to re-anchor once inside the original
+3-second entrance window, including playback restoration. No wider ongoing tolerance, endpoint
+change or weaker identity/source check was added. Four regressions cover delayed entrance and
+restore, outside-window admission and subsequent user seek. Both variants passed 613 JVM tests
+with 0 failures/errors/skips; three APKs built in 38 s and installation preserved all actual fields.
+Only existing player/test/instrumentation diagnostics and four checkpoint docs changed; no new
+file, assistant Git, backend update or deployment. Accepted source/writer/prompts/models/voices/
+650 ms musical handoff and exact baseline stay unchanged. Earlier failures are preserved below.
+
+## Earlier warm retry wait accepted; separate Spotify failure — October18,2026
+
+First actual attempt: early preparation returnedREADY in7577ms; final generation failed15887ms
+later, before voice. The cause is unclassified. Read-only backend inspection identified no
+deterministic cache bug, without ruling out an intermittent provider/transport problem. A fixed
+HTTP-category whitelist was added only to the existing test for future diagnosis; its build
+passed12s, with no backend source change for this investigation.
+
+Controlled retry: preparation6449ms, final generation14196ms, facts13585ms and one3306ms speech
+synthesis. Facts' natural completion to reflection player handoff measured3169ms, not exact
+audible onset. Manley said **"The wait felt acceptable."** The new reflection and custom voice
+passed. This is acceptance of the wait on this retry, not a broad latency guarantee or full pass.
+
+Full sequenceFAILED separately at Spotify ENTRANCE_PLAY with POSITION_DRIFT−1873ms at2585ms.
+The snapshot was fresh(age0ms), duration delta+1ms, and protective Pause was sent in8ms. Playback
+repair was still pending at this point; neither this attempt nor the initial generation failure
+was a full warm pass. The later repair/pass is above. Both attempts
+left all32 actual saved records/every inspected field/Room14 unchanged. Temporary private copies
+and test package were removed. Source/writer, voices,650ms song gap and accepted baseline are
+unchanged; documenting the result creates no new file or Git mutation.
+
+## Early cloud study deployed — October18,2026
 
 After the small voice-preparation change left the wait too long, Manley approved moving song
 understanding into the active run. The disclosed costs are real early AI usage even when a run
@@ -46,9 +92,12 @@ adding only the expected empty claim table/Room identity. Silent verification pa
 5 gated skips (58 discovered),44.350s device/49.750s host:21 migration,5 music DAO and32 selected
 voice/Completion checks. No provider calls occurred. All actual fields matched after checks;
 private copies/test package were removed and normal app reopened on Room14. New early-study
-requests have not been exercised against the live service. User commits/push/master promotion,
-Render activation and the gated warm timing check remain pending. The preceding596-test release/
-music-only probe is historical and does not establish this feature's speed or live behavior.
+requests were first exercised in the warm attempts above. Manley committed/pushed9fbb5d9,
+16dd071 andafd1bb5. Render deployment dep-dba5vmgm7kps73fk0rug succeeded/Live atafd1bb5 in55.0s
+on October18. Independent public health returned200 with Preparation1,Cue1,Study1 and Voice1.
+Deployment/health alone is not an early-provider receipt or speed proof; the measured partial
+outcomes above are separate. The preceding596-test release/music-only probe is historical. No accepted
+prompt/baseline, provider/phone call, new file or assistant Git mutation accompanies this note.
 
 ## Hosted activation and complete isolated-fixture device check — October17–18,2026
 
