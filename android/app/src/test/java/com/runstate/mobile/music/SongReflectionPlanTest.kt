@@ -77,4 +77,40 @@ class SongReflectionPlanTest {
             assertTrue(song.durationMillis in 1_000..10_000)
         }
     }
+
+    @Test fun acceptedPassagesFreezeTheirIndividualEntrancesAndStudyWriterRequirement() {
+        val accepted = listOf(
+            Triple("Lovely Day" to "Bill Withers", "lovely_day_bill_withers_v1", 58_030L to 5_870L),
+            Triple("Stronger" to "Kanye West", "stronger_kanye_west_v1", 0L to 10_000L),
+            Triple("Good as Hell" to "Lizzo", "good_as_hell_lizzo_v1", 48_910L to 4_640L),
+            Triple("God's Plan" to "Drake", "gods_plan_drake_v1", 37_300L to 7_300L)
+        )
+        for ((identity, cueId, timing) in accepted) {
+            val report = observation().copy(title = identity.first, artist = identity.second)
+            val evidence = reflectionRequestFromSavedRun(requestId, run, emptyList(), listOf(report)).evidence
+            val restored = Gson().fromJson(Gson().toJson(evidence), CompletedRunEvidence::class.java)
+            val plan = requireNotNull(restored.songPassage)
+            assertEquals(cueId, restored.musicContext.songCue?.cueId)
+            assertEquals(cueId, plan.cueId)
+            assertEquals(identity.first, plan.trackTitle)
+            assertEquals(identity.second, plan.artistName)
+            assertEquals(timing.first, plan.startPositionMillis)
+            assertEquals(timing.second, plan.durationMillis)
+            assertEquals(1, plan.songStudyVersion)
+        }
+        assertEquals(reflectionSongCatalog.size, reflectionSongCatalog.map { it.cue.cueId }.distinct().size)
+    }
+
+    @Test fun acceptedOriginalsDoNotSilentlyMatchLiveRemixOrAdditionalArtistCredits() {
+        for (song in reflectionSongCatalog.filter { it.songStudyVersion == 1 }) {
+            val rejected = listOf(
+                observation().copy(title = "${song.title} (Live)", artist = song.artist),
+                observation().copy(title = "${song.title} - Remix", artist = song.artist),
+                observation().copy(title = song.title, artist = "${song.artist}, Another Artist")
+            )
+            for (report in rejected) assertNull(selectSongReflectionPlan(run, 61_000, listOf(report)))
+            assertNull(selectSongReflectionPlan(run.copy(musicReflectionSharingAllowed = false),
+                61_000, listOf(observation().copy(title = song.title, artist = song.artist))))
+        }
+    }
 }

@@ -233,34 +233,42 @@ internal class HostedReflectionHttpClient(
     private val connectionFactory: (URL) -> HttpURLConnection = { it.openConnection() as HttpURLConnection },
     private val gson: Gson = GsonBuilder().serializeNulls().create()
 ) : ReflectionGateway {
-    private var songCueSupported: Boolean? = null
+    private data class SongCapabilities(val editorialCue: Boolean, val studyVersion: Int)
+    private var songCapabilities: SongCapabilities? = null
 
     override suspend fun request(request: ReflectionApiRequest): ReflectionCandidates = withContext(Dispatchers.IO) {
-        val sendCue = request.evidence.musicContext.songCue != null && supportsSongCue()
+        val sendCue = request.evidence.musicContext.songCue != null &&
+            supportsSongCue(request.evidence.songPassage?.songStudyVersion ?: 0)
         postReflectionRequest(URL(config.endpoint), request, gson, connectionFactory, config.accessCode, sendCue)
     }
 
     /** A cheap, credential-free capability check keeps the currently deployed strict server usable. */
-    private fun supportsSongCue(): Boolean {
-        songCueSupported?.let { return it }
+    private fun supportsSongCue(requiredStudyVersion: Int): Boolean {
+        fun SongCapabilities.supports() = editorialCue && studyVersion >= requiredStudyVersion
+        songCapabilities?.let { return it.supports() }
         var connection: HttpURLConnection? = null
         val supported = try {
             connection = connectionFactory(URL(URL(config.endpoint), "/health"))
-            if (connection !is HttpsURLConnection) false else {
+            if (connection !is HttpsURLConnection) null else {
                 connection.requestMethod = "GET"
                 connection.instanceFollowRedirects = false
                 connection.connectTimeout = 2_000
                 connection.readTimeout = 2_000
                 val response = connection.responseCode
-                val ready = response == HttpURLConnection.HTTP_OK &&
-                    connection.getHeaderField("X-RunState-Song-Cue") == "1"
+                val ready = if (response == HttpURLConnection.HTTP_OK) SongCapabilities(
+                    editorialCue = connection.getHeaderField("X-RunState-Song-Cue") == "1",
+                    studyVersion = connection.getHeaderField("X-RunState-Song-Study")?.toIntOrNull()
+                        ?.takeIf { it >= 0 } ?: 0
+                ) else null
                 try { connection.inputStream?.close() } catch (_: Exception) { }
                 ready
             }
-        } catch (_: Exception) { false }
+        } catch (_: Exception) { null }
         finally { try { connection?.disconnect() } catch (_: RuntimeException) { } }
-        songCueSupported = supported
-        return supported
+        // Do not pin an older/deploying server's missing study capability for this process.
+        // A later explicit retry can discover the deployment without changing frozen evidence.
+        if (supported?.studyVersion?.let { it >= 1 } == true) songCapabilities = supported
+        return supported?.supports() == true
     }
 }
 
@@ -309,7 +317,7 @@ private suspend fun postReflectionRequest(
             )
         }
         val responseBody = connection.inputStream.use { readBoundedUtf8(it, hosted) }
-        if (hosted) {
+        val parsed = if (hosted) {
             try {
                 parseReflectionResponse(responseBody, request.requestId, request.runId, expectedCueId)
             } catch (invalid: ReflectionBridgeException) {
@@ -318,6 +326,14 @@ private suspend fun postReflectionRequest(
         } else {
             parseReflectionResponse(responseBody, request.requestId, request.runId, expectedCueId)
         }
+        val requiredStudyVersion = request.evidence.songPassage?.songStudyVersion ?: 0
+        val deliveredStudyVersion = connection.getHeaderField("X-RunState-Song-Study")
+            ?.toIntOrNull() ?: 0
+        // Bind a new cue to this delivery, not just an earlier health check. A rolling
+        // deployment or rollback may otherwise leave an older server echoing a new cue ID.
+        if (parsed.songCueId != null && requiredStudyVersion > deliveredStudyVersion) {
+            parsed.copy(songCueId = null)
+        } else parsed
     } catch (known: ReflectionBridgeException) {
         throw known
     } catch (cancelled: CancellationException) {
@@ -356,8 +372,8 @@ private fun readBoundedUtf8(input: InputStream, hosted: Boolean): String {
 }
 
 private const val CONNECT_TIMEOUT_MILLIS = 3_000
-// Anthropic's backend request can legitimately run for up to 45 seconds.
-private const val READ_TIMEOUT_MILLIS = 60_000
+// The source lookup and two sequential study/writer calls share the backend's 90-second budget.
+private const val READ_TIMEOUT_MILLIS = 100_000
 private const val MAX_RESPONSE_BYTES = 64 * 1_024
 
 /** Rejects any response that cannot be tied exactly to the request and four branches. */
@@ -411,7 +427,8 @@ internal fun parseReflectionResponse(
                 seen.size == if (songCueId == null) 4 else 5) {
                 "The local reflection response was invalid."
             }
-            require(songCueId == expectedCueId) { "The reflection song pairing was not acknowledged." }
+            // A missing acknowledgement is an ordinary reflection fallback. It must remain
+            // readable, but the coordinator will not attach this request's optional song clip.
             require(requestId == expectedRequestId && runId == expectedRunId) {
                 "Reflection response identifiers do not match the request."
             }

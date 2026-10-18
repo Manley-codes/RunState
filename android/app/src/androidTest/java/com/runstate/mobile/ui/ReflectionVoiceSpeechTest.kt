@@ -167,12 +167,35 @@ class ReflectionVoiceSpeechTest {
         var speaker: AndroidReflectionSpeaker? = null
         try {
             val scenario = arguments.getString("musicScenario") ?: "sunday_best"
-            require(scenario == "sunday_best" || scenario == "stronger")
+            require(scenario in setOf("sunday_best", "stronger", "custom"))
+            val runScenario = arguments.getString("runScenario") ?: "standard"
+            require(runScenario in setOf("standard", "morning_feeling_good", "evening_no_selection", "late_morning_powered_up"))
             val stronger = scenario == "stronger"
-            val title = if (stronger) "Stronger" else "Sunday Best"
-            val artist = if (stronger) "Kanye West" else "Surfaces"
+            val custom = scenario == "custom"
+            fun suppliedIdentity(key: String): String {
+                val encodedIdentity = requireNotNull(arguments.getString(key))
+                require(encodedIdentity.length in 1..1_200)
+                val identity = StandardCharsets.UTF_8.newDecoder()
+                    .onMalformedInput(CodingErrorAction.REPORT)
+                    .onUnmappableCharacter(CodingErrorAction.REPORT)
+                    .decode(ByteBuffer.wrap(Base64.getUrlDecoder().decode(encodedIdentity))).toString()
+                require(identity.isNotBlank() && identity.length <= 200 && identity.none { it.isISOControl() })
+                return identity
+            }
+            val title = if (custom) suppliedIdentity("songTitleBase64") else if (stronger) "Stronger" else "Sunday Best"
+            val artist = if (custom) suppliedIdentity("songArtistBase64") else if (stronger) "Kanye West" else "Surfaces"
             // Manley requested comparing Stronger's opening with the previous 24-second entrance.
-            val passageStart = if (stronger) 0L else 15_500L
+            val passageStart = if (custom) requireNotNull(arguments.getString("passageStartMillis")?.toLongOrNull())
+                else if (stronger) 0L else 15_500L
+            require(passageStart in 0L..86_400_000L)
+            // An explicit audition can check a complete-phrase ending without changing the catalog.
+            val passageDuration = arguments.getString("passageDurationMillis")?.let {
+                requireNotNull(it.toLongOrNull())
+            } ?: if (custom) error("A custom audition requires an explicit duration.") else 10_000L
+            require(passageDuration in 1_000L..10_000L)
+            val expectedDuration = arguments.getString("expectedTrackDurationMillis")?.let {
+                requireNotNull(it.toLongOrNull()).also { duration -> require(duration in 1_000L..86_400_000L) }
+            }
             val encoded = arguments.getString("reflectionBase64")
             require(encoded != null && encoded.length in 1..16_000)
             val bytes = Base64.getUrlDecoder().decode(encoded)
@@ -191,16 +214,26 @@ class ReflectionVoiceSpeechTest {
                 original.sourcePackage == "com.spotify.music" &&
                     original.title.equals(title, true) && original.artist.equals(artist, true) &&
                     original.playback == PassagePlayback.PAUSED && original.canPlay && original.canSeek &&
-                    original.durationMillis >= passageStart + 12_000L && original.positionMillis in 0..original.durationMillis)
-            val selectedPassage = SongPassageRequest(title, artist, passageStart, 10_000L,
+                    original.durationMillis >= passageStart + passageDuration + 2_000L &&
+                    (expectedDuration == null || kotlin.math.abs(original.durationMillis - expectedDuration) <= 1_500L) &&
+                    original.positionMillis in 0..original.durationMillis)
+            val selectedPassage = SongPassageRequest(title, artist, passageStart, passageDuration,
                 spotifyMediaId = original.mediaId)
             val config = runBlocking { AndroidReflectionConnectionStore(context).load() }
             assertNotNull("The optional audio check needs the saved hosted connection.", config)
             val connection = requireNotNull(config)
-            val receipt = if (stronger) "Sample run. Distance, four point two miles. " +
+            val receipt = when (runScenario) {
+                "morning_feeling_good" -> "Sample run. Distance, three miles. Elapsed time, thirty-three minutes. " +
+                    "Active time, thirty-two minutes."
+                "evening_no_selection" -> "Sample run. Distance, four miles. Elapsed time, forty-five minutes. " +
+                    "Active time, forty-three minutes."
+                "late_morning_powered_up" -> "Sample run. Distance, two point seven five miles. " +
+                    "Elapsed time, thirty minutes. Active time, twenty-eight minutes."
+                else -> if (stronger || custom) "Sample run. Distance, four point two miles. " +
                 "Elapsed time, forty-two minutes. Active time, forty minutes. " +
                 "Average pace, nine minutes, thirty-one seconds per mile."
-            else "Sample run saved. Three miles of sample distance in thirty-two minutes."
+                else "Sample run saved. Three miles of sample distance in thirty-two minutes."
+            }
             val receiptId = AtomicReference<String?>()
             val receiptCompleted = AtomicBoolean(false)
             val cloudAccepted = AtomicBoolean(false)

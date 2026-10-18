@@ -29,6 +29,9 @@ class SpotifySongPassageTest {
         var playAtWrongPosition = false
         var omitPauseAdvertisement = false
         var ignorePause = false
+        var seekOffsetMillis = 0L
+        var playingReportDelayMillis = 0L
+        private var playingReportedAt = 0L
         var bufferPlayCalls = emptySet<Int>()
         private var playCalls = 0
         private var pendingPlay = false
@@ -36,7 +39,9 @@ class SpotifySongPassageTest {
         override fun snapshot(): SongPassageSnapshot {
             if (denied) throw SecurityException("No session access")
             val advance = if (current.playback == PassagePlayback.PLAYING) clock.time - changedAt else 0
-            return current.copy(positionMillis = current.positionMillis + advance)
+            return current.copy(positionMillis = current.positionMillis + advance,
+                playback = if (current.playback == PassagePlayback.PLAYING && clock.time < playingReportedAt)
+                    PassagePlayback.OTHER else current.playback)
         }
         fun replace(snapshot: SongPassageSnapshot) { current = snapshot; changedAt = clock.time }
         override fun pause() {
@@ -47,7 +52,9 @@ class SpotifySongPassageTest {
         }
         override fun seekTo(positionMillis: Long) {
             commands += "seek:$positionMillis"
-            replace(snapshot().copy(positionMillis = positionMillis))
+            // Apply the simulated seek error only to the passage entrance, never restoration.
+            replace(snapshot().copy(positionMillis = positionMillis +
+                if (commands.count { it.startsWith("seek:") } == 1) seekOffsetMillis else 0L))
         }
         override fun play() {
             commands += "play"
@@ -62,6 +69,7 @@ class SpotifySongPassageTest {
                 replace(before.copy(playback = PassagePlayback.PLAYING, canPlay = false,
                     canPause = !omitPauseAdvertisement,
                     positionMillis = if (playAtWrongPosition) 120_000 else before.positionMillis))
+                playingReportedAt = clock.time + playingReportDelayMillis
             }
         }
         fun completePendingPlay() {
@@ -100,6 +108,56 @@ class SpotifySongPassageTest {
         assertEquals(PassagePlayback.PAUSED, session.snapshot().playback)
     }
 
+    @Test fun advancedPlayingConfirmationConsumesPassageInsteadOfExtendingItsEnding() = runBlocking {
+        val clock = Clock()
+        val session = Session(clock).apply {
+            current = current.copy(playback = PassagePlayback.PAUSED, canPlay = true, canPause = false)
+            playingReportDelayMillis = 1_000L
+        }
+        var positionAtEnding: Long? = null
+        val result = SpotifySongPassageController(session, clock) { event ->
+            if (event.stage == SongPassageStage.ENDING_PAUSE && event.reason == SongPassageReason.ENTERED)
+                positionAtEnding = session.snapshot().positionMillis
+        }.play(request)
+        assertEquals(SongPassageResult(SongPassageStatus.FINISHED, true), result)
+        assertEquals(15_000L, positionAtEnding)
+        assertEquals(10_000L, clock.time)
+        assertEquals(listOf("seek:5000", "play", "pause", "seek:60000"), session.commands)
+        assertEquals(60_000L, session.snapshot().positionMillis)
+        assertEquals(PassagePlayback.PAUSED, session.snapshot().playback)
+    }
+
+    @Test fun acceptedLateEntranceStillStopsAtRequestedSongEndpoint() = runBlocking {
+        val clock = Clock()
+        val session = Session(clock).apply { seekOffsetMillis = 1_000L }
+        var positionAtEnding: Long? = null
+        val result = SpotifySongPassageController(session, clock) { event ->
+            if (event.stage == SongPassageStage.ENDING_PAUSE && event.reason == SongPassageReason.ENTERED)
+                positionAtEnding = session.snapshot().positionMillis
+        }.play(request)
+        assertEquals(SongPassageResult(SongPassageStatus.FINISHED, true), result)
+        assertEquals(15_000L, positionAtEnding)
+        assertEquals(9_000L, clock.time)
+        assertEquals(listOf("pause", "seek:5000", "play", "pause", "seek:60000", "play"), session.commands)
+        assertEquals(60_000L, session.snapshot().positionMillis)
+        assertEquals(PassagePlayback.PLAYING, session.snapshot().playback)
+    }
+
+    @Test fun acceptedEarlyEntranceCannotExtendExistingWallDurationCap() = runBlocking {
+        val clock = Clock()
+        val session = Session(clock).apply { seekOffsetMillis = -1_000L }
+        var positionAtEnding: Long? = null
+        val result = SpotifySongPassageController(session, clock) { event ->
+            if (event.stage == SongPassageStage.ENDING_PAUSE && event.reason == SongPassageReason.ENTERED)
+                positionAtEnding = session.snapshot().positionMillis
+        }.play(request)
+        assertEquals(SongPassageResult(SongPassageStatus.FINISHED, true), result)
+        assertEquals(14_000L, positionAtEnding)
+        assertEquals(10_000L, clock.time)
+        assertEquals(60_000L, session.snapshot().positionMillis)
+        assertEquals(PassagePlayback.PLAYING, session.snapshot().playback)
+    }
+
     @Test fun missingCapabilityOrWrongRecordingNeverTouchesPlayback() = runBlocking {
         val variants = listOf<(SongPassageSnapshot) -> SongPassageSnapshot>(
             { it.copy(canSeek = false) }, { it.copy(canPause = false) },
@@ -122,6 +180,8 @@ class SpotifySongPassageTest {
         val controller = SpotifySongPassageController(session, clock)
         assertEquals(SongPassageStatus.UNAVAILABLE, controller.play(request.copy(spotifyMediaId = "other-id")).status)
         assertEquals(SongPassageStatus.UNAVAILABLE, controller.play(request.copy(startPositionMillis = 175_000)).status)
+        assertEquals(SongPassageStatus.UNAVAILABLE,
+            controller.play(request.copy(startPositionMillis = Long.MAX_VALUE)).status)
         assertTrue(session.commands.isEmpty())
     }
 

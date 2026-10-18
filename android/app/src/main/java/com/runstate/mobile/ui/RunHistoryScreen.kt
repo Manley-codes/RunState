@@ -5,6 +5,7 @@ import android.media.AudioAttributes
 import android.media.AudioFocusRequest
 import android.media.AudioManager
 import android.media.MediaPlayer
+import android.media.VolumeShaper
 import android.media.MediaDataSource
 import android.os.Bundle
 import android.os.Handler
@@ -518,7 +519,8 @@ internal class AndroidReflectionSpeechPlatform(
     }
     private class ReflectionAudio(
         val id: String, val player: MediaPlayer, val source: MemoryAudioSource,
-        var started: Boolean = false, var released: Boolean = false
+        var started: Boolean = false, var released: Boolean = false,
+        var entryShaper: VolumeShaper? = null
     )
     private class InstrumentalPlayback(
         val id: String,
@@ -618,8 +620,23 @@ internal class AndroidReflectionSpeechPlatform(
             playback.player.isLooping = false
             playback.player.setOnPreparedListener { player ->
                 if (owns()) try {
+                    // Ease only this reflection's initial attack; keep the first word audible.
+                    // This changes neither the designed voice nor the phone/Spotify volume.
+                    playback.entryShaper = try {
+                        player.createVolumeShaper(VolumeShaper.Configuration.Builder()
+                            .setDuration(320L)
+                            .setCurve(floatArrayOf(0f, 0.55f, 1f), floatArrayOf(0.68f, 0.9f, 1f))
+                            .setInterpolatorType(VolumeShaper.Configuration.INTERPOLATOR_TYPE_CUBIC_MONOTONIC)
+                            .build())
+                    } catch (_: RuntimeException) { null }
                     player.start()
                     playback.started = true
+                    try { playback.entryShaper?.apply(VolumeShaper.Operation.PLAY) }
+                    catch (_: RuntimeException) {
+                        // Optional polish must not leave speech stuck at its initial lower gain.
+                        try { playback.entryShaper?.close() } catch (_: RuntimeException) { }
+                        playback.entryShaper = null
+                    }
                 } catch (_: RuntimeException) { failed() }
             }
             playback.player.setOnCompletionListener {
@@ -647,6 +664,9 @@ internal class AndroidReflectionSpeechPlatform(
         playback.released = true
         if (reflectionAudio === playback) reflectionAudio = null
         try { playback.player.release() } catch (_: RuntimeException) { }
+        // Release the player before closing its envelope, avoiding a volume jump during Stop.
+        try { playback.entryShaper?.close() } catch (_: RuntimeException) { }
+        playback.entryShaper = null
         playback.source.close()
     }
 

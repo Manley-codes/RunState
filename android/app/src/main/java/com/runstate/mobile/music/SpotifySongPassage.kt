@@ -182,11 +182,20 @@ internal class SpotifySongPassageController(
             current.expectedAt = clock.nowMillis()
             current.expectsPlaying = true
             enter(current, SongPassageStage.PLAYING)
+            // Admission already bounds start + duration below the validated (at most 24 h)
+            // track length, so this addition cannot overflow. A late seek/PLAYING report must
+            // consume the selected passage, not move its editorial ending further into the song.
+            val endPositionMillis = request.startPositionMillis + request.durationMillis
             val finishAt = current.expectedAt + request.durationMillis
             while (clock.nowMillis() < finishAt) {
                 val snapshot = checked(current)
                 if (!isOwnedPlaying(current, snapshot)) throw PassageInterrupted(playbackFailure(snapshot))
-                clock.waitMillis(minOf(POLL_MILLIS, finishAt - clock.nowMillis()).coerceAtLeast(1))
+                val positionRemaining = endPositionMillis - snapshot.positionMillis
+                if (positionRemaining <= 0L) break
+                // The existing wall-clock cap still wins if an early player report does not
+                // reach the endpoint. Reports/transport latency cannot promise sample accuracy.
+                clock.waitMillis(minOf(POLL_MILLIS, positionRemaining,
+                    finishAt - clock.nowMillis()).coerceAtLeast(1))
             }
             val finalPlaying = checked(current)
             if (!isOwnedPlaying(current, finalPlaying)) throw PassageInterrupted(playbackFailure(finalPlaying))

@@ -12,7 +12,9 @@ internal data class SongReflectionPlan(
     val trackTitle: String,
     val artistName: String,
     val startPositionMillis: Long,
-    val durationMillis: Long
+    val durationMillis: Long,
+    /** Frozen locally so an older server cannot authorize a new pairing with its legacy writer. */
+    val songStudyVersion: Int = 0
 ) {
     fun passage() = SongPassageRequest(trackTitle, artistName, startPositionMillis, durationMillis)
 }
@@ -22,13 +24,15 @@ internal data class CuratedReflectionSong(
     val title: String,
     val artist: String,
     val startPositionMillis: Long,
-    val durationMillis: Long = 10_000
+    val durationMillis: Long = 10_000,
+    val songStudyVersion: Int = 0
 ) {
-    fun plan() = SongReflectionPlan(cue.cueId, title, artist, startPositionMillis, durationMillis)
+    fun plan() = SongReflectionPlan(cue.cueId, title, artist, startPositionMillis, durationMillis,
+        songStudyVersion)
 }
 
 /**
- * A deliberately small editorial catalog, based on the earlier liked listening example.
+ * A deliberately small editorial catalog, based on the accepted listening examples.
  * It contains no lyrics, downloaded recordings, inferred artist persona or invented run facts.
  * Passage entrances are editorial audition choices, not automatic chorus detection.
  * New songs need a checked description and passage before they can enter this catalog.
@@ -47,6 +51,49 @@ internal val reflectionSongCatalog = listOf(
         ),
         // Manley confirmed this early vocal-hook entrance on the original Spotify recording.
         title = "Sunday Best", artist = "Surfaces", startPositionMillis = 15_500
+    ),
+    CuratedReflectionSong(
+        cue = ReflectionSongCue(
+            cueId = "lovely_day_bill_withers_v1", source = "RUNSTATE_CURATED",
+            theme = "A compact sequence of the recognizable repeated-title chorus.",
+            connectionNote = "A warm affirmative musical response to one concrete part of this completed run. " +
+                "Keep reported feelings conditional on each branch, without claiming perfect weather " +
+                "or a perfect whole day."
+        ),
+        title = "Lovely Day", artist = "Bill Withers", startPositionMillis = 58_030,
+        durationMillis = 5_870, songStudyVersion = 1
+    ),
+    CuratedReflectionSong(
+        cue = ReflectionSongCue(
+            cueId = "stronger_kanye_west_v1", source = "RUNSTATE_CURATED",
+            theme = "The already auditioned forceful electronic opening, brief and recognizable.",
+            connectionNote = "A concise self-assured finish to this completed run. Let attitude and cadence " +
+                "carry the connection without names, quoted lyrics or claimed training gains."
+        ),
+        title = "Stronger", artist = "Kanye West", startPositionMillis = 0,
+        durationMillis = 10_000, songStudyVersion = 1
+    ),
+    CuratedReflectionSong(
+        cue = ReflectionSongCue(
+            cueId = "good_as_hell_lizzo_v1", source = "RUNSTATE_CURATED",
+            theme = "A short recognizable title response near the end of a chorus, followed by an annotated gap.",
+            connectionNote = "A bright playful musical response to this completed run. Combine attitude with " +
+                "one light source-grounded song detail. Keep Energy conditional, without inferred " +
+                "training gains or a relationship story."
+        ),
+        title = "Good as Hell", artist = "Lizzo", startPositionMillis = 48_910,
+        durationMillis = 4_640, songStudyVersion = 1
+    ),
+    CuratedReflectionSong(
+        cue = ReflectionSongCue(
+            cueId = "gods_plan_drake_v1", source = "RUNSTATE_CURATED",
+            theme = "A short recognizable title hook and its following statement.",
+            connectionNote = "Let the record answer a relaxed, self-assured finish to this completed run. " +
+                "A connection through attitude and delivery can work without explaining the song " +
+                "or claiming why this runner ran."
+        ),
+        title = "God's Plan", artist = "Drake", startPositionMillis = 37_300,
+        durationMillis = 7_300, songStudyVersion = 1
     )
 )
 

@@ -910,6 +910,66 @@ class RunReflectionCoordinatorTest {
         assertEquals(0, dao.runReads)
     }
 
+    @Test fun acceptedSongRetryUsesFrozenEvidenceAndAcknowledgedClipThenRestartKeepsOnlyExactText() {
+        val dao = completedDao().apply {
+            inserted[0] = inserted[0].copy(musicObservationRequested = true,
+                musicReflectionSharingAllowed = true)
+        }
+        val store = MemoryReflectionStore().apply {
+            observedMusic = listOf(sampleMusicObservation().copy(title = "Stronger", artist = "Kanye West"))
+        }
+        val requests = mutableListOf<ReflectionApiRequest>()
+        val ids = ArrayDeque(listOf(UUID.fromString(FIRST_REQUEST_ID), UUID.fromString(SECOND_REQUEST_ID)))
+        val coordinator = RunReflectionCoordinator(dao, store, ReflectionGateway { request ->
+            requests += request
+            if (requests.size == 1) throw IllegalStateException("Fictional unavailable provider")
+            candidates().copy(isTestData = false, songCueId = request.evidence.musicContext.songCue?.cueId)
+        }, scope(), requestIdSupplier = { ids.removeFirst() }, nowMillis = { 100L })
+
+        coordinator.onSavedVisible(RUN_ID)
+        assertEquals(ReflectionStatus.FAILED, store.rows.getValue(RUN_ID).status)
+        coordinator.selectEnergy(RUN_ID, ReflectionBranch.SPENT)
+        store.observedMusic = listOf(sampleMusicObservation().copy(title = "Lovely Day", artist = "Bill Withers"))
+        coordinator.retry(RUN_ID)
+
+        assertEquals(2, requests.size)
+        assertNotEquals(requests[0].requestId, requests[1].requestId)
+        assertEquals(requests[0].evidence, requests[1].evidence)
+        assertEquals("Stronger", requests[1].evidence.musicContext.trackTitle)
+        assertEquals(1, requests[1].evidence.songPassage?.songStudyVersion)
+        assertEquals(1, store.musicReads)
+        val ready = coordinator.state.value as RunReflectionState.Ready
+        assertEquals(SPENT_TEXT, ready.text)
+        assertEquals(requests[1].evidence.songPassage?.passage(), ready.passage)
+
+        var restartCalls = 0
+        val restarted = RunReflectionCoordinator(dao, store, ReflectionGateway {
+            restartCalls++; error("A saved reflection must not regenerate")
+        }, scope(), nowMillis = { 100L })
+        restarted.onSavedVisible(RUN_ID)
+        val restored = restarted.state.value as RunReflectionState.Ready
+        assertEquals(0, restartCalls)
+        assertEquals(SPENT_TEXT, restored.text)
+        assertNull(restored.passage)
+    }
+
+    @Test fun ordinarySourceFallbackRemainsReadableWithoutLaunchingFrozenSongPassage() {
+        val dao = completedDao().apply {
+            inserted[0] = inserted[0].copy(musicObservationRequested = true,
+                musicReflectionSharingAllowed = true)
+        }
+        val store = MemoryReflectionStore().apply {
+            observedMusic = listOf(sampleMusicObservation().copy(title = "Good as Hell", artist = "Lizzo"))
+        }
+        val coordinator = RunReflectionCoordinator(dao, store,
+            ReflectionGateway { candidates().copy(isTestData = false) }, scope(),
+            quietWindowMillis = 0L, nowMillis = { 100L })
+        coordinator.onSavedVisible(RUN_ID)
+        val ready = coordinator.state.value as RunReflectionState.Ready
+        assertEquals(NO_SELECTION_TEXT, ready.text)
+        assertNull(ready.passage)
+    }
+
     @Test fun lateSuccessForFirstRunCannotReplaceSecondVisibleRun() {
         val first = CompletableDeferred<ReflectionCandidates>()
         val second = CompletableDeferred<ReflectionCandidates>()

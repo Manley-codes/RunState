@@ -315,7 +315,7 @@ class ReflectionApiClientTest {
         assertEquals("Bearer $code", fake.getRequestProperty("Authorization"))
         assertEquals("POST", fake.requestMethod)
         assertEquals(3_000, fake.connectTimeout)
-        assertEquals(60_000, fake.readTimeout)
+        assertEquals(100_000, fake.readTimeout)
         assertFalse(fake.instanceFollowRedirects)
         assertTrue(fake.sent.toString(StandardCharsets.UTF_8.name()).contains(REQUEST_ID))
         val body = JsonParser.parseString(fake.sent.toString(StandardCharsets.UTF_8.name())).asJsonObject
@@ -444,11 +444,9 @@ class ReflectionApiClientTest {
         assertFalse(post.sent.toString("UTF-8").contains("spotify:track"))
     }
 
-    @Test fun songAcknowledgementCannotBeMissingForeignOrUnrequested() {
+    @Test fun songAcknowledgementCanBeAbsentForFallbackButNeverForeignOrUnrequested() {
         val reply = JsonParser.parseString(response()).asJsonObject
-        assertThrows(ReflectionBridgeException::class.java) {
-            parseReflectionResponse(reply.toString(), REQUEST_ID, RUN_ID, "expected")
-        }
+        assertNull(parseReflectionResponse(reply.toString(), REQUEST_ID, RUN_ID, "expected").songCueId)
         reply.addProperty("songCueId", "foreign")
         assertThrows(ReflectionBridgeException::class.java) {
             parseReflectionResponse(reply.toString(), REQUEST_ID, RUN_ID, "expected")
@@ -458,11 +456,100 @@ class ReflectionApiClientTest {
         }
     }
 
+    @Test fun legacyCueCapabilityCannotAuthorizeTheNewStudyWriterPairings() = runBlocking {
+        val request = acceptedSongRequest()
+        val config = ReflectionConnectionConfig("https://reflection.example.com/api/reflections/candidates",
+            "K".repeat(43))
+        val health = FakeHttpsConnection(URL("https://reflection.example.com/health"), "{}", cueCapability = "1")
+        val post = FakeHttpsConnection(URL(config.endpoint), response(generationMode = "ANTHROPIC"))
+        val result = HostedReflectionHttpClient(config, { if (it.path == "/health") health else post }).request(request)
+        val sent = JsonParser.parseString(post.sent.toString("UTF-8")).asJsonObject.getAsJsonObject("evidence")
+        assertFalse(sent.getAsJsonObject("musicContext").has("songCue"))
+        assertFalse(sent.has("songPassage"))
+        assertNull(result.songCueId)
+    }
+
+    @Test fun studyWriterCapabilitySendsFrozenCueAndAllowsHonestUnpairedSourceFallback() = runBlocking {
+        val request = acceptedSongRequest()
+        val cueId = requireNotNull(request.evidence.musicContext.songCue).cueId
+        val config = ReflectionConnectionConfig("https://reflection.example.com/api/reflections/candidates",
+            "K".repeat(43))
+        for (acknowledge in listOf(false, true)) {
+            val health = FakeHttpsConnection(URL("https://reflection.example.com/health"), "{}",
+                cueCapability = "1", studyCapability = "1")
+            val body = JsonParser.parseString(response(generationMode = "ANTHROPIC")).asJsonObject.apply {
+                if (acknowledge) addProperty("songCueId", cueId)
+            }.toString()
+            val post = FakeHttpsConnection(URL(config.endpoint), body,
+                studyCapability = if (acknowledge) "1" else null)
+            val result = HostedReflectionHttpClient(config, { if (it.path == "/health") health else post }).request(request)
+            val sent = JsonParser.parseString(post.sent.toString("UTF-8")).asJsonObject.getAsJsonObject("evidence")
+            assertEquals(cueId, sent.getAsJsonObject("musicContext").getAsJsonObject("songCue").get("cueId").asString)
+            assertEquals(if (acknowledge) cueId else null, result.songCueId)
+            assertFalse(sent.has("songPassage"))
+            assertFalse(post.sent.toString("UTF-8").contains("songStudyVersion"))
+            assertNull(health.getRequestProperty("Authorization"))
+            assertEquals(100_000, post.readTimeout)
+        }
+    }
+
+    @Test fun retryCanDiscoverStudyWriterAfterAnOlderServerDeploysWithoutChangingEvidence() = runBlocking {
+        val request = acceptedSongRequest()
+        val cueId = requireNotNull(request.evidence.musicContext.songCue).cueId
+        val config = ReflectionConnectionConfig("https://reflection.example.com/api/reflections/candidates",
+            "K".repeat(43))
+        var studyVersion: String? = null
+        val posts = mutableListOf<FakeHttpsConnection>()
+        val client = HostedReflectionHttpClient(config, { url ->
+            if (url.path == "/health") FakeHttpsConnection(url, "{}", cueCapability = "1",
+                studyCapability = studyVersion)
+            else FakeHttpsConnection(url, JsonParser.parseString(response(generationMode = "ANTHROPIC"))
+                .asJsonObject.apply { if (studyVersion != null) addProperty("songCueId", cueId) }.toString(),
+                studyCapability = studyVersion)
+                .also { posts += it }
+        })
+        assertNull(client.request(request).songCueId)
+        studyVersion = "1"
+        assertEquals(cueId, client.request(request).songCueId)
+        val music = posts.map { JsonParser.parseString(it.sent.toString("UTF-8")).asJsonObject
+            .getAsJsonObject("evidence").getAsJsonObject("musicContext") }
+        assertFalse(music[0].has("songCue"))
+        assertEquals(cueId, music[1].getAsJsonObject("songCue").get("cueId").asString)
+    }
+
+    @Test fun cachedCapabilityCannotAuthorizeAnOlderServerThatOnlyEchoesTheCue() = runBlocking {
+        val request = acceptedSongRequest()
+        val cueId = requireNotNull(request.evidence.musicContext.songCue).cueId
+        val config = ReflectionConnectionConfig("https://reflection.example.com/api/reflections/candidates",
+            "K".repeat(43))
+        val body = JsonParser.parseString(response(generationMode = "ANTHROPIC")).asJsonObject.apply {
+            addProperty("songCueId", cueId)
+        }.toString()
+        var healthCalls = 0
+        var postCalls = 0
+        val client = HostedReflectionHttpClient(config, { url ->
+            if (url.path == "/health") {
+                healthCalls++
+                FakeHttpsConnection(url, "{}", cueCapability = "1", studyCapability = "1")
+            } else FakeHttpsConnection(url, body,
+                studyCapability = if (++postCalls == 1) "1" else null)
+        })
+        assertEquals(cueId, client.request(request).songCueId)
+        val afterRollback = client.request(request)
+        assertEquals(1, healthCalls)
+        assertNull(afterRollback.songCueId)
+        assertEquals("[FAKE] None.", afterRollback.noSelection)
+    }
+
+    private fun acceptedSongRequest() = reflectionRequestFromSavedRun(REQUEST_ID, sharingRun(),
+        completedTransitions(), listOf(musicObservation().copy(title = "Lovely Day", artist = "Bill Withers")))
+
     private fun knownSongRequest() = reflectionRequestFromSavedRun(REQUEST_ID, sharingRun(),
         completedTransitions(), listOf(musicObservation().copy(title = "Sunday Best", artist = "Surfaces")))
 
     private class FakeHttpsConnection(url: URL, private val body: String, private val status: Int = 200,
-        private val cueCapability: String? = null) :
+        private val cueCapability: String? = null,
+        private val studyCapability: String? = null) :
         HttpsURLConnection(url) {
         val sent = ByteArrayOutputStream()
         var wasDisconnected = false
@@ -476,8 +563,11 @@ class ReflectionApiClientTest {
         override fun getInputStream(): InputStream =
             ByteArrayInputStream(body.toByteArray(StandardCharsets.UTF_8))
         override fun getResponseCode(): Int = status
-        override fun getHeaderField(name: String?): String? =
-            if (name.equals("X-RunState-Song-Cue", ignoreCase = true)) cueCapability else null
+        override fun getHeaderField(name: String?): String? = when {
+            name.equals("X-RunState-Song-Cue", ignoreCase = true) -> cueCapability
+            name.equals("X-RunState-Song-Study", ignoreCase = true) -> studyCapability
+            else -> null
+        }
     }
 
     private fun response(
