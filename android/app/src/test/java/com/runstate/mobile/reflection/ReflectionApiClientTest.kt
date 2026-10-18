@@ -18,6 +18,105 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class ReflectionApiClientTest {
+    @Test fun multiSongShortlistDeduplicatesReportsWithoutCountingCallbacksOrDroppingVersions() {
+        val rows = listOf(
+            musicObservation(1).copy(title = "Stronger", artist = "Kanye West"),
+            musicObservation(2).copy(title = " STRONGER ", artist = "Kanye   West"),
+            musicObservation(3).copy(title = "Stronger - Live", artist = "Kanye West"),
+            musicObservation(4).copy(title = "Lovely Day", artist = "Bill Withers"),
+            musicObservation(5).copy(playbackState = MusicPlaybackState.PAUSED),
+            musicObservation(6).copy(sourcePackage = "other.player"),
+            musicObservation(7).copy(runId = REQUEST_ID),
+            musicObservation(8).copy(observedAtEpochMillis = FINISH + 1),
+            musicObservation(9).copy(title = ""),
+            musicObservation(10).copy(title = "bad\nidentity")
+        )
+        val shortlist = reflectionSongCandidates(sharingRun(), FINISH, rows.reversed())
+        assertEquals(listOf("1", "3", "4"), shortlist.map { it.candidateId })
+        assertEquals("Stronger - Live", shortlist[1].musicContext.trackTitle)
+        assertNull(shortlist[1].songPassage)
+        assertNotNull(shortlist[0].songPassage)
+        assertTrue(reflectionSongCandidates(completedRun(), FINISH, rows).isEmpty())
+    }
+
+    @Test fun multiSongShortlistHasADeterministicProviderBudget() {
+        val rows = (1..20).map { musicObservation(it).copy(title = "Song $it") }
+        val songs = reflectionSongCandidates(sharingRun(), FINISH, rows.reversed())
+        assertEquals((1..12).map(Int::toString), songs.map { it.candidateId })
+    }
+
+    @Test fun selectedSongMustBelongToFrozenShortlistAndCueMustBelongToWinner() {
+        val request = multiSongRequest()
+        val songs = requireNotNull(request.evidence.songCandidates)
+        val json = JsonParser.parseString(response(generationMode = "ANTHROPIC")).asJsonObject.apply {
+            addProperty("selectedSongId", "2")
+            addProperty("songSelectionMethod", "CONTEXT_MATCH")
+            addProperty("songCueId", songs[1].musicContext.songCue!!.cueId)
+        }
+        val parsed = parseReflectionResponse(json.toString(), REQUEST_ID, RUN_ID,
+            request.evidence.musicContext.songCue?.cueId, songs)
+        val frozen = request.evidence.withSongSelection(parsed)
+        assertEquals("2", frozen.selectedSongId)
+        assertEquals("Lovely Day", frozen.musicContext.trackTitle)
+        assertEquals(songs[1].songPassage, frozen.songPassage)
+        assertEquals(request.evidence.metrics, frozen.metrics)
+        json.addProperty("songCueId", songs[0].musicContext.songCue!!.cueId)
+        assertThrows(ReflectionBridgeException::class.java) {
+            parseReflectionResponse(json.toString(), REQUEST_ID, RUN_ID, null, songs)
+        }
+        json.remove("songCueId")
+        json.addProperty("selectedSongId", "99")
+        assertThrows(ReflectionBridgeException::class.java) {
+            parseReflectionResponse(json.toString(), REQUEST_ID, RUN_ID, null, songs)
+        }
+        json.addProperty("selectedSongId", "2")
+        json.addProperty("songSelectionMethod", "GUESS")
+        assertThrows(ReflectionBridgeException::class.java) {
+            parseReflectionResponse(json.toString(), REQUEST_ID, RUN_ID, null, songs)
+        }
+    }
+
+    @Test fun selectionWireRequiresCapabilityAndStripsLocalPlaybackAndConnectionData() = runBlocking {
+        val config = ReflectionConnectionConfig("https://reflection.example.com/api/reflections/candidates", "a".repeat(43))
+        val source = multiSongRequest()
+        val songs = requireNotNull(source.evidence.songCandidates).map {
+            it.copy(preparationReference = SongPreparationReference(REQUEST_ID, reflectionDestinationFingerprint(config)))
+        }
+        val request = source.copy(evidence = source.evidence.copy(songCandidates = songs))
+        for (supported in listOf(false, true)) {
+            val health = FakeHttpsConnection(URL("https://reflection.example.com/health"), "{}",
+                cueCapability = "1", studyCapability = "1", selectionCapability = if (supported) "1" else null)
+            val post = FakeHttpsConnection(URL(config.endpoint), response(generationMode = "ANTHROPIC"))
+            HostedReflectionHttpClient(config, { if (it.path == "/health") health else post }).request(request)
+            val raw = post.sent.toString("UTF-8")
+            val body = JsonParser.parseString(raw).asJsonObject
+            assertEquals(supported, body.has("songCandidates"))
+            assertFalse(body.getAsJsonObject("evidence").has("songCandidates"))
+            listOf("songPassage", "startPositionMillis", "durationMillis", "destinationFingerprint",
+                "preparationReference", "selectedSongId", "songSelectionMethod").forEach { assertFalse(raw.contains(it)) }
+            if (supported) {
+                val first = body.getAsJsonArray("songCandidates")[0].asJsonObject
+                assertEquals(setOf("candidateId", "musicContext", "songPreparationId"), first.keySet())
+            }
+        }
+    }
+
+    @Test fun changedDestinationCannotReceiveMultiSongList() = runBlocking {
+        val config = ReflectionConnectionConfig("https://reflection.example.com/api/reflections/candidates", "a".repeat(43))
+        val source = multiSongRequest()
+        val request = source.copy(evidence = source.evidence.copy(songCandidates = source.evidence.songCandidates!!.map {
+            it.copy(preparationReference = SongPreparationReference(REQUEST_ID, "f".repeat(64)))
+        }))
+        val health = FakeHttpsConnection(URL("https://reflection.example.com/health"), "{}",
+            cueCapability = "1", studyCapability = "1", selectionCapability = "1")
+        val post = FakeHttpsConnection(URL(config.endpoint), response(generationMode = "ANTHROPIC"))
+        HostedReflectionHttpClient(config, { if (it.path == "/health") health else post }).request(request)
+        assertFalse(JsonParser.parseString(post.sent.toString("UTF-8")).asJsonObject.has("songCandidates"))
+    }
+
+    private fun multiSongRequest() = reflectionRequestFromSavedRun(REQUEST_ID, sharingRun(), completedTransitions(),
+        listOf(musicObservation(1).copy(title = "Stronger", artist = "Kanye West"),
+            musicObservation(2).copy(title = "Lovely Day", artist = "Bill Withers")))
     private companion object {
         const val REQUEST_ID = "c4e1b8a2-7d35-4f61-8b0c-2a9e6d4f13b7"
         const val RUN_ID = "0f6a2c1e-9d43-4b7a-9c21-7b5e8a4d1f30"
@@ -551,7 +650,8 @@ class ReflectionApiClientTest {
         private val cueCapability: String? = null,
         private val studyCapability: String? = null,
         private val preparationCapability: String? = null,
-        private val responseContentType: String? = null) :
+        private val responseContentType: String? = null,
+        private val selectionCapability: String? = null) :
         HttpsURLConnection(url) {
         val sent = ByteArrayOutputStream()
         var wasDisconnected = false
@@ -569,6 +669,7 @@ class ReflectionApiClientTest {
             name.equals("X-RunState-Song-Cue", ignoreCase = true) -> cueCapability
             name.equals("X-RunState-Song-Study", ignoreCase = true) -> studyCapability
             name.equals("X-RunState-Song-Preparation", ignoreCase = true) -> preparationCapability
+            name.equals("X-RunState-Song-Selection", ignoreCase = true) -> selectionCapability
             name.equals("Content-Type", ignoreCase = true) -> responseContentType
             else -> null
         }

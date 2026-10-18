@@ -88,12 +88,15 @@ abstract class ReflectionDao {
         runId: String,
         requestId: String,
         json: String,
-        isTestData: Boolean
+        isTestData: Boolean,
+        selectedEvidenceJson: String? = null
     ): Boolean {
         require(json.isNotBlank())
         val stored = findByRunId(runId) ?: return false
         if (!stored.accepts(requestId) || stored.candidatesJson != null) return false
-        update(stored.copy(candidatesJson = json, isTestData = isTestData))
+        require(selectedEvidenceJson == null || selectedEvidenceJson.isNotBlank())
+        update(stored.copy(candidatesJson = json, isTestData = isTestData,
+            evidenceJson = selectedEvidenceJson ?: stored.evidenceJson))
         return true
     }
 

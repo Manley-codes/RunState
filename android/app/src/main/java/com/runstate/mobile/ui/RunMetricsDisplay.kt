@@ -291,6 +291,17 @@ private fun reflectionMusicSummaryFor(run: RunEntity, reflection: RunReflectionE
     if (!run.musicReflectionSharingAllowed) return "Music observations kept on this phone"
     val allowed = "Music sharing allowed for this run"
     val snapshot = reflection?.evidenceJson ?: return allowed
+    if (reflection.status == ReflectionStatus.READY) {
+        try {
+            val selected = historyEvidenceJson.fromJson(snapshot, com.runstate.mobile.reflection.CompletedRunEvidence::class.java)
+            val winner = selected.songCandidates.orEmpty().singleOrNull { it.candidateId == selected.selectedSongId }
+            if (winner != null && winner.musicContext == selected.musicContext &&
+                selected.songSelectionMethod in setOf("CONTEXT_MATCH", "AVAILABLE_FALLBACK")) {
+                val label = if (selected.songSelectionMethod == "CONTEXT_MATCH") "Chosen for this run" else "Available song match"
+                return "$label · ${winner.musicContext.trackTitle} — ${winner.musicContext.artistName}"
+            }
+        } catch (_: RuntimeException) { /* Legacy or damaged optional metadata uses the existing summary. */ }
+    }
     val music = try {
         val evidence = historyEvidenceJson.fromJson(snapshot, JsonObject::class.java)
         evidence?.get("musicContext")?.takeIf { it.isJsonObject }?.asJsonObject ?: return allowed

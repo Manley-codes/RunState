@@ -4,8 +4,25 @@ import android.content.Context
 import android.database.sqlite.SQLiteConstraintException
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.google.gson.Gson
+import com.google.gson.JsonObject
+import com.google.gson.JsonParser
+import com.runstate.mobile.reflection.*
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
+import java.io.ByteArrayInputStream
+import java.io.ByteArrayOutputStream
+import java.net.URL
+import java.security.cert.Certificate
+import java.util.UUID
+import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicReference
+import javax.net.ssl.HttpsURLConnection
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -51,6 +68,174 @@ class ReflectionDaoTest {
     private suspend fun createPending(): ReflectionDao {
         database.runDao().insert(completed)
         return database.reflectionDao().also { it.ensurePending(pending) }
+    }
+
+    /** Real Room/coordinator/HTTP serialization, isolated fixture storage and in-memory wire only. */
+    @Test fun observedSongsThroughHostedContractSaveTheNonFirstWinnerAndReopenWithoutReplay() = runBlocking {
+        val start = completed.officialStartEpochMillis
+        val finish = requireNotNull(completed.finishEpochMillis)
+        val runId = completed.runId
+        database.runDao().insert(completed.copy(state = StoredRunState.RUNNING,
+            finishEpochMillis = null, lastCheckpointEpochMillis = start,
+            trackingMode = RunTrackingMode.FIXTURE, transitionHistoryComplete = true,
+            preRunEnergy = PreRunEnergy.MODERATE,
+            musicObservationRequested = true, musicReflectionSharingAllowed = true))
+        val music = database.musicObservationDao()
+        suspend fun observe(key: String, offset: Long, title: String, artist: String,
+            playback: MusicPlaybackState = MusicPlaybackState.PLAYING,
+            source: String = "com.spotify.music") = music.recordObservation(RunMusicObservation(
+                runId, key, start + offset, null, source, title, artist, playback,
+                MusicObservationKind.METADATA_CHANGED))
+        observe("first", 1_000L, "Stronger", "Kanye West")
+        observe("winner", 10_000L, "Lovely Day", "Bill Withers")
+        observe("duplicate", 15_000L, " LOVELY  DAY ", "Bill Withers")
+        observe("paused", 20_000L, "Paused report", "Fixture artist", MusicPlaybackState.PAUSED)
+        observe("other-player", 25_000L, "Other player", "Fixture artist", source = "other.player")
+        observe("before-start", -1L, "Old report", "Fixture artist")
+        observe("after-finish", finish - start + 1L, "Late report", "Fixture artist")
+
+        val config = ReflectionConnectionConfig("https://reflection.example.com/api/reflections/candidates", "a".repeat(43))
+        val fingerprint = reflectionDestinationFingerprint(config)
+        val firstPreparation = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+        val secondPreparation = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
+        requireNotNull(music.claimPreparation(runId, firstPreparation, 1, fingerprint, start + 35_000L))
+        requireNotNull(music.claimPreparation(runId, secondPreparation, 2, fingerprint, start + 36_000L))
+        music.finishPreparation(runId, firstPreparation, true)
+        music.finishPreparation(runId, secondPreparation, true)
+        database.runDao().pauseRun(runId, finish)
+        database.runDao().completeRun(runId, finish,
+            FinalRunMetrics(160.9344, MetricSource.FIXTURE, TelemetryCoverage.COMPLETE, DistanceUnit.MILES))
+        val originalRun = requireNotNull(database.runDao().findById(runId))
+        val originalObservations = music.observationsFor(runId)
+        val exactText = "  Exact second-song reflection.\nA deliberate finish.  "
+        val posts = AtomicInteger()
+        val healthChecks = AtomicInteger()
+        val sent = AtomicReference<JsonObject>()
+        val client = HostedReflectionHttpClient(config, connectionFactory = { url ->
+            SelectionFixtureHttpsConnection(url) { raw ->
+                if (url.path == "/health") {
+                    healthChecks.incrementAndGet()
+                    "{\"status\":\"ok\"}"
+                } else {
+                    posts.incrementAndGet()
+                    val request = JsonParser.parseString(raw).asJsonObject
+                    sent.set(request)
+                    JsonObject().apply {
+                        addProperty("requestId", request.get("requestId").asString)
+                        addProperty("runId", request.get("runId").asString)
+                        // Simulated production envelope exercises passage eligibility; no provider is contacted.
+                        addProperty("generationMode", "ANTHROPIC")
+                        addProperty("selectedSongId", "2")
+                        addProperty("songSelectionMethod", "CONTEXT_MATCH")
+                        addProperty("songCueId", "lovely_day_bill_withers_v1")
+                        add("candidates", JsonObject().apply {
+                            addProperty("spent", "Unused spent branch.")
+                            addProperty("feeling_good", exactText)
+                            addProperty("powered_up", "Unused powered-up branch.")
+                            addProperty("no_selection", "Unused unanswered branch.")
+                        })
+                    }.toString()
+                }
+            }
+        })
+        val firstJob = SupervisorJob()
+        val reopenedJob = SupervisorJob()
+        try {
+            val coordinator = RunReflectionCoordinator(database.runDao(),
+                RoomReflectionStore(database.reflectionDao(), music), client,
+                CoroutineScope(firstJob + Dispatchers.Default),
+                requestIdSupplier = { UUID.fromString(pending.requestId) }, nowMillis = { finish + 100L })
+            coordinator.onSavedVisible(runId, awaitingReceipt = true).join()
+            coordinator.saveEnergy(runId, ReflectionBranch.FEELING_GOOD)
+            coordinator.finishReceipt(runId).join()
+            val ready = withTimeout(10_000L) { coordinator.state.first { it is RunReflectionState.Ready } }
+                as RunReflectionState.Ready
+            assertEquals(exactText, ready.text)
+            assertEquals("Lovely Day", ready.passage?.trackTitle)
+            assertEquals("Bill Withers", ready.passage?.artistName)
+            assertEquals(1, posts.get())
+            assertEquals(1, healthChecks.get())
+            val wire = requireNotNull(sent.get())
+            val songs = wire.getAsJsonArray("songCandidates")
+            assertEquals(listOf("1", "2"), songs.map { it.asJsonObject.get("candidateId").asString })
+            assertEquals(listOf(firstPreparation, secondPreparation),
+                songs.map { it.asJsonObject.get("songPreparationId").asString })
+            assertEquals("Stronger", wire.getAsJsonObject("evidence").getAsJsonObject("musicContext")
+                .get("trackTitle").asString)
+            val wireText = wire.toString()
+            listOf("songPassage", "startPositionMillis", "destinationFingerprint", "preparationReference",
+                "songPreparationReference", "selectedSongId", "songSelectionMethod", "Paused report", "Late report",
+                "Old report", "Other player").forEach { assertFalse(wireText.contains(it)) }
+            assertFalse(wire.getAsJsonObject("evidence").has("songCandidates"))
+            val saved = requireNotNull(database.reflectionDao().findByRunId(runId))
+            val selected = Gson().fromJson(saved.evidenceJson, CompletedRunEvidence::class.java)
+            assertEquals("2", selected.selectedSongId)
+            assertEquals("CONTEXT_MATCH", selected.songSelectionMethod)
+            assertEquals("Lovely Day", selected.musicContext.trackTitle)
+            assertEquals("Lovely Day", selected.songPassage?.trackTitle)
+            assertEquals(exactText, saved.text)
+            assertEquals(ReflectionBranch.FEELING_GOOD, saved.selectedBranch)
+            assertNull(saved.candidatesJson)
+            assertEquals(originalRun, database.runDao().findById(runId))
+            assertEquals(originalObservations, music.observationsFor(runId))
+            firstJob.cancelAndJoin()
+            database.close()
+            database = buildRunStateDatabase(context, DATABASE_NAME)
+            val reopened = RunReflectionCoordinator(database.runDao(),
+                RoomReflectionStore(database.reflectionDao(), database.musicObservationDao()), client,
+                CoroutineScope(reopenedJob + Dispatchers.Default), nowMillis = { finish + 100L })
+            reopened.onSavedVisible(runId).join()
+            val restored = withTimeout(10_000L) { reopened.state.first { it is RunReflectionState.Ready } }
+                as RunReflectionState.Ready
+            assertEquals(exactText, restored.text)
+            assertNull(restored.passage)
+            assertEquals(saved, database.reflectionDao().findByRunId(runId))
+            assertEquals(1, posts.get())
+            assertEquals(1, healthChecks.get())
+            assertEquals(1, database.runDao().countRuns())
+        } finally {
+            firstJob.cancelAndJoin()
+            reopenedJob.cancelAndJoin()
+        }
+    }
+
+    /** Deliberately cannot open a socket; this supplies only controlled HTTP response bytes. */
+    private class SelectionFixtureHttpsConnection(url: URL, private val response: (String) -> String) :
+        HttpsURLConnection(url) {
+        private val sent = ByteArrayOutputStream()
+        private val body by lazy { response(sent.toString("UTF-8")) }
+        override fun connect() = Unit
+        override fun disconnect() = Unit
+        override fun usingProxy() = false
+        override fun getCipherSuite() = "TLS_AES_128_GCM_SHA256"
+        override fun getLocalCertificates(): Array<Certificate> = emptyArray()
+        override fun getServerCertificates(): Array<Certificate> = emptyArray()
+        override fun getOutputStream() = sent
+        override fun getResponseCode() = 200
+        override fun getInputStream() = ByteArrayInputStream(body.toByteArray(Charsets.UTF_8))
+        override fun getHeaderField(name: String?): String? = when {
+            name.equals("X-RunState-Song-Cue", true) || name.equals("X-RunState-Song-Study", true) ||
+                name.equals("X-RunState-Song-Preparation", true) || name.equals("X-RunState-Song-Selection", true) -> "1"
+            else -> null
+        }
+    }
+
+    @Test fun selectedSongEvidenceIsAtomicAndSurvivesFinalizationAndReopen() = runBlocking {
+        val dao = createPending()
+        val selected = "{\"selectedSongId\":\"2\",\"songSelectionMethod\":\"CONTEXT_MATCH\"}"
+        assertFalse(dao.saveCandidates(completed.runId, retryId, "{}", false, selected))
+        assertEquals(pending.evidenceJson, dao.findByRunId(completed.runId)?.evidenceJson)
+        assertTrue(dao.saveCandidates(completed.runId, pending.requestId, "{}", false, selected))
+        assertFalse(dao.saveCandidates(completed.runId, pending.requestId, "{}", false, "{}"))
+        dao.selectNoSelectionIfDue(completed.runId, pending.selectionDeadlineEpochMillis)
+        assertTrue(dao.finalizeReady(completed.runId, pending.requestId, ReflectionBranch.NO_SELECTION,
+            "Exact selected reply.", pending.selectionDeadlineEpochMillis))
+        database.close()
+        database = buildRunStateDatabase(context, DATABASE_NAME)
+        val saved = requireNotNull(database.reflectionDao().findByRunId(completed.runId))
+        assertEquals(selected, saved.evidenceJson)
+        assertEquals("Exact selected reply.", saved.text)
+        assertNull(saved.candidatesJson)
     }
 
     @Test

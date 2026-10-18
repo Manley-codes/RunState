@@ -11,8 +11,11 @@ import com.runstate.mobile.run.TransitionHistoryCoverage
 /** Run-owned, ordered evidence from Android media sessions. No row means unknown, not silence. */
 @Dao
 abstract class MusicObservationDao {
-    @Query("SELECT * FROM run_song_preparations WHERE run_id = :runId")
+    @Query("SELECT * FROM run_song_preparations WHERE run_id = :runId ORDER BY observation_sequence_number, claimed_at_epoch_millis, preparation_id LIMIT 1")
     abstract suspend fun preparationFor(runId: String): SongPreparationClaimEntity?
+
+    @Query("SELECT * FROM run_song_preparations WHERE run_id = :runId ORDER BY observation_sequence_number, claimed_at_epoch_millis, preparation_id")
+    abstract suspend fun preparationsFor(runId: String): List<SongPreparationClaimEntity>
 
     /** Claim is committed before HTTP. Reopen/retry never returns an existing claim as new work. */
     @Transaction
@@ -23,7 +26,9 @@ abstract class MusicObservationDao {
         destinationFingerprint: String,
         nowEpochMillis: Long
     ): SongPreparationClaimEntity? {
-        if (preparationFor(runId) != null) return null
+        val previous = preparationsFor(runId)
+        if (previous.size >= MAX_SONG_PREPARATIONS_PER_RUN ||
+            previous.any { it.destinationFingerprint != destinationFingerprint }) return null
         val run = findRun(runId) ?: return null
         if (run.state != StoredRunState.RUNNING || !run.musicObservationRequested ||
             !run.musicReflectionSharingAllowed || run.transitionHistoryComplete != true ||
@@ -37,10 +42,11 @@ abstract class MusicObservationDao {
             historyCoverage = TransitionHistoryCoverage.COMPLETE
         ) ?: return null
         if (active < 30_000L) return null
+        val claimedIdentities = previous.mapNotNull { songPreparationIdentity(it.trackTitle, it.artistName) }.toSet()
         val first = observationsFor(runId).firstOrNull {
             it.sourcePackage == "com.spotify.music" && it.playbackState == MusicPlaybackState.PLAYING &&
                 it.observedAtEpochMillis in run.officialStartEpochMillis..nowEpochMillis &&
-                validPreparationIdentity(it.title?.trim()) && validPreparationIdentity(it.artist?.trim())
+                songPreparationIdentity(it.title, it.artist)?.let { identity -> identity !in claimedIdentities } == true
         } ?: return null
         if (first.sequenceNumber != observationSequenceNumber) return null
         val row = SongPreparationClaimEntity(

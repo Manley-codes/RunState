@@ -152,10 +152,10 @@ internal fun RunSettingsDialog(
                 }
                 SettingsPreference(
                     title = "Music in reflection",
-                    description = "Optional: prepare one observed Spotify song while you run. Its title and artist " +
-                        "go to RunState’s reflection service, Musixmatch and Anthropic. No phone audio, " +
-                        "notification text or full listening history is sent. Preparation may use AI credits " +
-                        "even if you discard the run.",
+                    description = "Optional: compare up to 12 Spotify songs observed during this run for your reflection. " +
+                        "Titles and artists go to RunState’s reflection service, Musixmatch and Anthropic. " +
+                        "Preparation starts while you run and may use AI credits even if you discard the run. " +
+                        "No phone audio, notification text or listening outside this run is sent.",
                     checked = musicReflectionSharingEnabled,
                     enabled = preferenceControlsEnabled &&
                         (musicReflectionSharingEnabled || musicObservationEnabled),

@@ -23,7 +23,8 @@ class RunSongStudyPreparationTest {
         var music = listOf(RunMusicObservationEntity(runId, 1, "first-observation", 1_100L, null,
             "com.spotify.music", "First title", "First artist", MusicPlaybackState.PLAYING,
             MusicObservationKind.SESSION_SNAPSHOT))
-        var claim: SongPreparationClaimEntity? = null
+        val claims = mutableListOf<SongPreparationClaimEntity>()
+        val claim: SongPreparationClaimEntity? get() = claims.firstOrNull()
         var preparationReadFails = false
         var onClaim: () -> Unit = {}
         override suspend fun activeRuns() = runs
@@ -33,25 +34,34 @@ class RunSongStudyPreparationTest {
             if (preparationReadFails) error("Fictional unavailable local store.")
             return claim
         }
+        override suspend fun preparations(runId: String): List<SongPreparationClaimEntity> {
+            if (preparationReadFails) error("Fictional unavailable local store.")
+            return claims.toList()
+        }
         override suspend fun claim(runId: String, preparationId: String, observationSequenceNumber: Int,
             destinationFingerprint: String, nowEpochMillis: Long): SongPreparationClaimEntity? {
-            if (claim != null || runs.singleOrNull()?.state != StoredRunState.RUNNING) return null
+            if (runs.singleOrNull()?.state != StoredRunState.RUNNING) return null
             val observation = music.single { it.sequenceNumber == observationSequenceNumber }
+            if (claims.any { songPreparationIdentity(it.trackTitle, it.artistName) ==
+                songPreparationIdentity(observation.title, observation.artist) }) return null
             val row = SongPreparationClaimEntity(runId, preparationId, requireNotNull(observation.title).trim(),
                 requireNotNull(observation.artist).trim(), observationSequenceNumber, destinationFingerprint,
                 nowEpochMillis)
-            claim = row
+            claims += row
             onClaim()
             return row
         }
         override suspend fun finish(runId: String, preparationId: String, ready: Boolean) {
-            claim = requireNotNull(claim).copy(status = if (ready) SongPreparationClaimStatus.READY
+            val index = claims.indexOfFirst { it.preparationId == preparationId }
+            claims[index] = claims[index].copy(status = if (ready) SongPreparationClaimStatus.READY
                 else SongPreparationClaimStatus.UNAVAILABLE)
         }
     }
 
     private class Gateway : SongStudyPreparationGateway {
         var supported = true
+        var multiple = false
+        var multipleCapabilityReply: CompletableDeferred<Boolean>? = null
         var capabilityReads = 0
         var capabilityReply: CompletableDeferred<Boolean>? = null
         var preparationReply: CompletableDeferred<Boolean>? = null
@@ -61,6 +71,7 @@ class RunSongStudyPreparationTest {
             capabilityReads++
             return capabilityReply?.await() ?: supported
         }
+        override suspend fun supportsMultiple(): Boolean = multipleCapabilityReply?.await() ?: multiple
         override suspend fun prepare(preparationId: String, trackTitle: String, artistName: String): Boolean {
             prepared += Triple(preparationId, trackTitle, artistName)
             return preparationReply?.await() ?: ready
@@ -82,7 +93,7 @@ class RunSongStudyPreparationTest {
                 waits.addLast(next)
                 next.await()
             },
-            { UUID.fromString("a8ddf13c-316b-44c4-bfa0-740012266a82") })
+            UUID::randomUUID)
         fun observe() = runBlocking { controller.onObservationSaved(store.runId).join() }
         fun advance(millis: Long) {
             now += millis
@@ -227,6 +238,121 @@ class RunSongStudyPreparationTest {
             assertNull(fixture.store.claim)
             assertEquals(0, fixture.gateway.capabilityReads)
             assertTrue(fixture.gateway.prepared.isEmpty())
+        } finally { fixture.close() }
+    }
+
+    @Test fun distinctSongsPrepareSeriallyWhileDuplicateCallbacksAndVersionSuffixesStayHonest() {
+        val pending = CompletableDeferred<Boolean>()
+        val fixture = Harness(gateway = Gateway().apply { multiple = true; preparationReply = pending })
+        try {
+            val first = fixture.store.music.single()
+            fixture.store.music += listOf(
+                first.copy(sequenceNumber = 2, title = "  FIRST   title ", artist = " first ARTIST "),
+                first.copy(sequenceNumber = 3, title = "First title (Live)"),
+                first.copy(sequenceNumber = 4, title = "Second title", artist = "Second artist")
+            )
+            fixture.observe()
+            assertEquals(1, fixture.gateway.prepared.size)
+            assertEquals(1, fixture.store.claims.size)
+            fixture.gateway.preparationReply = null
+            pending.complete(true)
+            assertEquals(listOf("First title", "First title (Live)", "Second title"),
+                fixture.gateway.prepared.map { it.second })
+            assertEquals(3, fixture.store.claims.map { it.preparationId }.toSet().size)
+            assertTrue(fixture.store.claims.all { it.status == SongPreparationClaimStatus.READY })
+        } finally { fixture.close() }
+    }
+
+    @Test fun laterObservationIsPreparedAndTwelveDistinctAttemptsAreTheRunBudget() {
+        val fixture = Harness(gateway = Gateway().apply { multiple = true; ready = false })
+        try {
+            fixture.observe()
+            val first = fixture.store.music.single()
+            fixture.store.music += (2..15).map { index -> first.copy(sequenceNumber = index, title = "Title $index") }
+            fixture.observe()
+            fixture.advance(1_000L)
+            assertEquals(12, fixture.gateway.prepared.size)
+            assertEquals(12, fixture.store.claims.size)
+            fixture.observe()
+            assertEquals(12, fixture.gateway.prepared.size)
+            assertTrue(fixture.store.claims.all { it.status == SongPreparationClaimStatus.UNAVAILABLE })
+            val restarted = Harness(fixture.store, Gateway().apply { multiple = true })
+            try {
+                restarted.observe()
+                assertEquals(0, restarted.gateway.capabilityReads)
+                assertTrue(restarted.gateway.prepared.isEmpty())
+            } finally { restarted.close() }
+        } finally { fixture.close() }
+    }
+
+    @Test fun failedAndInterruptedIdentitiesAreNeverRetriedButResumeCanPrepareANewSong() {
+        val pending = CompletableDeferred<Boolean>()
+        val fixture = Harness(gateway = Gateway().apply { multiple = true; preparationReply = pending })
+        try {
+            fixture.observe()
+            fixture.controller.cancel()
+            assertEquals(SongPreparationClaimStatus.UNAVAILABLE, fixture.store.claim?.status)
+            val second = fixture.store.music.single().copy(sequenceNumber = 2, title = "Second title")
+            fixture.store.music += second
+            fixture.gateway.preparationReply = null
+            fixture.gateway.ready = false
+            fixture.observe()
+            assertEquals(listOf("First title", "Second title"), fixture.gateway.prepared.map { it.second })
+            fixture.controller.cancel()
+            val restarted = Harness(fixture.store, Gateway().apply { multiple = true })
+            try {
+                restarted.observe()
+                assertTrue(restarted.gateway.prepared.isEmpty())
+                restarted.store.music += second.copy(sequenceNumber = 3, title = "Third title")
+                restarted.advance(1_000L)
+                assertEquals("Third title", restarted.gateway.prepared.single().second)
+            } finally { restarted.close() }
+        } finally { fixture.close() }
+    }
+
+    @Test fun unsupportedMultiCapabilityKeepsLegacyOneSongBehaviorAcrossProcessRecreation() {
+        val fixture = Harness()
+        try {
+            fixture.observe()
+            fixture.store.music += fixture.store.music.single().copy(sequenceNumber = 2, title = "Second title")
+            val restarted = Harness(fixture.store)
+            try {
+                restarted.observe()
+                assertTrue(restarted.gateway.prepared.isEmpty())
+                assertEquals(1, fixture.store.claims.size)
+            } finally { restarted.close() }
+        } finally { fixture.close() }
+    }
+
+    @Test fun revocationDuringMultiCapabilityCheckPreventsAnyIdentityDispatch() {
+        val pending = CompletableDeferred<Boolean>()
+        val fixture = Harness(gateway = Gateway().apply { multipleCapabilityReply = pending })
+        try {
+            fixture.observe()
+            fixture.allowed = false
+            pending.complete(true)
+            assertTrue(fixture.store.claims.isEmpty())
+            assertTrue(fixture.gateway.prepared.isEmpty())
+        } finally { fixture.close() }
+    }
+
+    @Test fun excludedObservationsCannotUsePreparationBudget() {
+        val fixture = Harness(gateway = Gateway().apply { multiple = true })
+        try {
+            val first = fixture.store.music.single()
+            fixture.store.music = listOf(
+                first.copy(runId = UUID.randomUUID().toString()),
+                first.copy(sequenceNumber = 2, sourcePackage = "com.other.player"),
+                first.copy(sequenceNumber = 3, playbackState = MusicPlaybackState.PAUSED),
+                first.copy(sequenceNumber = 4, title = " "),
+                first.copy(sequenceNumber = 5, observedAtEpochMillis = 999L),
+                first.copy(sequenceNumber = 6, observedAtEpochMillis = 999_999L),
+                first.copy(sequenceNumber = 7, title = "x".repeat(201)),
+                first.copy(sequenceNumber = 8, artist = "Bad\nArtist")
+            )
+            fixture.observe()
+            assertEquals(0, fixture.gateway.capabilityReads)
+            assertTrue(fixture.store.claims.isEmpty())
         } finally { fixture.close() }
     }
 }

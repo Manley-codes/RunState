@@ -312,3 +312,36 @@ val MIGRATION_13_14 = object : Migration(13, 14) {
             "ON `run_song_preparations` (`preparation_id`)")
     }
 }
+
+/** Widen the preparation key without rewriting any saved run, observation or claimed identity. */
+val MIGRATION_14_15 = object : Migration(14, 15) {
+    override fun migrate(connection: SQLiteConnection) {
+        connection.execSQL("""
+            CREATE TABLE `run_song_preparations_v15` (
+                `run_id` TEXT NOT NULL,
+                `preparation_id` TEXT NOT NULL,
+                `track_title` TEXT NOT NULL,
+                `artist_name` TEXT NOT NULL,
+                `observation_sequence_number` INTEGER NOT NULL,
+                `destination_fingerprint` TEXT NOT NULL,
+                `claimed_at_epoch_millis` INTEGER NOT NULL,
+                `status` TEXT NOT NULL,
+                PRIMARY KEY(`run_id`, `preparation_id`),
+                FOREIGN KEY(`run_id`) REFERENCES `runs`(`run_id`)
+                    ON UPDATE NO ACTION ON DELETE CASCADE
+            )
+        """.trimIndent())
+        connection.execSQL("""
+            INSERT INTO `run_song_preparations_v15`
+                (`run_id`, `preparation_id`, `track_title`, `artist_name`, `observation_sequence_number`,
+                 `destination_fingerprint`, `claimed_at_epoch_millis`, `status`)
+            SELECT `run_id`, `preparation_id`, `track_title`, `artist_name`, `observation_sequence_number`,
+                   `destination_fingerprint`, `claimed_at_epoch_millis`, `status`
+            FROM `run_song_preparations`
+        """.trimIndent())
+        connection.execSQL("DROP TABLE `run_song_preparations`")
+        connection.execSQL("ALTER TABLE `run_song_preparations_v15` RENAME TO `run_song_preparations`")
+        connection.execSQL("CREATE UNIQUE INDEX `index_run_song_preparations_preparation_id` " +
+            "ON `run_song_preparations` (`preparation_id`)")
+    }
+}

@@ -59,6 +59,73 @@ class RunStateMigrationTest {
     private val context = InstrumentationRegistry.getInstrumentation().targetContext
 
     @Test
+    fun versionFourteenMigrationPreservesAllFieldsAndEveryPreparationState() {
+        val name = "runstate-v14-multi-song-migration-test.db"
+        val old = helper.createDatabase(name, 14)
+        val identities = listOf(
+            RUN_ID to "a8ddf13c-316b-44c4-bfa0-740012266a82",
+            "03689ffc-65d9-4907-ae77-7a17b3ad77a6" to "3fc37cf9-3d3a-4d80-a08e-f9d5c14bbdf5",
+            "8c405ab0-4a80-4be9-9bfb-19f2517ec2ba" to "b5bec493-b0cd-44a4-a2f6-cd3e43489819"
+        )
+        identities.forEachIndexed { index, (runId, preparationId) ->
+            old.insertVersionTwoRun(runId = runId, state = "RUNNING",
+                lastCheckpointEpochMillis = OFFICIAL_START + 30_000, finishEpochMillis = null)
+            old.execSQL("UPDATE runs SET transition_history_complete=1, music_observation_requested=1, " +
+                "music_reflection_sharing_allowed=1 WHERE run_id=?", arrayOf(runId))
+            old.execSQL("""
+                INSERT INTO run_song_preparations (run_id,preparation_id,track_title,artist_name,
+                    observation_sequence_number,destination_fingerprint,claimed_at_epoch_millis,status)
+                VALUES (?,?,?,'Exact artist',1,?,?,?)
+            """.trimIndent(), arrayOf<Any>(runId, preparationId, "Exact title — $index", "a".repeat(64),
+                OFFICIAL_START + 30_000, listOf("CLAIMED", "READY", "UNAVAILABLE")[index]))
+        }
+        old.execSQL("""
+            INSERT INTO run_music_observations (run_id,sequence_number,observation_key,
+                observed_at_epoch_millis,elapsed_realtime_nanos,source_package,title,artist,playback_state,event_kind)
+            VALUES (?,1,'old-song',?,1000000,'com.spotify.music','Exact title — 0','Exact artist','PLAYING','SESSION_SNAPSHOT')
+        """.trimIndent(), arrayOf<Any>(RUN_ID, OFFICIAL_START + 1_000))
+        val tables = listOf("runs", "run_transitions", "run_location_points", "run_music_observations",
+            "run_reflections", "run_weather", "run_split_snapshots", "run_splits", "run_song_preparations")
+        val columns = tables.associateWith { table ->
+            old.query("SELECT * FROM `$table` LIMIT 0").use { it.columnNames.toList() }
+        }
+        fun rows(db: SupportSQLiteDatabase, table: String): List<List<String?>> =
+            db.query("SELECT * FROM `$table` ORDER BY 1,2").use { cursor -> buildList {
+                while (cursor.moveToNext()) add(columns.getValue(table).indices.map { index ->
+                    if (cursor.isNull(index)) null else cursor.getString(index)
+                })
+            } }
+        val before = tables.associateWith { rows(old, it) }
+        old.close()
+        helper.runMigrationsAndValidate(name, 15, true, MIGRATION_14_15).use { migrated ->
+            tables.forEach { table ->
+                migrated.query("SELECT * FROM `$table` LIMIT 0").use {
+                    assertEquals(table, columns.getValue(table), it.columnNames.toList())
+                }
+                assertEquals(table, before.getValue(table), rows(migrated, table))
+            }
+        }
+        val reopened = openDatabaseThroughFactory(name)
+        runBlocking {
+            val dao = reopened.musicObservationDao()
+            identities.forEachIndexed { index, (runId, preparationId) ->
+                val claim = dao.preparationsFor(runId).single()
+                assertEquals(preparationId, claim.preparationId)
+                assertEquals(listOf(SongPreparationClaimStatus.CLAIMED, SongPreparationClaimStatus.READY,
+                    SongPreparationClaimStatus.UNAVAILABLE)[index], claim.status)
+            }
+            val observation = dao.recordObservation(RunMusicObservation(RUN_ID, "new-song",
+                OFFICIAL_START + 31_000, null, "com.spotify.music", "New song", "New artist",
+                MusicPlaybackState.PLAYING, MusicObservationKind.METADATA_CHANGED))
+            val claim = dao.claimPreparation(RUN_ID, "789f76bc-4cd7-4891-b6ce-d956417ebc88",
+                observation.sequenceNumber, "a".repeat(64), OFFICIAL_START + 32_000)
+            assertEquals("New song", claim?.trackTitle)
+            assertEquals(2, dao.preparationsFor(RUN_ID).size)
+            assertEquals(identities.first().second, dao.preparationFor(RUN_ID)?.preparationId)
+        }
+    }
+
+    @Test
     fun versionThirteenMigrationPreservesEveryOldFieldAndCreatesNoPreparationClaims() {
         val name = "runstate-v13-song-preparation-migration-test.db"
         val old = helper.createDatabase(name, 13)

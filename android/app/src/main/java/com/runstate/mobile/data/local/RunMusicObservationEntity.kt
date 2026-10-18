@@ -4,7 +4,7 @@ import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.ForeignKey
 import androidx.room.Index
-import androidx.room.PrimaryKey
+import java.util.Locale
 import java.util.UUID
 
 /** A media-session event observed by RunState; it is not proof of a whole song play. */
@@ -18,6 +18,7 @@ enum class SongPreparationClaimStatus { CLAIMED, READY, UNAVAILABLE }
 
 @Entity(
     tableName = "run_song_preparations",
+    primaryKeys = ["run_id", "preparation_id"],
     foreignKeys = [ForeignKey(
         entity = RunEntity::class, parentColumns = ["run_id"], childColumns = ["run_id"],
         onDelete = ForeignKey.CASCADE
@@ -25,7 +26,7 @@ enum class SongPreparationClaimStatus { CLAIMED, READY, UNAVAILABLE }
     indices = [Index(value = ["preparation_id"], unique = true)]
 )
 data class SongPreparationClaimEntity(
-    @PrimaryKey @ColumnInfo(name = "run_id") val runId: String,
+    @ColumnInfo(name = "run_id") val runId: String,
     @ColumnInfo(name = "preparation_id") val preparationId: String,
     @ColumnInfo(name = "track_title") val trackTitle: String,
     @ColumnInfo(name = "artist_name") val artistName: String,
@@ -53,6 +54,17 @@ data class SongPreparationClaimEntity(
 
 internal fun validPreparationIdentity(value: String?): Boolean = value != null &&
     value.isNotBlank() && value == value.trim() && value.length <= 200 && value.none(Char::isISOControl)
+
+/** Bounded per-run spending, with no retry of an already claimed identity. */
+internal const val MAX_SONG_PREPARATIONS_PER_RUN = 12
+
+/** Match duplicate callbacks without erasing live/remix/version suffixes. */
+internal fun songPreparationIdentity(title: String?, artist: String?): Pair<String, String>? {
+    val parts = listOf(title?.trim(), artist?.trim())
+    if (parts.any { !validPreparationIdentity(it) }) return null
+    fun normalized(value: String) = value.lowercase(Locale.ROOT).replace(Regex("\\s+"), " ")
+    return normalized(requireNotNull(parts[0])) to normalized(requireNotNull(parts[1]))
+}
 
 @Entity(
     tableName = "run_music_observations",

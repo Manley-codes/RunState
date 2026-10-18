@@ -58,6 +58,7 @@ class RunReflectionCoordinatorTest {
         var savedWeather: RunWeatherSnapshot? = null
         var weatherReadFailure: Exception? = null
         var preparedSong: SongPreparationClaimEntity? = null
+        var failFinalizationOnce = false
         override suspend fun songPreparation(runId: String) = preparedSong
 
         override suspend fun find(runId: String) = rows[runId]
@@ -120,9 +121,20 @@ class RunReflectionCoordinatorTest {
             return true
         }
 
+        override suspend fun selectedCandidates(runId: String, requestId: String, json: String,
+            isTestData: Boolean, selectedEvidenceJson: String?): Boolean {
+            if (!candidates(runId, requestId, json, isTestData)) return false
+            selectedEvidenceJson?.let { rows[runId] = rows.getValue(runId).copy(evidenceJson = it) }
+            return true
+        }
+
         override suspend fun ready(
             runId: String, requestId: String, branch: ReflectionBranch, text: String, now: Long
         ): Boolean {
+            if (failFinalizationOnce) {
+                failFinalizationOnce = false
+                throw IllegalStateException("Synthetic local finalization failure")
+            }
             val old = rows[runId] ?: return false
             if (old.status != ReflectionStatus.PENDING || !old.selectionWindowStarted || old.requestId != requestId ||
                 old.selectedBranch != branch || old.candidatesJson == null) return false
@@ -969,6 +981,60 @@ class RunReflectionCoordinatorTest {
         assertEquals(0, restartCalls)
         assertEquals(SPENT_TEXT, restored.text)
         assertNull(restored.passage)
+    }
+
+    @Test fun chosenNonFirstSongIsSavedWithReplyAndDoesNotReplayAfterReopening() {
+        val dao = completedDao().apply {
+            inserted[0] = inserted[0].copy(musicObservationRequested = true, musicReflectionSharingAllowed = true)
+        }
+        val store = MemoryReflectionStore().apply {
+            observedMusic = listOf(sampleMusicObservation().copy(title = "Stronger", artist = "Kanye West"),
+                sampleMusicObservation().copy(sequenceNumber = 2, title = "Lovely Day", artist = "Bill Withers"))
+        }
+        val coordinator = RunReflectionCoordinator(dao, store, ReflectionGateway { request ->
+            assertEquals(2, request.evidence.songCandidates!!.size)
+            candidates().copy(isTestData = false, selectedSongId = "2", songSelectionMethod = "CONTEXT_MATCH",
+                songCueId = "lovely_day_bill_withers_v1")
+        }, scope(), quietWindowMillis = 0L, nowMillis = { 100L })
+        coordinator.onSavedVisible(RUN_ID)
+        val ready = coordinator.state.value as RunReflectionState.Ready
+        assertEquals("Lovely Day", ready.passage?.trackTitle)
+        val saved = store.rows.getValue(RUN_ID)
+        val evidence = com.google.gson.Gson().fromJson(saved.evidenceJson, CompletedRunEvidence::class.java)
+        assertEquals("2", evidence.selectedSongId)
+        assertEquals("Lovely Day", evidence.musicContext.trackTitle)
+        assertNull(saved.candidatesJson)
+        val reopened = RunReflectionCoordinator(dao, store, ReflectionGateway { error("No regeneration") },
+            scope(), nowMillis = { 100L })
+        reopened.onSavedVisible(RUN_ID)
+        assertNull((reopened.state.value as RunReflectionState.Ready).passage)
+        assertEquals(saved.text, (reopened.state.value as RunReflectionState.Ready).text)
+    }
+
+    @Test fun retryFallbackClearsPreviousSelectionAfterLocalFinalizationFailure() {
+        val dao = completedDao().apply {
+            inserted[0] = inserted[0].copy(musicObservationRequested = true, musicReflectionSharingAllowed = true)
+        }
+        val store = MemoryReflectionStore().apply {
+            observedMusic = listOf(sampleMusicObservation().copy(title = "Lovely Day", artist = "Bill Withers"))
+            failFinalizationOnce = true
+        }
+        var calls = 0
+        val coordinator = RunReflectionCoordinator(dao, store, ReflectionGateway {
+            if (++calls == 1) candidates().copy(isTestData = false, selectedSongId = "1",
+                songSelectionMethod = "CONTEXT_MATCH", songCueId = "lovely_day_bill_withers_v1")
+            else candidates().copy(isTestData = false)
+        }, scope(), quietWindowMillis = 0L, nowMillis = { 100L })
+        coordinator.onSavedVisible(RUN_ID)
+        assertEquals(ReflectionStatus.FAILED, store.rows.getValue(RUN_ID).status)
+        coordinator.retry(RUN_ID)
+        val saved = store.rows.getValue(RUN_ID)
+        assertEquals(ReflectionStatus.READY, saved.status)
+        val evidence = com.google.gson.Gson().fromJson(saved.evidenceJson, CompletedRunEvidence::class.java)
+        assertNull(evidence.selectedSongId)
+        assertNull(evidence.songSelectionMethod)
+        assertNull((coordinator.state.value as RunReflectionState.Ready).passage)
+        assertEquals(2, calls)
     }
 
     @Test fun ordinarySourceFallbackRemainsReadableWithoutLaunchingFrozenSongPassage() {

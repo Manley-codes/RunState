@@ -40,6 +40,9 @@ internal interface ReflectionStore {
     suspend fun musicObservations(runId: String): List<RunMusicObservationEntity> = emptyList()
     suspend fun weatherSnapshot(runId: String): RunWeatherSnapshot? = null
     suspend fun songPreparation(runId: String): SongPreparationClaimEntity? = null
+    suspend fun songPreparations(runId: String): List<SongPreparationClaimEntity> = listOfNotNull(songPreparation(runId))
+    suspend fun selectedCandidates(runId: String, requestId: String, json: String, isTestData: Boolean,
+        selectedEvidenceJson: String?): Boolean = candidates(runId, requestId, json, isTestData)
 }
 
 internal class RoomReflectionStore(
@@ -60,6 +63,9 @@ internal class RoomReflectionStore(
     override suspend fun musicObservations(runId: String) = musicDao?.observationsFor(runId).orEmpty()
     override suspend fun weatherSnapshot(runId: String) = weatherDao?.find(runId)?.readySnapshot()
     override suspend fun songPreparation(runId: String) = musicDao?.preparationFor(runId)
+    override suspend fun songPreparations(runId: String) = musicDao?.preparationsFor(runId).orEmpty()
+    override suspend fun selectedCandidates(runId: String, requestId: String, json: String, isTestData: Boolean,
+        selectedEvidenceJson: String?) = dao.saveCandidates(runId, requestId, json, isTestData, selectedEvidenceJson)
 }
 
 /**
@@ -142,7 +148,7 @@ internal class RunReflectionCoordinator(
                         catch (_: Exception) { null }
                         val request = reflectionRequestFromSavedRun(
                             requestIdSupplier().toString(), run, runDao.transitionsFor(runId), music, weather,
-                            store.songPreparation(runId))
+                            store.songPreparation(runId), store.songPreparations(runId))
                         val receiptFinishedAt = finishedReceipts[runId]
                         record = store.ensure(RunReflectionEntity(
                             runId = runId, requestId = request.requestId,
@@ -300,8 +306,13 @@ internal class RunReflectionCoordinator(
             try {
                 val evidence = gson.fromJson(record.evidenceJson, CompletedRunEvidence::class.java)
                 val candidates = gateway.request(ReflectionApiRequest(record.requestId, runId, evidence))
+                // Keep legacy snapshots byte-for-byte. Reconcile only actual new/previous
+                // selection metadata, including clearing a stale winner after a retry fallback.
+                val selectedEvidence = if (candidates.selectedSongId != null || evidence.selectedSongId != null ||
+                    evidence.songSelectionMethod != null) gson.toJson(evidence.withSongSelection(candidates)) else null
                 mutex.withLock {
-                    store.candidates(runId, record.requestId, gson.toJson(candidates), candidates.isTestData)
+                    store.selectedCandidates(runId, record.requestId, gson.toJson(candidates), candidates.isTestData,
+                        selectedEvidence)
                     finalizeIfPossible(runId)
                     store.find(runId)?.let(::publish)
                 }

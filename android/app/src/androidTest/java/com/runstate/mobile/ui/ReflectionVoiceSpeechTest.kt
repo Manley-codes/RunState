@@ -71,6 +71,100 @@ class ReflectionVoiceSpeechTest {
         EARLY_PREPARATION, COORDINATOR, RECEIPT, GENERATION, PERSISTENCE, AUDIO, RESTORATION, REOPEN, COMPLETE
     }
 
+    /** Explicit paid-provider check, silent and synthetic; no Spotify controls or Room writes. */
+    @Test fun realHostedMultiSongSelectionUsesPreparedSongsAndIdempotentDelivery() = runBlocking {
+        assumeTrue(InstrumentationRegistry.getArguments().getString("allowRealMultiSongSelection") == "yes")
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        var stage = "CONNECTION"
+        var preparationAttempts = 0
+        var preparedCount = 0
+        var finalDuration = -1L
+        var repeatedDuration = -1L
+        var selectedId: String? = null
+        var selectionMethod: String? = null
+        var selectedCatalogTitle: String? = null
+        try {
+            // The saved encrypted connection is read only after explicit opt-in, and never leaves this device.
+            val connection = requireNotNull(AndroidReflectionConnectionStore(instrumentation.targetContext).load())
+            stage = "CAPABILITY"
+            val preparationClient = HostedSongStudyPreparationClient(connection)
+            check(preparationClient.supports() && preparationClient.supportsMultiple())
+            val definitions = listOf("Stronger" to "Kanye West", "Lovely Day" to "Bill Withers",
+                "Good as Hell" to "Lizzo")
+            val songs = definitions.map { identity -> reflectionSongCatalog.single {
+                it.title == identity.first && it.artist == identity.second
+            } }
+            val runId = UUID.randomUUID().toString()
+            val zone = java.time.ZoneId.of("America/Chicago")
+            val start = java.time.LocalDate.now(zone).atTime(8, 0).atZone(zone).toInstant().toEpochMilli()
+            val finish = start + 32 * 60_000L
+            val fingerprint = reflectionDestinationFingerprint(connection)
+            val observations = songs.mapIndexed { index, song -> RunMusicObservationEntity(
+                runId, index + 1, "synthetic-selector-${index + 1}", start + (index + 1) * 60_000L,
+                null, "com.spotify.music", song.title, song.artist, MusicPlaybackState.PLAYING,
+                MusicObservationKind.METADATA_CHANGED) }
+            stage = "PREPARATION"
+            val claims = songs.mapIndexed { index, song ->
+                val preparationId = UUID.randomUUID().toString()
+                preparationAttempts++
+                val ready = preparationClient.prepare(preparationId, song.title, song.artist)
+                if (ready) preparedCount++
+                SongPreparationClaimEntity(runId, preparationId, song.title, song.artist, index + 1,
+                    fingerprint, observations[index].observedAtEpochMillis + 30_000L,
+                    if (ready) SongPreparationClaimStatus.READY else SongPreparationClaimStatus.UNAVAILABLE)
+            }
+            val run = RunEntity(runId = runId, state = StoredRunState.COMPLETED,
+                officialStartEpochMillis = start, startTimezoneId = zone.id,
+                lastCheckpointEpochMillis = finish, finishEpochMillis = finish,
+                trackingMode = RunTrackingMode.FIXTURE, finalDistanceMeters = 3 * 1_609.344,
+                metricSource = MetricSource.FIXTURE, telemetryCoverage = TelemetryCoverage.COMPLETE,
+                displayDistanceUnit = DistanceUnit.MILES, transitionHistoryComplete = true,
+                preRunEnergy = PreRunEnergy.MODERATE, musicObservationRequested = true,
+                musicReflectionSharingAllowed = true)
+            val request = reflectionRequestFromSavedRun(UUID.randomUUID().toString(), run,
+                listOf(RunTransitionEntity(runId, 1, RunTransitionType.PAUSE, finish)), observations,
+                songPreparation = claims.first(), songPreparations = claims)
+            check(request.evidence.songCandidates?.size == 3 && preparationAttempts == 3)
+            stage = "GENERATION"
+            val client = HostedReflectionHttpClient(connection)
+            val generationStarted = SystemClock.elapsedRealtime()
+            val candidates = client.request(request)
+            finalDuration = SystemClock.elapsedRealtime() - generationStarted
+            check(!candidates.isTestData && candidates.songSelectionMethod == "CONTEXT_MATCH")
+            val winner = requireNotNull(request.evidence.songCandidates).single {
+                it.candidateId == candidates.selectedSongId
+            }
+            check(candidates.songCueId != null && candidates.songCueId == winner.musicContext.songCue?.cueId)
+            check(listOf(candidates.spent, candidates.feelingGood, candidates.poweredUp, candidates.noSelection)
+                .all { it.isNotBlank() })
+            selectedId = winner.candidateId
+            selectionMethod = candidates.songSelectionMethod
+            selectedCatalogTitle = songs.single { it.title == winner.musicContext.trackTitle &&
+                it.artist == winner.musicContext.artistName }.title
+            stage = "REPEAT_DELIVERY"
+            val repeatedStarted = SystemClock.elapsedRealtime()
+            // Exact same request identity/evidence joins the server's cached response; no second generation.
+            val repeated = client.request(request)
+            repeatedDuration = SystemClock.elapsedRealtime() - repeatedStarted
+            check(candidates == repeated)
+            stage = "COMPLETE"
+        } catch (_: Exception) {
+            // Assertion output must not include connection secrets, provider text, or reflection content.
+            throw AssertionError("The optional silent multi-song selection check failed at $stage.")
+        } finally {
+            instrumentation.sendStatus(2, android.os.Bundle().apply {
+                putString("runstate_selector_stage", stage)
+                putInt("runstate_selector_preparation_attempts", preparationAttempts)
+                putInt("runstate_selector_prepared_count", preparedCount)
+                putLong("runstate_selector_generation_ms", finalDuration)
+                putLong("runstate_selector_repeat_delivery_ms", repeatedDuration)
+                selectedId?.let { putString("runstate_selector_chosen_id", it) }
+                selectionMethod?.let { putString("runstate_selector_method", it) }
+                selectedCatalogTitle?.let { putString("runstate_selector_catalog_title", it) }
+            })
+        }
+    }
+
     /** Silent read-only metadata sampling: no playback, run/history writes or provider requests. */
     @Test fun currentSpotifyDurationReadOnlyProbe() = runBlocking {
         assumeTrue(InstrumentationRegistry.getArguments().getString("allowRealSpotifyDurationProbe") == "yes")
