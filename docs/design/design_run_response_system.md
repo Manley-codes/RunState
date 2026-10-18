@@ -7,7 +7,55 @@ metadata:
 
 Every successfully saved run gets a contextual response. No exceptions.
 
-## Music composition repair — October 17, 2026
+## Early song study before completion — approved October18,2026
+
+Manley approved moving matched song understanding earlier, with possible early AI charges for
+discarded work and no guarantee that the first eligible song will still be current at the end.
+The local implementation waits30 active seconds, requires both frozen/current music choices,
+access and the same hosted destination, then durably claims one eligible observed song once.
+The early request contains no run facts or audio. Completion supplies fresh final evidence to
+the unchanged four-branch writer; a valid prepared study removes the need to study that song
+again. Source/notes can remain in bounded server memory for reuse, as disclosed in DATA_PRIVACY.
+
+Failed, expired or process-lost preparation can fall back to cold same-song generation with
+extra AI charges. There is no automatic background retry or new song ranking. Changed connection
+destinations suppress the pinned music; an older server receives no early upload. Recorded
+playback remains current-song only, so a later different track can skip the clip. Selected voice
+preparation, audible facts/intake ownership and650ms reflection-to-song pause remain unchanged.
+Final160 backend/609 JVM tests per Android variant and packaged JAR/three APKs passed. Moto13→14
+preserved32 old records/fields and left the new claim table empty; silent53 checks passed with5
+gated skips and no provider calls. Actual fields were unchanged afterward and temporary copies/
+test package removed. User commits/push, Render deployment and the real warm timing check remain
+pending; no early provider call, measured latency improvement or live activation is claimed.
+
+## Accepted writer and selected voice preparation — October 18, 2026
+
+The accepted song-study/four-branch writer is connected to normal hosted requests; it supersedes
+the rejected v1.8 composition below. Preserve the accepted prompts, Opus5.5 configuration and
+examples in `music_reflection_accepted_baseline.md`. The new normal-hosted reflection passed
+Manley's listening judgment, although he prefers the original wording. He finds the pause from
+facts to reflection too long. This is different from the650ms reflection-to-song gap, which stays.
+
+The bounded delivery change in progress prepares only the exact selected reflection's voice in
+memory as soon as that text is available, even if remaining facts or visual intake still hold
+audible playback. Preparation must not speak early, synthesize all four Energy candidates,
+regenerate the reflection or change the selected text. Playback reuses that synthesis once.
+Stop, background, navigation, destination/retry/run replacement invalidate obsolete preparation;
+returning to the screen must not revive it. No audio file or persistent speech cache is added.
+
+Preparation passed591 JVM tests per variant/three APK builds, was installed and passed27 silent
+Moto checks with5 gated skips. The first timed live check completed facts/custom voice but failed
+on a newly measured+1ms Spotify duration change; cleanup paused correctly. No facts-to-reflection
+interval was emitted because the timing report followed the failing clip assertion. Manley still
+finds the wait too long. Final-cleanup timing reporting and strict±1ms rounding handling now pass
+596 JVM tests per variant/three APK builds;±2ms still rejects. The update was installed without
+altering32 real saved records. A music-only probe finished/restored exactly with0ms duration delta;
+it did not reproduce the1ms event, retest fresh reflection delivery or measure a facts-to-reflection
+gap. This does not speed the fresh Musixmatch/song-study/writer work itself, and no shorter
+observed wait is claimed. The later approved early song-study feature above is separate from
+this smaller voice-preparation change.
+
+## Historical music composition repair — October 17, 2026
 
 Manley rejected the first Stronger audition as sounding the same as the pre-Musixmatch replies.
 Song analysis must be a central creative input, not optional decoration on a stats recap. Quality

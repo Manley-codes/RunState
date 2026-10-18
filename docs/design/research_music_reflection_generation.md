@@ -4,10 +4,133 @@ description: "Working research notebook for a grounded, music-aware reflection s
 metadata:
   type: research
   status: active-working-notebook
-  updated: 2026-10-17
+  updated: 2026-10-18
 ---
 
 # Music-aware reflection generation research
+
+## Early cloud study approved and implemented locally — October18,2026
+
+After the small voice-preparation change left the wait too long, Manley approved moving song
+understanding into the active run. The disclosed costs are real early AI usage even when a run
+is discarded, a first eligible song rather than necessarily the final/best song, a possible
+current-song-only snippet skip, and remaining wait on weak networks. This is a delivery change,
+not another search for better creative wording; accepted prompts/models/examples are unchanged.
+
+The local controller waits for30ACTIVE seconds and requires a RUNNING durable run, both frozen
+music opt-ins, current preferences/access and an unchanged hosted destination. Room14 atomically
+claims the first eligible saved Spotify PLAYING identity once. A capability-only health check
+precedes a metadata-only authenticated `/api/reflections/song-study` POST. The request contains
+only an opaque preparation ID/title/artist; song study sees no run facts. Old servers receive no
+early metadata request. Claims survive reopen and do not cause automatic background retries.
+
+Backend preparation retains matched bounded source plus validated notes in process memory only,
+up to32 entries with a2hour reuse TTL. Expired completed entries are purged on later cache access;
+process exit also discards them. No strict2hour erasure timer, provider-retention guarantee,
+file/cache export or audio is implied. The final writer receives fresh completed evidence and
+reuses the same pinned song's prepared study when available. The optional reference is transport
+metadata, not a model fact. Changed destinations redact the pinned music/reference. Failed,
+expired or process-lost preparation may require cold generation and extra AI charges.
+
+Controller, JVM test and generated Room14 schema are the only necessary new files in this slice;
+the existing additive migration and DAO tests cover the durable claim shape. No old schema may
+be rewritten. No song ranking, queue editing, arbitrary-track playback or different voice is
+added. Final160 backend tests passed with0 failures/errors/skips after the last source edit;
+the application JAR was packaged/inspected, including prepared-study classes and accepted prompt
+resources. Standard Maven jar-plugin downloads are ignored in `backend/.m2`; the generated JAR
+is under ignored `backend/target`. Final609 JVM tests per Android variant passed with0 failures/
+errors/skips; three APK builds passed in29s.
+
+Actual Moto13→14 installation preserved32 real saved records and every original stored field,
+adding only the expected empty claim table/Room identity. Silent verification passed53 checks/
+5 gated skips (58 discovered),44.350s device/49.750s host:21 migration,5 music DAO and32 selected
+voice/Completion checks. No provider calls occurred. All actual fields matched after checks;
+private copies/test package were removed and normal app reopened on Room14. New early-study
+requests have not been exercised against the live service. User commits/push/master promotion,
+Render activation and the gated warm timing check remain pending. The preceding596-test release/
+music-only probe is historical and does not establish this feature's speed or live behavior.
+
+## Hosted activation and complete isolated-fixture device check — October17–18,2026
+
+**Listener judgment resolved:** the new normal-hosted reflection is still good and passes for
+Manley, though he prefers the original wording. The long pause after the factual announcement is
+the next concern. Do not rewrite the accepted references or conflate that wait with the deliberate
+650ms pause after the reflection. Selected-only memory voice preparation/reuse passed591 JVM
+tests per variant/three APK builds and was installed. Silent Moto checks passed27/5 gated skips
+(32 discovered) in40.431s/45.860s host. All32 actual saved fields matched and private copies/test
+package were removed.
+
+The first timed live attempt failed40.820s/45.688s host after successful facts/custom voice.
+ENT_PLAY325ms reported PAUSED with NEW durationDelta+1ms/updateAge4ms. Unlike the earlier escape,
+cleanup sent its protective pause in8ms and music did not continue; all32 saved fields matched.
+This supplies a new measured rounding event, not the missing magnitude/cause of the original
+duration-change failure. The timing receipt had followed the clip assertion, so no facts-to-
+reflection interval was recovered for this failed attempt. Timing now emits from final cleanup
+for future failures. Manley still finds the wait too long.
+Strict±1ms tolerance retains full identity/valid bounds and rejects±2ms; final596 JVM tests per
+variant passed with0 failures/errors/skips and three APKs built in37s. Installed latest APK
+preserved all32 actual records/Room13/every inspected field. The music-only probe passed7.476s
+(10.953s host), FINISHED with0ms paused-position restoration error,159736ms duration and0ms delta
+throughout. It made no AI/voice calls, reproduced no1ms event, and supplies no facts-to-reflection
+timing. Boundary±1ms cases are proven by unit tests; no fresh normal reflection retest is claimed.
+Temporary private copies/test package were removed. No speed gain is established; the prior
+40.820s live failure remains a failure. Fresh two-call generation is still substantial work;
+the later approved early-study implementation above is separate from this earlier repair.
+
+Manley committed/pushed the three groups through2f3e77c and personally fast-forwarded/pushed
+master to that exact reviewed checkpoint. Remote branch tips matched. Render UI confirmed master,
+backend/Dockerfile, backend context and no Docker Command override. Manley selected Manual Deploy;
+dep-dba4qsm1egvs739c7j80 built successfully and became Live at2f3e77c in52.2s. Public health
+returned200/ok with Song-Cue1,Song-Study1 and Reflection-Voice1. No new key or subscription.
+
+Normal debug APK installation preserved all32 completed records/Room13 and every inspected
+database field. Temporary private copies were removed. Existing ReflectionVoiceSpeechTest gained
+an explicitly gated real normal-path check using in-memory Room, actual DAOs/coordinator, the
+saved on-device private connection and a controlled observation of the paused catalog recording.
+Fictional fixture facts:3miles,32active/33elapsed minutes,Moderate→FeelingGood, current Chicago time.
+No production history is read into the model or written by this isolated fixture.
+
+First1.57s test attempt rejected paused Spotify because the checker incorrectly demanded Pause
+while already paused. Native actions3025844 advertised Play/Seek, not Pause; production admission
+already handled that correctly. The test-only prerequisite was corrected. No source/model call
+occurred before that preflight failure. Fixed safe stage diagnostics make subsequent failures
+locatable without provider causes, private configuration or generated text.
+
+The next42.277s attempt proved one real hosted frozen request, matching accepted cue/study-version
+delivery, conditional Energy/text finalization in isolated Room and actual custom voice. Passage
+entrance failed DURATION_CHANGED325ms after play admission; cleanup also rejected changed duration
+and the recording continued. Operator verification found the expected Good as Hell/Lizzo recording
+PLAYING and explicitly paused it. The actual32 saved records remained unchanged; no complete
+audio success was claimed.
+
+Read-only duration probing then found159736ms stable over30samples. A standalone catalog passage
+passed7.465s with0ms duration delta throughout, exact stop/paused-position restoration. Both probes
+took18.125s host time, made no Claude/ElevenLabs call, and preserved all actual saved fields. The
+original delta was not captured/reproduced; no duration tolerance was introduced as a guessed fix.
+
+A narrow failure-containment repair keeps DURATION_CHANGED as an abort. On that specific failure,
+cleanup can cancel only its own pending/playing transport with the same nonblank media ID,
+source/session/title/artist, valid duration/position and expected trajectory. It cannot restore,
+resume, touch another recording, or override a distant user seek/confirmed user pause. Bounded
+duration-delta diagnostics remain for future evidence. Final590 JVM tests per Android variant and
+all three APK builds passed; installed repair again preserved all32 actual records/Room13 fields.
+No new permanent files, Git mutation or provider/account settings change.
+
+Final `realHostedSavedRunUsesAcceptedStudyThenCustomVoiceAndSpotify` actual-Moto check
+**passed49.309s** (53.172s host). One real normal HostedClient request from the frozen fictional
+3mi/32active/33elapsed/Moderate→FeelingGood fixture validated its POST cue and study-version1,
+persisted the selected branch/exact generated text in isolated in-memory Room, and used actual
+custom cloud speech. A656ms gap led into Good as Hell48.91–53.55s; passage completion, stop and
+original paused-position restoration were verified with0ms error. All duration deltas were0ms.
+Recreating the coordinator reopened that exact text with no additional HTTP request or automatic
+passage. All32 actual saved records/Room13/every inspected database field matched. Temporary private
+copies/test package were removed and normal RunState reopened.
+
+Manley accepts this new reflection while preferring the original wording; that does not replace
+the three preserved references. These are real normal code paths with an isolated
+fixture, not a genuine run or full normal-UI journey. The original DURATION_CHANGED was not
+reproduced, so this pass does not establish its cause or exercise that failure condition; the narrow
+containment branch is software-tested. Accepted references, prompts and source boundaries stay intact.
 
 ## Accepted process promoted to the normal request path locally — October17,2026
 

@@ -5,6 +5,151 @@ metadata:
   type: project
 ---
 
+## Early song study verified and installed; hosted activation pending — October18,2026
+
+Manley approved preparing song context during the run after being told that this can incur AI
+charges even for a discarded run, pin an earlier song instead of the last one, skip the snippet
+if Spotify now has another recording, and still wait on a weak connection. The bounded feature
+is implemented and software/silent-phone verified. The earlier596-test release and music-only
+probe below remain separate historical checks, not warm-study latency evidence.
+
+- After30 active seconds, a saved RUNNING run needs both frozen music choices, current music
+  preferences, notification access and the same configured hosted destination. The first eligible
+  durable Spotify PLAYING title/artist is claimed once in new Room14 `run_song_preparations`.
+  Paused time does not count. A claimed/interrupted/failed attempt is not automatically retried
+  after callbacks, reopen or process death.
+- A capability check protects older servers. An authenticated metadata-only POST to
+  `/api/reflections/song-study` sends an opaque preparation UUID and that one title/artist, no run
+  facts, GPS, Energy, audio or listening-history list. The backend retrieves matched bounded
+  Musixmatch material and validates song-only notes using the accepted study/model.
+- At most32 prepared source/study entries stay in backend process memory. Entries expire for
+  reuse after2hours and are purged on a later cache access or when the process ends; this is not
+  a timed guarantee of erasure at exactly2hours. No source/study file, phone cache or audio is
+  created. At most one speculative provider job is admitted while preserving final-work capacity.
+- Completion still supplies fresh frozen run facts and generates all four Energy branches.
+  A matching opaque reference can reuse the prepared study, with the same pinned song and
+  unchanged writer prompt. A failed, expired or lost preparation can require cold generation
+  and extra AI charges. An unavailable source can still produce ordinary text without a clip.
+  A changed destination suppresses the pinned music/reference rather than forwarding it elsewhere.
+- The final recorded snippet remains current-song only; another current recording causes a skip.
+  No arbitrary song ranking, Spotify queue changes, new voice, rewritten prompt or automatic hook
+  detection is added. The accepted650ms reflection-to-song pause and baseline stay intact.
+
+Three necessary new files are the controller
+`android/app/src/main/java/com/runstate/mobile/music/RunSongStudyPreparation.kt`, its focused
+`android/app/src/test/java/com/runstate/mobile/music/RunSongStudyPreparationTest.kt`, and Room's
+generated `android/app/schemas/com.runstate.mobile.data.local.RunStateDatabase/14.json` snapshot.
+The additive13→14 migration leaves old fields intact and creates no historical claims; exported
+schemas1–13 remain unchanged.
+
+Final software proof:160 backend tests passed with0 failures/errors/skips after the last source
+edit; application JAR was packaged and inspected for the prepared-study classes and frozen prompt
+resources. Standard Maven packaging downloaded its jar-plugin dependencies into ignored
+`backend/.m2`; the generated application JAR lives under ignored `backend/target`. Both Android
+variants passed609 JVM tests with0 failures/errors/skips, and all three APK builds passed in29s.
+
+The Moto upgrade13→14 preserved all32 saved records and every original field. Only the expected
+empty `run_song_preparations` table and Room identity changed. The latest silent suite passed53
+checks with5 explicitly gated skips (58 discovered), in44.350s device/49.750s host: all21 migration
+checks, all5 music DAO checks and32 selected voice/Completion checks. It made no provider calls.
+All actual database fields matched after testing; private copies and test package were removed,
+normal RunState reopened on Room14, and cleanup was independently verified empty.
+
+Both remote branch tips still point to2f3e77c. Manley's three grouped commits/push, deliberate
+master promotion, Render deployment and one gated warm timing check remain. No actual early
+provider request, faster measured delivery, new hosted activation or assistant Git mutation is
+claimed. The warm check's `allowRealSongPreparation=yes` gate remains off in ordinary silent tests.
+
+## Hosted activation and complete isolated-fixture sequence verified — October17–18,2026
+
+**Listener outcome and next bounded change:** Manley accepts the newly generated reflection as
+still good, while preferring the original wording. The delay from facts to reflection felt too
+long. This is separate from the accepted650ms reflection-to-song pause. Selected-only speech
+preparation is now installed: once the exact final reflection is available, prepare that one
+voice in memory while facts/intake can still hold audible playback, then reuse the same synthesis.
+Stop, background, navigation, destination/retry/run replacement must discard obsolete preparation.
+Prompts, models, preserved examples and the650ms song gap stay unchanged. The selected-voice
+preparation build passed591 JVM tests in each variant and three APK builds, then was installed
+with all32 saved records/inspected fields preserved. Silent Moto checks passed27 with5 gated skips
+(32 discovered), in40.431s/45.860s host; temporary copies/test package were removed.
+
+The first timed live attempt failed40.820s/45.688s host after successful facts/custom speech:
+ENT_PLAY at325ms was PAUSED with a newly measured+1ms duration delta/updateAge4ms. Cleanup sent
+the protective pause in8ms and music did not continue. All32 actual fields remained unchanged.
+The timing report came after the passage assertion, so this failure produced no measured
+facts-to-reflection interval; reporting now runs in final cleanup for future failures.
+Manley still finds the wait too long: selected-only preparation is not a demonstrated latency
+success. A narrow±1ms duration-rounding tolerance now retains full identity/valid-bound guards
+and rejects±2ms. Both final variants passed596 JVM tests with0 failures/errors/skips, and three APK
+builds passed in37s. The latest APK was installed with all32 actual records/Room13/inspected fields
+unchanged. A music-only probe passed7.476s/10.953s host: FINISHED, exact paused-position restoration
+at0ms error, actual duration159736ms and0ms delta at every recorded stage. It made no AI/voice
+request. The±1ms boundaries are unit-tested; this0ms probe did not reproduce that event. Temporary
+private copies/test package were removed. Future failed live checks can now emit timing in final
+cleanup, but no new fresh-reflection retest or facts-to-reflection timing is claimed. The earlier
+failed voice-preparation test remains a failure. This measured event does not establish the size
+or cause of the earlier unmeasured duration change. Fresh generation is
+still substantial work. The later approved early cloud-study feature is recorded above; this
+earlier repair did not implement it.
+
+Manley created/pushed the three groups through `2f3e77c`, then personally fast-forwarded/pushed
+`master` to the same exact checkpoint. GitHub's two branch tips were independently read and
+matched. Render still builds `master`, `backend/Dockerfile` with build context `backend`, no
+Docker Command override. Manley selected Manual Deploy; deployment `dep-dba4qsm1egvs739c7j80`
+became Succeeded/Live at `2f3e77c` in52.2s. Build success and public200/ok with Song-Cue1,
+Song-Study1 and Reflection-Voice1 were verified. No new credential or subscription was needed.
+
+The new normal APK was installed on the unlocked Moto. Before/after hashes of every inspected
+database field matched:32 completed,zero active,Room13. Temporary private safety copies under
+`android/app/build/runstate-update-*` were removed. No real run was started or saved.
+
+An explicitly gated normal-path test was added to existing `ReflectionVoiceSpeechTest.kt`:
+actual in-memory Room DAOs/coordinator/frozen request, saved private on-device hosted connection,
+Energy selection, custom voice and actual catalog passage. The first1.57s attempt stopped before
+provider work because the checker incorrectly required Pause while Spotify was already paused;
+native actions confirmed Play/Seek but no Pause, and only that test prerequisite was corrected.
+The next42.277s attempt proved one real hosted request, correct paired cue/delivery version,
+selected-text persistence and custom cloud speech. Passage entrance then failed DURATION_CHANGED;
+the same guard blocked cleanup and Spotify was still playing. The operator paused the expected
+Good as Hell recording. All32 actual History fields matched after both attempts and private
+verification copies/test packages were removed. This is not yet a successful complete sequence.
+
+Two guarded music-only probes then passed without Claude/ElevenLabs or database writes. Paused
+duration was159736ms for30 samples; the standalone passage reported0ms duration delta throughout,
+finished in7.465s and restored the paused position exactly. The original change's size could not
+be recovered and was not reproduced; no tolerance was added to exact-duration playback checks.
+
+The confirmed cleanup escape is repaired narrowly: DURATION_CHANGED still aborts playback, but
+cleanup may cancel RunState's own outstanding play only with unchanged nonblank media ID,
+source/session/title/artist, valid duration/position and its expected trajectory. It never seeks
+or resumes after this failure, and does not touch another recording, a distant user seek or a
+confirmed user pause. Private diagnostics now record bounded duration delta. Regression tests
+cover both buffering/paused pending play and genuine user/source changes.
+
+Both final Android variants passed590 JVM tests,zero skips; all three APK builds passed.
+The repair APK is installed and every inspected field of all32 actual runs/Room13 matched again.
+Temporary verification copies/test packages were removed. No new permanent files were needed;
+only the existing player, its JVM tests, existing voice/instrumentation tests and documentation
+were edited. Accepted examples/prompts remain unchanged. No Git mutation was performed by the
+assistant.
+
+The final `realHostedSavedRunUsesAcceptedStudyThenCustomVoiceAndSpotify` Moto check then
+**passed49.309s** (53.172s host invocation). One actual normal HostedClient request used frozen
+fictional3mi/32active/33elapsed/Moderate→FeelingGood evidence in isolated in-memory Room. The POST
+cue/study-version1 matched, selected Energy/exact generated text were persisted, actual custom
+cloud speech completed, the handoff gap was656ms, and Good as Hell's48.91–53.55s catalog passage
+completed with verified stop and original paused-position restoration at0ms error. Every recorded
+duration delta was0ms. A recreated coordinator reopened the exact saved text without another HTTP
+request or automatic passage. All32 actual saved records/Room13/every inspected database field
+matched; temporary private verification copies/test package were removed and normal RunState reopened.
+
+This proves those real hosted/client/storage/audio code paths using an isolated fictional fixture,
+not a new real run or a full normal-UI journey. Manley accepts the new reflection, prefers the
+original wording and flags the facts-to-reflection delay for the bounded change above.
+The original DURATION_CHANGED condition was not reproduced; the narrow containment
+repair's failure-condition coverage remains the software tests above. Accepted prompts/examples
+remain unchanged. A small follow-up commit covers the existing player/test changes and receipts.
+
 ## Accepted music writer connected to normal requests locally — October17,2026
 
 Manley accepted all three examples, asked to preserve the full working recipe and authorized

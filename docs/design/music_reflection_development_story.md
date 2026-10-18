@@ -1,6 +1,6 @@
 # How RunState music reflections developed
 
-Updated October 17, 2026. Written for Manley to explain the feature, the decisions behind it,
+Updated October 18, 2026. Written for Manley to explain the feature, the decisions behind it,
 and the mistakes that made the next version better.
 
 RunState aims to help a runner feel seen after a run. The basic numbers come first. Then an
@@ -11,9 +11,27 @@ The music can answer the reflection without the reflection naming the song or ex
 The October 17 milestone is three accepted automatic reflection and song pairings. Manley's
 response was: "These, all three of these, are substantially better than the previous ones."
 These were fictional listening scenarios, not three new runs or an outside-runner study.
-At acceptance, generation used an isolated backend trial; connecting that process to normal
-post-run requests is the next implementation step. Commit and deployment details belong in the
-[current project state](project_current_state.md).
+At acceptance, generation used an isolated backend trial. The same process is now connected to
+normal requests and deployed on Render. A later Moto check completed a real hosted request,
+selected-text storage, custom speech and short song passage using fictional evidence in isolated
+Room. That check preserved all32 real saved runs and reopened its exact text without regenerating
+or replaying music. Manley accepts the new reflection while preferring the original wording.
+He finds the wait after facts too long. Selected-only memory voice preparation is installed and
+software-tested, but he still finds the delay too long. A later timed check failed on a new
+one-millisecond Spotify duration update after speech; cleanup correctly paused the recording.
+The later narrow rounding/timing update passed software checks and a music-only stop/restore
+probe. It did not retest fresh reflection delivery or demonstrate a shorter wait.
+Genuine-run reliability and the
+full normal screen journey still need checking. Commit and deployment details belong in
+the [current project state](project_current_state.md).
+
+Manley has now approved doing the song study during the run so less work may remain after the
+facts announcement. That change passed software and silent phone checks and is installed. It
+studies one opted-in song after30 active seconds, then uses fresh final run facts at completion.
+It can incur charges even for discarded work, and the prepared song may no longer be current
+for the short playback. The Room14 upgrade preserved all32 old records/fields and created no
+historical preparation claims. Commits/push, hosted activation and actual warm timing still
+come next; no shorter wait has been measured yet.
 
 ## The early experiments established the idea
 
@@ -111,6 +129,21 @@ Acceptance of those three pairings does not certify every unplayed branch or eve
 The exact accepted text, facts, recording identities, times, model configuration and prompt
 fingerprints are retained in the [accepted baseline](music_reflection_accepted_baseline.md).
 The [research record](research_music_reflection_generation.md) keeps the underlying receipts.
+
+## Connecting the accepted process exposed a separate playback problem
+
+The accepted writer was then connected to normal app requests and deployed on Render. A phone
+check used the real saving, Energy-selection and hosted connection code with fictional data kept
+outside History. It confirmed the new reflection and custom voice, but Spotify changed its reported
+track duration as the snippet began. The app correctly refused to continue on changed metadata;
+its cleanup also refused to pause, leaving the song playing until it was paused explicitly.
+
+A music-only check then played and restored the same song correctly, without another AI request.
+The original duration change was not reproduced, so we kept the strict recording checks and added
+a narrow cleanup safeguard for playback RunState itself started. Tests cover avoiding another
+song or a user's seek/pause. This was a lesson about the difference between good generated writing,
+passing software tests and dependable control of another app. Full integration acceptance is
+recorded separately in the current project state.
 
 ## What each platform contributes
 

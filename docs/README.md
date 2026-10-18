@@ -9,10 +9,20 @@ choice made in June can be re-examined in August without anyone reconstructing w
 
 ## Platforms and tools used
 
-**Platform list updated October 17, 2026; individual checkpoints retain their dates.**
+**Platform list updated October 18, 2026; individual checkpoints retain their dates.**
 Development tools help us build the app; runtime services
 are what the app actually uses. The browser designs, native phone app and reflection backend
 are separate parts of this project.
+
+**October18 installed feature awaiting hosted activation:** Manley approved one early metadata-only
+song study after30 active seconds with music choices/access enabled. Room14 records a durable
+claim; bounded source/notes can stay in server memory for≤32 entries with2hour reuse TTL and lazy
+expiry cleanup. Final fresh-facts writing reuses the same pinned song. This can incur early/wasted
+AI charges and skip a clip if that recording is no longer current. Final160 backend/609 JVM tests
+per Android variant and packaged JAR/three APKs passed. Actual Moto13→14 preserved32 old records/
+fields;53 silent checks passed with5 gated skips/no provider calls, private copies/test removed.
+Commits/push, Render deployment and one actual warm timing check remain pending. The earlier
+596-test release and live service below do not establish this feature's speed.
 
 | Role | Platform or tool | How it has helped RunState and its current status |
 |---|---|---|
@@ -30,13 +40,13 @@ are separate parts of this project.
 | Map labels | **Noto Sans Regular** | MapLibre downloads and caches only the required glyph ranges from OpenFreeMap for street and place names. No new font binary is bundled. Noto Sans is licensed under SIL OFL 1.1; the app's existing notices identify the source and license. [Provider font sources](https://github.com/hyperknot/openfreemap-styles/tree/main/fonts); [license record](https://github.com/hyperknot/openfreemap-styles/blob/main/LICENSE.md). |
 | Map networking | **OkHttp 4.12.0** | The dedicated map client permits only the declared HTTPS OpenFreeMap TileJSON, bounded vector-tile coordinates and Noto Sans Regular glyph ranges. It identifies RunState and preserves cache validators; no map credentials or reflection context are sent. Normal Start/Active views make no new tile requests, and no offline-area download or prefetch feature is enabled. [Official source and license](https://github.com/square/okhttp/tree/parent-4.12.0). |
 | Run-start weather | **Open-Meteo; OkHttp** | An off-by-default remembered choice permits one direct HTTPS lookup from a rounded approximate GPS start location. The saved modeled hourly estimate powers Completion/expanded History and can enter the first reflection without coordinates. Three-second total budget; no polling, retry or old-run backfill. No new account/key/subscription; public noncommercial endpoint terms must be revisited before commercial release. [API](https://open-meteo.com/en/docs); [Android privacy](DATA_PRIVACY.md#android-weather-near-the-run-start--october-16-2026). |
-| Reflection runtime | **Anthropic Claude API** | The locally integrated music path studies one song first, then writes four conditional reflections from that study, bounded original song context and approved run facts. Both calls default to accepted `claude-opus-5-5`, separately from ordinary no-analysis writing. Three selected automatic listening examples were accepted as substantially better. Source/prompt tests passed; this integration still needs user commits/push, Render activation and normal phone verification. Keys stay backend-only. |
-| Song understanding | **Musixmatch Pro API, Basic** | Manley approved/purchased the $49/month plan. Normal local source now obtains bounded meaning, themes/support, moods, genres/entities and optional text snippet for the exact matched song; this feeds song study and writing without sending run facts or a full history to Musixmatch. Provider material stays in request memory. Four original IDs are reverified; other songs use matching. It supplies no audio/hook timestamp or whole-run ranking. Earlier hosted label-only checks remain historical. |
-| Speech runtime | **Android TextToSpeech; ElevenLabs `1st test voice`** | Saved-run facts stay local; the exact selected reflection uses Manley's designed male voice with Eleven Multilingual v2, then the existing music handoff. `cb23da6` is Live. Actual hosted facts → cloud reflection MP3 → instrumental passed in 40.732 s; Manley confirmed all three sounded right. Audio stays in memory, and all 32 saved runs/fields were preserved. History remains voice-only; unavailable service retains the pre-audio local fallback. |
+| Reflection runtime | **Anthropic Claude API** | The hosted music path studies one song first, then writes four conditional reflections from that study, bounded original song context and approved run facts. Both calls default to accepted `claude-opus-5-5`, separately from ordinary no-analysis writing. Three selected automatic listening examples were accepted as substantially better. Render `2f3e77c` is Live, and a49.309s Moto check exercised the normal hosted/client/storage/audio code paths using fictional evidence in isolated Room. Manley accepts the new reflection while preferring the original wording. Keys stay backend-only. |
+| Song understanding | **Musixmatch Pro API, Basic** | Manley approved/purchased the $49/month plan. The normal hosted source obtains bounded meaning, themes/support, moods, genres/entities and optional text snippet for the exact matched song; this feeds song study and writing without sending run facts or a full history to Musixmatch. The new local early-study feature adds bounded process-memory reuse of source/validated notes,≤32 entries/2hour TTL, with completed expired entries cleared on later access; it is not yet activated. Four original IDs are reverified; other songs use matching. It supplies no audio/hook timestamp or whole-run ranking. Earlier hosted label-only checks remain historical. |
+| Speech runtime | **Android TextToSpeech; ElevenLabs `1st test voice`** | Saved-run facts stay local; the exact selected reflection uses Manley's designed male voice with Eleven Multilingual v2, then the music handoff. One complete hosted fixture passed custom speech,656ms song gap and Good as Hell stop/restore. Manley likes the reflection but still finds the facts-to-reflection wait too long after installed/software-tested selected-only memory speech preparation. Its first timed check failed on a new+1ms Spotify duration event after speech; cleanup paused correctly. The later bounded rounding/timing update passed596 JVM tests per variant/three APKs and a separate music-only probe, with no fresh reflection retest or latency gain claimed. Audio stays in memory; all32 real saved records/fields were preserved. History remains voice-only; unavailable service retains the pre-audio local fallback. |
 | Asset creation and local playback | **ElevenLabs Music v2; Android MediaPlayer** | Generated one temporary original 10-second instrumental on October 14, bundled in the APK with an Eleven Music credit. MediaPlayer plays it after Completion speech when no eligible actual-song plan exists. It remains separate from the requested custom spoken reflection voice and creates no per-run music-generation request. |
-| Music evidence and current-song passage | **Spotify through Android media sessions** | Supplies partial title/artist/playback reports during opted-in runs; separate sharing approval permits one eligible identity in a reflection. Five locally prepared current-song passages cover Sunday Best, Lovely Day, Stronger, Good as Hell and God's Plan. Matching actual backend acknowledgment/version gates the new pairings; checked controls stop and restore prior position/state. No SDK, audio extraction, other-song selection or queue editing. Three new pairings were accepted on the Moto; normal-app activation and wider recording/control compatibility remain separate. |
-| Hosted backend | **Render** | The existing `runstate-reflections` Starter service in Oregon ($7/month, free Hobby workspace) uses manual deployment and `/health` monitoring. Latest `cb23da6` deployed successfully in 55.2s; health and the actual hosted custom-voice sequence passed. Earlier `bfc64ad` separately passed Musixmatch-key and silent authenticated reflection checks. Hosting runs the GitHub backend copy independently of Android installation. |
-| Deployment packaging | **Docker** | Packages Java 17 and backend resources; the Dockerfile copies full `src/` and runs Maven test/package. Latest `bfc64ad` built and started the Anthropic backend on internal port 10000. The `--remote` CMD remains live mode; prompt v1.6 source is deployed. |
+| Music evidence and current-song passage | **Spotify through Android media sessions** | Supplies partial title/artist/playback reports during opted-in runs; separate sharing approval permits one eligible identity in a reflection. Five prepared current-song passages cover Sunday Best, Lovely Day, Stronger, Good as Hell and God's Plan. Matching actual backend acknowledgment/version gates the new pairings. The latest normal-code-path fixture check stopped/restored the Good as Hell passage exactly. A prior duration-change failure led to narrow cleanup containment; that failure was not reproduced in the passing check. No SDK, audio extraction, other-song selection or queue editing. Genuine-run and wider recording/control compatibility remain open. |
+| Hosted backend | **Render** | The existing `runstate-reflections` Starter service in Oregon ($7/month, free Hobby workspace) uses manual deployment and `/health` monitoring. Manley promoted/pushed `master` to `2f3e77c`, then manually deployed it successfully in52.2s. Health confirms study/cue/custom-voice support; the later Moto fixture separately verified an actual hosted request and complete audio sequence. Hosting runs the GitHub backend copy independently of Android installation. |
+| Deployment packaging | **Docker** | Packages Java17 and backend resources; the Dockerfile copies full `src/` and runs Maven test/package. Render `2f3e77c` built and started the accepted study/writer backend. The `--remote` CMD remains live mode; its95s response budget encloses the90s source/study/writer budget inside Android's100s read timeout. |
 | Design preview | **Local HTML and GitHub Pages** | `start.html`/`completion.html` and the public preview helped review appearance and interactions. They are browser prototypes, not the installed Kotlin/Compose phone app, and do not prove native tracking or backend behavior. |
 
 Render hosting has an ongoing cost while the paid service remains provisioned, even without a
@@ -53,6 +63,26 @@ the working configuration and exact examples. The [development story](design/mus
 explains the experiments, mistakes and adjustments in plain English.
 
 ## Deployment: how the parts connect
+
+**October 17–18 accepted writer activation:** Manley promoted/pushed `master` to `2f3e77c` and
+manually deployed it; Render `dep-dba4qsm1egvs739c7j80` became Live in52.2s. After an earlier
+Spotify metadata interruption and narrow cleanup repair, the final Moto check passed49.309s:
+one real hosted request, matching cue/version1, selected Energy/exact-text persistence, actual
+custom voice,656ms gap and Good as Hell48.91–53.55s with stop/exact paused-position restoration.
+A recreated coordinator reopened exact text without another HTTP call/automatic clip. This used
+normal code paths with fictional evidence in isolated Room, not a real run/full normal-UI journey.
+All32 actual saved records/Room13/inspected fields matched; temporary copies/test package were
+removed. Manley accepts this newly generated reflection while preferring the original wording;
+the facts-to-reflection wait now motivates bounded selected-only memory voice preparation.
+That preparation passed591 JVM tests per variant/three APK builds and27 silent Moto checks/5 gated
+skips, then a timed live check failed on a new measured+1ms duration event after speech. Cleanup
+paused correctly; no facts-to-reflection interval was reported and no latency win is claimed.
+The later strict±1ms-only rounding/timing update passed596 JVM tests per variant/three APKs, was
+installed safely and passed a music-only probe in7.476s with exact stop/restore and0ms duration
+delta. That probe made no AI/voice request and provides no fresh reflection/facts-gap result.
+The650ms reflection-to-song gap stays. The original duration
+change was not reproduced; its containment branch is covered by software tests. Final148 backend
+and596 JVM tests per Android variant passed with no failures/skips; three APK builds passed.
 
 **October 17 custom reflection voice Live:** Manley pushed backend `25f2637`, Android `eb793cd`
 and documentation `cb23da6`. Manual deployment of latest `cb23da6` succeeded in **55.2 seconds**,

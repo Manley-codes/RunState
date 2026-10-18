@@ -7,13 +7,50 @@ metadata:
 
 # Music feature register — LIVE
 
+**October18 early song study approved/written locally:** after30ACTIVE seconds, both per-run
+music choices plus current preferences/access/unchanged hosted destination can trigger one
+durable Room14 claim for the first eligible saved Spotify PLAYING identity. Authenticated
+`/api/reflections/song-study` sends only preparation ID/title/artist. Backend bounded source and
+validated notes can be reused from≤32 process-memory entries with2hour TTL; completed expired
+entries are purged on later access/process exit, with no files or precise erasure timer. Final
+fresh-facts writing keeps that pinned song. No automatic early retry; failed/expired/lost work
+can need cold generation and extra charges. Manley approved discard/first-song/current-only-skip/
+weak-network tradeoffs. Old servers get no early metadata; changed destinations suppress pinned
+music. Prompts/models/voices/baseline/music gap stay unchanged. Final160 backend/609 JVM tests
+per Android variant passed with0 failures/errors/skips; JAR and three APK builds passed. Moto
+13→14 preserved all32 old records/fields and added the expected empty claims table. Silent53
+checks passed/5 gated skips (58 discovered),44.350s/49.750s host, with no provider calls and actual
+fields preserved; copies/test removed. Commits/push/master promotion, Render deployment and an
+actual warm timing check remain pending; no early live-provider or speed gain claim.
+
+**October17–18 hosted process and isolated-fixture audio passed:** Manley promoted/pushed2f3e77c and
+Render became Live in52.2s. The final Moto check passed49.309s: actual normal HostedClient frozen
+fictional request, matching paired cue/version1, persisted Energy/exact text, custom cloud voice,
+656ms gap and Good as Hell48.91–53.55s passage, with stop/exact paused-position restoration.
+Recreated coordinator retained the exact text without another HTTP call/automatic clip. All32
+actual saved records/Room13/inspected fields stayed unchanged; temporary copies/test removed.
+590 JVM tests per variant/three APKs passed for that repair. Manley accepts the new reflection,
+prefers the original wording and finds the facts-to-reflection wait too long. Selected-only
+memory voice preparation/reuse passed591 JVM tests per variant/three APKs and27 silent Moto checks/
+5 gated skips, then was installed. The next timed check failed after speech on a new measured
++1ms duration change; cleanup paused correctly. Timing was not emitted after the failed passage
+assertion, and Manley still finds the wait too long. Later strict±1ms-only rounding and final-cleanup
+timing passed596 JVM tests per variant/three APKs and were installed with32 real saved records
+preserved. A music-only probe passed7.476s/exact paused restore with0ms duration delta and no
+AI/voice call. It did not reproduce1ms or retest a fresh reflection; the failed live attempt stays
+a failure. No facts-to-reflection interval or material latency gain is established.
+Prompts/models/the650ms reflection-to-song gap stay unchanged; no speed gain is claimed yet.
+This is isolated-fixture code-path proof, not a genuine run/full normal-UI journey. The original
+duration-change failure was not reproduced; containment remains narrowly software-tested.
+
 **October17 normal-app connection built locally:** the accepted two-call engine now handles
 normal music requests with separately configured Opus5.5 and unchanged, hash-pinned prompts.
 Five prepared current-song passages require actual matched source/cue/version acknowledgment.
 Source gaps keep ordinary text usable without a paired clip; no automatic song/hook selection
 claim. Both music choices, frozen evidence, cancellation and stop/restoration protections remain.
-148 backend tests,587 JVM tests per Android variant and three APK builds passed. User commits/push
-first; Render activation and a normal phone check remain. No live calls/Git/phone/deploy mutations.
+148 backend tests,587 JVM tests per Android variant and three APK builds passed at this initial
+local checkpoint. The later deployment/device proof is above; no live calls/Git/phone/deploy
+mutations occurred during that earlier integration slice.
 The [accepted baseline](music_reflection_accepted_baseline.md) preserves the exact recipe;
 [the development story](music_reflection_development_story.md) records how it was reached.
 
