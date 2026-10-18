@@ -57,8 +57,8 @@ one song for the existing writer's four finishing-Energy replies. It does not ch
 after an Energy answer. The choice is saved with History, rather than silently changing when
 the runner returns. More studies mean more cost, and short runs or failed lookups may leave fewer
 candidates to compare. The final lookup/comparison is time-limited, and unavailable source material
-does not become invented song meaning. This is **Ready to test**, installed on the Moto with backend
-activation still pending, not a new verified listening or field result.
+does not become invented song meaning. This is **Ready to test**, installed on the Moto and deployed
+on Render, not a new verified listening or field result.
 
 Software checks and a silent two-song phone test passed. That phone check used a fake server to
 verify that the app could send both candidates, accept the second as winner, save its exact reply
@@ -67,11 +67,45 @@ survived the database upgrade. A retry review also caught and corrected an unnec
 older saved snapshots. These checks prove the wiring and preservation; they do not yet prove that
 live song choices are better. The accepted study/writer prompt fingerprints remain unchanged.
 
+After Manley committed, pushed and deployed the update, a silent check used the real online
+services with fictional morning-run facts and three songs: Stronger, Lovely Day and Good as Hell.
+The system prepared all three and chose Lovely Day, the second candidate. Its result confirms a
+real comparison of at least two available song analyses, rather than simply taking the first title;
+it does not prove that all three analyses reached the comparison. The final reflection request took
+about 16 seconds, and repeating the same request returned the cached result in under a second.
+This played no audio and changed no saved real runs. It is evidence that the deployed selection
+works with the services, while listening quality and a genuine run still need their own judgment.
+
 Selecting a fitting song and playing its best moment are still separate jobs. The current five
 curated snippets require the selected recording to remain current in Spotify; ranking does not
 automatically queue a previous song or discover a new hook. The feature is not complete until its
 agreed scope is implemented and checked. The [project status labels](project_current_state.md)
 now distinguish work underway, readiness for testing and proof from actual use.
+
+## Removing the need to leave one song current — Ready to test, local only
+
+Choosing among songs exposed another gap: the selected song might no longer be playing when the
+runner finished. The five hand-checked passages also could not cover an ordinary varied playlist.
+Manley authorized working on both while he went running, without touching his active phone.
+
+The new local version remembers the exact Spotify recording, rather than guessing from its title.
+With a new default-off choice for future runs, it can look up published line timing for the chosen
+recording and try loading that song for a short vocal moment. It keeps the accepted curated timing
+where the recording is verified; a different recording needs its own matching timing. The reply's
+writer and voices stay the same. An unavailable source leaves a reflection without a forced clip.
+
+A public-source check found a short repeated title hook for Lose Yourself. That proves the lookup
+and timing calculation can work beyond the original five; it does not prove the moment sounds right.
+Matching title, artist, album and duration also cannot prove an identical audio edition.
+Line timestamps are approximate, and Spotify loading/restoration still need phone testing. A queue
+can change, a play-from fallback may briefly sound before seeking, and cancelling a remote request
+is best effort. This distinction matters: source evidence, working local code and a polished heard
+finish are separate milestones. Final checks passed 193 backend tests and 672 Android tests per
+debug/release variant, plus all three APK builds. New tests caught cleanup that could interrupt a
+user's own seek; that was corrected before the final passing build. The Room 16 migration checks
+are compiled but have not run against an actual database. This extension is **Ready to test — local
+only**; the deployed selector and installed phone remain the earlier version. Phone loading,
+hosted integration and listening checks still need to follow the commit/deployment and update.
 
 ## The early experiments established the idea
 
@@ -191,7 +225,7 @@ recorded separately in the current project state.
 | --- | --- |
 | Spotify and Android media sessions | Observe the currently available title and artist with permission; play, seek and pause the authorized current recording. Spotify supplies the audible song passage. |
 | Musixmatch | Match the song and provide bounded song interpretation and supporting material for the study and writer. It does not supply this route's audio or a guaranteed hook timestamp. |
-| Anthropic Claude | Study eligible songs, compare available matched analyses, then write four conditional reflections from the chosen study, song context and real run evidence. The new multi-song comparison is Ready to test after backend activation; these are bounded requests with distinct jobs, not a fleet of autonomous research agents. |
+| Anthropic Claude | Study eligible songs, compare available matched analyses, then write four conditional reflections from the chosen study, song context and real run evidence. The new multi-song comparison is deployed and Ready to test on real runs; these are bounded requests with distinct jobs, not a fleet of autonomous research agents. |
 | ElevenLabs | Speak the selected reflection using Manley's designed voice, saved as `1st test voice`. The first, factual announcement remains Android speech. |
 | Android and Room | Keep the run, optional check-ins and saved reflection durable; coordinate voice and Spotify playback without turning listening tests into saved real runs. |
 | Render and GitHub | Render hosts the backend used by the phone; GitHub holds the committed source Render builds. A local trial or local edit reaches the hosted app only after the relevant commit is pushed and deployed. |
@@ -224,5 +258,6 @@ recorded separately in the current project state.
 For a detailed account of provider results, rejected attempts and device checks, use the
 [research notebook](research_music_reflection_generation.md). For the current delivery boundary,
 use [project state](project_current_state.md) and the [music feature register](music_feature_register.md).
-Broader song selection is now Ready to test after backend activation. Further work includes automatic significant-passage
-discovery, catalog gaps, genuine-run consistency and any provider requirements for wider distribution.
+Broader song selection is now deployed and Ready to test on real runs. Automatic hook discovery and
+chosen-recording loading are ready to test locally; deployment, phone verification, catalog gaps,
+genuine-run consistency and any provider requirements for wider distribution remain.

@@ -28,6 +28,50 @@ proof that a run caused a change. These calculations do not need AI and do not u
 history, split rows, aggregates or extra Energy data. Existing optional reflection sharing is
 unchanged; neither new feature adds a backend request field, provider account or permission.
 
+## Optional broader song snippets — Ready to test, local only, October 18, 2026
+
+The new local implementation is not yet installed or deployed; the Moto remains Room 15 and
+Render remains `7447c65`. Manley authorized automatic chosen-song loading and wider snippet
+finding while away. No phone or Spotify control is part of this development verification.
+
+Room 16 adds nullable Spotify track URI, album and duration to new media-session observations.
+Only a canonical Spotify track URI is accepted; other apps gain no recording fields. The additive
+migration is designed to preserve old fields and leave older observations unknown rather than
+fill them from today's player. Migration instrumentation is compiled, not yet executed. The new run-level
+`song_snippet_lookup_allowed` column defaults to false for every older run and requires music
+sharing. The **Find song snippets** setting also defaults off and applies to future runs; each new
+run freezes that choice. Turning it off changes future authorization, not the frozen permission
+on an already-started run. Disabling music sharing/observation clears the future snippet setting.
+
+For opted-in requests, recording album/duration accompany the bounded candidate identities to
+RunState. Only the chosen song's title, artist, album and duration are queried at LRCLIB for a
+matching recording's published line timings. Matching checks title/artist/album and duration within
+two seconds, not definitive audio-edition identity. The Spotify track URI stays local and is never
+accepted from the backend as a playback command. LRCLIB receives no route, Energy, run facts or
+full listening-history export. This is a new external metadata source; no account/subscription
+is introduced by this path. Optional lookup has a five-second cap inside the existing deadline.
+
+Raw timed lyrics exist temporarily in backend memory while deriving a short window. They are not
+stored in Room, logged, returned to Android or added to the model prompt. The model receives an
+original general description of the musical landing alongside the existing approved song-study
+context. The persisted result is numeric timing, source ID/version and the selected local recording
+binding, not lyric text or audio. Third-party retention remains subject to that provider's rules.
+
+Opted-in playback can load the exact recording observed during that run and attempt to restore
+the prior recording afterward. Spotify supplies all audio; RunState does not download/extract it.
+Preparation is preferred; a play-from fallback can briefly sound before pause/seek. Restoration is
+best effort and the queue may change. Pause during cleanup is also best effort, not proof an
+asynchronous remote load has been cancelled. Recordings changed by the user are not silently owned.
+
+The source-class Lose Yourself lookup succeeded with public song metadata and yielded source
+`10913690`, 99,340–102,140 ms. It did not send a person's run or control Spotify. Final software
+checks passed: 193 backend tests and 672 Android tests per debug/release variant, all without
+failures/errors/skips, plus three APK builds (release unsigned). Room 16 migration checks were
+compiled but not run against an actual database; the earlier Room 15 preservation result is not
+proof of this upgrade. No phone was inspected or updated; loading/listening remains unverified. The necessary new
+Room 16 schema contains structure only, and the new LRCLIB client/test files contain code, not
+user records or captured lyrics. Existing accepted reflection/voice references remain unchanged.
+
 ## Android multi-song reflection preparation — Ready to test, October 18, 2026
 
 Manley authorized progressing from one prepared song to selecting a fitting reflection song from
@@ -58,12 +102,12 @@ not selected. Final source lookup is bounded to 30 seconds, ranking to 10 second
 existing 90-second total deadline. Only available matched material is used. One candidate skips
 ranking; a failed rank uses the first available matched candidate, and no source yields an ordinary
 reflection without invented song meaning. The prior single-song path remains the older-server
-fallback until activation. The exact accepted
+fallback. The exact accepted
 writer/voices remain unchanged, and snippets still require one of five curated recordings to be
 the same current Spotify track. This does not add queue editing or audio extraction.
 
-The final Android build is installed; backend deployment and live-provider verification are
-pending. Backend 173 tests, Android 645 tests per variant and all three APKs passed. The final
+The final Android build is installed and Render commit `7447c65` is Live; preparation/selection
+capabilities both report version 1. Backend 173 tests, Android 645 tests per variant and all three APKs passed. The final
 23-case silent Moto check included a real Room/production-serialization test with fake HTTPS,
 two offered songs, a second-song winner and exact saved text/cue with no request or playback on
 reopen. Actual Room 14→15 migration and the final Room 15 reinstall preserved every row and column
@@ -73,11 +117,21 @@ and do not establish genuine-run quality. The necessary new schema export at
 `android/app/schemas/com.runstate.mobile.data.local.RunStateDatabase/15.json` contains schema
 structure, not copied user records. See project state for full receipts.
 
+A separate silent real-hosted check passed with fictional three-mile/32-minute morning-run facts,
+starting Energy Moderate, and three explicitly supplied song identities: Stronger / Kanye West,
+Lovely Day / Bill Withers and Good as Hell / Lizzo. All early preparations completed; the final
+`CONTEXT_MATCH` choice was Lovely Day. That proves comparison of at least two available matched
+analyses, not an exact count of three. The repeated identical request returned the same cached
+result. This check used the configured real providers, no audio or Spotify controls, and no Room
+run writes. All 32 actual saved run rows/every old-table field stayed unchanged on Room 15;
+private copies/test package were removed and the normal app reopened. No new permanent file was
+created for this verification. This is synthetic live-service evidence, not genuine-run or
+listener-quality verification.
+
 ## Earlier single-song preparation — approved October 18, 2026
 
-This is the historical installed/deployed one-song boundary. The new multi-song extension
-above supersedes it only after verification and activation; its recorded results do not verify
-the new selector.
+This is the historical installed/deployed one-song boundary, now superseded by the activated
+multi-song extension above. Its earlier recorded results do not verify the new selector.
 
 Manley approved an early cloud request after the first30 active seconds of a RUNNING run, with
 both frozen per-run music opt-ins, current music preferences, notification access and an unchanged

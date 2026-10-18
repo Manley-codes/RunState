@@ -10,13 +10,43 @@ status: LIVE — read this file
 
 **Read this file.** Not archived, not parked.
 
+## Chosen-song playback and wider snippets — Ready to test, local only, October 18, 2026
+
+The installed/deployed selector below still has its five-current-track snippet boundary. A separate
+local extension now carries exact observed Spotify recording identity, album/duration and default-off
+future-run permission for broader lookup/loading. It has not been installed or deployed while Manley
+is out running. Final software checks passed; actual-phone behavior remains to be verified.
+
+For the chosen song, optional LRCLIB lookup uses title/artist/album/duration, never a device URI or
+run facts. Title/artist/album agreement and duration within two seconds are required, but do not
+prove identical audio editions. Published lines can suggest a two-to-ten-second repeated/title-hook window.
+The existing writer receives a description of that landing before it writes. No full LRC or raw
+new lyric payload is sent to the model, persisted or returned to Android. Timings remain approximate;
+the algorithm cannot promise a complete sung statement or a good audible transition.
+
+Accepted curated timings stay fixed. Only baseline-verified recording IDs can use those timings for
+cross-track loading; a different complete recording may instead obtain source-matched timing.
+Missing or conflicting identity keeps conservative current-track behavior or no passage. Playback
+prefers a prepare command, confirms the exact target and bounds the short passage. Play-from can
+briefly sound at loading, restoration is best effort, and the previous queue is not guaranteed.
+These are source/transport mechanics, not a DJ, playlist generator or proof every song has a hook.
+
+The source-class check matched Lose Yourself to LRCLIB `10913690` and a 99.340–102.140 s title-hook
+window; it is not an audio audition. Final checks passed 193 backend tests and 672 Android tests
+per debug/release variant, all without failures/errors/skips, plus three APK builds (release
+unsigned). All 60 controller cases passed after new user-seek regressions exposed and corrected
+overbroad pending-load cleanup. The installed app still uses Room 15. The additive Room 16
+migration is designed to leave old observations unknown and new permission off; its instrumentation
+is compiled but has not run against an actual database. Phone loading, complete hosted generation
+and listener quality remain unverified. Full receipts belong in [project state](project_current_state.md).
+
 ## Current reflection selector — Ready to test, October 18, 2026
 
 This bounded implementation serves item **36**, choosing a song for the post-run reflection.
-It does not implement the broader playlist or live-DJ system below. The earlier single-song
-implementation remains the deployed fallback until the new capability is verified and activated.
+It does not implement the broader playlist or live-DJ system below. The new capability is installed
+and deployed; an older server still receives the compatible single-song fallback.
 
-1. With run-scoped and current observation/sharing choices enabled, collect at most 12 distinct
+1. With run-scoped and current observation/sharing choices enabled, shortlist up to 12 distinct
    Spotify title/artist identities observed PLAYING in that run. Do not infer a full listen,
    preference or performance effect from a metadata observation.
 2. After 30 active seconds, prepare eligible songs sequentially using matched Musixmatch context
@@ -35,16 +65,21 @@ This can improve fit beyond automatically taking the first song, but it has not 
 better choices in a real run. Up to 12 source/study attempts cost more than one; discarded or
 unused studies can still incur charges. Capacity/deadline limits mean not every reported song is
 necessarily analyzed. Software checks cover evidence membership, deduplication, fallback,
-old-data preservation and saved-choice stability; actual selection/reflection quality still needs
-its separate live-provider and real-run checks.
+old-data preservation and saved-choice stability. The real-provider synthetic selection check below
+passed; actual run selection and reflection quality still need their own checks.
 
 Snippets remain five curated current-track passages. Selection does not authorize queue changes
 or locate a hook in an arbitrary song, so a selected reflection song may have no audible passage.
-The final Moto build is installed; backend activation is pending. Backend 173 tests, Android 645
+The final Moto build is installed and Render commit `7447c65` is Live with selection capability 1.
+Backend 173 tests, Android 645
 tests per variant/all three APKs and 23 final silent Moto cases passed. The fake-HTTPS two-song
 integration selected the second candidate and reopened exact saved text without another request.
-All 32 saved runs and every old table field survived Room 14→15. These are controlled checks, not
-new live-provider or genuine-run proof. Full receipts and status definitions are in
+All 32 saved runs and every old table field survived Room 14→15. A later silent real-hosted check
+prepared three songs and chose the second, Lovely Day, for fictional morning-run facts. Its
+`CONTEXT_MATCH` result proves at least two matched analyses were ranked, not that all three were
+necessarily compared. Final generation took 16,269 ms; the identical cached response took 176 ms.
+No audio, Spotify control or real run write occurred; all actual saved fields stayed unchanged.
+These are controlled checks, not genuine-run or listener-quality proof. Full receipts and status definitions are in
 [project state](project_current_state.md).
 
 ---

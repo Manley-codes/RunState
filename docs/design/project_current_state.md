@@ -18,10 +18,75 @@ missing check. A successful build, installation or controlled fixture is not pro
 | **Verified in use** | The stated behavior worked in actual use for the named scenario, not only with fictional test data. This does not prove every device, song or circumstance. |
 | **Complete for agreed scope** | The agreed behavior, necessary checks and documentation are finished. Explicit remaining limits are outside that scope; this does not mean every future idea is built. |
 
-**Current headline:** multi-song reflection selection is **Ready to test**, installed on the Moto
-but awaiting the backend deployment and live-provider check. The accepted reflection
+**Current headline:** automatic chosen-song loading and wider snippet finding are **Ready to test — local only**;
+software checks passed, but this extension is not installed or deployed. The separate
+multi-song reflection selector is **Ready to test**, installed on the Moto,
+deployed on Render and checked against the real providers with fictional run evidence. Real-run
+selection and listener-quality checks remain. The accepted reflection
 recipe has passed controlled listening checks; the whole music feature is not complete. GPS is
 **Ready to test outdoors** with the quiet Start update installed; its field-accuracy checks remain.
+
+## Automatic chosen-song loading and wider snippets — Ready to test, local only, October 18, 2026
+
+Manley authorized continuing the next music slice while he went out for a run. Do not control
+Spotify, inspect/interfere with that run, install an APK or deploy during his absence. The installed
+phone remains Room 15 and Render remains `7447c65`; the implementation below is a local extension.
+
+New observations can retain Spotify's exact canonical track URI, album and recording duration.
+Room 16 adds these as nullable fields and a default-off run-owned snippet-lookup flag. The additive
+migration is designed to preserve old values, leave recording fields unknown and grant no new
+permission; its instrumentation checks are compiled but have not run against an actual database.
+There is no backfill from today's Spotify state. The new **Find song snippets** setting is off by default and
+described as applying to future runs. It requires existing music sharing and freezes with each
+new run. Disabling sharing/observation clears the setting for future runs; already authorized
+runs keep their frozen choice. The stored Spotify URI stays on the phone.
+
+For an opted-in selected song with consistent recording evidence, the backend may send title,
+artist, album and duration to LRCLIB for published line timing. Matching requires title/artist/album
+agreement and duration within two seconds; this is not definitive proof of the same audio edition.
+A source-derived repeated vocal
+or title-hook window can supply a short musical landing to the unchanged accepted writer.
+Lookup is optional, bounded to five seconds inside the existing request deadline, and adds no
+subscription. Source failure or unavailable timing leaves the reflection usable. Raw timed lyrics
+stay temporary in backend memory: they are not saved to the run, logged, returned to the phone or
+sent to the model. The response contains validated numeric timing, source/version and song identity.
+Published line boundaries are approximate; this is not word-accurate phrase completion or proof
+that the chosen moment will land well by ear.
+
+The five accepted curated timings remain unchanged. Cross-track use of a curated timing is
+bound to the three recording IDs verified in the accepted baseline: Lovely Day, Stronger and Good
+as Hell. A complete different/unverified recording can instead use metadata-matched source lookup; incomplete
+recording evidence keeps only the guarded legacy current-track behavior. Conflicting known IDs,
+albums or durations must not silently choose one version just because another callback is partial.
+
+The controller can request the chosen observed recording, confirm its identity, play the short
+passage and attempt to restore the previous recording/position/play state. Preparation is preferred;
+a supported play-from fallback may briefly sound before it is paused and moved to the passage.
+Restoration is best effort and Spotify's queue may change. Cancellation/timeout cleanup can issue
+a bounded pause for RunState's own pending selection; it cannot guarantee a remote player will
+never apply a delayed command later. A user-selected different recording is not owned by that
+cleanup. Facts voice, custom reflection voice, the 650 ms gap and accepted prompt fingerprints stay
+unchanged. Playback on the actual phone remains untested for this expansion.
+
+Final software checks passed: 193 backend tests across seven suites, and 672 Android JVM tests
+each for debug and release across 35 suites each, all with zero failures/errors/skips. All three
+APKs built (release unsigned); the final Android build took 25 seconds. Room 16 migration
+instrumentation is bundled in the test APK but has not executed against an actual Room database.
+Two new user-seek regressions first exposed overbroad pending-load cleanup; scoped cleanup then
+passed all 60 controller cases and the full suites. Coordinator reopen/retry, partial-identity
+conflict and unverified curated-edition checks also passed. Accepted baseline/prompts are unchanged.
+
+A real public source-class lookup matched Lose Yourself / Eminem / Curtain Call - The Hits
+(Deluxe Version), observed duration 326,000 ms, to LRCLIB source `10913690`. It derived a
+`TITLE_HOOK` from 99,340 to 102,140 ms. This proves source lookup/derivation, not Spotify playback,
+hearing quality or complete hosted generation. No new phone loading, listener or field result
+is claimed; the earlier Room 15 preservation check does not verify this Room 16 migration.
+
+Necessary new files for this slice are Room schema
+`android/app/schemas/com.runstate.mobile.data.local.RunStateDatabase/16.json`, the source client
+`backend/src/main/java/com/runstate/reflection/LrclibSongSnippets.java`, and its focused test
+`backend/src/test/java/com/runstate/reflection/LrclibSongSnippetsTest.java`. Other edits use existing
+files. No phone mutation, installation, deployment or Git mutation is claimed for this slice.
 
 ## Multi-song reflection selection — Ready to test, October 18, 2026
 
@@ -51,7 +116,7 @@ ranking a 10-second cap inside the existing 90-second total deadline. Only avail
 material can be compared. A single available candidate needs no ranking call; a failed comparison
 uses the first available matched candidate without claiming it was the best. No available analysis
 uses the ordinary reflection path without invented song meaning. Older-server capability handling
-keeps the previous single-song path usable until deployment. Selection means fit among eligible
+keeps the previous single-song path usable with an older server. Selection means fit among eligible
 available evidence, not a proven best song from every moment of the run.
 
 The snippet boundary is unchanged: five curated recordings, and playback only when the chosen
@@ -74,12 +139,33 @@ Every row and column across the 10 non-Room-identity tables, including all 32 sa
 was preserved. The first install migrated actual Room 14 to 15; the final check retained Room 15.
 Temporary private copies and the test package were removed after each check.
 
-The final phone build is installed. Backend commit/push and deployment are pending; Manley was
-given the backend-only Git block. No assistant Git mutations, live-provider request or deployment
-occurred in this slice. One necessary new tracked file,
+The final phone build is installed. Manley committed and pushed all three groups to the working
+branch and master: backend `46812b6`, Android `e2754c6` and documentation `7447c65`. He started Render
+deployment `dep-dbae96e7bikc73e9qckg`; commit `7447c65` visibly reached **Deploy succeeded / Live** at
+about 10:25:02 America/Chicago on October 18. Public health returned HTTP 200 with song preparation
+and song selection capability version 1. No assistant Git mutations occurred. One necessary new tracked file,
 `android/app/schemas/com.runstate.mobile.data.local.RunStateDatabase/15.json`, preserves Room's
-schema history for migration validation. Other changes use existing files. The optional live
-verification being prepared is a separate future receipt, not part of these passing counts.
+schema history for migration validation. Other implementation changes use existing files.
+
+The optional silent real-hosted check then passed one case in 38.408 seconds device / 48.375 seconds
+host. It offered Stronger / Kanye West, Lovely Day / Bill Withers and Good as Hell / Lizzo for a
+fictional three-mile, 32-minute morning run starting Moderate. All three early preparations completed;
+the final result selected candidate 2, Lovely Day, with `CONTEXT_MATCH`. That method establishes
+that at least two matched analyses reached ranking, not an exact three-analysis comparison count.
+Final generation took 16,269 ms. An identical request returned the same cached result in 176 ms.
+The check used no audio, Spotify controls or Room run writes. All 32 actual saved run rows and
+every field across the 10 old non-Room-identity tables remained unchanged on Room 15. Temporary
+private copies and the test package were removed, and the normal app reopened.
+
+A final read-only readiness check confirmed `observe_music=true`,
+`share_music_in_reflection=true` and RunState's Android notification-listener grant. No preference
+was changed. Independent cleanup confirmed the test package absent and zero remaining ignored
+`runstate-song-selection-check-*` private folders. This readiness check covers music only.
+
+This is a live-service selection check with synthetic evidence, not **Verified in use** for an
+outdoor run or a listener-quality judgment. Snippet support and the accepted baseline did not
+expand/change. No new permanent file was created during that verification; only its existing
+receipt documents remained uncommitted at that checkpoint, before the newer local extension above.
 
 ## Quiet GPS preparation and direct Start installed and checked — October 18, 2026
 
