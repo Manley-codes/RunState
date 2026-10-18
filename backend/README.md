@@ -29,8 +29,21 @@ Manley still rejects the writing and actual outputs contain unsupported run clai
 checkpoint commit preserves this work; it is not deployment approval. Work is paused at his
 request. Do not push the unfinished backend to Render's tracked branch or deploy it as an
 accepted repair during this pause; the current Auto Deploy setting has not been checked.
+**Later October 17:** Manley resumed bounded local work using Claude's rebuild handoff. The
+isolated study/writer experiment described below is authorized; default writing and deployment
+are still unchanged, and local trial results are not acceptance of a public release.
 
 ## Contract included
+
+**October 17 local rebuild trial:** `SongReflectionTrial` and the two `song-*-trial-v1.txt`
+resources are an isolated experiment, not a selectable server provider or replacement for v1.8.
+Explicit `MusixmatchSongAnalysis.lookupMaterial()` makes richer request-only song data available
+to this trial; default `lookup()` still discards those fields. The ordinary startup, environment
+settings, API contract and fallback/retry semantics are unchanged. Offline tests use fictional
+material. The test-source manual harness requires `RUNSTATE_LIVE_SONG_TRIAL=1`, configured private
+keys and explicit operator intent; it does not run with `mvn test`. It performs real paid calls,
+so do not enable it automatically in CI. Its results require human truth/taste review. See
+`docs/design/research_music_reflection_generation.md` from the repository root for scope/outcome.
 
 - `RequestIdentifiers` carries a canonical request UUID and the canonical Android run UUID.
 - `CompletedRunEvidence` carries completed epoch-millisecond timestamps, the IANA timezone recorded

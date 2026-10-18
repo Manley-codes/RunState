@@ -39,7 +39,7 @@ import java.util.concurrent.Flow;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
-/** Optional server-side song analysis. Does not retain lyric, quotation or entity fields. */
+/** Optional server-side analysis; only an explicit local trial can retain bounded request-only material. */
 public final class MusixmatchSongAnalysis {
     static final int MAX_RESPONSE_BYTES = 128 * 1024;
     static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(4);
@@ -47,8 +47,15 @@ public final class MusixmatchSongAnalysis {
     private static final String API_ORIGIN = "https://api.musixmatch.com";
     private static final String MATCH_PATH = "/ws/1.1/matcher.track.get";
     private static final String ANALYSIS_PATH = "/ws/1.1/track.lyrics.analysis.get";
+    private static final String SNIPPET_PATH = "/ws/1.1/track.snippet.get";
     private static final int MAX_LABELS = 8;
     private static final int MAX_MEANING_CHARACTERS = 1200;
+    private static final int MAX_QUOTES_PER_THEME = 4;
+    private static final int MAX_QUOTE_CHARACTERS = 240;
+    private static final int MAX_ENTITIES = 8;
+    private static final int MAX_ENTITY_DESCRIPTION_CHARACTERS = 400;
+    private static final int MAX_ENTITY_CATEGORIES = 4;
+    private static final int MAX_SNIPPET_CHARACTERS = 400;
     private final String apiKey;
     private final Transport transport;
 
@@ -100,6 +107,231 @@ public final class MusixmatchSongAnalysis {
             // Provider exceptions can contain the credential-bearing URL. Never retain or log them.
             return Optional.empty();
         }
+    }
+
+    /**
+     * Explicit local-trial lookup. Rich song material stays in memory and is never used by the
+     * ordinary reflection path. Snippets are optional lyric text, not audio or passage timing.
+     */
+    public Optional<SongMaterial> lookupMaterial(String trackTitle, String artistName) {
+        if (!validIdentity(trackTitle) || !validIdentity(artistName)
+                || Thread.currentThread().isInterrupted()) {
+            return Optional.empty();
+        }
+        try {
+            JsonObject track = object(responseBody(request(MATCH_PATH,
+                    "q_track=" + encode(trackTitle) + "&q_artist=" + encode(artistName))), "track");
+            String matchedTitle = identity(track, "track_name");
+            String matchedArtist = identity(track, "artist_name");
+            if (!normalize(trackTitle).equals(normalize(matchedTitle))
+                    || !normalize(artistName).equals(normalize(matchedArtist))) {
+                return Optional.empty();
+            }
+            String trackId = positiveInteger(track.get("track_id"));
+            JsonObject analysis = object(responseBody(request(ANALYSIS_PATH, "track_id=" + trackId)),
+                    "analysis");
+            List<ThemeMaterial> themes = materialThemes(analysis);
+            List<String> moods = materialMoods(analysis);
+            String meaning = optionalObjectText(analysis, "meaning", "explanation", MAX_MEANING_CHARACTERS);
+            // A matched catalog identity, entity or snippet alone does not establish usable analysis.
+            if (themes.isEmpty() && moods.isEmpty() && meaning == null) {
+                return Optional.empty();
+            }
+            return Optional.of(new SongMaterial(matchedTitle, matchedArtist, trackId,
+                    materialGenres(track), themes, moods, meaning, materialEntities(analysis),
+                    optionalSnippet(trackId)));
+        } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
+            return Optional.empty();
+        } catch (IOException | RuntimeException unavailable) {
+            // Never attach or log a credential-bearing transport exception or provider payload.
+            return Optional.empty();
+        }
+    }
+
+    private String optionalSnippet(String trackId) {
+        try {
+            JsonObject snippet = object(responseBody(request(SNIPPET_PATH, "track_id=" + trackId)), "snippet");
+            if (nonzeroOrInvalidFlag(snippet, "restricted") || nonzeroOrInvalidFlag(snippet, "instrumental")) {
+                return null;
+            }
+            return optionalText(snippet.get("snippet_body"), MAX_SNIPPET_CHARACTERS);
+        } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
+            return null;
+        } catch (IOException | RuntimeException unavailable) {
+            return null;
+        }
+    }
+
+    private static boolean nonzeroOrInvalidFlag(JsonObject object, String field) {
+        JsonElement value = object.get(field);
+        if (value == null || value.isJsonNull()) return false;
+        return !value.isJsonPrimitive() || !value.getAsJsonPrimitive().isNumber()
+                || value.getAsBigDecimal().signum() != 0;
+    }
+
+    /** Immutable request-only material. Its diagnostic string deliberately contains no provider text. */
+    public record SongMaterial(String trackTitle, String artistName, String providerTrackId,
+                               List<String> genres, List<ThemeMaterial> themes, List<String> moods,
+                               String meaningExplanation, List<EntityMaterial> entities, String snippetText) {
+        public SongMaterial {
+            if (!validIdentity(trackTitle) || !validIdentity(artistName)
+                    || providerTrackId == null || !providerTrackId.matches("[1-9][0-9]{0,18}")) {
+                throw new IllegalArgumentException("Invalid song-material identity.");
+            }
+            genres = copyTexts(genres, MAX_LABELS, 120);
+            themes = List.copyOf(themes);
+            moods = copyTexts(moods, MAX_LABELS, 120);
+            entities = List.copyOf(entities);
+            if (themes.size() > MAX_LABELS || entities.size() > MAX_ENTITIES
+                    || meaningExplanation != null && optionalTextValue(meaningExplanation, MAX_MEANING_CHARACTERS) == null
+                    || snippetText != null && optionalTextValue(snippetText, MAX_SNIPPET_CHARACTERS) == null
+                    || themes.isEmpty() && moods.isEmpty() && meaningExplanation == null) {
+                throw new IllegalArgumentException("Invalid bounded song material.");
+            }
+        }
+
+        @Override
+        public String toString() { return "SongMaterial[providerText=redacted]"; }
+    }
+
+    public record ThemeMaterial(String theme, List<String> quotes) {
+        public ThemeMaterial {
+            if (optionalTextValue(theme, 120) == null) {
+                throw new IllegalArgumentException("Invalid song theme.");
+            }
+            quotes = copyTexts(quotes, MAX_QUOTES_PER_THEME, MAX_QUOTE_CHARACTERS);
+        }
+
+        @Override
+        public String toString() { return "ThemeMaterial[providerText=redacted]"; }
+    }
+
+    public record EntityMaterial(String name, String description, List<String> categories) {
+        public EntityMaterial {
+            if (optionalTextValue(name, 120) == null
+                    || description != null && optionalTextValue(description, MAX_ENTITY_DESCRIPTION_CHARACTERS) == null) {
+                throw new IllegalArgumentException("Invalid song entity.");
+            }
+            categories = copyTexts(categories, MAX_ENTITY_CATEGORIES, 120);
+        }
+
+        @Override
+        public String toString() { return "EntityMaterial[providerText=redacted]"; }
+    }
+
+    private static List<String> copyTexts(List<String> values, int maxCount, int maxCharacters) {
+        List<String> copy = List.copyOf(values);
+        if (copy.size() > maxCount
+                || copy.stream().anyMatch(value -> optionalTextValue(value, maxCharacters) == null)) {
+            throw new IllegalArgumentException("Invalid bounded song text.");
+        }
+        return copy;
+    }
+
+    private static List<ThemeMaterial> materialThemes(JsonObject analysis) throws IOException {
+        if (!analysis.has("themes")) return List.of();
+        JsonElement values = object(analysis, "themes").get("main_themes");
+        if (values == null || !values.isJsonArray() || values.getAsJsonArray().size() > MAX_LABELS) {
+            throw invalidResponse();
+        }
+        List<ThemeMaterial> themes = new ArrayList<>();
+        Set<String> seen = new HashSet<>();
+        for (JsonElement value : values.getAsJsonArray()) {
+            if (!value.isJsonObject()) throw invalidResponse();
+            JsonObject item = value.getAsJsonObject();
+            String label = optionalText(item.get("theme"), 120);
+            if (label == null) throw invalidResponse();
+            if (seen.add(normalize(label))) {
+                themes.add(new ThemeMaterial(label,
+                        optionalTexts(item.get("quotes"), MAX_QUOTES_PER_THEME, MAX_QUOTE_CHARACTERS)));
+            }
+        }
+        return List.copyOf(themes);
+    }
+
+    private static List<String> materialMoods(JsonObject analysis) throws IOException {
+        if (!analysis.has("moods")) return List.of();
+        JsonElement values = object(analysis, "moods").get("main_moods");
+        if (values == null || !values.isJsonArray() || values.getAsJsonArray().size() > MAX_LABELS) {
+            throw invalidResponse();
+        }
+        List<String> moods = new ArrayList<>();
+        Set<String> seen = new HashSet<>();
+        for (JsonElement value : values.getAsJsonArray()) {
+            String mood = optionalText(value, 120);
+            if (mood == null) throw invalidResponse();
+            if (seen.add(normalize(mood))) moods.add(mood);
+        }
+        return List.copyOf(moods);
+    }
+
+    private static List<String> materialGenres(JsonObject track) {
+        JsonElement container = track.get("primary_genres");
+        if (container == null || !container.isJsonObject()) return List.of();
+        JsonElement values = container.getAsJsonObject().get("music_genre_list");
+        if (values == null || !values.isJsonArray() || values.getAsJsonArray().size() > MAX_LABELS) return List.of();
+        List<String> genres = new ArrayList<>();
+        Set<String> seen = new HashSet<>();
+        for (JsonElement value : values.getAsJsonArray()) {
+            if (!value.isJsonObject()) return List.of();
+            JsonElement genre = value.getAsJsonObject().get("music_genre");
+            if (genre == null || !genre.isJsonObject()) return List.of();
+            String name = optionalText(genre.getAsJsonObject().get("music_genre_name"), 120);
+            if (name == null) return List.of();
+            if (seen.add(normalize(name))) genres.add(name);
+        }
+        return List.copyOf(genres);
+    }
+
+    private static List<EntityMaterial> materialEntities(JsonObject analysis) {
+        JsonElement container = analysis.get("entities");
+        if (container == null || !container.isJsonObject()) return List.of();
+        JsonElement values = container.getAsJsonObject().get("entity_list");
+        if (values == null || !values.isJsonArray() || values.getAsJsonArray().size() > MAX_ENTITIES) return List.of();
+        List<EntityMaterial> entities = new ArrayList<>();
+        for (JsonElement value : values.getAsJsonArray()) {
+            if (!value.isJsonObject()) return List.of();
+            JsonObject item = value.getAsJsonObject();
+            String name = optionalText(item.get("entity_name"), 120);
+            if (name == null) return List.of();
+            String description = optionalObjectText(item, "model_metadata", "description", MAX_ENTITY_DESCRIPTION_CHARACTERS);
+            if (description == null) {
+                description = optionalObjectText(item, "wikidata", "description", MAX_ENTITY_DESCRIPTION_CHARACTERS);
+            }
+            entities.add(new EntityMaterial(name, description,
+                    optionalTexts(item.get("categories"), MAX_ENTITY_CATEGORIES, 120)));
+        }
+        return List.copyOf(entities);
+    }
+
+    private static String optionalObjectText(JsonObject parent, String container, String field, int limit) {
+        JsonElement object = parent.get(container);
+        return object != null && object.isJsonObject()
+                ? optionalText(object.getAsJsonObject().get(field), limit) : null;
+    }
+
+    private static List<String> optionalTexts(JsonElement values, int maxCount, int maxCharacters) {
+        if (values == null || !values.isJsonArray() || values.getAsJsonArray().size() > maxCount) return List.of();
+        List<String> result = new ArrayList<>();
+        for (JsonElement value : values.getAsJsonArray()) {
+            String text = optionalText(value, maxCharacters);
+            if (text == null) return List.of();
+            result.add(text);
+        }
+        return List.copyOf(result);
+    }
+
+    private static String optionalText(JsonElement value, int limit) {
+        return value != null && value.isJsonPrimitive() && value.getAsJsonPrimitive().isString()
+                ? optionalTextValue(value.getAsString(), limit) : null;
+    }
+
+    private static String optionalTextValue(String value, int limit) {
+        return value != null && !value.isBlank() && value.length() <= limit
+                && value.codePoints().noneMatch(c -> Character.isISOControl(c) && !Character.isWhitespace(c))
+                ? value : null;
     }
 
     @Override

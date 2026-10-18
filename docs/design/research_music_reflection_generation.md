@@ -9,6 +9,129 @@ metadata:
 
 # Music-aware reflection generation research
 
+## Rebuild handoff assessed and isolated trial built — October 17, 2026
+
+Manley supplied Claude's October 17 handoff, agrees with most of its direction and explicitly
+allows Codex to revise its recommendations rather than treating the document as binding rules.
+Music work resumes. The earlier pause below remains history. Scope for this slice is actual
+provider receipts and a backend-only local experiment, not deployment or a phone/audio rewrite.
+
+**Useful direction:** study the matched song before showing the run, then write from that study
+and real facts. Give the song's attitude a central role, preserve the four conditional Energy
+responses, and compare against v1.8 on the same model/facts. No handwritten replacement song
+analysis or new manual reflection/song-pairing test substitutes for the automatic pipeline.
+
+**Corrections to the handoff:** the role of restrictions/reviewers in weak writing is a plausible
+hypothesis, not an isolated causal finding. Controlled requests already permit artist descriptions;
+the phone's partial media reports do not. Individual-digit checks cannot establish truth, and
+several proposed examples invent willpower, motives or growing passion; those examples were not
+copied. Artist context generated from model knowledge is interpretation, not verified biography.
+Do not broadly strip recording/feature suffixes or assume passage timing survives a new version.
+The existing v1.8 three-pass failure is typed failure/retry, not an automatic ordinary fallback.
+
+**Actual read-only inventory:** 12 requests (matcher, analysis, snippet for each of four diagnostic
+identities), with no private listening/run data, keys displayed or provider response files created:
+
+| Requested identity | Result | Current exact-name gate |
+| --- | --- | --- |
+| Stronger / Kanye West | Exact identity; 3 themes with 7 supporting passages; 5 moods; 428-character meaning; snippet available | Accept |
+| 6am In Sausalito / Larry June | Exact identity; analysis and snippet both returned provider 404 | Accept identity, but no analysis |
+| Lovely Day / Bill Withers | Exact identity; 2 themes with 5 supporting passages; 5 moods; 350-character meaning; snippet available | Accept |
+| All Of The Lights / Kanye West, Rihanna, Kid Cudi (chosen diagnostic multi-artist input, not a phone observation) | Returned All of the Lights / Kanye West feat. Rihanna; analysis and snippet available | Reject artist mismatch |
+
+These receipts prove both unused material and catalog gaps; subscription access does not guarantee
+analysis for every song or verified artist-persona information. The account's actual Models API
+also returned Sonnet 5.5/Opus 5.5 and Sonnet 4.6; the first comparison deliberately keeps Sonnet 4.6.
+
+**Implementation:** ordinary `lookup()`/`Analysis`/v1.8 remain unchanged. Explicit `lookupMaterial()`
+retains bounded theme support, moods, original meaning, genres, whitelisted entity descriptions
+and an optional unrestricted noninstrumental text snippet in request memory. Raw entity matches,
+offsets, links and tracking URLs are not forwarded. Snippet failure does not discard useful analysis.
+Strict matching remains; no whole-run ranking or alternate-recording guessing is added.
+
+`SongReflectionTrial` is not a ReflectionProvider, has no server endpoint/configuration switch and
+is not called by the app. It makes one song-study call without run facts, validates source echoes,
+then one writer call for all four branches. The writer receives derived readable facts with
+sample/partial provenance preserved; pace, route, comparisons and missing weather are not guessed.
+There is no rewriting reviewer, automatic retry or automatic fallback in this isolated trial.
+Structural checks cover exact fields, bounded nonblank text, source echo provenance and available
+anchors. Writing length, word choice, whole numeric tokens and lyric-source overlap become explicit
+human-review flags rather than silently discarding or rewriting experimental prose. They do not
+prove factual truth, three-sentence compliance or writing quality. The console receipt independently
+omits a trial branch above eight detected source-overlap words and a baseline above two; it does not
+print all four reflections or the study's free-text fields.
+An overlong but exact source excerpt is shortened deterministically at eight words; invented or
+misattributed excerpts are rejected. Generated artist attitude stays explicitly unverified.
+
+Two user-supplied Larry June examples calibrate the desired level, without the handoff's separate
+unsupported-willpower/passion examples. These are inspiration, not evidence of model skill or new
+performance/run inputs. Detecting reuse or genericness still needs review.
+
+The explicit test-source main harness runs outside Surefire, so actual song material is not written
+to its XML/text reports. Its receipt omits source/study prose, exposes only one mechanically bounded
+trial branch and at most a minimally overlapping baseline branch. No raw provider quotes/snippets
+are saved to the repository or phone. Provider-side processing follows each provider's account terms;
+request-scoped RunState memory is not a claim of zero retention at Anthropic or Musixmatch.
+
+**Final offline checks:** 143 reported, **141 passed / 2 existing opt-in live skips**, zero failures
+or errors. Existing default-provider/HTTP/voice tests remain green. An intermediate test-edit
+compile error was corrected before this final pass. No Android rebuild/install was needed because
+this slice changes no Android source, schema or network contract.
+
+**Completed real comparisons (fictional run only):** Stronger / Kanye West, 4.2 miles, Saturday
+07:00–07:42 Chicago, 40 active minutes, Moderate before, all four conditional ending branches.
+Actual material contained 3 themes, 7 supporting passages, 3 validated study echoes and a snippet.
+
+- **Sonnet 4.6:** two-call trial plus the unchanged three-call v1.8 baseline completed in
+  **41.356 s / 5 Anthropic requests**. Trial Spent was persona-led and shorter; baseline was a
+  longer explicit explanation of the song. The trial nevertheless invented absence of hesitation
+  and its ending was ambiguous; baseline also implied an unmeasured personal cost/change.
+  One other trial branch received a numeric-review flag; its text was not displayed or human-reviewed.
+  This is a real controlled setup comparison, not a blind preference test or a creative-quality pass.
+- **Sonnet 5.5:** the same study/writer setup completed in **19.767 s / 2 Anthropic requests**.
+  Its Spent branch contrasted the song's continuing-work idea with permission to finish this run,
+  using known active time/distance/ending Energy. The adapted-echo flag needed human inspection:
+  a separate source-only analysis/snippet check confirmed the short phrase in actual theme support
+  (not the snippet or meaning), without displaying the raw passages. This establishes source
+  support, not verified recording timing, listener preference or general superiority of a model.
+  The other three responses were generated but not human-reviewed or played.
+
+**Failures and call accounting:** four early 4.6 attempts stopped after 1/2/2/2 Anthropic requests
+on overlong source selection, unsupported metadata, source-boundary and writing checks. The trial
+was then adjusted so verified long excerpts can be shortened and writing concerns are visible
+review flags instead of discarded prose. Another completed attempt's console receipt was lost to
+Windows UTF-8/CP1252 decoding; it made 2–5 requests, but its exact receipt/usage was not recovered.
+The first 5.5 attempt stopped after 2 requests because the old single-block parser rejected a
+newer response envelope. Trial-only parsing now accepts documented thinking/redacted-thinking
+alongside one final text block and never forwards/displays the reasoning. The default parser is
+unchanged. [Anthropic's response documentation](https://platform.claude.com/docs/en/build-with-claude/thinking)
+describes those blocks. Offline fixtures cover isolation; the later 5.5 success proves this local
+compatibility repair. No multi-turn reasoning replay or model configuration change is involved.
+
+Across this slice: **38 Musixmatch endpoint requests** (12 inventory + 24 across eight trial
+attempts + 2 phrase checks), one Models API check, and **18–21 attempted Anthropic generation
+requests** including the lost receipt. These are request-attempt counts, not a dollar/token bill
+or a claim every response succeeded. No further generations were run after the completed 5.5 check.
+
+**Judgment/next boundary:** the new pipeline really uses supporting song material and can produce
+a more direct connection, but one song/two models do not prove a broad creative improvement.
+Manley has not heard or accepted these new outputs. Before replacing app writing, review the
+specific output by ear, remove unsupported run claims without flattening personality, and verify
+all four branches/unknown-state behavior. Preserve current defaults and avoid another manual
+pairing loop or unbounded model search. Source/study payloads and generated full families were not
+written into repository files, Surefire reports or the phone; this notebook records summaries only.
+
+No existing voice, 650 ms gap, accepted Stronger opening, saved run, response contract or deployment
+is changed. Wider matching, recent-lead storage, four parallel calls and richer run facts are later
+decisions; do not add another Room migration for this experiment.
+
+**Four necessary new permanent files:**
+
+- `backend/src/main/java/com/runstate/reflection/SongReflectionTrial.java`: isolate the experimental orchestration from the installed path.
+- `backend/src/main/resources/prompts/song-study-trial-v1.txt`: reviewable song-only study instructions.
+- `backend/src/main/resources/prompts/song-writer-trial-v1.txt`: reviewable tailored writer instructions, separate from v1.8.
+- `backend/src/test/java/com/runstate/reflection/SongReflectionTrialTest.java`: offline checks and an explicit live harness without provider payload files.
+
 ## Pause and resume point — October 17, 2026
 
 Manley paused work after receiving the three unedited persona-led excerpts. No preferred

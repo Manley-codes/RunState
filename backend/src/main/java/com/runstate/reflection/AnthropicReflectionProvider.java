@@ -400,6 +400,29 @@ public final class AnthropicReflectionProvider implements ReflectionProvider {
         return request.toString();
     }
 
+    /** Explicit local trial only; no server endpoint or default generation path invokes this. */
+    JsonObject exchangeForSongTrial(JsonObject input, String prompt, JsonObject schema)
+            throws ReflectionProviderException {
+        String raw = exchange(buildRequestBody(input, prompt, schema,
+                configuration.musicEditorModel()), configuration.requestTimeout());
+        JsonObject response = parseObject(raw, "song trial response");
+        JsonElement blocks = response.get("content");
+        if (blocks != null && blocks.isJsonArray()) {
+            JsonArray textOnly = new JsonArray();
+            for (JsonElement block : blocks.getAsJsonArray()) {
+                if (!block.isJsonObject()) throw invalidResponse("Invalid song trial content block.");
+                String type = requiredString(block.getAsJsonObject(), "type", "song trial content block");
+                if ("text".equals(type)) textOnly.add(block);
+                else if (!"thinking".equals(type) && !"redacted_thinking".equals(type)) {
+                    throw invalidResponse("Unsupported song trial content block.");
+                }
+                // Newer models may return reasoning blocks. Never print, retain or forward them.
+            }
+            response.add("content", textOnly);
+        }
+        return parseObject(successfulOutput(response.toString()), "song trial output");
+    }
+
     private void enrichSongLabels(MusicContext music, JsonObject serializedMusic) {
         if (music.state() != ReflectionContract.MusicState.MUSIC || music.songCue() != null
                 || music.trackTitle() == null || music.artistName() == null) return;
@@ -493,7 +516,7 @@ public final class AnthropicReflectionProvider implements ReflectionProvider {
     }
 
     /** Provider-only facts spare the language model unit arithmetic and UTC interpretation. */
-    private static JsonObject reflectionFacts(CompletedRunEvidence evidence) {
+    static JsonObject reflectionFacts(CompletedRunEvidence evidence) {
         JsonObject facts = new JsonObject();
         addNullableString(facts, "distance_text", reflectionDistanceText(evidence.metrics()));
         facts.addProperty("elapsed_duration_seconds", BigDecimal.valueOf(
