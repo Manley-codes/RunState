@@ -153,6 +153,8 @@ internal object GpsCoverageEvaluator {
         var cumulative = 0.0
         var measuredSegmentSeen = false
         var sourceClockOffset: Long? = null
+        var initialInaccurateLastMono: Long? = null
+        val initialInaccurateOffsets = mutableListOf<Long>()
         fun sourceClocksAgree(epoch: Long, mono: Long): Boolean {
             val reference = sourceClockOffset ?: return false
             val offset = clockOffsetMillis(epoch, mono)
@@ -182,6 +184,29 @@ internal object GpsCoverageEvaluator {
                 return false
             }
             if (lastUsableMono?.let { mono <= it } == true) return false
+            // An honestly inaccurate acquisition point before the first anchor is part
+            // of the already allowed starting edge, not an interior recording gap. Its
+            // source clock must still be valid and agree with the eventual anchor. No
+            // stale, invalid, mock/unknown or later in-run rejection gets this exception.
+            if (intervalIndex == 0 && sourceClockOffset == null &&
+                !point.acceptedForDistance &&
+                point.rejectionReason == GpsSampleStatus.REJECTED_INACCURATE.name
+            ) {
+                val rawAccuracy = point.horizontalAccuracyMeters?.toDouble()
+                if (rawAccuracy != null && rawAccuracy.isFinite() && rawAccuracy > 0.0 &&
+                    rawAccuracy <= distanceConfig.maxHorizontalAccuracyMeters
+                ) return false
+                if (mono - interval.start !in 0L..MAX_EDGE_MILLIS ||
+                    initialInaccurateLastMono?.let { mono <= it } == true ||
+                    point.observedAtEpochMillis <= 0L
+                ) return false
+                val offset = clockOffsetMillis(point.observedAtEpochMillis, mono)
+                if (offset !in -MAX_SOURCE_CLOCK_OFFSET_MILLIS..MAX_SOURCE_CLOCK_OFFSET_MILLIS) return false
+                initialInaccurateOffsets.add(offset)
+                initialInaccurateLastMono = mono
+                return@forEach
+            }
+            if (sourceClockOffset == null && initialInaccurateLastMono?.let { mono <= it } == true) return false
             val accuracy = point.horizontalAccuracyMeters?.toDouble() ?: return false
             if (!accuracy.isFinite() || accuracy <= 0.0 || accuracy > distanceConfig.maxHorizontalAccuracyMeters) {
                 return false
@@ -220,6 +245,11 @@ internal object GpsCoverageEvaluator {
                 // Keep it across every later point and pause/resume interval; never rebase.
                 if (!point.acceptedForDistance || point.segmentDistanceMeters != null) return false
                 sourceClockOffset = clockOffsetMillis(point.observedAtEpochMillis, mono)
+                if (initialInaccurateOffsets.any {
+                        Math.subtractExact(it, checkNotNull(sourceClockOffset)) !in
+                            -SOURCE_CLOCK_TOLERANCE_MILLIS..SOURCE_CLOCK_TOLERANCE_MILLIS
+                    }
+                ) return false
             }
             if (!sourceClocksAgree(point.observedAtEpochMillis, mono)) return false
             interval.lastFix = mono

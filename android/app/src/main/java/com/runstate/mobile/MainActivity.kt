@@ -57,6 +57,7 @@ import com.runstate.mobile.location.GpsSignalStatus
 import com.runstate.mobile.location.GpsMapEvidence
 import com.runstate.mobile.location.rememberForegroundGpsPreview
 import com.runstate.mobile.location.ForegroundGpsPreviewStatus
+import com.runstate.mobile.location.ForegroundGpsPreviewSource
 import com.runstate.mobile.music.RunMusicNotificationListener
 import com.runstate.mobile.ui.RunMetricsDisplay
 import com.runstate.mobile.ui.RunMetricsTicker
@@ -86,6 +87,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.catch
@@ -99,6 +101,12 @@ import kotlinx.coroutines.flow.catch
  * process-scoped one is what makes a run survive rotation: the Activity's memory is
  * thrown away, the coordinator's is not.
  */
+private fun preciseGpsLocationReady(context: Context): Boolean =
+    ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) ==
+        PackageManager.PERMISSION_GRANTED &&
+        context.getSystemService(LocationManager::class.java)
+            ?.isProviderEnabled(LocationManager.GPS_PROVIDER) == true
+
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -198,7 +206,10 @@ internal fun RunJourneyRoot(
     runSettingsSessionId: String = "isolated-preview",
     musicAccessProvider: (Context) -> Boolean = ::hasMusicAccess,
     nativeMapsEnabled: Boolean = false,
-    onRetrySplits: suspend (String) -> Unit = {}
+    onRetrySplits: suspend (String) -> Unit = {},
+    gpsPreviewSourceOverride: ForegroundGpsPreviewSource? = null,
+    gpsLocationReady: (Context) -> Boolean = ::preciseGpsLocationReady,
+    startGpsRun: (Context, PreRunEnergy?, Boolean, Boolean) -> Unit = RunTrackingService::startNew
 ) {
 
     val reflectionRequestsAvailable = reflectionConnection is ReflectionConnectionState.Hosted ||
@@ -259,6 +270,22 @@ internal fun RunJourneyRoot(
     }
     var gpsMessage by rememberSaveable { mutableStateOf<String?>(null) }
     var pendingGpsResumeId by rememberSaveable { mutableStateOf<String?>(null) }
+    // An unsaved, foreground-only intention. Recreation must never restore permission to start.
+    var gpsStartRequested by remember { mutableStateOf(false) }
+    // This remembers only an already dispatched service handoff across Activity recreation.
+    // It cannot authorize a new start, and a different application process discards it.
+    val gpsDispatchSaver = remember(runSettingsSessionId) {
+        Saver<Boolean, Any>(save = { listOf(runSettingsSessionId, it) }, restore = { raw ->
+            val saved = raw as? List<*>
+            if (saved?.getOrNull(0) == runSettingsSessionId) saved.getOrNull(1) as? Boolean ?: false
+            else false
+        })
+    }
+    var gpsStartDispatched by rememberSaveable(runSettingsSessionId, stateSaver = gpsDispatchSaver) {
+        mutableStateOf(false)
+    }
+    var gpsStartAttempt by remember { mutableStateOf(0L) }
+    var gpsPreviewRestart by remember { mutableStateOf(0L) }
     val musicSelected = runPreferences?.observeMusic == true
     val musicReflectionSharingSelected = runPreferences?.shareMusicInReflection == true
     var runSettingsVisible by rememberSaveable { mutableStateOf(false) }
@@ -330,16 +357,16 @@ internal fun RunJourneyRoot(
             mapEvidence = coordinator.runMapEvidence(mapSignal)?.takeIf { it.runId == requestedId }
         }
     }
-    val previewEnabled = nativeMapsEnabled && mapVisible && mapRunId == "foreground-gps-preview" &&
-        gpsSelected && activeRunId == null && model.state == RunUiState.ReadyToStart
-    val previewController = rememberForegroundGpsPreview(previewEnabled, lifecycle, model.state)
+    val previewEnabled = gpsSelected && !gpsStartDispatched && activeRunId == null &&
+        !historyVisible && !runSettingsVisible && !connectionDialogVisible &&
+        (model.state == RunUiState.ReadyToStart || model.state == RunUiState.Countdown)
+    // Warm GPS while Start is visible, independent of map tiles. Retain this same listener
+    // through countdown/cancel; the service remains the only durable run recorder.
+    val previewController = rememberForegroundGpsPreview(previewEnabled, lifecycle,
+        gpsPreviewRestart, gpsPreviewSourceOverride)
     val gpsPreview by previewController
     val context = LocalContext.current
-    fun preciseLocationReady(): Boolean =
-        ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) ==
-            PackageManager.PERMISSION_GRANTED &&
-            context.getSystemService(LocationManager::class.java)
-                ?.isProviderEnabled(LocationManager.GPS_PROVIDER) == true
+    fun preciseLocationReady(): Boolean = gpsLocationReady(context)
     var gpsReady by remember(context) { mutableStateOf(preciseLocationReady()) }
     var voiceForeground by remember(lifecycle) {
         mutableStateOf(lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED))
@@ -552,6 +579,10 @@ internal fun RunJourneyRoot(
             }
 
             is RunTrackingServiceState.Failed -> {
+                gpsStartRequested = false
+                gpsStartDispatched = false
+                previewController.stopBeforeRun()
+                gpsPreviewRestart++
                 gpsMessage = service.reason
                 refresh()
                 val snapshot = coordinator.journeySnapshot()
@@ -646,8 +677,67 @@ internal fun RunJourneyRoot(
         refresh()
     }
 
+    // Cancel an unsaved GPS start on backgrounding. Returning or recreating the Activity asks
+    // for a new tap instead of starting a run the runner did not see begin.
+    DisposableEffect(lifecycle, coordinator, previewController) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_PAUSE && gpsStartRequested) {
+                gpsStartRequested = false
+                // The RESUMED preview lifecycle independently releases its listener here.
+            }
+        }
+        lifecycle.addObserver(observer)
+        onDispose { lifecycle.removeObserver(observer) }
+    }
+    LaunchedEffect(model.state, gpsStartRequested, gpsStartDispatched, gpsSelected, actionInFlight, trackingState) {
+        if (gpsSelected && !gpsStartRequested && !gpsStartDispatched &&
+            trackingState != RunTrackingServiceState.Starting &&
+            model.state == RunUiState.Countdown && !actionInFlight) {
+            runGuarded {
+                val current = coordinator.journeySnapshot()
+                if (current.admission == RunAdmission.CountdownInProgress &&
+                    current.startAttemptPhase == com.runstate.mobile.run.StartAttemptPhase.None) {
+                    coordinator.cancelCountdown()
+                }
+                refresh()
+            }
+        }
+    }
+    LaunchedEffect(model.state) {
+        if (model.state != RunUiState.Initializing && model.state != RunUiState.Countdown &&
+            (model.state != RunUiState.ReadyToStart || !gpsStartRequested)) {
+            gpsStartRequested = false
+            gpsStartDispatched = false
+        }
+    }
+    LaunchedEffect(gpsStartRequested, model.state, actionInFlight, voiceForeground) {
+        if (gpsStartRequested && model.state == RunUiState.ReadyToStart && !actionInFlight &&
+            lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) {
+            runGuarded {
+                val attempt = gpsStartAttempt
+                if (gpsStartRequested && preciseLocationReady() &&
+                    lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) {
+                    coordinator.beginCountdown()
+                    // A lifecycle interruption can arrive while coordinator admission suspends.
+                    if (!gpsStartRequested || gpsStartAttempt != attempt ||
+                        !lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) {
+                        coordinator.cancelCountdown()
+                    }
+                    refresh()
+                } else if (gpsStartRequested && !preciseLocationReady()) {
+                    // Permission/provider can change between the tap and admission.
+                    // Return control to Start instead of leaving an invisible pending request.
+                    gpsStartRequested = false
+                    gpsReady = false
+                    gpsMessage = "Precise GPS is unavailable. Enable phone Location before starting."
+                }
+            }
+        }
+    }
+
     val countdownDigit = rememberLifecycleCountdown(
-        active = model.state == RunUiState.Countdown,
+        active = model.state == RunUiState.Countdown &&
+            (!gpsSelected || gpsStartRequested && !gpsStartDispatched),
         lifecycle = lifecycle,
         onFinished = {
 
@@ -660,7 +750,13 @@ internal fun RunJourneyRoot(
             val shareMusicForRun = observeMusicForRun && reflectionRequestsAvailable &&
                 musicReflectionSharingSelected
             if (gpsSelected) {
-                if (!preciseLocationReady()) {
+                if (!gpsStartRequested || !lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) {
+                    runGuarded {
+                        coordinator.cancelCountdown()
+                        refresh()
+                    }
+                } else if (!preciseLocationReady()) {
+                    gpsStartRequested = false
                     gpsMessage = "Precise GPS is unavailable. Enable phone Location before starting."
                     runGuarded {
                         coordinator.cancelCountdown()
@@ -671,9 +767,13 @@ internal fun RunJourneyRoot(
                         // The visible Activity launches the foreground service before any
                         // asynchronous Room insert; that service owns this GPS start.
                         previewController.stopBeforeRun()
-                        RunTrackingService.startNew(context, preRunEnergy, observeMusicForRun,
+                        gpsStartDispatched = true
+                        gpsStartRequested = false
+                        startGpsRun(context, preRunEnergy, observeMusicForRun,
                             shareMusicForRun)
                     } catch (_: RuntimeException) {
+                        gpsStartDispatched = false
+                        gpsPreviewRestart++ // Retry even if dispatch failed within one frame.
                         gpsMessage = "Android could not start GPS tracking. Try again while the app is open."
                         runGuarded {
                             coordinator.cancelCountdown()
@@ -900,9 +1000,16 @@ internal fun RunJourneyRoot(
                     gpsReady = false
                     requestGpsPermissions()
                 }
+                gpsSelected -> {
+                    // Start goes straight to countdown regardless of signal strength.
+                    // The already-warm listener stays until the service takes sole ownership.
+                    mapRunId = null
+                    gpsMessage = null
+                    gpsStartAttempt++
+                    gpsStartDispatched = false
+                    gpsStartRequested = true
+                }
                 else -> runGuarded {
-                    // Opening the map is optional. Beginning a run closes that preview before
-                    // countdown, and the existing service remains the sole run recorder.
                     previewController.stopBeforeRun()
                     mapRunId = null
                     coordinator.beginCountdown()
@@ -911,6 +1018,7 @@ internal fun RunJourneyRoot(
             }
         },
         onCancelCountdown = {
+            gpsStartRequested = false
             runGuarded {
                 coordinator.cancelCountdown()
                 gpsSelected = true
@@ -1015,7 +1123,6 @@ internal fun RunJourneyRoot(
             gpsPreview.status == ForegroundGpsPreviewStatus.LOCATION_OFF) ({ requestGpsPermissions() }) else null,
         mapExpanded = mapVisible,
         onCloseRunMap = {
-            previewController.stopBeforeRun()
             mapRunId = null
         },
         gpsServicePresent = when (val service = trackingState) {
@@ -1063,6 +1170,7 @@ internal fun RunJourneyRoot(
         energyEnabled = reflectionCoordinator != null,
         isTestData = (activeReflection as? RunReflectionState.Ready)?.isTestData == true,
         onViewHistory = {
+            gpsStartRequested = false
             stopCompletionAudio?.invoke()
             previewController.stopBeforeRun()
             mapRunId = null
@@ -1074,7 +1182,8 @@ internal fun RunJourneyRoot(
             ?.let { "${it.trackTitle} · ${it.artistName}" },
         onStopReflectionAudio = { stopCompletionAudio?.invoke() },
         showHistory = true,
-        actionsEnabled = !actionInFlight && !reflectionConnectionSaving,
+        actionsEnabled = !actionInFlight && !reflectionConnectionSaving && !gpsStartDispatched &&
+            !(gpsStartRequested && model.state == RunUiState.ReadyToStart),
         modifier = modifier,
         savedPreRunEnergy = completedRun?.preRunEnergy,
         completionDateLabel = completedRun?.let(::completionDateLabelFor),
@@ -1083,8 +1192,13 @@ internal fun RunJourneyRoot(
             if (held) completionPresentationHeldRunId = presentedRunId
             else if (completionPresentationHeldRunId == presentedRunId) completionPresentationHeldRunId = null
         },
-        onOpenRunSettings = { runSettingsVisible = true },
+        onOpenRunSettings = {
+            gpsStartRequested = false
+            previewController.stopBeforeRun()
+            runSettingsVisible = true
+        },
         gpsReady = gpsReady,
+        gpsStatusText = gpsPreview.startStatusText,
         setupLoading = runPreferences == null && runPreferencesError == null,
         reflectionSetupRequired = reflectionConnection == ReflectionConnectionState.NotConfigured ||
             reflectionConnection == ReflectionConnectionState.Unavailable

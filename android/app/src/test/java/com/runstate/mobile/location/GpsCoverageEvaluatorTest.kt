@@ -115,6 +115,92 @@ class GpsCoverageEvaluatorTest {
     }
 
     @Test
+    fun `inaccurate acquisition before the first anchor uses the existing start edge allowance`() {
+        listOf<Float?>(null, 0f, 26f).forEach { accuracy ->
+            assertEquals("accuracy $accuracy", TelemetryCoverage.COMPLETE, assess(points =
+                prependInaccurate(route(2_000L..59_000L), 1_000L, accuracy)))
+        }
+    }
+
+    @Test
+    fun `inaccurate acquisition cannot extend the five second or total edge limits`() {
+        assertEquals(TelemetryCoverage.COMPLETE, assess(
+            run = paused(120_000L), transitions = listOf(pause(120_000L)),
+            points = prependInaccurate(route(5_000L..119_000L), 4_000L), nowOffset = 130_000L
+        ))
+        assertEquals(TelemetryCoverage.PARTIAL, assess(
+            run = paused(120_000L), transitions = listOf(pause(120_000L)),
+            points = prependInaccurate(route(5_001L..119_001L), 4_000L), nowOffset = 130_000L
+        ))
+        assertEquals(TelemetryCoverage.PARTIAL, assess(points =
+            prependInaccurate(route(2_000L..58_000L), 1_000L)))
+    }
+
+    @Test
+    fun `only actual inaccurate initial acquisition qualifies for the edge exception`() {
+        val reasons = listOf(
+            GpsSampleStatus.REJECTED_STALE.name, GpsSampleStatus.REJECTED_INVALID.name,
+            GpsSampleStatus.REJECTED_IMPLAUSIBLE_JUMP.name, GpsSampleStatus.REJECTED_OUT_OF_ORDER.name,
+            "CROSSES_CHECKPOINT", "BEFORE_CHECKPOINT", "NOT_RUNNING", "MOCK", "UNKNOWN_REASON"
+        )
+        reasons.forEach { reason ->
+            val points = prependInaccurate(route(2_000L..59_000L), 1_000L).mapIndexed { index, point ->
+                if (index == 0) point.copy(rejectionReason = reason) else point
+            }
+            assertEquals(reason, TelemetryCoverage.PARTIAL, assess(points = points))
+        }
+        assertEquals(TelemetryCoverage.PARTIAL, assess(points =
+            prependInaccurate(route(2_000L..59_000L), 1_000L, accuracy = 5f)))
+    }
+
+    @Test
+    fun `initial acquisition clock must agree with the eventual fixed anchor reference`() {
+        fun points(inaccurateBias: Long, acceptedBias: Long) =
+            prependInaccurate(route(2_000L..59_000L), 1_000L).mapIndexed { index, point ->
+                point.copy(observedAtEpochMillis = point.observedAtEpochMillis +
+                    if (index == 0) inaccurateBias else acceptedBias)
+            }
+        assertEquals(TelemetryCoverage.COMPLETE, assess(points = points(1_500L, 500L)))
+        assertEquals(TelemetryCoverage.PARTIAL, assess(points = points(1_501L, 500L)))
+        assertEquals(TelemetryCoverage.PARTIAL, assess(points = points(2_001L, 1_001L)))
+        assertEquals(TelemetryCoverage.COMPLETE, assess(points = points(-1_500L, -500L)))
+        assertEquals(TelemetryCoverage.PARTIAL, assess(points = points(-1_501L, -500L)))
+    }
+
+    @Test
+    fun `initial inaccurate samples cannot reorder source time or replace missing distance`() {
+        val points = prependInaccurate(route(2_000L..59_000L), 1_000L)
+        val reversed = (listOf(points.first().copy(observationKey = "newer-inaccurate",
+            elapsedRealtimeNanos = (MONO + 1_500L) * 1_000_000L,
+            observedAtEpochMillis = EPOCH + 1_500L)) + points)
+            .mapIndexed { index, point -> point.copy(sequenceNumber = index + 1) }
+        assertEquals(TelemetryCoverage.PARTIAL, assess(points = reversed))
+        assertEquals(TelemetryCoverage.PARTIAL, assess(points =
+            prependInaccurate(route(2_000L..59_000L), 2_001L)))
+        assertEquals(TelemetryCoverage.UNAVAILABLE, assess(points =
+            prependInaccurate(route(2_000L..2_000L), 1_000L)))
+    }
+
+    @Test
+    fun `initial edge exception never hides an interior or resumed inaccurate gap`() {
+        val interior = insertRejected(route(1_000L..59_000L), 2, 2_500L,
+            GpsSampleStatus.REJECTED_INACCURATE.name).map {
+            if (it.rejectionReason == GpsSampleStatus.REJECTED_INACCURATE.name)
+                it.copy(horizontalAccuracyMeters = 26f) else it
+        }
+        assertEquals(TelemetryCoverage.PARTIAL, assess(points = interior))
+        val resumed = insertRejected(route(1_000L..59_000L, 92_000L..149_000L), 59,
+            91_000L, GpsSampleStatus.REJECTED_INACCURATE.name).map {
+            if (it.rejectionReason == GpsSampleStatus.REJECTED_INACCURATE.name)
+                it.copy(horizontalAccuracyMeters = 26f) else it
+        }
+        assertEquals(TelemetryCoverage.PARTIAL, assess(
+            run = paused(150_000L), transitions = listOf(pause(), resume(90_000L, 2), pause(150_000L, 3)),
+            points = resumed, nowOffset = 160_000L
+        ))
+    }
+
+    @Test
     fun `pause time is excluded and each resumed interval begins at its own anchor`() {
         val transitions = listOf(pause(), resume(90_000L, 2), pause(150_000L, 3))
         val points = route(1_000L..59_000L, 91_000L..149_000L)
@@ -448,6 +534,11 @@ class GpsCoverageEvaluatorTest {
         return (points.take(index) + rejected + points.drop(index))
             .mapIndexed { position, point -> point.copy(sequenceNumber = position + 1) }
     }
+
+    private fun prependInaccurate(
+        points: List<RunLocationPointEntity>, offset: Long, accuracy: Float? = 26f
+    ) = insertRejected(points, 0, offset, GpsSampleStatus.REJECTED_INACCURATE.name)
+        .mapIndexed { index, point -> if (index == 0) point.copy(horizontalAccuracyMeters = accuracy) else point }
 
     private fun offset(point: RunLocationPointEntity) = point.observedAtEpochMillis - EPOCH
 

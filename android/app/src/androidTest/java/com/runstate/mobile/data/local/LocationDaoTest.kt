@@ -3,6 +3,7 @@ package com.runstate.mobile.data.local
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.runstate.mobile.run.RunTimingMark
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -128,6 +129,132 @@ class LocationDaoTest {
     }
 
     @Test
+    fun sameProcessNegativeSourceClockBiasDoesNotRejectFreshStartingFixes() = runBlocking {
+        database.runDao().insert(timedRun())
+        val dao = database.locationDao()
+        val anchor = dao.recordObservation(timedPoint("biased-anchor", 1_000, bias = -2_000), SESSION)
+        val segment = dao.recordObservation(timedPoint("biased-segment", 2_000, 6.0, -2_000), SESSION)
+        assertTrue(anchor.acceptedForDistance)
+        assertNull(anchor.segmentDistanceMeters)
+        assertEquals(6.0, segment.cumulativeDistanceMeters!!, 0.0)
+    }
+
+    @Test
+    fun resumedCheckpointUsesItsSavedMonotonicTimeDespiteNegativeSourceBias() = runBlocking {
+        database.runDao().insert(timedRun())
+        val dao = database.locationDao()
+        dao.recordObservation(timedPoint("anchor", 1_000, bias = -2_000), SESSION)
+        dao.recordObservation(timedPoint("segment", 3_000, 25.0, -2_000), SESSION)
+        pauseAndResume(4_000, 5_000)
+        val anchor = dao.recordObservation(timedPoint("resumed-anchor", 5_500, bias = -2_000), SESSION)
+        val segment = dao.recordObservation(timedPoint("resumed-segment", 6_500, 6.0, -2_000), SESSION)
+        assertTrue(anchor.acceptedForDistance)
+        assertNull(anchor.segmentDistanceMeters)
+        assertEquals(31.0, segment.cumulativeDistanceMeters!!, 0.0)
+    }
+
+    @Test
+    fun positiveSourceBiasCannotBridgeAQuickDurablePauseAndResume() = runBlocking {
+        database.runDao().insert(timedRun())
+        val dao = database.locationDao()
+        dao.recordObservation(timedPoint("anchor", 1_000, bias = 2_000), SESSION)
+        val beforePause = dao.recordObservation(timedPoint("segment", 3_000, 25.0, 2_000), SESSION)
+        // The previous source epoch (start + 5 s) appears later than Resume (start + 4 s).
+        // Monotonic evidence must still stop an owner that missed the PAUSED Flow emission.
+        pauseAndResume(3_500, 4_000)
+        val crossing = dao.recordObservation(timedPoint("crossing", 5_000, 100.0, 2_000), SESSION)
+        assertEquals("CROSSES_CHECKPOINT", crossing.rejectionReason)
+        assertNull(crossing.segmentDistanceMeters)
+        assertEquals(beforePause, dao.latestMeasured(run.runId))
+        dao.recordObservation(timedPoint("fresh-anchor", 5_500, bias = 2_000), SESSION)
+        val measured = dao.recordObservation(timedPoint("fresh-segment", 6_500, 6.0, 2_000), SESSION)
+        assertEquals(31.0, measured.cumulativeDistanceMeters!!, 0.0)
+    }
+
+    @Test
+    fun sourceNanosecondsPreserveBothSidesOfTheLatestCheckpoint() = runBlocking {
+        database.runDao().insert(timedRun())
+        val dao = database.locationDao()
+        dao.recordObservation(timedPoint("first-anchor", 1_000), SESSION)
+        pauseAndResume(2_000, 3_000)
+        val checkpointNanos = (MONO + 3_000) * 1_000_000L
+        val before = dao.recordObservation(timedPoint("just-before-resume", 3_000, bias = 1_000)
+            .copy(elapsedRealtimeNanos = checkpointNanos - 1), SESSION)
+        assertEquals("BEFORE_CHECKPOINT", before.rejectionReason)
+        val after = dao.recordObservation(timedPoint("just-after-resume", 3_000)
+            .copy(elapsedRealtimeNanos = checkpointNanos + 1), SESSION)
+        assertTrue(after.acceptedForDistance)
+        val segment = dao.recordObservation(timedPoint("after-segment", 4_000, 6.0), SESSION)
+        assertTrue(segment.acceptedForDistance)
+        assertEquals(6.0, segment.cumulativeDistanceMeters!!, 0.0)
+    }
+
+    @Test
+    fun sameProcessSourceOrderCannotBeChangedByWallClockOrder() = runBlocking {
+        database.runDao().insert(timedRun())
+        val dao = database.locationDao()
+        dao.recordObservation(timedPoint("anchor", 1_000), SESSION)
+        dao.recordObservation(timedPoint("segment", 3_000, 12.0), SESSION)
+        val delayed = dao.recordObservation(timedPoint("delayed", 2_000, 50.0, 2_000), SESSION)
+        val equal = dao.recordObservation(timedPoint("same-source-instant", 3_000, 50.0, 1_000), SESSION)
+        assertEquals("OUT_OF_ORDER", delayed.rejectionReason)
+        assertEquals("OUT_OF_ORDER", equal.rejectionReason)
+        val forward = dao.recordObservation(timedPoint("forward-source", 4_000, 6.0, -1_100), SESSION)
+        assertTrue(forward.acceptedForDistance)
+        assertEquals(18.0, forward.cumulativeDistanceMeters!!, 0.0)
+    }
+
+    @Test
+    fun absentOrDifferentProcessIdentityKeepsConservativeWallClockFallback() = runBlocking {
+        database.runDao().insert(timedRun())
+        val dao = database.locationDao()
+        for (session in listOf(null, OTHER_SESSION)) {
+            val rejected = dao.recordObservation(timedPoint("unknown-process-$session", 1_000,
+                bias = -2_000), session)
+            assertEquals("BEFORE_CHECKPOINT", rejected.rejectionReason)
+        }
+        val missingSourceClock = dao.recordObservation(timedPoint("no-source-clock", 1_000,
+            bias = -2_000).copy(elapsedRealtimeNanos = null), SESSION)
+        assertEquals("BEFORE_CHECKPOINT", missingSourceClock.rejectionReason)
+        assertNull(dao.latestAccepted(run.runId))
+    }
+
+    @Test
+    fun missingOrDifferentResumeTimingCannotBorrowTheOriginalStartClock() = runBlocking {
+        database.runDao().insert(timedRun())
+        val dao = database.locationDao()
+        dao.recordObservation(timedPoint("anchor", 1_000), SESSION)
+        database.runDao().pauseRun(run.runId, run.officialStartEpochMillis + 2_000,
+            RunTimingMark(MONO + 2_000, SESSION))
+        database.runDao().resumeRun(run.runId, run.officialStartEpochMillis + 3_000)
+        val missingTiming = dao.recordObservation(timedPoint("missing-resume-time", 3_500,
+            bias = -2_000), SESSION)
+        assertEquals("BEFORE_CHECKPOINT", missingTiming.rejectionReason)
+        database.runDao().pauseRun(run.runId, run.officialStartEpochMillis + 4_000,
+            RunTimingMark(MONO + 4_000, OTHER_SESSION))
+        database.runDao().resumeRun(run.runId, run.officialStartEpochMillis + 5_000,
+            RunTimingMark(MONO + 5_000, OTHER_SESSION))
+        val differentTiming = dao.recordObservation(timedPoint("different-resume-process", 5_500,
+            bias = -2_000), SESSION)
+        assertEquals("BEFORE_CHECKPOINT", differentTiming.rejectionReason)
+    }
+
+    private fun timedRun() = run.copy(startElapsedRealtimeMillis = MONO, timingSessionId = SESSION)
+
+    private fun timedPoint(key: String, offset: Long, segment: Double? = null, bias: Long = 0L) =
+        point(key, offset, segment).copy(
+            observedAtEpochMillis = run.officialStartEpochMillis + offset + bias,
+            elapsedRealtimeNanos = (MONO + offset) * 1_000_000L
+        )
+
+    private suspend fun pauseAndResume(pauseOffset: Long, resumeOffset: Long) {
+        database.runDao().pauseRun(run.runId, run.officialStartEpochMillis + pauseOffset,
+            RunTimingMark(MONO + pauseOffset, SESSION))
+        database.runDao().resumeRun(run.runId, run.officialStartEpochMillis + resumeOffset,
+            RunTimingMark(MONO + resumeOffset, SESSION))
+    }
+
+    @Test
     fun fixtureAndLegacyRunsCannotAcquireGpsObservations() = runBlocking {
         for (mode in listOf(RunTrackingMode.FIXTURE, null)) {
             database.runDao().insert(run.copy(
@@ -191,5 +318,8 @@ class LocationDaoTest {
 
     private companion object {
         const val DATABASE_NAME = "runstate-location-dao-test.db"
+        const val MONO = 100_000L
+        const val SESSION = "120e2c1e-9d43-4b7a-9c21-7b5e8a4d1f30"
+        const val OTHER_SESSION = "220e2c1e-9d43-4b7a-9c21-7b5e8a4d1f30"
     }
 }

@@ -1,6 +1,7 @@
 package com.runstate.mobile.ui
 
 import android.media.MediaMetadataRetriever
+import android.os.SystemClock
 import android.view.View
 import android.view.ViewGroup
 import androidx.activity.ComponentActivity
@@ -9,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.material3.Text
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -29,8 +31,10 @@ import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.junit4.AndroidComposeTestRule
 import androidx.compose.ui.test.junit4.StateRestorationTester
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
@@ -54,6 +58,7 @@ import androidx.test.core.app.ApplicationProvider
 import androidx.test.core.app.ActivityScenario
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.ext.junit.rules.ActivityScenarioRule
 import com.runstate.mobile.MainActivity
 import com.runstate.mobile.R
 import com.runstate.mobile.RunCompleteSpeechEffect
@@ -67,9 +72,14 @@ import com.runstate.mobile.location.GpsMapEvidence
 import com.runstate.mobile.location.GpsMapCoordinate
 import com.runstate.mobile.location.GpsMapMarker
 import com.runstate.mobile.location.GpsMapMarkerState
+import com.runstate.mobile.location.ForegroundGpsPreviewFix
+import com.runstate.mobile.location.ForegroundGpsPreviewSource
+import com.runstate.mobile.location.GpsPreviewAvailability
+import com.runstate.mobile.location.GpsSample
 import com.runstate.mobile.run.PreparedRunFactory
 import com.runstate.mobile.run.RunActionKind
 import com.runstate.mobile.run.RunSessionCoordinator
+import com.runstate.mobile.run.RunAdmission
 import com.runstate.mobile.data.local.ReflectionBranch
 import com.runstate.mobile.data.local.PostRunEffort
 import com.runstate.mobile.data.local.PreRunEnergy
@@ -85,6 +95,7 @@ import org.junit.Assert.assertSame
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
+import org.junit.rules.TestRule
 import java.io.File
 import java.time.Clock
 import java.time.Instant
@@ -102,15 +113,17 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlin.coroutines.EmptyCoroutineContext
 
 /**
  * Checks what each screen shows and offers, the lifecycle-gated countdown, and the hold.
  *
  * [RunStateScreen] and [HoldToStopButton] are rendered directly with plain values, and the
- * countdown is driven through a lifecycle this test owns — no coordinator or database is
- * involved in any of those. One test launches the real [MainActivity] to prove that genuine
- * Activity recreation restarts the countdown; durable storage is proved separately in
- * `RunSessionCoordinatorRoomTest`, not here.
+ * countdown is driven through a lifecycle this test owns. Bounded real-root cases use isolated
+ * in-memory Room and fake GPS/service boundaries, never the phone's saved runs or location.
+ * One test launches the real [MainActivity] to prove that genuine Activity recreation restarts
+ * the countdown; deeper durable storage is proved in `RunSessionCoordinatorRoomTest`.
  *
  * The absence assertions matter as much as the presence ones. Offering Cancel while a start
  * may already be stored, or Start over a blocked database, would be the screen contradicting
@@ -144,8 +157,21 @@ class RunStateScreenTest {
         const val LONGER_THAN_COUNTDOWN_MILLIS = 3 * COUNTDOWN_STEP_MILLIS + 500L
     }
 
+    private lateinit var composeTestRule:
+        AndroidComposeTestRule<ActivityScenarioRule<ComponentActivity>, ComponentActivity>
+
     @get:Rule
-    val composeTestRule = createAndroidComposeRule<ComponentActivity>()
+    val composeRule: TestRule = TestRule { statement, description ->
+        // These real-root cases collect Room flows. Compose's default unconfined test
+        // dispatcher can resume composition on Room's worker after a snapshot notification.
+        // Queue GPS-root continuations for the UI-driven test clock instead; keep Android's
+        // main-thread lifecycle checks and the unrelated screen tests' existing scheduler.
+        val effectContext = if (description.methodName.orEmpty().startsWith("gpsRoot")) {
+            StandardTestDispatcher()
+        } else EmptyCoroutineContext
+        composeTestRule = createAndroidComposeRule<ComponentActivity>(effectContext)
+        composeTestRule.apply(statement, description)
+    }
 
     /** Counts each callback, so a tap can be shown to reach the right one and only it. */
     private class RecordedActions {
@@ -749,6 +775,7 @@ class RunStateScreenTest {
     @Test
     fun startReportsGpsReadinessWithoutAModeSwitch() {
         var gpsReady by mutableStateOf(false)
+        var statusText by mutableStateOf<String?>(null)
         composeTestRule.setContent {
             StartRunScreen(
                 selectedPreRunEnergy = null,
@@ -758,15 +785,463 @@ class RunStateScreenTest {
                 onViewHistory = {},
                 showHistory = false,
                 gpsSelected = true,
-                gpsReady = gpsReady
+                gpsReady = gpsReady,
+                gpsStatusText = statusText
             )
         }
 
         composeTestRule.onNodeWithText("Location setup on Start").assertExists()
         composeTestRule.onNodeWithTag(START_GPS_TOGGLE_TAG).assertDoesNotExist()
         composeTestRule.runOnIdle { gpsReady = true }
-        composeTestRule.onNodeWithText("GPS ready").assertExists()
+        composeTestRule.onNodeWithText("GPS enabled").assertExists()
         composeTestRule.onNodeWithText("Sample demo · simulated distance").assertDoesNotExist()
+        for (label in listOf("GPS connecting…", "GPS signal weak", "GPS signal lost", "GPS ready")) {
+            composeTestRule.runOnIdle { statusText = label }
+            composeTestRule.onNodeWithText(label).assertExists()
+            composeTestRule.onNodeWithText("GPS enabled").assertDoesNotExist()
+            composeTestRule.onNodeWithTag(START_RUN_BUTTON_TAG).assertIsEnabled()
+            composeTestRule.onNode(isDialog()).assertDoesNotExist()
+        }
+    }
+
+    @Test
+    fun gpsRootWarmsTheStaticStartScreenWithoutStartingARun() {
+        GpsStartRootHarness().use { root ->
+            composeTestRule.onNodeWithText("ILLUSTRATIVE MAP").assertIsDisplayed()
+            composeTestRule.onNodeWithText("GPS connecting…").assertExists()
+            composeTestRule.onNode(isDialog()).assertDoesNotExist()
+            composeTestRule.onNodeWithTag(START_RUN_BUTTON_TAG).assertIsEnabled()
+            composeTestRule.mainClock.advanceTimeBy(LONGER_THAN_COUNTDOWN_MILLIS)
+            root.assertUnstarted()
+            assertEquals(1, root.source.registrations)
+            assertEquals(1, root.source.activeListeners)
+            root.emit(gpsStartFix())
+            composeTestRule.onNodeWithText("GPS ready").assertExists()
+            root.assertUnstarted()
+        }
+    }
+
+    @Test
+    fun gpsRootStartsCountdownWithoutWaitingForAnyFix() {
+        GpsStartRootHarness().use { root ->
+            root.tapStart()
+            root.awaitCountdown()
+            composeTestRule.onNodeWithText("Finding GPS").assertDoesNotExist()
+            composeTestRule.onNode(isDialog()).assertDoesNotExist()
+            assertEquals(1, root.source.activeListeners)
+            assertEquals(0, root.rowCount())
+            composeTestRule.mainClock.advanceTimeBy(2 * COUNTDOWN_STEP_MILLIS)
+            assertEquals(0, root.serviceStarts)
+            composeTestRule.mainClock.advanceTimeBy(COUNTDOWN_STEP_MILLIS + 100)
+            root.awaitSingleHandoff()
+            assertEquals(1, root.source.registrations)
+            assertEquals(1, root.source.removals)
+        }
+    }
+
+    @Test
+    fun gpsRootCachedOrWeakFixNeverClaimsReadyButDoesNotBlockStart() {
+        GpsStartRootHarness(ControlledGpsStartSource(gpsStartFix())).use { root ->
+            assertEquals(1, root.source.cacheReads)
+            composeTestRule.onNodeWithText("GPS ready").assertDoesNotExist()
+            composeTestRule.onNodeWithTag(START_RUN_BUTTON_TAG).assertIsEnabled()
+            root.emit(gpsStartFix(accuracyMeters = 100.0))
+            composeTestRule.onNodeWithText("GPS signal weak").assertExists()
+            composeTestRule.onNodeWithText("GPS ready").assertDoesNotExist()
+            root.tapStart()
+            root.awaitCountdown()
+            composeTestRule.mainClock.advanceTimeBy(LONGER_THAN_COUNTDOWN_MILLIS)
+            root.awaitSingleHandoff()
+        }
+    }
+
+    @Test
+    fun gpsRootLiveFixKeepsListenerUntilSingleHandoffAndRestoresOnlyDispatchedMarker() {
+        GpsStartRootHarness().use { root ->
+            root.emit(gpsStartFix())
+            composeTestRule.onNodeWithText("GPS ready").assertExists()
+            root.tapStart()
+            root.awaitCountdown()
+            assertEquals(1, root.source.registrations)
+            assertEquals(1, root.source.activeListeners)
+            assertEquals(0, root.source.removals)
+            assertEquals(0, root.rowCount())
+            composeTestRule.mainClock.advanceTimeBy(LONGER_THAN_COUNTDOWN_MILLIS)
+            root.awaitSingleHandoff()
+            root.restoreComposition(expectWarmup = false)
+            awaitGpsRoot { root.admission() == RunAdmission.CountdownInProgress }
+            composeTestRule.mainClock.advanceTimeBy(LONGER_THAN_COUNTDOWN_MILLIS)
+            assertEquals(1, root.serviceStarts)
+            assertEquals(1, root.source.registrations)
+            assertEquals(0, root.rowCount())
+            assertEquals(RunAdmission.CountdownInProgress, root.admission())
+        }
+    }
+
+    @Test
+    fun gpsRootRestorationCancelsUndispatchedCountdownAndRewarms() {
+        GpsStartRootHarness().use { root ->
+            val firstListener = root.source.callbacks.last()
+            root.restoreComposition(expectWarmup = true)
+            composeTestRule.runOnUiThread { firstListener.sample(gpsStartFix()) }
+            composeTestRule.mainClock.advanceTimeBy(LONGER_THAN_COUNTDOWN_MILLIS)
+            root.assertUnstarted()
+            composeTestRule.onNodeWithText("GPS ready").assertDoesNotExist()
+            assertEquals(2, root.source.registrations)
+            root.tapStart()
+            root.awaitCountdown()
+            root.restoreComposition(expectWarmup = true)
+            awaitGpsRoot { root.admission() == RunAdmission.ReadyForCountdown }
+            composeTestRule.mainClock.advanceTimeBy(LONGER_THAN_COUNTDOWN_MILLIS)
+            root.assertUnstarted()
+            composeTestRule.onNodeWithTag(START_RUN_BUTTON_TAG).assertIsEnabled()
+            assertEquals(3, root.source.registrations)
+        }
+    }
+
+    @Test
+    fun gpsRootCancelKeepsOneWarmListenerForTheNextStart() {
+        GpsStartRootHarness().use { root ->
+            root.tapStart()
+            root.awaitCountdown()
+            composeTestRule.onNodeWithText(CANCEL).assertIsEnabled().performClick()
+            awaitGpsRoot { root.admission() == RunAdmission.ReadyForCountdown }
+            composeTestRule.mainClock.advanceTimeBy(LONGER_THAN_COUNTDOWN_MILLIS)
+            root.assertUnstarted()
+            assertEquals(1, root.source.registrations)
+            assertEquals(0, root.source.removals)
+            assertEquals(1, root.source.activeListeners)
+            root.emit(gpsStartFix())
+            composeTestRule.onNodeWithText("GPS ready").assertExists()
+            root.tapStart()
+            root.awaitCountdown()
+            composeTestRule.mainClock.advanceTimeBy(LONGER_THAN_COUNTDOWN_MILLIS)
+            root.awaitSingleHandoff()
+            assertEquals(1, root.source.registrations)
+        }
+    }
+
+    @Test
+    fun gpsRootBackgroundStopsWarmupAndCancelsCountdownUntilAnotherTap() {
+        GpsStartRootHarness().use { root ->
+            val waiting = root.source.callbacks.last()
+            moveTo(root.lifecycleOwner, Lifecycle.State.CREATED)
+            awaitGpsRoot { root.source.activeListeners == 0 }
+            composeTestRule.runOnUiThread { waiting.sample(gpsStartFix()) }
+            moveTo(root.lifecycleOwner, Lifecycle.State.RESUMED)
+            awaitGpsRoot { root.source.activeListeners == 1 }
+            composeTestRule.mainClock.advanceTimeBy(LONGER_THAN_COUNTDOWN_MILLIS)
+            root.assertUnstarted()
+            composeTestRule.onNodeWithText("GPS ready").assertDoesNotExist()
+            root.tapStart()
+            root.awaitCountdown()
+            val counting = root.source.callbacks.last()
+            moveTo(root.lifecycleOwner, Lifecycle.State.CREATED)
+            awaitGpsRoot { root.admission() == RunAdmission.ReadyForCountdown && root.source.activeListeners == 0 }
+            composeTestRule.runOnUiThread { counting.sample(gpsStartFix()) }
+            moveTo(root.lifecycleOwner, Lifecycle.State.RESUMED)
+            awaitGpsRoot { root.source.activeListeners == 1 }
+            composeTestRule.mainClock.advanceTimeBy(LONGER_THAN_COUNTDOWN_MILLIS)
+            root.assertUnstarted()
+            composeTestRule.onNodeWithTag(START_RUN_BUTTON_TAG).assertIsEnabled()
+            assertEquals(3, root.source.registrations)
+            assertEquals(2, root.source.removals)
+            root.tapStart()
+            root.awaitCountdown()
+            composeTestRule.mainClock.advanceTimeBy(LONGER_THAN_COUNTDOWN_MILLIS)
+            root.awaitSingleHandoff()
+        }
+    }
+
+    @Test
+    fun gpsRootLosingUsableFixDuringCountdownStillStartsOnce() {
+        GpsStartRootHarness().use { root ->
+            root.emit(gpsStartFix())
+            root.tapStart()
+            root.awaitCountdown()
+            root.emit(gpsStartFix(ageMillis = 0, accuracyMeters = 100.0))
+            composeTestRule.mainClock.advanceTimeBy(LONGER_THAN_COUNTDOWN_MILLIS)
+            root.awaitSingleHandoff()
+            assertEquals(1, root.source.registrations)
+        }
+    }
+
+    @Test
+    fun gpsRootPermissionLossDuringCountdownCancelsBeforeServiceHandoff() {
+        GpsStartRootHarness().use { root ->
+            root.tapStart()
+            root.awaitCountdown()
+            composeTestRule.runOnUiThread {
+                root.locationReady = false
+                root.source.currentAvailability = GpsPreviewAvailability.PERMISSION_NEEDED
+            }
+            composeTestRule.mainClock.advanceTimeBy(LONGER_THAN_COUNTDOWN_MILLIS)
+            awaitGpsRoot { root.admission() == RunAdmission.ReadyForCountdown }
+            root.assertUnstarted()
+            composeTestRule.onNodeWithText("Precise GPS is unavailable", substring = true).assertExists()
+        }
+    }
+
+    @Test
+    fun gpsRootProviderLossDuringCountdownCancelsBeforeServiceHandoff() {
+        GpsStartRootHarness().use { root ->
+            root.tapStart()
+            root.awaitCountdown()
+            composeTestRule.runOnUiThread {
+                root.source.currentAvailability = GpsPreviewAvailability.LOCATION_OFF
+                root.source.callbacks.last().disabled()
+            }
+            composeTestRule.mainClock.advanceTimeBy(LONGER_THAN_COUNTDOWN_MILLIS)
+            awaitGpsRoot { root.admission() == RunAdmission.ReadyForCountdown }
+            root.assertUnstarted()
+            composeTestRule.onNodeWithText("Precise GPS is unavailable", substring = true).assertExists()
+        }
+    }
+
+    @Test
+    fun gpsRootServiceLaunchFailureRewarmsAndAllowsANewExplicitStart() {
+        GpsStartRootHarness().use { root ->
+            root.serviceFailuresRemaining = 1
+            root.tapStart()
+            root.awaitCountdown()
+            composeTestRule.mainClock.advanceTimeBy(LONGER_THAN_COUNTDOWN_MILLIS)
+            awaitGpsRoot { root.admission() == RunAdmission.ReadyForCountdown && root.source.activeListeners == 1 }
+            assertEquals(1, root.serviceStarts)
+            assertEquals(0, root.rowCount())
+            assertEquals(2, root.source.registrations)
+            composeTestRule.onNodeWithText("Android could not start GPS tracking", substring = true).assertExists()
+            composeTestRule.mainClock.advanceTimeBy(LONGER_THAN_COUNTDOWN_MILLIS)
+            assertEquals(1, root.serviceStarts)
+            root.tapStart()
+            root.awaitCountdown()
+            composeTestRule.mainClock.advanceTimeBy(LONGER_THAN_COUNTDOWN_MILLIS)
+            awaitGpsRoot { root.serviceStarts == 2 }
+            assertEquals(listOf(0, 0), root.listenersAtHandoff)
+            assertEquals(listOf(0, 0), root.rowsAtHandoff)
+            assertEquals(0, root.source.activeListeners)
+            assertEquals(0, root.rowCount())
+        }
+    }
+
+    @Test
+    fun gpsRootMapTogglesAndMapStartKeepTheSameWarmListener() {
+        GpsStartRootHarness().use { root ->
+            repeat(2) {
+                composeTestRule.onNodeWithTag("startExpandMap").performClick()
+                composeTestRule.mainClock.advanceTimeByFrame()
+                composeTestRule.onNodeWithTag(ACTIVE_RUN_MAP_DIALOG_TAG).assertIsDisplayed()
+                assertEquals(1, root.source.registrations)
+                assertEquals(1, root.source.activeListeners)
+                assertEquals(0, root.source.removals)
+                composeTestRule.onNodeWithText("Close map").performClick()
+                composeTestRule.mainClock.advanceTimeByFrame()
+                composeTestRule.onNodeWithTag(START_RUN_BUTTON_TAG).assertIsDisplayed()
+                assertEquals(1, root.source.registrations)
+                assertEquals(1, root.source.activeListeners)
+                assertEquals(0, root.source.removals)
+                root.assertUnstarted()
+            }
+            composeTestRule.onNodeWithTag("startExpandMap").performClick()
+            composeTestRule.mainClock.advanceTimeByFrame()
+            composeTestRule.onNodeWithTag(START_RUN_MAP_START_TAG).assertIsEnabled().performClick()
+            root.awaitCountdown()
+            assertEquals(1, root.source.registrations)
+            assertEquals(1, root.source.activeListeners)
+            composeTestRule.mainClock.advanceTimeBy(LONGER_THAN_COUNTDOWN_MILLIS)
+            root.awaitSingleHandoff()
+        }
+    }
+
+    @Test
+    fun gpsRootHistoryAndSettingsReleaseThenResumeWarmup() {
+        GpsStartRootHarness().use { root ->
+            composeTestRule.onNodeWithTag(START_HISTORY_TAG).performClick()
+            awaitGpsRoot { root.source.activeListeners == 0 }
+            composeTestRule.onNodeWithText("Back to run").assertIsDisplayed().performClick()
+            awaitGpsRoot { root.source.activeListeners == 1 }
+            assertEquals(2, root.source.registrations)
+            root.assertUnstarted()
+            composeTestRule.onNodeWithTag(START_RUN_SETTINGS_TAG).performClick()
+            awaitGpsRoot { root.source.activeListeners == 0 }
+            composeTestRule.onNodeWithTag(SETTINGS_DIALOG_TAG).assertIsDisplayed()
+            composeTestRule.onNodeWithTag(SETTINGS_DONE_TAG).performClick()
+            awaitGpsRoot { root.source.activeListeners == 1 }
+            assertEquals(3, root.source.registrations)
+            assertEquals(2, root.source.removals)
+            root.assertUnstarted()
+        }
+    }
+
+    /** Synthetic fixes and isolated Room exercise the real root without requesting device GPS. */
+    private inner class GpsStartRootHarness(
+        val source: ControlledGpsStartSource = ControlledGpsStartSource()
+    ) : AutoCloseable {
+        private val database = Room.inMemoryDatabaseBuilder(
+            ApplicationProvider.getApplicationContext(), RunStateDatabase::class.java).build()
+        private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+        private val coordinator = RunSessionCoordinator(database.runDao(), PreparedRunFactory(
+            Clock.fixed(Instant.ofEpochMilli(1_756_000_000_000), ZoneOffset.UTC),
+            { ZoneOffset.UTC }, UUID::randomUUID), applicationScope, database.locationDao())
+        val lifecycleOwner = TestLifecycle()
+        private val restoration = StateRestorationTester(composeTestRule)
+        private var shown by mutableStateOf(true)
+        private var compositionEntries = 0
+        private var compositionDisposals = 0
+        var locationReady = true
+        var serviceFailuresRemaining = 0
+        var serviceStarts = 0
+            private set
+        val listenersAtHandoff = mutableListOf<Int>()
+        val rowsAtHandoff = mutableListOf<Int>()
+        private val silentSpeaker = object : ReflectionSpeaker {
+            override fun speak(text: String) = Unit
+            override fun stop() = Unit
+            override fun close() = Unit
+        }
+
+        init {
+            moveTo(lifecycleOwner, Lifecycle.State.RESUMED)
+            restoration.setContent {
+                if (shown) {
+                    DisposableEffect(Unit) {
+                        compositionEntries++
+                        onDispose { compositionDisposals++ }
+                    }
+                    RunJourneyRoot(coordinator, null, database,
+                        remember { MutableStateFlow<RunTrackingServiceState>(RunTrackingServiceState.Idle) },
+                        lifecycleOwner.lifecycle, completionSpeakerFactory = { silentSpeaker },
+                        musicAccessProvider = { false }, gpsPreviewSourceOverride = source,
+                        gpsLocationReady = { locationReady && source.currentAvailability == GpsPreviewAvailability.READY }, startGpsRun = { _, _, _, _ ->
+                            listenersAtHandoff += source.activeListeners
+                            rowsAtHandoff += rowCount()
+                            serviceStarts++
+                            if (serviceFailuresRemaining > 0) {
+                                serviceFailuresRemaining--
+                                throw IllegalStateException("Synthetic service launch failure")
+                            }
+                        })
+                }
+            }
+            composeTestRule.waitUntil(5_000) {
+                composeTestRule.onAllNodesWithTag(START_RUN_BUTTON_TAG).fetchSemanticsNodes().isNotEmpty() &&
+                    source.activeListeners == 1
+            }
+            composeTestRule.mainClock.autoAdvance = false
+            assertEquals(1, source.registrations)
+            assertUnstarted()
+        }
+
+        fun tapStart() {
+            composeTestRule.onNodeWithTag(START_RUN_BUTTON_TAG).assertIsEnabled().performClick()
+        }
+
+        fun emit(fix: ForegroundGpsPreviewFix) {
+            composeTestRule.runOnUiThread { source.callbacks.last().sample(fix) }
+            composeTestRule.mainClock.advanceTimeByFrame()
+            composeTestRule.waitForIdle()
+        }
+
+        fun awaitCountdown() {
+            awaitGpsRoot {
+                admission() == RunAdmission.CountdownInProgress &&
+                    composeTestRule.onAllNodesWithText(COUNTDOWN).fetchSemanticsNodes().isNotEmpty()
+            }
+        }
+
+        fun awaitSingleHandoff() {
+            awaitGpsRoot { serviceStarts == 1 }
+            assertEquals(listOf(0), listenersAtHandoff)
+            assertEquals(listOf(0), rowsAtHandoff)
+            assertEquals(0, source.activeListeners)
+            assertEquals(0, rowCount())
+        }
+
+        fun admission() = runBlocking { coordinator.journeySnapshot().admission }
+        fun rowCount() = runBlocking { database.runDao().countRuns() }
+        fun restoreComposition(expectWarmup: Boolean) {
+            val entriesBefore = compositionEntries
+            val disposalsBefore = compositionDisposals
+            val listenersBefore = source.activeListeners
+            val removalsBefore = source.removals
+            val registrationsBefore = source.registrations
+            val startsBefore = serviceStarts
+            val previousAutoAdvance = composeTestRule.mainClock.autoAdvance
+            try {
+                // StateRestorationTester uses separate runOnIdle calls for remove/re-emit.
+                // With a paused clock those states can collapse without a disposal frame.
+                composeTestRule.mainClock.autoAdvance = true
+                restoration.emulateSavedInstanceStateRestore()
+            } finally {
+                composeTestRule.mainClock.autoAdvance = previousAutoAdvance
+            }
+            awaitGpsRoot {
+                compositionEntries == entriesBefore + 1 && compositionDisposals == disposalsBefore + 1 &&
+                    source.activeListeners == (if (expectWarmup) 1 else 0) &&
+                    (composeTestRule.onAllNodesWithTag(START_RUN_BUTTON_TAG).fetchSemanticsNodes().isNotEmpty() ||
+                        composeTestRule.onAllNodesWithText(COUNTDOWN).fetchSemanticsNodes().isNotEmpty())
+            }
+            assertEquals("Restoration must dispose the old root", disposalsBefore + 1, compositionDisposals)
+            assertEquals("Restoration must create a new root", entriesBefore + 1, compositionEntries)
+            assertEquals("Only an undispatched start rewarms location",
+                registrationsBefore + (if (expectWarmup) 1 else 0), source.registrations)
+            assertEquals("Every previous preview listener is removed", removalsBefore + listenersBefore, source.removals)
+            assertEquals(if (expectWarmup) 1 else 0, source.activeListeners)
+            assertEquals("Restoration cannot dispatch a start", startsBefore, serviceStarts)
+        }
+
+        fun assertUnstarted() {
+            assertEquals(RunAdmission.ReadyForCountdown, admission())
+            assertEquals(0, rowCount())
+            assertEquals(0, serviceStarts)
+        }
+
+        override fun close() {
+            composeTestRule.runOnUiThread { shown = false }
+            composeTestRule.mainClock.advanceTimeByFrame()
+            composeTestRule.waitForIdle()
+            applicationScope.cancel()
+            database.close()
+            composeTestRule.mainClock.autoAdvance = true
+        }
+    }
+
+    private class ControlledGpsStartSource(
+        private val cached: ForegroundGpsPreviewFix? = null
+    ) : ForegroundGpsPreviewSource {
+        data class Callbacks(val sample: (ForegroundGpsPreviewFix) -> Unit, val disabled: () -> Unit)
+        val callbacks = mutableListOf<Callbacks>()
+        var registrations = 0
+            private set
+        var removals = 0
+            private set
+        var activeListeners = 0
+            private set
+        var cacheReads = 0
+            private set
+        var currentAvailability = GpsPreviewAvailability.READY
+        override fun availability() = currentAvailability
+        override fun lastKnownSample(): ForegroundGpsPreviewFix? { cacheReads++; return cached }
+        override fun listen(onSample: (ForegroundGpsPreviewFix) -> Unit, onProviderDisabled: () -> Unit): () -> Unit {
+            callbacks += Callbacks(onSample, onProviderDisabled)
+            registrations++
+            activeListeners++
+            var removed = false
+            return {
+                if (!removed) { removed = true; removals++; activeListeners-- }
+            }
+        }
+    }
+
+    private fun gpsStartFix(ageMillis: Long = 100, accuracyMeters: Double = 4.0) = ForegroundGpsPreviewFix(
+        GpsSample(29.7174, -95.3905, accuracyMeters, System.currentTimeMillis(),
+            (SystemClock.elapsedRealtime() - ageMillis).coerceAtLeast(0)))
+
+    private fun awaitGpsRoot(condition: () -> Boolean) {
+        composeTestRule.waitUntil(5_000) {
+            composeTestRule.mainClock.advanceTimeByFrame()
+            condition()
+        }
+        composeTestRule.waitForIdle()
     }
 
     @Test

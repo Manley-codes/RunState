@@ -129,7 +129,6 @@ internal const val REFLECTION_CONNECTION_ADDRESS_TAG = "reflectionConnectionAddr
 internal const val REFLECTION_CONNECTION_CODE_TAG = "reflectionConnectionCode"
 internal const val REFLECTION_CONNECTION_SAVE_TAG = "reflectionConnectionSave"
 internal const val REFLECTION_CONNECTION_CLEAR_TAG = "reflectionConnectionClear"
-
 private val StartInk = Color(0xFF293326)
 private val StartForest = Color(0xFF2D3827)
 private val StartForestDeep = Color(0xFF1D261B)
@@ -169,6 +168,7 @@ internal fun StartRunScreen(
     modifier: Modifier = Modifier,
     onOpenRunSettings: () -> Unit = {},
     gpsReady: Boolean = false,
+    gpsStatusText: String? = null,
     setupLoading: Boolean = false,
     reflectionSetupRequired: Boolean = false,
     liveMapBackground: Boolean = false,
@@ -345,7 +345,8 @@ internal fun StartRunScreen(
                             text = when {
                                 setupLoading -> "Loading run preferences…"
                                 !gpsSelected -> "Sample demo · simulated distance"
-                                gpsReady -> if (liveMapBackground) "GPS run selected" else "GPS ready"
+                                gpsStatusText != null -> gpsStatusText
+                                gpsReady -> if (liveMapBackground) "GPS run selected" else "GPS enabled"
                                 else -> "Location setup on Start"
                             },
                             color = StartInk,

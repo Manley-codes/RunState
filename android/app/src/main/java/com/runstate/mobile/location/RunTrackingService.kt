@@ -21,6 +21,7 @@ import android.os.Looper
 import android.os.PowerManager
 import android.os.SystemClock
 import androidx.core.content.ContextCompat
+import androidx.core.location.LocationCompat
 import com.runstate.mobile.MainActivity
 import com.runstate.mobile.RunStateApplication
 import com.runstate.mobile.data.local.PreRunEnergy
@@ -64,6 +65,30 @@ internal fun missingTrackedRunWasRetired(runId: String, snapshot: RunJourneySnap
         is RunAdmission.RunCompleted -> admission.session.runId != runId
         RunAdmission.NotInitialized, is RunAdmission.BlockedByInconsistentStorage -> false
     }
+}
+
+/** Source fixes from before this recorder's registration cannot seed its route or distance. */
+internal fun gpsFixBelongsToRegistration(
+    fixElapsedRealtimeNanos: Long,
+    registrationElapsedRealtimeNanos: Long
+): Boolean = fixElapsedRealtimeNanos >= registrationElapsedRealtimeNanos
+
+/** Synthetic platform fixes stay rejected evidence and cannot seed or extend a real route. */
+internal fun recordingGpsDecision(
+    policy: GpsDistancePolicy,
+    sample: GpsSample,
+    nowElapsedRealtimeMillis: Long,
+    isMock: Boolean
+): GpsDecision {
+    if (!isMock) return policy.observe(sample, nowElapsedRealtimeMillis, isRunning = true)
+    policy.trackingInterrupted()
+    return GpsDecision(
+        status = GpsSampleStatus.REJECTED_INVALID,
+        acceptedForRoute = false,
+        distanceAddedMeters = null,
+        totalDistanceMeters = policy.distanceMeters,
+        hadUnobservedGap = true
+    )
 }
 
 /** Each timed platform lock is acquired once; renewal swaps in a new lock before releasing it. */
@@ -362,9 +387,15 @@ internal class RunTrackingService : Service() {
         if (listener != null) return
         signalMonitor.reset(SystemClock.elapsedRealtime())
         gpsEnabled = locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)
+        // This listener is registered only after the official run is stored. Android may
+        // immediately deliver a cached fix: keep its original source time and discard it
+        // before either the in-memory distance anchor or durable observations can see it.
+        var registrationElapsedRealtimeNanos = SystemClock.elapsedRealtimeNanos()
         val next = object : LocationListener {
             override fun onLocationChanged(location: Location) {
-                if (listener !== this || storedState != StoredRunState.RUNNING || !gpsEnabled) return
+                if (listener !== this || storedState != StoredRunState.RUNNING || !gpsEnabled ||
+                    !gpsFixBelongsToRegistration(location.elapsedRealtimeNanos, registrationElapsedRealtimeNanos)
+                ) return
                 val callbackListener = this
                 val deliveredGeneration = locationGeneration
                 // Snapshot both the fix and its delivery time before this callback queues
@@ -409,6 +440,7 @@ internal class RunTrackingService : Service() {
                 if (listener === this && provider == LocationManager.GPS_PROVIDER &&
                     storedState == StoredRunState.RUNNING) {
                     locationGeneration++
+                    registrationElapsedRealtimeNanos = SystemClock.elapsedRealtimeNanos()
                     gpsEnabled = true
                     policy.trackingInterrupted()
                     signalMonitor.reset(SystemClock.elapsedRealtime())
@@ -462,10 +494,11 @@ internal class RunTrackingService : Service() {
             elapsedRealtimeMillis = elapsedNanos / 1_000_000L
         )
         val observationPolicy = policy
-        val decision = observationPolicy.observe(
+        val decision = recordingGpsDecision(
+            policy = observationPolicy,
             sample = sample,
             nowElapsedRealtimeMillis = deliveredAtElapsedRealtimeMillis,
-            isRunning = true
+            isMock = LocationCompat.isMock(location)
         )
         try {
             val stored = app.database.locationDao().recordObservation(
@@ -484,7 +517,8 @@ internal class RunTrackingService : Service() {
                     acceptedForDistance = decision.acceptedForRoute,
                     rejectionReason = if (decision.acceptedForRoute) null else decision.status.name,
                     segmentDistanceMeters = decision.distanceAddedMeters
-                )
+                ),
+                currentTimingSessionId = app.timingSessionId
             )
             if (!ownsObservation(id, observationPolicy, callbackListener, deliveredGeneration)) return
             // Optional weather work owns its own application job and cannot delay GPS writes.

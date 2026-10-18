@@ -164,7 +164,7 @@ class RunStateApplication : Application() {
     internal val clock: Clock = Clock.systemUTC()
 
     // An elapsed-time reading is comparable only within this uninterrupted process.
-    private val timingSessionId = UUID.randomUUID().toString()
+    internal val timingSessionId = UUID.randomUUID().toString()
 
     /**
      * The scope for work that must outlive any screen.

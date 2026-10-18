@@ -8,12 +8,147 @@ import org.junit.Test
 
 class ForegroundGpsPreviewTest {
     @Test
+    fun `quiet start label distinguishes live fix cache and signal trouble`() {
+        val evidence = ForegroundGpsPreviewEvidence()
+        assertEquals("GPS connecting…", evidence.state(1_000).startStatusText)
+        evidence.observe(sample(1_000), 1_000, isLive = false)
+        assertEquals("GPS connecting…", evidence.state(1_000).startStatusText)
+        evidence.observe(sample(2_000), 2_000)
+        assertEquals("GPS ready", evidence.state(2_000).startStatusText)
+        assertEquals("GPS connecting…", evidence.state(7_001).startStatusText)
+        assertEquals("GPS signal lost", evidence.state(17_001).startStatusText)
+        evidence.observe(sample(18_000).copy(horizontalAccuracyMeters = 90.0), 18_000)
+        assertFalse(evidence.state(18_000).hasFreshLiveFix)
+        assertEquals("Location off", ForegroundGpsPreviewState(
+            ForegroundGpsPreviewStatus.LOCATION_OFF).startStatusText)
+        assertEquals("Allow precise location", ForegroundGpsPreviewState(
+            ForegroundGpsPreviewStatus.PERMISSION_NEEDED).startStatusText)
+    }
+
+    @Test
     fun `fresh cached fix is current only through its original fifteen second lifetime`() {
         val evidence = ForegroundGpsPreviewEvidence()
-        evidence.observe(sample(1_000), 10_000)
+        evidence.observe(sample(1_000), 10_000, isLive = false)
+        assertFalse(evidence.state(10_000).hasFreshLiveFix)
         assertEquals(ForegroundGpsPreviewStatus.CURRENT, evidence.state(16_000).status)
         assertEquals(ForegroundGpsPreviewStatus.STALE, evidence.state(16_001).status)
         assertEquals(GpsMapMarkerState.LAST_KNOWN, evidence.state(16_001).marker?.state)
+    }
+
+    @Test
+    fun `a current cached map fix cannot claim fresh live signal`() {
+        val harness = Harness()
+        harness.source.cached = sample(1_000)
+        harness.session.start()
+        assertEquals(ForegroundGpsPreviewStatus.CURRENT, harness.latest.status)
+        assertFalse(harness.latest.hasFreshLiveFix)
+        harness.source.callbacks.single().sample(sample(2_000))
+        assertTrue(harness.latest.hasFreshLiveFix)
+        assertTrue(harness.latest.toMapEvidence().sections.isEmpty())
+    }
+
+    @Test
+    fun `readiness expires after five source seconds before the map becomes stale`() {
+        val evidence = ForegroundGpsPreviewEvidence()
+        evidence.observe(sample(1_000), 1_000)
+        assertTrue(evidence.state(6_000).hasFreshLiveFix)
+        assertFalse(evidence.state(6_001).hasFreshLiveFix)
+        assertEquals(ForegroundGpsPreviewStatus.CURRENT, evidence.state(6_001).status)
+        assertEquals(ForegroundGpsPreviewStatus.STALE, evidence.state(16_001).status)
+        evidence.observe(sample(6_001), 6_001)
+        assertTrue(evidence.state(6_001).hasFreshLiveFix)
+        evidence.clear()
+        assertFalse(evidence.state(6_001).hasFreshLiveFix)
+    }
+
+    @Test
+    fun `duplicate older and delayed callbacks cannot refresh readiness`() {
+        val evidence = ForegroundGpsPreviewEvidence()
+        evidence.observe(sample(1_000), 1_000)
+        evidence.observe(sample(1_000), 6_001)
+        evidence.observe(sample(999), 6_001)
+        assertFalse(evidence.state(6_001).hasFreshLiveFix)
+        evidence.observe(sample(1_001), 6_002)
+        assertFalse(evidence.state(6_002).hasFreshLiveFix)
+        evidence.observe(sample(6_003), 6_003)
+        assertTrue(evidence.state(6_003).hasFreshLiveFix)
+    }
+
+    @Test
+    fun `mock cached and live callbacks cannot prepare a start or poison a later real fix`() {
+        val harness = Harness()
+        harness.source.cached = sample(1_000)
+        harness.source.cachedIsMock = true
+        harness.session.start()
+        assertFalse(harness.latest.hasFreshLiveFix)
+        assertNull(harness.latest.marker)
+        harness.source.callbacks.single().mockSample(sample(2_000))
+        assertFalse(harness.latest.hasFreshLiveFix)
+        assertNull(harness.latest.marker)
+        harness.source.callbacks.single().sample(sample(2_000))
+        assertTrue(harness.latest.hasFreshLiveFix)
+        harness.now = 3_000
+        harness.source.callbacks.single().mockSample(sample(3_000))
+        assertFalse(harness.latest.hasFreshLiveFix)
+        assertEquals(ForegroundGpsPreviewStatus.WEAK, harness.latest.status)
+        assertEquals(GpsMapMarkerState.LAST_KNOWN, harness.latest.marker?.state)
+    }
+
+    @Test
+    fun `an older mock cache cannot replace a newer synchronous real live fix`() {
+        val harness = Harness()
+        harness.source.synchronousSample = sample(2_000)
+        harness.source.cached = sample(1_000)
+        harness.source.cachedIsMock = true
+        harness.session.start()
+        assertTrue(harness.latest.hasFreshLiveFix)
+        assertEquals(ForegroundGpsPreviewStatus.CURRENT, harness.latest.status)
+    }
+
+    @Test
+    fun `signal status rechecks source freshness and current permission or provider`() {
+        for (unavailable in listOf(GpsPreviewAvailability.PERMISSION_NEEDED, GpsPreviewAvailability.LOCATION_OFF)) {
+            var now = 2_000L
+            val source = FakeSource()
+            val controller = ForegroundGpsPreviewController()
+            controller.startSession(source) { now }!!
+            source.callbacks.single().sample(sample(2_000))
+            assertTrue(controller.hasFreshLiveFixNow())
+            now = 7_001L
+            assertFalse(controller.hasFreshLiveFixNow())
+            source.callbacks.single().sample(sample(7_001))
+            assertTrue(controller.hasFreshLiveFixNow())
+            source.available = unavailable
+            assertFalse(controller.hasFreshLiveFixNow())
+            assertEquals(0, source.activeListeners)
+            assertNull(controller.value.marker)
+            assertEquals(1, source.registrations)
+            source.callbacks.single().sample(sample(7_002))
+            assertFalse(controller.value.hasFreshLiveFix)
+        }
+    }
+
+    @Test
+    fun `background restart requires a new live callback and handoff erases readiness`() {
+        val source = FakeSource()
+        val controller = ForegroundGpsPreviewController()
+        val first = controller.startSession(source) { 2_000L }!!
+        val old = source.callbacks.single()
+        old.sample(sample(2_000))
+        assertTrue(controller.hasFreshLiveFixNow())
+        controller.stopSession(first)
+        assertFalse(controller.hasFreshLiveFixNow())
+        source.cached = sample(2_000)
+        controller.startSession(source) { 3_000L }!!
+        old.sample(sample(3_000))
+        assertFalse(controller.hasFreshLiveFixNow())
+        source.callbacks.last().sample(sample(3_000))
+        assertTrue(controller.hasFreshLiveFixNow())
+        controller.stopBeforeRun()
+        assertFalse(controller.hasFreshLiveFixNow())
+        source.callbacks.last().sample(sample(3_001))
+        assertFalse(controller.value.hasFreshLiveFix)
+        assertEquals(0, source.activeListeners)
     }
 
     @Test
@@ -85,6 +220,7 @@ class ForegroundGpsPreviewTest {
             evidence.observe(candidate, 2_000)
             assertEquals(ForegroundGpsPreviewStatus.WEAK, evidence.state(2_000).status)
             assertNull(evidence.state(2_000).marker)
+            assertFalse(evidence.state(2_000).hasFreshLiveFix)
         }
     }
 
@@ -94,8 +230,10 @@ class ForegroundGpsPreviewTest {
             val evidence = ForegroundGpsPreviewEvidence()
             evidence.observe(sample(offset), 2_000)
             assertEquals(ForegroundGpsPreviewStatus.WEAK, evidence.state(2_000).status)
+            assertFalse(evidence.state(2_000).hasFreshLiveFix)
             evidence.observe(sample(3_000), 3_000)
             assertEquals(ForegroundGpsPreviewStatus.CURRENT, evidence.state(3_000).status)
+            assertTrue(evidence.state(3_000).hasFreshLiveFix)
         }
     }
 
@@ -119,6 +257,7 @@ class ForegroundGpsPreviewTest {
         evidence.observe(sample(15_000), 15_000)
         val state = evidence.state(20_000)
         assertEquals(ForegroundGpsPreviewStatus.CURRENT, state.status)
+        assertTrue(state.hasFreshLiveFix)
         assertTrue(state.toMapEvidence().sections.isEmpty())
         assertFalse(state.explanation.contains("recorded", ignoreCase = true))
         assertTrue(state.explanation.contains("not started"))
@@ -340,9 +479,14 @@ class ForegroundGpsPreviewTest {
     }
 
     private class FakeSource : ForegroundGpsPreviewSource {
-        data class Callbacks(val sample: (GpsSample) -> Unit, val disabled: () -> Unit)
+        data class Callbacks(
+            val sample: (GpsSample) -> Unit,
+            val disabled: () -> Unit,
+            val mockSample: (GpsSample) -> Unit
+        )
         var available = GpsPreviewAvailability.READY
         var cached: GpsSample? = null
+        var cachedIsMock = false
         var synchronousSample: GpsSample? = null
         var disableDuringRegistration = false
         var cacheFailure: RuntimeException? = null
@@ -353,16 +497,17 @@ class ForegroundGpsPreviewTest {
         val callbacks = mutableListOf<Callbacks>()
 
         override fun availability() = available
-        override fun lastKnownSample(): GpsSample? {
+        override fun lastKnownSample(): ForegroundGpsPreviewFix? {
             cacheReads++
             cacheFailure?.let { throw it }
-            return cached
+            return cached?.let { ForegroundGpsPreviewFix(it, cachedIsMock) }
         }
-        override fun listen(onSample: (GpsSample) -> Unit, onProviderDisabled: () -> Unit): () -> Unit {
+        override fun listen(onSample: (ForegroundGpsPreviewFix) -> Unit, onProviderDisabled: () -> Unit): () -> Unit {
             registrations++
             activeListeners++
-            callbacks.add(Callbacks(onSample, onProviderDisabled))
-            synchronousSample?.let(onSample)
+            callbacks.add(Callbacks({ onSample(ForegroundGpsPreviewFix(it)) }, onProviderDisabled,
+                { onSample(ForegroundGpsPreviewFix(it, isMock = true)) }))
+            synchronousSample?.let { onSample(ForegroundGpsPreviewFix(it)) }
             if (disableDuringRegistration) onProviderDisabled()
             var closed = false
             return {
