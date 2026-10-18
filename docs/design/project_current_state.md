@@ -7,7 +7,41 @@ metadata:
 
 ## Current Android checkpoint — October 17, 2026
 
-### Paused at Manley's request — October 17
+### Independent GPS map repair; music planning with Claude — October 17
+
+Manley resumed independent project work while Claude assists with a plan for the music reflection.
+Do not restart the music experiment or assume Claude owns its complete implementation. Codex
+completed a bounded GPS repair without changing reflection providers/prompts or music playback.
+
+Active map CURRENT previously required GPS/device wall clocks to agree within one second,
+while recording/pace already accept the Moto's measured 1,022–1,034 ms fixed bias. The map now
+shares the existing **2,000 ms absolute / 1,000 ms fixed-reference drift** bounds. The first
+accepted anchor establishes a reference for each timing session; new anchors and same-session
+pause/resume cannot rebase it. A genuinely new timing session can establish its own reference,
+with no connection to the old route. Lifecycle clock agreement remains within 250 ms and a
+backward wall step before the current Running checkpoint cannot claim CURRENT.
+
+Where stored lifecycle timing supports it, source elapsed time assigns fixes to Running intervals
+and controls freshness, including fixes whose biased wall time falls across a pause boundary.
+Stale/future source fixes, ambiguous overlapping sessions and excessive clock drift cannot claim
+CURRENT. Pauses, rejected fixes, missing sequences and source gaps retain route separation.
+Older incomplete timing and the completed final interval retain historical epoch fallback; this
+is not a repair of every old route boundary or a change to stored points/distance/pace.
+
+**Validation:** both debug and release passed **522 JVM tests**, no failures/errors/skips.
+The GPS map class has **36 cases**, including 12 new regression cases. Both APK builds passed.
+Only the existing `GpsMapEvidence.kt`, its existing test file, MEMORY and this checkpoint changed.
+The Moto is disconnected: no phone installation or new outdoor/physical verification occurred.
+No new permanent file, schema, account/provider request, saved run, deployment or Git mutation.
+An ordinary-run pace check and independently measured distance accuracy remain separate field
+work. Automatic mile/km splits are an accepted next GPS candidate but remain unimplemented.
+
+Manley's three earlier checkpoint commits are now present locally (`f85b946`, `7469345`,
+`1ef0622`); the repository reports three ahead of its last-known origin/master. Do not push the
+unfinished music backend or deploy it merely to install this independent Android repair.
+Suggested separate commit: `fix(android): align live GPS map timing with recorded fixes`.
+
+### Earlier pause checkpoint — October 17
 
 Close out documentation and grouped commit advice only; no new feature work, provider calls,
 phone replay or deployment during this pause. Resume with **music-reflection quality**, not

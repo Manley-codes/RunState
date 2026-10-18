@@ -44,6 +44,135 @@ class GpsMapEvidenceTest {
     }
 
     @Test
+    fun `the measured Moto source clock profile keeps fresh map evidence current`() {
+        val points = (0..12).map { index ->
+            point(index + 1, 3_000L + index * 1_000L, if (index == 0) null else 3.0)
+                .withSourceWallOffset(1_022L + index)
+        }
+        val result = evidence(points = points.reversed(), nowOffset = 18_000)
+        assertEquals(listOf(13), result.sections.map { it.size })
+        assertEquals(GpsMapMarkerState.CURRENT, result.marker?.state)
+        assertEquals(points.last().latitude, result.marker!!.coordinate.latitude, 0.0)
+    }
+
+    @Test
+    fun `bounded source clock offsets work in both directions including two seconds`() {
+        for (bias in listOf(-2_000L, -1_034L, 1_034L, 2_000L)) {
+            val points = listOf(point(1, 3_000), point(2, 4_000, 3.0))
+                .map { it.withSourceWallOffset(bias) }
+            val result = evidence(points = points, nowOffset = 7_000)
+            assertEquals("bias $bias", listOf(2), result.sections.map { it.size })
+            assertEquals("bias $bias", GpsMapMarkerState.CURRENT, result.marker?.state)
+        }
+    }
+
+    @Test
+    fun `absolute source clock offset cannot exceed two seconds at the anchor or later fix`() {
+        for (sign in listOf(-1L, 1L)) {
+            for (badAnchor in listOf(false, true)) {
+                val points = listOf(
+                    point(1, 3_000).withSourceWallOffset(sign * if (badAnchor) 2_001L else 1_500L),
+                    point(2, 4_000, 3.0).withSourceWallOffset(sign * 2_001L)
+                )
+                assertEquals("sign $sign, badAnchor $badAnchor", GpsMapMarkerState.LAST_KNOWN,
+                    evidence(points = points, nowOffset = 8_000).marker?.state)
+            }
+        }
+    }
+
+    @Test
+    fun `residual source drift is bounded against the first anchor in both directions`() {
+        for (sign in listOf(-1L, 1L)) {
+            for (drift in listOf(1_000L, 1_001L)) {
+                val points = listOf(
+                    point(1, 3_000).withSourceWallOffset(sign * -500L),
+                    point(2, 4_000, 3.0).withSourceWallOffset(sign * (-500L + drift))
+                )
+                assertEquals("sign $sign, drift $drift",
+                    if (drift == 1_000L) GpsMapMarkerState.CURRENT else GpsMapMarkerState.LAST_KNOWN,
+                    evidence(points = points, nowOffset = 7_000).marker?.state)
+            }
+        }
+    }
+
+    @Test
+    fun `a fresh accepted anchor cannot rebase an excessive source clock drift`() {
+        val points = listOf(
+            point(1, 1_000).withSourceWallOffset(-500),
+            point(2, 2_000, 3.0).withSourceWallOffset(-500),
+            point(3, 3_000).withSourceWallOffset(501),
+            point(4, 4_000, 3.0).withSourceWallOffset(501)
+        )
+        val result = evidence(points = points, nowOffset = 7_000)
+        assertEquals(listOf(2, 2), result.sections.map { it.size })
+        assertEquals(GpsMapMarkerState.LAST_KNOWN, result.marker?.state)
+    }
+
+    @Test
+    fun `pause resume in the same process cannot rebase an excessive source clock drift`() {
+        val points = listOf(
+            point(1, 1_000).withSourceWallOffset(-500),
+            point(2, 2_000, 3.0).withSourceWallOffset(-500),
+            point(3, 6_000).withSourceWallOffset(501),
+            point(4, 7_000, 3.0).withSourceWallOffset(501)
+        )
+        val result = evidence(run = running().copy(lastCheckpointEpochMillis = EPOCH + 5_000),
+            transitions = listOf(pause(3_000), resume(5_000)), points = points, nowOffset = 9_000)
+        assertEquals(listOf(2, 2), result.sections.map { it.size })
+        assertEquals(GpsMapMarkerState.LAST_KNOWN, result.marker?.state)
+    }
+
+    @Test
+    fun `biased source fixes use monotonic running membership on both sides of a pause`() {
+        for (bias in listOf(-1_500L, 1_500L)) {
+            val points = listOf(point(1, 3_000), point(2, 8_100), point(3, 9_000, 3.0))
+                .map { it.withSourceWallOffset(bias) }
+            val result = evidence(run = running().copy(lastCheckpointEpochMillis = EPOCH + 8_000),
+                transitions = listOf(pause(4_000), resume(8_000)), points = points, nowOffset = 12_000)
+            assertEquals("bias $bias", listOf(1, 2), result.sections.map { it.size })
+            assertEquals("bias $bias", GpsMapMarkerState.CURRENT, result.marker?.state)
+            assertEquals(points.last().latitude, result.marker!!.coordinate.latitude, 0.0)
+        }
+    }
+
+    @Test
+    fun `monotonic fix age controls freshness despite a bounded wall clock bias`() {
+        val negativeBias = listOf(point(1, 3_000).withSourceWallOffset(-2_000))
+        assertEquals(GpsMapMarkerState.CURRENT,
+            evidence(points = negativeBias, nowOffset = 18_000).marker?.state)
+
+        val positiveBias = listOf(point(1, 3_000).withSourceWallOffset(2_000))
+        assertEquals(GpsMapMarkerState.LAST_KNOWN,
+            evidence(points = positiveBias, nowOffset = 18_001).marker?.state)
+    }
+
+    @Test
+    fun `source calibration cannot excuse future source time or a device wall clock change`() {
+        val futureSource = listOf(point(1, 5_000).withSourceWallOffset(-2_000))
+        assertEquals(GpsMapMarkerState.LAST_KNOWN,
+            evidence(points = futureSource, nowOffset = 4_000).marker?.state)
+
+        val biasedPoints = listOf(point(1, 3_000), point(2, 4_000, 3.0))
+            .map { it.withSourceWallOffset(1_034) }
+        for (wallChange in listOf(-251L, 251L)) {
+            assertEquals("wall change $wallChange", GpsMapMarkerState.LAST_KNOWN,
+                evidence(points = biasedPoints, nowOffset = 7_000 + wallChange,
+                    nowMark = mark(7_000)).marker?.state)
+        }
+    }
+
+    @Test
+    fun `a small backward wall clock step cannot claim current before the latest resume`() {
+        val points = listOf(point(1, 3_000), point(2, 8_000))
+            .map { it.withSourceWallOffset(-1_500) }
+        val result = evidence(run = running().copy(lastCheckpointEpochMillis = EPOCH + 8_000),
+            transitions = listOf(pause(4_000), resume(8_000)), points = points,
+            nowOffset = 7_900, nowMark = mark(8_000))
+        assertEquals(listOf(1, 1), result.sections.map { it.size })
+        assertEquals(GpsMapMarkerState.LAST_KNOWN, result.marker?.state)
+    }
+
+    @Test
     fun `an accurate stationary fix refreshes position but cannot add route geometry`() {
         val stationary = rejected(3, 3_000, "IGNORED_WITHIN_ACCURACY")
         val result = evidence(points = listOf(point(1, 1_000), point(2, 2_000, 3.0), stationary))
@@ -92,7 +221,7 @@ class GpsMapEvidenceTest {
         assertEquals(GpsMapMarkerState.LAST_KNOWN,
             evidence(nowOffset = 4_251, nowMark = mark(4_000)).marker?.state)
         assertEquals(GpsMapMarkerState.LAST_KNOWN,
-            evidence(points = listOf(point(1, 1_000).copy(observedAtEpochMillis = EPOCH + 2_001))).marker?.state)
+            evidence(points = listOf(point(1, 1_000).withSourceWallOffset(2_001))).marker?.state)
     }
 
     @Test
@@ -210,6 +339,37 @@ class GpsMapEvidenceTest {
     }
 
     @Test
+    fun `explicit resume in a new timing session calibrates its own bounded source offset`() {
+        val freshResume = resume(3_000).copy(elapsedRealtimeMillis = 2_000, timingSessionId = OTHER_SESSION)
+        val freshPoint = point(2, 4_000).copy(elapsedRealtimeNanos = 3_000_000_000L)
+            .withSourceWallOffset(1_500)
+        val delayedOldPoint = rejected(3, 1_000, "REJECTED_OUT_OF_ORDER")
+        val result = evidence(run = running().copy(lastCheckpointEpochMillis = EPOCH + 3_000),
+            transitions = listOf(pause(2_000), freshResume),
+            points = listOf(point(1, 1_000), freshPoint, delayedOldPoint),
+            nowOffset = 7_000, nowMark = RunTimingMark(6_000, OTHER_SESSION))
+        assertEquals(listOf(1, 1), result.sections.map { it.size })
+        assertEquals(GpsMapMarkerState.CURRENT, result.marker?.state)
+        assertEquals(freshPoint.latitude, result.marker!!.coordinate.latitude, 0.0)
+    }
+
+    @Test
+    fun `overlapping timing sessions with ambiguous bounded wall mappings never claim current`() {
+        val earlierPoint = point(1, 500)
+        val ambiguousPoint = point(2, 1_500).withSourceWallOffset(500)
+        val freshResume = resume(3_000).copy(elapsedRealtimeMillis = MONO + 1_000,
+            timingSessionId = OTHER_SESSION)
+        val result = evidence(run = running().copy(lastCheckpointEpochMillis = EPOCH + 3_000),
+            transitions = listOf(pause(2_000), freshResume),
+            points = listOf(earlierPoint, ambiguousPoint), nowOffset = 5_000,
+            nowMark = RunTimingMark(MONO + 3_000, OTHER_SESSION))
+        assertFalse(result.evidenceUnavailable)
+        assertEquals(listOf(1), result.sections.map { it.size })
+        assertEquals(GpsMapMarkerState.LAST_KNOWN, result.marker?.state)
+        assertEquals(earlierPoint.latitude, result.marker!!.coordinate.latitude, 0.0)
+    }
+
+    @Test
     fun `a completed route never labels its final recorded position current`() {
         val result = evidence(run = running().copy(state = StoredRunState.COMPLETED,
             finishEpochMillis = EPOCH + 4_000, lastCheckpointEpochMillis = EPOCH + 4_000),
@@ -250,6 +410,9 @@ class GpsMapEvidenceTest {
 
     private fun rejected(sequence: Int, offset: Long, reason: String) = point(sequence, offset).copy(
         acceptedForDistance = false, rejectionReason = reason)
+
+    private fun RunLocationPointEntity.withSourceWallOffset(offsetMillis: Long) =
+        copy(observedAtEpochMillis = observedAtEpochMillis + offsetMillis)
 
     private fun pause(offset: Long) = RunTransitionEntity(
         RUN, 1, RunTransitionType.PAUSE, EPOCH + offset, MONO + offset, SESSION)
