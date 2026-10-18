@@ -36,9 +36,11 @@ public final class ReflectionHttpServer implements AutoCloseable {
 
     public static final String CANDIDATES_PATH = "/api/reflections/candidates";
     public static final String SPEECH_PATH = "/api/reflections/speech";
+    public static final String SONG_PREPARATION_PATH = "/api/reflections/song-study";
     public static final String HEALTH_PATH = "/health";
     public static final String SONG_CUE_CAPABILITY_HEADER = "X-RunState-Song-Cue";
     public static final String SONG_STUDY_CAPABILITY_HEADER = "X-RunState-Song-Study";
+    public static final String SONG_PREPARATION_CAPABILITY_HEADER = "X-RunState-Song-Preparation";
     public static final String REFLECTION_VOICE_CAPABILITY_HEADER = "X-RunState-Reflection-Voice";
     public static final int MAX_REQUEST_BYTES = 64 * 1024;
     public static final int MAX_RESPONSE_BYTES = 64 * 1024;
@@ -74,9 +76,11 @@ public final class ReflectionHttpServer implements AutoCloseable {
     private final ExecutorService executor;
     private final RemoteAccess remoteAccess;
     private final Semaphore providerSlots;
+    private final Semaphore songPreparationSlots;
     private final int maxCachedRequests;
     private final Object cacheLock = new Object();
     private final Map<String, RequestWork> workByRequestId = new HashMap<>();
+    private final Map<String, SongPreparationWork> songPreparationById = new HashMap<>();
     private final AtomicBoolean closed = new AtomicBoolean();
 
     private ReflectionHttpServer(
@@ -98,6 +102,8 @@ public final class ReflectionHttpServer implements AutoCloseable {
         }
         this.remoteAccess = remoteAccess;
         this.providerSlots = new Semaphore(maxConcurrentProviderCalls);
+        // Speculative work may use only one slot, leaving the other for a completed run/voice.
+        this.songPreparationSlots = new Semaphore(maxConcurrentProviderCalls >= 2 ? 1 : 0);
         this.maxCachedRequests = maxCachedRequests;
         InetAddress bindAddress = remoteAccess == null
                 ? InetAddress.getByName("127.0.0.1") : remoteAccess.bindAddress;
@@ -253,6 +259,9 @@ public final class ReflectionHttpServer implements AutoCloseable {
             // Liveness only: no provider call, credentials, run data, or configuration disclosure.
             exchange.getResponseHeaders().set(SONG_CUE_CAPABILITY_HEADER, "1");
             exchange.getResponseHeaders().set(SONG_STUDY_CAPABILITY_HEADER, "1");
+            if (provider.supportsSongPreparation()) {
+                exchange.getResponseHeaders().set(SONG_PREPARATION_CAPABILITY_HEADER, "1");
+            }
             if (speechProvider != null) {
                 exchange.getResponseHeaders().set(REFLECTION_VOICE_CAPABILITY_HEADER, "1");
             }
@@ -263,7 +272,8 @@ public final class ReflectionHttpServer implements AutoCloseable {
             return error(401, "unauthorized", "A valid demo access token is required.");
         }
         boolean speech = SPEECH_PATH.equals(exchange.getRequestURI().getRawPath());
-        if (!speech && !CANDIDATES_PATH.equals(exchange.getRequestURI().getRawPath())) {
+        boolean songPreparation = SONG_PREPARATION_PATH.equals(exchange.getRequestURI().getRawPath());
+        if (!speech && !songPreparation && !CANDIDATES_PATH.equals(exchange.getRequestURI().getRawPath())) {
             return error(404, "not_found", "The requested endpoint does not exist.");
         }
         if (exchange.getRequestURI().getRawQuery() != null) {
@@ -293,6 +303,9 @@ public final class ReflectionHttpServer implements AutoCloseable {
         byte[] body = readBoundedBody(exchange);
         if (speech) {
             return synthesizeSpeech(ReflectionApiJson.parseSpeechRequest(body));
+        }
+        if (songPreparation) {
+            return prepareSongOnce(ReflectionApiJson.parseSongPreparationRequest(body));
         }
         ApiRequest request = ReflectionApiJson.parseRequest(body);
         return generateOnce(request);
@@ -368,7 +381,8 @@ public final class ReflectionHttpServer implements AutoCloseable {
 
     private EndpointResponse callProvider(ApiRequest request) {
         try {
-            ReflectionProvider.GeneratedReflections generated = provider.generateForDelivery(request.evidence());
+            ReflectionProvider.GeneratedReflections generated = provider.generateForDelivery(
+                    request.evidence(), request.songPreparationId());
             String body = ReflectionApiJson.success(request, generated.candidates(), generationMode, generated.songCueId());
             if (body.getBytes(StandardCharsets.UTF_8).length > MAX_RESPONSE_BYTES) {
                 return providerFailure(FailureType.INVALID_RESPONSE);
@@ -377,6 +391,8 @@ public final class ReflectionHttpServer implements AutoCloseable {
                     200, body.getBytes(StandardCharsets.UTF_8), JSON_CONTENT_TYPE,
                     generated.songCueId() != null
             );
+        } catch (ReflectionProvider.SongPreparationConflictException conflict) {
+            return error(409, "preparation_id_conflict", "The preparationId belongs to a different song.");
         } catch (ReflectionProviderException failure) {
             return providerFailure(failure.failureType());
         } catch (RuntimeException unexpected) {
@@ -386,6 +402,68 @@ public final class ReflectionHttpServer implements AutoCloseable {
                     "The reflection request could not be completed."
             );
         }
+    }
+
+    private EndpointResponse prepareSongOnce(ReflectionContract.SongPreparationRequest request) {
+        if (!provider.supportsSongPreparation()) {
+            return error(503, "provider_unavailable", "Song preparation is not configured.");
+        }
+        SongPreparationWork work;
+        boolean owner;
+        synchronized (cacheLock) {
+            long now = System.nanoTime();
+            songPreparationById.values().removeIf(item -> item.response().isDone()
+                    && now - item.admittedNanos() >= AnthropicReflectionProvider.SONG_PREPARATION_TTL.toNanos());
+            SongPreparationWork existing = songPreparationById.get(request.preparationId());
+            if (existing != null) {
+                if (!sameSongIdentity(existing.request(), request)) {
+                    return error(409, "preparation_id_conflict", "The preparationId belongs to a different song.");
+                }
+                work = existing;
+                owner = false;
+            } else {
+                if (songPreparationById.size() >= AnthropicReflectionProvider.MAX_PREPARED_SONGS) {
+                    return error(503, "server_capacity", "The song preparation capacity has been reached.");
+                }
+                if (!songPreparationSlots.tryAcquire()) {
+                    return error(503, "server_busy", "The song preparation service is busy.");
+                }
+                if (!providerSlots.tryAcquire()) {
+                    songPreparationSlots.release();
+                    return error(503, "server_busy", "The reflection service is busy. Try again later.");
+                }
+                work = new SongPreparationWork(request, now, new CompletableFuture<>());
+                songPreparationById.put(request.preparationId(), work);
+                owner = true;
+            }
+        }
+        if (!owner) return work.response().join();
+        EndpointResponse response = error(500, "internal_error", "Song preparation could not complete.");
+        try {
+            ReflectionProvider.SongPreparationState state = provider.prepareSong(request);
+            if (state == null) response = providerFailure(FailureType.INVALID_RESPONSE);
+            else response = new EndpointResponse(200,
+                    ReflectionApiJson.songPreparationResponse(request.preparationId(), state));
+            return response;
+        } catch (ReflectionProvider.SongPreparationConflictException conflict) {
+            return response = error(409, "preparation_id_conflict", "The preparationId belongs to a different song.");
+        } catch (ReflectionProviderException failure) {
+            return response = providerFailure(failure.failureType());
+        } catch (RuntimeException failure) {
+            return response;
+        } finally {
+            work.response().complete(response);
+            providerSlots.release();
+            songPreparationSlots.release();
+        }
+    }
+
+    private static boolean sameSongIdentity(ReflectionContract.SongPreparationRequest first,
+                                            ReflectionContract.SongPreparationRequest next) {
+        return first.trackTitle().strip().replaceAll("\\s+", " ").equalsIgnoreCase(
+                next.trackTitle().strip().replaceAll("\\s+", " "))
+                && first.artistName().strip().replaceAll("\\s+", " ").equalsIgnoreCase(
+                next.artistName().strip().replaceAll("\\s+", " "));
     }
 
     private EndpointResponse synthesizeSpeech(String text) {
@@ -604,6 +682,11 @@ public final class ReflectionHttpServer implements AutoCloseable {
             ApiRequest request,
             CompletableFuture<EndpointResponse> response
     ) {
+    }
+
+    private record SongPreparationWork(ReflectionContract.SongPreparationRequest request, long admittedNanos,
+                                       CompletableFuture<EndpointResponse> response) {
+        @Override public String toString() { return "SongPreparationWork[identity=redacted]"; }
     }
 
     private record EndpointResponse(int status, byte[] body, String contentType, boolean songStudyAcknowledged) {

@@ -48,6 +48,160 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ReflectionHttpServerTest {
+    @Test
+    void sourceOnlySongPreparationIsAuthenticatedStrictAndReturnsNoSourceMaterial() throws Exception {
+        AtomicInteger calls = new AtomicInteger();
+        ReflectionProvider provider = preparingProvider(calls);
+        try (ReflectionHttpServer server = startRemote(provider, 2, 2)) {
+            String path = ReflectionHttpServer.SONG_PREPARATION_PATH;
+            String body = preparationBody(REQUEST_ID);
+            assertError(rawRequest(server, "POST", path, List.of("Host: " + DEMO_HOST), body), 401, "unauthorized");
+            assertError(rawRequest(server, "POST", path,
+                    List.of("Host: " + DEMO_HOST, "Authorization: Bearer " + DUMMY_DEMO_TOKEN,
+                            "Origin: https://example.com"), body), 403, "request_rejected");
+            assertError(rawRequest(server, "POST", path, List.of("Host: wrong.example",
+                    "Authorization: Bearer " + DUMMY_DEMO_TOKEN), body), 403, "request_rejected");
+            assertError(rawRequest(server, "GET", path, remoteHeaders(), body), 405, "method_not_allowed");
+            assertError(rawRequest(server, "POST", path + "?facts=true", remoteHeaders(), body), 400, "invalid_request");
+            assertError(rawRequest(server, "POST", path,
+                    List.of("Host: " + DEMO_HOST, "Authorization: Bearer " + DUMMY_DEMO_TOKEN,
+                            "Content-Encoding: gzip"), body), 415, "unsupported_media_type");
+            for (String invalid : List.of(body.replace("}", ",\"distanceMeters\":5000}"),
+                    body.replace("}", ",\"evidence\":{}}"), body.replace(REQUEST_ID, REQUEST_ID.toUpperCase()),
+                    body.replace("Controlled track", "x".repeat(201)), body.replace("Controlled track", "\\ud800"))) {
+                assertError(rawRequest(server, "POST", path, remoteHeaders(), invalid), 400, "invalid_request");
+            }
+            assertError(rawRequest(server, "POST", path, remoteHeaders(),
+                    body.replace("\"trackTitle\":", "\"trackTitle\":\"duplicate\",\"trackTitle\":")), 400, "invalid_json");
+            assertError(rawRequest(server, "POST", path, remoteHeaders(), " ".repeat(ReflectionHttpServer.MAX_REQUEST_BYTES + 1)),
+                    413, "request_too_large");
+            assertThrows(ReflectionApiJson.InvalidJsonException.class, () -> ReflectionApiJson.parseSongPreparationRequest(
+                    new byte[]{(byte) 0xc3, 0x28}));
+            assertEquals(0, calls.get());
+            RawHttpResponse prepared = rawRequest(server, "POST", path, remoteHeaders(), body);
+            assertEquals(200, prepared.status());
+            JsonObject response = JsonParser.parseString(prepared.body()).getAsJsonObject();
+            assertEquals(java.util.Set.of("preparationId", "state", "songStudyVersion"), response.keySet());
+            assertEquals(REQUEST_ID, response.get("preparationId").getAsString());
+            assertEquals("READY", response.get("state").getAsString());
+            assertEquals(1, response.get("songStudyVersion").getAsInt());
+            assertFalse(prepared.body().contains("Controlled track"));
+            assertEquals(prepared, rawRequest(server, "POST", path, remoteHeaders(), body));
+            assertEquals(1, calls.get());
+            assertError(rawRequest(server, "POST", path, remoteHeaders(), body.replace("Controlled track", "Other song")),
+                    409, "preparation_id_conflict");
+        }
+    }
+
+    @Test
+    void preparationCapabilityRequiresSupportingProviderAndMissingProviderIsHonest() throws Exception {
+        for (boolean supported : List.of(false, true)) {
+            ReflectionProvider provider = supported ? preparingProvider(new AtomicInteger()) : evidence -> exactCandidates();
+            try (ReflectionHttpServer server = start(provider)) {
+                var health = client.send(HttpRequest.newBuilder(URI.create("http://127.0.0.1:"
+                        + server.address().getPort() + "/health")).GET().build(), HttpResponse.BodyHandlers.ofString());
+                assertEquals(supported ? "1" : null,
+                        health.headers().firstValue(ReflectionHttpServer.SONG_PREPARATION_CAPABILITY_HEADER).orElse(null));
+                RawHttpResponse result = rawRequest(server, "POST", ReflectionHttpServer.SONG_PREPARATION_PATH,
+                        List.of(hostHeader(server, "127.0.0.1")), preparationBody(REQUEST_ID));
+                assertEquals(supported ? 200 : 503, result.status());
+            }
+        }
+    }
+
+    @Test
+    void earlyPreparationJoinsDuplicatesLeavesFinalCapacityAndDoesNotCacheBusyIds() throws Exception {
+        CountDownLatch entered = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        AtomicInteger calls = new AtomicInteger();
+        ReflectionProvider provider = new ReflectionProvider() {
+            @Override public CandidateReflections generate(CompletedRunEvidence evidence) { return exactCandidates(); }
+            @Override public boolean supportsSongPreparation() { return true; }
+            @Override public SongPreparationState prepareSong(ReflectionContract.SongPreparationRequest request)
+                    throws ReflectionProviderException {
+                calls.incrementAndGet(); entered.countDown();
+                try { if (!release.await(3, TimeUnit.SECONDS)) throw new ReflectionProviderException(FailureType.TIMEOUT, "Fixture timeout"); }
+                catch (InterruptedException interrupted) { Thread.currentThread().interrupt(); throw new ReflectionProviderException(FailureType.TRANSPORT, "Fixture interrupted"); }
+                return SongPreparationState.READY;
+            }
+        };
+        try (ReflectionHttpServer server = startRemote(provider, 2, 2)) {
+            java.util.function.Supplier<RawHttpResponse> firstRequest = () -> {
+                try { return rawRequest(server, "POST", ReflectionHttpServer.SONG_PREPARATION_PATH,
+                        remoteHeaders(), preparationBody(REQUEST_ID)); }
+                catch (Exception failure) { throw new CompletionException(failure); }
+            };
+            CompletableFuture<RawHttpResponse> first = CompletableFuture.supplyAsync(firstRequest);
+            assertTrue(entered.await(2, TimeUnit.SECONDS));
+            CompletableFuture<RawHttpResponse> duplicate = CompletableFuture.supplyAsync(firstRequest);
+            assertError(rawRequest(server, "POST", ReflectionHttpServer.SONG_PREPARATION_PATH,
+                    remoteHeaders(), preparationBody(SECOND_REQUEST_ID)), 503, "server_busy");
+            assertEquals(200, rawPost(server, remoteHeaders(), validRequest()).status());
+            release.countDown();
+            assertEquals(first.get(3, TimeUnit.SECONDS), duplicate.get(3, TimeUnit.SECONDS));
+            assertEquals(1, calls.get());
+            assertEquals(200, rawRequest(server, "POST", ReflectionHttpServer.SONG_PREPARATION_PATH,
+                    remoteHeaders(), preparationBody(SECOND_REQUEST_ID)).status());
+            assertEquals(2, calls.get());
+        } finally { release.countDown(); }
+        try (ReflectionHttpServer server = startRemote(preparingProvider(calls), 1, 2)) {
+            assertError(rawRequest(server, "POST", ReflectionHttpServer.SONG_PREPARATION_PATH,
+                    remoteHeaders(), preparationBody(THIRD_REQUEST_ID)), 503, "server_busy");
+            assertEquals(200, rawPost(server, remoteHeaders(), validRequest()).status());
+        }
+    }
+
+    @Test
+    void preparationCacheIsSeparateBoundedAndFinalHandleIsPartOfRequestIdentity() throws Exception {
+        AtomicInteger calls = new AtomicInteger();
+        AtomicReference<String> deliveredHandle = new AtomicReference<>();
+        ReflectionProvider provider = new ReflectionProvider() {
+            @Override public CandidateReflections generate(CompletedRunEvidence evidence) { return exactCandidates(); }
+            @Override public boolean supportsSongPreparation() { return true; }
+            @Override public SongPreparationState prepareSong(ReflectionContract.SongPreparationRequest request) { calls.incrementAndGet(); return SongPreparationState.READY; }
+            @Override public GeneratedReflections generateForDelivery(CompletedRunEvidence evidence, String preparationId) {
+                deliveredHandle.set(preparationId); return new GeneratedReflections(exactCandidates(), null);
+            }
+        };
+        try (ReflectionHttpServer server = startRemote(provider, 2, 2)) {
+            for (int index = 0; index < 32; index++) {
+                String id = new java.util.UUID(1, index).toString();
+                assertEquals(200, rawRequest(server, "POST", ReflectionHttpServer.SONG_PREPARATION_PATH,
+                        remoteHeaders(), preparationBody(id)).status());
+            }
+            assertEquals(32, calls.get());
+            assertError(rawRequest(server, "POST", ReflectionHttpServer.SONG_PREPARATION_PATH,
+                    remoteHeaders(), preparationBody(THIRD_REQUEST_ID)), 503, "server_capacity");
+            JsonObject request = JsonParser.parseString(validRequest()).getAsJsonObject();
+            request.addProperty("songPreparationId", REQUEST_ID);
+            assertEquals(200, rawPost(server, remoteHeaders(), request.toString()).status());
+            assertEquals(REQUEST_ID, deliveredHandle.get());
+            request.addProperty("songPreparationId", SECOND_REQUEST_ID);
+            assertError(rawPost(server, remoteHeaders(), request.toString()), 409, "request_id_conflict");
+            request.addProperty("requestId", SECOND_REQUEST_ID);
+            request.addProperty("songPreparationId", "not-a-uuid");
+            assertError(rawPost(server, remoteHeaders(), request.toString()), 400, "invalid_request");
+            request.remove("songPreparationId");
+            request.getAsJsonObject("evidence").addProperty("songPreparationId", REQUEST_ID);
+            assertError(rawPost(server, remoteHeaders(), request.toString()), 400, "invalid_request");
+        }
+    }
+
+    private static ReflectionProvider preparingProvider(AtomicInteger calls) {
+        return new ReflectionProvider() {
+            @Override public CandidateReflections generate(CompletedRunEvidence evidence) { return exactCandidates(); }
+            @Override public boolean supportsSongPreparation() { return true; }
+            @Override public SongPreparationState prepareSong(ReflectionContract.SongPreparationRequest request) {
+                calls.incrementAndGet(); return SongPreparationState.READY;
+            }
+        };
+    }
+
+    private static String preparationBody(String id) {
+        JsonObject body = new JsonObject();
+        body.addProperty("preparationId", id); body.addProperty("trackTitle", "Controlled track");
+        body.addProperty("artistName", "Controlled artist"); return body.toString();
+    }
 
     private static final String REQUEST_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
     private static final String RUN_ID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";

@@ -221,7 +221,7 @@ public final class MusixmatchSongAnalysis {
                 || value.getAsBigDecimal().signum() != 0;
     }
 
-    /** Immutable request-only material. Its diagnostic string deliberately contains no provider text. */
+    /** Bounded immutable material; approved preparation may retain it in memory, never diagnostic text. */
     public record SongMaterial(String trackTitle, String artistName, String providerTrackId,
                                List<String> genres, List<ThemeMaterial> themes, List<String> moods,
                                String meaningExplanation, List<EntityMaterial> entities, String snippetText) {

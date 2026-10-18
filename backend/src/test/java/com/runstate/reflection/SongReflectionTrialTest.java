@@ -21,6 +21,38 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class SongReflectionTrialTest {
     @Test
+    void separateSourceStudyAndFreshFactsWriterHaveExactlyTheColdInputsAndFrozenPrompts() throws Exception {
+        var coldInputs = new java.util.ArrayList<JsonObject>();
+        var warmInputs = new java.util.ArrayList<JsonObject>();
+        var coldPrompts = new java.util.ArrayList<String>();
+        var warmPrompts = new java.util.ArrayList<String>();
+        var cold = new SongReflectionTrial((input, prompt, schema) -> {
+            coldInputs.add(input.deepCopy()); coldPrompts.add(prompt);
+            return input.has("run_facts") ? branches() : notes();
+        });
+        var warm = new SongReflectionTrial((input, prompt, schema) -> {
+            warmInputs.add(input.deepCopy()); warmPrompts.add(prompt);
+            return input.has("run_facts") ? branches() : notes();
+        });
+        var facts = evidence(PreRunEnergy.MODERATE);
+        var expected = cold.generate(facts, material());
+        var studied = warm.study(material());
+        assertEquals(1, warmInputs.size());
+        assertFalse(warmInputs.get(0).has("run_facts"));
+        var result = warm.write(facts, studied, null, SongReflectionTrial.CreativeApproach.AUTO);
+        assertEquals(expected.reflections(), result.reflections());
+        assertEquals(coldInputs, warmInputs);
+        assertEquals(coldPrompts, warmPrompts);
+        String[] hashes = {"41ddf6d72b2e12487ed6efeddd647297d0f33b4c2c55d9615434a20f352865cc",
+                "a3f07cad9f9ab8483d9e251e95345733cc803b823888f7635936e4f9109a3128"};
+        for (int index = 0; index < hashes.length; index++) {
+            String normalized = warmPrompts.get(index).replace("\r\n", "\n");
+            assertEquals(hashes[index], java.util.HexFormat.of().formatHex(java.security.MessageDigest
+                    .getInstance("SHA-256").digest(normalized.getBytes(java.nio.charset.StandardCharsets.UTF_8))));
+        }
+    }
+
+    @Test
     void studiesTheSongBeforeSeeingRunFactsAndWritesFromValidatedNotes() throws Exception {
         AtomicInteger calls = new AtomicInteger();
         var config = AnthropicReflectionProvider.configurationFrom(Map.of("ANTHROPIC_API_KEY", "fake-key"));

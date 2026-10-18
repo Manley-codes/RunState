@@ -48,6 +48,210 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class AnthropicReflectionProviderTest {
+    private static final String PREPARATION_ID = "09bf1430-b193-49b9-a9c3-4f3577dc67b6";
+
+    @Test
+    void earlySourceStudyAndWarmWriterAreByteEquivalentToColdPipelineAndDeduplicate() throws Exception {
+        List<TransportRequest> cold = new ArrayList<>();
+        List<TransportRequest> warm = new ArrayList<>();
+        AtomicInteger lookups = new AtomicInteger();
+        CompletedRunEvidence facts = evidenceWithMusic(new MusicContext(MusicState.MUSIC,
+                "A Fictional Morning", "Fixture Artist", null, MusicProvenance.MEDIA_SESSION_PARTIAL));
+        AnthropicReflectionProvider coldProvider = new AnthropicReflectionProvider(testConfiguration(), request -> {
+            cold.add(request);
+            return songResponse(evidenceFrom(request).has("run_facts") ? writerBranches() : studyNotes());
+        }, (title, artist) -> Optional.of(songMaterial(title, artist)));
+        AnthropicReflectionProvider warmProvider = new AnthropicReflectionProvider(testConfiguration(), request -> {
+            warm.add(request);
+            assertFalse(request.body().contains(PREPARATION_ID));
+            return songResponse(evidenceFrom(request).has("run_facts") ? writerBranches() : studyNotes());
+        }, (title, artist) -> { lookups.incrementAndGet(); return Optional.of(songMaterial(title, artist)); });
+        var preparation = new ReflectionContract.SongPreparationRequest(PREPARATION_ID,
+                "A Fictional Morning", "Fixture Artist");
+        assertEquals(ReflectionProvider.SongPreparationState.READY, warmProvider.prepareSong(preparation));
+        assertEquals(1, warm.size());
+        assertFalse(evidenceFrom(warm.get(0)).has("run_facts"));
+        assertEquals(ReflectionProvider.SongPreparationState.READY, warmProvider.prepareSong(preparation));
+        assertEquals(1, warm.size());
+        var expected = coldProvider.generateForDelivery(facts);
+        var actual = warmProvider.generateForDelivery(facts, PREPARATION_ID);
+        assertEquals(expected, actual);
+        assertEquals(1, lookups.get());
+        assertEquals(cold.stream().map(TransportRequest::body).toList(), warm.stream().map(TransportRequest::body).toList());
+        assertEquals("claude-opus-5-5", JsonParser.parseString(warm.get(1).body()).getAsJsonObject().get("model").getAsString());
+    }
+
+    @Test
+    void expiredMissingOrCapacityLimitedPreparationUsesTheSamePinnedSongCold() throws Exception {
+        java.util.concurrent.atomic.AtomicLong clock = new java.util.concurrent.atomic.AtomicLong();
+        AtomicInteger calls = new AtomicInteger();
+        List<String> lookedUp = new ArrayList<>();
+        AnthropicReflectionProvider provider = new AnthropicReflectionProvider(testConfiguration(), request -> {
+            calls.incrementAndGet();
+            return songResponse(evidenceFrom(request).has("run_facts") ? writerBranches() : studyNotes());
+        }, (title, artist) -> { lookedUp.add(title); return Optional.of(songMaterial(title, artist)); },
+                clock::get, 1, Duration.ofSeconds(1));
+        var preparation = new ReflectionContract.SongPreparationRequest(PREPARATION_ID,
+                "A Fictional Morning", "Fixture Artist");
+        String secondId = "bb97b5a5-21c6-47d7-bc67-240220407066";
+        assertEquals(ReflectionProvider.SongPreparationState.READY, provider.prepareSong(preparation));
+        assertEquals(ReflectionProvider.SongPreparationState.UNAVAILABLE, provider.prepareSong(
+                new ReflectionContract.SongPreparationRequest(secondId, preparation.trackTitle(), preparation.artistName())));
+        assertEquals(1, calls.get());
+        var facts = evidenceWithMusic(new MusicContext(MusicState.MUSIC, preparation.trackTitle(),
+                preparation.artistName(), null, MusicProvenance.MEDIA_SESSION_PARTIAL));
+        provider.generateForDelivery(facts, secondId);
+        assertEquals(3, calls.get());
+        clock.set(Duration.ofSeconds(1).toNanos());
+        provider.generateForDelivery(facts, PREPARATION_ID);
+        assertEquals(5, calls.get());
+        assertEquals(List.of(preparation.trackTitle(), preparation.trackTitle(), preparation.trackTitle()), lookedUp);
+        assertEquals(ReflectionProvider.SongPreparationState.READY, provider.prepareSong(
+                new ReflectionContract.SongPreparationRequest(secondId, preparation.trackTitle(), preparation.artistName())));
+        assertEquals(6, calls.get());
+    }
+
+    @Test
+    void preparationIdentityConflictNeverUsesAnotherSongStudyOrInventsMaterial() throws Exception {
+        AtomicInteger calls = new AtomicInteger();
+        AnthropicReflectionProvider provider = new AnthropicReflectionProvider(testConfiguration(), request -> {
+            calls.incrementAndGet(); return songResponse(studyNotes());
+        }, (title, artist) -> Optional.of(songMaterial(title, artist)));
+        provider.prepareSong(new ReflectionContract.SongPreparationRequest(PREPARATION_ID,
+                "A Fictional Morning", "Fixture Artist"));
+        assertThrows(ReflectionProvider.SongPreparationConflictException.class, () -> provider.prepareSong(
+                new ReflectionContract.SongPreparationRequest(PREPARATION_ID, "A Fictional Morning (Live)", "Fixture Artist")));
+        var wrong = evidenceWithMusic(new MusicContext(MusicState.MUSIC, "Another Song", "Fixture Artist",
+                null, MusicProvenance.MEDIA_SESSION_PARTIAL));
+        assertThrows(ReflectionProvider.SongPreparationConflictException.class,
+                () -> provider.generateForDelivery(wrong, PREPARATION_ID));
+        assertEquals(1, calls.get());
+        AtomicInteger lookups = new AtomicInteger();
+        AnthropicReflectionProvider unavailable = new AnthropicReflectionProvider(testConfiguration(), request -> {
+            calls.incrementAndGet(); return successfulResponseForPreparationFallback();
+        }, (title, artist) -> { lookups.incrementAndGet(); return Optional.empty(); });
+        var request = new ReflectionContract.SongPreparationRequest(PREPARATION_ID,
+                "A Fictional Morning", "Fixture Artist");
+        assertEquals(ReflectionProvider.SongPreparationState.UNAVAILABLE, unavailable.prepareSong(request));
+        var facts = evidenceWithMusic(new MusicContext(MusicState.MUSIC, request.trackTitle(), request.artistName(), null));
+        assertNull(unavailable.generateForDelivery(facts, PREPARATION_ID).songCueId());
+        assertEquals(1, lookups.get());
+    }
+
+    private static TransportResponse successfulResponseForPreparationFallback() {
+        return new TransportResponse(200, successfulResponse(validCandidateJson()));
+    }
+
+    @Test
+    void inflightDuplicateAndFinalWriterJoinOneSourceStudy() throws Exception {
+        var entered = new java.util.concurrent.CountDownLatch(1);
+        var release = new java.util.concurrent.CountDownLatch(1);
+        AtomicInteger studies = new AtomicInteger();
+        AtomicInteger writers = new AtomicInteger();
+        AtomicInteger lookups = new AtomicInteger();
+        AnthropicReflectionProvider provider = new AnthropicReflectionProvider(testConfiguration(), request -> {
+            if (!evidenceFrom(request).has("run_facts")) {
+                studies.incrementAndGet(); entered.countDown();
+                if (!release.await(3, java.util.concurrent.TimeUnit.SECONDS)) throw new java.io.IOException("Fixture timed out");
+                return songResponse(studyNotes());
+            }
+            writers.incrementAndGet(); return songResponse(writerBranches());
+        }, (title, artist) -> { lookups.incrementAndGet(); return Optional.of(songMaterial(title, artist)); });
+        var executor = java.util.concurrent.Executors.newFixedThreadPool(3);
+        try {
+            var preparation = new ReflectionContract.SongPreparationRequest(PREPARATION_ID,
+                    "A Fictional Morning", "Fixture Artist");
+            var first = executor.submit(() -> provider.prepareSong(preparation));
+            assertTrue(entered.await(2, java.util.concurrent.TimeUnit.SECONDS));
+            var duplicate = executor.submit(() -> provider.prepareSong(preparation));
+            var facts = evidenceWithMusic(new MusicContext(MusicState.MUSIC, preparation.trackTitle(),
+                    preparation.artistName(), null, MusicProvenance.MEDIA_SESSION_PARTIAL));
+            var finalReply = executor.submit(() -> provider.generateForDelivery(facts, PREPARATION_ID));
+            release.countDown();
+            assertEquals(ReflectionProvider.SongPreparationState.READY, first.get(3, java.util.concurrent.TimeUnit.SECONDS));
+            assertEquals(ReflectionProvider.SongPreparationState.READY, duplicate.get(3, java.util.concurrent.TimeUnit.SECONDS));
+            assertEquals("This finish belongs to you.", finalReply.get(3, java.util.concurrent.TimeUnit.SECONDS).candidates().spent());
+            assertEquals(1, studies.get()); assertEquals(1, writers.get()); assertEquals(1, lookups.get());
+        } finally { release.countDown(); executor.shutdownNow(); }
+    }
+
+    @Test
+    void failedEarlyStudyDoesNotRetryInBackgroundAndFinalUsesTheSameSongCold() throws Exception {
+        AtomicInteger calls = new AtomicInteger();
+        AtomicInteger lookups = new AtomicInteger();
+        AnthropicReflectionProvider provider = new AnthropicReflectionProvider(testConfiguration(), request -> {
+            if (calls.incrementAndGet() == 1) throw new HttpTimeoutException("Fixture early timeout");
+            assertFalse(request.body().contains(PREPARATION_ID));
+            return songResponse(evidenceFrom(request).has("run_facts") ? writerBranches() : studyNotes());
+        }, (title, artist) -> {
+            assertEquals("A Fictional Morning", title); assertEquals("Fixture Artist", artist);
+            lookups.incrementAndGet(); return Optional.of(songMaterial(title, artist));
+        });
+        var preparation = new ReflectionContract.SongPreparationRequest(PREPARATION_ID,
+                "A Fictional Morning", "Fixture Artist");
+        assertThrows(ReflectionProviderException.class, () -> provider.prepareSong(preparation));
+        assertThrows(ReflectionProviderException.class, () -> provider.prepareSong(preparation));
+        assertEquals(1, calls.get()); assertEquals(1, lookups.get());
+        var facts = evidenceWithMusic(new MusicContext(MusicState.MUSIC, preparation.trackTitle(),
+                preparation.artistName(), null, MusicProvenance.MEDIA_SESSION_PARTIAL));
+        assertEquals("This finish belongs to you.", provider.generateForDelivery(facts, PREPARATION_ID).candidates().spent());
+        assertEquals(3, calls.get()); assertEquals(2, lookups.get());
+    }
+
+    @Test
+    void mismatchedSourceCannotBecomeAPreparedSongAndWarmFinalValidationStillFailsHonestly() throws Exception {
+        AtomicInteger calls = new AtomicInteger();
+        var preparation = new ReflectionContract.SongPreparationRequest(PREPARATION_ID,
+                "A Fictional Morning", "Fixture Artist");
+        AnthropicReflectionProvider mismatch = new AnthropicReflectionProvider(testConfiguration(), request -> {
+            calls.incrementAndGet(); return successfulResponseForPreparationFallback();
+        }, (title, artist) -> Optional.of(songMaterial(title, "Different Artist")));
+        assertEquals(ReflectionProvider.SongPreparationState.UNAVAILABLE, mismatch.prepareSong(preparation));
+        assertEquals(0, calls.get());
+        var facts = evidenceWithMusic(new MusicContext(MusicState.MUSIC, preparation.trackTitle(), preparation.artistName(), null));
+        assertNull(mismatch.generateForDelivery(facts, PREPARATION_ID).songCueId());
+        assertEquals(1, calls.get());
+        AtomicInteger validCalls = new AtomicInteger();
+        AnthropicReflectionProvider badWriter = new AnthropicReflectionProvider(testConfiguration(), request -> {
+            validCalls.incrementAndGet();
+            if (!evidenceFrom(request).has("run_facts")) return songResponse(studyNotes());
+            JsonObject invalid = writerBranches();
+            invalid.getAsJsonObject("spent").addProperty("reflection", "You ran 99999 miles today.");
+            return songResponse(invalid);
+        }, (title, artist) -> Optional.of(songMaterial(title, artist)));
+        assertEquals(ReflectionProvider.SongPreparationState.READY, badWriter.prepareSong(preparation));
+        ReflectionProviderException invalid = assertThrows(ReflectionProviderException.class,
+                () -> badWriter.generateForDelivery(facts, PREPARATION_ID));
+        assertEquals(FailureType.INVALID_RESPONSE, invalid.failureType());
+        assertEquals(2, validCalls.get());
+    }
+
+    @Test
+    void warmAcceptedLandingAcknowledgesOnlyTheExactEditorialPairing() throws Exception {
+        String moment = "A compact sequence of the recognizable repeated-title chorus.";
+        String effect = "A warm affirmative musical response to one concrete part of this completed run. Keep reported feelings conditional on each branch, without claiming perfect weather or a perfect whole day.";
+        for (boolean matchingCue : List.of(true, false)) {
+            AtomicInteger calls = new AtomicInteger();
+            AnthropicReflectionProvider provider = new AnthropicReflectionProvider(testConfiguration(), request -> {
+                calls.incrementAndGet();
+                JsonObject input = evidenceFrom(request);
+                if (!input.has("run_facts")) {
+                    assertFalse(input.has("passage_landing")); return songResponse(studyNotes());
+                }
+                assertEquals(matchingCue, input.has("passage_landing"));
+                return songResponse(writerBranches());
+            }, (title, artist) -> Optional.of(songMaterial(title, artist)));
+            provider.prepareSong(new ReflectionContract.SongPreparationRequest(PREPARATION_ID, "Lovely Day", "Bill Withers"));
+            SongCueContext cue = new SongCueContext("lovely_day_bill_withers_v1", SongCueSource.RUNSTATE_CURATED,
+                    moment, matchingCue ? effect : "An unrecognized editorial instruction.");
+            var facts = evidenceWithMusic(new MusicContext(MusicState.MUSIC, "Lovely Day", "Bill Withers",
+                    null, MusicProvenance.MEDIA_SESSION_PARTIAL, cue));
+            assertEquals(matchingCue ? cue.cueId() : null,
+                    provider.generateForDelivery(facts, PREPARATION_ID).songCueId());
+            assertEquals(2, calls.get());
+        }
+    }
+
 
     private static final String DUMMY_API_KEY = "test-api-key-not-real";
     private static final String SPENT = "  Exact spent text.  ";

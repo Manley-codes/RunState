@@ -66,17 +66,25 @@ final class SongReflectionTrial {
     TrialResult generate(CompletedRunEvidence evidence, SongMaterial material, PassageLanding landing,
                          CreativeApproach approach) throws ReflectionProviderException {
         java.util.Objects.requireNonNull(approach, "approach");
-        if (evidence.musicContext().state() != MusicState.MUSIC
-                || !same(evidence.musicContext().trackTitle(), material.trackTitle())
-                || !same(evidence.musicContext().artistName(), material.artistName())) {
-            throw invalid("The trial requires exact matched song material.");
-        }
-        if (landing != null && (!same(landing.trackTitle(), material.trackTitle())
-                || !same(landing.artistName(), material.artistName()))) {
-            throw invalid("The passage landing requires exact matched song material.");
-        }
+        requireMatching(evidence, material, landing);
+        return write(evidence, study(material), landing, approach);
+    }
+
+    /** Source-only work is safe to prepare before final run facts exist. */
+    StudiedSong study(SongMaterial material) throws ReflectionProviderException {
+        java.util.Objects.requireNonNull(material, "material");
         JsonObject notes = exchange.exchange(songInput(material),
                 prompt("song-study-trial-v1.txt"), notesSchema());
+        validateNotes(notes, material);
+        return new StudiedSong(material, notes);
+    }
+
+    TrialResult write(CompletedRunEvidence evidence, StudiedSong studied, PassageLanding landing,
+                      CreativeApproach approach) throws ReflectionProviderException {
+        java.util.Objects.requireNonNull(approach, "approach");
+        SongMaterial material = studied.material();
+        requireMatching(evidence, material, landing);
+        JsonObject notes = studied.linerNotes();
         validateNotes(notes, material);
         JsonObject facts = facts(evidence);
         JsonObject writerInput = new JsonObject();
@@ -112,6 +120,29 @@ final class SongReflectionTrial {
                 branches.getAsJsonObject("feeling_good").get("reflection").getAsString(),
                 branches.getAsJsonObject("powered_up").get("reflection").getAsString(),
                 branches.getAsJsonObject("no_selection").get("reflection").getAsString()), warnings);
+    }
+
+    private static void requireMatching(CompletedRunEvidence evidence, SongMaterial material, PassageLanding landing)
+            throws ReflectionProviderException {
+        if (evidence.musicContext().state() != MusicState.MUSIC
+                || !same(evidence.musicContext().trackTitle(), material.trackTitle())
+                || !same(evidence.musicContext().artistName(), material.artistName())) {
+            throw invalid("The trial requires exact matched song material.");
+        }
+        if (landing != null && (!same(landing.trackTitle(), material.trackTitle())
+                || !same(landing.artistName(), material.artistName()))) {
+            throw invalid("The passage landing requires exact matched song material.");
+        }
+    }
+
+    /** Bounded memory-only source/validated notes; never stores run facts or generated run replies. */
+    record StudiedSong(SongMaterial material, JsonObject linerNotes) {
+        StudiedSong {
+            java.util.Objects.requireNonNull(material, "material");
+            linerNotes = linerNotes.deepCopy();
+        }
+        @Override public JsonObject linerNotes() { return linerNotes.deepCopy(); }
+        @Override public String toString() { return "StudiedSong[sourceAndNotes=redacted]"; }
     }
 
     /** An editorial listening target, never a lyric source, timestamp or claim about the runner. */

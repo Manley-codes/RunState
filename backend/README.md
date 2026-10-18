@@ -19,11 +19,81 @@ not built into the APK. The Anthropic key belongs only in the backend environmen
 Java records are used as small immutable data holders. A record exposes its values through generated
 accessor methods and does not offer setters; its constructor can still reject invalid combinations.
 
-**Latest local implementation (October 17):** Manley accepted three automatic listening examples
+## Early song preparation — October 18 local implementation
+
+Manley approved sending one opted-in, actually observed song identity while a run is active so
+the source lookup and song-only study can finish before Save. The app still writes the reflection
+only from durably completed run facts. This is a new capability; the previously deployed service
+does not gain it until the user pushes/promotes and deploys this backend. Device/network warm-path
+timing has not yet been demonstrated for this change.
+
+`GET /health` advertises `X-RunState-Song-Preparation: 1` when its provider supports the feature.
+Authenticated `POST /api/reflections/song-study` accepts exactly:
+
+```json
+{
+  "preparationId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+  "trackTitle": "Controlled track",
+  "artistName": "Controlled artist"
+}
+```
+
+It returns only `{preparationId, state: "READY" | "UNAVAILABLE", songStudyVersion: 1}`. Run facts,
+Energy, weather, route, audio, lyrics, study notes and provider credentials are not accepted or
+returned by this endpoint. Existing Host, Origin, bearer authentication, JSON/encoding, duplicate-key
+and body-size checks apply. The title and artist are bounded to 200 characters each; live/remix
+suffixes and collaboration credits are preserved. A repeated ID and matching full identity joins
+or reuses the same attempt; a conflicting identity returns HTTP 409. Busy/capacity requests return
+503 without starting work. There is one early-work slot within the two shared provider slots,
+leaving capacity for a finished run or its voice; a one-slot test configuration denies early work.
+
+The provider keeps at most 32 bounded song-material/validated-study results in process memory,
+reusable for up to two hours from admission. Expired entries are lazily removed on subsequent
+preparation, final-generation or health checks. They contain no run facts, generated run replies,
+audio or credentials, and are never written to files, logs or a database. Server restarts lose
+them. Its separate bounded HTTP preparation cache contains identity/status only and does not use
+the existing 256 completed-request cache. This explicitly extends the older request-only source
+lifetime for the approved early-preparation path; cold generation remains request-scoped.
+
+The ordinary candidates request may include an optional **top-level** `songPreparationId` UUID.
+It is outside `evidence`, participates in request-id conflict checks, and never enters either model
+prompt. Matching ready/in-flight preparation supplies the same validated material and notes to the
+unchanged writer with fresh final run facts. An unknown, expired, evicted or restarted handle uses
+the same pinned song through the existing cold lookup → study → writer path. A failed early study
+also permits this explicit final cold attempt; it does not trigger a background retry and may incur
+another source/study charge. An intentional no-source result stays an ordinary text fallback with
+no clip acknowledgement. Conflicting identities and invalid final output fail honestly. All stages
+retain the shared 90-second generation budget and the existing exact cue/delivery acknowledgement.
+
+The accepted study/writer prompt bytes, Opus model choice, four Energy branches, custom voice,
+music entrance and 650 ms handoff remain unchanged. Offline tests compare warm and cold model
+request bodies byte for byte and pin both accepted prompt hashes; that proves input equivalence,
+not identical future model wording or a measured reduction in phone wait time.
+
+**Latest hosted activation (October 17):** Manley committed/pushed and fast-forwarded `master` to
+`2f3e77c`, then manually deployed it. Render deployment `dep-dba4qsm1egvs739c7j80` succeeded in52.2s;
+public health confirms song-study, cue and configured custom-voice support. After an earlier
+duration-metadata interruption and a narrow Android containment repair, the final Moto check
+passed49.309s: actual normal HostedClient request from frozen fictional evidence, paired cue/version1,
+selected Energy/exact-text persistence in isolated Room, custom cloud speech,656ms pause and the
+Good as Hell catalog passage with verified stop/exact paused-position restoration. Recreating the
+coordinator kept the exact text without another HTTP request/automatic clip. All32 actual saved
+records/Room13/inspected fields were preserved. Manley accepts this new reflection, prefers the
+original wording and flags the facts-to-reflection wait. Selected-only Android speech preparation
+is installed/software-tested, but a subsequent timed attempt failed on a new+1ms Spotify duration
+event after speech; cleanup paused correctly. The later bounded rounding/timing update passed
+596 JVM tests per variant/three APKs and a separate music-only stop/restore probe, with no AI/voice
+call or new reflection timing in that probe. No shorter wait or fresh-reflection retest is claimed.
+Prompts/models/music gap stay unchanged;
+this checks normal code paths with an isolated fixture, not a real run/full normal-UI journey.
+The original duration change was not reproduced. See project state/research for the failure and
+containment evidence; public health alone does not prove the audio sequence.
+
+**Earlier local implementation (October 17):** Manley accepted three automatic listening examples
 and authorized connecting their song-study/writer process to ordinary app requests. The normal
 music path now reuses the exact accepted prompts with `claude-opus-5-5` by default. Both source
-lookup and an actual paired result are required to authorize a known song passage. This is local
-source, not a deployment: user commits/push, Render activation and a normal phone check come next.
+lookup and an actual paired result are required to authorize a known song passage. This earlier
+local implementation checkpoint preceded the deployment and device checks recorded above.
 The exact reference is [the accepted baseline](../docs/design/music_reflection_accepted_baseline.md);
 [the development story](../docs/design/music_reflection_development_story.md) explains the route here.
 
@@ -46,8 +116,9 @@ does not update a service tracking another branch. Review/promotion precedes dep
 **October 17 accepted engine:** `SongReflectionTrial` now supplies the shared song-only study and
 four-branch writer used by the normal music provider. The two `song-*-trial-v1.txt` resources keep
 their accepted bytes and names; the reproduction harness still supports explicit audition modes.
-`MusixmatchSongAnalysis.lookupReflectionMaterial()` obtains bounded request-only material for the
-normal path. No raw provider material or study notes are persisted. Offline tests use fictional
+`MusixmatchSongAnalysis.lookupReflectionMaterial()` obtains bounded material for the normal path;
+the explicitly approved early-preparation exception above can reuse it in bounded process memory.
+No raw provider material or study notes are durably persisted. Offline tests use fictional
 sources. The separate test-source reproduction harness requires `RUNSTATE_LIVE_SONG_TRIAL=1`,
 private keys and explicit intent; it performs paid calls and never runs with `mvn test`.
 The retired v1.8 baseline-comparison flag refuses before any calls. See the accepted baseline and

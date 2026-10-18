@@ -14,6 +14,26 @@ public interface ReflectionProvider {
         return new GeneratedReflections(generate(evidence), null);
     }
 
+    /** Optional opaque handle stays outside run facts and never reaches either model prompt. */
+    default GeneratedReflections generateForDelivery(CompletedRunEvidence evidence, String songPreparationId)
+            throws ReflectionProviderException {
+        return generateForDelivery(evidence);
+    }
+
+    default boolean supportsSongPreparation() { return false; }
+
+    default SongPreparationState prepareSong(ReflectionContract.SongPreparationRequest request)
+            throws ReflectionProviderException {
+        return SongPreparationState.UNAVAILABLE;
+    }
+
+    enum SongPreparationState { READY, UNAVAILABLE }
+
+    /** One opaque preparation ID cannot be rebound to a different song. */
+    final class SongPreparationConflictException extends IllegalArgumentException {
+        public SongPreparationConflictException() { super("The song preparation identity does not match."); }
+    }
+
     record GeneratedReflections(CandidateReflections candidates, String songCueId) {
         public GeneratedReflections {
             java.util.Objects.requireNonNull(candidates, "candidates");

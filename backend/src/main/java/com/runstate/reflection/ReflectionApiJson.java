@@ -39,7 +39,8 @@ import java.util.Set;
 final class ReflectionApiJson {
 
     private static final int MAX_JSON_DEPTH = 32;
-    private static final Set<String> REQUEST_FIELDS = Set.of("requestId", "runId", "evidence");
+    private static final Set<String> REQUIRED_REQUEST_FIELDS = Set.of("requestId", "runId", "evidence");
+    private static final Set<String> REQUEST_FIELDS = Set.of("requestId", "runId", "evidence", "songPreparationId");
     private static final Set<String> EVIDENCE_FIELDS = Set.of(
             "officialStartEpochMillis",
             "finishEpochMillis",
@@ -84,14 +85,39 @@ final class ReflectionApiJson {
     static ApiRequest parseRequest(byte[] utf8Json) throws InvalidJsonException {
         String rawJson = decodeUtf8(utf8Json);
         JsonObject root = parseStrictObject(rawJson);
-        requireFields(root, REQUEST_FIELDS, REQUEST_FIELDS, "request");
+        requireFields(root, REQUEST_FIELDS, REQUIRED_REQUEST_FIELDS, "request");
 
         RequestIdentifiers identifiers = new RequestIdentifiers(
                 requiredString(root, "requestId"),
                 requiredString(root, "runId")
         );
         CompletedRunEvidence evidence = parseEvidence(requiredObject(root, "evidence"));
-        return new ApiRequest(identifiers, evidence);
+        String preparationId = root.has("songPreparationId") ? requiredString(root, "songPreparationId") : null;
+        if (preparationId != null) {
+            new ReflectionContract.SongPreparationRequest(preparationId,
+                    evidence.musicContext().trackTitle(), evidence.musicContext().artistName());
+            if (evidence.musicContext().state() != MusicState.MUSIC) {
+                throw new IllegalArgumentException("Song preparation requires a shared song identity.");
+            }
+        }
+        return new ApiRequest(identifiers, evidence, preparationId);
+    }
+
+    static ReflectionContract.SongPreparationRequest parseSongPreparationRequest(byte[] utf8Json)
+            throws InvalidJsonException {
+        JsonObject root = parseStrictObject(decodeUtf8(utf8Json));
+        Set<String> fields = Set.of("preparationId", "trackTitle", "artistName");
+        requireFields(root, fields, fields, "song preparation request");
+        return new ReflectionContract.SongPreparationRequest(requiredString(root, "preparationId"),
+                requiredString(root, "trackTitle"), requiredString(root, "artistName"));
+    }
+
+    static String songPreparationResponse(String preparationId, ReflectionProvider.SongPreparationState state) {
+        JsonObject response = new JsonObject();
+        response.addProperty("preparationId", preparationId);
+        response.addProperty("state", state.name());
+        response.addProperty("songStudyVersion", 1);
+        return response.toString();
     }
 
     /** Speech is an exact-text boundary, not a second prompt or a route to arbitrary voice settings. */
@@ -436,7 +462,8 @@ final class ReflectionApiJson {
         }
     }
 
-    record ApiRequest(RequestIdentifiers identifiers, CompletedRunEvidence evidence) {
+    record ApiRequest(RequestIdentifiers identifiers, CompletedRunEvidence evidence, String songPreparationId) {
+        ApiRequest(RequestIdentifiers identifiers, CompletedRunEvidence evidence) { this(identifiers, evidence, null); }
     }
 
     static final class InvalidJsonException extends Exception {

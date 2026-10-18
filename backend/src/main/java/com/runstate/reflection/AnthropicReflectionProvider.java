@@ -39,6 +39,13 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.LinkedHashMap;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Semaphore;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
+import java.util.function.LongSupplier;
 
 /** Anthropic Messages API adapter for the versioned mobile reflection prompt. */
 public final class AnthropicReflectionProvider implements ReflectionProvider {
@@ -65,6 +72,19 @@ public final class AnthropicReflectionProvider implements ReflectionProvider {
     private final Transport transport;
     private final String systemPrompt;
     private final SongMaterialLookup songAnalysisLookup;
+    static final int MAX_PREPARED_SONGS = 32;
+    static final Duration SONG_PREPARATION_TTL = Duration.ofHours(2);
+    private final Object preparationLock = new Object();
+    private final Map<String, PreparedWork> preparedSongs = new LinkedHashMap<>();
+    private final Semaphore earlyStudySlot = new Semaphore(1);
+    private final LongSupplier preparationClock;
+    private final int preparationCapacity;
+    private final long preparationTtlNanos;
+
+    private record PreparedWork(ReflectionContract.SongPreparationRequest identity, long admittedNanos,
+                                CompletableFuture<Optional<SongReflectionTrial.StudiedSong>> result) {
+        @Override public String toString() { return "PreparedSongWork[content=redacted]"; }
+    }
 
     /** Bounded matched song material only; the lookup never receives run facts or listening history. */
     @FunctionalInterface
@@ -98,10 +118,26 @@ public final class AnthropicReflectionProvider implements ReflectionProvider {
 
     AnthropicReflectionProvider(ProviderConfiguration configuration, Transport transport,
                                SongMaterialLookup songAnalysisLookup) throws ReflectionProviderException {
+        this(configuration, transport, songAnalysisLookup, System::nanoTime,
+                MAX_PREPARED_SONGS, SONG_PREPARATION_TTL);
+    }
+
+    /** Fake monotonic time and smaller capacity let offline tests prove bounded expiry/admission. */
+    AnthropicReflectionProvider(ProviderConfiguration configuration, Transport transport,
+                               SongMaterialLookup songAnalysisLookup, LongSupplier preparationClock,
+                               int preparationCapacity, Duration preparationTtl) throws ReflectionProviderException {
         this.configuration = Objects.requireNonNull(configuration, "configuration");
         this.transport = Objects.requireNonNull(transport, "transport");
         this.songAnalysisLookup = Objects.requireNonNull(songAnalysisLookup, "songAnalysisLookup");
         this.systemPrompt = loadSystemPrompt();
+        this.preparationClock = Objects.requireNonNull(preparationClock);
+        if (preparationCapacity < 1 || preparationCapacity > MAX_PREPARED_SONGS
+                || preparationTtl.isNegative() || preparationTtl.isZero()
+                || preparationTtl.compareTo(SONG_PREPARATION_TTL) > 0) {
+            throw new IllegalArgumentException("Invalid song preparation limits.");
+        }
+        this.preparationCapacity = preparationCapacity;
+        this.preparationTtlNanos = preparationTtl.toNanos();
     }
 
     @Override
@@ -112,34 +148,97 @@ public final class AnthropicReflectionProvider implements ReflectionProvider {
     @Override
     public GeneratedReflections generateForDelivery(CompletedRunEvidence evidence)
             throws ReflectionProviderException {
+        return generateForDelivery(evidence, null);
+    }
+
+    @Override public boolean supportsSongPreparation() {
+        synchronized (preparationLock) { expirePreparedSongs(); }
+        return true;
+    }
+
+    @Override
+    public SongPreparationState prepareSong(ReflectionContract.SongPreparationRequest request)
+            throws ReflectionProviderException {
+        Objects.requireNonNull(request, "request");
+        long started = System.nanoTime();
+        PreparedWork work;
+        boolean owner = false;
+        synchronized (preparationLock) {
+            expirePreparedSongs();
+            work = preparedSongs.get(request.preparationId());
+            if (work != null) requireSamePreparation(work, request.trackTitle(), request.artistName());
+            else {
+                if (preparedSongs.size() >= preparationCapacity || !earlyStudySlot.tryAcquire()) {
+                    return SongPreparationState.UNAVAILABLE;
+                }
+                work = new PreparedWork(request, preparationClock.getAsLong(), new CompletableFuture<>());
+                preparedSongs.put(request.preparationId(), work);
+                owner = true;
+            }
+        }
+        if (owner) {
+            try {
+                Optional<MusixmatchSongAnalysis.SongMaterial> material = lookupMaterial(request.trackTitle(), request.artistName());
+                work.result().complete(material.isPresent()
+                        ? Optional.of(songEngine(null, started).study(material.get())) : Optional.empty());
+            } catch (ReflectionProviderException failure) {
+                work.result().completeExceptionally(new ReflectionProviderException(failure.failureType(),
+                        "Song preparation could not complete."));
+            } catch (RuntimeException failure) {
+                work.result().completeExceptionally(new ReflectionProviderException(FailureType.INVALID_RESPONSE,
+                        "Song preparation did not produce valid notes."));
+            } finally {
+                work.result().completeExceptionally(new ReflectionProviderException(FailureType.TRANSPORT,
+                        "Song preparation could not complete."));
+                earlyStudySlot.release();
+            }
+        }
+        return awaitPrepared(work, started).isPresent() ? SongPreparationState.READY : SongPreparationState.UNAVAILABLE;
+    }
+
+    @Override
+    public GeneratedReflections generateForDelivery(CompletedRunEvidence evidence, String songPreparationId)
+            throws ReflectionProviderException {
         Objects.requireNonNull(evidence, "evidence");
         long started = System.nanoTime();
         MusicContext music = evidence.musicContext();
-        Optional<MusixmatchSongAnalysis.SongMaterial> material = Optional.empty();
-        if (music.state() == ReflectionContract.MusicState.MUSIC
-                && music.trackTitle() != null && music.artistName() != null) {
-            try {
-                Optional<MusixmatchSongAnalysis.SongMaterial> lookedUp = songAnalysisLookup.lookup(
-                        music.trackTitle(), music.artistName());
-                if (lookedUp != null) material = lookedUp.filter(source ->
-                        sameSongText(music.trackTitle(), source.trackTitle())
-                                && sameSongText(music.artistName(), source.artistName()));
-            } catch (RuntimeException unavailable) {
-                // Optional source failure permits ordinary text, never a paired-song acknowledgement.
-                // Do not log the exception: provider URLs can carry credentials.
+        PreparedWork work = null;
+        if (songPreparationId != null) {
+            new ReflectionContract.SongPreparationRequest(songPreparationId, music.trackTitle(), music.artistName());
+            synchronized (preparationLock) {
+                expirePreparedSongs();
+                work = preparedSongs.get(songPreparationId);
+                if (work != null) requireSamePreparation(work, music.trackTitle(), music.artistName());
             }
         }
+        Optional<SongReflectionTrial.StudiedSong> studied = null;
+        if (work != null) {
+            try { studied = awaitPrepared(work, started); }
+            catch (ReflectionProviderException unavailablePreparation) {
+                if (Thread.currentThread().isInterrupted()) throw unavailablePreparation;
+                // A failed speculative study is not a failed completed run. Use the unchanged
+                // cold pipeline for this same pinned song, within the original shared deadline.
+                remainingSongTimeout(started);
+                // Production lookup has at most three four-second HTTP requests. Do not start
+                // a fresh lookup near the shared deadline when that bounded source work cannot fit.
+                if (SONG_PIPELINE_TIMEOUT.minusNanos(System.nanoTime() - started)
+                        .compareTo(Duration.ofSeconds(16)) < 0) {
+                    throw new ReflectionProviderException(FailureType.TIMEOUT,
+                            "There is insufficient time for a fresh song lookup.");
+                }
+            }
+        }
+        Optional<MusixmatchSongAnalysis.SongMaterial> material = studied == null
+                ? lookupMaterial(music.trackTitle(), music.artistName()) : studied.map(SongReflectionTrial.StudiedSong::material);
         if (Thread.currentThread().isInterrupted()) {
             throw new ReflectionProviderException(FailureType.TRANSPORT, "The reflection request was interrupted.");
         }
         if (material.isPresent()) {
             SongReflectionTrial.PassageLanding landing = acceptedLanding(music);
-            SongReflectionTrial engine = new SongReflectionTrial((input, prompt, schema) -> {
-                // The fixed audition prompt/engine stay intact; real-app source boundaries remain explicit.
-                if (input.has("run_facts")) addObservedContext(evidence, input.getAsJsonObject("run_facts"));
-                return exchangeSong(input, prompt, schema, configuration.songWriterModel(), remainingSongTimeout(started));
-            });
-            SongReflectionTrial.TrialResult result = engine.generate(evidence, material.get(), landing);
+            SongReflectionTrial engine = songEngine(evidence, started);
+            SongReflectionTrial.TrialResult result = studied == null
+                    ? engine.generate(evidence, material.get(), landing)
+                    : engine.write(evidence, studied.orElseThrow(), landing, SongReflectionTrial.CreativeApproach.AUTO);
             // Mechanical source/number/schema checks are bounds, not a semantic factual oracle.
             if (!result.reviewWarnings().isEmpty()) {
                 throw invalidResponse("The song reflection did not pass its bounded output checks.");
@@ -150,8 +249,56 @@ public final class AnthropicReflectionProvider implements ReflectionProvider {
         // An editorial landing alone must not masquerade as an analysis-derived paired reply.
         serialized.getAsJsonObject("music_context").remove("song_cue");
         CandidateReflections ordinary = parseSuccessfulResponse(exchange(buildRequestBody(serialized,
-                systemPrompt, candidateSchema(), configuration.model()), configuration.requestTimeout()));
+                systemPrompt, candidateSchema(), configuration.model()), remainingSongTimeout(started)));
         return new GeneratedReflections(ordinary, null);
+    }
+
+    private SongReflectionTrial songEngine(CompletedRunEvidence evidence, long started) {
+        return new SongReflectionTrial((input, prompt, schema) -> {
+            if (input.has("run_facts") && evidence != null) addObservedContext(evidence, input.getAsJsonObject("run_facts"));
+            return exchangeSong(input, prompt, schema, configuration.songWriterModel(), remainingSongTimeout(started));
+        });
+    }
+
+    private Optional<MusixmatchSongAnalysis.SongMaterial> lookupMaterial(String title, String artist) {
+        if (title == null || artist == null) return Optional.empty();
+        try {
+            Optional<MusixmatchSongAnalysis.SongMaterial> found = songAnalysisLookup.lookup(title, artist);
+            return found == null ? Optional.empty() : found.filter(source ->
+                    sameSongText(title, source.trackTitle()) && sameSongText(artist, source.artistName()));
+        } catch (RuntimeException unavailable) {
+            // Optional lookup failure carries no source into the writer and never acknowledges a clip.
+            return Optional.empty();
+        }
+    }
+
+    private void expirePreparedSongs() {
+        long now = preparationClock.getAsLong();
+        preparedSongs.values().removeIf(work -> work.result().isDone()
+                && now - work.admittedNanos() >= preparationTtlNanos);
+    }
+
+    private static void requireSamePreparation(PreparedWork work, String title, String artist) {
+        if (!sameSongText(work.identity().trackTitle(), title) || !sameSongText(work.identity().artistName(), artist)) {
+            throw new SongPreparationConflictException();
+        }
+    }
+
+    private Optional<SongReflectionTrial.StudiedSong> awaitPrepared(PreparedWork work, long started)
+            throws ReflectionProviderException {
+        try {
+            long remaining = SONG_PIPELINE_TIMEOUT.toNanos() - (System.nanoTime() - started);
+            if (remaining <= 0) throw new TimeoutException();
+            return work.result().get(remaining, TimeUnit.NANOSECONDS);
+        } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
+            throw new ReflectionProviderException(FailureType.TRANSPORT, "Song preparation was interrupted.");
+        } catch (TimeoutException timedOut) {
+            throw new ReflectionProviderException(FailureType.TIMEOUT, "Song preparation timed out.");
+        } catch (ExecutionException failed) {
+            if (failed.getCause() instanceof ReflectionProviderException known) throw known;
+            throw new ReflectionProviderException(FailureType.INVALID_RESPONSE, "Song preparation did not produce valid notes.");
+        }
     }
 
     private static void addObservedContext(CompletedRunEvidence evidence, JsonObject facts) {

@@ -21,6 +21,21 @@ public final class ReflectionContract {
         }
     }
 
+    /** Early preparation contains one opted-in song identity, never completed or live run facts. */
+    public record SongPreparationRequest(String preparationId, String trackTitle, String artistName) {
+        public SongPreparationRequest {
+            requireCanonicalUuid(preparationId, "preparationId");
+            requireBoundedText(trackTitle, 200, "trackTitle");
+            requireBoundedText(artistName, 200, "artistName");
+            require(trackTitle.codePoints().noneMatch(value -> Character.isISOControl(value)
+                            || value >= 0xd800 && value <= 0xdfff)
+                    && artistName.codePoints().noneMatch(value -> Character.isISOControl(value)
+                            || value >= 0xd800 && value <= 0xdfff),
+                    "Song preparation identity must contain valid visible Unicode text.");
+        }
+        @Override public String toString() { return "SongPreparationRequest[identity=redacted]"; }
+    }
+
     /** Optional Energy captured before the run. */
     public enum PreRunEnergy {
         UNKNOWN,
