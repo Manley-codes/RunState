@@ -10,6 +10,43 @@ status: LIVE — read this file
 
 **Read this file.** Not archived, not parked.
 
+## Current reflection selector — Ready to test, October 18, 2026
+
+This bounded implementation serves item **36**, choosing a song for the post-run reflection.
+It does not implement the broader playlist or live-DJ system below. The earlier single-song
+implementation remains the deployed fallback until the new capability is verified and activated.
+
+1. With run-scoped and current observation/sharing choices enabled, collect at most 12 distinct
+   Spotify title/artist identities observed PLAYING in that run. Do not infer a full listen,
+   preference or performance effect from a metadata observation.
+2. After 30 active seconds, prepare eligible songs sequentially using matched Musixmatch context
+   and the accepted Opus study. Room 15 adds durable per-identity claims, retains
+   existing Room 14 records and does not fabricate historical candidates.
+3. At completion, compare available matched meaning/themes/moods against final run facts and
+   starting Energy in at most one additional model call. Choose one candidate, not a new unheard song.
+4. Feed that winner into the unchanged accepted writer, producing the four finishing-Energy
+   branches. The chosen song is shared across branches, not selected separately for each answer.
+5. Persist the exact choice with the reflection/History. Final source lookup has a 30-second budget,
+   ranking a 10-second cap, both within the existing 90-second total deadline. One available source
+   skips ranking; a ranking failure uses the first available matched source. No available source
+   uses an ordinary reflection without invented music meaning. Older servers keep the single-song path.
+
+This can improve fit beyond automatically taking the first song, but it has not yet demonstrated
+better choices in a real run. Up to 12 source/study attempts cost more than one; discarded or
+unused studies can still incur charges. Capacity/deadline limits mean not every reported song is
+necessarily analyzed. Software checks cover evidence membership, deduplication, fallback,
+old-data preservation and saved-choice stability; actual selection/reflection quality still needs
+its separate live-provider and real-run checks.
+
+Snippets remain five curated current-track passages. Selection does not authorize queue changes
+or locate a hook in an arbitrary song, so a selected reflection song may have no audible passage.
+The final Moto build is installed; backend activation is pending. Backend 173 tests, Android 645
+tests per variant/all three APKs and 23 final silent Moto cases passed. The fake-HTTPS two-song
+integration selected the second candidate and reopened exact saved text without another request.
+All 32 saved runs and every old table field survived Room 14→15. These are controlled checks, not
+new live-provider or genuine-run proof. Full receipts and status definitions are in
+[project state](project_current_state.md).
+
 ---
 
 ## The goal, in Manley's words
@@ -47,7 +84,7 @@ Numbers refer to the August 16 2026 music inventory. Status vocabulary matches
 
 | # | Item | Status |
 | --- | --- | --- |
-| 12 | **Structured song history** | Provider-neutral conceptual contract approved August 26, 2026; not implemented. Nothing below works without it |
+| 12 | **Structured song history** | Broader contract approved August 26; partial Android observations exist. Complete occurrences/coverage/feedback remain unimplemented; bounded reflection ranking is Ready to test above. |
 | 18 | Relationship web | ARCHITECTURE — songs connected to effort, weather, energy, finishes |
 | 31 | Skip detection | The live negative signal. Spotify does not expose skips; needs first-party playback |
 | 41 | All-day listening profile | Heaviest privacy item in the project; needs its own consent tier |

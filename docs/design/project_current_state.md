@@ -5,6 +5,82 @@ metadata:
   type: project
 ---
 
+## Feature status language — adopted October 18, 2026
+
+Use one of these labels whenever reporting a feature, followed by its exact scope and the next
+missing check. A successful build, installation or controlled fixture is not proof of real-run use.
+
+| Label | Plain-English meaning |
+| --- | --- |
+| **Planned** | Agreed direction; not implemented yet. |
+| **Building** | Work is underway; the new behavior is not ready to rely on. |
+| **Ready to test** | The stated behavior is implemented and its required software checks passed; name whether it is local, deployed and/or installed, and what user check remains. |
+| **Verified in use** | The stated behavior worked in actual use for the named scenario, not only with fictional test data. This does not prove every device, song or circumstance. |
+| **Complete for agreed scope** | The agreed behavior, necessary checks and documentation are finished. Explicit remaining limits are outside that scope; this does not mean every future idea is built. |
+
+**Current headline:** multi-song reflection selection is **Ready to test**, installed on the Moto
+but awaiting the backend deployment and live-provider check. The accepted reflection
+recipe has passed controlled listening checks; the whole music feature is not complete. GPS is
+**Ready to test outdoors** with the quiet Start update installed; its field-accuracy checks remain.
+
+## Multi-song reflection selection — Ready to test, October 18, 2026
+
+Manley committed and pushed the preceding GPS checkpoint, then authorized continuing toward a
+more complete music feature before and during his upcoming run. The new scope is to choose a
+fitting reflection song from what he actually heard, rather than pinning the first eligible song.
+This is reflection selection, not a playlist/DJ feature or permission to change Spotify's queue.
+
+The implementation accepts up to 12 distinct Spotify title/artist identities observed PLAYING
+during one opted-in run. After 30 active seconds, sequential early preparation can obtain matched
+Musixmatch material and the accepted Opus song study for eligible candidates. Durable per-identity
+claims in Room 15 prevent repeated background work for the same song; migration preserves
+existing Room 14 rows. Titles/artists are partial Android media-session evidence, not proof of a
+complete listen, album version, preference or a song causing a performance change.
+
+At completion, at most one additional model comparison uses available matched meaning/themes/moods, finalized run facts
+and starting Energy to choose one winner. The same accepted writer then prepares the four
+finishing-Energy branches. Song choice is shared by those branches; it is not reranked after the
+runner chooses finishing Energy. Exact selected-song context persists with the reflection and
+History so reopening does not choose or generate again. The accepted prompts, reference examples,
+voices and 650 ms reflection-to-song gap remain unchanged.
+
+Preparation is bounded to 12 distinct candidates, with at most one final ranking call. More songs mean
+more Musixmatch/Anthropic use, including work on discarded runs. Sequential preparation may not
+finish every candidate before a short run ends. Final source lookup has a 30-second budget and
+ranking a 10-second cap inside the existing 90-second total deadline. Only available matched
+material can be compared. A single available candidate needs no ranking call; a failed comparison
+uses the first available matched candidate without claiming it was the best. No available analysis
+uses the ordinary reflection path without invented song meaning. Older-server capability handling
+keeps the previous single-song path usable until deployment. Selection means fit among eligible
+available evidence, not a proven best song from every moment of the run.
+
+The snippet boundary is unchanged: five curated recordings, and playback only when the chosen
+recording is still the current Spotify track. A good reflection choice can therefore have no
+playable snippet. Automatic hook discovery, selecting another Spotify recording and broad
+end-to-end real-run reliability remain unfinished.
+
+Verification: 173 backend tests passed with no failures/errors/skips and unchanged accepted prompt
+fingerprints. The final Android run passed 645 tests each for debug and release, no failures/errors/
+skips, and all three APK builds in 27 seconds. A retry review found a legacy snapshot rewrite;
+the repair restricts updates to selection metadata. The initial full rerun caught the byte-for-byte
+legacy snapshot regression, which was corrected before the final passing result.
+
+The first Moto migration check passed 22 cases in 2.233 seconds device / 23.297 seconds host. The
+final installed build passed 23 cases in 2.466 seconds device / 16.093 seconds host, including an
+integrated two-song test using real Room and production HTTP serialization against fake HTTPS:
+the second candidate won, its exact text/cue persisted, and reopening sent no HTTP request or
+automatic replay. These checks do not establish real-provider ranking or genuine-run quality.
+Every row and column across the 10 non-Room-identity tables, including all 32 saved run rows,
+was preserved. The first install migrated actual Room 14 to 15; the final check retained Room 15.
+Temporary private copies and the test package were removed after each check.
+
+The final phone build is installed. Backend commit/push and deployment are pending; Manley was
+given the backend-only Git block. No assistant Git mutations, live-provider request or deployment
+occurred in this slice. One necessary new tracked file,
+`android/app/schemas/com.runstate.mobile.data.local.RunStateDatabase/15.json`, preserves Room's
+schema history for migration validation. Other changes use existing files. The optional live
+verification being prepared is a separate future receipt, not part of these passing counts.
+
 ## Quiet GPS preparation and direct Start installed and checked — October 18, 2026
 
 Manley rejected the large Finding GPS interruption and the requirement to acquire a signal before

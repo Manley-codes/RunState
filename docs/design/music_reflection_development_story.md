@@ -45,6 +45,34 @@ and fields stayed unchanged on Room 14. Private verification folders and the tes
 confirmed removed. This controlled fixture proves the code-path sequence;
 genuine runs and the full normal screen journey still need their own checks.
 
+## Choosing from the run's songs — Ready to test
+
+The working preparation path picked the first eligible song. That reduced the wait, but did not
+answer which song best fit the finished run. On October 18, Manley authorized comparing songs
+actually observed playing during the run, while preserving the writing and audio recipe he liked.
+
+The new approach can study up to 12 distinct opted-in songs during the run, then compares available
+matched analysis with the completed run facts and starting Energy. It chooses
+one song for the existing writer's four finishing-Energy replies. It does not change that choice
+after an Energy answer. The choice is saved with History, rather than silently changing when
+the runner returns. More studies mean more cost, and short runs or failed lookups may leave fewer
+candidates to compare. The final lookup/comparison is time-limited, and unavailable source material
+does not become invented song meaning. This is **Ready to test**, installed on the Moto with backend
+activation still pending, not a new verified listening or field result.
+
+Software checks and a silent two-song phone test passed. That phone check used a fake server to
+verify that the app could send both candidates, accept the second as winner, save its exact reply
+and reopen it without generating or playing again. All 32 saved real runs and old stored fields
+survived the database upgrade. A retry review also caught and corrected an unnecessary rewrite of
+older saved snapshots. These checks prove the wiring and preservation; they do not yet prove that
+live song choices are better. The accepted study/writer prompt fingerprints remain unchanged.
+
+Selecting a fitting song and playing its best moment are still separate jobs. The current five
+curated snippets require the selected recording to remain current in Spotify; ranking does not
+automatically queue a previous song or discover a new hook. The feature is not complete until its
+agreed scope is implemented and checked. The [project status labels](project_current_state.md)
+now distinguish work underway, readiness for testing and proof from actual use.
+
 ## The early experiments established the idea
 
 Before the app could perform the sequence itself, Manley listened to reflections and manually
@@ -163,7 +191,7 @@ recorded separately in the current project state.
 | --- | --- |
 | Spotify and Android media sessions | Observe the currently available title and artist with permission; play, seek and pause the authorized current recording. Spotify supplies the audible song passage. |
 | Musixmatch | Match the song and provide bounded song interpretation and supporting material for the study and writer. It does not supply this route's audio or a guaranteed hook timestamp. |
-| Anthropic Claude | Study the song, then write four conditional reflections from the study, song context and real run evidence. These are two requests with different jobs, not a fleet of autonomous research agents. |
+| Anthropic Claude | Study eligible songs, compare available matched analyses, then write four conditional reflections from the chosen study, song context and real run evidence. The new multi-song comparison is Ready to test after backend activation; these are bounded requests with distinct jobs, not a fleet of autonomous research agents. |
 | ElevenLabs | Speak the selected reflection using Manley's designed voice, saved as `1st test voice`. The first, factual announcement remains Android speech. |
 | Android and Room | Keep the run, optional check-ins and saved reflection durable; coordinate voice and Spotify playback without turning listening tests into saved real runs. |
 | Render and GitHub | Render hosts the backend used by the phone; GitHub holds the committed source Render builds. A local trial or local edit reaches the hosted app only after the relevant commit is pushed and deployed. |
@@ -196,5 +224,5 @@ recorded separately in the current project state.
 For a detailed account of provider results, rejected attempts and device checks, use the
 [research notebook](research_music_reflection_generation.md). For the current delivery boundary,
 use [project state](project_current_state.md) and the [music feature register](music_feature_register.md).
-Future work still includes broader song selection, automatic significant-passage discovery,
-catalog gaps, genuine-run consistency and any provider requirements for wider distribution.
+Broader song selection is now Ready to test after backend activation. Further work includes automatic significant-passage
+discovery, catalog gaps, genuine-run consistency and any provider requirements for wider distribution.

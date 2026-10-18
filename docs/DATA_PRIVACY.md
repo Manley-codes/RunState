@@ -28,7 +28,56 @@ proof that a run caused a change. These calculations do not need AI and do not u
 history, split rows, aggregates or extra Energy data. Existing optional reflection sharing is
 unchanged; neither new feature adds a backend request field, provider account or permission.
 
-## Android early song study — approved October 18, 2026
+## Android multi-song reflection preparation — Ready to test, October 18, 2026
+
+Manley authorized progressing from one prepared song to selecting a fitting reflection song from
+music actually heard during the run. This extends the existing optional music-sharing path to a
+maximum of 12 distinct Spotify title/artist identities observed PLAYING in that same opted-in run.
+It does not collect music outside a run, request the account's listening history, or capture audio,
+lyrics from Spotify or general notification contents. Both frozen per-run and current observation
+and sharing choices, notification access and the unchanged configured destination still apply.
+
+After 30 active seconds, eligible identities can be prepared sequentially through the authenticated
+song-study route. Each early request contains the song identity and opaque preparation reference,
+not run facts, Energy, GPS coordinates, weather or a full listening-history export. Musixmatch
+matches/provides bounded song context; Anthropic performs the existing song-only study. The final
+comparison adds approved final run facts and starting Energy to available matched meaning/themes/moods, then
+selects one song for the accepted four-branch reflection writer. No separate song is selected for
+each finishing-Energy answer. This is more metadata/provider use than the previous one-song path.
+
+Room 15 stores durable per-identity claims and final selected-song context.
+Migration preserves existing Room 14 rows and does not backfill claims for old runs. Run-owned
+metadata follows local run deletion; no provider key or song audio belongs in those rows. Prepared
+source/study material retains the existing bounded process-memory cache, not a new disk archive.
+External providers retain data under their own settings. A saved selected-song identity does not
+establish a complete listen or prove music affected the run.
+
+At most 12 candidate preparations and one additional final comparison are permitted per run. More
+studies increase API usage and can incur charges even when a run is discarded or a candidate is
+not selected. Final source lookup is bounded to 30 seconds, ranking to 10 seconds, within the
+existing 90-second total deadline. Only available matched material is used. One candidate skips
+ranking; a failed rank uses the first available matched candidate, and no source yields an ordinary
+reflection without invented song meaning. The prior single-song path remains the older-server
+fallback until activation. The exact accepted
+writer/voices remain unchanged, and snippets still require one of five curated recordings to be
+the same current Spotify track. This does not add queue editing or audio extraction.
+
+The final Android build is installed; backend deployment and live-provider verification are
+pending. Backend 173 tests, Android 645 tests per variant and all three APKs passed. The final
+23-case silent Moto check included a real Room/production-serialization test with fake HTTPS,
+two offered songs, a second-song winner and exact saved text/cue with no request or playback on
+reopen. Actual Room 14→15 migration and the final Room 15 reinstall preserved every row and column
+in the 10 non-Room-identity tables, including all 32 saved run rows. Temporary private copies and
+test package were removed after both device checks. These checks sent no live-provider request
+and do not establish genuine-run quality. The necessary new schema export at
+`android/app/schemas/com.runstate.mobile.data.local.RunStateDatabase/15.json` contains schema
+structure, not copied user records. See project state for full receipts.
+
+## Earlier single-song preparation — approved October 18, 2026
+
+This is the historical installed/deployed one-song boundary. The new multi-song extension
+above supersedes it only after verification and activation; its recorded results do not verify
+the new selector.
 
 Manley approved an early cloud request after the first30 active seconds of a RUNNING run, with
 both frozen per-run music opt-ins, current music preferences, notification access and an unchanged
