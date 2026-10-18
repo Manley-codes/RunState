@@ -48,6 +48,141 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ReflectionHttpServerTest {
+    private static JsonObject multiSongRequest() {
+        JsonObject request = JsonParser.parseString(validRequest()).getAsJsonObject();
+        com.google.gson.JsonArray songs = new com.google.gson.JsonArray();
+        for (int id = 1; id <= 2; id++) {
+            JsonObject song = new JsonObject(); song.addProperty("candidateId", Integer.toString(id));
+            JsonObject music = new JsonObject();
+            music.addProperty("state", "MUSIC"); music.addProperty("provenance", "MEDIA_SESSION_PARTIAL");
+            music.addProperty("trackTitle", "Observed song " + id); music.addProperty("artistName", "Observed artist");
+            song.add("musicContext", music); songs.add(song);
+        }
+        request.add("songCandidates", songs);
+        return request;
+    }
+
+    private static ReflectionProvider selectingProvider(AtomicInteger calls) {
+        return new ReflectionProvider() {
+            @Override public CandidateReflections generate(CompletedRunEvidence evidence) { return exactCandidates(); }
+            @Override public boolean supportsSongSelection() { return true; }
+            @Override public GeneratedReflections generateForDelivery(CompletedRunEvidence evidence, String preparationId,
+                    List<ReflectionContract.SongCandidate> songs) {
+                calls.incrementAndGet();
+                return new GeneratedReflections(exactCandidates(), null, songs.get(1).candidateId(), SongSelectionMethod.CONTEXT_MATCH);
+            }
+        };
+    }
+
+    @Test
+    void multiSongSelectionIsAuthenticatedIdempotentAndBindsTheEntireCandidateSet() throws Exception {
+        AtomicInteger calls = new AtomicInteger();
+        try (var server = startRemote(selectingProvider(calls), 2, 8)) {
+            JsonObject request = multiSongRequest();
+            assertError(rawPost(server, List.of("Host: " + DEMO_HOST), request.toString()), 401, "unauthorized");
+            assertEquals(0, calls.get());
+            var first = rawPost(server, remoteHeaders(), request.toString());
+            assertEquals(200, first.status());
+            JsonObject output = JsonParser.parseString(first.body()).getAsJsonObject();
+            assertEquals("2", output.get("selectedSongId").getAsString());
+            assertEquals("CONTEXT_MATCH", output.get("songSelectionMethod").getAsString());
+            assertFalse(output.has("songCueId"));
+            assertEquals(first, rawPost(server, remoteHeaders(), request.toString()));
+            assertEquals(1, calls.get());
+            request.getAsJsonArray("songCandidates").get(1).getAsJsonObject()
+                    .addProperty("songPreparationId", SECOND_REQUEST_ID);
+            assertError(rawPost(server, remoteHeaders(), request.toString()), 409, "request_id_conflict");
+            request = multiSongRequest();
+            request.getAsJsonArray("songCandidates").get(1).getAsJsonObject().getAsJsonObject("musicContext")
+                    .addProperty("trackTitle", "Changed song");
+            assertError(rawPost(server, remoteHeaders(), request.toString()), 409, "request_id_conflict");
+            assertEquals(1, calls.get());
+        }
+    }
+
+    @Test
+    void selectionCapabilityRequiresSupportingProviderAndUnsupportedRequestsAreHonest() throws Exception {
+        for (boolean supported : List.of(false, true)) {
+            try (var server = start(supported ? selectingProvider(new AtomicInteger()) : evidence -> exactCandidates())) {
+                var health = client.send(HttpRequest.newBuilder(URI.create("http://127.0.0.1:"
+                        + server.address().getPort() + "/health")).GET().build(), HttpResponse.BodyHandlers.ofString());
+                assertEquals(supported ? "1" : null,
+                        health.headers().firstValue(ReflectionHttpServer.SONG_SELECTION_CAPABILITY_HEADER).orElse(null));
+                assertEquals(supported ? 200 : 503, post(server, multiSongRequest().toString()).statusCode());
+            }
+        }
+    }
+
+    @Test
+    void songCandidateParsingRejectsUnknownDuplicateMalformedAndUnboundedInputs() throws Exception {
+        List<JsonObject> invalid = new java.util.ArrayList<>();
+        for (String value : List.of("null", "{}", "[]", "[null]", "[1]")) {
+            JsonObject request = multiSongRequest(); request.add("songCandidates", JsonParser.parseString(value)); invalid.add(request);
+        }
+        for (String id : List.of("", "01", "-1", "1.0", "12345678901", "1e2", " ")) {
+            JsonObject request = multiSongRequest(); request.getAsJsonArray("songCandidates").get(0).getAsJsonObject()
+                    .addProperty("candidateId", id); invalid.add(request);
+        }
+        for (String field : List.of("lyrics", "listeningDuration", "runFacts")) {
+            JsonObject request = multiSongRequest(); request.getAsJsonArray("songCandidates").get(0).getAsJsonObject()
+                    .addProperty(field, "not accepted"); invalid.add(request);
+        }
+        for (String field : List.of("candidateId", "musicContext")) {
+            JsonObject request = multiSongRequest(); request.getAsJsonArray("songCandidates").get(0).getAsJsonObject()
+                    .remove(field); invalid.add(request);
+        }
+        for (String invalidMusic : List.of("null", "{\"state\":\"UNKNOWN\"}",
+                "{\"state\":\"MUSIC\",\"trackTitle\":\"Title\",\"artistName\":\"Artist\"}")) {
+            JsonObject request = multiSongRequest(); request.getAsJsonArray("songCandidates").get(0).getAsJsonObject()
+                    .add("musicContext", JsonParser.parseString(invalidMusic)); invalid.add(request);
+        }
+        JsonObject duplicateId = multiSongRequest(); duplicateId.getAsJsonArray("songCandidates").get(1)
+                .getAsJsonObject().addProperty("candidateId", "1"); invalid.add(duplicateId);
+        JsonObject duplicateIdentity = multiSongRequest(); duplicateIdentity.getAsJsonArray("songCandidates").get(1)
+                .getAsJsonObject().getAsJsonObject("musicContext").addProperty("trackTitle", " OBSERVED  SONG 1 ");
+        invalid.add(duplicateIdentity);
+        JsonObject tooMany = multiSongRequest();
+        while (tooMany.getAsJsonArray("songCandidates").size() <= 12) {
+            tooMany.getAsJsonArray("songCandidates").add(tooMany.getAsJsonArray("songCandidates").get(0).deepCopy());
+        }
+        invalid.add(tooMany);
+        JsonObject badPreparation = multiSongRequest(); badPreparation.getAsJsonArray("songCandidates").get(0)
+                .getAsJsonObject().addProperty("songPreparationId", "not-a-uuid"); invalid.add(badPreparation);
+        AtomicInteger calls = new AtomicInteger();
+        try (var server = start(selectingProvider(calls))) {
+            for (JsonObject request : invalid) assertError(post(server, request.toString()), 400, "invalid_request");
+            assertEquals(0, calls.get());
+        }
+        String duplicateJsonKey = multiSongRequest().toString().replace("\"candidateId\":\"1\"",
+                "\"candidateId\":\"1\",\"candidateId\":\"3\"");
+        assertThrows(ReflectionApiJson.InvalidJsonException.class, () -> ReflectionApiJson.parseRequest(
+                duplicateJsonKey.getBytes(StandardCharsets.UTF_8)));
+    }
+
+    @Test
+    void selectedCueMustBelongToTheChosenCandidateNeverLegacyOrAnotherCandidate() throws Exception {
+        JsonObject request = multiSongRequest();
+        request.getAsJsonObject("evidence").getAsJsonObject("musicContext").add("songCue", validSongCue());
+        JsonObject chosenCue = validSongCue(); chosenCue.addProperty("cueId", "chosen_cue");
+        request.getAsJsonArray("songCandidates").get(1).getAsJsonObject().getAsJsonObject("musicContext")
+                .add("songCue", chosenCue);
+        var parsed = ReflectionApiJson.parseRequest(request.toString().getBytes(StandardCharsets.UTF_8));
+        var method = ReflectionProvider.SongSelectionMethod.CONTEXT_MATCH;
+        String output = ReflectionApiJson.success(parsed, new ReflectionProvider.GeneratedReflections(
+                exactCandidates(), "chosen_cue", "2", method), ReflectionHttpServer.GenerationMode.ANTHROPIC);
+        assertTrue(output.contains("chosen_cue"));
+        for (var bad : List.of(new ReflectionProvider.GeneratedReflections(exactCandidates(), "chosen_cue", "1", method),
+                new ReflectionProvider.GeneratedReflections(exactCandidates(), validSongCue().get("cueId").getAsString(), "2", method),
+                new ReflectionProvider.GeneratedReflections(exactCandidates(), null, "99", method),
+                new ReflectionProvider.GeneratedReflections(exactCandidates(), validSongCue().get("cueId").getAsString()))) {
+            assertThrows(IllegalArgumentException.class, () -> ReflectionApiJson.success(parsed, bad,
+                    ReflectionHttpServer.GenerationMode.ANTHROPIC));
+        }
+        String fallback = ReflectionApiJson.success(parsed, new ReflectionProvider.GeneratedReflections(exactCandidates(), null),
+                ReflectionHttpServer.GenerationMode.ANTHROPIC);
+        assertFalse(fallback.contains("selectedSongId")); assertFalse(fallback.contains("songCueId"));
+    }
+
     @Test
     void sourceOnlySongPreparationIsAuthenticatedStrictAndReturnsNoSourceMaterial() throws Exception {
         AtomicInteger calls = new AtomicInteger();

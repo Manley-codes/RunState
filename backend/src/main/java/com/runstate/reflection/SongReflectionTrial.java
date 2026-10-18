@@ -192,7 +192,7 @@ final class SongReflectionTrial {
         return song;
     }
 
-    private static JsonObject facts(CompletedRunEvidence evidence) {
+    static JsonObject facts(CompletedRunEvidence evidence) {
         JsonObject facts = AnthropicReflectionProvider.reflectionFacts(evidence);
         DateTimeFormatter readable = DateTimeFormatter.ofPattern("EEEE h:mm a", Locale.US)
                 .withZone(ZoneId.of(evidence.startTimezoneId()));

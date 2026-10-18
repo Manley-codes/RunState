@@ -22,6 +22,13 @@ public interface ReflectionProvider {
 
     default boolean supportsSongPreparation() { return false; }
 
+    default boolean supportsSongSelection() { return false; }
+
+    default GeneratedReflections generateForDelivery(CompletedRunEvidence evidence, String songPreparationId,
+            java.util.List<ReflectionContract.SongCandidate> songCandidates) throws ReflectionProviderException {
+        return generateForDelivery(evidence, songPreparationId);
+    }
+
     default SongPreparationState prepareSong(ReflectionContract.SongPreparationRequest request)
             throws ReflectionProviderException {
         return SongPreparationState.UNAVAILABLE;
@@ -34,11 +41,21 @@ public interface ReflectionProvider {
         public SongPreparationConflictException() { super("The song preparation identity does not match."); }
     }
 
-    record GeneratedReflections(CandidateReflections candidates, String songCueId) {
+    enum SongSelectionMethod { CONTEXT_MATCH, AVAILABLE_FALLBACK }
+
+    record GeneratedReflections(CandidateReflections candidates, String songCueId,
+                                String selectedSongId, SongSelectionMethod songSelectionMethod) {
+        public GeneratedReflections(CandidateReflections candidates, String songCueId) {
+            this(candidates, songCueId, null, null);
+        }
         public GeneratedReflections {
             java.util.Objects.requireNonNull(candidates, "candidates");
             if (songCueId != null && !songCueId.matches("[a-z0-9][a-z0-9_-]{0,79}")) {
                 throw new IllegalArgumentException("Invalid acknowledged song cue.");
+            }
+            if ((selectedSongId == null) != (songSelectionMethod == null)
+                    || selectedSongId != null && !selectedSongId.matches("(?:0|[1-9][0-9]{0,9})")) {
+                throw new IllegalArgumentException("Invalid song selection acknowledgement.");
             }
         }
         @Override public String toString() { return "GeneratedReflections[content=redacted, paired=" + (songCueId != null) + "]"; }

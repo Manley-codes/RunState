@@ -34,13 +34,15 @@ import java.nio.charset.CodingErrorAction;
 import java.nio.charset.StandardCharsets;
 import java.util.HashSet;
 import java.util.Set;
+import java.util.List;
+import java.util.ArrayList;
 
 /** Strict JSON translation at the local HTTP boundary. Domain validation stays in the contract. */
 final class ReflectionApiJson {
 
     private static final int MAX_JSON_DEPTH = 32;
     private static final Set<String> REQUIRED_REQUEST_FIELDS = Set.of("requestId", "runId", "evidence");
-    private static final Set<String> REQUEST_FIELDS = Set.of("requestId", "runId", "evidence", "songPreparationId");
+    private static final Set<String> REQUEST_FIELDS = Set.of("requestId", "runId", "evidence", "songPreparationId", "songCandidates");
     private static final Set<String> EVIDENCE_FIELDS = Set.of(
             "officialStartEpochMillis",
             "finishEpochMillis",
@@ -100,7 +102,23 @@ final class ReflectionApiJson {
                 throw new IllegalArgumentException("Song preparation requires a shared song identity.");
             }
         }
-        return new ApiRequest(identifiers, evidence, preparationId);
+        List<ReflectionContract.SongCandidate> candidates = new ArrayList<>();
+        if (root.has("songCandidates")) {
+            JsonElement array = root.get("songCandidates");
+            if (!array.isJsonArray() || array.getAsJsonArray().isEmpty() || array.getAsJsonArray().size() > 12) {
+                throw new IllegalArgumentException("songCandidates must contain one to twelve songs");
+            }
+            for (JsonElement element : array.getAsJsonArray()) {
+                if (!element.isJsonObject()) throw new IllegalArgumentException("A song candidate must be an object");
+                JsonObject candidate = element.getAsJsonObject();
+                requireFields(candidate, Set.of("candidateId", "musicContext", "songPreparationId"),
+                        Set.of("candidateId", "musicContext"), "song candidate");
+                candidates.add(new ReflectionContract.SongCandidate(requiredString(candidate, "candidateId"),
+                        optionalMusic(candidate, "musicContext"),
+                        candidate.has("songPreparationId") ? requiredString(candidate, "songPreparationId") : null));
+            }
+        }
+        return new ApiRequest(identifiers, evidence, preparationId, candidates);
     }
 
     static ReflectionContract.SongPreparationRequest parseSongPreparationRequest(byte[] utf8Json)
@@ -151,8 +169,24 @@ final class ReflectionApiJson {
 
     static String success(ApiRequest request, CandidateReflections candidates,
                           ReflectionHttpServer.GenerationMode generationMode, String acknowledgedCueId) {
-        if (acknowledgedCueId != null && (request.evidence().musicContext().songCue() == null
-                || !acknowledgedCueId.equals(request.evidence().musicContext().songCue().cueId()))) {
+        return success(request, new ReflectionProvider.GeneratedReflections(candidates, acknowledgedCueId), generationMode);
+    }
+
+    static String success(ApiRequest request, ReflectionProvider.GeneratedReflections generated,
+                          ReflectionHttpServer.GenerationMode generationMode) {
+        CandidateReflections candidates = generated.candidates();
+        String acknowledgedCueId = generated.songCueId();
+        MusicContext selectedMusic = request.evidence().musicContext();
+        if (generated.selectedSongId() != null) {
+            selectedMusic = request.songCandidates().stream()
+                    .filter(candidate -> candidate.candidateId().equals(generated.selectedSongId()))
+                    .findFirst().orElseThrow(() -> new IllegalArgumentException("Selected song is not an offered candidate"))
+                    .musicContext();
+        } else if (!request.songCandidates().isEmpty() && acknowledgedCueId != null) {
+            throw new IllegalArgumentException("Multi-song delivery cannot acknowledge an unselected cue");
+        }
+        if (acknowledgedCueId != null && (selectedMusic.songCue() == null
+                || !acknowledgedCueId.equals(selectedMusic.songCue().cueId()))) {
             throw new IllegalArgumentException("Acknowledged cue must match the request.");
         }
         JsonObject candidateJson = new JsonObject();
@@ -167,6 +201,10 @@ final class ReflectionApiJson {
         response.addProperty("generationMode", generationMode.name());
         if (acknowledgedCueId != null) {
             response.addProperty("songCueId", acknowledgedCueId);
+        }
+        if (generated.selectedSongId() != null) {
+            response.addProperty("selectedSongId", generated.selectedSongId());
+            response.addProperty("songSelectionMethod", generated.songSelectionMethod().name());
         }
         response.add("candidates", candidateJson);
         return response.toString();
@@ -462,8 +500,14 @@ final class ReflectionApiJson {
         }
     }
 
-    record ApiRequest(RequestIdentifiers identifiers, CompletedRunEvidence evidence, String songPreparationId) {
-        ApiRequest(RequestIdentifiers identifiers, CompletedRunEvidence evidence) { this(identifiers, evidence, null); }
+    record ApiRequest(RequestIdentifiers identifiers, CompletedRunEvidence evidence, String songPreparationId,
+                      List<ReflectionContract.SongCandidate> songCandidates) {
+        ApiRequest { songCandidates = ReflectionContract.validatedSongCandidates(songCandidates); }
+        ApiRequest(RequestIdentifiers identifiers, CompletedRunEvidence evidence) { this(identifiers, evidence, null, List.of()); }
+        ApiRequest(RequestIdentifiers identifiers, CompletedRunEvidence evidence, String songPreparationId) {
+            this(identifiers, evidence, songPreparationId, List.of());
+        }
+        @Override public String toString() { return "ApiRequest[content=redacted]"; }
     }
 
     static final class InvalidJsonException extends Exception {

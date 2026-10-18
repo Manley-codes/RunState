@@ -3,6 +3,9 @@ package com.runstate.reflection;
 import java.time.DateTimeException;
 import java.time.ZoneId;
 import java.util.UUID;
+import java.util.List;
+import java.util.HashSet;
+import java.util.Locale;
 
 /**
  * Transport-neutral values shared by the future Android client and reflection service.
@@ -34,6 +37,39 @@ public final class ReflectionContract {
                     "Song preparation identity must contain valid visible Unicode text.");
         }
         @Override public String toString() { return "SongPreparationRequest[identity=redacted]"; }
+    }
+
+    /** One distinct, observed song eligible for selection, without invented listening duration. */
+    public record SongCandidate(String candidateId, MusicContext musicContext, String songPreparationId) {
+        public SongCandidate {
+            require(candidateId != null && candidateId.matches("(?:0|[1-9][0-9]{0,9})"),
+                    "candidateId must be a canonical observation sequence of at most ten digits");
+            require(musicContext != null && musicContext.state() == MusicState.MUSIC
+                            && musicContext.provenance() == MusicProvenance.MEDIA_SESSION_PARTIAL,
+                    "song candidates require observed music context");
+            // Reuse the strict Unicode and identity length rules without creating a preparation.
+            new SongPreparationRequest("00000000-0000-0000-0000-000000000000",
+                    musicContext.trackTitle(), musicContext.artistName());
+            if (songPreparationId != null) requireCanonicalUuid(songPreparationId, "songPreparationId");
+        }
+        @Override public String toString() { return "SongCandidate[identity=redacted]"; }
+    }
+
+    public static List<SongCandidate> validatedSongCandidates(List<SongCandidate> candidates) {
+        require(candidates != null && candidates.size() <= 12, "At most twelve song candidates are supported");
+        List<SongCandidate> result = List.copyOf(candidates);
+        var ids = new HashSet<String>();
+        var identities = new HashSet<List<String>>();
+        for (SongCandidate candidate : result) {
+            require(ids.add(candidate.candidateId()), "Duplicate song candidate identifier");
+            require(identities.add(List.of(normalizeSongIdentity(candidate.musicContext().trackTitle()),
+                    normalizeSongIdentity(candidate.musicContext().artistName()))), "Duplicate observed song");
+        }
+        return result;
+    }
+
+    static String normalizeSongIdentity(String text) {
+        return text.strip().replaceAll("\\s+", " ").toLowerCase(Locale.ROOT);
     }
 
     /** Optional Energy captured before the run. */

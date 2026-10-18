@@ -50,6 +50,230 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class AnthropicReflectionProviderTest {
     private static final String PREPARATION_ID = "09bf1430-b193-49b9-a9c3-4f3577dc67b6";
 
+    private static ReflectionContract.SongCandidate observedSong(String id, String title) {
+        return new ReflectionContract.SongCandidate(id, new MusicContext(MusicState.MUSIC, title,
+                "Fixture Artist", null, MusicProvenance.MEDIA_SESSION_PARTIAL), null);
+    }
+
+    @Test
+    void multiSongRanksMatchedMeaningAndWritesTheNonFirstWinnerWithoutChangingAcceptedPrompts() throws Exception {
+        List<JsonObject> calls = new ArrayList<>();
+        var provider = new AnthropicReflectionProvider(testConfiguration(), request -> {
+            JsonObject input = evidenceFrom(request); calls.add(input);
+            if (input.has("song_candidates")) {
+                assertEquals(2, input.getAsJsonArray("song_candidates").size());
+                assertEquals("A fictional record about fresh starts.", input.getAsJsonArray("song_candidates")
+                        .get(1).getAsJsonObject().get("meaning").getAsString());
+                assertEquals("LOW", input.getAsJsonObject("run_facts").get("energy_before").getAsString());
+                assertFalse(input.toString().contains("listening_duration"));
+                assertFalse(input.toString().contains("post_run_energy"));
+                assertFalse(input.toString().contains("A fresh start for this fictional morning"));
+                assertTrue(request.timeout().compareTo(Duration.ofSeconds(10)) <= 0);
+                JsonObject schema = JsonParser.parseString(request.body()).getAsJsonObject()
+                        .getAsJsonObject("output_config").getAsJsonObject("format").getAsJsonObject("schema");
+                assertEquals(List.of("1", "8"), schema.getAsJsonObject("properties").getAsJsonObject("candidateId")
+                        .getAsJsonArray("enum").asList().stream().map(JsonElement::getAsString).toList());
+                return songResponse(JsonParser.parseString("{\"candidateId\":\"8\"}").getAsJsonObject());
+            }
+            if (input.has("run_facts")) {
+                assertEquals("Second song", input.get("song_title").getAsString());
+                return songResponse(writerBranches());
+            }
+            assertEquals("Second song", input.get("track_title").getAsString());
+            return songResponse(studyNotes());
+        }, (title, artist) -> Optional.of(songMaterial(title, artist)));
+        var result = provider.generateForDelivery(knownEvidence(), null,
+                List.of(observedSong("1", "First song"), observedSong("8", "Second song")));
+        assertEquals("8", result.selectedSongId());
+        assertEquals(ReflectionProvider.SongSelectionMethod.CONTEXT_MATCH, result.songSelectionMethod());
+        assertNull(result.songCueId());
+        assertEquals(3, calls.size());
+    }
+
+    @Test
+    void multiSongExcludesMissingAndMismatchedAnalysisRatherThanRankingTitles() throws Exception {
+        AtomicInteger modelCalls = new AtomicInteger();
+        var provider = new AnthropicReflectionProvider(testConfiguration(), request -> {
+            modelCalls.incrementAndGet();
+            JsonObject input = evidenceFrom(request);
+            assertFalse(input.has("song_candidates"));
+            return songResponse(input.has("run_facts") ? writerBranches() : studyNotes());
+        }, (title, artist) -> title.equals("Missing") ? Optional.empty()
+                : Optional.of(songMaterial(title.equals("Mismatch") ? "Other recording" : title, artist)));
+        var result = provider.generateForDelivery(knownEvidence(), null, List.of(observedSong("1", "Missing"),
+                observedSong("2", "Mismatch"), observedSong("3", "Available")));
+        assertEquals("3", result.selectedSongId());
+        assertEquals(ReflectionProvider.SongSelectionMethod.AVAILABLE_FALLBACK, result.songSelectionMethod());
+        assertEquals(2, modelCalls.get());
+    }
+
+    @Test
+    void invalidOrTimedOutRankingUsesExplicitFirstAvailableFallbackWithoutRetry() throws Exception {
+        for (String response : List.of("{\"candidateId\":\"99\"}", "{\"candidateId\":2}",
+                "{\"candidateId\":\"2\",\"reason\":\"extra\"}", "timeout")) {
+            AtomicInteger rankings = new AtomicInteger();
+            var provider = new AnthropicReflectionProvider(testConfiguration(), request -> {
+                JsonObject input = evidenceFrom(request);
+                if (input.has("song_candidates")) {
+                    rankings.incrementAndGet();
+                    if (response.equals("timeout")) throw new HttpTimeoutException("private detail");
+                    return songResponse(JsonParser.parseString(response).getAsJsonObject());
+                }
+                if (input.has("run_facts")) {
+                    assertEquals("First", input.get("song_title").getAsString());
+                    return songResponse(writerBranches());
+                }
+                return songResponse(studyNotes());
+            }, (title, artist) -> Optional.of(songMaterial(title, artist)));
+            var result = provider.generateForDelivery(knownEvidence(), null,
+                    List.of(observedSong("1", "First"), observedSong("2", "Second")));
+            assertEquals("1", result.selectedSongId());
+            assertEquals(ReflectionProvider.SongSelectionMethod.AVAILABLE_FALLBACK, result.songSelectionMethod());
+            assertEquals(1, rankings.get());
+        }
+    }
+
+    @Test
+    void noAnalysisNeverAcknowledgesSelectionOrLegacyCueAndDoesNotRepeatSourceWork() throws Exception {
+        AtomicInteger lookups = new AtomicInteger();
+        var provider = new AnthropicReflectionProvider(testConfiguration(), request -> {
+            assertFalse(evidenceFrom(request).getAsJsonObject("music_context").has("song_cue"));
+            return successfulResponseForPreparationFallback();
+        }, (title, artist) -> { lookups.incrementAndGet(); return Optional.empty(); });
+        var result = provider.generateForDelivery(knownEvidence(), null,
+                List.of(observedSong("1", "First"), observedSong("2", "Second")));
+        assertNull(result.selectedSongId()); assertNull(result.songSelectionMethod()); assertNull(result.songCueId());
+        assertEquals(2, lookups.get());
+    }
+
+    @Test
+    void preparedWinnerReusesItsNotesAndRejectsPreparationIdentityRebinding() throws Exception {
+        AtomicInteger lookups = new AtomicInteger();
+        AtomicInteger studies = new AtomicInteger();
+        var provider = new AnthropicReflectionProvider(testConfiguration(), request -> {
+            JsonObject input = evidenceFrom(request);
+            if (input.has("song_candidates")) return songResponse(JsonParser.parseString("{\"candidateId\":\"2\"}").getAsJsonObject());
+            if (input.has("run_facts")) return songResponse(writerBranches());
+            studies.incrementAndGet(); return songResponse(studyNotes());
+        }, (title, artist) -> { lookups.incrementAndGet(); return Optional.of(songMaterial(title, artist)); });
+        provider.prepareSong(new ReflectionContract.SongPreparationRequest(PREPARATION_ID, "Second", "Fixture Artist"));
+        var second = new ReflectionContract.SongCandidate("2", observedSong("2", "Second").musicContext(), PREPARATION_ID);
+        var result = provider.generateForDelivery(knownEvidence(), null, List.of(observedSong("1", "First"), second));
+        assertEquals("2", result.selectedSongId());
+        assertEquals(2, lookups.get()); assertEquals(1, studies.get());
+        var rebound = new ReflectionContract.SongCandidate("2", observedSong("2", "Different").musicContext(), PREPARATION_ID);
+        assertThrows(ReflectionProvider.SongPreparationConflictException.class,
+                () -> provider.generateForDelivery(knownEvidence(), null, List.of(observedSong("1", "First"), rebound)));
+        assertEquals(2, lookups.get());
+    }
+
+    @Test
+    void chosenSongAloneSuppliesAcceptedPassageAndMismatchedEditorialCueIsNotAcknowledged() throws Exception {
+        String moment = "A compact sequence of the recognizable repeated-title chorus.";
+        String effect = "A warm affirmative musical response to one concrete part of this completed run. Keep reported feelings conditional on each branch, without claiming perfect weather or a perfect whole day.";
+        for (boolean matchingCue : List.of(true, false)) {
+            SongCueContext cue = new SongCueContext("lovely_day_bill_withers_v1", SongCueSource.RUNSTATE_CURATED,
+                    moment, matchingCue ? effect : "Different unapproved landing");
+            var winner = new ReflectionContract.SongCandidate("9", new MusicContext(MusicState.MUSIC,
+                    "Lovely Day", "Bill Withers", null, MusicProvenance.MEDIA_SESSION_PARTIAL, cue), null);
+            var provider = new AnthropicReflectionProvider(testConfiguration(), request -> {
+                JsonObject input = evidenceFrom(request);
+                if (input.has("song_candidates")) {
+                    assertFalse(input.toString().contains("passage_landing"));
+                    assertFalse(input.toString().contains("lovely_day_bill_withers_v1"));
+                    return songResponse(JsonParser.parseString("{\"candidateId\":\"9\"}").getAsJsonObject());
+                }
+                if (input.has("run_facts")) {
+                    assertEquals(matchingCue, input.has("passage_landing"));
+                    assertEquals("Lovely Day", input.get("song_title").getAsString());
+                    return songResponse(writerBranches());
+                }
+                return songResponse(studyNotes());
+            }, (title, artist) -> Optional.of(songMaterial(title, artist)));
+            var result = provider.generateForDelivery(knownEvidence(), null, List.of(observedSong("1", "First"), winner));
+            assertEquals("9", result.selectedSongId());
+            assertEquals(matchingCue ? cue.cueId() : null, result.songCueId());
+        }
+    }
+
+    @Test
+    void selectionInterruptionCancelsSourceWorkAndNeverStartsWriting() throws Exception {
+        var entered = new java.util.concurrent.CountDownLatch(1);
+        var cancelled = new java.util.concurrent.CountDownLatch(1);
+        AtomicInteger modelCalls = new AtomicInteger();
+        var provider = new AnthropicReflectionProvider(testConfiguration(), request -> {
+            modelCalls.incrementAndGet(); return successfulResponseForPreparationFallback();
+        }, (title, artist) -> {
+            entered.countDown();
+            try { Thread.sleep(10_000); return Optional.empty(); }
+            catch (InterruptedException interrupted) { cancelled.countDown(); Thread.currentThread().interrupt(); return Optional.empty(); }
+        });
+        var failure = new AtomicReference<ReflectionProviderException>();
+        var preserved = new java.util.concurrent.atomic.AtomicBoolean();
+        Thread caller = new Thread(() -> {
+            try { provider.generateForDelivery(knownEvidence(), null, List.of(observedSong("1", "First"))); }
+            catch (ReflectionProviderException expected) { failure.set(expected); preserved.set(Thread.currentThread().isInterrupted()); }
+        });
+        caller.start();
+        try {
+            assertTrue(entered.await(2, java.util.concurrent.TimeUnit.SECONDS)); caller.interrupt(); caller.join(2_000);
+            assertFalse(caller.isAlive()); assertEquals(FailureType.TRANSPORT, failure.get().failureType());
+            assertTrue(preserved.get()); assertTrue(cancelled.await(2, java.util.concurrent.TimeUnit.SECONDS));
+            assertEquals(0, modelCalls.get());
+        } finally { caller.interrupt(); caller.join(2_000); }
+    }
+
+    @Test
+    void twelveCandidatesAreAllConsideredWithAtMostFourConcurrentSourceLookups() throws Exception {
+        AtomicInteger active = new AtomicInteger(); AtomicInteger maximum = new AtomicInteger();
+        AtomicInteger lookedUp = new AtomicInteger();
+        var provider = new AnthropicReflectionProvider(testConfiguration(), request -> {
+            JsonObject input = evidenceFrom(request);
+            if (input.has("song_candidates")) {
+                assertEquals(12, input.getAsJsonArray("song_candidates").size());
+                return songResponse(JsonParser.parseString("{\"candidateId\":\"12\"}").getAsJsonObject());
+            }
+            return songResponse(input.has("run_facts") ? writerBranches() : studyNotes());
+        }, (title, artist) -> {
+            maximum.accumulateAndGet(active.incrementAndGet(), Math::max); lookedUp.incrementAndGet();
+            try { Thread.sleep(10); return Optional.of(songMaterial(title, artist)); }
+            catch (InterruptedException interrupted) { Thread.currentThread().interrupt(); return Optional.empty(); }
+            finally { active.decrementAndGet(); }
+        });
+        var candidates = java.util.stream.IntStream.rangeClosed(1, 12)
+                .mapToObj(id -> observedSong(Integer.toString(id), "Song " + id)).toList();
+        assertEquals("12", provider.generateForDelivery(knownEvidence(), null, candidates).selectedSongId());
+        assertEquals(12, lookedUp.get()); assertTrue(maximum.get() <= 4); assertEquals(0, active.get());
+    }
+
+    @Test
+    void sharedDeadlineIncludesRankingAndSourceWaitIsBoundedAndCancelled() throws Exception {
+        var config = new ProviderConfiguration(testConfiguration().endpoint(), DUMMY_API_KEY,
+                "ordinary-model", Duration.ofSeconds(10), Duration.ofSeconds(120), 2048);
+        List<Duration> timeouts = new ArrayList<>();
+        var provider = new AnthropicReflectionProvider(config, request -> {
+            timeouts.add(request.timeout()); Thread.sleep(3);
+            JsonObject input = evidenceFrom(request);
+            if (input.has("song_candidates")) return songResponse(JsonParser.parseString("{\"candidateId\":\"2\"}").getAsJsonObject());
+            return songResponse(input.has("run_facts") ? writerBranches() : studyNotes());
+        }, (title, artist) -> Optional.of(songMaterial(title, artist)));
+        provider.generateForDelivery(knownEvidence(), null, List.of(observedSong("1", "First"), observedSong("2", "Second")));
+        assertEquals(3, timeouts.size()); assertTrue(timeouts.get(0).compareTo(Duration.ofSeconds(10)) <= 0);
+        assertTrue(timeouts.get(1).compareTo(Duration.ofSeconds(90)) < 0);
+        assertTrue(timeouts.get(2).compareTo(timeouts.get(1)) < 0);
+
+        var shortConfig = new ProviderConfiguration(config.endpoint(), DUMMY_API_KEY, "ordinary-model",
+                Duration.ofSeconds(1), Duration.ofMillis(60), 2048);
+        var cancelled = new java.util.concurrent.CountDownLatch(1);
+        var bounded = new AnthropicReflectionProvider(shortConfig, request -> successfulResponseForPreparationFallback(),
+                (title, artist) -> {
+                    try { Thread.sleep(10_000); return Optional.empty(); }
+                    catch (InterruptedException interrupted) { cancelled.countDown(); Thread.currentThread().interrupt(); return Optional.empty(); }
+                });
+        assertNull(bounded.generateForDelivery(knownEvidence(), null, List.of(observedSong("1", "First"))).selectedSongId());
+        assertTrue(cancelled.await(2, java.util.concurrent.TimeUnit.SECONDS));
+    }
+
     @Test
     void earlySourceStudyAndWarmWriterAreByteEquivalentToColdPipelineAndDeduplicate() throws Exception {
         List<TransportRequest> cold = new ArrayList<>();
