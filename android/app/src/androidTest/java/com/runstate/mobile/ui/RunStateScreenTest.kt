@@ -77,6 +77,7 @@ import com.runstate.mobile.data.local.MetricSource
 import com.runstate.mobile.data.local.RunSplitStatus
 import com.runstate.mobile.data.local.TelemetryCoverage
 import com.runstate.mobile.reflection.RunReflectionState
+import com.runstate.mobile.reflection.ReflectionVoicePreparation
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -228,8 +229,22 @@ class RunStateScreenTest {
     private class ControlledCompletionSpeaker : ReflectionSpeaker {
         data class AudioRequest(val text: String, val canPlayCue: () -> Boolean, val finished: () -> Unit)
         val requests = mutableListOf<AudioRequest>()
+        val preparations = mutableListOf<String>()
+        val preparationEvents = mutableListOf<String>()
+        var preparedText: String? = null
+        var preparationCancellations = 0
         var stops = 0
         var closes = 0
+        override fun prepare(text: String) {
+            preparations += text
+            preparationEvents += "prepare:$text"
+            preparedText = text
+        }
+        override fun cancelPreparation() {
+            preparationCancellations++
+            preparationEvents += "cancel"
+            preparedText = null
+        }
         override fun speak(text: String) { error("Completion must choose its explicit audio sequence") }
         override fun speakWithInstrumental(
             text: String, canPlayInstrumental: () -> Boolean, onFinished: () -> Unit
@@ -2229,6 +2244,168 @@ class RunStateScreenTest {
         composeTestRule.runOnIdle { includeEffect = false }
         composeTestRule.waitForIdle()
         assertEquals(1, closes)
+    }
+
+    @Test
+    fun completionPreparesSilentlyBehindFactsAndIntakeThenSpeaksOnceWhenReleased() {
+        val runId = "completion-prepared-behind-facts"
+        val exact = "  Exact prepared reflection.\nSecond line.  "
+        val speaker = ControlledCompletionSpeaker()
+        var visible by mutableStateOf(false)
+        var spokenId by mutableStateOf<String?>(null)
+        val consumed = mutableListOf<String>()
+        composeTestRule.setContent {
+            RunCompleteSpeechEffect(runId, runId, spokenId, RunReflectionState.Ready(runId, exact),
+                visible, { speaker }, { consumed += it; spokenId = it },
+                voicePreparation = ReflectionVoicePreparation(runId, "prepared-request", exact),
+                preparationVisible = true)
+        }
+        composeTestRule.runOnIdle {
+            assertEquals(listOf(exact), speaker.preparations)
+            assertEquals(exact, speaker.preparedText)
+            assertTrue(speaker.requests.isEmpty())
+            assertTrue(consumed.isEmpty())
+            visible = true
+        }
+        composeTestRule.runOnIdle {
+            assertEquals(exact, speaker.requests.single().text)
+            assertTrue(speaker.requests.single().canPlayCue())
+            assertEquals(listOf(runId), consumed)
+            visible = false
+        }
+        composeTestRule.runOnIdle { visible = true }
+        composeTestRule.runOnIdle {
+            assertEquals(1, speaker.requests.size)
+            assertEquals(listOf(runId), consumed)
+        }
+    }
+
+    @Test
+    fun backgroundingCompletionCancelsSilentPreparationAndReturningDoesNotSpeakThroughTheGate() {
+        val runId = "completion-preparation-background"
+        val speaker = ControlledCompletionSpeaker()
+        var foreground by mutableStateOf(true)
+        var cancelledBeforeBackground = 0
+        composeTestRule.setContent {
+            RunCompleteSpeechEffect(runId, runId, null, RunReflectionState.Preparing(runId),
+                false, { speaker }, { error("Facts still own audible delivery.") },
+                voicePreparation = ReflectionVoicePreparation(runId, "background-request", "Prepared text."),
+                preparationVisible = foreground)
+        }
+        composeTestRule.runOnIdle {
+            assertEquals("Prepared text.", speaker.preparedText)
+            cancelledBeforeBackground = speaker.preparationCancellations
+            foreground = false
+        }
+        composeTestRule.runOnIdle {
+            assertEquals(null, speaker.preparedText)
+            assertTrue(speaker.preparationCancellations > cancelledBeforeBackground)
+            assertTrue(speaker.requests.isEmpty())
+            foreground = true
+        }
+        composeTestRule.runOnIdle {
+            assertEquals(listOf("Prepared text.", "Prepared text."), speaker.preparations)
+            assertTrue(speaker.requests.isEmpty())
+        }
+    }
+
+    @Test
+    fun replacementRequestCancelsPreviousPreparationEvenWhenItsWordsAreUnchanged() {
+        val runId = "completion-preparation-retry"
+        val exact = "Same words, a different request."
+        val speaker = ControlledCompletionSpeaker()
+        var preparation by mutableStateOf<ReflectionVoicePreparation?>(
+            ReflectionVoicePreparation(runId, "first-request", exact))
+        var cancelledBeforeClear = 0
+        composeTestRule.setContent {
+            RunCompleteSpeechEffect(runId, runId, null, RunReflectionState.Preparing(runId),
+                false, { speaker }, { error("Facts still own audible delivery.") },
+                voicePreparation = preparation, preparationVisible = true)
+        }
+        composeTestRule.runOnIdle {
+            assertEquals(listOf(exact), speaker.preparations)
+            preparation = ReflectionVoicePreparation(runId, "replacement-request", exact)
+        }
+        composeTestRule.runOnIdle {
+            assertEquals(listOf(exact, exact), speaker.preparations)
+            assertEquals(listOf("cancel", "prepare:$exact"), speaker.preparationEvents.takeLast(2))
+            assertTrue(speaker.requests.isEmpty())
+            cancelledBeforeClear = speaker.preparationCancellations
+            preparation = null
+        }
+        composeTestRule.runOnIdle {
+            assertEquals(null, speaker.preparedText)
+            assertTrue(speaker.preparationCancellations > cancelledBeforeClear)
+            assertTrue(speaker.requests.isEmpty())
+        }
+    }
+
+    @Test
+    fun oldIneligibleMismatchedAndConsumedCompletionsNeverPrepareAVoice() {
+        val runId = "completion-preparation-eligibility"
+        val speaker = ControlledCompletionSpeaker()
+        var factories = 0
+        var eligibleId by mutableStateOf<String?>(null)
+        var spokenId by mutableStateOf<String?>(null)
+        var preparation by mutableStateOf(ReflectionVoicePreparation(runId, "eligibility-request", "Exact text."))
+        composeTestRule.setContent {
+            RunCompleteSpeechEffect(runId, eligibleId, spokenId, RunReflectionState.Ready(runId, "Exact text."),
+                false, { factories++; speaker }, { error("An old or consumed run cannot speak.") },
+                voicePreparation = preparation, preparationVisible = true)
+        }
+        composeTestRule.runOnIdle {
+            assertEquals(0, factories) // Reopened History has no new-arrival eligibility.
+            eligibleId = "another-run"
+        }
+        composeTestRule.runOnIdle {
+            assertEquals(0, factories)
+            eligibleId = runId
+            preparation = preparation.copy(runId = "another-run")
+        }
+        composeTestRule.runOnIdle {
+            assertEquals(0, factories)
+            spokenId = runId
+            preparation = preparation.copy(runId = runId)
+        }
+        composeTestRule.runOnIdle {
+            assertEquals(0, factories)
+            assertTrue(speaker.preparations.isEmpty())
+            assertTrue(speaker.requests.isEmpty())
+        }
+    }
+
+    @Test
+    fun optionalPreparationFailureDoesNotHideTextOrConsumeTheLaterSpeechAttempt() {
+        val runId = "completion-preparation-failure"
+        val exact = "The exact saved reflection remains available."
+        val speaker = ControlledCompletionSpeaker()
+        var factories = 0
+        var visible by mutableStateOf(false)
+        var spokenId by mutableStateOf<String?>(null)
+        val consumed = mutableListOf<String>()
+        composeTestRule.setContent {
+            Text(exact, Modifier.testTag("prepared-voice-failure-text"))
+            RunCompleteSpeechEffect(runId, runId, spokenId, RunReflectionState.Ready(runId, exact),
+                visible, {
+                    factories++
+                    if (factories == 1) error("The optional preparation engine is unavailable.")
+                    speaker
+                }, { consumed += it; spokenId = it },
+                voicePreparation = ReflectionVoicePreparation(runId, "failure-request", exact),
+                preparationVisible = true)
+        }
+        composeTestRule.runOnIdle {
+            assertEquals(1, factories)
+            assertTrue(consumed.isEmpty())
+            assertTrue(speaker.requests.isEmpty())
+            visible = true
+        }
+        composeTestRule.runOnIdle {
+            assertEquals(2, factories)
+            assertEquals(listOf(runId), consumed)
+            assertEquals(exact, speaker.requests.single().text)
+        }
+        composeTestRule.onNodeWithTag("prepared-voice-failure-text").assertIsDisplayed()
     }
 
     @Test

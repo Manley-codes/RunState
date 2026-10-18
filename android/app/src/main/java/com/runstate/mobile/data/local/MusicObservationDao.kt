@@ -5,10 +5,57 @@ import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Transaction
+import com.runstate.mobile.run.RunTimeline
+import com.runstate.mobile.run.TransitionHistoryCoverage
 
 /** Run-owned, ordered evidence from Android media sessions. No row means unknown, not silence. */
 @Dao
 abstract class MusicObservationDao {
+    @Query("SELECT * FROM run_song_preparations WHERE run_id = :runId")
+    abstract suspend fun preparationFor(runId: String): SongPreparationClaimEntity?
+
+    /** Claim is committed before HTTP. Reopen/retry never returns an existing claim as new work. */
+    @Transaction
+    open suspend fun claimPreparation(
+        runId: String,
+        preparationId: String,
+        observationSequenceNumber: Int,
+        destinationFingerprint: String,
+        nowEpochMillis: Long
+    ): SongPreparationClaimEntity? {
+        if (preparationFor(runId) != null) return null
+        val run = findRun(runId) ?: return null
+        if (run.state != StoredRunState.RUNNING || !run.musicObservationRequested ||
+            !run.musicReflectionSharingAllowed || run.transitionHistoryComplete != true ||
+            nowEpochMillis < run.officialStartEpochMillis) return null
+        val active = RunTimeline.activeMillis(
+            officialStartEpochMillis = run.officialStartEpochMillis,
+            finishEpochMillis = run.finishEpochMillis,
+            currentState = run.state,
+            transitions = transitionsForPreparation(runId),
+            nowEpochMillis = nowEpochMillis,
+            historyCoverage = TransitionHistoryCoverage.COMPLETE
+        ) ?: return null
+        if (active < 30_000L) return null
+        val first = observationsFor(runId).firstOrNull {
+            it.sourcePackage == "com.spotify.music" && it.playbackState == MusicPlaybackState.PLAYING &&
+                it.observedAtEpochMillis in run.officialStartEpochMillis..nowEpochMillis &&
+                validPreparationIdentity(it.title?.trim()) && validPreparationIdentity(it.artist?.trim())
+        } ?: return null
+        if (first.sequenceNumber != observationSequenceNumber) return null
+        val row = SongPreparationClaimEntity(
+            runId, preparationId, requireNotNull(first.title).trim(), requireNotNull(first.artist).trim(),
+            first.sequenceNumber, destinationFingerprint, nowEpochMillis
+        )
+        return if (insertPreparation(row) == -1L) null else row
+    }
+
+    /** A late response can settle its own claim only; it cannot create or replace another attempt. */
+    open suspend fun finishPreparation(runId: String, preparationId: String, ready: Boolean) {
+        finishClaimedPreparation(runId, preparationId,
+            if (ready) SongPreparationClaimStatus.READY else SongPreparationClaimStatus.UNAVAILABLE)
+    }
+
     /** A retry preserves the first event; a new event requires an opted-in RUNNING parent. */
     @Transaction
     open suspend fun recordObservation(observation: RunMusicObservation): RunMusicObservationEntity {
@@ -54,4 +101,20 @@ abstract class MusicObservationDao {
 
     @Insert(onConflict = OnConflictStrategy.ABORT)
     protected abstract suspend fun insert(row: RunMusicObservationEntity)
+
+    @Query("SELECT * FROM run_transitions WHERE run_id = :runId ORDER BY sequence_number ASC")
+    protected abstract suspend fun transitionsForPreparation(runId: String): List<RunTransitionEntity>
+
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    protected abstract suspend fun insertPreparation(row: SongPreparationClaimEntity): Long
+
+    @Query("""
+        UPDATE run_song_preparations SET status = :status
+        WHERE run_id = :runId AND preparation_id = :preparationId AND status = 'CLAIMED'
+    """)
+    protected abstract suspend fun finishClaimedPreparation(
+        runId: String,
+        preparationId: String,
+        status: SongPreparationClaimStatus
+    ): Int
 }

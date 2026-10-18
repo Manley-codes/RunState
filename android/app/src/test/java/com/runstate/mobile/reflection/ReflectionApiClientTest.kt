@@ -549,7 +549,9 @@ class ReflectionApiClientTest {
 
     private class FakeHttpsConnection(url: URL, private val body: String, private val status: Int = 200,
         private val cueCapability: String? = null,
-        private val studyCapability: String? = null) :
+        private val studyCapability: String? = null,
+        private val preparationCapability: String? = null,
+        private val responseContentType: String? = null) :
         HttpsURLConnection(url) {
         val sent = ByteArrayOutputStream()
         var wasDisconnected = false
@@ -566,8 +568,102 @@ class ReflectionApiClientTest {
         override fun getHeaderField(name: String?): String? = when {
             name.equals("X-RunState-Song-Cue", ignoreCase = true) -> cueCapability
             name.equals("X-RunState-Song-Study", ignoreCase = true) -> studyCapability
+            name.equals("X-RunState-Song-Preparation", ignoreCase = true) -> preparationCapability
+            name.equals("Content-Type", ignoreCase = true) -> responseContentType
             else -> null
         }
+    }
+
+    @Test fun earlyPreparationSendsOneIdentityOnlyAndChecksActualVersionedResponse() = runBlocking {
+        val config = ReflectionConnectionConfig("https://reflection.example.com/api/reflections/candidates", "a".repeat(43))
+        val health = FakeHttpsConnection(URL("https://reflection.example.com/health"), "{}", preparationCapability = "1")
+        val post = FakeHttpsConnection(URL("https://reflection.example.com/api/reflections/song-study"),
+            "{\"preparationId\":\"$REQUEST_ID\",\"state\":\"READY\",\"songStudyVersion\":1}",
+            responseContentType = "application/json")
+        val client = HostedSongStudyPreparationClient(config) { if (it.path == "/health") health else post }
+        assertTrue(client.supports())
+        assertTrue(client.prepare(REQUEST_ID, "Good as Hell", "Lizzo"))
+        val body = JsonParser.parseString(post.sent.toString("UTF-8")).asJsonObject
+        assertEquals(setOf("preparationId", "trackTitle", "artistName"), body.keySet())
+        assertEquals("Good as Hell", body["trackTitle"].asString)
+        assertEquals("Lizzo", body["artistName"].asString)
+        assertEquals("Bearer ${config.accessCode}", post.getRequestProperty("Authorization"))
+        assertNull(health.getRequestProperty("Authorization"))
+        assertTrue(post.wasDisconnected && health.wasDisconnected)
+        assertFalse(post.instanceFollowRedirects)
+    }
+
+    @Test fun earlyPreparationRejectsUnmatchedDuplicateExtraOrUnavailableResponses() = runBlocking {
+        val config = ReflectionConnectionConfig("https://reflection.example.com/api/reflections/candidates", "a".repeat(43))
+        val bodies = listOf(
+            "{\"preparationId\":\"$RUN_ID\",\"state\":\"READY\",\"songStudyVersion\":1}",
+            "{\"preparationId\":\"$REQUEST_ID\",\"state\":\"UNAVAILABLE\",\"songStudyVersion\":1}",
+            "{\"preparationId\":\"$REQUEST_ID\",\"state\":\"READY\",\"songStudyVersion\":2}",
+            "{\"preparationId\":\"$REQUEST_ID\",\"state\":\"READY\",\"state\":\"READY\",\"songStudyVersion\":1}",
+            "{\"preparationId\":\"$REQUEST_ID\",\"state\":\"READY\",\"songStudyVersion\":1,\"extra\":true}",
+            "{\"preparationId\":\"$REQUEST_ID\",\"state\":\"READY\",\"songStudyVersion\":1.0}",
+            "not JSON")
+        for (body in bodies) {
+            val post = FakeHttpsConnection(URL(config.endpoint), body, responseContentType = "application/json")
+            assertFalse(HostedSongStudyPreparationClient(config) { post }.prepare(REQUEST_ID, "Title", "Artist"))
+            assertTrue(post.wasDisconnected)
+        }
+        val unsupported = FakeHttpsConnection(URL(config.endpoint), "{}")
+        assertFalse(HostedSongStudyPreparationClient(config) { unsupported }.supports())
+    }
+
+    @Test fun finalPreparationReferenceIsLocalBoundAndOnlyVersionedTopLevelWireMetadata() = runBlocking {
+        val config = ReflectionConnectionConfig("https://reflection.example.com/api/reflections/candidates", "a".repeat(43))
+        val original = acceptedSongRequest()
+        val reference = SongPreparationReference(REQUEST_ID, reflectionDestinationFingerprint(config))
+        val request = original.copy(evidence = original.evidence.copy(songPreparationReference = reference))
+        for (supported in listOf(false, true)) {
+            val health = FakeHttpsConnection(URL("https://reflection.example.com/health"), "{}", cueCapability = "1",
+                studyCapability = "1", preparationCapability = if (supported) "1" else null)
+            val post = FakeHttpsConnection(URL(config.endpoint), response(generationMode = "ANTHROPIC"))
+            HostedReflectionHttpClient(config, { if (it.path == "/health") health else post }).request(request)
+            val body = JsonParser.parseString(post.sent.toString("UTF-8")).asJsonObject
+            assertEquals(supported, body.has("songPreparationId"))
+            if (supported) assertEquals(REQUEST_ID, body["songPreparationId"].asString)
+            assertFalse(body.getAsJsonObject("evidence").has("songPreparationReference"))
+            assertFalse(post.sent.toString("UTF-8").contains(reference.destinationFingerprint))
+        }
+        val other = ReflectionConnectionConfig(config.endpoint, "b".repeat(43))
+        val post = FakeHttpsConnection(URL(other.endpoint), response(generationMode = "ANTHROPIC"))
+        HostedReflectionHttpClient(other, { post }).request(request)
+        val body = JsonParser.parseString(post.sent.toString("UTF-8")).asJsonObject
+        assertFalse(body.has("songPreparationId"))
+        val music = body.getAsJsonObject("evidence").getAsJsonObject("musicContext")
+        assertEquals("UNKNOWN", music["state"].asString)
+        assertFalse(post.sent.toString("UTF-8").contains("Lovely Day"))
+        // Clearing a hosted destination can select the debug bridge. It is a different
+        // destination too, and must never receive the previously shared song identity.
+        val local = FakeHttpsConnection(URL(LOCAL_REFLECTION_ENDPOINT), response())
+        LocalReflectionHttpClient(connectionFactory = { local }).request(request)
+        val localBody = JsonParser.parseString(local.sent.toString("UTF-8")).asJsonObject
+        assertEquals("UNKNOWN", localBody.getAsJsonObject("evidence").getAsJsonObject("musicContext")["state"].asString)
+        assertFalse(localBody.has("songPreparationId"))
+        assertFalse(local.sent.toString("UTF-8").contains("Lovely Day"))
+    }
+
+    @Test fun earlyClaimPinsItsSongAndCannotLeakANewerSongAfterFailureOrChangedObservation() {
+        val first = musicObservation().copy(title = "Lovely Day", artist = "Bill Withers")
+        val latest = musicObservation(2).copy(title = "Stronger", artist = "Kanye West")
+        val claim = SongPreparationClaimEntity(RUN_ID, REQUEST_ID, first.title!!, first.artist!!,
+            first.sequenceNumber, "a".repeat(64), START + 31_000L)
+        val request = reflectionRequestFromSavedRun(REQUEST_ID, sharingRun(), completedTransitions(),
+            listOf(first, latest), songPreparation = claim)
+        assertEquals("Lovely Day", request.evidence.musicContext.trackTitle)
+        assertEquals(REQUEST_ID, request.evidence.songPreparationReference?.preparationId)
+        val missing = reflectionRequestFromSavedRun(REQUEST_ID, sharingRun(), completedTransitions(),
+            listOf(latest), songPreparation = claim)
+        assertEquals("UNKNOWN", missing.evidence.musicContext.state)
+        assertNull(missing.evidence.songPreparationReference)
+        val legacy = reflectionRequestFromSavedRun(REQUEST_ID, sharingRun(), completedTransitions(), listOf(first, latest))
+        assertEquals("Stronger", legacy.evidence.musicContext.trackTitle)
+        val revoked = reflectionRequestFromSavedRun(REQUEST_ID, completedRun(), completedTransitions(),
+            listOf(first, latest), songPreparation = claim)
+        assertEquals("UNKNOWN", revoked.evidence.musicContext.state)
     }
 
     private fun response(

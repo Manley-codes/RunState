@@ -54,6 +54,12 @@ internal class ReflectionConnectionConfig(val endpoint: String, val accessCode: 
     override fun toString(): String = "ReflectionConnectionConfig[connection=redacted]"
 }
 
+/** A one-way local binding, not an access code or a value sent to a provider. */
+internal fun reflectionDestinationFingerprint(config: ReflectionConnectionConfig): String =
+    java.security.MessageDigest.getInstance("SHA-256")
+        .digest((config.endpoint + "\n" + config.accessCode).toByteArray(StandardCharsets.UTF_8))
+        .joinToString("") { "%02x".format(it.toInt() and 0xff) }
+
 /** The connection can be absent, saved, or explicitly cleared. A damaged save never falls back. */
 internal interface ReflectionConnectionStore {
     suspend fun load(): ReflectionConnectionConfig?

@@ -77,6 +77,7 @@ internal class RunMusicNotificationListener : NotificationListenerService() {
 
     override fun onListenerConnected() {
         super.onListenerConnected()
+        app.musicListenerConnectionChanged(true)
         if (runObserver?.isActive == true) return
         runObserver = scope.launch {
             app.database.runDao().observeActiveRuns().collect { activeRuns ->
@@ -90,6 +91,7 @@ internal class RunMusicNotificationListener : NotificationListenerService() {
     }
 
     override fun onListenerDisconnected() {
+        app.musicListenerConnectionChanged(false)
         runObserver?.cancel()
         runObserver = null
         stopCapture()
@@ -97,6 +99,7 @@ internal class RunMusicNotificationListener : NotificationListenerService() {
     }
 
     override fun onDestroy() {
+        app.musicListenerConnectionChanged(false)
         runObserver?.cancel()
         stopCapture()
         scope.cancel()
@@ -137,6 +140,7 @@ internal class RunMusicNotificationListener : NotificationListenerService() {
     }
 
     private fun stopCapture() {
+        app.cancelSongStudyPreparation()
         runId = null
         captureJob?.cancel()
         captureJob = null
@@ -172,6 +176,7 @@ internal class RunMusicNotificationListener : NotificationListenerService() {
         currentScope.launch {
             try {
                 app.database.musicObservationDao().recordObservation(observation)
+                app.onMusicObservationSaved(ownerRunId)
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (_: Exception) {

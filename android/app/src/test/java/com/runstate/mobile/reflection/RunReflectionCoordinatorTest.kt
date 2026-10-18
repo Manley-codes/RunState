@@ -57,6 +57,8 @@ class RunReflectionCoordinatorTest {
         var weatherReads = 0
         var savedWeather: RunWeatherSnapshot? = null
         var weatherReadFailure: Exception? = null
+        var preparedSong: SongPreparationClaimEntity? = null
+        override suspend fun songPreparation(runId: String) = preparedSong
 
         override suspend fun find(runId: String) = rows[runId]
         override suspend fun all() = rows.values.toList()
@@ -165,6 +167,7 @@ class RunReflectionCoordinatorTest {
         )
 
         coordinator.onSavedVisible(RUN_ID, awaitingReceipt = true)
+        assertNull(coordinator.voicePreparation.value)
         now = 9_000L // The unused placeholder deadline has passed while receipt plays.
         coordinator.selectEnergy(RUN_ID, ReflectionBranch.SPENT)
         val waiting = store.rows.getValue(RUN_ID)
@@ -173,12 +176,17 @@ class RunReflectionCoordinatorTest {
         assertNotNull(waiting.candidatesJson)
         assertEquals(RunReflectionState.Preparing(RUN_ID, ReflectionBranch.SPENT), coordinator.state.value)
         assertEquals(0, timers)
+        assertEquals(ReflectionVoicePreparation(RUN_ID, FIRST_REQUEST_ID, SPENT_TEXT),
+            coordinator.voicePreparation.value)
+        coordinator.selectEnergy(RUN_ID, ReflectionBranch.POWERED_UP)
+        assertEquals("Later feedback must not change the locked voice branch", SPENT_TEXT,
+            coordinator.voicePreparation.value?.text)
 
         coordinator.finishReceipt(RUN_ID)
         val ready = store.rows.getValue(RUN_ID)
         assertTrue(ready.selectionWindowStarted)
         assertEquals(15_000L, ready.selectionDeadlineEpochMillis)
-        assertEquals(RunReflectionState.Ready(RUN_ID, SPENT_TEXT, ReflectionBranch.SPENT), coordinator.state.value)
+        assertEquals(RunReflectionState.Ready(RUN_ID, SPENT_TEXT, ReflectionBranch.POWERED_UP), coordinator.state.value)
         now = 12_000L
         coordinator.finishReceipt(RUN_ID)
         coordinator.onSavedVisible(RUN_ID, awaitingReceipt = true)
@@ -216,6 +224,7 @@ class RunReflectionCoordinatorTest {
             assertEquals("$branch must not start another request", 1, calls)
             assertEquals(branch, store.rows.getValue(RUN_ID).selectedBranch)
             assertEquals(RunReflectionState.Preparing(RUN_ID, branch), coordinator.state.value)
+            assertNull(coordinator.voicePreparation.value)
 
             response.complete(family)
             val waitingForReceipt = store.rows.getValue(RUN_ID)
@@ -223,6 +232,8 @@ class RunReflectionCoordinatorTest {
             assertNull(waitingForReceipt.text)
             assertEquals(ReflectionStatus.PENDING, waitingForReceipt.status)
             assertEquals(RunReflectionState.Preparing(RUN_ID, branch), coordinator.state.value)
+            assertEquals(ReflectionVoicePreparation(RUN_ID, FIRST_REQUEST_ID, exactText),
+                coordinator.voicePreparation.value)
 
             coordinator.finishReceipt(RUN_ID)
             val ready = store.rows.getValue(RUN_ID)
@@ -259,9 +270,11 @@ class RunReflectionCoordinatorTest {
         assertEquals(6_000L, requestedDelay)
         assertEquals(15_000L, store.rows.getValue(RUN_ID).selectionDeadlineEpochMillis)
         assertNull(store.rows.getValue(RUN_ID).selectedBranch)
+        assertNull(coordinator.voicePreparation.value)
         now = 15_000L
         release.complete(Unit)
         assertEquals(RunReflectionState.Ready(RUN_ID, NO_SELECTION_TEXT), coordinator.state.value)
+        assertEquals(NO_SELECTION_TEXT, coordinator.voicePreparation.value?.text)
     }
 
     @Test fun receiptFinishedBeforeSavedVisibilityCannotLeaveSelectionWaiting() {
@@ -917,6 +930,9 @@ class RunReflectionCoordinatorTest {
         }
         val store = MemoryReflectionStore().apply {
             observedMusic = listOf(sampleMusicObservation().copy(title = "Stronger", artist = "Kanye West"))
+            val first = observedMusic.single()
+            preparedSong = SongPreparationClaimEntity(RUN_ID, FIRST_REQUEST_ID, first.title!!, first.artist!!,
+                first.sequenceNumber, "a".repeat(64), first.observedAtEpochMillis)
         }
         val requests = mutableListOf<ReflectionApiRequest>()
         val ids = ArrayDeque(listOf(UUID.fromString(FIRST_REQUEST_ID), UUID.fromString(SECOND_REQUEST_ID)))
@@ -936,6 +952,8 @@ class RunReflectionCoordinatorTest {
         assertNotEquals(requests[0].requestId, requests[1].requestId)
         assertEquals(requests[0].evidence, requests[1].evidence)
         assertEquals("Stronger", requests[1].evidence.musicContext.trackTitle)
+        assertEquals(SongPreparationReference(FIRST_REQUEST_ID, "a".repeat(64)),
+            requests[1].evidence.songPreparationReference)
         assertEquals(1, requests[1].evidence.songPassage?.songStudyVersion)
         assertEquals(1, store.musicReads)
         val ready = coordinator.state.value as RunReflectionState.Ready
@@ -979,12 +997,15 @@ class RunReflectionCoordinatorTest {
         coordinator.onSavedVisible(RUN_ID)
         coordinator.onSavedVisible(SECOND_RUN_ID)
         second.complete(candidates("[FAKE] Second run."))
+        val secondPreparation = coordinator.voicePreparation.value
+        assertEquals(SECOND_RUN_ID, secondPreparation?.runId)
         assertEquals(
             RunReflectionState.Ready(SECOND_RUN_ID, "[FAKE] Second run."),
             coordinator.state.value
         )
 
         first.complete(candidates("[FAKE] Late first run."))
+        assertEquals(secondPreparation, coordinator.voicePreparation.value)
         assertEquals("[FAKE] Late first run.", store.rows.getValue(RUN_ID).text)
         assertEquals(
             RunReflectionState.Ready(SECOND_RUN_ID, "[FAKE] Second run."),

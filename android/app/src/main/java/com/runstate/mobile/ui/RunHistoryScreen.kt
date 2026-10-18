@@ -85,6 +85,7 @@ import com.runstate.mobile.data.local.RunSplitStatus
 import com.runstate.mobile.R
 import com.runstate.mobile.RunStateApplication
 import com.runstate.mobile.reflection.ReflectionSpeechGateway
+import com.runstate.mobile.reflection.MAX_REFLECTION_AUDIO_BYTES
 import com.runstate.mobile.music.AndroidSpotifyPassageSession
 import com.runstate.mobile.music.SongPassageRequest
 import com.runstate.mobile.music.SongPassageStatus
@@ -92,10 +93,13 @@ import com.runstate.mobile.music.SongPassageDiagnostic
 import com.runstate.mobile.music.SpotifySongPassageController
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import java.util.UUID
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ensureActive
@@ -114,6 +118,9 @@ internal const val RUN_HISTORY_ENERGY_CHOICE_TAG_PREFIX = "runHistoryEnergyChoic
 
 /** Kept injectable so screen behavior can be checked without a device voice engine. */
 internal interface ReflectionSpeaker {
+    /** Prepare one exact reflection silently; custom speakers can retain their existing behavior. */
+    fun prepare(text: String) = Unit
+    fun cancelPreparation() = Unit
     fun speak(text: String)
     fun speakWithSongPassage(
         text: String,
@@ -196,9 +203,13 @@ internal class AndroidReflectionSpeaker(
         var cloudAudio: Boolean = false
     )
 
+    private data class PreparedReflection(val text: String, val audio: Deferred<ByteArray?>)
+
     private val mainHandler = Handler(Looper.getMainLooper())
     private val voiceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var preparation: Job? = null
+    private var preparedReflection: PreparedReflection? = null
+    private var adoptedReflection: PreparedReflection? = null
     private var initialized = false
     private var initializationFailed = false
     private var request: SpeechRequest? = null
@@ -233,6 +244,39 @@ internal class AndroidReflectionSpeaker(
         submit(text, rate = 0.94f, onFinished = null, canPlayInstrumental = null)
     }
 
+    override fun prepare(text: String) {
+        if (closed || !validSpeechText(text)) {
+            cancelPreparation()
+            return
+        }
+        if (preparedReflection?.text == text) return
+        cancelPreparation()
+        val gateway = try { platform.reflectionSpeechGateway() } catch (_: RuntimeException) { null } ?: return
+        preparedReflection = PreparedReflection(text, voiceScope.async {
+            withTimeoutOrNull(20_000L) { synthesizeAudio(gateway, text) }
+        })
+    }
+
+    override fun cancelPreparation() {
+        val abandoned = preparedReflection
+        preparedReflection = null
+        abandoned?.audio?.cancel()
+    }
+
+    private fun cancelAdoptedPreparation() {
+        val abandoned = adoptedReflection
+        adoptedReflection = null
+        abandoned?.audio?.cancel()
+    }
+
+    private fun validSpeechText(text: String) = text.isNotBlank() &&
+        text.length <= TextToSpeech.getMaxSpeechInputLength()
+
+    private suspend fun synthesizeAudio(gateway: ReflectionSpeechGateway, text: String): ByteArray? = try {
+        gateway.synthesize(text)?.takeIf { it.isNotEmpty() && it.size <= MAX_REFLECTION_AUDIO_BYTES }
+    } catch (cancelled: CancellationException) { throw cancelled }
+    catch (_: Exception) { null }
+
     override fun speakWithSongPassage(
         text: String,
         passage: SongPassageRequest,
@@ -263,9 +307,14 @@ internal class AndroidReflectionSpeaker(
         songPassage: SongPassageRequest? = null,
         purpose: SpeechPurpose = SpeechPurpose.REFLECTION
     ) {
+        // A matching silent request becomes this speech attempt's sole preparation. Detach it
+        // before stop() clears the old owner, so an in-flight request is awaited, not repeated.
+        val prepared = preparedReflection?.takeIf {
+            purpose == SpeechPurpose.REFLECTION && !closed && validSpeechText(text) && it.text == text
+        }
+        if (prepared != null) preparedReflection = null
         stop()
-        if (closed || text.isBlank() ||
-            text.length > TextToSpeech.getMaxSpeechInputLength()) {
+        if (closed || !validSpeechText(text)) {
             onFinished?.invoke()
             return
         }
@@ -273,14 +322,22 @@ internal class AndroidReflectionSpeaker(
             canPlayInstrumental, songPassage)
         request = next
         val gateway = if (purpose == SpeechPurpose.REFLECTION) platform.reflectionSpeechGateway() else null
-        if (gateway == null) useLocalVoice(next) else {
+        if (prepared == null && gateway == null) useLocalVoice(next) else {
+            adoptedReflection = prepared
             next.phase = SpeechPhase.PREPARING_CLOUD
             armTimeout(next.id, 25_000L)
             preparation = voiceScope.launch {
-                val audio = try { gateway.synthesize(next.text) }
-                catch (cancelled: CancellationException) { throw cancelled }
-                catch (_: Exception) { null }
+                val audio = if (prepared != null) {
+                    try { prepared.audio.await() }
+                    catch (cancelled: CancellationException) {
+                        // Cancelling the speech owner still exits immediately. A separately
+                        // cancelled prepared worker instead falls back once without another call.
+                        coroutineContext.ensureActive()
+                        null
+                    }
+                } else synthesizeAudio(requireNotNull(gateway), next.text)
                 if (request !== next || closed || next.phase != SpeechPhase.PREPARING_CLOUD) return@launch
+                if (adoptedReflection === prepared) adoptedReflection = null
                 preparation = null
                 if (audio == null) useLocalVoice(next) else playCloudVoice(next, audio)
             }
@@ -291,6 +348,7 @@ internal class AndroidReflectionSpeaker(
         if (request !== current || closed) return
         preparation?.cancel()
         preparation = null
+        cancelAdoptedPreparation()
         current.cloudAudio = false
         current.phase = SpeechPhase.WAITING_FOR_ENGINE
         clearTimeout()
@@ -333,6 +391,8 @@ internal class AndroidReflectionSpeaker(
         clearTimeout()
         preparation?.cancel()
         preparation = null
+        cancelPreparation()
+        cancelAdoptedPreparation()
         try {
             platform.stop()
         } catch (_: RuntimeException) {
@@ -482,6 +542,7 @@ internal class AndroidReflectionSpeaker(
         clearTimeout()
         preparation?.cancel()
         preparation = null
+        cancelAdoptedPreparation()
         try { platform.stopReflectionAudio() } catch (_: RuntimeException) { }
         stopInstrumental()
         releaseFocus()

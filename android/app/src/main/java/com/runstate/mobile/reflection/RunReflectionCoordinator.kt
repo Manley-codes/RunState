@@ -20,6 +20,11 @@ internal sealed interface RunReflectionState {
     data class Failed(val runId: String, val energy: ReflectionBranch? = null) : RunReflectionState
 }
 
+/** Preparation is silent and process-only; it never authorizes reveal or audible playback. */
+internal data class ReflectionVoicePreparation(val runId: String, val requestId: String, val text: String) {
+    override fun toString() = "ReflectionVoicePreparation[text=redacted]"
+}
+
 /** Storage seam for deterministic coordinator tests; Room implements the durable rules. */
 internal interface ReflectionStore {
     suspend fun find(runId: String): RunReflectionEntity?
@@ -34,6 +39,7 @@ internal interface ReflectionStore {
     suspend fun retry(runId: String, requestId: String): RunReflectionEntity?
     suspend fun musicObservations(runId: String): List<RunMusicObservationEntity> = emptyList()
     suspend fun weatherSnapshot(runId: String): RunWeatherSnapshot? = null
+    suspend fun songPreparation(runId: String): SongPreparationClaimEntity? = null
 }
 
 internal class RoomReflectionStore(
@@ -53,6 +59,7 @@ internal class RoomReflectionStore(
     override suspend fun retry(runId: String, requestId: String) = dao.retry(runId, requestId)
     override suspend fun musicObservations(runId: String) = musicDao?.observationsFor(runId).orEmpty()
     override suspend fun weatherSnapshot(runId: String) = weatherDao?.find(runId)?.readySnapshot()
+    override suspend fun songPreparation(runId: String) = musicDao?.preparationFor(runId)
 }
 
 /**
@@ -84,6 +91,8 @@ internal class RunReflectionCoordinator(
     private var activeRunId: String? = null
     private val mutableState = MutableStateFlow<RunReflectionState>(RunReflectionState.Idle)
     val state: StateFlow<RunReflectionState> = mutableState.asStateFlow()
+    private val mutableVoicePreparation = MutableStateFlow<ReflectionVoicePreparation?>(null)
+    val voicePreparation: StateFlow<ReflectionVoicePreparation?> = mutableVoicePreparation.asStateFlow()
 
     /** Recover local replies without silently starting another potentially paid request. */
     suspend fun initialize() = initialization.withLock {
@@ -132,7 +141,8 @@ internal class RunReflectionCoordinator(
                         catch (cancelled: CancellationException) { throw cancelled }
                         catch (_: Exception) { null }
                         val request = reflectionRequestFromSavedRun(
-                            requestIdSupplier().toString(), run, runDao.transitionsFor(runId), music, weather)
+                            requestIdSupplier().toString(), run, runDao.transitionsFor(runId), music, weather,
+                            store.songPreparation(runId))
                         val receiptFinishedAt = finishedReceipts[runId]
                         record = store.ensure(RunReflectionEntity(
                             runId = runId, requestId = request.requestId,
@@ -334,6 +344,26 @@ internal class RunReflectionCoordinator(
 
     private fun publish(record: RunReflectionEntity) {
         if (activeRunId != record.runId) return
+        // An explicit first Energy choice is immutable even while the receipt holds READY.
+        // Do not guess a branch or synthesize the whole family while Energy is unanswered.
+        val selectedText = when {
+            record.status == ReflectionStatus.READY -> record.text
+            record.status == ReflectionStatus.PENDING && record.selectedBranch != null &&
+                record.candidatesJson != null -> {
+                val candidates = gson.fromJson(record.candidatesJson, ReflectionCandidates::class.java)
+                when (record.selectedBranch) {
+                    ReflectionBranch.SPENT -> candidates.spent
+                    ReflectionBranch.FEELING_GOOD -> candidates.feelingGood
+                    ReflectionBranch.POWERED_UP -> candidates.poweredUp
+                    ReflectionBranch.NO_SELECTION -> candidates.noSelection
+                    null -> null
+                }
+            }
+            else -> null
+        }
+        mutableVoicePreparation.value = selectedText?.let {
+            ReflectionVoicePreparation(record.runId, record.requestId, it)
+        }
         mutableState.value = when (record.status) {
             ReflectionStatus.PENDING -> RunReflectionState.Preparing(record.runId, record.postRunEnergy)
             ReflectionStatus.READY -> RunReflectionState.Ready(record.runId, requireNotNull(record.text),
@@ -344,7 +374,10 @@ internal class RunReflectionCoordinator(
     }
 
     private fun publishFailure(runId: String) {
-        if (activeRunId == runId) mutableState.value = RunReflectionState.Failed(runId)
+        if (activeRunId == runId) {
+            mutableVoicePreparation.value = null
+            mutableState.value = RunReflectionState.Failed(runId)
+        }
     }
 }
 

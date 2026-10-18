@@ -59,6 +59,61 @@ class RunStateMigrationTest {
     private val context = InstrumentationRegistry.getInstrumentation().targetContext
 
     @Test
+    fun versionThirteenMigrationPreservesEveryOldFieldAndCreatesNoPreparationClaims() {
+        val name = "runstate-v13-song-preparation-migration-test.db"
+        val old = helper.createDatabase(name, 13)
+        val finish = OFFICIAL_START + 60_000
+        old.insertVersionTwoRun(state = "COMPLETED", lastCheckpointEpochMillis = finish, finishEpochMillis = finish)
+        old.execSQL("""
+            UPDATE runs SET transition_history_complete=1, music_observation_requested=1,
+                music_reflection_sharing_allowed=1, pre_run_energy='LOW', post_run_effort='SMOOTH'
+            WHERE run_id=?
+        """.trimIndent(), arrayOf(RUN_ID))
+        old.execSQL("""
+            INSERT INTO run_music_observations (run_id,sequence_number,observation_key,
+                observed_at_epoch_millis,elapsed_realtime_nanos,source_package,title,artist,playback_state,event_kind)
+            VALUES (?,1,'old-observation',?,1000000,'com.spotify.music','Exact title','Exact artist','PLAYING','SESSION_SNAPSHOT')
+        """.trimIndent(), arrayOf<Any>(RUN_ID, OFFICIAL_START + 1_000))
+        old.execSQL("""
+            INSERT INTO run_reflections (run_id,request_id,evidence_json,selection_deadline_epoch_millis,
+                status,selected_branch,post_run_energy,candidates_json,text,finalized_at_epoch_millis,is_test_data,selection_window_started)
+            VALUES (?,?,'{"preserve":"evidence"}',?,'READY','SPENT','SPENT',NULL,?,?,0,1)
+        """.trimIndent(), arrayOf<Any>(RUN_ID, "03689ffc-65d9-4907-ae77-7a17b3ad77a6", finish + 6_000,
+            "  Exact old reflection.\nUnicode — 🏃  ", finish + 7_000))
+        val tables = listOf("runs", "run_transitions", "run_location_points", "run_music_observations",
+            "run_reflections", "run_weather", "run_split_snapshots", "run_splits")
+        val columns = tables.associateWith { table ->
+            old.query("SELECT * FROM `$table` LIMIT 0").use { it.columnNames.toList() }
+        }
+        fun rows(db: SupportSQLiteDatabase, table: String): List<List<String?>> =
+            db.query("SELECT * FROM `$table` ORDER BY 1").use { cursor -> buildList {
+                while (cursor.moveToNext()) add(columns.getValue(table).indices.map { index ->
+                    if (cursor.isNull(index)) null else cursor.getString(index)
+                })
+            } }
+        val before = tables.associateWith { rows(old, it) }
+        old.close()
+        helper.runMigrationsAndValidate(name, 14, true, MIGRATION_13_14).use { migrated ->
+            tables.forEach { table ->
+                migrated.query("SELECT * FROM `$table` LIMIT 0").use {
+                    assertEquals(table, columns.getValue(table), it.columnNames.toList())
+                }
+                assertEquals(table, before.getValue(table), rows(migrated, table))
+            }
+            migrated.query("SELECT COUNT(*) FROM run_song_preparations").use {
+                assertTrue(it.moveToFirst())
+                assertEquals("Older runs must not gain an early preparation attempt.", 0, it.getInt(0))
+            }
+        }
+        val reopened = openDatabaseThroughFactory(name)
+        runBlocking {
+            assertNull(reopened.musicObservationDao().preparationFor(RUN_ID))
+            assertEquals("Exact title", reopened.musicObservationDao().observationsFor(RUN_ID).single().title)
+            assertEquals("  Exact old reflection.\nUnicode — 🏃  ", reopened.reflectionDao().findByRunId(RUN_ID)?.text)
+        }
+    }
+
+    @Test
     fun versionTwelveMigrationPreservesEveryAppFieldWithoutBackfillingSplits() {
         val name = "runstate-v12-split-migration-test.db"
         val activeId = "03689ffc-65d9-4907-ae77-7a17b3ad77a6"

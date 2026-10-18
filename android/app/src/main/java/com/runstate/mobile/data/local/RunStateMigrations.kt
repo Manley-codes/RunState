@@ -289,3 +289,26 @@ val MIGRATION_12_13 = object : Migration(12, 13) {
         """.trimIndent())
     }
 }
+
+/** Claims store no source material or credentials and never create attempts for historical runs. */
+val MIGRATION_13_14 = object : Migration(13, 14) {
+    override fun migrate(connection: SQLiteConnection) {
+        connection.execSQL("""
+            CREATE TABLE IF NOT EXISTS `run_song_preparations` (
+                `run_id` TEXT NOT NULL,
+                `preparation_id` TEXT NOT NULL,
+                `track_title` TEXT NOT NULL,
+                `artist_name` TEXT NOT NULL,
+                `observation_sequence_number` INTEGER NOT NULL,
+                `destination_fingerprint` TEXT NOT NULL,
+                `claimed_at_epoch_millis` INTEGER NOT NULL,
+                `status` TEXT NOT NULL,
+                PRIMARY KEY(`run_id`),
+                FOREIGN KEY(`run_id`) REFERENCES `runs`(`run_id`)
+                    ON UPDATE NO ACTION ON DELETE CASCADE
+            )
+        """.trimIndent())
+        connection.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_run_song_preparations_preparation_id` " +
+            "ON `run_song_preparations` (`preparation_id`)")
+    }
+}

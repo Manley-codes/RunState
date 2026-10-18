@@ -1,6 +1,7 @@
 package com.runstate.mobile
 
 import com.runstate.mobile.reflection.RunReflectionState
+import com.runstate.mobile.reflection.ReflectionVoicePreparation
 import com.runstate.mobile.reflection.CompletedRunEvidence
 import com.runstate.mobile.reflection.ReflectionMetricsEvidence
 import com.runstate.mobile.reflection.ReflectionMusicContext
@@ -18,6 +19,16 @@ import org.junit.Test
 class RunCompleteSpeechTest {
     private val runId = "0f6a2c1e-9d43-4b7a-9c21-7b5e8a4d1f30"
     private val otherRunId = "9b3d7a5c-2e41-4f68-8a90-1c2d3e4f5a6b"
+
+    @Test fun silentPreparationRequiresThisUnspokenNewCompletion() {
+        val preparation = ReflectionVoicePreparation(runId, otherRunId, "Exact selected text")
+        assertEquals(preparation, eligibleCompletionVoicePreparation(runId, runId, null, preparation))
+        assertNull(eligibleCompletionVoicePreparation(runId, runId, runId, preparation))
+        assertNull(eligibleCompletionVoicePreparation(runId, null, null, preparation))
+        assertNull(eligibleCompletionVoicePreparation(otherRunId, otherRunId, null, preparation))
+        assertNull(eligibleCompletionVoicePreparation(null, null, null, preparation))
+        assertNull(eligibleCompletionVoicePreparation(runId, runId, null, null))
+    }
 
     @Test
     fun newlyCompletedRunSpeaksItsExactReadyTextOnlyOnce() {

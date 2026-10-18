@@ -8,6 +8,7 @@ import com.google.gson.stream.JsonToken
 import com.runstate.mobile.data.local.MetricSource
 import com.runstate.mobile.data.local.RunEntity
 import com.runstate.mobile.data.local.RunMusicObservationEntity
+import com.runstate.mobile.data.local.SongPreparationClaimEntity
 import com.runstate.mobile.data.local.RunTransitionEntity
 import com.runstate.mobile.data.local.MusicPlaybackState
 import com.runstate.mobile.data.local.StoredRunState
@@ -30,6 +31,14 @@ import javax.net.ssl.HttpsURLConnection
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.coroutines.ensureActive
+import java.util.concurrent.atomic.AtomicReference
+import kotlin.coroutines.coroutineContext
+import kotlin.coroutines.resume
 
 internal const val LOCAL_REFLECTION_ENDPOINT =
     "http://10.0.2.2:8787/api/reflections/candidates"
@@ -52,8 +61,14 @@ internal data class CompletedRunEvidence(
     val preRunEnergy: String = "UNKNOWN",
     val musicContext: ReflectionMusicContext = ReflectionMusicContext(),
     val weatherContext: RunWeatherSnapshot? = null,
-    val songPassage: SongReflectionPlan? = null
+    val songPassage: SongReflectionPlan? = null,
+    /** Local transport binding; removed from evidence before sending any completed facts. */
+    val songPreparationReference: SongPreparationReference? = null
 )
+
+internal data class SongPreparationReference(val preparationId: String, val destinationFingerprint: String) {
+    override fun toString() = "SongPreparationReference[reference=redacted]"
+}
 
 internal data class ReflectionMetricsEvidence(
     val distanceMeters: Double?,
@@ -106,7 +121,8 @@ internal fun reflectionRequestFromSavedRun(
     run: RunEntity,
     transitions: List<RunTransitionEntity>,
     musicObservations: List<RunMusicObservationEntity> = emptyList(),
-    weather: RunWeatherSnapshot? = null
+    weather: RunWeatherSnapshot? = null,
+    songPreparation: SongPreparationClaimEntity? = null
 ): ReflectionApiRequest {
     require(UUID.fromString(requestId).toString() == requestId) {
         "requestId must be canonical lowercase UUID text."
@@ -157,9 +173,22 @@ internal fun reflectionRequestFromSavedRun(
         )
     }
 
-    val song = selectSongReflectionPlan(run, finishEpochMillis, musicObservations)
+    // A claimed early study pins this run to exactly that already-shared identity, even if
+    // preparation failed or Spotify later changed tracks. Never upload a second song instead.
+    val sharedMusicAllowed = run.musicObservationRequested && run.musicReflectionSharingAllowed
+    val pinnedObservation = songPreparation?.takeIf { it.runId == run.runId && sharedMusicAllowed }?.let { claim ->
+        musicObservations.singleOrNull { observation ->
+            observation.runId == run.runId && observation.sequenceNumber == claim.observationSequenceNumber &&
+                observation.sourcePackage == "com.spotify.music" && observation.playbackState == MusicPlaybackState.PLAYING &&
+                observation.observedAtEpochMillis in run.officialStartEpochMillis..finishEpochMillis &&
+                observation.title?.trim() == claim.trackTitle && observation.artist?.trim() == claim.artistName
+        }
+    }
+    val usableObservations = if (songPreparation == null) musicObservations else listOfNotNull(
+        pinnedObservation?.copy(title = songPreparation.trackTitle, artist = songPreparation.artistName))
+    val song = selectSongReflectionPlan(run, finishEpochMillis, usableObservations)
     val musicContext = if (song == null) {
-        reflectionMusicContextFromSavedRun(run, finishEpochMillis, musicObservations)
+        reflectionMusicContextFromSavedRun(run, finishEpochMillis, usableObservations)
     } else ReflectionMusicContext(
         state = "MUSIC", trackTitle = song.title, artistName = song.artist,
         provenance = "MEDIA_SESSION_PARTIAL", songCue = song.cue
@@ -176,7 +205,10 @@ internal fun reflectionRequestFromSavedRun(
             preRunEnergy = run.preRunEnergy?.name ?: "UNKNOWN",
             musicContext = musicContext,
             weatherContext = weather,
-            songPassage = song?.plan()
+            songPassage = song?.plan(),
+            songPreparationReference = songPreparation?.takeIf { pinnedObservation != null }?.let {
+                SongPreparationReference(it.preparationId, it.destinationFingerprint)
+            }
         )
     )
 }
@@ -207,7 +239,8 @@ private fun reflectionMusicContextFromSavedRun(
 /** A small debug bridge to the loopback-bound backend through emulator routing or adb reverse. */
 internal class LocalReflectionHttpClient(
     endpoint: String = LOCAL_REFLECTION_ENDPOINT,
-    private val gson: Gson = GsonBuilder().serializeNulls().create()
+    private val gson: Gson = GsonBuilder().serializeNulls().create(),
+    private val connectionFactory: (URL) -> HttpURLConnection = { it.openConnection() as HttpURLConnection }
 ) : ReflectionGateway {
 
     private val endpointUrl = URL(endpoint).also { url ->
@@ -224,7 +257,9 @@ internal class LocalReflectionHttpClient(
     }
 
     override suspend fun request(request: ReflectionApiRequest): ReflectionCandidates =
-        postReflectionRequest(endpointUrl, request, gson, { it.openConnection() as HttpURLConnection }, null)
+        postReflectionRequest(endpointUrl, request, gson, connectionFactory, null,
+            includeSongCue = request.evidence.songPreparationReference == null,
+            includeSharedMusic = request.evidence.songPreparationReference == null)
 }
 
 /** Hosted mode never accepts a local HTTP connection, follows a redirect, or drops credentials. */
@@ -233,19 +268,30 @@ internal class HostedReflectionHttpClient(
     private val connectionFactory: (URL) -> HttpURLConnection = { it.openConnection() as HttpURLConnection },
     private val gson: Gson = GsonBuilder().serializeNulls().create()
 ) : ReflectionGateway {
-    private data class SongCapabilities(val editorialCue: Boolean, val studyVersion: Int)
+    private data class SongCapabilities(val editorialCue: Boolean, val studyVersion: Int,
+        val preparation: Boolean)
     private var songCapabilities: SongCapabilities? = null
 
     override suspend fun request(request: ReflectionApiRequest): ReflectionCandidates = withContext(Dispatchers.IO) {
-        val sendCue = request.evidence.musicContext.songCue != null &&
+        val reference = request.evidence.songPreparationReference
+        val sameDestination = reference == null ||
+            reference.destinationFingerprint == reflectionDestinationFingerprint(config)
+        val sendCue = sameDestination && request.evidence.musicContext.songCue != null &&
             supportsSongCue(request.evidence.songPassage?.songStudyVersion ?: 0)
-        postReflectionRequest(URL(config.endpoint), request, gson, connectionFactory, config.accessCode, sendCue)
+        val sendPreparation = sameDestination && reference != null &&
+            (songCapabilities ?: readSongCapabilities())?.preparation == true
+        postReflectionRequest(URL(config.endpoint), request, gson, connectionFactory, config.accessCode,
+            sendCue, sendPreparation, sameDestination)
     }
 
     /** A cheap, credential-free capability check keeps the currently deployed strict server usable. */
     private fun supportsSongCue(requiredStudyVersion: Int): Boolean {
         fun SongCapabilities.supports() = editorialCue && studyVersion >= requiredStudyVersion
         songCapabilities?.let { return it.supports() }
+        return readSongCapabilities()?.supports() == true
+    }
+
+    private fun readSongCapabilities(): SongCapabilities? {
         var connection: HttpURLConnection? = null
         val supported = try {
             connection = connectionFactory(URL(URL(config.endpoint), "/health"))
@@ -258,7 +304,8 @@ internal class HostedReflectionHttpClient(
                 val ready = if (response == HttpURLConnection.HTTP_OK) SongCapabilities(
                     editorialCue = connection.getHeaderField("X-RunState-Song-Cue") == "1",
                     studyVersion = connection.getHeaderField("X-RunState-Song-Study")?.toIntOrNull()
-                        ?.takeIf { it >= 0 } ?: 0
+                        ?.takeIf { it >= 0 } ?: 0,
+                    preparation = connection.getHeaderField("X-RunState-Song-Preparation") == "1"
                 ) else null
                 try { connection.inputStream?.close() } catch (_: Exception) { }
                 ready
@@ -268,7 +315,7 @@ internal class HostedReflectionHttpClient(
         // Do not pin an older/deploying server's missing study capability for this process.
         // A later explicit retry can discover the deployment without changing frozen evidence.
         if (supported?.studyVersion?.let { it >= 1 } == true) songCapabilities = supported
-        return supported?.supports() == true
+        return supported
     }
 }
 
@@ -278,7 +325,9 @@ private suspend fun postReflectionRequest(
     gson: Gson,
     connectionFactory: (URL) -> HttpURLConnection,
     accessCode: String?,
-    includeSongCue: Boolean = true
+    includeSongCue: Boolean = true,
+    includeSongPreparation: Boolean = false,
+    includeSharedMusic: Boolean = true
 ): ReflectionCandidates = withContext(Dispatchers.IO) {
     val hosted = accessCode != null
     var connection: HttpURLConnection? = null
@@ -288,8 +337,14 @@ private suspend fun postReflectionRequest(
         val json = gson.toJsonTree(request).asJsonObject
         val evidence = json.getAsJsonObject("evidence")
         evidence.remove("songPassage") // Local timing/transport instructions never go to the model.
+        evidence.remove("songPreparationReference")
+        if (!includeSharedMusic) evidence.add("musicContext", gson.toJsonTree(ReflectionMusicContext()))
+        request.evidence.songPreparationReference?.takeIf { includeSongPreparation }?.let {
+            require(UUID.fromString(it.preparationId).toString() == it.preparationId)
+            json.addProperty("songPreparationId", it.preparationId)
+        }
         if (request.evidence.weatherContext == null) evidence.remove("weatherContext")
-        val expectedCueId = request.evidence.musicContext.songCue?.cueId?.takeIf { includeSongCue }
+        val expectedCueId = request.evidence.musicContext.songCue?.cueId?.takeIf { includeSongCue && includeSharedMusic }
         if (expectedCueId == null) evidence.getAsJsonObject("musicContext").remove("songCue")
         val body = gson.toJson(json).toByteArray(StandardCharsets.UTF_8)
         connection = connectionFactory(endpoint)
@@ -375,6 +430,103 @@ private const val CONNECT_TIMEOUT_MILLIS = 3_000
 // The source lookup and two sequential study/writer calls share the backend's 90-second budget.
 private const val READ_TIMEOUT_MILLIS = 100_000
 private const val MAX_RESPONSE_BYTES = 64 * 1_024
+
+/** Early work contains one song identity, never run facts or a listening-history list. */
+internal interface SongStudyPreparationGateway {
+    suspend fun supports(): Boolean
+    suspend fun prepare(preparationId: String, trackTitle: String, artistName: String): Boolean
+}
+
+internal class HostedSongStudyPreparationClient(
+    private val config: ReflectionConnectionConfig,
+    private val connectionFactory: (URL) -> HttpURLConnection = { it.openConnection() as HttpURLConnection }
+) : SongStudyPreparationGateway {
+    override suspend fun supports(): Boolean = exchange(null)
+
+    override suspend fun prepare(preparationId: String, trackTitle: String, artistName: String): Boolean {
+        require(UUID.fromString(preparationId).toString() == preparationId)
+        require(listOf(trackTitle, artistName).all { value ->
+            value.isNotBlank() && value.length <= 200 && value.none(Char::isISOControl)
+        })
+        return exchange(Triple(preparationId, trackTitle, artistName))
+    }
+
+    private suspend fun exchange(song: Triple<String, String, String>?): Boolean {
+        val active = AtomicReference<HttpURLConnection?>()
+        val budget = if (song == null) 4_000L else 65_000L
+        return withTimeoutOrNull(budget) {
+            coroutineScope {
+                suspendCancellableCoroutine<Boolean> { continuation ->
+                    val worker = launch(Dispatchers.IO) {
+                        val result = fetch(song, active)
+                        if (continuation.isActive) continuation.resume(result)
+                    }
+                    continuation.invokeOnCancellation {
+                        worker.cancel()
+                        try { active.getAndSet(null)?.disconnect() } catch (_: RuntimeException) { }
+                    }
+                }
+            }
+        } ?: false
+    }
+
+    private suspend fun fetch(song: Triple<String, String, String>?,
+        active: AtomicReference<HttpURLConnection?>): Boolean {
+        try {
+            val path = if (song == null) "/health" else "/api/reflections/song-study"
+            val connection = connectionFactory(URL(URL(config.endpoint), path))
+            active.set(connection)
+            if (connection !is HttpsURLConnection) return false
+            connection.instanceFollowRedirects = false
+            connection.connectTimeout = 2_000
+            connection.readTimeout = if (song == null) 2_000 else 60_000
+            coroutineContext.ensureActive()
+            if (song == null) {
+                connection.requestMethod = "GET"
+                return connection.responseCode == HttpURLConnection.HTTP_OK &&
+                    connection.getHeaderField("X-RunState-Song-Preparation") == "1"
+            }
+            connection.requestMethod = "POST"
+            connection.doOutput = true
+            connection.setRequestProperty("Content-Type", "application/json; charset=utf-8")
+            connection.setRequestProperty("Accept", "application/json")
+            connection.setRequestProperty("Authorization", "Bearer ${config.accessCode}")
+            val body = Gson().toJson(mapOf("preparationId" to song.first,
+                "trackTitle" to song.second, "artistName" to song.third)).toByteArray(StandardCharsets.UTF_8)
+            connection.setFixedLengthStreamingMode(body.size)
+            connection.outputStream.use { it.write(body) }
+            if (connection.responseCode != HttpURLConnection.HTTP_OK ||
+                connection.contentType?.substringBefore(';')?.trim()?.lowercase() != "application/json") return false
+            val response = connection.inputStream.use { readBoundedUtf8(it, true) }
+            if (response.length > 4_096) return false
+            JsonReader(StringReader(response)).use { reader ->
+                reader.strictness = Strictness.STRICT
+                reader.beginObject()
+                val seen = mutableSetOf<String>()
+                var id: String? = null
+                var state: String? = null
+                var version: Int? = null
+                while (reader.hasNext()) when (val name = reader.nextName()) {
+                    "preparationId" -> { requireUnique(seen, name); id = reader.requireString() }
+                    "state" -> { requireUnique(seen, name); state = reader.requireString() }
+                    "songStudyVersion" -> {
+                        requireUnique(seen, name)
+                        if (reader.peek() != JsonToken.NUMBER) return false
+                        val raw = reader.nextString()
+                        if (raw != "1") return false
+                        version = 1
+                    }
+                    else -> return false
+                }
+                reader.endObject()
+                return reader.peek() == JsonToken.END_DOCUMENT && seen.size == 3 &&
+                    id == song.first && version == 1 && state == "READY"
+            }
+        } catch (cancelled: CancellationException) { throw cancelled }
+        catch (_: Exception) { return false }
+        finally { try { active.getAndSet(null)?.disconnect() } catch (_: RuntimeException) { } }
+    }
+}
 
 /** Rejects any response that cannot be tied exactly to the request and four branches. */
 internal fun parseReflectionResponse(

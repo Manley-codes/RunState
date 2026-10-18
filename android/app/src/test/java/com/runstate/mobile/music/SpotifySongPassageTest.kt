@@ -483,13 +483,13 @@ class SpotifySongPassageTest {
         assertEquals(listOf("pause", "seek:5000", "play", "pause"), session.commands)
     }
 
-    @Test fun diagnosticsDistinguishMetadataChangeWithoutIncludingItsValues() = runBlocking {
+    @Test fun diagnosticsDistinguishMetadataChangeWithoutIncludingIdentity() = runBlocking {
         val clock = Clock()
         val session = Session(clock)
         val events = mutableListOf<SongPassageDiagnostic>()
         clock.onWait = {
             if (clock.time == 500L) session.replace(session.snapshot().copy(
-                durationMillis = 180_001L, positionUpdateAgeMillis = -20L))
+                durationMillis = 180_002L, positionUpdateAgeMillis = -20L))
         }
         val result = SpotifySongPassageController(session, clock) { events += it }.play(request)
         assertEquals(SongPassageStatus.INTERRUPTED, result.status)
@@ -497,8 +497,151 @@ class SpotifySongPassageTest {
         assertEquals(SongPassageStage.PLAYING, failure.stage)
         assertEquals(500L, failure.stageElapsedMillis)
         assertEquals(-20L, failure.positionUpdateAgeMillis)
+        assertEquals(2L, failure.durationDeltaMillis)
         assertTrue(events.none { it.toString().contains("Test title") || it.toString().contains("test-track") })
-        assertEquals(listOf("pause", "seek:5000", "play"), session.commands)
+        assertEquals(listOf("pause", "seek:5000", "play", "pause"), session.commands)
+        assertEquals(PassagePlayback.PAUSED, session.snapshot().playback)
+    }
+
+    @Test fun durationDiagnosticClampsAnInvalidReportWithoutOverflowOrContinuingPlayback() = runBlocking {
+        val clock = Clock()
+        val session = Session(clock)
+        val events = mutableListOf<SongPassageDiagnostic>()
+        clock.onWait = {
+            if (clock.time == 500L) session.replace(session.snapshot().copy(durationMillis = Long.MAX_VALUE))
+        }
+        val result = SpotifySongPassageController(session, clock) { events += it }.play(request)
+        assertEquals(SongPassageStatus.INTERRUPTED, result.status)
+        val failure = events.first { it.reason == SongPassageReason.DURATION_CHANGED }
+        assertEquals(86_400_000L - 180_000L, failure.durationDeltaMillis)
+        assertTrue(events.none { it.toString().contains("Test title") || it.toString().contains("test-track") })
+    }
+
+    @Test fun singleMillisecondDurationRefinementPreservesPassageAndPausedRestoration() = runBlocking {
+        for (delta in listOf(-1L, 1L)) {
+            val clock = Clock()
+            val session = Session(clock).apply {
+                current = current.copy(playback = PassagePlayback.PAUSED, canPlay = true, canPause = false)
+            }
+            clock.onWait = {
+                if (clock.time == 500L) session.current = session.current.copy(durationMillis = 180_000L + delta)
+            }
+            val result = SpotifySongPassageController(session, clock).play(request)
+            assertEquals(SongPassageResult(SongPassageStatus.FINISHED, true), result)
+            assertEquals(listOf("seek:5000", "play", "pause", "seek:60000"), session.commands)
+            assertEquals(PassagePlayback.PAUSED, session.snapshot().playback)
+            assertEquals(60_000L, session.snapshot().positionMillis)
+            assertEquals(180_000L + delta, session.snapshot().durationMillis)
+            assertEquals(10_000L, clock.time)
+        }
+    }
+
+    @Test fun singleMillisecondRefinementBeforePlayingConfirmationKeepsTheOriginalEndpoint() = runBlocking {
+        val clock = Clock()
+        val session = Session(clock).apply {
+            current = current.copy(playback = PassagePlayback.PAUSED, canPlay = true, canPause = false)
+            playingReportDelayMillis = 1_000L
+        }
+        clock.onWait = {
+            if (clock.time == 500L) session.current = session.current.copy(durationMillis = 180_001L)
+        }
+        val result = SpotifySongPassageController(session, clock).play(request)
+        assertEquals(SongPassageResult(SongPassageStatus.FINISHED, true), result)
+        assertEquals(listOf("seek:5000", "play", "pause", "seek:60000"), session.commands)
+        assertEquals(10_000L, clock.time)
+        assertEquals(PassagePlayback.PAUSED, session.snapshot().playback)
+        assertEquals(60_000L, session.snapshot().positionMillis)
+    }
+
+    @Test fun twoMillisecondChangesStillAbortAndCancelOwnedPlaybackWithoutRestoration() = runBlocking {
+        for (delta in listOf(-2L, 2L)) {
+            val clock = Clock()
+            val session = Session(clock).apply {
+                current = current.copy(playback = PassagePlayback.PAUSED, canPlay = true, canPause = false)
+            }
+            clock.onWait = {
+                if (clock.time == 500L) session.current = session.current.copy(durationMillis = 180_000L + delta)
+            }
+            val result = SpotifySongPassageController(session, clock).play(request)
+            assertEquals(SongPassageStatus.INTERRUPTED, result.status)
+            assertFalse(result.playbackRestored)
+            assertEquals(listOf("seek:5000", "play", "pause"), session.commands)
+            assertEquals(PassagePlayback.PAUSED, session.snapshot().playback)
+        }
+    }
+
+    @Test fun durationRefinementAllowanceNeverAccumulatesBeyondTheAdmittedDuration() = runBlocking {
+        val clock = Clock()
+        val session = Session(clock)
+        val events = mutableListOf<SongPassageDiagnostic>()
+        clock.onWait = {
+            if (clock.time == 500L) session.current = session.current.copy(durationMillis = 180_001L)
+            if (clock.time == 600L) session.current = session.current.copy(durationMillis = 180_002L)
+        }
+        val result = SpotifySongPassageController(session, clock) { events += it }.play(request)
+        assertEquals(SongPassageStatus.INTERRUPTED, result.status)
+        assertEquals(2L, events.first { it.reason == SongPassageReason.DURATION_CHANGED }.durationDeltaMillis)
+        assertEquals(600L, clock.time)
+        assertEquals(listOf("pause", "seek:5000", "play", "pause"), session.commands)
+    }
+
+    @Test fun aOneMillisecondDifferenceNeverAllowsChangedRecordingIdentityOrInvalidMetadata() = runBlocking {
+        for (change in listOf<(SongPassageSnapshot) -> SongPassageSnapshot>(
+            { it.copy(mediaId = "next-track", durationMillis = 180_001L) },
+            { it.copy(sessionKey = "next-session", durationMillis = 180_001L) },
+            { it.copy(title = "Next title", durationMillis = 180_001L) },
+            { it.copy(artist = "Another artist", durationMillis = 180_001L) },
+            { it.copy(sourcePackage = "another.player", durationMillis = 180_001L) },
+            { it.copy(durationMillis = 0L) }, { it.copy(durationMillis = 999L) },
+            { it.copy(durationMillis = Long.MIN_VALUE) }
+        )) {
+            val clock = Clock()
+            val session = Session(clock)
+            clock.onWait = { if (clock.time == 500L) session.replace(change(session.snapshot())) }
+            val result = SpotifySongPassageController(session, clock).play(request)
+            assertEquals(SongPassageStatus.INTERRUPTED, result.status)
+            assertFalse(result.playbackRestored)
+            assertEquals(listOf("pause", "seek:5000", "play"), session.commands)
+        }
+    }
+
+    @Test fun durationChangeDuringPendingPlayCancelsQueuedStartWithoutRestoringOrResuming() = runBlocking {
+        for (buffering in listOf(true, false)) {
+            val clock = Clock()
+            val session = Session(clock).apply {
+                current = current.copy(playback = PassagePlayback.PAUSED, canPlay = true, canPause = false)
+                if (buffering) bufferPlayCalls = setOf(1) else ignorePlay = true
+            }
+            clock.onWait = {
+                if (clock.time == 500L) session.replace(session.snapshot().copy(durationMillis = 180_073L))
+            }
+            val result = SpotifySongPassageController(session, clock).play(request)
+            assertEquals(SongPassageStatus.INTERRUPTED, result.status)
+            assertFalse(result.playbackRestored)
+            assertEquals(listOf("seek:5000", "play", "pause"), session.commands)
+            session.completePendingPlay()
+            assertEquals(PassagePlayback.PAUSED, session.snapshot().playback)
+            assertEquals(5_000L, session.snapshot().positionMillis)
+        }
+    }
+
+    @Test fun durationOnlyFailureNeverOverridesNewIdentityUserPauseOrDistantSeek() = runBlocking {
+        for (change in listOf<(SongPassageSnapshot) -> SongPassageSnapshot>(
+            { it.copy(mediaId = "next-track") }, { it.copy(sessionKey = "next-session") },
+            { it.copy(sourcePackage = "another.player") }, { it.copy(title = "Next title") },
+            { it.copy(artist = "Another artist") }, { it.copy(positionMillis = 90_000L) },
+            { it.copy(playback = PassagePlayback.PAUSED) }, { it.copy(mediaId = null) }
+        )) {
+            val clock = Clock()
+            val session = Session(clock)
+            clock.onWait = {
+                if (clock.time == 500L) session.replace(change(session.snapshot()).copy(durationMillis = 180_073L))
+            }
+            val result = SpotifySongPassageController(session, clock).play(request)
+            assertEquals(SongPassageStatus.INTERRUPTED, result.status)
+            assertFalse(result.playbackRestored)
+            assertEquals(listOf("pause", "seek:5000", "play"), session.commands)
+        }
     }
 
     @Test fun throwingDiagnosticObserverCannotChangePlaybackOrRestoration() = runBlocking {

@@ -1,7 +1,10 @@
 package com.runstate.mobile
 
 import android.app.Application
+import android.app.NotificationManager
+import android.content.ComponentName
 import android.os.Build
+import androidx.core.app.NotificationManagerCompat
 import com.runstate.mobile.data.local.RunStateDatabase
 import com.runstate.mobile.data.local.buildRunStateDatabase
 import com.runstate.mobile.location.RunTrackingServiceState
@@ -12,6 +15,8 @@ import com.runstate.mobile.reflection.ReflectionConnectionConfig
 import com.runstate.mobile.reflection.ReflectionGateway
 import com.runstate.mobile.reflection.ReflectionSpeechGateway
 import com.runstate.mobile.reflection.ReflectionSpeechHttpClient
+import com.runstate.mobile.reflection.HostedSongStudyPreparationClient
+import com.runstate.mobile.reflection.reflectionDestinationFingerprint
 import com.runstate.mobile.reflection.ReflectionBridgeException
 import com.runstate.mobile.reflection.LOCAL_REFLECTION_ENDPOINT
 import com.runstate.mobile.reflection.PHONE_REFLECTION_ENDPOINT
@@ -25,6 +30,10 @@ import com.runstate.mobile.data.local.RunSplitStatus
 import com.runstate.mobile.settings.AndroidRunPreferencesStore
 import com.runstate.mobile.settings.RunPreferences
 import com.runstate.mobile.weather.RunWeatherCapture
+import com.runstate.mobile.music.RunMusicNotificationListener
+import com.runstate.mobile.music.RoomSongPreparationStore
+import com.runstate.mobile.music.RunSongStudyPreparation
+import com.runstate.mobile.music.SongPreparationDestination
 import java.time.Clock
 import android.os.SystemClock
 import com.runstate.mobile.run.RunTimingMark
@@ -186,6 +195,42 @@ class RunStateApplication : Application() {
     internal val runWeatherCapture: RunWeatherCapture by lazy {
         RunWeatherCapture(applicationScope, database.weatherDao())
     }
+    private var musicListenerConnected = false
+    private var songStudyPreparationOwner: RunSongStudyPreparation? = null
+
+    internal fun musicListenerConnectionChanged(connected: Boolean) {
+        musicListenerConnected = connected
+        if (!connected) cancelSongStudyPreparation()
+    }
+
+    internal fun cancelSongStudyPreparation() {
+        songStudyPreparationOwner?.cancel()
+    }
+
+    /** Only a successful durable callback can initialize this optional application-owned work. */
+    internal fun onMusicObservationSaved(runId: String) {
+        val preparation = songStudyPreparationOwner ?: RunSongStudyPreparation(
+            applicationScope, RoomSongPreparationStore(database.runDao(), database.musicObservationDao()),
+            allowed = {
+                musicListenerConnected && mutableRunPreferences.value?.observeMusic == true &&
+                    mutableRunPreferences.value?.shareMusicInReflection == true && hasMusicNotificationAccess()
+            },
+            destination = {
+                (mutableReflectionConnection.value as? ReflectionConnectionState.Hosted)?.config?.let { config ->
+                    SongPreparationDestination(reflectionDestinationFingerprint(config),
+                        HostedSongStudyPreparationClient(config))
+                }
+            }
+        ).also { songStudyPreparationOwner = it }
+        preparation.onObservationSaved(runId)
+    }
+
+    private fun hasMusicNotificationAccess(): Boolean = try {
+        if (Build.VERSION.SDK_INT >= 27) {
+            getSystemService(NotificationManager::class.java).isNotificationListenerAccessGranted(
+                ComponentName(this, RunMusicNotificationListener::class.java))
+        } else NotificationManagerCompat.getEnabledListenerPackages(this).contains(packageName)
+    } catch (_: RuntimeException) { false }
     private var runSplitsJob: Job? = null
     private val runSplitsLock = Mutex()
 
@@ -275,6 +320,7 @@ class RunStateApplication : Application() {
                         withContext(Dispatchers.IO) { runPreferencesStore.save(next) }
                         // Publish only after commit, preserving the previous confirmed choice on error.
                         mutableRunPreferences.value = next
+                        if (!next.observeMusic || !next.shareMusicInReflection) cancelSongStudyPreparation()
                         mutableRunPreferencesError.value = null
                     } catch (cancelled: CancellationException) {
                         throw cancelled
@@ -377,6 +423,7 @@ class RunStateApplication : Application() {
     /** Rotation cancels the caller's wait, never a connection write already accepted by the app. */
     private suspend fun changeReflectionConnection(change: suspend () -> Unit) {
         applicationScope.async {
+            cancelSongStudyPreparation()
             connectionLock.withLock {
                 mutableConnectionSaving.value = true
                 try { change() } finally { mutableConnectionSaving.value = false }

@@ -4,12 +4,55 @@ import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.ForeignKey
 import androidx.room.Index
+import androidx.room.PrimaryKey
+import java.util.UUID
 
 /** A media-session event observed by RunState; it is not proof of a whole song play. */
 enum class MusicObservationKind { SESSION_SNAPSHOT, METADATA_CHANGED, PLAYBACK_CHANGED }
 
 /** The coarse state reported by the other app's media session at observation time. */
 enum class MusicPlaybackState { PLAYING, PAUSED, STOPPED, BUFFERING, OTHER, UNKNOWN }
+
+/** A durable claim prevents an interrupted process from paying to prepare the same run again. */
+enum class SongPreparationClaimStatus { CLAIMED, READY, UNAVAILABLE }
+
+@Entity(
+    tableName = "run_song_preparations",
+    foreignKeys = [ForeignKey(
+        entity = RunEntity::class, parentColumns = ["run_id"], childColumns = ["run_id"],
+        onDelete = ForeignKey.CASCADE
+    )],
+    indices = [Index(value = ["preparation_id"], unique = true)]
+)
+data class SongPreparationClaimEntity(
+    @PrimaryKey @ColumnInfo(name = "run_id") val runId: String,
+    @ColumnInfo(name = "preparation_id") val preparationId: String,
+    @ColumnInfo(name = "track_title") val trackTitle: String,
+    @ColumnInfo(name = "artist_name") val artistName: String,
+    @ColumnInfo(name = "observation_sequence_number") val observationSequenceNumber: Int,
+    @ColumnInfo(name = "destination_fingerprint") val destinationFingerprint: String,
+    @ColumnInfo(name = "claimed_at_epoch_millis") val claimedAtEpochMillis: Long,
+    @ColumnInfo(name = "status") val status: SongPreparationClaimStatus = SongPreparationClaimStatus.CLAIMED
+) {
+    init {
+        require(UUID.fromString(runId).toString() == runId) { "A preparation requires a canonical run ID." }
+        require(UUID.fromString(preparationId).toString() == preparationId) {
+            "A preparation requires a canonical preparation ID."
+        }
+        require(validPreparationIdentity(trackTitle) && validPreparationIdentity(artistName)) {
+            "A preparation requires a bounded title and artist."
+        }
+        require(observationSequenceNumber >= 1 && claimedAtEpochMillis >= 0) {
+            "A preparation requires a valid observation and claim time."
+        }
+        require(destinationFingerprint.matches(Regex("[a-f0-9]{64}"))) {
+            "A preparation requires an opaque destination fingerprint."
+        }
+    }
+}
+
+internal fun validPreparationIdentity(value: String?): Boolean = value != null &&
+    value.isNotBlank() && value == value.trim() && value.length <= 200 && value.none(Char::isISOControl)
 
 @Entity(
     tableName = "run_music_observations",

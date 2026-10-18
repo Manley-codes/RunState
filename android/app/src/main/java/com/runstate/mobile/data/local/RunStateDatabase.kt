@@ -20,6 +20,7 @@ import androidx.room.RoomDatabase
  * Version 11 adds nullable measured timing evidence without changing older runs.
  * Version 12 adds run-owned optional weather attempts without backfilling older runs.
  * Version 13 adds immutable split snapshots and rows without recalculating older runs.
+ * Version 14 adds one durable optional song-preparation claim per run, with no old-run backfill.
  * Each exported schema under `android/app/schemas` stays unchanged as the record of what
  * that version looked like. Every future version increment requires an explicitly
  * written migration; destructive migration is not configured here and must not be added
@@ -53,9 +54,10 @@ import androidx.room.RoomDatabase
         RunMusicObservationEntity::class,
         RunWeatherEntity::class,
         RunSplitSnapshotEntity::class,
-        RunSplitEntity::class
+        RunSplitEntity::class,
+        SongPreparationClaimEntity::class
     ],
-    version = 13,
+    version = 14,
     exportSchema = true
 )
 abstract class RunStateDatabase : RoomDatabase() {
@@ -108,6 +110,6 @@ internal fun buildRunStateDatabase(
         .addMigrations(
             MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5,
             MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10,
-            MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13
+            MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14
         )
         .build()

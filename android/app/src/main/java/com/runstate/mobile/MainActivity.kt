@@ -26,6 +26,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -41,6 +42,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import com.runstate.mobile.reflection.RunReflectionCoordinator
 import com.runstate.mobile.reflection.RunReflectionState
+import com.runstate.mobile.reflection.ReflectionVoicePreparation
 import com.runstate.mobile.data.local.ReflectionBranch
 import com.runstate.mobile.data.local.PreRunEnergy
 import com.runstate.mobile.data.local.PostRunEffort
@@ -308,6 +310,9 @@ internal fun RunJourneyRoot(
 
     val reflectionState = reflectionCoordinator?.let { activeCoordinator ->
         activeCoordinator.state.collectAsState().value
+    }
+    val voicePreparation = reflectionCoordinator?.let { activeCoordinator ->
+        activeCoordinator.voicePreparation.collectAsState().value
     }
     val trackingState by trackingFlow.collectAsState()
     val activeMapAvailable = !historyVisible && activeTrackingMode == RunTrackingMode.GPS &&
@@ -768,11 +773,15 @@ internal fun RunJourneyRoot(
             reflectionCoordinator?.finishReceipt(id)
         }
     )
-    RunCompleteSpeechEffect(
+    // Changing destination closes the old player's pending audio before a new one can prepare.
+    key(reflectionConnection, completedRunId) {
+        RunCompleteSpeechEffect(
         completedRunId = completedRunId,
         eligibleRunId = completionSpeechEligibleRunId,
         spokenRunId = completionSpeechSpokenRunId,
         reflectionState = reflectionState,
+        voicePreparation = voicePreparation,
+        preparationVisible = completionVisible,
         completionVisible = completionVisible && completionPresentationHeldRunId != completedRunId &&
             (completionReceiptRunId != completedRunId ||
             completionReceiptFinishedRunId == completedRunId),
@@ -780,7 +789,8 @@ internal fun RunJourneyRoot(
         onSpoken = { completionSpeechSpokenRunId = it },
         onAudioActiveChange = { completionAudioActive = it },
         onStopReady = { stopCompletionAudio = it }
-    )
+        )
+    }
 
     if (connectionDialogVisible && model.state == RunUiState.ReadyToStart) {
         ReflectionConnectionDialog(
@@ -1272,11 +1282,14 @@ internal fun RunCompleteSpeechEffect(
     speakerFactory: (Context) -> ReflectionSpeaker,
     onSpoken: (String) -> Unit,
     onAudioActiveChange: (Boolean) -> Unit = {},
-    onStopReady: ((() -> Unit)?) -> Unit = {}
+    onStopReady: ((() -> Unit)?) -> Unit = {},
+    voicePreparation: ReflectionVoicePreparation? = null,
+    preparationVisible: Boolean = completionVisible
 ) {
     val context = LocalContext.current
     var speaker by remember { mutableStateOf<ReflectionSpeaker?>(null) }
     var speakingRunId by remember { mutableStateOf<String?>(null) }
+    var preparationRequestId by remember { mutableStateOf<String?>(null) }
     var activeAttempt by remember { mutableStateOf<Any?>(null) }
     val currentRunId by rememberUpdatedState(completedRunId)
     val currentVisible by rememberUpdatedState(completionVisible)
@@ -1299,6 +1312,26 @@ internal fun RunCompleteSpeechEffect(
             try { speaker?.close() } catch (_: RuntimeException) { }
         }
     }
+    LaunchedEffect(completedRunId, eligibleRunId, spokenRunId, voicePreparation, preparationVisible) {
+        val preparation = eligibleCompletionVoicePreparation(
+            completedRunId, eligibleRunId, spokenRunId, voicePreparation
+        )?.takeIf { preparationVisible }
+        try {
+            if (preparation == null) {
+                speaker?.cancelPreparation()
+                preparationRequestId = null
+            } else {
+                val activeSpeaker = speaker ?: speakerFactory(context).also { speaker = it }
+                if (preparationRequestId != preparation.requestId) activeSpeaker.cancelPreparation()
+                preparationRequestId = preparation.requestId
+                activeSpeaker.prepare(preparation.text)
+            }
+        } catch (_: RuntimeException) {
+            // Optional preparation must not consume arrival speech or hide the exact saved text.
+            preparationRequestId = null
+            try { speaker?.cancelPreparation() } catch (_: RuntimeException) { }
+        }
+    }
     LaunchedEffect(completedRunId, eligibleRunId, spokenRunId, reflectionState, completionVisible) {
         if (speakingRunId != null && speakingRunId != completedRunId) {
             stopAudio()
@@ -1308,7 +1341,8 @@ internal fun RunCompleteSpeechEffect(
             try { oldSpeaker?.close() } catch (_: RuntimeException) { }
         }
         if (!completionVisible) {
-            stopAudio()
+            // Facts and intake may still own audible delivery while voice prepares silently.
+            if (!preparationVisible || activeAttempt != null) stopAudio()
             return@LaunchedEffect
         }
         val exactText = readyCompletionSpeechText(
@@ -1343,6 +1377,17 @@ internal fun RunCompleteSpeechEffect(
             // Consume this arrival attempt once; a missing engine never replays on resume.
         }
     }
+}
+
+/** Preparing a voice never makes an old History row or another run eligible to speak. */
+internal fun eligibleCompletionVoicePreparation(
+    completedRunId: String?,
+    eligibleRunId: String?,
+    spokenRunId: String?,
+    preparation: ReflectionVoicePreparation?
+): ReflectionVoicePreparation? = preparation?.takeIf {
+    completedRunId != null && completedRunId == eligibleRunId &&
+        it.runId == completedRunId && spokenRunId != completedRunId
 }
 
 /** Speak only a newly completed run's exact selected text, once, after it becomes READY. */
