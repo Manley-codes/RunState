@@ -186,7 +186,7 @@ internal class SpotifySongPassageController(
             enter(current, SongPassageStage.ENTRANCE_PLAY)
             session.play()
             val playing = await(current) { it.playback == PassagePlayback.PLAYING }
-            if (!isOwnedPlaying(current, playing)) throw PassageInterrupted(playbackFailure(playing))
+            if (!isConfirmedPlay(current, playing)) throw PassageInterrupted(playbackFailure(playing))
             current.pendingPlay = false
             current.expectedPosition = playing.positionMillis
             current.expectedAt = clock.nowMillis()
@@ -239,8 +239,10 @@ internal class SpotifySongPassageController(
                 enter(current, SongPassageStage.RESTORE_PLAY)
                 session.play()
                 val resumed = await(current) { it.playback == PassagePlayback.PLAYING }
-                if (!isOwnedPlaying(current, resumed)) throw PassageInterrupted(playbackFailure(resumed))
+                if (!isConfirmedPlay(current, resumed)) throw PassageInterrupted(playbackFailure(resumed))
                 current.pendingPlay = false
+                current.expectedPosition = resumed.positionMillis
+                current.expectedAt = clock.nowMillis()
             }
             completed = true
             report(current, SongPassageReason.FINISHED)
@@ -327,6 +329,19 @@ internal class SpotifySongPassageController(
 
     private fun isOwnedPlaying(current: Owner, snapshot: SongPassageSnapshot): Boolean =
         snapshot.playback == PassagePlayback.PLAYING && isOnExpectedTrajectory(current, snapshot)
+
+    private fun isConfirmedPlay(current: Owner, snapshot: SongPassageSnapshot): Boolean {
+        // A transport command does not mean audio started immediately. The first PLAYING
+        // report may describe any progress from the requested seek through the bounded command
+        // wait. Admit that interval once, then follow the confirmed position with the ordinary
+        // drift guard. Keep the requested target here so seek tolerance cannot accumulate.
+        val commandElapsed = (clock.nowMillis() - current.expectedAt)
+            .coerceIn(0L, CONFIRM_TIMEOUT_MILLIS)
+        return snapshot.playback == PassagePlayback.PLAYING &&
+            snapshot.positionMillis in 0..snapshot.durationMillis &&
+            snapshot.positionMillis >= current.expectedPosition - POSITION_TOLERANCE &&
+            snapshot.positionMillis <= current.expectedPosition + commandElapsed + POSITION_TOLERANCE
+    }
 
     private fun isOnExpectedTrajectory(current: Owner, snapshot: SongPassageSnapshot): Boolean =
         snapshot.positionMillis in 0..snapshot.durationMillis &&

@@ -76,6 +76,7 @@ class SpotifySongPassageTest {
             if (pendingPlay) {
                 pendingPlay = false
                 replace(snapshot().copy(playback = PassagePlayback.PLAYING, canPlay = false, canPause = true))
+                playingReportedAt = clock.time + playingReportDelayMillis
             }
         }
         fun bufferCurrentPlay() {
@@ -140,6 +141,94 @@ class SpotifySongPassageTest {
         assertEquals(9_000L, clock.time)
         assertEquals(listOf("pause", "seek:5000", "play", "pause", "seek:60000", "play"), session.commands)
         assertEquals(60_000L, session.snapshot().positionMillis)
+        assertEquals(PassagePlayback.PLAYING, session.snapshot().playback)
+    }
+
+    @Test fun delayedPlaybackStartUsesFirstPlayingReportWithoutExtendingTheSongEndpoint() = runBlocking {
+        val clock = Clock()
+        val session = Session(clock).apply {
+            current = current.copy(playback = PassagePlayback.PAUSED, canPlay = true, canPause = false,
+                positionUpdateAgeMillis = 226_207L)
+            bufferPlayCalls = setOf(1)
+            playingReportDelayMillis = 700L
+        }
+        clock.onWait = {
+            if (clock.time == 1_900L) {
+                session.current = session.current.copy(durationMillis = 180_001L,
+                    positionUpdateAgeMillis = 0L)
+                session.completePendingPlay()
+            }
+        }
+        var confirmedAt: Long? = null
+        var positionAtEnding: Long? = null
+        val result = SpotifySongPassageController(session, clock) { event ->
+            if (event.stage == SongPassageStage.PLAYING && event.reason == SongPassageReason.ENTERED)
+                confirmedAt = clock.time
+            if (event.stage == SongPassageStage.ENDING_PAUSE && event.reason == SongPassageReason.ENTERED)
+                positionAtEnding = session.snapshot().positionMillis
+        }.play(request)
+        assertEquals(SongPassageResult(SongPassageStatus.FINISHED, true), result)
+        assertEquals(2_600L, confirmedAt)
+        assertEquals(15_000L, positionAtEnding)
+        assertEquals(11_900L, clock.time)
+        assertEquals(listOf("seek:5000", "play", "pause", "seek:60000"), session.commands)
+        assertEquals(PassagePlayback.PAUSED, session.snapshot().playback)
+        assertEquals(60_000L, session.snapshot().positionMillis)
+    }
+
+    @Test fun delayedRestoreResumeIsConfirmedWithoutAssumingImmediatePlayback() = runBlocking {
+        val clock = Clock()
+        val session = Session(clock).apply { bufferPlayCalls = setOf(2) }
+        clock.onWait = { if (clock.time == 12_500L) session.completePendingPlay() }
+        val result = SpotifySongPassageController(session, clock).play(request)
+        assertEquals(SongPassageResult(SongPassageStatus.FINISHED, true), result)
+        assertEquals(12_500L, clock.time)
+        assertEquals(listOf("pause", "seek:5000", "play", "pause", "seek:60000", "play"), session.commands)
+        assertEquals(PassagePlayback.PLAYING, session.snapshot().playback)
+        assertEquals(60_000L, session.snapshot().positionMillis)
+    }
+
+    @Test fun firstPlayingReportOutsideTheBoundedEntranceIntervalIsCancelled() = runBlocking {
+        // After 2600 ms, a valid first report is bounded by target−1500 through target+2600+1500.
+        for (offsetAtStart in listOf(-2_201L, 3_401L)) {
+            val clock = Clock()
+            val session = Session(clock).apply {
+                current = current.copy(playback = PassagePlayback.PAUSED, canPlay = true, canPause = false)
+                bufferPlayCalls = setOf(1)
+                playingReportDelayMillis = 700L
+            }
+            clock.onWait = {
+                if (clock.time == 1_900L) {
+                    session.completePendingPlay()
+                    session.replace(session.current.copy(positionMillis = 5_000L + offsetAtStart))
+                }
+            }
+            val result = SpotifySongPassageController(session, clock).play(request)
+            assertEquals(SongPassageStatus.INTERRUPTED, result.status)
+            assertFalse(result.playbackRestored)
+            assertEquals(2_600L, clock.time)
+            assertEquals(listOf("seek:5000", "play", "pause"), session.commands)
+            assertEquals(PassagePlayback.PAUSED, session.snapshot().playback)
+        }
+    }
+
+    @Test fun delayedFirstConfirmationDoesNotRelaxSubsequentUserSeekDetection() = runBlocking {
+        val clock = Clock()
+        val session = Session(clock).apply {
+            current = current.copy(playback = PassagePlayback.PAUSED, canPlay = true, canPause = false)
+            bufferPlayCalls = setOf(1)
+            playingReportDelayMillis = 700L
+        }
+        clock.onWait = {
+            if (clock.time == 1_900L) session.completePendingPlay()
+            if (clock.time == 2_700L)
+                session.replace(session.snapshot().copy(positionMillis = session.snapshot().positionMillis + 1_501L))
+        }
+        val result = SpotifySongPassageController(session, clock).play(request)
+        assertEquals(SongPassageStatus.INTERRUPTED, result.status)
+        assertFalse(result.playbackRestored)
+        assertEquals(2_700L, clock.time)
+        assertEquals(listOf("seek:5000", "play"), session.commands)
         assertEquals(PassagePlayback.PLAYING, session.snapshot().playback)
     }
 

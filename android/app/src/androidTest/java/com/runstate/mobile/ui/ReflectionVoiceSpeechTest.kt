@@ -414,6 +414,23 @@ class ReflectionVoiceSpeechTest {
                     sent.set(request)
                     generationStartedAt.set(SystemClock.uptimeMillis())
                     try { client.request(request).also { delivered.set(it) } }
+                    catch (failure: Exception) {
+                        // Emit only a fixed category or bounded HTTP status, never remote text,
+                        // generated reflections, connection settings or exception diagnostics.
+                        val status = Regex("^The hosted reflection service rejected the request \\(HTTP ([1-5][0-9]{2})\\)\\.$")
+                            .matchEntire(failure.message.orEmpty())?.groupValues?.get(1)
+                        val category = when {
+                            status != null -> "HTTP_$status"
+                            failure.message == "The hosted reflection response was invalid." -> "INVALID_RESPONSE"
+                            failure.message == "The hosted reflection service is unavailable." -> "UNAVAILABLE"
+                            failure is kotlinx.coroutines.CancellationException -> "CANCELLED"
+                            else -> "UNCLASSIFIED"
+                        }
+                        InstrumentationRegistry.getInstrumentation().sendStatus(2, android.os.Bundle().apply {
+                            putString("runstate_hosted_failure_category", category)
+                        })
+                        throw failure
+                    }
                     finally { generationFinishedAt.set(SystemClock.uptimeMillis()) }
                 }, appScope)
             advance(HostedMusicFlowStage.COORDINATOR)
