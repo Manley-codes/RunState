@@ -11,6 +11,40 @@ metadata, to Anthropic. See [the current Android checkpoint](design/project_curr
 and [backend documentation](../backend/README.md) for those implemented boundaries. The older
 console statement that RunState has no server does **not** apply to the Android app.
 
+## Android saved splits and Energy insight — October 17, 2026
+
+The phone can derive mile/kilometer splits from an already recorded GPS run. New GPS completions
+store a run-owned preparation marker; complete, consistent evidence can produce a frozen local
+snapshot of distance boundaries, active durations, boundary timestamps, pace, display unit and
+calculation version. This adds no location permission or sensor collection. It uses the existing
+saved route; the new split tables add no coordinates. Upgrading to Room 13 leaves older run fields
+and observations intact and does not backfill old split history. Split failure does not erase
+the run, and deletion cascades to its owned split rows through the same local data lifecycle.
+
+A local History card can count saved pre/post Energy pairs in up to 20 recent genuine GPS runs.
+It appears only with at least 3 paired answers in one starting-Energy group. Missing answers stay
+unknown; Samples and confirmed test output are excluded. It reports counts, not a diagnosis or
+proof that a run caused a change. These calculations do not need AI and do not upload the run
+history, split rows, aggregates or extra Energy data. Existing optional reflection sharing is
+unchanged; neither new feature adds a backend request field, provider account or permission.
+
+## Local experimental song study — October 17, 2026
+
+The explicitly invoked `SongReflectionTrialTest` main harness is separate from the phone and
+hosted reflection path. It can request one matched song's bounded supporting theme passages,
+meaning, moods, genre, whitelisted entity descriptions and optional text snippet from Musixmatch.
+It sends that material to Anthropic for a song-only study, then sends validated study notes and
+fictional run facts for four experimental reflections. The October 17 checks used no real run
+history, coordinates, account/listening history or phone observation. The model's artist context
+is interpretive, not verified biographical data.
+
+Raw provider material and study notes stay in RunState request memory; they are not written to
+source files, Maven test reports or the phone database. The console receipt shows counts and a
+limited generated excerpt, not raw supporting passages or all study prose. These local boundaries
+do not claim zero retention by either external provider. Normal `mvn test`, backend startup and
+phone use do not enable this experiment. It is not a deployment, a new phone-sharing preference,
+a public-use clearance claim or a change to the accepted audio sequence.
+
 ## Android curated song passage — October 16, 2026
 
 **Optional backend analysis integration:** a backend configured with `MUSIXMATCH_API_KEY` can send

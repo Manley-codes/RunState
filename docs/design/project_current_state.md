@@ -5,7 +5,116 @@ metadata:
   type: project
 ---
 
+## Grouped commit and next phone audition — October 17, 2026
+
+Manley explicitly asked to create the commits, then hear the newly generated reflection on his
+phone. Codex created the reviewed existing-index GPS repair as `c0045a4`, Android splits/Energy
+as `567db30`, and the isolated song-study trial as `59de026`. Shared verification/privacy notes
+are committed separately afterward. No push or deployment is authorized by this commit request;
+the unfinished historical v1.8/default writer must not reach Render accidentally.
+
+The existing supplied-text phone audition needs no source change and no new model generation.
+It can speak the exact Sonnet5.5 Spent output through generic fictional facts, the selected custom
+ElevenLabs voice, the retained650ms gap and Stronger's accepted0–10s opening, then verify paused
+position restoration. At preparation no Moto is attached. User has been asked to connect/unlock,
+briefly play/pause the original recording and confirm readiness to listen. Prefer installing only
+the compatible temporary test APK; a normal-app update is not necessary just to hear existing
+audio behavior. New GPS/splits installation and field proof remain distinct pending work. Do not
+regenerate the accepted test text, start a saved run or use MainActivity data as an audition shortcut.
+
+## Current music checkpoint — October 17, 2026
+
+Claude's rebuild handoff has been reviewed and actual Musixmatch receipts checked. A separate
+local song-study → four-branch writer trial is built; it is not wired to the app/server and does
+not replace v1.8. Default enrichment, voices, song timing and all Android/GPS work stay unchanged.
+The research notebook records exact scope, provider catalog/matching gaps, verification, live
+outcome and four necessary new backend file locations/reasons. Final141 offline checks passed/2
+live skips. Actual same-facts Sonnet4.6 trial/baseline completed in41.356s; Sonnet5.5 trial in19.767s.
+The latter's short phrase was verified in actual theme support. Distinctive writing still needs
+truth/taste review: 4.6 invented hesitation/cost claims, and no new output has listener acceptance.
+No phone installation, Git mutation, provider configuration change or deployment occurred.
+
 ## Current Android checkpoint — October 17, 2026
+
+### Saved GPS splits and local Energy insight — phone update pending
+
+Manley subsequently clarified that he intended **only mile/km splits**, rather than both listed
+tasks. He accepts the already built Energy insight and wants a plain-English walkthrough later,
+especially how to explain its role in RunState. Preserve it without further expansion until that
+review. During the preceding Android slice, opening/logo and music writing were outside scope;
+no backend, audio sequencing or provider configuration was changed by that slice. The newer
+separate music checkpoint above supersedes the planning pause only.
+
+**Splits:** future completed GPS runs receive a durable PENDING marker in the same completion
+transaction. A separate application job reads their stored route/timing and derives selected-mile
+or kilometer splits on a background dispatcher. Full units, a final partial and a sub-unit run
+are supported. Times exclude pauses, include stationary Running time, and sum to the saved active
+duration; an exact-unit final row includes any final active tail. Boundaries interpolate accepted
+segments using monotonic source time aligned to official run intervals, not biased GPS wall time.
+The existing coverage policy rechecks the underlying evidence; incomplete/uncertain GPS settles
+UNAVAILABLE rather than inventing precise splits. Derivation failure leaves PENDING for retry or
+the next app launch and does not undo a saved run.
+
+Room **13** adds run-owned `run_split_snapshots` and `run_splits`, with unit and derivation version
+1. Publishing is atomic, validated and immutable after READY/UNAVAILABLE; foreign-key deletion
+cascades. Migration adds empty tables only: no old run gets a split backfill or changed field.
+Expanded GPS History shows distance/time/pace, a final partial label, a GPS-estimate explanation
+and an independent Retry splits action if needed. Loading is limited to the expanded GPS row and
+does not regenerate/repeat its reflection. Samples have no GPS splits. This does not add live
+split announcements, split-to-song matching or a new backend/reflection request field.
+
+**Runner state:** the existing History screen can show one restrained “Your Energy” card derived
+locally from the latest **20 genuine GPS records**, including unanswered records in that window.
+It requires **at least three paired answers within one starting-Energy group**, choosing the most
+recent represented eligible group. It reports actual counts (for example, Feeling Good in 3 of
+4 Low-start runs); ties/pluralities show the mixed distribution. Missing answers stay unknown,
+Samples/confirmed test output and ambiguous duplicate identities are excluded, and Effort is not
+converted to Energy. There is no numeric comparison of the different pre/post scales, causal
+claim, improvement diagnosis or AI call. Pending/failed reflection metadata defaults do not
+prevent a genuine saved Energy answer from contributing. Editing an answer recomputes the local
+card while the exact saved reflection remains immutable. It stays hidden in Samples and during
+loading/read errors or insufficient history. Wider usefulness with runners remains untested.
+
+**Verification:** final debug/release each passed **576 JVM tests**, zero failures/errors/skips;
+debug, release and instrumentation APKs built. Feature cases include 25 calculator,18 insight and
+11 mapper/formatting cases. **74 selected emulator cases** passed in29.651s (9 split DAO,20
+migration,24 database,14 coordinator and7 new UI); **two existing History regressions** passed
+in7.750s. These cover migration12→13 exact old-field preservation/no backfill, actual
+calculator→Room publication, transaction rollback/retry, concurrency, reopening, cascades,
+counts/unknowns, filter visibility, answer updates, split retry and unchanged speech/reply text.
+A final mapper-only correction to accept actual feedback while AI is pending/failed was covered
+by the final unit suites and all APKs rebuilt; the UI fixtures themselves were not rerun after
+that mapping correction. An intermediate missing test import was fixed before the final pass.
+
+**Environment:** tests used a headless read-only emulator at`emulator-5580`, with its network
+disabled. The emulator is shut down; SHA-256 of all five original QCOW/raw guest images matches
+the pre-start values, including the14GB userdata image. Android/Gradle may create their normal
+runtime caches/logs; preservation is claimed for the five checked images, not every host cache.
+No Moto installation or field test occurred because no physical phone is connected. No real run,
+credential, cloud service or backend deployment was changed. The earlier staged GPS fix remains
+staged as found; no Git staging/commit/push/branch action was performed.
+
+**Necessary new files** (paths below are relative to`C:\Users\Owner\IdeaProjects\RunState`):
+
+| File | Reason |
+| --- | --- |
+| `android/app/src/main/java/com/runstate/mobile/run/RunSplitCalculator.kt` | Isolate the pause-aware GPS derivation and immutable split values. |
+| `android/app/src/main/java/com/runstate/mobile/data/local/RunSplitEntity.kt` | Store versioned results and atomically publish them without changing the parent run. |
+| `android/app/src/main/java/com/runstate/mobile/ui/RunSplitDisplay.kt` | Safely format/read the optional History table independently of reflection delivery. |
+| `android/app/src/main/java/com/runstate/mobile/ui/RunnerStateInsight.kt` | Keep the local check-in calculation and its small panel together. |
+| `android/app/src/test/java/com/runstate/mobile/run/RunSplitCalculatorTest.kt` | Check genuine unit boundaries, pauses, tails, clocks and unavailable evidence. |
+| `android/app/src/test/java/com/runstate/mobile/ui/RunnerStateInsightTest.kt` | Check sufficient history, unknowns, Samples, group/tie handling and edits. |
+| `android/app/src/androidTest/java/com/runstate/mobile/data/local/RunSplitDaoTest.kt` | Check real SQLite publication, retry, reopening, rollback and ownership. |
+| `android/app/schemas/com.runstate.mobile.data.local.RunStateDatabase/13.json` | Room-generated required record of the additive schema upgrade. |
+
+Two ignored QA images live under`android/app/build/outputs/runstate-qa/`: `qa-energy-insight.png`
+and`qa-history-splits.png`. These are synthetic UI-test screenshots (the split image exercises
+a load-failure/retry fixture), not real-run evidence or a ready-made demonstration data set.
+Existing source/test/docs files were extended rather than creating any new documentation file.
+This is a commit checkpoint; group the new two-feature work separately from the already-staged
+GPS map fix when practical. The unfinished music backend must still not be pushed/deployed as a
+finished repair. Resume with a Moto update, ordinary new GPS run/splits check and real Energy
+feedback when available; independently measured distance accuracy is still separate.
 
 ### Independent GPS map repair; music planning with Claude — October 17
 
