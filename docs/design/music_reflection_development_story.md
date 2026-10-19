@@ -1,5 +1,28 @@
 # How RunState music reflections developed
 
+### October 19 lesson: meaning and playback are different jobs
+
+The next failure was not necessarily a weak reflection. Our code required usable song analysis
+before it would even prepare a snippet, and Android advertised track-loading controls that
+Spotify did not actually execute on the Moto. We are separating those dependencies: an observed
+song can still supply a musical ending when analysis is unavailable, and Spotify's official
+connection is being added for loading a different recording. A timed hook is preferred; a short
+opening is an honest availability fallback, not a claim that we found the best lyric. Software
+checks passed initially, but account setup and real-device playback proof are still outstanding.
+This is a local implementation milestone, not a finished-feature claim.
+
+The official connection then exposed an account-setup issue. What initially sounded like a
+successful connection was clarified: the app never reached Ready. It repeatedly asked for
+authorization, and a safe diagnostic identified a missing user grant. Inspecting the existing
+Spotify dashboard showed that the public client ID, redirect and SDK choice matched, but the
+Android package list was empty. The correct package and signing fingerprint were added and saved;
+the dashboard and the build's signing report now agree. No secret was viewed. Clearer phone copy
+now reports authorization failure rather than implying playback is ready. The lesson is to verify
+the actual connection state and stored registration, not treat opening Spotify or dismissing a
+prompt as success. The repair still needs a fresh phone grant and an actual automatic song test;
+it is not evidence that track switching already works. The backend source changes remain local,
+with no new Render deployment or assistant Git operation.
+
 Updated October 18, 2026. Written for Manley to explain the feature, the decisions behind it,
 and the mistakes that made the next version better.
 

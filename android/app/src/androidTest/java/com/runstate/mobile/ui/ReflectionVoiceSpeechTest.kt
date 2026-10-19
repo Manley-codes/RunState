@@ -16,6 +16,8 @@ import com.runstate.mobile.music.AndroidSpotifyPassageSession
 import com.runstate.mobile.music.PassagePlayback
 import com.runstate.mobile.music.reflectionSongCatalog
 import com.runstate.mobile.music.SpotifySongPassageController
+import com.runstate.mobile.music.SpotifyAppRemoteConnection
+import com.runstate.mobile.music.SpotifyRemoteConnectionStatus
 import com.runstate.mobile.music.SongPassageStatus
 import com.runstate.mobile.music.SongPassageSession
 import com.runstate.mobile.music.SongPassageSnapshot
@@ -48,9 +50,12 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.NonCancellable
 import java.util.UUID
 import java.util.Base64
 import java.nio.ByteBuffer
@@ -78,6 +83,63 @@ class ReflectionVoiceSpeechTest {
         PREFLIGHT_SESSION, PREFLIGHT_CATALOG, PREFLIGHT_CONTROLS, CONNECTION, IN_MEMORY_DATABASE,
         FIXTURE_INSERT, FIXTURE_MUSIC, FIXTURE_PAUSE, FIXTURE_COMPLETE, FIXTURE_READ,
         EARLY_PREPARATION, COORDINATOR, RECEIPT, GENERATION, PERSISTENCE, AUDIO, RESTORATION, REOPEN, COMPLETE
+    }
+
+    /** Explicit live transport check: previously observed recording, no Room or AI/provider calls. */
+    @Test fun officialSpotifyConnectionLoadsSnippetAndRestoresDifferentPausedSong() = runBlocking {
+        assumeTrue(InstrumentationRegistry.getArguments().getString("allowRealSpotifyAppRemoteProbe") == "yes")
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val request = SongPassageRequest("Lose Yourself", "Eminem", 99_260L, 2_220L,
+            "spotify:track:5Z01UMMf7V1o0MzF86s6WJ", allowTrackSwitch = true,
+            observedDurationMillis = 326_467L)
+        withContext(Dispatchers.Main) {
+            val connection = SpotifyAppRemoteConnection.get(instrumentation.targetContext)
+            instrumentation.sendStatus(2, android.os.Bundle().apply {
+                putBoolean("runstate_spotify_authorization_remembered", connection.hasRememberedAuthorization)
+                putBoolean("runstate_spotify_configured", connection.state.value.configured)
+            })
+            check(connection.hasRememberedAuthorization) {
+                "Spotify authorization is not remembered; no silent connection or playback was attempted."
+            }
+            connection.onForeground()
+            val ready = withTimeout(25_000L) {
+                connection.state.onEach { state ->
+                    instrumentation.sendStatus(2, android.os.Bundle().apply {
+                        putString("runstate_spotify_connection_state", state.status.name)
+                        putBoolean("runstate_spotify_on_demand", state.canPlayOnDemand)
+                        putString("runstate_spotify_connection_failure", state.failureCategory)
+                    })
+                }.first { it.status in setOf(SpotifyRemoteConnectionStatus.READY,
+                    SpotifyRemoteConnectionStatus.NEEDS_AUTH, SpotifyRemoteConnectionStatus.ERROR) }
+            }
+            check(ready.status == SpotifyRemoteConnectionStatus.READY && ready.canPlayOnDemand) {
+                "Spotify did not confirm an authorized on-demand connection."
+            }
+            val session = requireNotNull(connection.newPassageSession())
+            try {
+                session.expectTrack(request)
+                session.prepareForPlayback()
+                val original = requireNotNull(session.snapshot())
+                check(original.playback == PassagePlayback.PAUSED && original.mediaId != request.spotifyMediaId)
+                val controller = SpotifySongPassageController(session, diagnosticObserver = { diagnostic ->
+                    instrumentation.sendStatus(2, android.os.Bundle().apply {
+                        putString("runstate_official_spotify_stage", diagnostic.toString())
+                    })
+                })
+                val result = withTimeout(65_000L) { controller.play(request) }
+                assertEquals(SongPassageStatus.FINISHED, result.status)
+                assertTrue("The original song was not restored.", result.playbackRestored)
+                val restored = requireNotNull(session.snapshot())
+                assertEquals(original.mediaId, restored.mediaId)
+                assertEquals(PassagePlayback.PAUSED, restored.playback)
+                assertTrue(kotlin.math.abs(original.positionMillis - restored.positionMillis) <= 1_500L)
+                instrumentation.sendStatus(2, android.os.Bundle().apply {
+                    putBoolean("runstate_official_spotify_finished_and_restored", true)
+                })
+            } finally {
+                withContext(NonCancellable) { session.release(); connection.onBackground() }
+            }
+        }
     }
 
     /** Read-only capture of the explicitly chosen test recording, returned only to the operator. */

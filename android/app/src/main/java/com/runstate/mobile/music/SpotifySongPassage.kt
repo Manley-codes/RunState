@@ -96,6 +96,10 @@ internal data class SongPassageSnapshot(
 )
 
 internal interface SongPassageSession {
+    /** The observed exact URI can stabilize provider-specific title/artist presentation. */
+    fun expectTrack(request: SongPassageRequest) = Unit
+    /** Refresh optional asynchronous transports before the controller takes its baseline. */
+    suspend fun prepareForPlayback() = Unit
     /** Null means missing/ambiguous/unreadable access, never a fabricated current song. */
     fun snapshot(): SongPassageSnapshot?
     fun pause()
@@ -106,6 +110,8 @@ internal interface SongPassageSession {
     fun playFromTrackUri(uri: String): Boolean = false
     /** Best-effort cancellation of our pending selection; a foreign player can ignore this request. */
     fun cancelPendingTrackLoad() { pause() }
+    /** Release a transport lease only after bounded containment of an outstanding load. */
+    suspend fun release() = Unit
 }
 
 internal interface PassageClock {
@@ -128,6 +134,8 @@ private object RealPassageClock : PassageClock {
 internal class SpotifySongPassageController(
     private val session: SongPassageSession,
     private val clock: PassageClock = RealPassageClock,
+    private val onEntranceReady: () -> Unit = {},
+    private val quiescePausedBeforeEntry: Boolean = false,
     private val diagnosticObserver: (SongPassageDiagnostic) -> Unit = {}
 ) {
     private class Owner(var initial: SongPassageSnapshot) {
@@ -197,9 +205,10 @@ internal class SpotifySongPassageController(
         owner = current
         var completed = false
         try {
-            if (initial.playback == PassagePlayback.PLAYING) {
+            if (initial.playback == PassagePlayback.PLAYING || quiescePausedBeforeEntry) {
                 enter(current, SongPassageStage.INITIAL_PAUSE)
-                if (!checked(current).canPause) throw PassageInterrupted(SongPassageReason.CAPABILITY_CHANGED)
+                if (!checked(current).canPause && initial.playback == PassagePlayback.PLAYING)
+                    throw PassageInterrupted(SongPassageReason.CAPABILITY_CHANGED)
                 current.changedPlayback = true
                 session.pause()
                 await(current) { it.playback == PassagePlayback.PAUSED }
@@ -226,6 +235,11 @@ internal class SpotifySongPassageController(
                 abs(it.positionMillis - request.startPositionMillis) <= POSITION_TOLERANCE }
             if (!paused.canPlay) throw PassageInterrupted(SongPassageReason.CAPABILITY_CHANGED)
             checked(current)
+            // The speech platform retains focus while this exact recording is loaded/paused
+            // and sought. Release only at the deliberate entrance, not before our baseline.
+            onEntranceReady()
+            coroutineContext.ensureActive()
+            if (current.stopped || owner !== current) throw PassageInterrupted(SongPassageReason.STOPPED)
             current.expectedPosition = request.startPositionMillis
             current.expectedAt = clock.nowMillis()
             current.expectsPlaying = true

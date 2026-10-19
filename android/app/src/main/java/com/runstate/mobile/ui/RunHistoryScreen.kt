@@ -90,7 +90,9 @@ import com.runstate.mobile.music.AndroidSpotifyPassageSession
 import com.runstate.mobile.music.SongPassageRequest
 import com.runstate.mobile.music.SongPassageStatus
 import com.runstate.mobile.music.SongPassageDiagnostic
+import com.runstate.mobile.music.SongPassageSession
 import com.runstate.mobile.music.SpotifySongPassageController
+import com.runstate.mobile.music.SpotifyAppRemoteConnection
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Deferred
@@ -103,6 +105,10 @@ import kotlinx.coroutines.withTimeoutOrNull
 import java.util.UUID
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlin.coroutines.coroutineContext
 import com.runstate.mobile.data.local.ReflectionBranch
 
@@ -115,12 +121,15 @@ internal const val RUN_HISTORY_EFFORT_TAG_PREFIX = "runHistoryEffort:"
 internal const val RUN_HISTORY_ENERGY_TAG_PREFIX = "runHistoryEnergy:"
 internal const val RUN_HISTORY_ENERGY_SHEET_TAG = "runHistoryEnergySheet"
 internal const val RUN_HISTORY_ENERGY_CHOICE_TAG_PREFIX = "runHistoryEnergyChoice:"
+// Survives one speaker being disposed/replaced while its cancelled foreign-player load cleans up.
+private val spotifyPassageMutex = Mutex()
 
 /** Kept injectable so screen behavior can be checked without a device voice engine. */
 internal interface ReflectionSpeaker {
     /** Prepare one exact reflection silently; custom speakers can retain their existing behavior. */
     fun prepare(text: String) = Unit
     fun cancelPreparation() = Unit
+    fun prepareSongPassageConnection() = Unit
     fun speak(text: String)
     fun speakWithSongPassage(
         text: String,
@@ -149,6 +158,7 @@ internal interface ReflectionSpeaker {
 /** The Android boundary is separate so request ownership can be verified without playing audio. */
 internal interface ReflectionSpeechPlatform {
     fun reflectionSpeechGateway(): ReflectionSpeechGateway? = null
+    fun prepareSongPassageConnection() = Unit
     fun initialize(onReady: (Boolean) -> Unit, onDone: (String) -> Unit, onError: (String) -> Unit)
     fun requestAudioFocus(utteranceId: String, onFocusLost: (String) -> Unit): Boolean
     fun speak(utteranceId: String, text: String, rate: Float): Boolean
@@ -283,7 +293,12 @@ internal class AndroidReflectionSpeaker(
         canPlayPassage: () -> Boolean,
         onFinished: () -> Unit
     ) {
+        prepareSongPassageConnection()
         submit(text, 0.94f, onFinished, canPlayPassage, passage)
+    }
+
+    override fun prepareSongPassageConnection() {
+        if (!closed) try { platform.prepareSongPassageConnection() } catch (_: RuntimeException) { }
     }
 
     override fun speakWithInstrumental(
@@ -491,9 +506,11 @@ internal class AndroidReflectionSpeaker(
             return
         }
         current.phase = SpeechPhase.INSTRUMENTAL
-        releaseFocus()
+        if (current.songPassage == null) releaseFocus()
         if (request !== current || closed) return
-        armTimeout(current.id, if (current.songPassage != null) 30_000L else 15_000L)
+        // Track loading and best-effort restoration have their own confirmation budgets.
+        // Leave room for every stage and cancellation containment, not just the audible clip.
+        armTimeout(current.id, if (current.songPassage != null) 60_000L else 15_000L)
         try {
             val done: (String) -> Unit = { id -> onMain {
                     if (request?.id == id && request?.phase == SpeechPhase.INSTRUMENTAL) finish(id)
@@ -563,6 +580,7 @@ internal class AndroidReflectionSpeaker(
 
 internal class AndroidReflectionSpeechPlatform(
     context: Context,
+    private val passageSessionFactory: (() -> SongPassageSession)? = null,
     passageDiagnosticObserver: (SongPassageDiagnostic) -> Unit = {}
 ) : ReflectionSpeechPlatform {
     private class MemoryAudioSource(private var audio: ByteArray?) : MediaDataSource() {
@@ -594,10 +612,8 @@ internal class AndroidReflectionSpeechPlatform(
     override fun reflectionSpeechGateway(): ReflectionSpeechGateway? =
         (appContext as? RunStateApplication)?.reflectionSpeechGateway
     private val passageScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
-    private val passageController by lazy {
-        SpotifySongPassageController(AndroidSpotifyPassageSession(appContext),
-            diagnosticObserver = passageDiagnosticObserver)
-    }
+    private val passageDiagnostics = passageDiagnosticObserver
+    private var passageController: SpotifySongPassageController? = null
     private var passageJob: Job? = null
     private var passageId: String? = null
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -806,7 +822,23 @@ internal class AndroidReflectionSpeechPlatform(
         passageId = utteranceId
         passageJob = passageScope.launch {
             try {
-                val result = passageController.play(passage)
+                val result = spotifyPassageMutex.withLock {
+                    coroutineContext.ensureActive()
+                    // One transport is held until cleanup finishes. A new retry cannot race a
+                    // cancelled SDK load, and a live passage never changes transport midway.
+                    val session = passageSessionFactory?.invoke()
+                        ?: SpotifyAppRemoteConnection.get(appContext).newPassageSession()
+                        ?: AndroidSpotifyPassageSession(appContext)
+                    val controller = SpotifySongPassageController(session,
+                        onEntranceReady = ::releaseAudioFocus, quiescePausedBeforeEntry = true,
+                        diagnosticObserver = passageDiagnostics)
+                    passageController = controller
+                    try { session.expectTrack(passage); session.prepareForPlayback(); controller.play(passage) }
+                    finally {
+                        withContext(NonCancellable) { session.release() }
+                        if (passageController === controller) passageController = null
+                    }
+                }
                 if (passageId == utteranceId && !closed) {
                     passageId = null
                     passageJob = null
@@ -828,9 +860,13 @@ internal class AndroidReflectionSpeechPlatform(
 
     override fun stopSongPassage() {
         passageId = null
-        passageController.stop()
+        passageController?.stop()
         passageJob?.cancel()
         passageJob = null
+    }
+
+    override fun prepareSongPassageConnection() {
+        SpotifyAppRemoteConnection.get(appContext).connectSilently()
     }
 
     override fun stopInstrumental() {

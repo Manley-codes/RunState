@@ -300,8 +300,12 @@ private fun reflectionMusicSummaryFor(run: RunEntity, reflection: RunReflectionE
             val selected = historyEvidenceJson.fromJson(snapshot, com.runstate.mobile.reflection.CompletedRunEvidence::class.java)
             val winner = selected.songCandidates.orEmpty().singleOrNull { it.candidateId == selected.selectedSongId }
             if (winner != null && winner.musicContext == selected.musicContext &&
-                selected.songSelectionMethod in setOf("CONTEXT_MATCH", "AVAILABLE_FALLBACK")) {
-                val label = if (selected.songSelectionMethod == "CONTEXT_MATCH") "Chosen for this run" else "Available song match"
+                selected.songSelectionMethod in setOf("CONTEXT_MATCH", "AVAILABLE_FALLBACK", "OBSERVED_FALLBACK")) {
+                val label = when (selected.songSelectionMethod) {
+                    "CONTEXT_MATCH" -> "Chosen for this run"
+                    "OBSERVED_FALLBACK" -> "Song from this run"
+                    else -> "Available song match"
+                }
                 return "$label · ${winner.musicContext.trackTitle} — ${winner.musicContext.artistName}"
             }
         } catch (_: RuntimeException) { /* Legacy or damaged optional metadata uses the existing summary. */ }

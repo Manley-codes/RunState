@@ -42,7 +42,7 @@ final class ReflectionApiJson {
 
     private static final int MAX_JSON_DEPTH = 32;
     private static final Set<String> REQUIRED_REQUEST_FIELDS = Set.of("requestId", "runId", "evidence");
-    private static final Set<String> REQUEST_FIELDS = Set.of("requestId", "runId", "evidence", "songPreparationId", "songCandidates", "allowSongSnippetLookup");
+    private static final Set<String> REQUEST_FIELDS = Set.of("requestId", "runId", "evidence", "songPreparationId", "songCandidates", "allowSongSnippetLookup", "allowSongSnippetFallbacks");
     private static final Set<String> EVIDENCE_FIELDS = Set.of(
             "officialStartEpochMillis",
             "finishEpochMillis",
@@ -134,7 +134,15 @@ final class ReflectionApiJson {
             }
             allowSnippets = value.getAsBoolean();
         }
-        return new ApiRequest(identifiers, evidence, preparationId, candidates, allowSnippets);
+        boolean allowFallbacks = false;
+        if (root.has("allowSongSnippetFallbacks")) {
+            JsonElement value = root.get("allowSongSnippetFallbacks");
+            if (!value.isJsonPrimitive() || !value.getAsJsonPrimitive().isBoolean()) {
+                throw new IllegalArgumentException("Song snippet fallbacks require an explicit boolean");
+            }
+            allowFallbacks = value.getAsBoolean();
+        }
+        return new ApiRequest(identifiers, evidence, preparationId, candidates, allowSnippets, allowFallbacks);
     }
 
     static ReflectionContract.SongPreparationRequest parseSongPreparationRequest(byte[] utf8Json)
@@ -204,12 +212,17 @@ final class ReflectionApiJson {
         }
         if (generated.songSnippet() != null) {
             if (!request.allowSongSnippetLookup() || !generated.songSnippet().matches(selectedCandidate)
-                    || selectedMusic.songCue() != null) {
+                    || generated.songSnippet().version() == 2 && !request.allowSongSnippetFallbacks()
+                    || selectedMusic.songCue() != null && (generated.songSnippet().version() != 2 || acknowledgedCueId != null)) {
                 throw new IllegalArgumentException("Generated snippet must match the opted-in selected recording");
             }
         } else if (acknowledgedCueId != null && (selectedMusic.songCue() == null
                 || !acknowledgedCueId.equals(selectedMusic.songCue().cueId()))) {
             throw new IllegalArgumentException("Acknowledged cue must match the request.");
+        }
+        if (generated.songSelectionMethod() == ReflectionProvider.SongSelectionMethod.OBSERVED_FALLBACK
+                && (!request.allowSongSnippetFallbacks() || generated.songSnippet() == null)) {
+            throw new IllegalArgumentException("Observed playback fallback requires its authorized recording receipt");
         }
         JsonObject candidateJson = new JsonObject();
         candidateJson.addProperty("spent", candidates.spent());
@@ -537,12 +550,20 @@ final class ReflectionApiJson {
     }
 
     record ApiRequest(RequestIdentifiers identifiers, CompletedRunEvidence evidence, String songPreparationId,
-                      List<ReflectionContract.SongCandidate> songCandidates, boolean allowSongSnippetLookup) {
+                      List<ReflectionContract.SongCandidate> songCandidates, boolean allowSongSnippetLookup,
+                      boolean allowSongSnippetFallbacks) {
         ApiRequest {
             songCandidates = ReflectionContract.validatedSongCandidates(songCandidates);
             if (allowSongSnippetLookup && songCandidates.isEmpty()) {
                 throw new IllegalArgumentException("Song snippet lookup requires shared observed candidates");
             }
+            if (allowSongSnippetFallbacks && !allowSongSnippetLookup) {
+                throw new IllegalArgumentException("Snippet fallbacks require authorized lookup");
+            }
+        }
+        ApiRequest(RequestIdentifiers identifiers, CompletedRunEvidence evidence, String songPreparationId,
+                   List<ReflectionContract.SongCandidate> songCandidates, boolean allowSongSnippetLookup) {
+            this(identifiers, evidence, songPreparationId, songCandidates, allowSongSnippetLookup, false);
         }
         ApiRequest(RequestIdentifiers identifiers, CompletedRunEvidence evidence, String songPreparationId,
                    List<ReflectionContract.SongCandidate> songCandidates) {

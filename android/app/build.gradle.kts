@@ -5,6 +5,12 @@ plugins {
     alias(libs.plugins.androidx.room)
 }
 
+// Spotify's client ID is public app identity, never a client secret or user token.
+val spotifyClientId = providers.gradleProperty("runstate.spotifyClientId").orElse("").get()
+require(spotifyClientId.isEmpty() || spotifyClientId.matches(Regex("[a-fA-F0-9]{32}"))) {
+    "runstate.spotifyClientId must be the public Spotify application ID."
+}
+
 android {
     namespace = "com.runstate.mobile"
     compileSdk {
@@ -17,6 +23,9 @@ android {
         targetSdk = 37
         versionCode = 1
         versionName = "1.0"
+
+        buildConfigField("String", "SPOTIFY_CLIENT_ID", "\"$spotifyClientId\"")
+        buildConfigField("String", "SPOTIFY_REDIRECT_URI", "\"runstate://spotify-callback\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -77,6 +86,8 @@ dependencies {
     implementation(libs.gson)
     implementation(libs.maplibre)
     implementation(libs.okhttp)
+    // Official Spotify release, pinned locally; provenance and checksum are in third-party notices.
+    implementation(files("libs/spotify-app-remote-release-0.8.0.aar"))
 
     ksp(libs.androidx.room.compiler)
     testImplementation(libs.junit)

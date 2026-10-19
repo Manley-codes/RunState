@@ -69,7 +69,7 @@ public final class ReflectionContract {
         @Override public String toString() { return "SongRecording[metadata=redacted]"; }
     }
 
-    public enum SongSnippetSelectionMethod { TITLE_HOOK, REPEATED_HOOK }
+    public enum SongSnippetSelectionMethod { TITLE_HOOK, REPEATED_HOOK, TIMED_LINE_WINDOW, RECORDING_OPENING_FALLBACK }
 
     /** Source-derived playback coordinates only: no lyrics, audio URL, or device playback identifier. */
     public record SongSnippet(String cueId, String source, String sourceId, String trackTitle,
@@ -77,8 +77,13 @@ public final class ReflectionContract {
                               long startPositionMillis, long durationMillis,
                               SongSnippetSelectionMethod selectionMethod, int version) {
         public SongSnippet {
-            require("LRCLIB".equals(source) && version == 1, "Unsupported song snippet source/version");
-            require(sourceId != null && sourceId.matches("[1-9][0-9]{0,18}"), "Invalid timing source identifier");
+            boolean opening = selectionMethod == SongSnippetSelectionMethod.RECORDING_OPENING_FALLBACK;
+            require((version == 1 || version == 2) && (opening
+                    ? version == 2 && "RUNSTATE_RECORDING".equals(source) && "opening".equals(sourceId)
+                    : "LRCLIB".equals(source) && sourceId != null && sourceId.matches("[1-9][0-9]{0,18}")),
+                    "Unsupported song snippet source/version");
+            require(version == 2 || selectionMethod == SongSnippetSelectionMethod.TITLE_HOOK
+                    || selectionMethod == SongSnippetSelectionMethod.REPEATED_HOOK, "Unsupported legacy selection method");
             requireVisibleSongText(trackTitle, "trackTitle");
             requireVisibleSongText(artistName, "artistName");
             new SongRecording(albumName, trackDurationMillis);
@@ -86,7 +91,11 @@ public final class ReflectionContract {
                             && startPositionMillis <= trackDurationMillis - durationMillis,
                     "Snippet must fit within the observed recording");
             require(selectionMethod != null, "A source-derived selection method is required");
-            require(("lrclib_v1_" + sourceId + "_" + startPositionMillis + "_"
+            require(!opening || startPositionMillis == 0 && durationMillis <= 8_000,
+                    "Opening fallback must be a short recording opening");
+            require(version == 1 || startPositionMillis <= trackDurationMillis - durationMillis - 2_000,
+                    "Playback receipt must preserve the controller's two-second end margin");
+            require(((opening ? "recording_v2_" : "lrclib_v" + version + "_") + sourceId + "_" + startPositionMillis + "_"
                     + (startPositionMillis + durationMillis)).equals(cueId), "Invalid generated snippet cue");
         }
         public boolean matches(SongCandidate candidate) {
@@ -96,7 +105,7 @@ public final class ReflectionContract {
                     && java.util.Objects.equals(albumName, candidate.recording().albumName())
                     && trackDurationMillis == candidate.recording().durationMillis();
         }
-        @Override public String toString() { return "SongSnippet[metadata=redacted, source=LRCLIB]"; }
+        @Override public String toString() { return "SongSnippet[metadata=redacted, source=" + source + "]"; }
     }
 
     private static void requireVisibleSongText(String text, String field) {

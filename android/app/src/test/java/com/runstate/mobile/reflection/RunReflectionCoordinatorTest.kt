@@ -1074,6 +1074,68 @@ class RunReflectionCoordinatorTest {
         assertEquals(saved.text, (reopened.state.value as RunReflectionState.Ready).text)
     }
 
+    @Test fun observedOpeningReceiptPlaysWithoutAnalysisAcknowledgementAndNeverReplaysOnReopen() {
+        val dao = completedDao().apply {
+            inserted[0] = inserted[0].copy(musicObservationRequested = true,
+                musicReflectionSharingAllowed = true, songSnippetLookupAllowed = true)
+        }
+        val uri = "spotify:track:" + "a".repeat(22)
+        val store = MemoryReflectionStore().apply {
+            observedMusic = listOf(sampleMusicObservation().copy(title = "Example Song", artist = "Example Artist",
+                spotifyTrackUri = uri, albumName = null, trackDurationMillis = 180_000L))
+        }
+        val snippet = ReflectionSongSnippet("recording_v2_opening_0_8000", "RUNSTATE_RECORDING", "opening",
+            "Example Song", "Example Artist", null, 180_000, 0, 8_000, "RECORDING_OPENING_FALLBACK", 2)
+        val coordinator = RunReflectionCoordinator(dao, store, ReflectionGateway { request ->
+            candidates().copy(isTestData = false, selectedSongId = request.evidence.songCandidates!!.single().candidateId,
+                songSelectionMethod = "OBSERVED_FALLBACK", songSnippet = snippet)
+        }, scope(), quietWindowMillis = 0L, nowMillis = { 100L })
+        coordinator.onSavedVisible(RUN_ID)
+        val passage = (coordinator.state.value as RunReflectionState.Ready).passage!!
+        assertEquals(uri, passage.spotifyMediaId); assertEquals(8_000L, passage.durationMillis)
+        val saved = store.rows.getValue(RUN_ID)
+        val evidence = gson.fromJson(saved.evidenceJson, CompletedRunEvidence::class.java)
+        assertNull(evidence.musicContext.songCue); assertEquals(snippet, evidence.songPlaybackReceipt)
+        assertNull(pairedPassageFor(saved)); assertNull(pairedPassageFor(saved, "wrong-cue"))
+        assertNotNull(pairedPassageFor(saved, snippet.cueId))
+        val damaged = evidence.copy(songPassage = evidence.songPassage!!.copy(startPositionMillis = 50_000))
+        assertNull(pairedPassageFor(saved.copy(evidenceJson = gson.toJson(damaged)), snippet.cueId))
+        val reopened = RunReflectionCoordinator(dao, store, ReflectionGateway { error("No regeneration") },
+            scope(), nowMillis = { 100L })
+        reopened.onSavedVisible(RUN_ID)
+        assertNull((reopened.state.value as RunReflectionState.Ready).passage)
+        assertEquals(saved.text, (reopened.state.value as RunReflectionState.Ready).text)
+    }
+
+    @Test fun v2RetryClearsFailedDeliveryReceiptWhenServerReturnsNoWinner() {
+        val dao = completedDao().apply {
+            inserted[0] = inserted[0].copy(musicObservationRequested = true,
+                musicReflectionSharingAllowed = true, songSnippetLookupAllowed = true)
+        }
+        val store = MemoryReflectionStore().apply {
+            observedMusic = listOf(sampleMusicObservation().copy(title = "Example Song", artist = "Example Artist",
+                spotifyTrackUri = "spotify:track:" + "a".repeat(22), albumName = null, trackDurationMillis = 180_000L))
+            failFinalizationOnce = true
+        }
+        val snippet = ReflectionSongSnippet("recording_v2_opening_0_8000", "RUNSTATE_RECORDING", "opening",
+            "Example Song", "Example Artist", null, 180_000, 0, 8_000, "RECORDING_OPENING_FALLBACK", 2)
+        var calls = 0
+        val coordinator = RunReflectionCoordinator(dao, store, ReflectionGateway { request ->
+            if (++calls == 1) candidates().copy(isTestData = false,
+                selectedSongId = request.evidence.songCandidates!!.single().candidateId,
+                songSelectionMethod = "OBSERVED_FALLBACK", songSnippet = snippet)
+            else candidates().copy(isTestData = false)
+        }, scope(), quietWindowMillis = 0L, nowMillis = { 100L })
+        coordinator.onSavedVisible(RUN_ID)
+        assertEquals(ReflectionStatus.FAILED, store.rows.getValue(RUN_ID).status)
+        coordinator.retry(RUN_ID)
+        val saved = store.rows.getValue(RUN_ID)
+        assertEquals(ReflectionStatus.READY, saved.status)
+        val evidence = gson.fromJson(saved.evidenceJson, CompletedRunEvidence::class.java)
+        assertNull(evidence.songPlaybackReceipt); assertNull(evidence.songPassage); assertNull(evidence.selectedSongId)
+        assertNull((coordinator.state.value as RunReflectionState.Ready).passage); assertEquals(2, calls)
+    }
+
     @Test fun failedLocalFinalizationThenFallbackCannotKeepASourcedSnippet() {
         val dao = completedDao().apply {
             inserted[0] = inserted[0].copy(musicObservationRequested = true,

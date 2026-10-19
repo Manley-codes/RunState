@@ -43,6 +43,7 @@ public final class ReflectionHttpServer implements AutoCloseable {
     public static final String SONG_PREPARATION_CAPABILITY_HEADER = "X-RunState-Song-Preparation";
     public static final String SONG_SELECTION_CAPABILITY_HEADER = "X-RunState-Song-Selection";
     public static final String SONG_SNIPPETS_CAPABILITY_HEADER = "X-RunState-Song-Snippets";
+    public static final String SONG_SNIPPET_FALLBACKS_CAPABILITY_HEADER = "X-RunState-Song-Snippet-Fallbacks";
     public static final String REFLECTION_VOICE_CAPABILITY_HEADER = "X-RunState-Reflection-Voice";
     public static final int MAX_REQUEST_BYTES = 64 * 1024;
     public static final int MAX_RESPONSE_BYTES = 64 * 1024;
@@ -270,6 +271,9 @@ public final class ReflectionHttpServer implements AutoCloseable {
             if (provider.supportsSongSnippets()) {
                 exchange.getResponseHeaders().set(SONG_SNIPPETS_CAPABILITY_HEADER, "1");
             }
+            if (provider.supportsSongSnippetFallbacks()) {
+                exchange.getResponseHeaders().set(SONG_SNIPPET_FALLBACKS_CAPABILITY_HEADER, "1");
+            }
             if (speechProvider != null) {
                 exchange.getResponseHeaders().set(REFLECTION_VOICE_CAPABILITY_HEADER, "1");
             }
@@ -320,6 +324,11 @@ public final class ReflectionHttpServer implements AutoCloseable {
             exchange.getResponseHeaders().set(SONG_SNIPPETS_CAPABILITY_HEADER, "1");
         } else if (request.allowSongSnippetLookup()) {
             return error(503, "provider_unavailable", "Song snippet lookup is not configured.");
+        }
+        if (provider.supportsSongSnippetFallbacks()) {
+            exchange.getResponseHeaders().set(SONG_SNIPPET_FALLBACKS_CAPABILITY_HEADER, "1");
+        } else if (request.allowSongSnippetFallbacks()) {
+            return error(503, "provider_unavailable", "Song snippet fallbacks are not configured.");
         }
         if (!request.songCandidates().isEmpty() && !provider.supportsSongSelection()) {
             return error(503, "provider_unavailable", "Song selection is not configured.");
@@ -398,7 +407,8 @@ public final class ReflectionHttpServer implements AutoCloseable {
     private EndpointResponse callProvider(ApiRequest request) {
         try {
             ReflectionProvider.GeneratedReflections generated = provider.generateForDelivery(
-                    request.evidence(), request.songPreparationId(), request.songCandidates(), request.allowSongSnippetLookup());
+                    request.evidence(), request.songPreparationId(), request.songCandidates(), request.allowSongSnippetLookup(),
+                    request.allowSongSnippetFallbacks());
             String body = ReflectionApiJson.success(request, generated, generationMode);
             if (body.getBytes(StandardCharsets.UTF_8).length > MAX_RESPONSE_BYTES) {
                 return providerFailure(FailureType.INVALID_RESPONSE);

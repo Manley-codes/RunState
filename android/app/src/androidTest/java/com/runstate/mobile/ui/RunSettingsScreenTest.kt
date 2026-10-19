@@ -137,6 +137,43 @@ class RunSettingsScreenTest {
     }
 
     @Test
+    fun spotifyConnectionNeedsAnExplicitTapAndDoesNotEnableMusicSharing() {
+        var connectCalls = 0
+        var disconnectCalls = 0
+        var preferenceChanges = 0
+        var connected by mutableStateOf(false)
+        var busy by mutableStateOf(false)
+        compose.setContent {
+            RunSettingsDialog(
+                gpsReady = true, gpsMessage = null,
+                musicObservationEnabled = false, musicAccessGranted = true,
+                musicReflectionSharingEnabled = false, musicReflectionSharingAvailable = true,
+                reflectionConnectionLabel = null, demoMode = false,
+                onDismiss = {}, onRequestLocationSetup = {},
+                onSetMusicObservation = { preferenceChanges++ }, onRequestMusicAccess = {},
+                onSetMusicReflectionSharing = { preferenceChanges++ }, onSetDemoMode = {},
+                onOpenReflectionSetup = {}, settingsLoading = busy,
+                songSnippetsEnabled = false, onSetSongSnippets = { preferenceChanges++ },
+                spotifyConnectionLabel = if (connected) "Spotify connected" else "Connect Spotify for automatic snippets",
+                spotifyConnectEnabled = !connected, spotifyDisconnectEnabled = connected,
+                onConnectSpotify = { connectCalls++; connected = true },
+                onDisconnectSpotify = { disconnectCalls++; connected = false }
+            )
+        }
+        compose.runOnIdle { assertEquals(0, connectCalls) }
+        compose.onNodeWithTag(SETTINGS_SPOTIFY_CONNECT_TAG).performScrollTo().performClick()
+        compose.onNodeWithTag(SETTINGS_SPOTIFY_CONNECT_TAG).assertIsNotEnabled()
+        compose.onNodeWithTag(SETTINGS_SONG_SNIPPETS_TAG).performScrollTo().assertIsOff()
+        compose.onNodeWithTag(SETTINGS_MUSIC_SHARING_TAG).performScrollTo().assertIsOff()
+        compose.runOnIdle { assertEquals(1, connectCalls); assertEquals(0, preferenceChanges); busy = true }
+        compose.onNodeWithTag(SETTINGS_SPOTIFY_DISCONNECT_TAG).performScrollTo().assertIsNotEnabled()
+            .performTouchInput { click() }
+        compose.runOnIdle { assertEquals(0, disconnectCalls); busy = false }
+        compose.onNodeWithTag(SETTINGS_SPOTIFY_DISCONNECT_TAG).performClick()
+        compose.runOnIdle { assertEquals(1, disconnectCalls); assertEquals(0, preferenceChanges) }
+    }
+
+    @Test
     fun snippetLookupIsSeparateDefaultOffFutureRunChoiceAndRequiresMusicSharing() {
         var sharing by mutableStateOf(false)
         var snippets by mutableStateOf(false)

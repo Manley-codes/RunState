@@ -36,7 +36,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /** Optional exact-recording timing lookup. Lyric text exists only while deriving a bounded window. */
-final class LrclibSongSnippets {
+final class LrclibSongSnippets implements AnthropicReflectionProvider.SongSnippetLookup {
     static final Duration MAX_TIMEOUT = Duration.ofSeconds(5);
     static final int MAX_RESPONSE_BYTES = 256 * 1024;
     private static final int MAX_LINES = 1_024;
@@ -47,8 +47,13 @@ final class LrclibSongSnippets {
     LrclibSongSnippets() { this(new JdkTransport()); }
     LrclibSongSnippets(Transport transport) { this.transport = java.util.Objects.requireNonNull(transport); }
 
-    Optional<SongSnippet> lookup(SongCandidate candidate, MusixmatchSongAnalysis.SongMaterial material,
+    public Optional<SongSnippet> lookup(SongCandidate candidate, MusixmatchSongAnalysis.SongMaterial material,
                                  Duration remaining) {
+        return lookup(candidate, material, remaining, false);
+    }
+
+    public Optional<SongSnippet> lookup(SongCandidate candidate, MusixmatchSongAnalysis.SongMaterial material,
+                                 Duration remaining, boolean allowLineWindow) {
         if (candidate.recording() == null || Thread.currentThread().isInterrupted()
                 || remaining.isZero() || remaining.isNegative()) return Optional.empty();
         Duration timeout = remaining.compareTo(MAX_TIMEOUT) < 0 ? remaining : MAX_TIMEOUT;
@@ -59,7 +64,7 @@ final class LrclibSongSnippets {
         try {
             Response response = transport.send(new Request(URI.create("https://lrclib.net/api/get?" + query), timeout));
             if (response.status() != 200 || response.body().length > MAX_RESPONSE_BYTES) return Optional.empty();
-            return derive(candidate, material, response.body());
+            return derive(candidate, material, response.body(), allowLineWindow);
         } catch (InterruptedException interrupted) {
             Thread.currentThread().interrupt();
             return Optional.empty();
@@ -71,6 +76,11 @@ final class LrclibSongSnippets {
 
     static Optional<SongSnippet> derive(SongCandidate candidate, MusixmatchSongAnalysis.SongMaterial material,
                                         byte[] body) {
+        return derive(candidate, material, body, false);
+    }
+
+    static Optional<SongSnippet> derive(SongCandidate candidate, MusixmatchSongAnalysis.SongMaterial material,
+                                        byte[] body, boolean allowLineWindow) {
         try {
             if (body.length > MAX_RESPONSE_BYTES || candidate.recording() == null) return Optional.empty();
             JsonObject source = JsonParser.parseString(new String(body, StandardCharsets.UTF_8)).getAsJsonObject();
@@ -78,8 +88,8 @@ final class LrclibSongSnippets {
             if (!id.matches("[1-9][0-9]{0,18}")) return Optional.empty();
             String title = text(source, "trackName"), artist = text(source, "artistName");
             if (!same(title, candidate.musicContext().trackTitle()) || !same(artist, candidate.musicContext().artistName())
-                    || !same(material.trackTitle(), candidate.musicContext().trackTitle())
-                    || !same(material.artistName(), candidate.musicContext().artistName())) return Optional.empty();
+                    || material != null && (!same(material.trackTitle(), candidate.musicContext().trackTitle())
+                    || !same(material.artistName(), candidate.musicContext().artistName()))) return Optional.empty();
             String album = candidate.recording().albumName();
             if (album != null && !same(album, text(source, "albumName"))) return Optional.empty();
             double seconds = source.get("duration").getAsDouble();
@@ -95,8 +105,9 @@ final class LrclibSongSnippets {
             var counts = new HashMap<String, Integer>();
             lines.stream().filter(line -> !line.words().isEmpty()).forEach(line -> counts.merge(line.words(), 1, Integer::sum));
             String titleWords = words(candidate.musicContext().trackTitle());
-            List<String> supporting = material.themes().stream().flatMap(theme -> theme.quotes().stream())
-                    .map(LrclibSongSnippets::words).filter(value -> value.split(" ").length >= 3).toList();
+            List<String> supporting = material == null ? List.of() : material.themes().stream()
+                    .flatMap(theme -> theme.quotes().stream()).map(LrclibSongSnippets::words)
+                    .filter(value -> value.split(" ").length >= 3).toList();
             Window best = null;
             for (int index = 0; index < lines.size() - 1; index++) {
                 Line first = lines.get(index);
@@ -105,7 +116,7 @@ final class LrclibSongSnippets {
                 boolean titleHook = titleWords.length() >= 4 && containsWords(first.words(), titleWords)
                         && repeated >= 2;
                 boolean repeatedHook = repeated >= 3 && first.words().split(" ").length >= 3;
-                if (!titleHook && !repeatedHook) continue;
+                if (!titleHook && !repeatedHook && !allowLineWindow) continue;
                 // End only at an actual subsequent line timestamp. These are approximate line boundaries,
                 // never word-level proof that the singer has completed a sentence.
                 for (int next = index + 1; next <= Math.min(index + 3, lines.size() - 1); next++) {
@@ -116,19 +127,25 @@ final class LrclibSongSnippets {
                     String phrase = String.join(" ", lines.subList(index, next).stream().map(Line::words).toList());
                     boolean supported = supporting.stream().anyMatch(quote -> containsWords(phrase, quote)
                             || (phrase.split(" ").length >= 3 && containsWords(quote, phrase)));
-                    int score = (titleHook ? 100 : 0) + Math.min(repeated, 6) * 10
+                    int score = (titleHook ? 1_000 : repeatedHook ? 500 : 0) + Math.min(repeated, 6) * 10
                             + (supported ? 30 : 0) + (lines.get(next).words().isEmpty() ? 8 : 0);
+                    // A nonrepeating verse is still usable audio. Prefer an actual gap and a
+                    // short, substantial line window; never label it a chorus or strong hook.
+                    if (!titleHook && !repeatedHook) score += (duration >= 4_000 ? 4 : 0)
+                            + (lines.get(next).words().isEmpty() ? 50 : 0);
                     Window candidateWindow = new Window(first.millis(), duration, score,
-                            titleHook ? SongSnippetSelectionMethod.TITLE_HOOK : SongSnippetSelectionMethod.REPEATED_HOOK);
+                            titleHook ? SongSnippetSelectionMethod.TITLE_HOOK : repeatedHook
+                                    ? SongSnippetSelectionMethod.REPEATED_HOOK : SongSnippetSelectionMethod.TIMED_LINE_WINDOW);
                     if (best == null || candidateWindow.score() > best.score()) best = candidateWindow;
                     // Prefer the shortest complete line-window unless the following window has actual stronger evidence.
                     if (lines.get(next).words().isEmpty()) break;
                 }
             }
             if (best == null) return Optional.empty();
-            return Optional.of(new SongSnippet("lrclib_v1_" + id + "_" + best.start() + "_"
+            int version = allowLineWindow ? 2 : 1;
+            return Optional.of(new SongSnippet("lrclib_v" + version + "_" + id + "_" + best.start() + "_"
                     + (best.start() + best.duration()), "LRCLIB", id, candidate.musicContext().trackTitle(),
-                    candidate.musicContext().artistName(), album, observedMillis, best.start(), best.duration(), best.method(), 1));
+                    candidate.musicContext().artistName(), album, observedMillis, best.start(), best.duration(), best.method(), version));
         } catch (RuntimeException invalid) { return Optional.empty(); }
     }
 

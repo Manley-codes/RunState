@@ -37,6 +37,8 @@ internal const val SETTINGS_DONE_TAG = "runSettingsDone"
 internal const val SETTINGS_RETRY_PREFERENCES_TAG = "runSettingsRetryPreferences"
 internal const val SETTINGS_WEATHER_TAG = "runSettingsWeather"
 internal const val SETTINGS_SONG_SNIPPETS_TAG = "runSettingsSongSnippets"
+internal const val SETTINGS_SPOTIFY_CONNECT_TAG = "runSettingsSpotifyConnect"
+internal const val SETTINGS_SPOTIFY_DISCONNECT_TAG = "runSettingsSpotifyDisconnect"
 internal const val SETTINGS_DISTANCE_ANNOUNCEMENTS_TAG = "runSettingsDistanceAnnouncements"
 
 private val SettingsInk = Color(0xFF293326)
@@ -70,7 +72,12 @@ internal fun RunSettingsDialog(
     songSnippetsEnabled: Boolean = false,
     onSetSongSnippets: (Boolean) -> Unit = {},
     distanceAnnouncements: Boolean = true,
-    onSetDistanceAnnouncements: (Boolean) -> Unit = {}
+    onSetDistanceAnnouncements: (Boolean) -> Unit = {},
+    spotifyConnectionLabel: String? = null,
+    spotifyConnectEnabled: Boolean = false,
+    spotifyDisconnectEnabled: Boolean = false,
+    onConnectSpotify: () -> Unit = {},
+    onDisconnectSpotify: () -> Unit = {}
 ) {
     val controlsEnabled = actionsEnabled && !settingsLoading
     val preferenceControlsEnabled = controlsEnabled && preferencesAvailable
@@ -188,7 +195,8 @@ internal fun RunSettingsDialog(
                     title = "Find song snippets",
                     description = "For future runs, send the chosen song's title, artist, album and duration " +
                         "through RunState to LRCLIB to find a short vocal hook. Timing is community supplied " +
-                        "and may be unavailable or imperfect. No lyrics are saved to your run. " +
+                        "and may be imperfect. If timing is unavailable, use a short opening of the same song. " +
+                        "No lyrics are saved to your run. " +
                         "After your reflection, RunState may briefly switch Spotify to that recording; " +
                         "restoring the previous song is best effort and the queue may change.",
                     checked = songSnippetsEnabled,
@@ -196,6 +204,27 @@ internal fun RunSettingsDialog(
                     onCheckedChange = onSetSongSnippets,
                     tag = SETTINGS_SONG_SNIPPETS_TAG
                 )
+                if (spotifyConnectionLabel != null) {
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(spotifyConnectionLabel, color = SettingsInk, fontSize = 14.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
+                        SettingsDescription("Connect Spotify once so RunState can load the selected song, " +
+                            "play its short ending and stop it automatically. Spotify Premium is needed " +
+                            "to choose a specific song. Connecting does not turn music sharing on.")
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            TextButton(onClick = onConnectSpotify,
+                                enabled = controlsEnabled && spotifyConnectEnabled,
+                                modifier = Modifier.heightIn(min = 48.dp).testTag(SETTINGS_SPOTIFY_CONNECT_TAG)
+                            ) { Text("Connect Spotify", color = SettingsInk) }
+                            if (spotifyDisconnectEnabled) {
+                                TextButton(onClick = onDisconnectSpotify, enabled = controlsEnabled,
+                                    modifier = Modifier.heightIn(min = 48.dp).testTag(SETTINGS_SPOTIFY_DISCONNECT_TAG)
+                                ) { Text("Disconnect", color = SettingsInk) }
+                            }
+                        }
+                    }
+                }
 
                 SettingsDivider()
                 SettingsSectionTitle("WEATHER")

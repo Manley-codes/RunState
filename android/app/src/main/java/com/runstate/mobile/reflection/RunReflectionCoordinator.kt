@@ -351,7 +351,8 @@ internal class RunReflectionCoordinator(
             ReflectionBranch.NO_SELECTION -> candidates.noSelection
         }
         if (store.ready(runId, record.requestId, branch, text, nowMillis())) {
-            candidates.songCueId?.let { completedSongCues[runId] = record.requestId to it }
+            (candidates.songSnippet?.takeIf { it.version == 2 }?.cueId ?: candidates.songCueId)
+                ?.let { completedSongCues[runId] = record.requestId to it }
         }
     }
 
@@ -401,6 +402,27 @@ internal fun pairedPassageFor(record: RunReflectionEntity, acknowledgedCueId: St
         val gson = GsonBuilder().create()
         val evidence = gson.fromJson(record.evidenceJson, CompletedRunEvidence::class.java)
         val plan = evidence.songPassage ?: return null
+        val receipt = evidence.songPlaybackReceipt
+        if (receipt != null) {
+            if (receipt.version != 2 || acknowledgedCueId != receipt.cueId ||
+                plan.playbackReceiptId != receipt.cueId || !evidence.songSnippetLookupAllowed) return null
+            val candidate = evidence.songCandidates.orEmpty().singleOrNull { it.candidateId == evidence.selectedSongId }
+                ?: return null
+            validateSongSnippet(receipt, candidate, true, allowFallbacks = true)
+            val recording = candidate.recording ?: return null
+            if (evidence.musicContext.state != "MUSIC" || evidence.musicContext.provenance != "MEDIA_SESSION_PARTIAL" ||
+                plan.spotifyTrackUri != recording.spotifyTrackUri || plan.observedDurationMillis != recording.durationMillis ||
+                !plan.allowTrackSwitch || plan.trackTitle != candidate.musicContext.trackTitle ||
+                plan.artistName != candidate.musicContext.artistName || evidence.musicContext.trackTitle != plan.trackTitle ||
+                evidence.musicContext.artistName != plan.artistName) return null
+            val curated = candidate.songPassage?.takeIf { it.allowTrackSwitch }
+            if (curated != null) {
+                if (plan != curated.copy(playbackReceiptId = receipt.cueId)) return null
+            } else if (plan.cueId != receipt.cueId || plan.timingSource != receipt.source ||
+                plan.timingSourceId != receipt.sourceId || plan.timingVersion != 2 ||
+                plan.startPositionMillis != receipt.startPositionMillis || plan.durationMillis != receipt.durationMillis) return null
+            return plan.passage()
+        }
         val music = evidence.musicContext
         val cue = music.songCue ?: return null
         if (acknowledgedCueId != cue.cueId || cue.cueId != plan.cueId ||

@@ -22,6 +22,25 @@ import java.util.concurrent.atomic.AtomicReference;
 import static org.junit.jupiter.api.Assertions.*;
 
 class LrclibSongSnippetsTest {
+    @Test void nonRepeatingTimedVerseWorksWithoutAnalysisOnlyForNewOptedInClients() {
+        String verse = "[00:01]A fresh beginning here\n[00:05]Another unique phrase\n[00:10]The final different line\n[00:14]";
+        assertTrue(LrclibSongSnippets.derive(candidate(), null, bytes(response(verse))).isEmpty());
+        var window = LrclibSongSnippets.derive(candidate(), null, bytes(response(verse)), true).orElseThrow();
+        assertEquals(SongSnippetSelectionMethod.TIMED_LINE_WINDOW, window.selectionMethod());
+        assertEquals(2, window.version()); assertEquals(5_000, window.startPositionMillis());
+        assertEquals(9_000, window.durationMillis());
+        assertEquals("lrclib_v2_42_5000_14000", window.cueId());
+    }
+
+    @Test void absentAlbumDoesNotDiscardAnOtherwiseMatchedRecordingAndHooksStillWin() {
+        var song = new SongCandidate("2", candidate().musicContext(), null, new SongRecording(null, 180_000));
+        var window = LrclibSongSnippets.derive(song, null, bytes(response(LRC)), true).orElseThrow();
+        assertNull(window.albumName()); assertTrue(window.matches(song));
+        assertEquals(SongSnippetSelectionMethod.TITLE_HOOK, window.selectionMethod());
+        assertEquals(10_250, window.startPositionMillis());
+        var wrong = response(LRC); wrong.addProperty("duration", 220);
+        assertTrue(LrclibSongSnippets.derive(song, null, bytes(wrong), true).isEmpty());
+    }
     private static final String LRC = "[00:00.00]An unrelated opening line\n"
             + "[00:10.25]Bright horizon is ahead\n[00:14.00]Keep this moment close\n[00:17.00]\n"
             + "[00:30.00]Bright horizon is ahead\n[00:34.00]Keep this moment close\n[00:37.00]\n"

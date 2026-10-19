@@ -51,6 +51,76 @@ import static org.junit.jupiter.api.Assertions.fail;
 class AnthropicReflectionProviderTest {
     private static final String PREPARATION_ID = "09bf1430-b193-49b9-a9c3-4f3577dc67b6";
 
+    @Test void absentAnalysisStillProvidesAuthorizedObservedSongWithoutCreativeAcknowledgement() throws Exception {
+        AtomicInteger timing = new AtomicInteger();
+        var provider = new AnthropicReflectionProvider(testConfiguration(), request -> {
+            assertFalse(evidenceFrom(request).getAsJsonObject("music_context").has("song_cue"));
+            return successfulResponseForPreparationFallback();
+        }, (title, artist) -> Optional.empty(), (song, material, remaining) -> {
+            assertNull(material); timing.incrementAndGet(); return Optional.of(snippet(song));
+        });
+        var song = recordedSong("2", "Selected");
+        var result = provider.generateForDelivery(knownEvidence(), null, List.of(song), true, true);
+        assertEquals("2", result.selectedSongId());
+        assertEquals(ReflectionProvider.SongSelectionMethod.OBSERVED_FALLBACK, result.songSelectionMethod());
+        assertNull(result.songCueId()); assertEquals(2, result.songSnippet().version());
+        assertEquals("LRCLIB", result.songSnippet().source()); assertEquals(1, timing.get());
+        var legacy = provider.generateForDelivery(knownEvidence(), null, List.of(song), true);
+        assertNull(legacy.selectedSongId()); assertNull(legacy.songSnippet()); assertEquals(1, timing.get());
+    }
+
+    @Test void playableObservedSongWinsWhenOnlyTheUnplayableSongHasAnalysis() throws Exception {
+        var provider = new AnthropicReflectionProvider(testConfiguration(), request -> {
+            var input = evidenceFrom(request);
+            assertEquals("Playable", input.getAsJsonObject("music_context").get("track_title").getAsString());
+            assertFalse(input.has("song_context"));
+            return successfulResponseForPreparationFallback();
+        }, (title, artist) -> title.equals("Unplayable") ? Optional.of(songMaterial(title, artist)) : Optional.empty(),
+                (song, material, remaining) -> Optional.empty());
+        var result = provider.generateForDelivery(knownEvidence(), null,
+                List.of(observedSong("1", "Unplayable"), recordedSong("2", "Playable")), true, true);
+        assertEquals("2", result.selectedSongId()); assertNull(result.songCueId());
+        assertEquals(ReflectionProvider.SongSelectionMethod.OBSERVED_FALLBACK, result.songSelectionMethod());
+        assertEquals("Playable", result.songSnippet().trackTitle());
+    }
+
+    @Test void shortOpeningReservesThePlaybackControllersTwoSecondTail() throws Exception {
+        var provider = new AnthropicReflectionProvider(testConfiguration(), request -> successfulResponseForPreparationFallback(),
+                (title, artist) -> Optional.empty(), (song, material, remaining) -> Optional.empty());
+        for (long length : List.of(3_999L, 4_000L, 9_000L, 10_000L)) {
+            var song = new ReflectionContract.SongCandidate("2", observedSong("2", "Short").musicContext(), null,
+                    new ReflectionContract.SongRecording(null, length));
+            var result = provider.generateForDelivery(knownEvidence(), null, List.of(song), true, true);
+            if (length < 4_000) { assertNull(result.songSnippet()); assertNull(result.selectedSongId()); }
+            else {
+                assertEquals(Math.min(8_000, length - 2_000), result.songSnippet().durationMillis());
+                assertTrue(result.songSnippet().durationMillis() <= length - 2_000);
+            }
+        }
+        assertThrows(IllegalArgumentException.class, () -> new ReflectionContract.SongSnippet(
+                "recording_v2_opening_0_8000", "RUNSTATE_RECORDING", "opening", "Short", "Artist", null,
+                9_000, 0, 8_000, ReflectionContract.SongSnippetSelectionMethod.RECORDING_OPENING_FALLBACK, 2));
+    }
+
+    @Test void missingOrMismatchedTimingUsesAnHonestBoundedOpeningOfTheSameRecording() throws Exception {
+        for (boolean analysis : List.of(false, true)) for (boolean wrongRecording : List.of(false, true)) {
+            var provider = new AnthropicReflectionProvider(testConfiguration(), request -> {
+                var input = evidenceFrom(request);
+                if (!analysis) return successfulResponseForPreparationFallback();
+                if (input.has("run_facts")) assertFalse(input.has("passage_landing"));
+                return songResponse(input.has("run_facts") ? writerBranches() : studyNotes());
+            }, (title, artist) -> analysis ? Optional.of(songMaterial(title, artist)) : Optional.empty(),
+                    (song, material, remaining) -> wrongRecording
+                            ? Optional.of(snippet(recordedSong("3", "Wrong"))) : Optional.empty());
+            var result = provider.generateForDelivery(knownEvidence(), null, List.of(recordedSong("2", "Selected")), true, true);
+            assertNull(result.songCueId()); assertEquals("2", result.selectedSongId());
+            assertEquals("Selected", result.songSnippet().trackTitle());
+            assertEquals("RUNSTATE_RECORDING", result.songSnippet().source());
+            assertEquals(ReflectionContract.SongSnippetSelectionMethod.RECORDING_OPENING_FALLBACK, result.songSnippet().selectionMethod());
+            assertEquals(0, result.songSnippet().startPositionMillis()); assertEquals(8_000, result.songSnippet().durationMillis());
+        }
+    }
+
     private static ReflectionContract.SongCandidate recordedSong(String id, String title) {
         return new ReflectionContract.SongCandidate(id, observedSong(id, title).musicContext(), null,
                 new ReflectionContract.SongRecording("Fixture Album", 180_000));

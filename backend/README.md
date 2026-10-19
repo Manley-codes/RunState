@@ -19,6 +19,61 @@ not built into the APK. The Anthropic key belongs only in the backend environmen
 Java records are used as small immutable data holders. A record exposes its values through generated
 accessor methods and does not offer setters; its constructor can still reject invalid combinations.
 
+## Snippet availability v2 — local implementation, October 19, 2026
+
+This source update separates **a playable ending from an observed song** from **evidence that the
+writer used that song's analysis**. It is local code, not yet deployed to Render. Spotify account
+setup, actual cross-track playback and end-to-end listening remain separate verification work;
+software checks alone do not establish a completed music feature. The accepted study/writer
+prompts, model choice, voices and audited curated timings remain unchanged.
+
+`GET /health` and the actual candidates delivery advertise
+`X-RunState-Song-Snippet-Fallbacks: 1` when supported. A capable Android client can add the top-level
+`allowSongSnippetFallbacks: true` only alongside `allowSongSnippetLookup: true`, shared observed
+`songCandidates`, and the existing run-scoped lookup permission. Older clients retain the v1
+behavior and response vocabulary. New clients omit the new field for older servers; a cached
+missing capability is rechecked on a later request after thirty seconds rather than pinned for
+the process lifetime. The flag participates in existing request-ID conflict/idempotence checks.
+
+The fallback-enabled path selects an analyzed candidate with a usable recording when available.
+If none exists, it chooses a usable offered recording as `OBSERVED_FALLBACK` and generates the
+ordinary reflection. This is not a context-ranked choice or an assertion of music understanding.
+In particular, an analyzed candidate without recording identity no longer prevents another
+observed, playable candidate from supplying an ending. The winner is fixed before writing;
+playback does not silently substitute another song after the reflection is produced.
+
+Playback timing uses these sources in order:
+
+1. The phone's existing curated timing, when its exact observed Spotify ID is verified.
+2. A matched LRCLIB `TITLE_HOOK` or `REPEATED_HOOK` window.
+3. A matched `TIMED_LINE_WINDOW` when published timings exist without a qualifying repeat.
+4. `RECORDING_OPENING_FALLBACK`, a short opening of that same observed recording when usable
+   timing is absent. It starts at zero and lasts at most eight seconds, retaining the controller's
+   two-second tail margin. At least four seconds of recording duration is required for this path.
+
+Line timing is approximate; a line window is not labeled a chorus or guaranteed complete lyric.
+The opening fallback is not described as a discovered hook or supplied to the writer as a
+source-derived musical landing. LRCLIB can be used without Musixmatch analysis: source identity
+and timing stand independently, while matched analysis remains an optional scoring input.
+Album is optional; title/artist and duration matching remain required. The exact Spotify URI
+stays on the phone and is never accepted from a server response as a playback instruction.
+
+An opted-in response may carry `songSnippet.version: 2` with `source: "LRCLIB"`, or
+`source: "RUNSTATE_RECORDING"` and `sourceId: "opening"` for an opening fallback. It still carries
+the selected candidate ID, recording metadata and bounded numeric coordinates. `songCueId` is
+present only when generation genuinely used the landing; an ordinary reflection's playback
+receipt does not add that creative acknowledgement. Android stores the validated v2 receipt in
+the existing reflection-evidence JSON, separately binds it to its local playback plan and can
+prefer the exact verified curated timing. No database schema or lyric/audio storage is added.
+Only a fresh validated delivery authorizes automatic playback; reopening does not replay, and
+a retry without a winner clears a previously unused playback receipt.
+
+The first shared software pass completed 199 backend tests and 695 Android tests per variant.
+Additional review regressions cover mixed source availability, the end margin, contradictory
+curated/remote cue claims and capability discovery after deployment; final receipts belong in
+[project state](../docs/design/project_current_state.md). No live-provider or listening success is
+claimed by this local implementation note.
+
 ## Early song preparation — October 18 local implementation
 
 Manley approved sending one opted-in, actually observed song identity while a run is active so
@@ -62,7 +117,8 @@ unchanged writer with fresh final run facts. An unknown, expired, evicted or res
 the same pinned song through the existing cold lookup → study → writer path. A failed early study
 also permits this explicit final cold attempt; it does not trigger a background retry and may incur
 another source/study charge. An intentional no-source result stays an ordinary text fallback with
-no clip acknowledgement. Conflicting identities and invalid final output fail honestly. All stages
+no creative clip acknowledgement. Legacy clients have no clip; opted-in v2 clients may receive
+the independent observed-song ending described above. Conflicting identities and invalid final output fail honestly. All stages
 retain the shared 90-second generation budget and the existing exact cue/delivery acknowledgement.
 
 The accepted study/writer prompt bytes, Opus model choice, four Energy branches, custom voice,
@@ -391,7 +447,8 @@ study/writer result may acknowledge a recognized cue through `songCueId` and the
 version on the actual POST response. The server never blindly echoes an arbitrary requested cue.
 Android requires the corresponding acknowledgment and delivery version before a new paired clip;
 health alone cannot authorize playback across a server rollback. Missing analysis can still return
-ordinary text without acknowledgment; the phone keeps it readable and plays no paired passage.
+ordinary text without acknowledgment; the phone keeps it readable and plays no analysis-paired passage.
+The opted-in v2 playback receipt described above can separately authorize an observed-song ending.
 Unknown/mismatched cues are not acknowledged. Old request/response shapes remain supported.
 
 ### Automatic song study and reflection writing (Musixmatch + Claude)
@@ -432,7 +489,8 @@ The complete song path shares 90 seconds including lookup; each Claude call is c
 configured 45 seconds. Android candidate reads allow 100 seconds, and the Docker response bound
 is 95 seconds. No automatic generation retry, three-stage v1.8 fallback, or handwritten replacement
 is used. Missing/mismatched/unavailable analysis returns ordinary single-call text with no paired
-cue acknowledgment. Invalid study/writer/schema/source-copy output or interruption fails honestly
+cue acknowledgment; the v2 path can still provide an independently classified observed-song ending.
+Invalid study/writer/schema/source-copy output or interruption fails honestly
 through existing app retry; the app retains the saved run and does not authorize its passage.
 
 A recognized cue requires exact catalog ID, song title/artist and editorial definition. The normal

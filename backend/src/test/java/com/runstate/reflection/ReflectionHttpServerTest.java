@@ -48,6 +48,51 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ReflectionHttpServerTest {
+    @Test void v2ObservedEndingIsExplicitIdempotentAndSeparateFromCreativeCue() throws Exception {
+        AtomicInteger calls = new AtomicInteger();
+        var provider = new ReflectionProvider() {
+            @Override public CandidateReflections generate(CompletedRunEvidence evidence) { return exactCandidates(); }
+            @Override public boolean supportsSongSelection() { return true; }
+            @Override public boolean supportsSongSnippets() { return true; }
+            @Override public boolean supportsSongSnippetFallbacks() { return true; }
+            @Override public GeneratedReflections generateForDelivery(CompletedRunEvidence evidence, String id,
+                    List<ReflectionContract.SongCandidate> songs, boolean lookup, boolean fallbacks) {
+                assertTrue(lookup); assertTrue(fallbacks); calls.incrementAndGet();
+                var song = songs.get(1);
+                var snippet = new ReflectionContract.SongSnippet("recording_v2_opening_0_8000",
+                        "RUNSTATE_RECORDING", "opening", song.musicContext().trackTitle(), song.musicContext().artistName(),
+                        song.recording().albumName(), song.recording().durationMillis(), 0, 8_000,
+                        ReflectionContract.SongSnippetSelectionMethod.RECORDING_OPENING_FALLBACK, 2);
+                return new GeneratedReflections(exactCandidates(), null, song.candidateId(), SongSelectionMethod.OBSERVED_FALLBACK, snippet);
+            }
+        };
+        try (var server = startRemote(provider, 2, 8)) {
+            var request = snippetRequest(); request.addProperty("allowSongSnippetFallbacks", true);
+            var first = rawPost(server, remoteHeaders(), request.toString()); assertEquals(200, first.status());
+            var json = JsonParser.parseString(first.body()).getAsJsonObject();
+            assertFalse(json.has("songCueId")); assertEquals("OBSERVED_FALLBACK", json.get("songSelectionMethod").getAsString());
+            assertEquals(2, json.getAsJsonObject("songSnippet").get("version").getAsInt());
+            assertEquals(first, rawPost(server, remoteHeaders(), request.toString())); assertEquals(1, calls.get());
+            request.addProperty("allowSongSnippetFallbacks", false);
+            assertError(rawPost(server, remoteHeaders(), request.toString()), 409, "request_id_conflict");
+        }
+    }
+
+    @Test void fallbackFlagNeedsConsentAndCannotBeReturnedToLegacyClient() throws Exception {
+        var json = snippetRequest(); json.addProperty("allowSongSnippetFallbacks", true);
+        json.addProperty("allowSongSnippetLookup", false);
+        assertThrows(IllegalArgumentException.class, () -> ReflectionApiJson.parseRequest(json.toString().getBytes(StandardCharsets.UTF_8)));
+        var legacy = ReflectionApiJson.parseRequest(snippetRequest().toString().getBytes(StandardCharsets.UTF_8));
+        var song = legacy.songCandidates().get(1);
+        var snippet = new ReflectionContract.SongSnippet("recording_v2_opening_0_8000", "RUNSTATE_RECORDING", "opening",
+                song.musicContext().trackTitle(), song.musicContext().artistName(), song.recording().albumName(),
+                song.recording().durationMillis(), 0, 8_000, ReflectionContract.SongSnippetSelectionMethod.RECORDING_OPENING_FALLBACK, 2);
+        var generated = new ReflectionProvider.GeneratedReflections(exactCandidates(), null, song.candidateId(),
+                ReflectionProvider.SongSelectionMethod.OBSERVED_FALLBACK, snippet);
+        assertThrows(IllegalArgumentException.class, () -> ReflectionApiJson.success(legacy, generated, ReflectionHttpServer.GenerationMode.ANTHROPIC));
+        assertThrows(IllegalArgumentException.class, () -> new ReflectionProvider.GeneratedReflections(exactCandidates(),
+                snippet.cueId(), song.candidateId(), ReflectionProvider.SongSelectionMethod.OBSERVED_FALLBACK, snippet));
+    }
     private static JsonObject snippetRequest() {
         JsonObject request = multiSongRequest(); request.addProperty("allowSongSnippetLookup", true);
         for (var element : request.getAsJsonArray("songCandidates")) {

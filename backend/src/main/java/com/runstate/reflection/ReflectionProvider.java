@@ -26,6 +26,8 @@ public interface ReflectionProvider {
 
     default boolean supportsSongSnippets() { return false; }
 
+    default boolean supportsSongSnippetFallbacks() { return false; }
+
     default GeneratedReflections generateForDelivery(CompletedRunEvidence evidence, String songPreparationId,
             java.util.List<ReflectionContract.SongCandidate> songCandidates) throws ReflectionProviderException {
         return generateForDelivery(evidence, songPreparationId);
@@ -35,6 +37,12 @@ public interface ReflectionProvider {
             java.util.List<ReflectionContract.SongCandidate> songCandidates, boolean allowSongSnippetLookup)
             throws ReflectionProviderException {
         return generateForDelivery(evidence, songPreparationId, songCandidates);
+    }
+
+    default GeneratedReflections generateForDelivery(CompletedRunEvidence evidence, String songPreparationId,
+            java.util.List<ReflectionContract.SongCandidate> songCandidates, boolean allowSongSnippetLookup,
+            boolean allowSongSnippetFallbacks) throws ReflectionProviderException {
+        return generateForDelivery(evidence, songPreparationId, songCandidates, allowSongSnippetLookup);
     }
 
     default SongPreparationState prepareSong(ReflectionContract.SongPreparationRequest request)
@@ -49,7 +57,7 @@ public interface ReflectionProvider {
         public SongPreparationConflictException() { super("The song preparation identity does not match."); }
     }
 
-    enum SongSelectionMethod { CONTEXT_MATCH, AVAILABLE_FALLBACK }
+    enum SongSelectionMethod { CONTEXT_MATCH, AVAILABLE_FALLBACK, OBSERVED_FALLBACK }
 
     record GeneratedReflections(CandidateReflections candidates, String songCueId,
                                 String selectedSongId, SongSelectionMethod songSelectionMethod,
@@ -70,8 +78,17 @@ public interface ReflectionProvider {
                     || selectedSongId != null && !selectedSongId.matches("(?:0|[1-9][0-9]{0,9})")) {
                 throw new IllegalArgumentException("Invalid song selection acknowledgement.");
             }
-            if (songSnippet != null && (selectedSongId == null || !songSnippet.cueId().equals(songCueId))) {
+            if (songSnippet != null && (selectedSongId == null ||
+                    songCueId != null && !songSnippet.cueId().equals(songCueId) ||
+                    songSnippet.version() == 1 && songCueId == null)) {
                 throw new IllegalArgumentException("A generated snippet requires its selected song and exact cue.");
+            }
+            if (songSelectionMethod == SongSelectionMethod.OBSERVED_FALLBACK && songCueId != null) {
+                throw new IllegalArgumentException("Observed selection cannot claim analysis-derived pairing.");
+            }
+            if (songSnippet != null && songSnippet.selectionMethod()
+                    == ReflectionContract.SongSnippetSelectionMethod.RECORDING_OPENING_FALLBACK && songCueId != null) {
+                throw new IllegalArgumentException("An opening fallback is not an analysis-derived landing.");
             }
         }
         @Override public String toString() { return "GeneratedReflections[content=redacted, paired=" + (songCueId != null) + "]"; }

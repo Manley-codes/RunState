@@ -4,6 +4,8 @@ import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.runstate.mobile.music.SongPassageRequest
+import com.runstate.mobile.music.SongPassageSession
+import com.runstate.mobile.music.SongPassageSnapshot
 import com.runstate.mobile.music.AndroidSpotifyPassageSession
 import com.runstate.mobile.music.PassagePlayback
 import com.runstate.mobile.data.local.*
@@ -20,6 +22,8 @@ import com.runstate.mobile.reflection.reflectionRequestFromSavedRun
 import androidx.test.platform.app.InstrumentationRegistry
 import com.google.gson.Gson
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.awaitCancellation
 import java.util.UUID
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -40,6 +44,58 @@ class SongPassageSpeechTest {
     val composeTestRule = createAndroidComposeRule<ComponentActivity>()
 
     private val passage = SongPassageRequest("Selected title", "Selected artist", 5_000L)
+
+    @Test fun replacementPassageWaitsForCancelledTransportCleanupWithoutTouchingSpotify() {
+        val cleanupStarted = CountDownLatch(1)
+        val secondFinished = CountDownLatch(1)
+        val releaseGate = CompletableDeferred<Unit>()
+        var factories = 0
+        var platform: AndroidReflectionSpeechPlatform? = null
+        var replacement: AndroidReflectionSpeechPlatform? = null
+        try {
+            composeTestRule.runOnUiThread {
+                val factory: () -> SongPassageSession = {
+                    val first = ++factories == 1
+                    object : SongPassageSession {
+                        override suspend fun prepareForPlayback() { if (first) awaitCancellation() }
+                        override fun snapshot(): SongPassageSnapshot? = null
+                        override fun pause() = Unit
+                        override fun play() = Unit
+                        override fun seekTo(positionMillis: Long) = Unit
+                        override suspend fun release() {
+                            if (first) { cleanupStarted.countDown(); releaseGate.await() }
+                        }
+                    }
+                }
+                platform = AndroidReflectionSpeechPlatform(composeTestRule.activity, passageSessionFactory = factory)
+                requireNotNull(platform).playSongPassage("first", passage, {}, {}, {})
+                requireNotNull(platform).close()
+                replacement = AndroidReflectionSpeechPlatform(composeTestRule.activity, passageSessionFactory = factory)
+                requireNotNull(replacement).playSongPassage("second", passage, {}, { secondFinished.countDown() }, {})
+                assertEquals("The replacement cannot acquire a transport while old cleanup runs.", 1, factories)
+            }
+            assertTrue(cleanupStarted.await(5, TimeUnit.SECONDS))
+            releaseGate.complete(Unit)
+            assertTrue(secondFinished.await(5, TimeUnit.SECONDS))
+            composeTestRule.runOnUiThread { assertEquals(2, factories) }
+        } finally {
+            releaseGate.complete(Unit)
+            composeTestRule.runOnUiThread { platform?.close(); replacement?.close() }
+        }
+    }
+
+    @Test fun plainReflectionAndFactsDoNotPrepareSpotifyConnection() {
+        composeTestRule.runOnUiThread {
+            val platform = ControlledPlatform()
+            val speaker = speaker(platform)
+            try {
+                speaker.prepare("Exact reflection.")
+                speaker.speakReceipt("Run facts.") {}
+                speaker.speak("Exact reflection.")
+                assertEquals(0, platform.connectionPreparations)
+            } finally { speaker.close() }
+        }
+    }
 
     /** Explicit silent hosted smoke check; synthetic facts only, no saved-run or preference writes. */
     @Test fun hostedSampleReflectionUsesSavedConnection() {
@@ -178,6 +234,9 @@ class SongPassageSpeechTest {
         var passageStops = 0
         var instrumentalStarts = 0
         var closes = 0
+        var connectionPreparations = 0
+
+        override fun prepareSongPassageConnection() { connectionPreparations++ }
 
         override fun initialize(
             onReady: (Boolean) -> Unit,
@@ -258,6 +317,7 @@ class SongPassageSpeechTest {
             val exact = "  Exact saved reflection.\nSecond line.  "
             try {
                 speaker.speakWithSongPassage(exact, passage, onFinished = { finished++ })
+                assertEquals("Connect silently while the voice is still preparing.", 1, platform.connectionPreparations)
                 assertTrue(platform.spoken.isEmpty())
                 assertTrue(platform.passages.isEmpty())
                 platform.ready(true)
@@ -273,11 +333,13 @@ class SongPassageSpeechTest {
                 platform.voiceDone(voice.id)
                 assertEquals("Duplicate speech completion must not reschedule music.", handoff, deadlines.last())
                 handoff.run()
+                assertEquals("The outer budget includes load, clip, restore and cleanup.", 60_000L, delays.last())
                 val played = platform.passages.single()
                 assertEquals(passage, played.request)
                 assertEquals(0, finished)
                 assertTrue(platform.events.indexOf("voice") < platform.events.indexOf("passage"))
-                assertEquals("release-focus", platform.events[platform.events.indexOf("passage") - 1])
+                assertEquals("The transport retains speech focus through its baseline/load/seek.",
+                    "voice", platform.events[platform.events.indexOf("passage") - 1])
 
                 // TTS may deliver old completion/error/focus callbacks after handing off.
                 platform.voiceDone(voice.id)

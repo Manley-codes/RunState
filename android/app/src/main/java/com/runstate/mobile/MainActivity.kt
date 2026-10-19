@@ -59,6 +59,8 @@ import com.runstate.mobile.location.rememberForegroundGpsPreview
 import com.runstate.mobile.location.ForegroundGpsPreviewStatus
 import com.runstate.mobile.location.ForegroundGpsPreviewSource
 import com.runstate.mobile.music.RunMusicNotificationListener
+import com.runstate.mobile.music.SpotifyAppRemoteConnection
+import com.runstate.mobile.music.SpotifyRemoteConnectionStatus
 import com.runstate.mobile.ui.RunMetricsDisplay
 import com.runstate.mobile.ui.RunMetricsTicker
 import com.runstate.mobile.ui.RunCompleteReflectionDisplay
@@ -124,6 +126,7 @@ class MainActivity : ComponentActivity() {
         runStateApplication.initializeReflectionConnection()
         runStateApplication.initializeRunPreferences()
         runStateApplication.initializeRunSplits()
+        val spotifyConnection = SpotifyAppRemoteConnection.get(this)
 
         setContent {
             RunStateTheme {
@@ -133,6 +136,25 @@ class MainActivity : ComponentActivity() {
                 val preferencesSaving by runStateApplication.runPreferencesSaving.collectAsState()
                 val preferencesError by runStateApplication.runPreferencesError.collectAsState()
                 val reflectionCoordinator = runStateApplication.runReflectionCoordinator
+                val spotify by spotifyConnection.state.collectAsState()
+                // Only an explicit Connect Spotify action may open account authorization.
+                // Foreground reconnection uses the grant already remembered by that action.
+                DisposableEffect(spotifyConnection, lifecycle) {
+                    val observer = LifecycleEventObserver { _, event ->
+                        when (event) {
+                            Lifecycle.Event.ON_START -> spotifyConnection.onForeground()
+                            Lifecycle.Event.ON_STOP -> spotifyConnection.onBackground()
+                            else -> Unit
+                        }
+                    }
+                    lifecycle.addObserver(observer)
+                    if (lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED))
+                        spotifyConnection.onForeground()
+                    onDispose {
+                        lifecycle.removeObserver(observer)
+                        spotifyConnection.onBackground()
+                    }
+                }
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
                     RunJourneyRoot(
                         coordinator = coordinator,
@@ -152,6 +174,28 @@ class MainActivity : ComponentActivity() {
                         nativeMapsEnabled = true,
                         onRetrySplits = runStateApplication::retryRunSplits,
                         countdownSpeakerFactory = { AndroidReflectionSpeaker(it) },
+                        spotifyConnectionLabel = when {
+                            !spotify.configured -> "Spotify setup not finished"
+                            spotify.status == SpotifyRemoteConnectionStatus.CONNECTING -> "Connecting to Spotify…"
+                            spotify.status == SpotifyRemoteConnectionStatus.READY && spotify.canPlayOnDemand -> "Spotify connected"
+                            spotify.status == SpotifyRemoteConnectionStatus.READY -> "Spotify Premium needed for selected songs"
+                            spotify.status == SpotifyRemoteConnectionStatus.NEEDS_AUTH -> when (spotify.failureCategory) {
+                                "AuthenticationFailedException" -> "Spotify could not verify RunState's connection setup."
+                                "UserNotAuthorizedException" -> "Spotify authorization wasn't completed."
+                                "NotLoggedInException" -> "Sign in to Spotify, then connect again."
+                                null -> "Connect Spotify for automatic snippets"
+                                else -> "Spotify authorization wasn't completed. Try connecting again."
+                            }
+                            spotify.status == SpotifyRemoteConnectionStatus.ERROR -> "Spotify connection unavailable. Try connecting again."
+                            else -> "Spotify not connected"
+                        },
+                        spotifyConnectEnabled = spotify.configured &&
+                            spotify.status != SpotifyRemoteConnectionStatus.CONNECTING &&
+                            spotify.status != SpotifyRemoteConnectionStatus.READY,
+                        spotifyDisconnectEnabled = spotify.status == SpotifyRemoteConnectionStatus.READY ||
+                            spotify.status == SpotifyRemoteConnectionStatus.CONNECTING,
+                        onConnectSpotify = { spotifyConnection.authorize(this@MainActivity) },
+                        onDisconnectSpotify = spotifyConnection::disconnect,
 
                         // The Activity's own lifecycle gates the countdown, so nothing counts
                         // down — and no run is started — while the app is in the background.
@@ -214,7 +258,12 @@ internal fun RunJourneyRoot(
     gpsPreviewSourceOverride: ForegroundGpsPreviewSource? = null,
     gpsLocationReady: (Context) -> Boolean = ::preciseGpsLocationReady,
     startGpsRun: (Context, PreRunEnergy?, Boolean, Boolean, Boolean) -> Unit = RunTrackingService::startNew,
-    countdownSpeakerFactory: ((Context) -> ReflectionSpeaker)? = null
+    countdownSpeakerFactory: ((Context) -> ReflectionSpeaker)? = null,
+    spotifyConnectionLabel: String? = null,
+    spotifyConnectEnabled: Boolean = false,
+    spotifyDisconnectEnabled: Boolean = false,
+    onConnectSpotify: () -> Unit = {},
+    onDisconnectSpotify: () -> Unit = {}
 ) {
 
     val reflectionRequestsAvailable = reflectionConnection is ReflectionConnectionState.Hosted ||
@@ -1393,6 +1442,11 @@ internal fun RunJourneyRoot(
     if (runSettingsVisible && model.state == RunUiState.ReadyToStart && !historyVisible &&
         !connectionDialogVisible) {
         RunSettingsDialog(
+            spotifyConnectionLabel = spotifyConnectionLabel,
+            spotifyConnectEnabled = spotifyConnectEnabled,
+            spotifyDisconnectEnabled = spotifyDisconnectEnabled,
+            onConnectSpotify = onConnectSpotify,
+            onDisconnectSpotify = onDisconnectSpotify,
             gpsReady = gpsReady,
             gpsMessage = gpsMessage,
             musicObservationEnabled = musicSelected,

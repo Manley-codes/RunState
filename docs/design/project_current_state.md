@@ -18,7 +18,62 @@ missing check. A successful build, installation or controlled fixture is not pro
 | **Verified in use** | The stated behavior worked in actual use for the named scenario, not only with fictional test data. This does not prove every device, song or circumstance. |
 | **Complete for agreed scope** | The agreed behavior, necessary checks and documentation are finished. Explicit remaining limits are outside that scope; this does not mean every future idea is built. |
 
-**Current headline:** automatic chosen-song loading and wider snippet finding are **Building — installed/deployed foundation**;
+## October 19 snippet-only completion work — Building, local changes
+
+Manley made reliable automatic real-song snippets the sole current task. Do not label this
+100% complete from builds or simulated controls. Preserve the accepted writer, custom voice,
+facts voice and 650 ms reflection-to-song gap; no routine Git mutations by the assistant.
+
+The two proven gaps are addressed in local code: the ordinary Android media-session commands
+did not load another song on this Moto, and empty Musixmatch analysis prevented timing lookup
+and playback authorization. Official Spotify App Remote 0.8.0 is now integrated with explicit
+Connect Spotify in settings, silent reconnection only after that grant, process-wide playback
+ownership and confirmed load/seek/play/pause/restore. An official connection needs a registered
+public Spotify client ID, Android package/fingerprint, and phone authorization. Manley confirmed
+Spotify Premium and created RunState in Edge. His initial report of a successful phone connection
+was clarified: RunState never reached `READY`; it repeatedly returned to `NEEDS_AUTH`. Safe phone
+diagnostics identified `UserNotAuthorizedException` and no remembered grant, not a successful
+connection followed by a playback failure.
+
+The existing Edge dashboard was inspected directly through computer use. Its public client ID,
+redirect and Android SDK selection matched the app, but the Android package list was empty.
+Under the already authorized setup, `com.runstate.mobile` and public debug SHA-1
+`E6:40:04:A6:E7:A6:BA:77:C3:E9:89:9A:F0:01:6A:03:36:FD:50:7E` were added and Save was clicked.
+The dashboard now confirms the stored package and normalized fingerprint; Gradle `signingReport`
+independently confirms the same signing identity. No client secret was viewed. This fixes a
+confirmed registration omission, not proof that phone authorization now succeeds.
+
+Safe failure-category logs/preferences and clearer failed-authorization copy in MainActivity
+distinguish missing authorization from reconnection or on-demand playback capability failures.
+A fresh successful phone grant is still required before actual song switching can be tested.
+No client secret belongs in Android.
+
+New negotiated v2 receipts separate actual-song playback readiness from creative song-analysis
+acknowledgement. Timing preference is verified curated timing, matched source hook, a genuine
+timed line window, then a truthfully labeled short recording opening. Absent analysis does not
+fabricate song understanding; the selected observed-song ending can follow an ordinary reflection.
+Same-recording opening fallback improves availability, not guaranteed hook quality. Album may
+be absent while exact observed Spotify URI/duration remain required for switching. Consent stays
+run-scoped; neither connection nor an update enables observation/sharing/lookup automatically.
+No Room migration is needed. The SDK connection source, pinned official AAR and its license are
+the three necessary new permanent files; existing source/tests/docs otherwise carry the work.
+
+Final verification after review and authorization-diagnostic fixes: all 201 backend tests and
+699 Android tests in each debug/release variant passed, with no failures, errors or skips.
+Debug/release/instrumentation APK builds passed; the latest failed-authorization copy is installed
+on the Moto. The earlier thirteen silent device cases passed; two optional real-provider/audio
+cases were intentionally skipped in that device run. `git diff --check` passed. Retrying Connect
+after the corrected dashboard registration is pending the user; no successful grant is inferred.
+Read-only baseline found37 completed runs, no active run, Room17/integrity OK. The comparison
+after installation/settings use proved every field in ten other tables unchanged; runs differed
+only by one pending activity's activity_finalized flag changing0→1 (offline reversal of that one
+field reproduced the exact original full-table hash). All other saved run fields match. No real
+App Remote playback success, new hosted deployment or paid-provider calls yet in this slice.
+Account setup and actual different-track, endpoint-stop/restoration and complete voice handoff
+checks remain required. Completion audio still follows its foreground screen lifecycle; Spotify
+can reject/delay external commands. These boundaries cannot support a universal perfection claim.
+
+**Previous headline:** automatic chosen-song loading and wider snippet finding were **Building — installed/deployed foundation**;
 software and silent storage checks passed, but phone loading and complete pairing remain unresolved.
 The first broader-snippet case has empty Musixmatch analysis and a failed Spotify load. The separate
 multi-song reflection selector is **Ready to test**, installed on the Moto,

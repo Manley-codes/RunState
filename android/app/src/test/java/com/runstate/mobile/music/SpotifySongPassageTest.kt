@@ -1036,6 +1036,74 @@ class SpotifySongPassageTest {
         }
     }
 
+    @Test fun speechFocusHandoffOccursOnlyAfterPausedBaselineAndConfirmedEntranceSeek() = runBlocking {
+        val clock = Clock()
+        val session = Session(clock).apply { current = current.copy(playback = PassagePlayback.PAUSED, canPlay = true, canPause = false) }
+        var handoffs = 0
+        val controller = SpotifySongPassageController(session, clock, onEntranceReady = {
+            handoffs++
+            assertEquals(listOf("pause", "seek:5000"), session.commands)
+            assertEquals(PassagePlayback.PAUSED, session.snapshot().playback)
+            assertEquals(5_000L, session.snapshot().positionMillis)
+        }, quiescePausedBeforeEntry = true)
+        assertEquals(SongPassageResult(SongPassageStatus.FINISHED, true), controller.play(request))
+        assertEquals(1, handoffs)
+        assertEquals(PassagePlayback.PAUSED, session.snapshot().playback)
+    }
+
+    @Test fun officialConnectionFailureDiagnosticContainsOnlyBoundedClassName() {
+        val failure = IllegalStateException("Do not expose a token, URI, account or provider message.",
+            IllegalArgumentException("Private nested details."))
+        assertEquals("IllegalStateException", spotifyRemoteFailureCategory(failure))
+        assertEquals("UnknownFailure", spotifyRemoteFailureCategory(object : RuntimeException("Private details.") {}))
+        assertEquals(null, SpotifyRemoteConnectionState(SpotifyRemoteConnectionStatus.DISCONNECTED, true).failureCategory)
+    }
+
+    @Test fun sdkDisconnectNativeCleanupPausesOnlyTheExactOwnedPlaybackTrajectory() {
+        val owned = Session(Clock()).current.copy(mediaId = selectedUri, playback = PassagePlayback.PLAYING)
+        assertTrue(mayPauseNativeSpotifyCleanup(owned, owned.copy(positionMillis = owned.positionMillis + 100), 100))
+        assertFalse(mayPauseNativeSpotifyCleanup(owned, owned.copy(mediaId = originalUri), 0))
+        assertFalse(mayPauseNativeSpotifyCleanup(owned, owned.copy(sessionKey = "replacement"), 0))
+        assertFalse(mayPauseNativeSpotifyCleanup(owned, owned.copy(positionMillis = 120_000), 100))
+        assertFalse(mayPauseNativeSpotifyCleanup(owned, owned.copy(playback = PassagePlayback.PAUSED), 0))
+        assertFalse(mayPauseNativeSpotifyCleanup(owned, owned.copy(durationMillis = owned.durationMillis + 2), 0))
+        assertFalse(mayPauseNativeSpotifyCleanup(owned, owned.copy(positionMillis = owned.positionMillis + 4_000), 4_000))
+    }
+
+    @Test fun officialLateLoadWaitsForBothCommandAcknowledgementsAndConfirmedPause() {
+        val pending = SpotifyPendingTrackLoad(selectedUri, originalUri, 60_000L, 100L).apply { cancelled = true }
+        assertEquals(SpotifyLoadAction.WAIT, pending.observe(originalUri, true, 60_000L, 200L))
+        assertEquals(SpotifyLoadAction.PAUSE_TARGET, pending.observe(selectedUri, false, 200L, 300L))
+        pending.pauseSent = true
+        pending.pauseAcknowledged = true
+        assertEquals("A pause cannot discharge a still-pending load command.", SpotifyLoadAction.WAIT,
+            pending.observe(selectedUri, true, 300L, 400L))
+        pending.loadAcknowledged = true
+        assertEquals("Late playback after an acknowledged pause needs another targeted pause.", SpotifyLoadAction.PAUSE_TARGET,
+            pending.observe(selectedUri, false, 300L, 400L))
+        assertEquals(SpotifyLoadAction.RELEASE, pending.observe(selectedUri, true, 300L, 400L))
+    }
+
+    @Test fun officialLateLoadNeverPausesAnotherTrackOrOverridesUserSeekOrResume() {
+        fun pending() = SpotifyPendingTrackLoad(selectedUri, originalUri, 60_000L, 100L).apply { cancelled = true }
+        assertEquals(SpotifyLoadAction.RELEASE, pending().observe("spotify:track:" + "C".repeat(22), false, 0, 500))
+        assertEquals(SpotifyLoadAction.RELEASE, pending().observe(originalUri, false, 60_100, 500))
+        assertEquals(SpotifyLoadAction.RELEASE, pending().observe(originalUri, true, 75_000, 500))
+        assertEquals(SpotifyLoadAction.RELEASE, pending().observe(selectedUri, true, 90_000, 500))
+        assertEquals("The exact target may be buffering without a reported position.", SpotifyLoadAction.PAUSE_TARGET,
+            pending().observe(selectedUri, false, -1, 500))
+    }
+
+    @Test fun officialOrdinaryLoadCannotReleaseBeforeItsPauseBarrierCompletes() {
+        val pending = SpotifyPendingTrackLoad(selectedUri, originalUri, 60_000L, 100L)
+        assertEquals(SpotifyLoadAction.WAIT, pending.observe(selectedUri, false, 100L, 200L))
+        assertEquals(SpotifyLoadAction.WAIT, pending.observe(selectedUri, true, 100L, 200L))
+        pending.loadAcknowledged = true
+        assertEquals(SpotifyLoadAction.WAIT, pending.observe(selectedUri, true, 100L, 200L))
+        pending.pauseAcknowledged = true
+        assertEquals(SpotifyLoadAction.RELEASE, pending.observe(selectedUri, true, 100L, 200L))
+    }
+
     @Test fun throwingDiagnosticObserverCannotChangePlaybackOrRestoration() = runBlocking {
         val clock = Clock()
         val session = Session(clock)

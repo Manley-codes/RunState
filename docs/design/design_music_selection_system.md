@@ -10,6 +10,32 @@ status: LIVE — read this file
 
 **Read this file.** Not archived, not parked.
 
+## October 19 — snippet completion resumed as the sole task
+
+Local implementation now separates musical meaning from playback availability. A negotiated
+v2 receipt can authorize the selected observed recording without claiming that Musixmatch
+analysis or the writer supplied a creative landing. Exact accepted curated timings remain
+first choice, then matched LRCLIB hooks, timed line windows and a short opening fallback.
+The latter is explicitly not a verified chorus. Selected identity remains fixed with the
+saved response; this is not permission to swap an unrelated song after writing.
+
+Official Spotify App Remote replaces the unproven different-track media-session path when
+connected. It has an explicit one-time connection action and prior-grant-only reconnection.
+Premium is confirmed. The initially reported connection was clarified: the phone never reached
+`READY`, repeatedly showed `NEEDS_AUTH`, and safe diagnostics found `UserNotAuthorizedException`
+with no remembered grant. The existing Edge dashboard matched the configured public client ID,
+redirect and Android SDK selection, but had no Android package registered. The correct
+`com.runstate.mobile` package and Gradle-verified public debug fingerprint were added and saved
+under the existing setup authorization; the dashboard confirms them. No secret was viewed.
+This corrects registration, not the unproven phone grant or playback. Clearer failure copy and
+safe category diagnostics are present; fresh authorization and the exact different-track,
+stop/restoration and full voice handoff still need proof. Latest complete software checkpoint
+is 201 backend/699 Android tests per variant and all three APK builds, with no failures/errors/skips;
+the earlier 13 silent device cases passed. The latest authorization-status copy is installed, and
+the user's Connect retry after the dashboard correction is pending. Current receipts and the
+public fingerprint are in `project_current_state.md`.
+No routine Git mutations, backend deployment or paid-provider calls have occurred in this slice.
+
 ## October 18 debrief — investigation parked for return soon
 
 Manley asked to pause work here while preserving fresh feedback from his real run. Reflection

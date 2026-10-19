@@ -49,7 +49,56 @@ proof that a run caused a change. These calculations do not need AI and do not u
 history, split rows, aggregates or extra Energy data. Existing optional reflection sharing is
 unchanged; neither new feature adds a backend request field, provider account or permission.
 
-## Optional broader song snippets — Building, installed/deployed foundation, October 18, 2026
+## Independent song-ending receipt — local implementation, October 19, 2026
+
+The new snippet-availability code is local and not yet deployed to Render. It does not change the
+accepted creative writer or establish successful live Spotify loading/listening. The older
+installed/deployed checkpoint below remains historical; current activation and device verification
+are tracked in `design/project_current_state.md`.
+
+Existing music observation, sharing and **Find song snippets** permission still govern this path.
+The new `allowSongSnippetFallbacks` request flag is sent only for an opted-in run, with the existing
+lookup flag and shared observed candidates, after the backend advertises
+`X-RunState-Song-Snippet-Fallbacks: 1`. This protocol flag does not silently enable a phone setting
+or backfill old runs. An older server receives the previous compatible request. The client can
+recheck a cached missing capability on a later request after thirty seconds, without a retry loop.
+
+The same chosen song's title, artist, optional album and recording duration may reach LRCLIB.
+An absent album no longer discards an otherwise valid local Spotify URI/duration identity; known
+conflicting identities are still rejected. The Spotify URI stays local. LRCLIB still receives no
+GPS, run facts, Energy, audio or full listening-history export, and no new external service or
+provider subscription is introduced by this source change.
+
+Missing Musixmatch analysis no longer has to prevent actual-song audio. If no analyzed candidate
+has a usable recording, the backend can choose a usable observed candidate as `OBSERVED_FALLBACK`.
+The reflection uses the ordinary writing path; the saved selection does not claim a contextual
+match or musical understanding. The song is chosen before writing and remains bound to that
+response. Validated analysis continues through the existing accepted writer when available.
+
+The timing preference is verified local curated coordinates, a matched repeated/title hook,
+a published timed-line window, then a short opening of the same observed recording if no usable
+timing exists. A timed line is not claimed to be a chorus or a complete sentence; the opening is
+not claimed to be a discovered hook. Opening fallback lasts at most eight seconds and preserves
+the controller's two-second end margin. Raw LRC remains temporary backend memory, not a stored
+lyric archive, model input or Android payload. Missing analysis can use timed lyrics to derive
+numeric playback coordinates without treating them as invented meaning or persona.
+
+The new `songSnippet.version: 2` receipt records the chosen identity, numeric timing, source and
+method. LRCLIB timings use source `LRCLIB`; an opening uses `RUNSTATE_RECORDING` with method
+`RECORDING_OPENING_FALLBACK`. The existing `songCueId` remains a separate acknowledgement that
+the writer used an actual landing. A playback receipt with no creative acknowledgement is valid
+and does not mislabel an ordinary reflection as an analysis-derived pairing. Android retains this
+receipt and its local playback binding in existing reflection-evidence JSON; no Room schema,
+credential storage, audio capture or downloaded song file is introduced. A fresh response can
+authorize playback, reopening does not repeat it, and a retry with no winner clears an old unused
+receipt. Exact verified curated timing can remain the local playback choice even when analysis
+was unavailable.
+
+The first shared software pass completed 199 backend tests and 695 Android tests per variant;
+subsequent review fixes have additional regressions. These are software checks, not proof of a
+new successful live music sequence. Final test and activation receipts are recorded in project state.
+
+## Earlier broader song snippets — installed/deployed foundation, October 18, 2026
 
 The implementation is installed on the Moto at Room 16 and deployed on Render as `9b274e0`.
 The user's deployment succeeded; public health confirms the snippet capability. Development left

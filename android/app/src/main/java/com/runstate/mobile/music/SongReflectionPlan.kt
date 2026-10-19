@@ -20,7 +20,9 @@ internal data class SongReflectionPlan(
     val allowTrackSwitch: Boolean = false,
     val timingSource: String = "RUNSTATE_CURATED",
     val timingSourceId: String? = null,
-    val timingVersion: Int = 0
+    val timingVersion: Int = 0,
+    /** A validated v2 playback receipt, distinct from acknowledgement of creative song analysis. */
+    val playbackReceiptId: String? = null
 ) {
     fun passage() = SongPassageRequest(trackTitle, artistName, startPositionMillis, durationMillis,
         spotifyMediaId = spotifyTrackUri, allowTrackSwitch = allowTrackSwitch,

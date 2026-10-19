@@ -422,3 +422,12 @@ into plain text and converts/rounds displayed units. These display changes do no
 the data a phone-sensor measurement or imply provider endorsement. Provider and licence
 links appear beside the weather display. Public free API service terms are separate
 from the data licence: https://open-meteo.com/en/terms
+
+Spotify App Remote SDK 0.8.0
+Official release: https://github.com/spotify/android-sdk/releases/tag/v0.8.0-appremote_v2.1.0-auth
+Artifact: spotify-app-remote-release-0.8.0.aar (unmodified)
+SHA-256: b5a6dd880eaf01f63a871cba9ef7af77c341f8a94ffc8fdf2e9021f9a9d4c198
+Source/license: https://github.com/spotify/android-sdk/blob/v0.8.0-appremote_v2.1.0-auth/LICENSE
+Apache License 2.0; the full license text appears earlier in this file and in app/libs/SPOTIFY_SDK_LICENSE.txt.
+Spotify Developer Terms apply separately to use of the playback service. Spotify plays the recording;
+RunState does not download or record Spotify audio.
