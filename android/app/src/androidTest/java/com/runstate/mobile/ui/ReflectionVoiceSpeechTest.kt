@@ -1,6 +1,9 @@
 package com.runstate.mobile.ui
 
 import androidx.activity.ComponentActivity
+import android.content.ComponentName
+import android.media.session.MediaSessionManager
+import android.media.session.PlaybackState
 import android.os.SystemClock
 import androidx.room.Room
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
@@ -16,10 +19,14 @@ import com.runstate.mobile.music.SpotifySongPassageController
 import com.runstate.mobile.music.SongPassageStatus
 import com.runstate.mobile.music.SongPassageSession
 import com.runstate.mobile.music.SongPassageSnapshot
+import com.runstate.mobile.music.RunMusicNotificationListener
+import com.runstate.mobile.music.canonicalSpotifyTrackUri
+import com.runstate.mobile.music.spotifyObservationRecording
 import com.runstate.mobile.reflection.AndroidReflectionConnectionStore
 import com.runstate.mobile.reflection.CompletedRunEvidence
 import com.runstate.mobile.reflection.HostedReflectionHttpClient
 import com.runstate.mobile.reflection.ReflectionApiRequest
+import com.runstate.mobile.reflection.ReflectionBridgeException
 import com.runstate.mobile.reflection.ReflectionCandidates
 import com.runstate.mobile.reflection.ReflectionGateway
 import com.runstate.mobile.reflection.ReflectionMetricsEvidence
@@ -32,6 +39,8 @@ import com.runstate.mobile.reflection.RoomReflectionStore
 import com.runstate.mobile.reflection.RunReflectionCoordinator
 import com.runstate.mobile.reflection.RunReflectionState
 import com.runstate.mobile.reflection.reflectionRequestFromSavedRun
+import com.runstate.mobile.reflection.withSongSelection
+import com.runstate.mobile.reflection.pairedPassageFor
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -69,6 +78,502 @@ class ReflectionVoiceSpeechTest {
         PREFLIGHT_SESSION, PREFLIGHT_CATALOG, PREFLIGHT_CONTROLS, CONNECTION, IN_MEMORY_DATABASE,
         FIXTURE_INSERT, FIXTURE_MUSIC, FIXTURE_PAUSE, FIXTURE_COMPLETE, FIXTURE_READ,
         EARLY_PREPARATION, COORDINATOR, RECEIPT, GENERATION, PERSISTENCE, AUDIO, RESTORATION, REOPEN, COMPLETE
+    }
+
+    /** Read-only capture of the explicitly chosen test recording, returned only to the operator. */
+    @Test fun captureCurrentSpotifyRecordingForChosenSongTrial() {
+        assumeTrue(InstrumentationRegistry.getArguments().getString("allowRealSpotifyRecordingCapture") == "yes")
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        try {
+            val context = instrumentation.targetContext
+            val session = AndroidSpotifyPassageSession(context)
+            val before = requireNotNull(session.snapshot())
+            val manager = context.getSystemService(MediaSessionManager::class.java)
+            val controller = manager.getActiveSessions(ComponentName(context, RunMusicNotificationListener::class.java))
+                .single { it.packageName == "com.spotify.music" }
+            val recording = requireNotNull(spotifyObservationRecording(controller.packageName, controller.metadata))
+            val after = requireNotNull(session.snapshot())
+            instrumentation.sendStatus(2, android.os.Bundle().apply {
+                putString("runstate_spotify_capabilities", Gson().toJson(mapOf(
+                    "canPrepareTrack" to after.canPrepareTrack, "canPlayTrack" to after.canPlayTrack,
+                    "canSeek" to after.canSeek, "hasCanonicalTrackUri" to (recording.trackUri != null),
+                    "hasAlbum" to !recording.albumName.isNullOrBlank(),
+                    "validDuration" to (after.durationMillis in 1_000..3_600_000),
+                    "playback" to after.playback.name)))
+            })
+            check(before.sessionKey == after.sessionKey && controller.sessionToken == after.sessionKey &&
+                before.mediaId == after.mediaId && before.title == after.title && before.artist == after.artist &&
+                before.durationMillis == after.durationMillis && after.playback != PassagePlayback.OTHER)
+            check(canonicalSpotifyTrackUri(after.mediaId) == recording.trackUri && recording.trackUri != null &&
+                recording.durationMillis == after.durationMillis && after.durationMillis in 1_000..3_600_000)
+            fun encoded(value: String?): String {
+                val text = requireNotNull(value).trim()
+                check(text.isNotEmpty() && text.length <= 200 && text.codePoints().noneMatch {
+                    Character.isISOControl(it) || it in 0xd800..0xdfff
+                })
+                return Base64.getUrlEncoder().withoutPadding().encodeToString(text.toByteArray(StandardCharsets.UTF_8))
+            }
+            // These are the song the operator explicitly requested, never credentials or notifications.
+            val captured = mapOf(
+                "capturedSongUri" to recording.trackUri,
+                "capturedSongTitleBase64" to encoded(after.title),
+                "capturedSongArtistBase64" to encoded(after.artist),
+                "capturedSongAlbumBase64" to encoded(recording.albumName),
+                "capturedSongDurationMillis" to after.durationMillis,
+                "capturedAtEpochMillis" to System.currentTimeMillis(),
+                "canPrepareTrack" to after.canPrepareTrack, "canPlayTrack" to after.canPlayTrack,
+                "canSeek" to after.canSeek, "playback" to after.playback.name
+            )
+            instrumentation.sendStatus(2, android.os.Bundle().apply {
+                putString("runstate_spotify_capture", Gson().toJson(captured))
+            })
+        } catch (_: Exception) {
+            throw AssertionError("The optional read-only Spotify recording capture was unavailable or changed during capture.")
+        }
+    }
+
+    /** Explicit paid/audible trial: fictional evidence stays in memory; the selected track differs from the current one. */
+    @Test fun realHostedChosenSongUsesSourceTimedSnippetAndRestoresPriorPausedTrack() {
+        val arguments = InstrumentationRegistry.getArguments()
+        val diagnoseCapabilitiesOnly = arguments.getString("diagnoseHostedCapabilitiesOnly") == "yes"
+        assumeTrue(diagnoseCapabilitiesOnly || arguments.getString("allowRealChosenSongAudio") == "yes")
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val context = instrumentation.targetContext
+        var speaker: AndroidReflectionSpeaker? = null
+        var stage = "CAPTURED_ARGUMENTS"
+        fun advance(value: String) {
+            stage = value
+            instrumentation.sendStatus(2, android.os.Bundle().apply { putString("runstate_chosen_song_stage", value) })
+        }
+        try {
+            fun capturedText(key: String): String {
+                val encoded = requireNotNull(arguments.getString(key))
+                require(encoded.length in 1..1_200)
+                val text = StandardCharsets.UTF_8.newDecoder()
+                    .onMalformedInput(CodingErrorAction.REPORT).onUnmappableCharacter(CodingErrorAction.REPORT)
+                    .decode(ByteBuffer.wrap(Base64.getUrlDecoder().decode(encoded))).toString()
+                require(text == text.trim() && text.isNotEmpty() && text.length <= 200 &&
+                    text.codePoints().noneMatch { Character.isISOControl(it) || it in 0xd800..0xdfff })
+                return text
+            }
+            val title = capturedText("capturedSongTitleBase64")
+            val artist = capturedText("capturedSongArtistBase64")
+            val album = capturedText("capturedSongAlbumBase64")
+            val targetUri = requireNotNull(canonicalSpotifyTrackUri(arguments.getString("capturedSongUri")))
+            val duration = requireNotNull(arguments.getString("capturedSongDurationMillis")?.toLongOrNull())
+            require(duration in 1_000..3_600_000)
+            val capturedAt = requireNotNull(arguments.getString("capturedAtEpochMillis")?.toLongOrNull())
+            val now = System.currentTimeMillis()
+            require(capturedAt in (now - 2 * 60 * 60_000L)..(now + 5_000L))
+            advance("PREFLIGHT_DIFFERENT_PAUSED_TRACK")
+            val session = AndroidSpotifyPassageSession(context)
+            val original = requireNotNull(session.snapshot())
+            check(original.sourcePackage == "com.spotify.music" && original.playback == PassagePlayback.PAUSED &&
+                canonicalSpotifyTrackUri(original.mediaId) != null && original.mediaId != targetUri &&
+                !original.title.isNullOrBlank() && !original.artist.isNullOrBlank() &&
+                original.durationMillis in 1_000..3_600_000 && original.positionMillis in 0..original.durationMillis &&
+                original.canPlay && original.canSeek && (original.canPrepareTrack || original.canPlayTrack))
+            fun priorTrackIsUnchanged(): Boolean = runCatching {
+                val current = requireNotNull(session.snapshot())
+                current.sessionKey == original.sessionKey && current.sourcePackage == original.sourcePackage &&
+                    current.mediaId == original.mediaId && current.title == original.title && current.artist == original.artist &&
+                    current.playback == PassagePlayback.PAUSED &&
+                    kotlin.math.abs(current.durationMillis - original.durationMillis) <= 1L &&
+                    kotlin.math.abs(current.positionMillis - original.positionMillis) <= 1_500L
+            }.getOrDefault(false)
+            advance("CONNECTION")
+            val connection = requireNotNull(runBlocking { AndroidReflectionConnectionStore(context).load() })
+            val finish = System.currentTimeMillis()
+            val start = finish - 42 * 60_000L
+            val runId = UUID.randomUUID().toString()
+            val run = RunEntity(runId = runId, state = StoredRunState.COMPLETED,
+                officialStartEpochMillis = start, startTimezoneId = "America/Chicago",
+                lastCheckpointEpochMillis = finish, finishEpochMillis = finish,
+                trackingMode = RunTrackingMode.FIXTURE, finalDistanceMeters = 4.2 * 1_609.344,
+                metricSource = MetricSource.FIXTURE, telemetryCoverage = TelemetryCoverage.COMPLETE,
+                displayDistanceUnit = DistanceUnit.MILES, transitionHistoryComplete = true,
+                preRunEnergy = PreRunEnergy.MODERATE, musicObservationRequested = true,
+                musicReflectionSharingAllowed = true, songSnippetLookupAllowed = true)
+            val transitions = listOf(RunTransitionEntity(runId, 1, RunTransitionType.PAUSE, start + 40 * 60_000L))
+            // Only the recording metadata was captured live. The run and this PLAYING timeline are
+            // explicitly synthetic test evidence, never inserted into the runner's Room history.
+            val observation = RunMusicObservationEntity(runId, 1, "controlled-chosen-song", start + 60_000L,
+                null, "com.spotify.music", title, artist, MusicPlaybackState.PLAYING,
+                MusicObservationKind.SESSION_SNAPSHOT, targetUri, album, duration)
+            val request = reflectionRequestFromSavedRun(UUID.randomUUID().toString(), run, transitions, listOf(observation))
+            val candidate = requireNotNull(request.evidence.songCandidates).single()
+            check(candidate.recording?.spotifyTrackUri == targetUri && candidate.musicContext.songCue == null &&
+                request.evidence.songSnippetLookupAllowed)
+            advance("HOSTED_REQUEST")
+            val generationStartedAt = SystemClock.elapsedRealtime()
+            val healthReported = AtomicBoolean(false)
+            val reflectionPostBlocked = AtomicBoolean(false)
+            val client = HostedReflectionHttpClient(connection, connectionFactory = { url ->
+                val path = when (url.path) {
+                    "/health" -> "HEALTH"
+                    "/api/reflections/candidates" -> "REFLECTION"
+                    else -> error("Unexpected test transport path.")
+                }
+                if (diagnoseCapabilitiesOnly && path == "REFLECTION") {
+                    // Stop before opening the reflection connection, setting credentials, or
+                    // obtaining an output stream. This diagnostic cannot submit a paid request.
+                    reflectionPostBlocked.set(true)
+                    throw ChosenSongDiagnosticStop()
+                }
+                ChosenSongObservedConnection(url.openConnection() as javax.net.ssl.HttpsURLConnection, path) { status ->
+                    instrumentation.sendStatus(2, status)
+                    if (path == "HEALTH") healthReported.set(true)
+                }
+            })
+            val response = try {
+                runBlocking { client.request(request) }
+            } catch (failure: ReflectionBridgeException) {
+                if (!diagnoseCapabilitiesOnly || !reflectionPostBlocked.get()) throw failure
+                null // The production client sanitizes our intentional pre-POST stop.
+            }
+            if (diagnoseCapabilitiesOnly) {
+                check(healthReported.get() && reflectionPostBlocked.get() && response == null)
+                instrumentation.sendStatus(2, android.os.Bundle().apply {
+                    putBoolean("runstate_diagnostic_reflection_post_blocked", true)
+                })
+                advance("CAPABILITIES_DIAGNOSTIC_COMPLETE")
+                return
+            }
+            val candidates = requireNotNull(response)
+            advance("HOSTED_RESPONSE_RECEIVED")
+            instrumentation.sendStatus(2, android.os.Bundle().apply {
+                putBoolean("runstate_chosen_has_snippet", candidates.songSnippet != null)
+                putBoolean("runstate_chosen_is_test_data", candidates.isTestData)
+                putBoolean("runstate_chosen_has_selected_id", candidates.selectedSongId != null)
+                putBoolean("runstate_chosen_has_cue", candidates.songCueId != null)
+                putBoolean("runstate_chosen_selected_matches", candidates.selectedSongId == candidate.candidateId)
+                putString("runstate_chosen_response_source", when (candidates.songSnippet?.source) {
+                    null -> "NONE"
+                    "LRCLIB" -> "LRCLIB"
+                    else -> "UNEXPECTED"
+                })
+                putLong("runstate_chosen_generation_ms",
+                    (SystemClock.elapsedRealtime() - generationStartedAt).coerceIn(0L, 120_000L))
+            })
+            advance("REQUIRE_LRCLIB_SNIPPET")
+            val snippet = requireNotNull(candidates.songSnippet)
+            advance("REQUIRE_SELECTED_CUE_ACKNOWLEDGEMENT")
+            check(!candidates.isTestData && candidates.selectedSongId == candidate.candidateId &&
+                candidates.songCueId == snippet.cueId && snippet.source == "LRCLIB")
+            advance("PAIRING_SELECTED_EVIDENCE")
+            val evidence = request.evidence.withSongSelection(candidates)
+            val reflection = candidates.feelingGood
+            val record = RunReflectionEntity(runId, request.requestId, Gson().toJson(evidence), finish,
+                status = ReflectionStatus.READY, selectedBranch = ReflectionBranch.FEELING_GOOD,
+                text = reflection, finalizedAtEpochMillis = finish, isTestData = false)
+            advance("PAIRING_PLAYBACK_REQUEST")
+            val selectedPassage = requireNotNull(pairedPassageFor(record, candidates.songCueId))
+            advance("PRIOR_TRACK_RECHECK")
+            check(selectedPassage.allowTrackSwitch && selectedPassage.spotifyMediaId == targetUri &&
+                selectedPassage.observedDurationMillis == duration && priorTrackIsUnchanged())
+            instrumentation.sendStatus(2, android.os.Bundle().apply {
+                putString("runstate_chosen_timing_source", snippet.source)
+                putString("runstate_chosen_timing_source_id", snippet.sourceId)
+                putLong("runstate_chosen_start_ms", snippet.startPositionMillis)
+                putLong("runstate_chosen_duration_ms", snippet.durationMillis)
+            })
+            val receipt = "Sample check. " + savedRunReceiptFor(run, transitions)
+            val receiptId = AtomicReference<String?>()
+            val receiptCompleted = AtomicBoolean(false)
+            val cloudCompleted = AtomicBoolean(false)
+            val songCompleted = AtomicBoolean(false)
+            val failed = AtomicBoolean(false)
+            val reflectionCompletedAt = AtomicLong(0)
+            val songHandoffGap = AtomicLong(-1)
+            val finished = CountDownLatch(1)
+            advance("FACTS_VOICE_SONG")
+            rule.runOnUiThread {
+                val android = AndroidReflectionSpeechPlatform(context) { diagnostic ->
+                    instrumentation.sendStatus(2, android.os.Bundle().apply {
+                        putString("runstate_passage_diagnostic", diagnostic.toString())
+                    })
+                }
+                val witnessed = object : ReflectionSpeechPlatform by android {
+                    override fun reflectionSpeechGateway(): ReflectionSpeechGateway = ReflectionSpeechHttpClient.hosted(connection)
+                    override fun initialize(onReady: (Boolean) -> Unit, onDone: (String) -> Unit, onError: (String) -> Unit) {
+                        android.initialize(onReady, { id ->
+                            if (id == receiptId.get()) receiptCompleted.set(true)
+                            onDone(id)
+                        }, { id -> failed.set(true); onError(id) })
+                    }
+                    override fun speakReceipt(id: String, text: String, rate: Float): Boolean {
+                        if (text != receipt) failed.set(true)
+                        receiptId.set(id)
+                        return android.speakReceipt(id, text, rate)
+                    }
+                    override fun speak(id: String, text: String, rate: Float): Boolean {
+                        failed.set(true) // This trial requires the real custom voice, with no local substitute.
+                        return false
+                    }
+                    override fun playReflectionAudio(id: String, audio: ByteArray, onDone: (String) -> Unit,
+                        onUnavailable: (String) -> Unit, onError: (String) -> Unit): Boolean {
+                        if (!receiptCompleted.get()) failed.set(true)
+                        return android.playReflectionAudio(id, audio, { done ->
+                            reflectionCompletedAt.set(SystemClock.uptimeMillis())
+                            cloudCompleted.set(true); onDone(done)
+                        }, { unavailable -> failed.set(true); onUnavailable(unavailable) },
+                            { error -> failed.set(true); onError(error) })
+                    }
+                    override fun playSongPassage(id: String, passage: SongPassageRequest, onDone: (String) -> Unit,
+                        onError: (String) -> Unit, onFocusLost: (String) -> Unit): Boolean {
+                        if (!cloudCompleted.get() || passage != selectedPassage || !priorTrackIsUnchanged()) {
+                            failed.set(true); return false
+                        }
+                        songHandoffGap.set(SystemClock.uptimeMillis() - reflectionCompletedAt.get())
+                        return android.playSongPassage(id, passage,
+                            { done -> songCompleted.set(true); onDone(done) },
+                            { error -> failed.set(true); onError(error) },
+                            { lost -> failed.set(true); onFocusLost(lost) })
+                    }
+                    override fun playInstrumental(id: String, onDone: (String) -> Unit,
+                        onError: (String) -> Unit, onFocusLost: (String) -> Unit): Boolean {
+                        failed.set(true); return false
+                    }
+                }
+                val owned = AndroidReflectionSpeaker(context, witnessed)
+                speaker = owned
+                owned.speakReceipt(receipt) {
+                    owned.speakWithSongPassage(reflection, selectedPassage,
+                        canPlayPassage = { cloudCompleted.get() && !failed.get() && priorTrackIsUnchanged() },
+                        onFinished = { finished.countDown() })
+                }
+            }
+            check(finished.await(120, TimeUnit.SECONDS) && receiptCompleted.get() && cloudCompleted.get() &&
+                songCompleted.get() && !failed.get() && songHandoffGap.get() >= 650L)
+            advance("RESTORATION")
+            check(priorTrackIsUnchanged())
+            instrumentation.sendStatus(2, android.os.Bundle().apply {
+                putLong("runstate_reflection_song_gap_ms", songHandoffGap.get().coerceAtMost(120_000L))
+                putBoolean("runstate_chosen_prior_track_restored", true)
+            })
+            advance("COMPLETE")
+        } catch (failure: Exception) {
+            // Match only the client's fixed, sanitized error shapes. Never forward a provider
+            // body, arbitrary exception message, stack trace/cause, connection or generated text.
+            val httpStatus = if (failure is ReflectionBridgeException) Regex(
+                "^The hosted reflection service rejected the request \\(HTTP ([1-5][0-9]{2})\\)\\.$"
+            ).matchEntire(failure.message.orEmpty())?.groupValues?.get(1) else null
+            instrumentation.sendStatus(2, android.os.Bundle().apply {
+                putString("runstate_chosen_failure_class", when (failure) {
+                    is ReflectionBridgeException -> "ReflectionBridgeException"
+                    is kotlinx.coroutines.CancellationException -> "CancellationException"
+                    is IllegalArgumentException -> "IllegalArgumentException"
+                    is IllegalStateException -> "IllegalStateException"
+                    is SecurityException -> "SecurityException"
+                    is java.io.IOException -> "IOException"
+                    else -> "OTHER"
+                })
+                putString("runstate_chosen_failure_category", when {
+                    httpStatus != null -> "HTTP_$httpStatus"
+                    failure is ReflectionBridgeException &&
+                        failure.message == "The hosted reflection response was invalid." -> "INVALID_RESPONSE"
+                    failure is ReflectionBridgeException &&
+                        failure.message == "The hosted reflection service is unavailable." -> "UNAVAILABLE"
+                    failure is kotlinx.coroutines.CancellationException -> "CANCELLED"
+                    else -> "LOCAL_CHECK_OR_UNCLASSIFIED"
+                })
+            })
+            throw AssertionError("The optional chosen-song trial failed at $stage; no saved run or preferences were changed.")
+        } finally {
+            rule.runOnUiThread { speaker?.close() }
+        }
+    }
+
+    /** Transport-only proof with operator-verified source coordinates; no analysis, speech or saved-run writes. */
+    @Test fun observedChosenSongTransportOnlyRestoresPriorPausedTrack() = runBlocking {
+        val arguments = InstrumentationRegistry.getArguments()
+        assumeTrue(arguments.getString("allowRealChosenSongTransportOnly") == "yes")
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        var phase = "CAPTURED_ARGUMENTS"
+        try {
+            fun capturedText(key: String): String {
+                val encoded = requireNotNull(arguments.getString(key))
+                require(encoded.length in 1..1_200)
+                val text = StandardCharsets.UTF_8.newDecoder()
+                    .onMalformedInput(CodingErrorAction.REPORT).onUnmappableCharacter(CodingErrorAction.REPORT)
+                    .decode(ByteBuffer.wrap(Base64.getUrlDecoder().decode(encoded))).toString()
+                require(text == text.trim() && text.isNotEmpty() && text.length <= 200 &&
+                    text.codePoints().noneMatch { Character.isISOControl(it) || it in 0xd800..0xdfff })
+                return text
+            }
+            val title = capturedText("capturedSongTitleBase64")
+            val artist = capturedText("capturedSongArtistBase64")
+            capturedText("capturedSongAlbumBase64") // Require the same complete recording capture as the hosted trial.
+            val targetUri = requireNotNull(canonicalSpotifyTrackUri(arguments.getString("capturedSongUri")))
+            val duration = requireNotNull(arguments.getString("capturedSongDurationMillis")?.toLongOrNull())
+            require(duration in 1_000..3_600_000)
+            val now = System.currentTimeMillis()
+            val capturedAt = requireNotNull(arguments.getString("capturedAtEpochMillis")?.toLongOrNull())
+            // The target recording is immutable and is rechecked after loading; current
+            // playback must still pass the separate fresh-session ownership checks below.
+            require(capturedAt in (now - 2 * 60 * 60_000L)..(now + 5_000L))
+            val start = requireNotNull(arguments.getString("sourceStartMillis")?.toLongOrNull())
+            val length = requireNotNull(arguments.getString("sourceDurationMillis")?.toLongOrNull())
+            require(arguments.getString("sourceId")?.matches(Regex("[1-9][0-9]{0,18}")) == true)
+            require(start >= 0L && length in 2_000L..10_000L && start <= duration - length - 2_000L)
+            phase = "PREFLIGHT_DIFFERENT_PAUSED_TRACK"
+            val mode = arguments.getString("transportMode") ?: "default"
+            require(mode in setOf("default", "prepare_uri", "play_uri", "play_media_id"))
+            val context = instrumentation.targetContext
+            val delegate = AndroidSpotifyPassageSession(context)
+            val manager = context.getSystemService(MediaSessionManager::class.java)
+            val listener = ComponentName(context, RunMusicNotificationListener::class.java)
+            fun currentController() = manager.getActiveSessions(listener).single { it.packageName == "com.spotify.music" }
+            val firstSnapshot = requireNotNull(delegate.snapshot())
+            val firstController = currentController()
+            check(firstController.sessionToken == firstSnapshot.sessionKey)
+            val rawActions = requireNotNull(firstController.playbackState).actions
+            instrumentation.sendStatus(2, android.os.Bundle().apply {
+                putString("runstate_transport_mode", mode)
+                putBoolean("runstate_action_prepare_media_id", rawActions and PlaybackState.ACTION_PREPARE_FROM_MEDIA_ID != 0L)
+                putBoolean("runstate_action_prepare_uri", rawActions and PlaybackState.ACTION_PREPARE_FROM_URI != 0L)
+                putBoolean("runstate_action_play_media_id", rawActions and PlaybackState.ACTION_PLAY_FROM_MEDIA_ID != 0L)
+                putBoolean("runstate_action_play_uri", rawActions and PlaybackState.ACTION_PLAY_FROM_URI != 0L)
+            })
+            val session: SongPassageSession = if (mode == "default") delegate else object : SongPassageSession by delegate {
+                private var observed: SongPassageSnapshot? = null
+                override fun snapshot(): SongPassageSnapshot? {
+                    val value = delegate.snapshot() ?: return null
+                    val controller = currentController()
+                    check(controller.sessionToken == value.sessionKey)
+                    val actions = requireNotNull(controller.playbackState).actions
+                    observed = value
+                    return value.copy(
+                        canPrepareTrack = mode == "prepare_uri" && actions and PlaybackState.ACTION_PREPARE_FROM_URI != 0L,
+                        canPlayTrack = when (mode) {
+                            "play_uri" -> actions and PlaybackState.ACTION_PLAY_FROM_URI != 0L
+                            "play_media_id" -> actions and PlaybackState.ACTION_PLAY_FROM_MEDIA_ID != 0L
+                            else -> false
+                        })
+                }
+                private fun loadingController(): android.media.session.MediaController {
+                    val expected = requireNotNull(observed)
+                    val fresh = requireNotNull(delegate.snapshot())
+                    check(fresh.sessionKey == expected.sessionKey && fresh.sourcePackage == expected.sourcePackage &&
+                        fresh.mediaId == expected.mediaId && fresh.title == expected.title && fresh.artist == expected.artist &&
+                        kotlin.math.abs(fresh.durationMillis - expected.durationMillis) <= 1L &&
+                        fresh.playback == expected.playback && fresh.playback == PassagePlayback.PAUSED &&
+                        kotlin.math.abs(fresh.positionMillis - expected.positionMillis) <= 1_500L)
+                    return currentController().also { check(it.sessionToken == expected.sessionKey) }
+                }
+                override fun prepareFromTrackUri(uri: String): Boolean {
+                    require(canonicalSpotifyTrackUri(uri) != null)
+                    if (mode != "prepare_uri") return false
+                    val controller = loadingController()
+                    if (requireNotNull(controller.playbackState).actions and PlaybackState.ACTION_PREPARE_FROM_URI == 0L) return false
+                    controller.transportControls.prepareFromUri(android.net.Uri.parse(uri), null)
+                    return true
+                }
+                override fun playFromTrackUri(uri: String): Boolean {
+                    require(canonicalSpotifyTrackUri(uri) != null)
+                    val controller = loadingController()
+                    val actions = requireNotNull(controller.playbackState).actions
+                    return when {
+                        mode == "play_uri" && actions and PlaybackState.ACTION_PLAY_FROM_URI != 0L -> {
+                            controller.transportControls.playFromUri(android.net.Uri.parse(uri), null); true
+                        }
+                        mode == "play_media_id" && actions and PlaybackState.ACTION_PLAY_FROM_MEDIA_ID != 0L -> {
+                            controller.transportControls.playFromMediaId(uri, null); true
+                        }
+                        else -> false
+                    }
+                }
+            }
+            val original = requireNotNull(session.snapshot())
+            check(original.sourcePackage == "com.spotify.music" && original.playback == PassagePlayback.PAUSED &&
+                canonicalSpotifyTrackUri(original.mediaId) != null && original.mediaId != targetUri &&
+                !original.title.isNullOrBlank() && !original.artist.isNullOrBlank() &&
+                original.durationMillis in 1_000..3_600_000 && original.positionMillis in 0..original.durationMillis &&
+                original.canPlay && original.canSeek && (original.canPrepareTrack || original.canPlayTrack))
+            fun priorIsUnchanged(snapshot: SongPassageSnapshot?): Boolean = snapshot != null &&
+                snapshot.sessionKey == original.sessionKey && snapshot.sourcePackage == original.sourcePackage &&
+                snapshot.mediaId == original.mediaId && snapshot.title == original.title && snapshot.artist == original.artist &&
+                snapshot.playback == PassagePlayback.PAUSED &&
+                kotlin.math.abs(snapshot.durationMillis - original.durationMillis) <= 1L &&
+                kotlin.math.abs(snapshot.positionMillis - original.positionMillis) <= 1_500L
+            check(priorIsUnchanged(session.snapshot()))
+            val passage = SongPassageRequest(title, artist, start, length, targetUri,
+                allowTrackSwitch = true, observedDurationMillis = duration)
+            val controller = SpotifySongPassageController(session, diagnosticObserver = { diagnostic ->
+                phase = diagnostic.stage.name
+                instrumentation.sendStatus(2, android.os.Bundle().apply {
+                    putString("runstate_transport_only_diagnostic", diagnostic.toString())
+                })
+            })
+            val result = withTimeout(35_000L) { controller.play(passage) }
+            instrumentation.sendStatus(2, android.os.Bundle().apply {
+                putString("runstate_transport_only_status", result.status.name)
+                putBoolean("runstate_transport_only_reported_restored", result.playbackRestored)
+            })
+            phase = "RESTORATION"
+            check(result.status == SongPassageStatus.FINISHED && result.playbackRestored &&
+                priorIsUnchanged(session.snapshot()))
+            instrumentation.sendStatus(2, android.os.Bundle().apply {
+                putString("runstate_transport_only_phase", "COMPLETE")
+                putBoolean("runstate_transport_only_prior_track_restored", true)
+            })
+        } catch (_: Exception) {
+            // The production controller owns failure/cancellation containment. Do not add an
+            // unguarded emergency pause here that might overwrite a deliberate user change.
+            throw AssertionError("The optional chosen-song transport-only check failed at $phase.")
+        }
+    }
+
+    private class ChosenSongDiagnosticStop : java.io.IOException("Chosen-song diagnostic stopped before reflection POST.")
+
+    /** Capture only already received, allowlisted headers; never inspect a disconnected connection. */
+    private class ChosenSongObservedConnection(
+        private val delegate: javax.net.ssl.HttpsURLConnection,
+        private val path: String,
+        private val report: (android.os.Bundle) -> Unit
+    ) : javax.net.ssl.HttpsURLConnection(delegate.url) {
+        private var reported = false
+        override fun getResponseCode(): Int = try {
+            delegate.responseCode.also { record(it, "RESPONSE") }
+        } catch (failure: Exception) {
+            record(-1, if (failure is java.net.SocketTimeoutException) "TIMEOUT" else "TRANSPORT")
+            throw failure
+        }
+        private fun record(code: Int, outcome: String) {
+            if (reported) return
+            reported = true
+            // Once responseCode succeeded, these are cached response headers. On an exception,
+            // do not ask for headers at all: that could reconnect or block a second time.
+            fun header(name: String): String? = if (code >= 100)
+                runCatching { delegate.getHeaderField(name) }.getOrNull() else null
+            report(android.os.Bundle().apply {
+                putString("runstate_http_path", path)
+                putInt("runstate_http_status", code.takeIf { it in 100..599 } ?: -1)
+                putString("runstate_http_outcome", outcome)
+                putBoolean("runstate_http_study", header("X-RunState-Song-Study")?.toIntOrNull()?.let { it >= 1 } == true)
+                putBoolean("runstate_http_selection", header("X-RunState-Song-Selection") == "1")
+                putBoolean("runstate_http_snippets", header("X-RunState-Song-Snippets") == "1")
+                putBoolean("runstate_http_preparation", header("X-RunState-Song-Preparation") == "1")
+            })
+        }
+        override fun connect() = delegate.connect()
+        override fun disconnect() = delegate.disconnect()
+        override fun usingProxy(): Boolean = delegate.usingProxy()
+        override fun setRequestMethod(method: String) { delegate.requestMethod = method }
+        override fun setConnectTimeout(timeout: Int) { delegate.connectTimeout = timeout }
+        override fun setReadTimeout(timeout: Int) { delegate.readTimeout = timeout }
+        override fun setInstanceFollowRedirects(follow: Boolean) { delegate.instanceFollowRedirects = follow }
+        override fun setDoOutput(output: Boolean) { delegate.doOutput = output }
+        override fun setRequestProperty(key: String, value: String) = delegate.setRequestProperty(key, value)
+        override fun setFixedLengthStreamingMode(length: Int) = delegate.setFixedLengthStreamingMode(length)
+        override fun setFixedLengthStreamingMode(length: Long) = delegate.setFixedLengthStreamingMode(length)
+        override fun getOutputStream(): java.io.OutputStream = delegate.outputStream
+        override fun getInputStream(): java.io.InputStream = delegate.inputStream
+        override fun getErrorStream(): java.io.InputStream? = delegate.errorStream
+        override fun getHeaderField(name: String?): String? = delegate.getHeaderField(name)
+        override fun getCipherSuite(): String = delegate.cipherSuite
+        override fun getLocalCertificates(): Array<java.security.cert.Certificate>? = delegate.localCertificates
+        override fun getServerCertificates(): Array<java.security.cert.Certificate> = delegate.serverCertificates
     }
 
     /** Explicit paid-provider check, silent and synthetic; no Spotify controls or Room writes. */
