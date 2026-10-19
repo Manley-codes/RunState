@@ -8,6 +8,17 @@ process; it should not overwrite what worked here.
 For the development story, read [How the music reflection reached this point](music_reflection_development_story.md).
 For full trials, failures and phone receipts, read [the research notebook](research_music_reflection_generation.md).
 
+## Creative latitude — October 18, 2026 direction
+
+Manley wants to preserve the writer's current creative range, including humor, attitude and
+unexpected comparisons. He enjoyed a reflection contrasting being out running with people eating;
+this is listener feedback about creative freedom, not an exact transcript or a required template.
+Do not add new tone bans, generic politeness rewrites or rigid formulas based on hypothetical
+audience objections. Reassess with concrete feedback when more runners use the app. Keep measured
+run facts truthful and missing inputs unknown, but do not confuse factual reliability with
+flattening the voice. No model, prompt, output filter, accepted text or voice setting was changed
+for this direction. The preserved recipe below remains the reproducible historical baseline.
+
 ## What is preserved
 
 The exact accepted words, fictional facts, source identities, creative directions, editorial

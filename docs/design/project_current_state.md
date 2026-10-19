@@ -18,24 +18,240 @@ missing check. A successful build, installation or controlled fixture is not pro
 | **Verified in use** | The stated behavior worked in actual use for the named scenario, not only with fictional test data. This does not prove every device, song or circumstance. |
 | **Complete for agreed scope** | The agreed behavior, necessary checks and documentation are finished. Explicit remaining limits are outside that scope; this does not mean every future idea is built. |
 
-**Current headline:** automatic chosen-song loading and wider snippet finding are **Ready to test — local only**;
-software checks passed, but this extension is not installed or deployed. The separate
+**Current headline:** automatic chosen-song loading and wider snippet finding are **Building — installed/deployed foundation**;
+software and silent storage checks passed, but phone loading and complete pairing remain unresolved.
+The first broader-snippet case has empty Musixmatch analysis and a failed Spotify load. The separate
 multi-song reflection selector is **Ready to test**, installed on the Moto,
 deployed on Render and checked against the real providers with fictional run evidence. Real-run
 selection and listener-quality checks remain. The accepted reflection
-recipe has passed controlled listening checks; the whole music feature is not complete. GPS is
-**Ready to test outdoors** with the quiet Start update installed; its field-accuracy checks remain.
+recipe has passed controlled listening checks; the whole music feature is not complete. Music work
+was parked while the October 18 run-debrief changes below were implemented. Those phone changes
+are now **Ready to test — installed**, with software and silent Moto checks passed; audible/field
+confirmation remains. Song-loading/source-coverage work is the next return point. GPS
+pace/time have a positive user-reported outdoor comparison; measured distance and broader field
+checks remain. This report does not establish full GPS completion.
 
-## Automatic chosen-song loading and wider snippets — Ready to test, local only, October 18, 2026
+## Energy-beam clarification and Completion alignment — current visual follow-up
 
-Manley authorized continuing the next music slice while he went out for a run. Do not control
-Spotify, inspect/interfere with that run, install an APK or deploy during his absence. The installed
-phone remains Room 15 and Render remains `7447c65`; the implementation below is a local extension.
+Pause handoff: Manley requested grouped commit/push commands and a break after this checkpoint.
+No further implementation is queued during the pause. On return, resume the parked chosen-song
+loading/source-analysis work; the current screen adjustments are installed and verified below.
+
+Manley clarified that the beam must trace **one shared rounded rectangle around the whole row of
+three Energy choices**, not each square individually. The question/title remains outside that
+perimeter. The existing traveling light, visibility/selection/reduced-motion behavior and tile
+layout stay intact. Completion's visualizer is also raised 8 dp without changing its size or the
+surrounding facts/controls. Measured placement keeps the intake endpoint aligned; the adaptive
+layout preserves text clearance. This supersedes the individual-edge interpretation below.
+Only the two existing screen files change; no new file, backend, audio, run storage or Git change.
+Debug/test APK builds and seven existing silent Moto screen checks passed, including stationary
+Start/large text, Completion metric clearance and intake targeting. Actual Start captures confirm
+one moving shared perimeter; the raised Completion ring was visually inspected. Installed in place;
+all 36 saved runs/every existing field in ten tables remained unchanged, Room 17 integrity OK.
+This small visual-only follow-up did not rerun the preceding full JVM suites. No new tests were added.
+
+## October 18 earlier visual corrections — installed and checked
+
+Manley supplied `20261018-2325-05.4450995.mp4`; its complete 4.37-second timeline was reviewed before
+editing. The reference has a small white light moving around each Energy tile, with a soft trailing
+glow. The native Start now uses that individual-edge treatment only on the three choices, never
+the heading or the row's shared perimeter. It repeats while unanswered and visible, and stops on
+selection, backgrounding or disabled animations. The existing colors, tile placement and intake stay.
+
+“Total incl. breaks” is removed from presentation. Active/Paused, Completion, recap and History
+use active duration as their sole run time, and facts speech uses trusted active duration too.
+Unknown active duration remains unknown rather than falling back to wall-clock time. Internal
+timestamps, elapsed calculations, pause accounting, pace/split calculations and stored rows remain.
+
+The entire Completion reflection panel, including preparation/error status, stays absent until an
+explicit Energy response. The first tile intake must finish before text/voice appear, even when the
+writer finished earlier. Writing and voice preparation continue early; saving without Energy still
+works. “Not sure” reveals the reflection without inventing an Energy category. Its formerly rejected
+save path is repaired: explicit unknown uses the existing nullable post-run answer field, while an
+automatic no-answer timeout leaves that field null. This distinguishes them after reopening without
+another database schema. A recovered answered activity shows its stored text without replaying intake.
+
+The basic post-save recap stays for later design refinement. Reflection writer/prompts/models/voices,
+Spotify behavior and the larger pending music task are unchanged. This slice adds no permanent
+project file and performs no Git or Render operation.
+
+Verification: **685 JVM tests in each debug/release variant**, all three APK builds, and **20 focused
+silent Moto checks passed**. The checks cover hidden/prepared reflection presentation, intake/voice
+ordering, explicit Not sure versus timeout and reopen, active-only metrics, paused/large-text layout,
+and stationary Start interactions. Native Completion/Paused captures were inspected; two actual
+Start screenshots confirmed the edge light moves independently around the tiles, with no heading
+beam. Compose test captures freeze this infinite decorative animation and are not its motion proof.
+The update is installed. All **35 existing runs and every old field in ten database tables** were
+unchanged; Room 17 integrity passed. No real run, provider generation or audio audition was started.
+Current test screenshots/test APK, private database comparisons and temporary video-review tools
+were removed; the main app was reopened. The supplied recording was not changed.
+Live listening/ordinary-run checks for the preceding debrief features still remain.
+
+## October 18 debrief implementation — preceding installed checkpoint
+
+Manley subsequently approved the bounded recommendations below and explicitly asked Codex to
+implement them. This supersedes the discussion-only status of the historical debrief. No new
+restrictions, prompts, models or delivery changes were added to the accepted creative reflection
+writer. Preserve its humor, attitude and variety; evaluate actual experiences before adding tone rules.
+
+- **Start:** optional Energy gets a clear question and restrained one-time sweep. Start remains
+  available without an answer. The countdown is ten seconds with Start now and Cancel; local speech
+  says “Starting in ten,” then three, two, one. Recording starts once after countdown or Start now.
+- **Paused:** distance, frozen active time and supported average pace remain together above compact
+  controls; total including breaks stays secondary. Unavailable pace is never invented.
+- **Run updates:** a local, foreground-service mile monitor uses the existing durable GPS metrics.
+  Every mile is enabled by default, with an Off choice in Run settings. It speaks distance, supported
+  average pace and active time. Pause, disabling, completion and recovery must not replay stale
+  milestones. Sample runs and incomplete distance coverage remain silent. Other intervals are later.
+- **Completion:** a larger irregular visualizer, honest Not sure answer and optional Something else
+  note. Notes are limited to 280 characters, saved locally and shown in recap/expanded History; they
+  are not sent to the AI. Optional “How hard was that?” follows Energy intake, with Skip and no
+  reflection/save gate. The separate brief “How’s your energy now?” invitation follows facts only
+  while still unanswered. The facts themselves remain metrics-only.
+- **Save Activity:** End run protects a durable pending activity immediately. Completion then offers
+  explicit finalization, followed by a simple recap with actual metrics, available route/splits,
+  feedback, note and exact stored reflection. History/Done live there. Pending activities recover to
+  Completion after reopening, stay out of finalized History/totals/insights, and cannot be duplicated
+  by repeated Save. Saving does not require Energy, Effort or a successful reflection. The new facts
+  receipt says “Run complete” until finalization. Rich export/share/PR recap remains future work.
+
+Room 17 adds only finalization and local-note fields; existing completed records remain finalized.
+Its generated migration schema is the only necessary new permanent project file in this slice.
+The Android debug and release unit suites each passed 684 tests and all three APK builds passed.
+Twenty-eight unique focused silent Moto checks passed across the final runs, covering migration,
+pending-activity recovery/finalization/note persistence, saved/discarded sample navigation, metric
+visibility, Energy/Effort/note interactions, separate invitation ordering, countdown cancellation,
+Start now races/restoration and settings persistence/large text. Earlier failures were stale fixture
+expectations or paused test-clock/render synchronization; the obsolete real-Activity countdown test
+was replaced by isolated composition restoration plus the existing GPS-root cancellation check.
+No production lifecycle guard was weakened to pass tests. Actual Start, paused, Completion and recap
+test screenshots were inspected; richer Active/recap styling remains a future pass.
+
+The final private before/after comparison found every old field in all ten real database tables
+identical, including all 33 runs, routes, music observations, reflections, weather and splits. Room
+17 integrity passed; every legacy run remains finalized and no note was invented. The current test
+package/device artifacts and private comparison copies were removed, and the main app reopened.
+Spoken countdown/mile audio and real field behavior still need ordinary use. No real run, provider
+call, Spotify playback, Render change or Git mutation was performed for these adjustments.
+
+The prior chosen-song loading/source-coverage investigation remains **Building** and returns after
+this checkpoint. The GNX first-request failure is still undiagnosed. Future personal boost/DJ,
+distinct facts voice, richer recap and the Energy Insights walkthrough remain separately recorded.
+
+## October 18 real-run debrief — historical discussion before the approval above
+
+Manley asked to pause the current music investigation, preserve his fresh run observations, and
+discuss the changes below before returning to music soon. This entry records his experience and
+Codex's recommendations separately. No new phone capture, run-data inspection, listening test or
+provider request was made for this debrief; source inspection is not a fresh visual/accessibility
+audit. Proposed copy, animation, sizes, intervals and future screens are not locked designs.
+
+### What Manley experienced
+
+- He started without selecting pre-run Energy and expects other runners may overlook it too.
+- Pace and time were nearly the same as another running app used alongside RunState. This is
+  encouraging user-reported evidence; no independent values, distance comparison or definite
+  screen-off conditions were supplied here. Do not invent them or promote all GPS checks to passed.
+- The facts announcement worked. Reflection failed on its first attempt, then worked on Retry.
+  The instrumental played instead of a song snippet. He listened to Kendrick Lamar's **GNX** album.
+  The exact selected recording, first failure and fallback reason have not been diagnosed from
+  this report. His run preceded installation of the broader-snippet extension above; a song-linked
+  reflection and successful song playback are separate capabilities.
+- He liked the reflection itself. After checking the song in History and listening again, its
+  direct connection was unclear, but he felt it carried roughly **65–75% of the persona**. This
+  percentage is his subjective description, not an algorithm score or measured provider benefit.
+- Post-run Energy was not obvious to him: none of the three labels completely described the state
+  he wanted to express. He wants the app's runner-state concept to handle this honestly.
+- Pausing left Active time visible but hid pace from the visible screen. Current source still
+  renders average pace; the taller paused controls and scrollable layout can push it below the
+  viewport. Preserve this as a visibility defect, not a claim that stored pace vanished.
+- He strongly likes the clean, clear visual character, particularly the current screens' overall
+  feel. Carry it into later screens without treating every current layout as final.
+
+### Start, Active and Completion proposals
+
+| Topic | User direction | Recommendation and implications |
+| --- | --- | --- |
+| Pre-run Energy discovery | Recall the original beam wrapping around the choices; consider restoring it to attract attention. | A restrained one-time sweep/beam plus a clear question such as **How's your energy?** is worth trying. Motion should stop after selection and have a reduced-motion equivalent; do not rely on color/movement alone. Keep Start usable and unanswered Energy unknown. The existing intake/ring motion is documented; the exact old wrapping beam was not located in the inspected notes/source, so verify the original before claiming a faithful recreation. A later optional check-in during countdown is an alternative, not a requirement added here. |
+| Paused metrics | Keep pace and all other displayed metrics visible while paused. | First bounded usability repair: keep distance, frozen Active time and supported average pace together above compact pause controls. Retain total including breaks as secondary information. Future current pace must not pretend to measure movement during pause. Do not manufacture unavailable metrics. |
+| Countdown | Prefer 10–15 seconds, **Start now**, and partial spoken countdown, with a more noticeable final three seconds. | Recommend 10 seconds initially, Start now and Cancel. Say **Starting in ten**, then **three, two, one**, rather than scattered opening counts that can sound unfinished. Audible clarity need not mean an abrupt volume jump. Recording/time starts once when countdown finishes or Start now is pressed; GPS preparation can continue before that. Cancel must leave no accidental activity. Existing native countdown is visual three seconds with Cancel only. Duration/audio policy remains to approve. |
+| Live announcements | Announce milestones such as each mile; possibly 1.5-mile intervals; distance/pace and other details still undecided. | Valuable requested capability, currently not implemented as a live milestone scheduler. Recommend a predictable one-mile interval, configurable interval or Off, concise distance + average pace + active time. Use only supported measured values. Respect music/audio focus, lock-screen operation, calls and pause; never repeat a milestone after resume/recovery or speak stale queued updates. Exact wording/settings remain open. See respectful-announcement opportunities. |
+| Custom post-run feeling | Consider a small custom Energy/feeling description when the three choices do not fit. | Recommend **Something else / Add a note** and an honest **Not sure** route, rather than a required fourth text field. Energy describes available energy; a runner can also be tired and proud or physically spent and mentally good. Keep optional wording alongside, not silently converted into, a Low/Moderate/High answer. Free text needs its own storage and an explicit decision about whether it is sent to the reflection service; existing Energy insights must not treat it as an entered category. Exact field/label and cloud use are undecided. |
+| Effort interaction | Remove small Effort text below Energy; after Energy intake, reveal Effort choices, then collapse after a choice. | Energy and Effort answer different questions: what is left versus how hard the run felt. Progressive disclosure can reduce clutter, but an automatic second required step would interrupt the accepted Energy-to-reflection flow. If adopted, make **How hard was that?** a brief optional follow-up with Skip; neither reflection nor saving should wait. Keep it outside the already generated Energy-only reflection unless a later, explicit generation change is designed. This is a proposal, not a new requirement that every runner answer twice. |
+| Spoken post-run Energy invitation | After the facts, invite a post-run Energy choice and explain its value for patterns/performance. | Recommend one separate short neutral cue, **How's your energy now?**, rather than adding interpretation to the facts or promising improved performance. Explain **helps you notice patterns over time** during introduction/help. Suppress a late prompt if Energy is already answered; avoid repeated prompts or blocking. This new proposal revisits the earlier facts-only direction but does not change it in code. |
+| Completion visualizer | Increase apparent size toward the Start-screen visualizer. | Support more visual presence while protecting metric readability. Current nominal sizes are close (normal Completion 80 dp, Start 84 dp); compare the actual composition before choosing a size. Equal dimensions alone may not create equal visual weight. Preserve the accepted irregular motion/intake and clean layout. |
+| Completion primary action | Replace the black **Start another run** panel with **Save Activity**. | Strong product direction; this needs a truthful lifecycle change, not just renamed navigation. Today completing the run persists it before Completion/facts/reflection; Start another run resets preparation. Recommend automatic recoverable storage first, then explicit Save Activity finalization. Protect a run if the app closes before Save, prevent duplicate saves/mileage/PR processing, and define how unfinished activity appears on reopening/History. Existing saved runs must stay intact. |
+| Completion navigation | Remove **View in Log History** and move it to a later post-save screen. | Reasonable with the new destination in place. Retain a usable way to reach the saved activity until replacement navigation exists. Avoid two competing primary exits. No navigation was removed in this debrief. |
+
+**Why retain the simple Energy answer alongside optional nuance:** the current local **Your Energy**
+card describes entered pre/post patterns across recent genuine GPS runs; it does not promise better
+performance. Effort is a separate potentially useful signal, not currently an input to that card.
+An optional note can preserve nuance without inventing a category or changing the meaning of an
+existing count. The requested plain-English Energy Insights walkthrough remains outstanding.
+
+### Save Activity flow to design before coding
+
+Recommended sequence: **End run → automatically protect a recoverable activity → Completion
+(facts, optional Energy/Effort, reflection) → Save Activity → activity recap.**
+
+This separates protecting data from the runner confirming that they are finished. Do not remove
+durable saving and rely on the runner reaching the button. Do not label a button Save if it only
+opens Start. Decide draft/finalized status, History visibility, recovery/discard, exactly-once
+finalization and background reflection completion together. The spoken **Run saved** receipt also
+needs to match the eventual meaning: it must not claim the runner finalized before they did.
+Saving must remain available without Energy, Effort, music or a successful network reflection.
+
+Manley's future recap direction includes route/map outline, metrics, splits, supported PRs and an
+optional shareable/savable activity image. The richer screen/export is recorded in
+`parked_feature_ideas.md`; this debrief does not authorize building it now.
+
+### Future ideas retained without starting them
+
+- **Personal boost songs / I Need a Push:** Manley says Kendrick Lamar's **reincarnated** on GNX
+  helped when he began struggling, through personal meaning, delivery, beat and the overall song.
+  Capture this as his reported experience, not proof of a causal speed/fitness effect or a
+  universal psychological category. The existing runner-invoked Push plan is the right home;
+  see the October 18 addition in `music_feature_register.md`.
+- **Facts voice identity:** later explore a distinctive ElevenLabs facts voice, because the
+  current generic facts voice resembles other running apps. Do not change the accepted custom
+  reflection voice or present this as a selected replacement voice.
+- **During-run song group → End Run → selected reflection/snippet:** this substantially overlaps
+  the implemented early candidate preparation/selection pipeline. The improvement worth reviewing
+  is to consider both reflection fit and a usable, significant snippet when choosing the final pair.
+  End Run triggers work; it does not solve loading a Spotify track. See the parked checkpoint in
+  `design_music_selection_system.md`. No new agents or music implementation are approved here.
+
+### Recommended next slices — not a reordered or approved full roadmap
+
+1. Repair paused-metric visibility first; compare Completion ring sizing in a bounded visual pass.
+2. Settle the short Start/Completion interaction decisions above, then implement one bounded flow
+   at a time. Save Activity/recovery semantics need agreement before persistence/navigation changes.
+3. Add predictable optional live distance announcements as a separate functional slice. The new
+   facts voice, rich activity recap/export and DJ/boost system can follow later.
+4. Return soon to parked music: distinguish the real run's initial reflection failure from snippet
+   fallback, then address source coverage and reliable chosen-track loading. Preserve the accepted
+   writer, voices and successful reference pairs while doing so; do not restart broad creative trials.
+
+This is a recommendation for discussion, not permission to implement every item or a claim that
+existing Energy Insights has been explained to Manley; that walkthrough is still owed.
+
+## Automatic chosen-song loading and wider snippets — Building, installed/deployed foundation, October 18, 2026
+
+Manley authorized continuing this music slice while he went out for a run; development left his
+active phone untouched. After his return, he committed/pushed backend `15ed772`, Android `72b6517`
+and docs `9b274e0`; both branches reached `9b274e05c628109a90d9e5ae80bdc4d2f70d2dcb`.
+His manual Render deployment `dep-dbaim27btjjs73fahof0` succeeded and is Live at `9b274e0`.
+Public health returned 200 with Song-Snippets, Study, Preparation and Selection capabilities all 1.
+Main/test APKs were installed in place, without uninstalling or clearing app data.
 
 New observations can retain Spotify's exact canonical track URI, album and recording duration.
 Room 16 adds these as nullable fields and a default-off run-owned snippet-lookup flag. The additive
-migration is designed to preserve old values, leave recording fields unknown and grant no new
-permission; its instrumentation checks are compiled but have not run against an actual database.
+migration preserves old values, leaves recording fields unknown and grants no new permission.
+Five silent Moto checks passed: Room 15→16 preservation/default-off and four observation,
+recording and permission cases. The actual app opened on Room 16 with integrity OK; hashes of
+every old column across all ten old tables matched, including 33 saved runs, 3,540 route points
+and 1,407 music observations. All three new recording fields were NULL for older observations,
+and every older run kept snippet lookup off. Private temporary copies were automatically removed.
 There is no backfill from today's Spotify state. The new **Find song snippets** setting is off by default and
 described as applying to future runs. It requires existing music sharing and freezes with each
 new run. Disabling sharing/observation clears the setting for future runs; already authorized
@@ -66,12 +282,12 @@ Restoration is best effort and Spotify's queue may change. Cancellation/timeout 
 a bounded pause for RunState's own pending selection; it cannot guarantee a remote player will
 never apply a delayed command later. A user-selected different recording is not owned by that
 cleanup. Facts voice, custom reflection voice, the 650 ms gap and accepted prompt fingerprints stay
-unchanged. Playback on the actual phone remains untested for this expansion.
+unchanged. The actual phone checks below failed before target playback; this expansion remains unresolved.
 
 Final software checks passed: 193 backend tests across seven suites, and 672 Android JVM tests
 each for debug and release across 35 suites each, all with zero failures/errors/skips. All three
-APKs built (release unsigned); the final Android build took 25 seconds. Room 16 migration
-instrumentation is bundled in the test APK but has not executed against an actual Room database.
+APKs built (release unsigned); the final Android build took 25 seconds. The subsequent five silent
+Moto cases and actual database verification established this installation's Room 16 preservation.
 Two new user-seek regressions first exposed overbroad pending-load cleanup; scoped cleanup then
 passed all 60 controller cases and the full suites. Coordinator reopen/retry, partial-identity
 conflict and unverified curated-edition checks also passed. Accepted baseline/prompts are unchanged.
@@ -79,14 +295,64 @@ conflict and unverified curated-edition checks also passed. Accepted baseline/pr
 A real public source-class lookup matched Lose Yourself / Eminem / Curtain Call - The Hits
 (Deluxe Version), observed duration 326,000 ms, to LRCLIB source `10913690`. It derived a
 `TITLE_HOOK` from 99,340 to 102,140 ms. This proves source lookup/derivation, not Spotify playback,
-hearing quality or complete hosted generation. No new phone loading, listener or field result
-is claimed; the earlier Room 15 preservation check does not verify this Room 16 migration.
+hearing quality or complete hosted generation. Actual Spotify loading, wider-hook playback and
+listener quality remain unverified. Two existing test files gained silent settings and live
+cross-track checks. The updated test APK compiled in 41 seconds and was installed test-only;
+the isolated `snippetLookupIsSeparateDefaultOffFutureRunChoiceAndRequiresMusicSharing` case
+passed on the Moto in 4.376 seconds without changing real preferences. This brings the focused
+silent cases to six. The user's latest real run is saved (33 total completed runs, none active).
+This checkpoint is not **Verified in use** or completion of the whole music feature.
+
+**First broader-snippet case — stopped before audio:** Manley approved the specific LRCLIB test,
+not a change to the future-run setting, which remains off. Paused Spotify capture passed in
+1.340 seconds for Lose Yourself / Eminem, album `Curtain Call: The Hits (Deluxe Edition)`, duration
+326,467 ms, canonical track `5Z01UMMf7V1o0MzF86s6WJ`. The session advertises prepare/play-from/seek;
+advertising those controls does not prove cross-track playback works. A real source-class lookup
+using this recording metadata matched LRCLIB `18848635`, with `TITLE_HOOK` 99,260–101,480 ms
+(2.220 seconds), replacing the earlier public-fixture timing for this particular test.
+
+Two full hosted attempts stopped before any audio or Spotify commands: the first failed the
+generation-stage check after 8.058 seconds; the diagnostic retry took 7.185 seconds and received
+a valid ordinary response in 4,646 ms, with no selected song, cue or snippet (`isTestData=false`).
+A silent phone capability check then passed in 3.706 seconds: HTTP 200 and study/selection/snippets/
+preparation available. Its POST was blocked, so it made no AI or audio request. A bounded direct
+Musixmatch check matched the exact song (`84457688`, matcher 200), but its analysis response was
+HTTP 200 with an empty array. The parser correctly found no usable song material; an ordinary
+reflection without a paired cue is not a successful music-reflection test. Bounded catalog search
+also found original soundtrack entry `84460673`, `Lose Yourself - From "8 Mile" Soundtrack`, with
+empty analysis; demo entry `291762218` was excluded. No parser or source-alias change is justified.
+
+The default music-only cross-track probe then failed in 7.391 seconds: `TRACK_LOAD_TIMEOUT` after
+5,033 ms following prepare. Spotify stayed on the previous paused recording, without a verified
+target or clip. Cleanup sent pause; result `INTERRUPTED`, `restored=false`. This is not successful
+loading or verified restoration. Test-only variants `default`, `prepare_uri`, `play_uri` and
+`play_media_id` initially built in six seconds and were installed. After Manley refreshed a different
+paused song, the first follow-up stopped before commands at 3.151 seconds on a test-only 30-minute
+capture expiry. The fixture window was extended to two hours, rebuilt in six seconds and installed;
+real current/loaded-recording identity checks were unchanged. Default prepare failed again after
+5,073 ms. The session advertised prepare-URI/play-URI but neither media-ID action. Explicit
+`play_uri` then failed in 6.453 seconds with a 5,033 ms load timeout: previous paused song retained,
+cleanup pause sent, `INTERRUPTED`/`restored=false`. No redundant prepare-URI probe or unsupported
+media-ID probe was run. No snippet or voice playback was verified; the last read-only Spotify
+state was PAUSED (2). Advertised commands did not establish working cross-track transport.
+
+Cleanup uninstalled only the test package and reopened the main app; no app data or real preferences
+were cleared/changed. The current isolated test database had been deleted. A final comparison found
+all old-column hashes across all ten tables identical, with 33 saved runs and Room 16 integrity OK;
+private copies were automatically deleted. No new sharing was enabled. Source coverage and phone
+loading must both be resolved before complete pairing can be called ready. Only two existing test
+files and these six docs changed in this verification turn: no production edits, new files or commits.
+
+The next transport candidate is the official [Spotify Android App Remote SDK](https://developer.spotify.com/documentation/android),
+which supports starting track playback with user playback authorization. It is not implemented;
+account availability, Premium requirements and API/quota suitability are not settled. Songs with
+unavailable Musixmatch analysis also need an evidence-based source fallback, not guessed lyric meaning.
 
 Necessary new files for this slice are Room schema
 `android/app/schemas/com.runstate.mobile.data.local.RunStateDatabase/16.json`, the source client
 `backend/src/main/java/com/runstate/reflection/LrclibSongSnippets.java`, and its focused test
 `backend/src/test/java/com/runstate/reflection/LrclibSongSnippetsTest.java`. Other edits use existing
-files. No phone mutation, installation, deployment or Git mutation is claimed for this slice.
+files. The user performed the commits/push and deployment click; no assistant Git mutation occurred.
 
 ## Multi-song reflection selection — Ready to test, October 18, 2026
 
@@ -165,7 +431,7 @@ was changed. Independent cleanup confirmed the test package absent and zero rema
 This is a live-service selection check with synthetic evidence, not **Verified in use** for an
 outdoor run or a listener-quality judgment. Snippet support and the accepted baseline did not
 expand/change. No new permanent file was created during that verification; only its existing
-receipt documents remained uncommitted at that checkpoint, before the newer local extension above.
+receipt documents remained uncommitted at that checkpoint, before the newer extension above.
 
 ## Quiet GPS preparation and direct Start installed and checked — October 18, 2026
 

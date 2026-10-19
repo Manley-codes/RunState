@@ -82,13 +82,13 @@ automatically queue a previous song or discover a new hook. The feature is not c
 agreed scope is implemented and checked. The [project status labels](project_current_state.md)
 now distinguish work underway, readiness for testing and proof from actual use.
 
-## Removing the need to leave one song current — Ready to test, local only
+## Removing the need to leave one song current — Building, installed/deployed foundation
 
 Choosing among songs exposed another gap: the selected song might no longer be playing when the
 runner finished. The five hand-checked passages also could not cover an ordinary varied playlist.
 Manley authorized working on both while he went running, without touching his active phone.
 
-The new local version remembers the exact Spotify recording, rather than guessing from its title.
+The new version remembers the exact Spotify recording, rather than guessing from its title.
 With a new default-off choice for future runs, it can look up published line timing for the chosen
 recording and try loading that song for a short vocal moment. It keeps the accepted curated timing
 where the recording is verified; a different recording needs its own matching timing. The reply's
@@ -102,10 +102,27 @@ can change, a play-from fallback may briefly sound before seeking, and cancellin
 is best effort. This distinction matters: source evidence, working local code and a polished heard
 finish are separate milestones. Final checks passed 193 backend tests and 672 Android tests per
 debug/release variant, plus all three APK builds. New tests caught cleanup that could interrupt a
-user's own seek; that was corrected before the final passing build. The Room 16 migration checks
-are compiled but have not run against an actual database. This extension is **Ready to test — local
-only**; the deployed selector and installed phone remain the earlier version. Phone loading,
-hosted integration and listening checks still need to follow the commit/deployment and update.
+user's own seek; that was corrected before the final passing build. After Manley returned, he
+committed, pushed and deployed `9b274e0`; the phone was updated in place to Room 16. Six focused
+silent phone cases passed, including migration and the separate default-off settings choice.
+Every old field in the actual database stayed unchanged, including 33 saved runs, and older runs
+received no new permission. The later integration checks keep this extension **Building — installed/
+deployed foundation**: phone loading and complete pairing are unresolved.
+
+The first test with the phone's actual Lose Yourself recording exposed a source gap. RunState
+identified the recording and found a short timed hook, but Musixmatch recognized the song without
+returning any analysis. Both hosted attempts stopped before audio or Spotify control; one returned
+a valid ordinary reflection with no paired song. This was not a successful music test or a listening
+failure: it never reached playback. Checking the original soundtrack entry also found no analysis.
+A separate music-only attempt then exposed a second issue: Spotify did not load the requested
+recording before the timeout. It stayed on the previous paused song; the cleanup was not proof of
+restoration. After refreshing the session, both prepare and explicit play-URI still timed out;
+advertised controls did not mean they worked. The test tools were removed, the main app reopened,
+and all stored run data was verified unchanged. Separating source coverage from playback made
+both gaps visible instead of treating all of this as one vague failure. The official Spotify
+Android SDK is the next transport candidate, not an implemented solution or an account-access
+guarantee. Missing song analysis also needs a real source fallback. Manley's one-test approval
+kept the future-run snippet setting off; the broader feature remains Building.
 
 ## The early experiments established the idea
 

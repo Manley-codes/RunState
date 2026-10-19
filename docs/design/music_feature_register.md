@@ -7,6 +7,24 @@ metadata:
 
 # Music feature register — LIVE
 
+**October 18 real-run ideas — future, not a new build scope:** Manley reported that Kendrick
+Lamar's **reincarnated** from **GNX** helped him when he began struggling: personal relevance,
+the voice/persona, lyrics, beat and overall feel mattered together. This belongs with **I Need a
+Push**, **Personal Anchor Language**, and **Songs a runner makes their own** below. A candidate
+user-facing name is **My push songs** or **Personal boost**, rather than a claim that certain
+songs produce a universal psychological effect. Let the runner mark a song/moment that helped;
+repeated personal feedback can later inform a trusted reserve. Do not infer that a pace change
+proves motivation or authorize automatic music takeover from this anecdote. A user-invoked Push
+remains the existing first scope. No new DJ/playlist/mental-state inference is implemented.
+
+Manley also wants to explore a more distinctive **facts announcement voice**, potentially with
+ElevenLabs, later. The accepted reflection voice stays separate; no replacement facts voice was
+chosen or generated. Live milestone announcements are a nearer-term request with cadence/copy
+still open; recommended distance/pace/time, predictable interval and Off are recorded in the
+October 18 debrief in `project_current_state.md`. The current music investigation is parked for
+return soon; full status and the during-run candidate-pipeline proposal are in
+`design_music_selection_system.md`.
+
 **October18 early song study approved/written locally:** after30ACTIVE seconds, both per-run
 music choices plus current preferences/access/unchanged hosted destination can trigger one
 durable Room14 claim for the first eligible saved Spotify PLAYING identity. Authenticated

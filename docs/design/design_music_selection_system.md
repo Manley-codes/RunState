@@ -10,12 +10,36 @@ status: LIVE — read this file
 
 **Read this file.** Not archived, not parked.
 
-## Chosen-song playback and wider snippets — Ready to test, local only, October 18, 2026
+## October 18 debrief — investigation parked for return soon
 
-The installed/deployed selector below still has its five-current-track snippet boundary. A separate
-local extension now carries exact observed Spotify recording identity, album/duration and default-off
-future-run permission for broader lookup/loading. It has not been installed or deployed while Manley
-is out running. Final software checks passed; actual-phone behavior remains to be verified.
+Manley asked to pause work here while preserving fresh feedback from his real run. Reflection
+required Retry once, then he liked it; an instrumental replaced the song snippet while listening
+to GNX. The selected recording and exact failure/fallback reasons have not been inspected for
+that run. Do not attribute it automatically to the later Lose Yourself test's empty analysis or
+Spotify loading failure. The run preceded the Room 16 installation; actual sources/permissions
+must be checked before claiming why that run used a fallback. The full debrief is in
+`project_current_state.md`.
+
+His proposed pipeline is **prepare a group of suitable songs during the run → End Run selects
+among them → reflection and short musical ending**. Early candidate studies and final-facts ranking
+already implement much of this. One final winner currently serves all post-Energy branches.
+The next design improvement to consider, not yet implemented, is choosing a **reflection/song
+pair with a usable hook**, rather than selecting solely for meaning and discovering afterward
+that it cannot play. A next suitable prepared candidate could be useful if the best match lacks
+analysis/timing/playback, with honest fallback reasons and no fabricated source meaning.
+Finish is a trigger, not a workaround for Spotify's loading capability. Coordinated background
+jobs can do this; multiple autonomous agents are not necessary for this version. Preserve the
+accepted writer/pairings and resume reliable transport/source coverage work without reopening an
+unbounded creative-evaluation loop. No music/provider/phone changes were made in this debrief.
+
+## Chosen-song playback and wider snippets — Building, installed/deployed foundation, October 18, 2026
+
+The extension now carries exact observed Spotify recording identity, album/duration and default-off
+future-run permission for broader lookup/loading. It is installed on the Moto at Room 16 and Live
+on Render as `9b274e0`; health confirms snippet/study/preparation/selection capability 1. Software
+and six focused silent Moto cases passed. A real chosen-song load timed out; phone loading and
+complete pairing remain unresolved, and listening is unverified.
+The older five-current-track limitation below describes the preceding selector checkpoint.
 
 For the chosen song, optional LRCLIB lookup uses title/artist/album/duration, never a device URI or
 run facts. Title/artist/album agreement and duration within two seconds are required, but do not
@@ -35,10 +59,26 @@ The source-class check matched Lose Yourself to LRCLIB `10913690` and a 99.340�
 window; it is not an audio audition. Final checks passed 193 backend tests and 672 Android tests
 per debug/release variant, all without failures/errors/skips, plus three APK builds (release
 unsigned). All 60 controller cases passed after new user-seek regressions exposed and corrected
-overbroad pending-load cleanup. The installed app still uses Room 15. The additive Room 16
-migration is designed to leave old observations unknown and new permission off; its instrumentation
-is compiled but has not run against an actual database. Phone loading, complete hosted generation
-and listener quality remain unverified. Full receipts belong in [project state](project_current_state.md).
+overbroad pending-load cleanup. The in-place Room 16 upgrade passed five storage/permission cases
+and an actual database check: all old fields across ten tables, including 33 saved runs, were
+unchanged; new recording fields remained unknown and old-run lookup stayed off. A sixth isolated
+settings case passed without changing real preferences. Phone loading, complete hosted generation
+with broader timing and listener quality remain unverified. The first actual-recording test captured
+paused Lose Yourself and obtained LRCLIB `18848635` timing (99.260–101.480 s). Both hosted attempts
+stopped before audio: Musixmatch matched the song but its analysis response was an empty array,
+so the diagnostic attempt returned an ordinary reflection without selected song/cue/snippet.
+Capability discovery succeeded; advertised Spotify controls are not proof of loading. The original
+soundtrack entry also returned empty analysis; its demo was excluded. A music-only prepare probe
+failed with `TRACK_LOAD_TIMEOUT`, still on the previous paused recording, no verified target/clip;
+cleanup sent pause but returned `INTERRUPTED`/`restored=false`. After a refreshed session, default
+prepare and explicit play-URI also timed out on the previous paused song; redundant prepare-URI
+and unsupported media-ID probes were omitted. No parser/source-alias fix or working cross-track
+playback is established. Final Spotify state was paused; test package/database/private copies
+were removed, main app reopened and every old field across ten tables/33 runs remained intact.
+The specific LRCLIB approval left the future-run setting off. Official Spotify Android App Remote
+is a next candidate, not implemented or proven available for this account; analysis coverage needs
+its own sourced fallback. Full receipts belong in
+[project state](project_current_state.md).
 
 ## Current reflection selector — Ready to test, October 18, 2026
 

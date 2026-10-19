@@ -11,6 +11,27 @@ metadata, to Anthropic. See [the current Android checkpoint](design/project_curr
 and [backend documentation](../backend/README.md) for those implemented boundaries. The older
 console statement that RunState has no server does **not** apply to the Android app.
 
+## Protected activities and optional notes — October 18, 2026
+
+The new Save Activity flow keeps an ended run recoverable on the phone before the runner explicitly
+finalizes it. Pending activities remain outside finalized History totals/insights; reopening can
+recover the pending Completion screen. Room 17 adds a finalization flag and nullable optional
+post-run note; older completed records remain finalized and their existing fields are preserved.
+An optional note is limited to 280 characters, stored locally, and is not added to reflection,
+song-study, weather or voice-service requests. Notes do not automatically become an Energy answer.
+The later explicit “Not sure” response is retained as an unknown answer in the existing post-run
+Energy field; automatic timeout leaves it unanswered. Neither is treated as a measured Energy level
+by insights. Hiding the reflection panel until a response is a presentation change; early preparation
+and previously authorized provider requests continue.
+Ending a run still starts the existing authorized reflection process; pressing Save Activity is
+not a new consent boundary for those already-authorized requests.
+
+Optional every-mile announcements use existing GPS distance, average pace and active time, with
+local Android speech and a remembered Off setting. Countdown speech and the brief Energy invitation
+also use local speech. They add no audio recording, cloud request, location collection or music
+sharing. Software and silent Moto checks passed, and all old fields in the 33 saved runs and related
+tables were preserved. Audible/field confirmation remains; exact scope is in project_current_state.md.
+
 ## Android saved splits and Energy insight — October 17, 2026
 
 The phone can derive mile/kilometer splits from an already recorded GPS run. New GPS completions
@@ -28,16 +49,18 @@ proof that a run caused a change. These calculations do not need AI and do not u
 history, split rows, aggregates or extra Energy data. Existing optional reflection sharing is
 unchanged; neither new feature adds a backend request field, provider account or permission.
 
-## Optional broader song snippets — Ready to test, local only, October 18, 2026
+## Optional broader song snippets — Building, installed/deployed foundation, October 18, 2026
 
-The new local implementation is not yet installed or deployed; the Moto remains Room 15 and
-Render remains `7447c65`. Manley authorized automatic chosen-song loading and wider snippet
-finding while away. No phone or Spotify control is part of this development verification.
+The implementation is installed on the Moto at Room 16 and deployed on Render as `9b274e0`.
+The user's deployment succeeded; public health confirms the snippet capability. Development left
+his active run untouched, and the subsequent installation preserved app data without uninstall/clear.
+Actual Spotify loading has a failed test case and listening remains unverified. Manley approved one specific LRCLIB test;
+the actual future-run snippet setting remains off.
 
 Room 16 adds nullable Spotify track URI, album and duration to new media-session observations.
 Only a canonical Spotify track URI is accepted; other apps gain no recording fields. The additive
-migration is designed to preserve old fields and leave older observations unknown rather than
-fill them from today's player. Migration instrumentation is compiled, not yet executed. The new run-level
+migration preserved all old fields and left older observations unknown rather than fill them from
+today's player. Five silent Moto checks passed. The new run-level
 `song_snippet_lookup_allowed` column defaults to false for every older run and requires music
 sharing. The **Find song snippets** setting also defaults off and applies to future runs; each new
 run freezes that choice. Turning it off changes future authorization, not the frozen permission
@@ -66,9 +89,23 @@ asynchronous remote load has been cancelled. Recordings changed by the user are 
 The source-class Lose Yourself lookup succeeded with public song metadata and yielded source
 `10913690`, 99,340–102,140 ms. It did not send a person's run or control Spotify. Final software
 checks passed: 193 backend tests and 672 Android tests per debug/release variant, all without
-failures/errors/skips, plus three APK builds (release unsigned). Room 16 migration checks were
-compiled but not run against an actual database; the earlier Room 15 preservation result is not
-proof of this upgrade. No phone was inspected or updated; loading/listening remains unverified. The necessary new
+failures/errors/skips, plus three APK builds (release unsigned). The installed Room 16 database
+passed integrity checks; hashes of all old columns in ten old tables matched, including 33 runs,
+3,540 route points and 1,407 music observations. New recording fields stayed NULL and all old runs
+kept lookup off. Private temporary copies were automatically removed. An additional isolated
+default-off/settings-dependency case passed in 4.376 seconds without changing real preferences,
+bringing the silent cases to six. A later paused Spotify capture succeeded, and its actual recording
+metadata matched LRCLIB source `18848635` with 99,260–101,480 ms timing. Two hosted attempts stopped
+before audio or Spotify commands; Musixmatch matched the song but returned no analysis material.
+A separate capability check blocked POST and made no AI/audio request. No successful paired
+reflection/loading/listening result is claimed. A later music-only probe issued prepare but timed
+out while Spotify remained on the previous paused recording; cleanup sent pause, with no verified
+restoration. After a refreshed session, prepare and explicit play-URI also timed out on the previous
+paused song; unsupported/redundant variants were not tried. The soundtrack entry also returned empty
+Musixmatch analysis. Final checks found Spotify paused, all ten old-table column hashes unchanged,
+33 saved runs and Room 16 integrity OK. The test package and isolated test database were removed,
+private copies deleted and the main app reopened. No real preferences or new sharing were enabled;
+the specific test consent did not enable future-run sharing. The necessary new
 Room 16 schema contains structure only, and the new LRCLIB client/test files contain code, not
 user records or captured lyrics. Existing accepted reflection/voice references remain unchanged.
 

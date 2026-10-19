@@ -13,6 +13,27 @@ live in parked_music_recommendation.md. This file now holds TWO categories (July
 and **accepted/later** (committed to the vision, waiting for its proper phase — currently
 the automatic-splits/telemetry entry).
 
+## Activity recap after Save Activity — future direction, October 18, 2026
+
+Manley wants Completion's main action to become **Save Activity**, followed by an activity recap
+rather than immediately offering another run. His richer future screen could show the completed
+route on a map, measured metrics, splits, supported PRs and an option to save/export an activity
+image. Carry forward the clean, clear visual character he likes. This is a direction to revisit,
+not an approved full screen/export implementation or a promise every metric is already available.
+
+The immediate design dependency is truthful **Save Activity** behavior: automatically protect
+the ended run as a recoverable activity, then let the runner explicitly finalize it. Existing
+autosave currently happens before Completion and reflections, so renaming Start another run
+would be misleading and removing durable saving would risk loss. Agree recovery, History visibility,
+discard and exactly-once finalization before changing that lifecycle. Save should not require
+Energy, Effort, music or a successful online reflection. Preserve existing saved activities.
+
+Manley proposes moving **View in Log History** out of Completion into this later flow. Keep
+replacement access usable before removing the existing link. Rich map imagery/export, achievement
+presentation and polished splits can be added after the basic save/destination behavior is sound.
+The full run debrief, proposed sequencing and unresolved Energy interaction decisions are in
+`project_current_state.md` (October 18 real-run debrief).
+
 ## Suggested running places on Start — deferred October 16, 2026
 
 **Status: recorded for later consideration, not an implementation task or a change in priorities.**

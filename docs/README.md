@@ -14,15 +14,43 @@ Development tools help us build the app; runtime services
 are what the app actually uses. The browser designs, native phone app and reflection backend
 are separate parts of this project.
 
-**October 18 current delivery:** the multi-song selector is installed on the Moto at Room 15 and
-deployed on Render as `7447c65`. A silent real-service check prepared three songs and selected Lovely
-Day rather than the first candidate for fictional morning-run evidence. This proves service
-integration, not genuine-run or listener-quality acceptance. The next local extension adds exact
-observed recording identity, default-off future-run LRCLIB timing lookup and chosen-song loading;
-it is **Ready to test — local only**, with 193 backend tests, 672 Android tests per debug/release
-variant and all three APK builds passing. Room 16 migration checks are compiled, not executed;
-new phone loading/listening and hosted integration remain untested. It is not installed/deployed. The phone is untouched while
-Manley runs. See [current state](design/project_current_state.md) for precise status and receipts.
+**Latest visual clarification:** the moving light follows one shared rounded rectangle around all
+three pre-run Energy squares, excluding their heading; Completion's visualizer is raised slightly.
+This replaces the earlier individual-square beam. Installed; debug/test builds and seven existing
+silent phone checks passed. Screens inspected and all 36 saved runs/every old database field preserved.
+
+**October 18 preceding visual correction:** total time including breaks is removed from screens and facts speech; trusted
+active time remains. Completion hides the entire reflection until an Energy answer and its intake
+finish, including when the reply prepared early. Explicit Not sure now saves/reopens correctly.
+685 tests per Android variant, all three APK builds and 20 focused silent Moto checks passed.
+Native screens and live beam movement were inspected; all 35 saved runs/every old database field
+were preserved. Installed on the Moto, with no additional schema, permanent file or Render change.
+
+**October 18 preceding phone changes:** Manley approved the run-debrief improvements. Paused metrics,
+ten-second countdown/Start now, optional feeling notes, Energy/Effort refinement, mile updates with
+Off, and protected activity → Save Activity → basic recap are implemented. Room 17 adds finalization
+and local notes without changing old records. The accepted reflection writer and voices stay intact.
+684 tests per Android variant, all APK builds and 28 focused silent Moto checks passed. Screens were
+inspected and all 33 runs/every old field in ten database tables were preserved. The update is
+installed; actual announcement listening and a future ordinary run remain. No Render update is needed.
+See [current state](design/project_current_state.md) for precise behavior and remaining checks.
+
+**October 18 current delivery:** automatic chosen-song loading and broader timing lookup are
+**Building — installed/deployed foundation; phone loading and complete pairing unresolved**.
+Render `9b274e0` is Live with the new snippet capability;
+the Moto was updated in place to Room 16. The 193 backend tests, 672 Android tests per debug/release
+variant and all three APK builds passed. Six focused silent Moto cases passed, and all old database
+fields remained unchanged, including 33 saved runs. The first actual Lose Yourself test captured
+the recording and found LRCLIB timing, but Musixmatch returned empty analysis; both hosted attempts
+stopped before audio or Spotify commands. A separate music-only prepare attempt timed out on the
+previous paused song, without verified target playback or restoration. A refreshed session and
+explicit play-URI failed too. Final checks found Spotify paused and all saved data unchanged;
+test tools/private copies were removed and the main app reopened. This is a failed integration
+case, not an end-to-end pass. Official App Remote is a next candidate, not implemented or confirmed
+available for this account; missing analysis needs a sourced fallback. The future-run setting
+remains off. The preceding
+selector's three-song real-service check proved selection with fictional facts, not genuine-run
+or listener-quality acceptance. See [current state](design/project_current_state.md) for receipts.
 
 | Role | Platform or tool | How it has helped RunState and its current status |
 |---|---|---|
@@ -40,14 +68,14 @@ Manley runs. See [current state](design/project_current_state.md) for precise st
 | Map labels | **Noto Sans Regular** | MapLibre downloads and caches only the required glyph ranges from OpenFreeMap for street and place names. No new font binary is bundled. Noto Sans is licensed under SIL OFL 1.1; the app's existing notices identify the source and license. [Provider font sources](https://github.com/hyperknot/openfreemap-styles/tree/main/fonts); [license record](https://github.com/hyperknot/openfreemap-styles/blob/main/LICENSE.md). |
 | Map networking | **OkHttp 4.12.0** | The dedicated map client permits only the declared HTTPS OpenFreeMap TileJSON, bounded vector-tile coordinates and Noto Sans Regular glyph ranges. It identifies RunState and preserves cache validators; no map credentials or reflection context are sent. Normal Start/Active views make no new tile requests, and no offline-area download or prefetch feature is enabled. [Official source and license](https://github.com/square/okhttp/tree/parent-4.12.0). |
 | Run-start weather | **Open-Meteo; OkHttp** | An off-by-default remembered choice permits one direct HTTPS lookup from a rounded approximate GPS start location. The saved modeled hourly estimate powers Completion/expanded History and can enter the first reflection without coordinates. Three-second total budget; no polling, retry or old-run backfill. No new account/key/subscription; public noncommercial endpoint terms must be revisited before commercial release. [API](https://open-meteo.com/en/docs); [Android privacy](DATA_PRIVACY.md#android-weather-near-the-run-start--october-16-2026). |
-| Reflection runtime | **Anthropic Claude API** | Studies eligible opted-in songs, compares available matched analyses with final run facts/starting Energy, then writes four finishing-Energy branches for one winner. Accepted study/writer prompts and `claude-opus-5-5` remain unchanged. The deployed selector passed a real-service synthetic check; genuine-run choice quality remains to test. The local wider-snippet extension adds a general source-derived landing description, not raw timed lyrics. Keys stay backend-only. |
-| Song understanding | **Musixmatch Pro API, Basic** | Manley approved/purchased the $49/month plan. Supplies bounded meaning, themes/support, moods, genres/entities and optional text snippet for matched songs; Musixmatch receives song identity, not run facts or a full history. Deployed early study can prepare up to 12 distinct opted-in candidates; process-memory reuse remains bounded to 32 entries/two-hour TTL with lazy expiry. More candidates can cost more even when unused. It supplies no recording audio or hook timestamp; Anthropic performs comparison and writing. |
-| Song line timing — local extension | **LRCLIB** | Ready to test locally. Optional five-second lookup uses the chosen title, artist, album and duration after a new default-off future-run choice. Matching these fields within two seconds of duration is not definitive audio-edition proof. Published repeated/title-hook timing can suggest a two-to-ten-second passage beyond the five curated examples. A public Lose Yourself source check found 99.340–102.140 s; it was not an audio audition. Raw LRC stays temporary, outside model prompts, logs, Room and responses. No new subscription; availability, natural phrase endings and actual Spotify loading remain unverified. Not installed/deployed yet. |
+| Reflection runtime | **Anthropic Claude API** | Studies eligible opted-in songs, compares available matched analyses with final run facts/starting Energy, then writes four finishing-Energy branches for one winner. Accepted study/writer prompts and `claude-opus-5-5` remain unchanged. The deployed selector passed a real-service synthetic check; genuine-run choice quality remains to test. The deployed wider-snippet extension adds a general source-derived landing description, not raw timed lyrics; its complete live path still needs checking. Keys stay backend-only. |
+| Song understanding | **Musixmatch Pro API, Basic** | Manley approved/purchased the $49/month plan. Supplies available bounded meaning, themes/support, moods, genres/entities and optional text snippet for matched songs; it receives song identity, not run facts or a full history. Deployed early study can prepare up to 12 distinct opted-in candidates; reuse is bounded to 32 entries/two-hour TTL. More candidates can cost more even when unused. A real Lose Yourself lookup matched the song but returned empty analysis, preventing a paired reflection in that test. Catalog match alone does not establish analysis coverage. It supplies no audio or hook timestamp; Anthropic compares and writes. |
+| Song line timing | **LRCLIB** | Installed/deployed; complete pairing remains Building. Optional five-second lookup uses the chosen title, artist, album and duration after a default-off future-run choice. Metadata matching within two seconds of duration is not definitive audio-edition proof. Published repeated/title-hook timing can suggest a two-to-ten-second passage. The public Lose Yourself fixture found 99.340–102.140 s; actual paused-phone metadata matched source18848635/99.260–101.480 s under one-test consent. Neither was an audio audition. Raw LRC stays temporary, outside model prompts, logs, Room and responses. No new subscription. |
 | Speech runtime | **Android TextToSpeech; ElevenLabs `1st test voice`** | Local facts-only speech precedes the exact selected reflection in Manley's designed male voice, then a 650 ms pause before music. Earlier warm preparation made the wait acceptable to Manley; a complete controlled check measured about 2.25 s from facts finishing to reflection player handoff, not exact audible onset. Voice configuration and accepted writing remain unchanged during broader selection/snippet work. Audio stays in memory; History remains voice-only. |
 | Asset creation and local playback | **ElevenLabs Music v2; Android MediaPlayer** | Generated one temporary original 10-second instrumental on October 14, bundled in the APK with an Eleven Music credit. MediaPlayer plays it after Completion speech when no eligible actual-song plan exists. It remains separate from the requested custom spoken reflection voice and creates no per-run music-generation request. |
-| Music evidence and passage playback | **Spotify through Android media sessions** | The installed app supplies opted-in partial title/artist/playback evidence and five curated current-track passages. The local Room 16 extension also records exact canonical URI/album/duration and can request the chosen observed song after reflection. Preparation is preferred; play-from may briefly sound before seek, restoration is best effort and the queue can change. URI stays on-device; no SDK or audio extraction. Broader loading has not been installed or physically tested. |
-| Hosted backend | **Render** | The existing `runstate-reflections` Starter service in Oregon ($7/month, free Hobby workspace) uses manual deployment and `/health`. Manley deployed `7447c65` via `dep-dbae96e7bikc73e9qckg`; it reached Live October 18 at about 10:25 America/Chicago. Health confirms preparation/selection capability 1; a separate synthetic real-provider check selected Lovely Day. The newer LRCLIB/loading changes are local only. Hosting runs the GitHub backend copy independently of Android installation. |
-| Deployment packaging | **Docker** | Packages Java 17 and backend resources; the Dockerfile copies full `src/` and runs Maven test/package. Render `7447c65` runs the multi-song study/selection/writer backend. The `--remote` CMD remains live mode; its 95 s response budget encloses the 90 s pipeline inside Android's 100 s read timeout. |
+| Music evidence and passage playback | **Spotify through Android media sessions** | The installed Room 16 app supplies opted-in partial playback evidence and canonical URI/album/duration. Five curated timings remain intact. Actual prepare and fresh-session play-URI attempts timed out on the previous paused song despite advertised support; broader loading is unresolved. Final state was paused, with no verified target/clip/restoration. URI stays on-device; no audio extraction. Official [Android App Remote](https://developer.spotify.com/documentation/android) supports starting track playback with user authorization and is a next candidate, not implemented; account/Premium/API-quota questions remain unresolved. |
+| Hosted backend | **Render** | The existing `runstate-reflections` Starter service in Oregon ($7/month, free Hobby workspace) uses manual deployment and `/health`. Manley deployed `9b274e0` via `dep-dbaim27btjjs73fahof0`; it succeeded and is Live. Health 200 confirms snippets/study/preparation/selection capability 1. The preceding deployment's synthetic real-provider check selected Lovely Day; the newer broader-hook path still needs its complete live check. Hosting runs the GitHub backend copy independently of Android installation. |
+| Deployment packaging | **Docker** | Packages Java 17 and backend resources; the Dockerfile copies full `src/` and runs Maven test/package. Render `9b274e0` runs the multi-song study/selection/writer and optional snippet-timing backend. The `--remote` CMD remains live mode; its 95 s response budget encloses the 90 s pipeline inside Android's 100 s read timeout. |
 | Design preview | **Local HTML and GitHub Pages** | `start.html`/`completion.html` and the public preview helped review appearance and interactions. They are browser prototypes, not the installed Kotlin/Compose phone app, and do not prove native tracking or backend behavior. |
 
 Render hosting has an ongoing cost while the paid service remains provisioned, even without a
