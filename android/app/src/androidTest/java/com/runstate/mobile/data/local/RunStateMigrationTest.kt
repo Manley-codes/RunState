@@ -59,6 +59,53 @@ class RunStateMigrationTest {
     private val context = InstrumentationRegistry.getInstrumentation().targetContext
 
     @Test
+    fun versionSixteenKeepsEveryOldRunFieldAndMarksHistorySavedWithoutInventingNotes() {
+        val name = "runstate-v16-activity-finalization-test.db"
+        val old = helper.createDatabase(name, 16)
+        val activeId = "03689ffc-65d9-4907-ae77-7a17b3ad77a6"
+        val finish = OFFICIAL_START + 1_920_000L
+        old.insertVersionTwoRun(state = "COMPLETED", lastCheckpointEpochMillis = finish,
+            finishEpochMillis = finish)
+        old.insertVersionTwoRun(runId = activeId, state = "PAUSED",
+            lastCheckpointEpochMillis = OFFICIAL_START + 30_000L, finishEpochMillis = null)
+        old.execSQL("UPDATE runs SET transition_history_complete=1, music_observation_requested=1, " +
+            "music_reflection_sharing_allowed=1, song_snippet_lookup_allowed=1, " +
+            "pre_run_energy='MODERATE', tracking_mode='GPS'")
+        old.execSQL("UPDATE runs SET final_distance_meters=4828.032, metric_source='GPS', " +
+            "telemetry_coverage='COMPLETE', display_distance_unit='MILES', post_run_effort='WORKING' WHERE run_id=?",
+            arrayOf(RUN_ID))
+        val columns = old.query("SELECT * FROM runs LIMIT 0").use { it.columnNames.toList() }
+        fun rows(db: SupportSQLiteDatabase) = db.query(
+            "SELECT ${columns.joinToString(",") { "`$it`" }} FROM runs ORDER BY run_id"
+        ).use { cursor -> buildList {
+            while (cursor.moveToNext()) add(columns.indices.map { index ->
+                if (cursor.isNull(index)) null else cursor.getString(index)
+            })
+        } }
+        val before = rows(old)
+        old.close()
+        helper.runMigrationsAndValidate(name, 17, true, MIGRATION_16_17).use { migrated ->
+            assertEquals(before, rows(migrated))
+            migrated.query("SELECT activity_finalized, post_run_note FROM runs").use { cursor ->
+                var count = 0
+                while (cursor.moveToNext()) {
+                    assertEquals(1, cursor.getInt(0))
+                    assertTrue(cursor.isNull(1))
+                    count++
+                }
+                assertEquals(2, count)
+            }
+        }
+        val reopened = openDatabaseThroughFactory(name)
+        runBlocking {
+            assertNull(reopened.runDao().findLatestUnfinalizedActivity())
+            assertTrue(requireNotNull(reopened.runDao().findById(RUN_ID)).activityFinalized)
+            assertNull(reopened.runDao().findById(RUN_ID)?.postRunNote)
+            assertEquals(StoredRunState.PAUSED, reopened.runDao().findById(activeId)?.state)
+        }
+    }
+
+    @Test
     fun versionFifteenMigrationPreservesOldFieldsAndDoesNotInventRecordingOrLookupConsent() {
         val name = "runstate-v15-recording-migration-test.db"
         val old = helper.createDatabase(name, 15)

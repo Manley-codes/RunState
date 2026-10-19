@@ -88,9 +88,9 @@ internal sealed interface RunAdmission {
     /**
      * This cycle's run has durably finished, and nothing new has begun yet.
      *
-     * Distinct from [ReadyForCountdown] because the runner is owed a truthful "saved"
-     * before being offered another start. The runner may explicitly retire this cycle
-     * with [RunSessionCoordinator.prepareAnotherRun] to return to the Ready screen.
+     * Distinct from [ReadyForCountdown] because the protected completion awaits the
+     * runner's Save Activity confirmation. After [RunSessionCoordinator.finalizeActivity],
+     * [RunSessionCoordinator.prepareAnotherRun] may return to the Ready screen.
      *
      * @property session the completed owner, still pointing at its finished machine.
      */
@@ -379,13 +379,18 @@ internal class RunSessionCoordinator(
         // a `Failed` never lingers beside a recovery that is currently in flight.
         initializationStatus = InitializationStatus.NotAttempted
 
+        var protectedCompletion: RunEntity? = null
         val result = try {
 
             // Built here, from this coordinator's own machine and DAO, and not retained.
             // Recovery is a decision made once per attempt, not a collaborator with a
             // lifetime; keeping one would mean holding a second reference to the machine
             // that a retired cycle would then leave pointing at the wrong one.
-            ActiveRunRecovery(stateMachine, runDao).recover()
+            ActiveRunRecovery(stateMachine, runDao).recover().also { recovery ->
+                if (recovery is ActiveRunRecoveryResult.NothingToRecover) {
+                    protectedCompletion = runDao.findLatestUnfinalizedActivity()
+                }
+            }
         } catch (cancellation: CancellationException) {
 
             // Cancellation is not a verdict about the database. The status stays
@@ -413,6 +418,12 @@ internal class RunSessionCoordinator(
                 activeSession = null
                 inconsistentActiveRuns = emptyList()
                 clearMetricState()
+                protectedCompletion?.let { run ->
+                    stateMachine.restoreCompleted()
+                    activeSession = ActiveRunSession(run.runId, stateMachine, runDao,
+                        recoveringProtectedCompletion = true)
+                    metricRun = run
+                }
             }
 
             is ActiveRunRecoveryResult.Recovered -> {
@@ -830,6 +841,10 @@ internal class RunSessionCoordinator(
                 "A countdown cannot begin while a run is ${session.state}."
             }
 
+            check(runDao.findById(session.runId)?.activityFinalized == true) {
+                "Save the completed activity before starting another run."
+            }
+
             beginFreshCycle()
         }
 
@@ -841,13 +856,13 @@ internal class RunSessionCoordinator(
     /**
      * Retires a durably completed run and returns to the Ready screen before countdown.
      *
-     * This is the "Start another run" action on Saved. It deliberately makes no run
-     * official and does not touch Room: the runner can choose their next pre-run inputs
+     * This follows explicit Save Activity. It deliberately makes no run
+     * official and does not write Room: the runner can choose their next pre-run inputs
      * before pressing Start. The finished session continues to report COMPLETED to any
      * earlier holder; the new cycle has its own NO_SESSION machine and identity.
      *
      * @throws IllegalStateException unless recovery completed and this coordinator owns a
-     *   finished run with no start or lifecycle write still pending. Refusal changes nothing.
+     *   explicitly finalized run with no start or lifecycle write still pending. Refusal changes nothing.
      */
     suspend fun prepareAnotherRun() = coordinatorLock.withLock {
         check(initializationStatus == InitializationStatus.Completed) {
@@ -867,9 +882,33 @@ internal class RunSessionCoordinator(
         check(session != null && session.state == RunSessionState.COMPLETED) {
             "Another run can only be prepared after a run has finished."
         }
+        check(runDao.findById(session.runId)?.activityFinalized == true) {
+            "Save the completed activity before preparing another run."
+        }
 
         beginFreshCycle()
     }
+
+    /** User confirmation changes only the saved marker; the ended run is already durable. */
+    suspend fun finalizeActivity(runId: String): Boolean = applicationScope.async {
+        coordinatorLock.withLock {
+            check(reservedAction == null && !startReserved) {
+                "Wait for the current run action before saving the activity."
+            }
+            runDao.finalizeActivity(runId).also { finalized ->
+                if (finalized && metricRun?.runId == runId) metricRun = runDao.findById(runId)
+            }
+        }
+    }.await()
+
+    /** Local-only annotation: it is not inferred into Energy or included in reflection requests. */
+    suspend fun updatePostRunNote(runId: String, note: String?): Boolean = applicationScope.async {
+        coordinatorLock.withLock {
+            runDao.setPostRunNote(runId, note).also { updated ->
+                if (updated && metricRun?.runId == runId) metricRun = runDao.findById(runId)
+            }
+        }
+    }.await()
 
     /**
      * Abandons a countdown, returning the coordinator to a fresh NO_SESSION cycle.
@@ -1324,7 +1363,8 @@ internal class RunSessionCoordinator(
                     finalDistanceMeters = metrics.distanceMeters,
                     metricSource = metrics.source,
                     telemetryCoverage = metrics.coverage,
-                    displayDistanceUnit = metrics.displayUnit
+                    displayDistanceUnit = metrics.displayUnit,
+                    activityFinalized = false
                 )
             }
             RunActionKind.DISCARD -> error("Discard has no surviving metric row.")

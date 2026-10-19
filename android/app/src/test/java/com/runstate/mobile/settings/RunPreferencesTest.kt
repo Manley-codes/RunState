@@ -8,6 +8,16 @@ import org.junit.Test
 
 class RunPreferencesTest {
     @Test
+    fun mileAnnouncementsCanBeTurnedOffWithoutChangingMusicConsent() {
+        val values = FakeValues()
+        assertTrue(StoredRunPreferences(values).load().distanceAnnouncements)
+        StoredRunPreferences(values).save(RunPreferences(distanceAnnouncements = false))
+        val reopened = StoredRunPreferences(values).load()
+        assertFalse(reopened.distanceAnnouncements)
+        assertFalse(reopened.observeMusic)
+        assertFalse(reopened.shareMusicInReflection)
+    }
+    @Test
     fun songSnippetLookupNeedsItsOwnChoiceAndSharing() {
         val values = FakeValues(mutableMapOf("observe_music" to true, "share_music_in_reflection" to true))
         assertFalse(StoredRunPreferences(values).load().findSongSnippets)
@@ -56,7 +66,7 @@ class RunPreferencesTest {
 
         assertEquals(disabled, StoredRunPreferences(values).load())
         assertEquals(2, values.commits)
-        assertEquals(setOf("observe_music", "share_music_in_reflection", "music_setup_complete", "capture_weather", "find_song_snippets"),
+        assertEquals(setOf("observe_music", "share_music_in_reflection", "music_setup_complete", "capture_weather", "find_song_snippets", "distance_announcements"),
             values.saved.keys)
     }
 

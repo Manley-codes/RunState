@@ -111,21 +111,79 @@ class RunSettingsScreenTest {
                 modifier = Modifier.systemBarsPadding()
             )
         }
-        compose.onNodeWithText("GPS ready").assertIsDisplayed()
+        // Permission/provider readiness alone does not claim an acquired satellite fix.
+        // The real journey supplies GPS-ready copy separately from its preview evidence.
+        compose.onNodeWithText("GPS enabled").assertIsDisplayed()
         compose.onNodeWithText("Music observation on").assertIsDisplayed()
         compose.onNodeWithTag(START_GPS_TOGGLE_TAG).assertDoesNotExist()
         compose.onNodeWithTag(START_MUSIC_TOGGLE_TAG).assertDoesNotExist()
         compose.onNodeWithTag(START_MUSIC_SHARING_TOGGLE_TAG).assertDoesNotExist()
         compose.onNodeWithTag(START_REFLECTION_SETUP_TAG).assertDoesNotExist()
         savePreview(START_RUN_SCREEN_TAG, "demo-start-clean.png")
+        compose.mainClock.autoAdvance = false
+        compose.mainClock.advanceTimeBy(400L)
+        savePreview(START_ENERGY_CHOICES_TAG, "energy-edge-beam-a.png")
+        compose.mainClock.advanceTimeBy(800L)
+        savePreview(START_ENERGY_CHOICES_TAG, "energy-edge-beam-b.png")
+        compose.mainClock.autoAdvance = true
         compose.onNodeWithTag(START_HISTORY_TAG).performClick()
         compose.onNodeWithTag(START_RUN_SETTINGS_TAG).performClick()
-        compose.onNodeWithTag(START_ENERGY_HIGH_TAG).performScrollTo().performClick()
+        compose.onNodeWithTag(START_ENERGY_HIGH_TAG).assertIsDisplayed().performClick()
         compose.onNodeWithTag(START_RUN_BUTTON_TAG).performClick()
         assertEquals(1, history)
         assertEquals(1, settings)
         assertEquals(1, starts)
         assertEquals(com.runstate.mobile.data.local.PreRunEnergy.HIGH, energy)
+    }
+
+    @Test
+    fun snippetLookupIsSeparateDefaultOffFutureRunChoiceAndRequiresMusicSharing() {
+        var sharing by mutableStateOf(false)
+        var snippets by mutableStateOf(false)
+        var loading by mutableStateOf(false)
+        var preferencesAvailable by mutableStateOf(true)
+        val choices = mutableListOf<Boolean>()
+        var otherActions = 0
+        compose.setContent {
+            RunSettingsDialog(
+                gpsReady = false, gpsMessage = null,
+                musicObservationEnabled = true, musicAccessGranted = true,
+                musicReflectionSharingEnabled = sharing, musicReflectionSharingAvailable = true,
+                reflectionConnectionLabel = null, demoMode = false,
+                onDismiss = { otherActions++ }, onRequestLocationSetup = { otherActions++ },
+                onSetMusicObservation = { otherActions++ }, onRequestMusicAccess = { otherActions++ },
+                onSetMusicReflectionSharing = { sharing = it }, onSetDemoMode = { otherActions++ },
+                onOpenReflectionSetup = { otherActions++ }, settingsLoading = loading,
+                preferencesAvailable = preferencesAvailable, songSnippetsEnabled = snippets,
+                onSetSongSnippets = { choices += it; snippets = it }
+            )
+        }
+        compose.onNodeWithTag(SETTINGS_SONG_SNIPPETS_TAG).performScrollTo().assertIsOff().assertIsNotEnabled()
+        compose.onNodeWithText("For future runs, send the chosen song's title", substring = true)
+            .performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("through RunState to LRCLIB", substring = true).assertExists()
+        compose.onNodeWithText("restoring the previous song is best effort and the queue may change.",
+            substring = true).assertExists()
+        compose.onNodeWithTag(SETTINGS_MUSIC_SHARING_TAG).performScrollTo().performClick()
+        compose.onNodeWithTag(SETTINGS_SONG_SNIPPETS_TAG).performScrollTo().assertIsOff().assertIsEnabled()
+        compose.runOnIdle { assertTrue(choices.isEmpty()) }
+        compose.onNodeWithTag(SETTINGS_SONG_SNIPPETS_TAG).performClick().assertIsOn()
+        compose.runOnIdle { assertEquals(listOf(true), choices); loading = true }
+        compose.onNodeWithTag(SETTINGS_SONG_SNIPPETS_TAG).performScrollTo().assertIsNotEnabled().performTouchInput { click() }
+        compose.runOnIdle {
+            assertEquals(listOf(true), choices)
+            loading = false
+            preferencesAvailable = false
+        }
+        compose.onNodeWithTag(SETTINGS_SONG_SNIPPETS_TAG).performScrollTo().assertIsNotEnabled()
+            .performTouchInput { click() }
+        compose.runOnIdle {
+            assertEquals(listOf(true), choices)
+            assertEquals(0, otherActions)
+            preferencesAvailable = true
+        }
+        compose.onNodeWithTag(SETTINGS_SONG_SNIPPETS_TAG).performScrollTo().performClick().assertIsOff()
+        compose.runOnIdle { assertEquals(listOf(true, false), choices); assertEquals(0, otherActions) }
     }
 
     @Test
@@ -293,6 +351,40 @@ class RunSettingsScreenTest {
     }
 
     @Test
+    fun everyMileChoicePersistsAcrossSettingsReopenAndRestorationWithoutChangingMusic() {
+        val original = RunPreferences(observeMusic = true, shareMusicInReflection = true,
+            musicSetupComplete = true, captureWeather = true, findSongSnippets = true)
+        val fixture = fixture(original)
+        val restoration = renderRoot(fixture)
+        waitForTag(START_RUN_SCREEN_TAG)
+        compose.onNodeWithTag(START_RUN_SETTINGS_TAG).performScrollTo().performClick()
+        waitForTag(SETTINGS_DIALOG_TAG)
+        compose.onNodeWithTag(SETTINGS_DISTANCE_ANNOUNCEMENTS_TAG)
+            .performScrollTo().assertIsOn().performClick()
+        compose.waitUntil(5_000L) { fixture.preferenceWrites == 1 }
+        val quiet = original.copy(distanceAnnouncements = false)
+        assertEquals(quiet, fixture.loadPreferences())
+        assertEquals(quiet, fixture.preferences)
+        compose.onNodeWithTag(SETTINGS_DONE_TAG).performClick()
+        compose.waitUntil(5_000L) {
+            compose.onAllNodesWithTag(SETTINGS_DIALOG_TAG).fetchSemanticsNodes().isEmpty()
+        }
+        restoration.emulateSavedInstanceStateRestore()
+        waitForTag(START_RUN_SCREEN_TAG)
+        compose.onNodeWithTag(START_RUN_SETTINGS_TAG).performScrollTo().performClick()
+        waitForTag(SETTINGS_DIALOG_TAG)
+        compose.onNodeWithTag(SETTINGS_DISTANCE_ANNOUNCEMENTS_TAG)
+            .performScrollTo().assertIsOff().performClick()
+        compose.waitUntil(5_000L) { fixture.preferenceWrites == 2 }
+        assertEquals(original, fixture.loadPreferences())
+        assertEquals(original, fixture.preferences)
+        compose.onNodeWithTag(SETTINGS_MUSIC_OBSERVATION_TAG).performScrollTo().assertIsOn()
+        compose.onNodeWithTag(SETTINGS_MUSIC_SHARING_TAG).performScrollTo().assertIsOn()
+        compose.onNodeWithTag(SETTINGS_SONG_SNIPPETS_TAG).performScrollTo().assertIsOn()
+        assertEquals(0, runBlocking { fixture.database.runDao().countRuns() })
+    }
+
+    @Test
     fun sampleDraftSurvivesRotationButColdProcessRestorationDefaultsBackToGps() {
         val fixture = fixture(RunPreferences(musicSetupComplete = true))
         val restoration = renderRoot(fixture)
@@ -330,7 +422,9 @@ class RunSettingsScreenTest {
         assertEquals(MetricSource.FIXTURE, saved.metricSource)
         assertTrue(saved.musicObservationRequested)
         assertTrue(saved.musicReflectionSharingAllowed)
-        compose.onNodeWithText("Start another run").assertIsDisplayed().performClick()
+        compose.onNodeWithText("Save Activity").assertIsDisplayed().performClick()
+        waitForTag(RUN_ACTIVITY_RECAP_TAG)
+        compose.onNodeWithText("Done").assertIsDisplayed().performClick()
         waitForTag(START_RUN_SCREEN_TAG)
         assertNormalGpsAndPreferences(fixture, savedChoices)
         chooseSampleDemo()
@@ -341,7 +435,7 @@ class RunSettingsScreenTest {
         waitForTag(START_RUN_SCREEN_TAG)
         assertNormalGpsAndPreferences(fixture, savedChoices)
         assertEquals(null, runBlocking { fixture.database.runDao().findById(second.runId) })
-        assertEquals(saved, runBlocking { fixture.database.runDao().findById(first.runId) })
+        assertEquals(saved.copy(activityFinalized = true), runBlocking { fixture.database.runDao().findById(first.runId) })
         assertEquals(1, runBlocking { fixture.database.runDao().countRuns() })
     }
 
@@ -450,12 +544,12 @@ class RunSettingsScreenTest {
         compose.mainClock.autoAdvance = false
         compose.onNodeWithTag(START_RUN_BUTTON_TAG).performClick()
         // Root admission crosses a real Room/coroutine boundary. Advance frames until the
-        // countdown effect itself has begun, rather than advancing three seconds before it.
+        // countdown effect itself has begun, rather than advancing time before it.
         compose.waitUntil(5_000L) {
             compose.mainClock.advanceTimeByFrame()
-            compose.onAllNodesWithText("3").fetchSemanticsNodes().isNotEmpty()
+            compose.onAllNodesWithText(COUNTDOWN_SECONDS.toString()).fetchSemanticsNodes().isNotEmpty()
         }
-        for (digit in listOf("2", "1")) {
+        for (digit in (COUNTDOWN_SECONDS - 1 downTo 1).map(Int::toString)) {
             compose.mainClock.advanceTimeBy(COUNTDOWN_STEP_MILLIS)
             compose.mainClock.advanceTimeByFrame()
             compose.onNodeWithText(digit).assertIsDisplayed()

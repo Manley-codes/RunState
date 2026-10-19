@@ -37,6 +37,7 @@ internal const val SETTINGS_DONE_TAG = "runSettingsDone"
 internal const val SETTINGS_RETRY_PREFERENCES_TAG = "runSettingsRetryPreferences"
 internal const val SETTINGS_WEATHER_TAG = "runSettingsWeather"
 internal const val SETTINGS_SONG_SNIPPETS_TAG = "runSettingsSongSnippets"
+internal const val SETTINGS_DISTANCE_ANNOUNCEMENTS_TAG = "runSettingsDistanceAnnouncements"
 
 private val SettingsInk = Color(0xFF293326)
 private val SettingsCream = Color(0xFFF9FAF5)
@@ -67,7 +68,9 @@ internal fun RunSettingsDialog(
     weatherEnabled: Boolean = false,
     onSetWeather: (Boolean) -> Unit = {},
     songSnippetsEnabled: Boolean = false,
-    onSetSongSnippets: (Boolean) -> Unit = {}
+    onSetSongSnippets: (Boolean) -> Unit = {},
+    distanceAnnouncements: Boolean = true,
+    onSetDistanceAnnouncements: (Boolean) -> Unit = {}
 ) {
     val controlsEnabled = actionsEnabled && !settingsLoading
     val preferenceControlsEnabled = controlsEnabled && preferencesAvailable
@@ -126,6 +129,17 @@ internal fun RunSettingsDialog(
                     }
                 }
 
+                SettingsDivider()
+                SettingsSectionTitle("RUN UPDATES")
+                SettingsPreference(
+                    title = "Every mile",
+                    description = "Brief distance, average pace and active-time updates during GPS runs. " +
+                        "Music returns after each update. Turn off for a quiet run.",
+                    checked = distanceAnnouncements,
+                    enabled = preferenceControlsEnabled,
+                    onCheckedChange = onSetDistanceAnnouncements,
+                    tag = SETTINGS_DISTANCE_ANNOUNCEMENTS_TAG
+                )
                 SettingsDivider()
                 SettingsSectionTitle("MUSIC")
                 SettingsPreference(

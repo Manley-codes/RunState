@@ -49,6 +49,8 @@ internal const val ACTION_FAILED_MESSAGE = "That didn't save. Try again."
 
 /** How long each countdown digit stays on screen. */
 internal const val COUNTDOWN_STEP_MILLIS = 1_000L
+internal const val COUNTDOWN_SECONDS = 10
+internal const val COUNTDOWN_START_NOW_TAG = "countdownStartNow"
 
 /**
  * Draws one [RunUiModel] and reports taps. It decides nothing.
@@ -133,7 +135,15 @@ internal fun RunStateScreen(
     onCloseRunMap: () -> Unit = {},
     onOpenSpotify: () -> Unit = {},
     weatherSummary: String? = null,
-    reflectionSongLabel: String? = null
+    reflectionSongLabel: String? = null,
+    onStartNow: () -> Unit = {},
+    onSaveActivity: (() -> Unit)? = null,
+    activitySaving: Boolean = false,
+    activitySaveError: String? = null,
+    localNote: String? = null,
+    onSaveLocalNote: ((String?) -> Unit)? = null,
+    noteSaving: Boolean = false,
+    noteError: String? = null
 ) {
     val state = model.state
 
@@ -180,7 +190,14 @@ internal fun RunStateScreen(
             savedPreRunEnergy = savedPreRunEnergy,
             completionDateLabel = completionDateLabel,
             weatherSummary = weatherSummary,
-            onReflectionPresentationHoldChange = onReflectionPresentationHoldChange
+            onReflectionPresentationHoldChange = onReflectionPresentationHoldChange,
+            onSaveActivity = onSaveActivity,
+            activitySaving = activitySaving,
+            activitySaveError = activitySaveError,
+            localNote = localNote,
+            onSaveLocalNote = onSaveLocalNote,
+            noteSaving = noteSaving,
+            noteError = noteError
         )
         return
     }
@@ -334,6 +351,12 @@ internal fun RunStateScreen(
                 }
 
                 ScreenAction(
+                    label = "Start now",
+                    enabled = actionsEnabled && countdownDigit != null,
+                    onClick = onStartNow,
+                    modifier = Modifier.testTag(COUNTDOWN_START_NOW_TAG)
+                )
+                SecondaryAction(
                     label = "Cancel",
                     enabled = actionsEnabled,
                     onClick = onCancelCountdown
@@ -381,12 +404,13 @@ internal fun RunStateScreen(
 private fun ScreenAction(
     label: String,
     enabled: Boolean,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     Button(
         onClick = onClick,
         enabled = enabled,
-        modifier = Modifier.padding(top = 24.dp)
+        modifier = modifier.padding(top = 24.dp)
     ) {
         Text(text = label)
     }
@@ -438,18 +462,19 @@ private fun messageFor(state: RunUiState): String = when (state) {
 }
 
 /**
- * Runs the visible 3, 2, 1 countdown only while [lifecycle] is at least STARTED.
+ * Runs a ten-second preparation countdown only while [lifecycle] is at least STARTED.
  *
- * Returns the digit to show, or null when none should be. When the last second has passed,
- * [onFinished] is called once, and that is the only moment an official start may be asked
- * for — which is why this is gated on the lifecycle rather than merely on composition. A
+ * Returns the digit to show, or null when none should be. [onFinished] is called once,
+ * either after the last second or an explicit Start now request.
+ * This is gated on the lifecycle rather than merely on composition. A
  * composition keeps running while the app is in the background; a countdown must not,
  * because a durable start the runner never saw happen is exactly what this prevents.
  *
  * - Dropping below STARTED cancels the countdown and clears the digit.
- * - Returning to STARTED begins again at 3. A countdown is a visual preparation, so there is
+ * - Returning to STARTED begins again at ten. A countdown is a visual preparation, so there is
  *   nothing meaningful to resume part-way through.
- * - A recreated Activity has a new composition, so it too begins again at 3.
+ * - The journey owner cancels unsent GPS intent on background/recreation. This helper never
+ *   stores permission to start a run across compositions.
  *
  * [lifecycle] is passed in by the Activity instead of read from `LocalLifecycleOwner`, so no
  * extra lifecycle-compose dependency is needed and a test can hand in a lifecycle it drives.
@@ -460,34 +485,56 @@ private fun messageFor(state: RunUiState): String = when (state) {
 internal fun rememberLifecycleCountdown(
     active: Boolean,
     lifecycle: Lifecycle,
-    onFinished: () -> Unit
+    onFinished: () -> Unit,
+    startNowRequested: Boolean = false,
+    onCountdownCue: (Int?) -> Unit = {}
 ): Int? {
     var digit by remember { mutableStateOf<Int?>(null) }
+    var finished by remember(active, lifecycle) { mutableStateOf(false) }
     val currentOnFinished by rememberUpdatedState(onFinished)
+    val currentOnCue by rememberUpdatedState(onCountdownCue)
+
+    // Both ways to finish share the same main-thread flag. A tap during the final second
+    // cannot ask the run owner to start again when the timer's delay returns.
+    LaunchedEffect(active, startNowRequested, lifecycle) {
+        if (active && startNowRequested && !finished &&
+            lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) {
+            finished = true
+            digit = null
+            currentOnCue(null)
+            currentOnFinished()
+        }
+    }
 
     LaunchedEffect(active, lifecycle) {
         digit = null
-        if (!active) return@LaunchedEffect
-
-        // Local to this countdown. Once it has finished, returning to STARTED before the
-        // screen has moved on must not count down — or ask for a start — a second time.
-        var finished = false
+        if (!active) {
+            currentOnCue(null)
+            return@LaunchedEffect
+        }
 
         lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
             if (finished) return@repeatOnLifecycle
 
             try {
-                for (step in 3 downTo 1) {
+                for (step in COUNTDOWN_SECONDS downTo 1) {
+                    if (finished) return@repeatOnLifecycle
                     digit = step
+                    if (step == COUNTDOWN_SECONDS || step <= 3) currentOnCue(step)
                     delay(COUNTDOWN_STEP_MILLIS)
                 }
             } catch (cancellation: CancellationException) {
                 digit = null
+                currentOnCue(null)
                 throw cancellation
             }
 
-            finished = true
-            currentOnFinished()
+            if (!finished && lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) {
+                finished = true
+                digit = null
+                currentOnCue(null)
+                currentOnFinished()
+            }
         }
     }
 
@@ -510,7 +557,7 @@ private fun ReadyToStartPreview() = PreviewScreen(RunUiModel(RunUiState.ReadyToS
 
 @Preview(showBackground = true, name = "Countdown")
 @Composable
-private fun CountdownPreview() = PreviewScreen(RunUiModel(RunUiState.Countdown), digit = 3)
+private fun CountdownPreview() = PreviewScreen(RunUiModel(RunUiState.Countdown), digit = COUNTDOWN_SECONDS)
 
 @Preview(showBackground = true, name = "Starting run")
 @Composable

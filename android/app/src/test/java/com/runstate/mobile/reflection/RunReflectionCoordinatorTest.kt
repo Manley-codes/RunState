@@ -83,7 +83,6 @@ class RunReflectionCoordinatorTest {
         override suspend fun energy(
             runId: String, branch: ReflectionBranch, now: Long, selectionHeld: Boolean
         ): RunReflectionEntity {
-            require(branch != ReflectionBranch.NO_SELECTION)
             val old = rows.getValue(runId)
             return old.copy(
                 selectedBranch = old.selectedBranch
@@ -263,6 +262,32 @@ class RunReflectionCoordinatorTest {
         }
     }
 
+    @Test fun explicitNotSureSelectsUnknownAndSurvivesRecoveryWithoutAnotherRequest() {
+        val store = MemoryReflectionStore()
+        var calls = 0
+        val coordinator = RunReflectionCoordinator(
+            runDao = completedDao(), store = store,
+            gateway = ReflectionGateway { calls++; candidates() }, applicationScope = scope(),
+            requestIdSupplier = { UUID.fromString(FIRST_REQUEST_ID) }, nowMillis = { 100L },
+            quietDelay = { CompletableDeferred<Unit>().await() })
+        coordinator.onSavedVisible(RUN_ID, awaitingReceipt = true)
+        coordinator.selectEnergy(RUN_ID, ReflectionBranch.NO_SELECTION)
+        assertEquals(ReflectionBranch.NO_SELECTION, store.rows.getValue(RUN_ID).postRunEnergy)
+        assertEquals(ReflectionBranch.NO_SELECTION, store.rows.getValue(RUN_ID).selectedBranch)
+        assertEquals(RunReflectionState.Preparing(RUN_ID, ReflectionBranch.NO_SELECTION), coordinator.state.value)
+        coordinator.finishReceipt(RUN_ID)
+        val expected = RunReflectionState.Ready(RUN_ID, NO_SELECTION_TEXT, ReflectionBranch.NO_SELECTION)
+        assertEquals(expected, coordinator.state.value)
+        val exact = store.rows.getValue(RUN_ID)
+        val reopened = RunReflectionCoordinator(runDao = completedDao(), store = store,
+            gateway = ReflectionGateway { error("Recovery must not regenerate a saved reflection") },
+            applicationScope = scope(), nowMillis = { 30_000L })
+        reopened.onSavedVisible(RUN_ID)
+        assertEquals(expected, reopened.state.value)
+        assertEquals(exact, store.rows.getValue(RUN_ID))
+        assertEquals(1, calls)
+    }
+
     @Test fun noEnergyGetsAFullQuietWindowAfterReceiptFinishes() {
         val store = MemoryReflectionStore()
         var now = 100L
@@ -286,6 +311,7 @@ class RunReflectionCoordinatorTest {
         now = 15_000L
         release.complete(Unit)
         assertEquals(RunReflectionState.Ready(RUN_ID, NO_SELECTION_TEXT), coordinator.state.value)
+        assertNull("Timeout must not fabricate an explicit Not sure answer", store.rows.getValue(RUN_ID).postRunEnergy)
         assertEquals(NO_SELECTION_TEXT, coordinator.voicePreparation.value?.text)
     }
 

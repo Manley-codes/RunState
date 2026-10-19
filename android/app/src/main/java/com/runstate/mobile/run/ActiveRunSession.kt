@@ -88,22 +88,21 @@ class ActiveRunSession internal constructor(
     val runId: String,
 
     private val stateMachine: RunSessionStateMachine,
-    private val runDao: RunDao
+    private val runDao: RunDao,
+    private val recoveringProtectedCompletion: Boolean = false
 ) {
 
     init {
 
-        // An owner only exists for a run that is already official and unfinished, and
-        // there are now two honest ways to reach that. A normal start comes through
+        // An owner only exists for a run that is already durable. A normal start comes through
         // [RunSessionStarter] and always arrives RUNNING, because the row it just wrote
         // is a running row. Recovery may arrive RUNNING or PAUSED — but only because
         // [ActiveRunRecovery] read that state out of storage first and restored the
         // machine to match it. PAUSED is accepted here as a recovered fact, never as a
         // state this object is willing to assume on its own.
         //
-        // The other three stay refused for the same reason as before. NO_SESSION and
-        // COUNTDOWN mean no run row exists yet, so there is nothing to own, and
-        // COMPLETED means the run is over and has no remaining lifecycle to run.
+        // NO_SESSION and COUNTDOWN have no row to own. COMPLETED is accepted only by
+        // the explicit protected-completion recovery path; its lifecycle remains ended.
         //
         // What does not change is that the owner still caches only [runId]. Recovery
         // hands the entity it read to its own caller, not to this object: a row held in
@@ -116,9 +115,10 @@ class ActiveRunSession internal constructor(
         // enforces that rule by constructing both paths inside one process coordinator.
         check(
             stateMachine.state == RunSessionState.RUNNING ||
-                stateMachine.state == RunSessionState.PAUSED
+                stateMachine.state == RunSessionState.PAUSED ||
+                (recoveringProtectedCompletion && stateMachine.state == RunSessionState.COMPLETED)
         ) {
-            "An active run session can only own a run that is RUNNING or PAUSED, but " +
+            "An owner requires a running, paused, or explicitly recovered protected completion, but " +
                 "this machine is ${stateMachine.state}."
         }
     }

@@ -123,15 +123,18 @@ class RunSessionStateMachine {
         restoreTo(RunSessionState.PAUSED)
     }
 
+    /** Restores a durably ended run whose explicit Save Activity action is still pending. */
+    internal fun restoreCompleted() {
+        restoreTo(RunSessionState.COMPLETED)
+    }
+
     /**
-     * The shared guard behind both recovery entrances.
+     * The shared guard behind the named recovery entrances.
      *
-     * Two named entrances rather than one public `restore(state)` on purpose. A generic
+     * Named entrances rather than one public `restore(state)` on purpose. A generic
      * restore would accept any [RunSessionState] the caller happened to hold, which
-     * reopens exactly what this class exists to prevent: NO_SESSION, COUNTDOWN and
-     * COMPLETED would all become representable restore targets, and the compiler could
-     * not object. Two entrances make the only two legal destinations the only two things
-     * that can be asked for.
+     * reopens exactly what this class exists to prevent: NO_SESSION and COUNTDOWN
+     * would become representable restore targets despite having no durable row.
      *
      * It is also why nothing here mentions the storage enum. The machine describes the
      * session's stages and knows nothing about rows or columns; translating a stored

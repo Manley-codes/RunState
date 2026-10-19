@@ -18,6 +18,20 @@ class RunEntityTest {
     private val canonicalUuid = "0f6a2c1e-9d43-4b7a-9c21-7b5e8a4d1f30"
 
     @Test
+    fun `older rows remain finalized and note validation preserves optional completed only semantics`() {
+        val active = runWith()
+        assertEquals(true, active.activityFinalized)
+        assertNull(active.postRunNote)
+        val completed = active.copy(state = StoredRunState.COMPLETED,
+            finishEpochMillis = officialStart, activityFinalized = false)
+        assertEquals("x".repeat(280), completed.copy(postRunNote = "x".repeat(280)).postRunNote)
+        listOf("", " ", "x".repeat(281)).forEach { invalid ->
+            assertThrows(IllegalArgumentException::class.java) { completed.copy(postRunNote = invalid) }
+        }
+        assertThrows(IllegalArgumentException::class.java) { active.copy(postRunNote = "Tired") }
+    }
+
+    @Test
     fun `timing marks allow zero and require a canonical process identity`() {
         assertEquals(0L, RunTimingMark(0L, canonicalUuid).elapsedRealtimeMillis)
         assertThrows(IllegalArgumentException::class.java) { RunTimingMark(-1L, canonicalUuid) }

@@ -3,6 +3,8 @@ package com.runstate.mobile.run
 import com.runstate.mobile.data.local.DistanceUnit
 import com.runstate.mobile.data.local.MetricSource
 import com.runstate.mobile.data.local.TelemetryCoverage
+import kotlin.math.floor
+import kotlin.math.roundToLong
 
 /**
  * One read-only metric answer for the run this process currently owns.
@@ -63,4 +65,39 @@ internal data class RunMetrics(
             }
         }
     }
+}
+
+/** Consumes crossings once, including silent ones. Recovery seeds from durable distance. */
+internal class RunMilestoneAnnouncements(initialDistanceMeters: Double = 0.0) {
+    private var passedMile = mileAt(initialDistanceMeters)
+
+    fun update(metrics: RunMetrics, running: Boolean, enabled: Boolean): String? {
+        val distance = metrics.distanceMeters ?: return null
+        val mile = mileAt(distance)
+        if (mile <= passedMile) return null
+        val previous = passedMile
+        passedMile = mile // Failed speech, disabled updates and recovery never produce a backlog.
+        if (!running || !enabled || metrics.source != MetricSource.GPS ||
+            metrics.coverage != TelemetryCoverage.COMPLETE || mile != previous + 1 ||
+            distance - mile * METERS_PER_MILE > 160.9344) return null
+        val paceSeconds = metrics.paceSecondsPerMeter?.times(METERS_PER_MILE)
+            ?.takeIf { it.isFinite() && it > 0 && it < Long.MAX_VALUE.toDouble() }?.roundToLong()
+        val activeSeconds = metrics.activeMillis?.div(1_000)
+        return listOfNotNull(
+            "$mile ${if (mile == 1) "mile" else "miles"} completed.",
+            paceSeconds?.let { "Average pace, ${spokenDuration(it)} per mile." },
+            activeSeconds?.let { "Active time, ${spokenDuration(it)}." }
+        ).joinToString(" ")
+    }
+
+    private fun mileAt(distance: Double): Int = if (distance.isFinite() && distance >= 0)
+        floor(distance / METERS_PER_MILE).coerceAtMost(Int.MAX_VALUE.toDouble()).toInt() else 0
+
+    private fun spokenDuration(seconds: Long): String {
+        val parts = listOf(seconds / 3_600 to "hour", seconds / 60 % 60 to "minute", seconds % 60 to "second")
+            .filter { it.first > 0 }.map { (n, unit) -> "$n $unit${if (n == 1L) "" else "s"}" }
+        return parts.ifEmpty { listOf("0 seconds") }.joinToString(", ")
+    }
+
+    private companion object { const val METERS_PER_MILE = 1_609.344 }
 }

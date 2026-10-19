@@ -6,6 +6,7 @@ import com.runstate.mobile.data.local.FinalRunMetrics
 import com.runstate.mobile.data.local.MetricSource
 import com.runstate.mobile.data.local.PreRunEnergy
 import com.runstate.mobile.data.local.RunEntity
+import com.runstate.mobile.data.local.RunTransitionEntity
 import com.runstate.mobile.data.local.RunTransitionType
 import com.runstate.mobile.data.local.RunTrackingMode
 import com.runstate.mobile.data.local.StoredRunState
@@ -150,6 +151,137 @@ class RunSessionCoordinatorTest {
         var cause: Throwable? = null
         attempt.invokeOnCompletion { cause = it }
         return cause
+    }
+
+    @Test
+    fun `completion is protected until idempotent explicit finalization`() = runBlocking {
+        val fixture = Fixture()
+        startedRun(fixture)
+        fixture.clock.nowMillis = FIRST_PAUSE
+        fixture.coordinator.requestAction(RunActionKind.PAUSE).await()
+        fixture.clock.nowMillis = FIRST_FINISH
+        fixture.coordinator.requestAction(RunActionKind.COMPLETE).await()
+        val protectedRun = requireNotNull(fixture.dao.findById(RUN_ID))
+        assertFalse(protectedRun.activityFinalized)
+        assertTrue(runCatching { fixture.coordinator.beginCountdown() }.isFailure)
+        assertTrue(runCatching { fixture.coordinator.prepareAnotherRun() }.isFailure)
+        assertEquals(protectedRun, fixture.dao.findById(RUN_ID))
+        assertTrue(fixture.coordinator.finalizeActivity(RUN_ID))
+        assertTrue(fixture.coordinator.finalizeActivity(RUN_ID))
+        assertEquals(protectedRun.copy(activityFinalized = true), fixture.dao.findById(RUN_ID))
+        assertEquals(1, fixture.dao.countRuns())
+        assertEquals(1, fixture.dao.transitionsFor(RUN_ID).size)
+        fixture.coordinator.prepareAnotherRun()
+        assertEquals(RunAdmission.ReadyForCountdown, fixture.admission())
+        fixture.scope.cancel()
+    }
+
+    @Test
+    fun `cold launch recovers latest protected completion without writing facts or transitions`() = runBlocking {
+        val dao = FakeRunDao()
+        val older = preparedRun(SECOND_RUN_ID).copy(state = StoredRunState.COMPLETED,
+            finishEpochMillis = FIRST_PAUSE, lastCheckpointEpochMillis = FIRST_PAUSE,
+            activityFinalized = false)
+        val latest = preparedRun().copy(state = StoredRunState.COMPLETED,
+            finishEpochMillis = FIRST_FINISH, lastCheckpointEpochMillis = FIRST_FINISH,
+            activityFinalized = false, postRunNote = "Tired legs, happy mind")
+        dao.insert(older)
+        dao.insert(latest)
+        dao.transitions += RunTransitionEntity(SECOND_RUN_ID, 1, RunTransitionType.PAUSE, FIRST_PAUSE)
+        dao.transitions += RunTransitionEntity(RUN_ID, 1, RunTransitionType.PAUSE, FIRST_PAUSE)
+        val before = dao.inserted.toList()
+        val transitionsBefore = dao.transitions.toList()
+        val fixture = Fixture(dao)
+        val first = fixture.coordinator.initialize()
+        assertEquals(RUN_ID, (first.admission as RunAdmission.RunCompleted).session.runId)
+        assertEquals(first, fixture.coordinator.initialize())
+        assertEquals(before, dao.inserted)
+        assertEquals(transitionsBefore, dao.transitions)
+        assertEquals(0, fixture.identitiesIssued)
+        assertEquals(FIRST_FINISH - OFFICIAL_START, fixture.coordinator.runMetrics()?.elapsedMillis)
+        fixture.scope.cancel()
+    }
+
+    @Test
+    fun `existing finalized history stays history and active recovery takes priority over a draft`() = runBlocking {
+        val historical = preparedRun().copy(state = StoredRunState.COMPLETED,
+            finishEpochMillis = FIRST_FINISH, lastCheckpointEpochMillis = FIRST_FINISH)
+        val dao = FakeRunDao().apply { insert(historical) }
+        val historyOnly = Fixture(dao)
+        assertEquals(RunAdmission.ReadyForCountdown, historyOnly.coordinator.initialize().admission)
+        historyOnly.scope.cancel()
+        dao.inserted[0] = historical.copy(activityFinalized = false)
+        dao.insert(preparedRun(SECOND_RUN_ID, SECOND_START))
+        val active = Fixture(dao)
+        val admission = active.coordinator.initialize().admission as RunAdmission.RunInProgress
+        assertEquals(SECOND_RUN_ID, admission.session.runId)
+        assertFalse(requireNotNull(dao.findById(RUN_ID)).activityFinalized)
+        active.scope.cancel()
+    }
+
+    @Test
+    fun `failed protected completion read cannot silently admit a new run and is retryable`() = runBlocking {
+        val failure = IllegalStateException("disk unavailable")
+        val dao = FakeRunDao().apply {
+            insert(preparedRun().copy(state = StoredRunState.COMPLETED,
+                finishEpochMillis = FIRST_FINISH, lastCheckpointEpochMillis = FIRST_FINISH,
+                activityFinalized = false))
+            failPendingCompletionReadWith = failure
+        }
+        val fixture = Fixture(dao)
+        val failed = fixture.coordinator.initialize()
+        assertEquals(InitializationStatus.Failed(failure), failed.initializationStatus)
+        assertEquals(RunAdmission.NotInitialized, failed.admission)
+        assertTrue(runCatching { fixture.coordinator.beginCountdown() }.isFailure)
+        dao.failPendingCompletionReadWith = null
+        assertTrue(fixture.coordinator.initialize().admission is RunAdmission.RunCompleted)
+        assertEquals(1, dao.countRuns())
+        fixture.scope.cancel()
+    }
+
+    @Test
+    fun `failed activity save remains protected and a cancelled screen cannot cancel its retry`() = runBlocking {
+        val fixture = Fixture()
+        startedRun(fixture)
+        fixture.coordinator.requestAction(RunActionKind.PAUSE).await()
+        fixture.coordinator.requestAction(RunActionKind.COMPLETE).await()
+        val protectedRun = requireNotNull(fixture.dao.findById(RUN_ID))
+        fixture.dao.failFinalizationWith = IllegalStateException("disk full")
+        assertTrue(runCatching { fixture.coordinator.finalizeActivity(RUN_ID) }.isFailure)
+        assertEquals(protectedRun, fixture.dao.findById(RUN_ID))
+        fixture.dao.failFinalizationWith = null
+        val reached = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        fixture.dao.duringFinalization = { reached.complete(Unit); release.await() }
+        val screen = launch { fixture.coordinator.finalizeActivity(RUN_ID) }
+        reached.await()
+        screen.cancel()
+        release.complete(Unit)
+        fixture.coordinator.journeySnapshot() // Wait for the process-owned writer to release its lock.
+        assertEquals(protectedRun.copy(activityFinalized = true), fixture.dao.findById(RUN_ID))
+        fixture.scope.cancel()
+    }
+
+    @Test
+    fun `feeling notes are optional bounded local facts and never choose effort or energy`() = runBlocking {
+        val fixture = Fixture()
+        startedRun(fixture)
+        assertFalse(fixture.coordinator.updatePostRunNote(RUN_ID, "not completed"))
+        assertFalse(fixture.coordinator.finalizeActivity(RUN_ID))
+        fixture.coordinator.requestAction(RunActionKind.PAUSE).await()
+        assertFalse(fixture.coordinator.finalizeActivity(RUN_ID))
+        fixture.coordinator.requestAction(RunActionKind.COMPLETE).await()
+        val original = requireNotNull(fixture.dao.findById(RUN_ID))
+        assertTrue(fixture.coordinator.updatePostRunNote(RUN_ID, "  Tired legs, happy mind  "))
+        assertEquals(original.copy(postRunNote = "Tired legs, happy mind"), fixture.dao.findById(RUN_ID))
+        assertTrue(fixture.coordinator.updatePostRunNote(RUN_ID, "x".repeat(280)))
+        assertTrue(runCatching { fixture.coordinator.updatePostRunNote(RUN_ID, "x".repeat(281)) }.isFailure)
+        assertEquals("x".repeat(280), fixture.dao.findById(RUN_ID)?.postRunNote)
+        assertTrue(fixture.coordinator.updatePostRunNote(RUN_ID, " \n "))
+        assertEquals(original, fixture.dao.findById(RUN_ID))
+        assertFalse(fixture.coordinator.updatePostRunNote(SECOND_RUN_ID, "missing"))
+        assertFalse(fixture.coordinator.finalizeActivity(SECOND_RUN_ID))
+        fixture.scope.cancel()
     }
 
     @Test
@@ -1143,6 +1275,7 @@ class RunSessionCoordinatorTest {
         // Act: the next run.
         fixture.clock.nowMillis = SECOND_START
         val secondSession = runBlocking {
+            fixture.coordinator.finalizeActivity(firstSession.runId)
             fixture.coordinator.beginCountdown()
             fixture.startRun()
         }
@@ -1244,6 +1377,7 @@ class RunSessionCoordinatorTest {
         // Act: the next countdown retires the finished cycle, and a new run begins.
         fixture.clock.nowMillis = SECOND_START
         val secondSession = runBlocking {
+            fixture.coordinator.finalizeActivity(firstSession.runId)
             fixture.coordinator.beginCountdown()
             fixture.startRun()
         }
@@ -1722,6 +1856,7 @@ class RunSessionCoordinatorTest {
         runBlocking {
             fixture.coordinator.requestAction(RunActionKind.PAUSE).await()
             fixture.coordinator.requestAction(RunActionKind.COMPLETE).await()
+            fixture.coordinator.finalizeActivity(first.runId)
         }
 
         // Act
@@ -1749,6 +1884,7 @@ class RunSessionCoordinatorTest {
         runBlocking {
             fixture.coordinator.requestAction(RunActionKind.PAUSE).await()
             fixture.coordinator.requestAction(RunActionKind.COMPLETE).await()
+            fixture.coordinator.finalizeActivity(first.runId)
         }
         val storedBefore = fixture.dao.inserted.toList()
         val transitionsBefore = fixture.dao.transitions.toList()

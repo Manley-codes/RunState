@@ -231,9 +231,26 @@ data class RunEntity(
 
     /** Frozen permission for external song-passage lookup; never granted to older runs. */
     @ColumnInfo(name = "song_snippet_lookup_allowed", defaultValue = "0")
-    val songSnippetLookupAllowed: Boolean = false
+    val songSnippetLookupAllowed: Boolean = false,
+
+    /** Old activities stay saved. New completions are protected until Save Activity. */
+    @ColumnInfo(name = "activity_finalized", defaultValue = "1")
+    val activityFinalized: Boolean = true,
+
+    /** Optional local-only feeling description, separate from comparable Energy/Effort. */
+    @ColumnInfo(name = "post_run_note")
+    val postRunNote: String? = null
 ) {
+    companion object {
+        const val POST_RUN_NOTE_MAX_LENGTH = 280
+    }
+
     init {
+
+        require(postRunNote == null || (state == StoredRunState.COMPLETED &&
+            postRunNote.isNotBlank() && postRunNote.length <= POST_RUN_NOTE_MAX_LENGTH)) {
+            "A feeling note belongs to a completed run and must contain 1–280 characters."
+        }
 
         require((startElapsedRealtimeMillis == null) == (timingSessionId == null)) {
             "Start elapsed realtime and timing session must be present together."

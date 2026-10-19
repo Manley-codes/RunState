@@ -31,6 +31,9 @@ import com.runstate.mobile.data.local.StoredRunState
 import com.runstate.mobile.run.InitializationStatus
 import com.runstate.mobile.run.RunAdmission
 import com.runstate.mobile.run.RunJourneySnapshot
+import com.runstate.mobile.run.RunMilestoneAnnouncements
+import com.runstate.mobile.ui.AndroidReflectionSpeaker
+import com.runstate.mobile.ui.ReflectionSpeaker
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -169,6 +172,11 @@ internal class RunTrackingService : Service() {
     private var wakeRenewal: Job? = null
     private var finishedNormally = false
     private var failed = false
+    private var announcementMonitor: Job? = null
+    private var announcementTimeout: Job? = null
+    private var announcementSpeaker: ReflectionSpeaker? = null
+    /** An old cancelled monitor must not stop speech belonging to a replacement run. */
+    private var announcementGeneration = 0L
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -264,6 +272,7 @@ internal class RunTrackingService : Service() {
                     idToResume
                 }
                 runId = id
+                startAnnouncementMonitor(id)
                 app.database.runDao().observeRunById(id).takeWhile { row ->
                     if (row != null) true else {
                         finishRetiredRunObservation(id, startId)
@@ -370,6 +379,7 @@ internal class RunTrackingService : Service() {
             }
 
             StoredRunState.PAUSED -> {
+                stopAnnouncement()
                 stopGps()
                 policy.pause()
                 app.publishTrackingServiceState(RunTrackingServiceState.Paused(id))
@@ -377,12 +387,79 @@ internal class RunTrackingService : Service() {
             }
 
             StoredRunState.COMPLETED -> {
+                stopAnnouncement()
+                announcementMonitor?.cancel()
                 stopGps()
                 finishedNormally = true
                 app.publishTrackingServiceState(RunTrackingServiceState.Idle)
                 stopSelf()
             }
         }
+    }
+
+    /** Uses the same durable metrics as the screen, even while the screen is locked. */
+    private fun startAnnouncementMonitor(id: String) {
+        val generation = ++announcementGeneration
+        announcementMonitor?.cancel()
+        stopAnnouncement()
+        try { announcementSpeaker?.close() } catch (_: RuntimeException) { }
+        announcementSpeaker = null
+        announcementMonitor = scope.launch {
+            try {
+                // Seed from stored distance on attachment: never replay an old mile after recovery.
+                val initialDistance = app.database.locationDao().pointsFor(id)
+                    .lastOrNull { it.acceptedForDistance && it.cumulativeDistanceMeters != null }
+                    ?.cumulativeDistanceMeters ?: 0.0
+                val announcements = RunMilestoneAnnouncements(initialDistance)
+                while (runId == id && generation == announcementGeneration) {
+                    val row = app.database.runDao().findById(id) ?: break
+                    if (row.state == StoredRunState.COMPLETED) break
+                    val enabled = app.runPreferences.value?.distanceAnnouncements == true
+                    if (!enabled || row.state != StoredRunState.RUNNING) stopAnnouncement()
+                    if (enabled && announcementSpeaker == null) {
+                        announcementSpeaker = AndroidReflectionSpeaker(this@RunTrackingService)
+                    }
+                    val metrics = app.runSessionCoordinator.runMetrics()
+                    val text = metrics?.let { announcements.update(it,
+                        running = row.state == StoredRunState.RUNNING, enabled = enabled) }
+                    if (text != null) {
+                        // Room/metrics suspend. Recheck the current owner and preferences so a
+                        // pause, completion, replacement run or disabled setting wins before speech.
+                        val snapshot = app.runSessionCoordinator.journeySnapshot()
+                        val currentOwner = snapshot.admission as? RunAdmission.RunInProgress
+                        val speaker = announcementSpeaker
+                        if (generation == announcementGeneration && runId == id &&
+                            currentOwner != null && currentOwner.session.runId == id &&
+                            currentOwner.session.state == com.runstate.mobile.run.RunSessionState.RUNNING &&
+                            snapshot.reservedAction == null && storedState == StoredRunState.RUNNING &&
+                            app.runPreferences.value?.distanceAnnouncements == true && speaker != null) {
+                            // Claims are already consumed; unavailable focus/voice is skipped, not queued.
+                            stopAnnouncement()
+                            val timeout = scope.launch {
+                                delay(20_000L)
+                                if (generation == announcementGeneration && announcementSpeaker === speaker) {
+                                    speaker.stop()
+                                }
+                            }
+                            announcementTimeout = timeout
+                            speaker.speakReceipt(text) {
+                                timeout.cancel()
+                                if (announcementTimeout === timeout) announcementTimeout = null
+                            }
+                        }
+                    }
+                    delay(1_000L)
+                }
+            } catch (cancelled: CancellationException) { throw cancelled }
+            catch (_: Exception) { /* Optional announcements never stop location recording. */ }
+            finally { if (generation == announcementGeneration) stopAnnouncement() }
+        }
+    }
+
+    private fun stopAnnouncement() {
+        announcementTimeout?.cancel()
+        announcementTimeout = null
+        try { announcementSpeaker?.stop() } catch (_: RuntimeException) { }
     }
 
     @SuppressLint("MissingPermission") // Checked before the service starts and again above.
@@ -747,12 +824,18 @@ internal class RunTrackingService : Service() {
 
     private fun failAndStop(reason: String) {
         failed = true
+        stopAnnouncement()
+        announcementMonitor?.cancel()
         stopGps()
         app.publishTrackingServiceState(RunTrackingServiceState.Failed(reason))
         stopSelf()
     }
 
     override fun onDestroy() {
+        stopAnnouncement()
+        announcementMonitor?.cancel()
+        try { announcementSpeaker?.close() } catch (_: RuntimeException) { }
+        announcementSpeaker = null
         stopGps()
         scope.cancel()
         if (!finishedNormally && !failed) {

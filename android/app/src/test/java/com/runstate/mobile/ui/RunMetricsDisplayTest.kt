@@ -327,9 +327,11 @@ class RunMetricsDisplayTest {
     @Test
     fun `save receipt uses saved fixture facts and spoken duration units`() {
         val run = historyRun(historyStart + 3_661_000L, 1_609.344,
-            TelemetryCoverage.COMPLETE, true)
-        assertEquals("Run saved. Fixture distance, 1 mile. Elapsed time, 1 hour, 1 minute, 1 second.",
-            savedRunReceiptFor(run))
+            TelemetryCoverage.PARTIAL, true)
+        val transitions = listOf(RunTransitionEntity(historyRunId, 1, RunTransitionType.PAUSE,
+            historyStart + 3_661_000L))
+        assertEquals("Run saved. Fixture distance, 1 mile. Active time, 1 hour, 1 minute, 1 second.",
+            savedRunReceiptFor(run, transitions))
     }
 
     @Test
@@ -337,9 +339,9 @@ class RunMetricsDisplayTest {
         val gps = historyRun(historyStart + 60_000L, 2_000.0,
             TelemetryCoverage.PARTIAL, true).copy(metricSource = MetricSource.GPS,
             displayDistanceUnit = DistanceUnit.KILOMETERS)
-        assertEquals("Run saved. Partial GPS distance, 2 kilometers. Elapsed time, 1 minute.",
+        assertEquals("Run saved. Partial GPS distance, 2 kilometers.",
             savedRunReceiptFor(gps))
-        assertEquals("Run saved. Elapsed time, 1 minute.", savedRunReceiptFor(
+        assertEquals("Run saved.", savedRunReceiptFor(
             historyRun(historyStart + 60_000L, historyComplete = false)))
         assertEquals("Run saved.", savedRunReceiptFor(historyRun(null, historyComplete = false)))
     }
@@ -347,8 +349,10 @@ class RunMetricsDisplayTest {
     @Test
     fun `tiny measured receipt does not round movement to zero`() {
         val run = historyRun(historyStart + 999L, 1.0, TelemetryCoverage.PARTIAL, true)
-        assertEquals("Run saved. Fixture distance, less than 0.01 miles. Elapsed time, 0 seconds.",
-            savedRunReceiptFor(run))
+        val transitions = listOf(RunTransitionEntity(historyRunId, 1, RunTransitionType.PAUSE,
+            historyStart + 999L))
+        assertEquals("Run saved. Fixture distance, less than 0.01 miles. Active time, 0 seconds.",
+            savedRunReceiptFor(run, transitions))
     }
 
     @Test
@@ -359,10 +363,10 @@ class RunMetricsDisplayTest {
         val transitions = listOf(RunTransitionEntity(historyRunId, 1, RunTransitionType.PAUSE,
             historyStart + 500_000L))
 
-        assertEquals("Run saved. 1 mile. Elapsed time, 10 minutes. " +
+        assertEquals("Run saved. 1 mile. Active time, 8 minutes, 20 seconds. " +
             "Average pace, 8 minutes, 20 seconds per mile.", savedRunReceiptFor(run, transitions))
-        // Without the actual saved pause rows, this same run cannot safely announce a pace.
-        assertEquals("Run saved. 1 mile. Elapsed time, 10 minutes.", savedRunReceiptFor(run))
+        // Without the actual saved pause rows, neither active duration nor pace is known.
+        assertEquals("Run saved. 1 mile.", savedRunReceiptFor(run))
     }
 
     @Test
@@ -398,6 +402,12 @@ class RunMetricsDisplayTest {
             .forEach { run ->
                 val receipt = savedRunReceiptFor(run, emptyList())
                 assertFalse(receipt, receipt.contains("pace", ignoreCase = true))
+                assertFalse(receipt, receipt.contains("Elapsed time", ignoreCase = true))
+                if (run.transitionHistoryComplete != true ||
+                    run.metricSource == MetricSource.GPS && run.telemetryCoverage != TelemetryCoverage.COMPLETE) {
+                    assertFalse("Unknown active time must never fall back to total: $receipt",
+                        receipt.contains("Active time", ignoreCase = true))
+                }
             }
     }
 
@@ -409,18 +419,19 @@ class RunMetricsDisplayTest {
         listOf(
             listOf(pause.copy(runId = "cccccccc-cccc-4ccc-8ccc-cccccccccccc")),
             listOf(pause.copy(sequenceNumber = 2)),
-            listOf(pause.copy(occurredAtEpochMillis = historyStart + 700_000L)),
-            listOf(pause.copy(occurredAtEpochMillis = historyStart))
+            listOf(pause.copy(occurredAtEpochMillis = historyStart + 700_000L))
         ).forEach { transitions ->
-            assertEquals("Run saved. 1 mile. Elapsed time, 10 minutes.", savedRunReceiptFor(run, transitions))
+            assertEquals("Run saved. 1 mile.", savedRunReceiptFor(run, transitions))
         }
+        assertEquals("Run saved. 1 mile. Active time, 0 seconds.",
+            savedRunReceiptFor(run, listOf(pause.copy(occurredAtEpochMillis = historyStart))))
     }
 
     @Test
     fun `save receipt stays factual when the run carries energy effort and music choices`() {
         val run = historyRun(historyStart + 600_000L, 1_609.344,
             TelemetryCoverage.COMPLETE, true).copy(metricSource = MetricSource.GPS)
-        val factual = "Run saved. 1 mile. Elapsed time, 10 minutes. Average pace, 10 minutes per mile."
+        val factual = "Run saved. 1 mile. Active time, 10 minutes. Average pace, 10 minutes per mile."
         val transitions = listOf(RunTransitionEntity(historyRunId, 1, RunTransitionType.PAUSE,
             historyStart + 600_000L))
         PreRunEnergy.entries.forEach { energy ->

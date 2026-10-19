@@ -32,6 +32,7 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -105,6 +106,10 @@ internal const val RUN_COMPLETE_EFFORT_SHEET_TAG = "runCompleteEffortSheet"
 internal const val RUN_COMPLETE_EFFORT_CHOICE_TAG_PREFIX = "runCompleteEffortChoice:"
 internal const val RUN_COMPLETE_HISTORY_TAG = "runCompleteHistory"
 internal const val RUN_COMPLETE_AUDIO_STOP_TAG = "runCompleteAudioStop"
+internal const val RUN_COMPLETE_SAVE_ACTIVITY_TAG = "runCompleteSaveActivity"
+internal const val RUN_COMPLETE_NOTE_TAG = "runCompleteNote"
+internal const val RUN_COMPLETE_NOTE_SAVE_TAG = "runCompleteNoteSave"
+internal const val RUN_ACTIVITY_RECAP_TAG = "runActivityRecap"
 
 internal val CompletionInk = Color(0xFF4A5049)
 internal val CompletionStrongInk = Color(0xFF2D3832)
@@ -182,12 +187,22 @@ internal fun RunCompleteScreen(
     completionDateLabel: String? = null,
     onReflectionPresentationHoldChange: (Boolean) -> Unit = {},
     weatherSummary: String? = null,
-    reflectionSongLabel: String? = null
+    reflectionSongLabel: String? = null,
+    onSaveActivity: (() -> Unit)? = null,
+    activitySaving: Boolean = false,
+    activitySaveError: String? = null,
+    localNote: String? = null,
+    onSaveLocalNote: ((String?) -> Unit)? = null,
+    noteSaving: Boolean = false,
+    noteError: String? = null
 ) {
     val distance = splitMetric(metrics?.distance ?: "—")
     val pace = splitMetric(metrics?.averagePace ?: "—")
     val sourceLabel = metrics?.sourceLabel ?: "Metrics unavailable"
-    var effortSheetOpen by rememberSaveable { mutableStateOf(false) }
+    var effortFollowupOpen by rememberSaveable { mutableStateOf(false) }
+    var effortFollowupPending by rememberSaveable { mutableStateOf(false) }
+    var noteOpen by rememberSaveable { mutableStateOf(false) }
+    var noteDraft by rememberSaveable(localNote) { mutableStateOf(localNote.orEmpty()) }
     var energyChoicesOpen by rememberSaveable { mutableStateOf(false) }
     var energySubmitted by rememberSaveable { mutableStateOf(false) }
     val reflectionFinal = reflection is RunCompleteReflectionDisplay.Ready
@@ -241,8 +256,17 @@ internal fun RunCompleteScreen(
         ringBounds = bounds
     }
 
-    // Restored sheets continue holding the quiet no-Energy window after rotation.
-    LaunchedEffect(effortSheetOpen) { currentSheetOpenChange(effortSheetOpen) }
+    // The optional inline follow-up never holds or delays the reflection.
+    LaunchedEffect(Unit) { currentSheetOpenChange(false) }
+    LaunchedEffect(intake, effortFollowupPending, effortEnabled) {
+        if (intake == null && effortFollowupPending && effortEnabled) {
+            effortFollowupPending = false
+            effortFollowupOpen = selectedEffort == null
+        }
+    }
+    LaunchedEffect(effortError) {
+        if (effortError != null) effortFollowupOpen = true
+    }
     // This changes presentation only. The owner has already selected and saved the reply.
     LaunchedEffect(reflectionFinal) {
         if (reflectionFinal && !previousReflectionFinal) energyChoicesOpen = false
@@ -257,8 +281,7 @@ internal fun RunCompleteScreen(
 
     // A recorded choice and a finished provider response are separate states. Waiting
     // for the latter must never cause the answered initial choices to return.
-    val hasEnergyAnswer = energySubmitted ||
-        (selectedEnergy != null && selectedEnergy != ReflectionBranch.NO_SELECTION)
+    val hasEnergyAnswer = energySubmitted || selectedEnergy != null
 
     Box(
         modifier = modifier
@@ -285,11 +308,10 @@ internal fun RunCompleteScreen(
                     .verticalScroll(rememberScrollState())
                     .padding(start = 26.dp, top = 22.dp, end = 24.dp, bottom = 24.dp)
             ) {
-                SavedStatus(sourceLabel, completionDateLabel)
+                SavedStatus(sourceLabel, completionDateLabel, isDraft = onSaveActivity != null)
                 Spacer(modifier = Modifier.height(18.dp))
                 CompletionHero(
                     distance = distance,
-                    elapsed = metrics?.elapsed ?: "—",
                     pace = pace,
                     active = metrics?.active ?: "—",
                     phase = ringPhase,
@@ -307,13 +329,13 @@ internal fun RunCompleteScreen(
                 CompletionEnergySummary(
                     before = savedPreRunEnergy,
                     after = selectedEnergy,
-                    showAfter = reflectionFinal && !initialPresentationHeld,
-                    canEdit = energyEnabled && (reflectionFinal || hasEnergyAnswer) && !initialPresentationHeld,
+                    showAfter = hasEnergyAnswer && !initialPresentationHeld,
+                    canEdit = energyEnabled && hasEnergyAnswer && !initialPresentationHeld,
                     editEnabled = actionsEnabled,
                     choicesOpen = energyChoicesOpen,
                     onEdit = { energyChoicesOpen = !energyChoicesOpen }
                 )
-                if (energyEnabled && ((!reflectionFinal && !hasEnergyAnswer) || energyChoicesOpen)) {
+                if (energyEnabled && (!hasEnergyAnswer || energyChoicesOpen)) {
                     EnergyChoices(
                         selectedEnergy = selectedEnergy,
                         onSelectEnergy = { branch ->
@@ -321,6 +343,7 @@ internal fun RunCompleteScreen(
                             intake = null
                             energySubmitted = true
                             energyChoicesOpen = false
+                            effortFollowupPending = effortEnabled && selectedEffort == null
                             animationsEnabled = ValueAnimator.areAnimatorsEnabled()
                             val root = rootBounds
                             val ring = ringBounds
@@ -332,7 +355,7 @@ internal fun RunCompleteScreen(
                                     allTiles.mapValues { (_, bounds) -> bounds!!.translate(-root.topLeft) },
                                     ring.center - root.topLeft
                                 )
-                                if (!reflectionFinal) {
+                                if (!hasEnergyAnswer) {
                                     // Register before the owner can synchronously publish READY.
                                     initialPresentationHeld = true
                                     currentPresentationHoldChange(true)
@@ -349,23 +372,34 @@ internal fun RunCompleteScreen(
                             tileBounds[branch] = bounds
                         }
                     )
-                }
-                if (effortEnabled && !reflectionFinal) {
-                    EffortControl(
-                        selectedEffort = selectedEffort,
-                        saving = effortSaving,
-                        error = effortError,
+                    TextButton(
+                        onClick = {
+                            energySubmitted = true
+                            energyChoicesOpen = false
+                            onSelectEnergy(ReflectionBranch.NO_SELECTION)
+                        },
                         enabled = actionsEnabled,
-                        onOpen = { effortSheetOpen = true }
-                    )
+                        colors = ButtonDefaults.textButtonColors(contentColor = CompletionMutedInk),
+                        modifier = Modifier.heightIn(min = 48.dp)
+                    ) { Text("Not sure") }
                 }
-                if (reflection != null && !initialPresentationHeld) {
+                if (effortEnabled && !initialPresentationHeld &&
+                    (effortFollowupOpen || effortSaving)) {
+                    InlineEffortChoices(effortSaving, effortError, actionsEnabled,
+                        onSelect = { effort ->
+                            effortFollowupOpen = false
+                            onSelectEffort(effort)
+                        },
+                        onSkip = { effortFollowupOpen = false })
+                }
+                if (reflection != null && hasEnergyAnswer && !initialPresentationHeld) {
                     Spacer(modifier = Modifier.height(14.dp))
                     ReflectionPanel(
                         reflection = reflection,
                         onRetry = onRetryReflection,
                         retryEnabled = actionsEnabled,
-                        isTestData = isTestData
+                        isTestData = isTestData,
+                        isDraft = onSaveActivity != null
                     )
                     if (reflectionAudioActive) {
                         Text(
@@ -383,16 +417,41 @@ internal fun RunCompleteScreen(
                         ) { Text("Stop audio") }
                     }
                 }
-                if (effortEnabled && reflectionFinal) {
-                    EffortControl(
-                        selectedEffort = selectedEffort,
-                        saving = effortSaving,
-                        error = effortError,
-                        enabled = actionsEnabled,
-                        onOpen = { effortSheetOpen = true }
-                    )
+                if (onSaveLocalNote != null) {
+                    TextButton(
+                        onClick = { noteOpen = !noteOpen },
+                        enabled = actionsEnabled && !noteSaving,
+                        colors = ButtonDefaults.textButtonColors(contentColor = CompletionMutedInk),
+                        modifier = Modifier.heightIn(min = 48.dp)
+                    ) { Text(if (noteOpen) "Close note" else if (localNote.isNullOrBlank()) "Something else? Add a note" else "Edit your note") }
+                    if (noteOpen) {
+                        OutlinedTextField(
+                            value = noteDraft,
+                            onValueChange = { noteDraft = it.take(280) },
+                            enabled = actionsEnabled && !noteSaving,
+                            label = { Text("How did you feel?") },
+                            supportingText = { Text("Optional · saved on this phone · ${noteDraft.length}/280") },
+                            minLines = 2,
+                            maxLines = 5,
+                            modifier = Modifier.fillMaxWidth().testTag(RUN_COMPLETE_NOTE_TAG)
+                        )
+                        TextButton(
+                            onClick = { onSaveLocalNote(noteDraft.trim().ifBlank { null }) },
+                            enabled = actionsEnabled && !noteSaving && noteDraft.trim() != localNote.orEmpty(),
+                            modifier = Modifier.heightIn(min = 48.dp).testTag(RUN_COMPLETE_NOTE_SAVE_TAG)
+                        ) { Text(if (noteSaving) "Saving note…" else "Save note") }
+                        TextButton(onClick = {
+                            noteDraft = localNote.orEmpty()
+                            noteOpen = false
+                        }, enabled = actionsEnabled && !noteSaving,
+                            modifier = Modifier.heightIn(min = 48.dp)) {
+                            Text("Cancel note changes")
+                        }
+                        if (noteError != null) Text(noteError, color = CompletionStrongInk,
+                            fontSize = 12.sp, lineHeight = 18.sp)
+                    }
                 }
-                if (showHistory) {
+                if (showHistory && onSaveActivity == null) {
                     TextButton(
                         onClick = onViewHistory,
                         enabled = actionsEnabled,
@@ -408,9 +467,18 @@ internal fun RunCompleteScreen(
                 }
             }
 
+            if (activitySaveError != null) {
+                Text(activitySaveError, color = CompletionStrongInk, fontSize = 13.sp,
+                    lineHeight = 19.sp, modifier = Modifier.padding(horizontal = 24.dp))
+            }
+            if (onSaveActivity != null && noteDraft.trim() != localNote.orEmpty()) {
+                Text("Save your note before finishing the activity.", color = CompletionMutedInk,
+                    fontSize = 12.sp, modifier = Modifier.padding(horizontal = 24.dp))
+            }
             Button(
-                onClick = onStartAnother,
-                enabled = actionsEnabled,
+                onClick = onSaveActivity ?: onStartAnother,
+                enabled = actionsEnabled && !activitySaving && !noteSaving &&
+                    (onSaveActivity == null || noteDraft.trim() == localNote.orEmpty()),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = CompletionStrongInk,
                     contentColor = Color.White,
@@ -423,9 +491,10 @@ internal fun RunCompleteScreen(
                     .fillMaxWidth()
                     .padding(horizontal = 24.dp, vertical = 20.dp)
                     .heightIn(min = 56.dp)
+                    .testTag(RUN_COMPLETE_SAVE_ACTIVITY_TAG)
             ) {
                 Text(
-                    text = "Start another run",
+                    text = if (activitySaving) "Saving activity…" else if (onSaveActivity != null) "Save Activity" else "Start another run",
                     fontSize = 16.sp,
                     fontWeight = FontWeight.SemiBold,
                     letterSpacing = 0.2.sp
@@ -437,16 +506,87 @@ internal fun RunCompleteScreen(
         // Drawn copies do not expose duplicate actions or intercept the fixed footer.
         intake?.let { current -> CompletionEnergyIntakeOverlay(current, time = { intakeTime.value }) }
 
-        if (effortSheetOpen && effortEnabled) {
-            EffortChoiceSheet(
-                selectedEffort = selectedEffort,
-                enabled = actionsEnabled && !effortSaving,
-                onDismiss = { effortSheetOpen = false },
-                onSelect = { effort ->
-                    effortSheetOpen = false
-                    onSelectEffort(effort)
+    }
+}
+
+/** A read-only recap of the finalized activity. It neither generates nor replays a reflection. */
+@Composable
+internal fun RunActivityRecapScreen(
+    item: RunHistoryItem?,
+    localNote: String?,
+    onViewHistory: () -> Unit,
+    onDone: () -> Unit,
+    modifier: Modifier = Modifier,
+    route: HistoryRouteDisplay? = null,
+    splits: HistorySplitDisplay? = null,
+    onRetrySplits: () -> Unit = {},
+    loadError: String? = null,
+    actionsEnabled: Boolean = true
+) {
+    Column(modifier.fillMaxSize().background(CompletionSurfaceTop).testTag(RUN_ACTIVITY_RECAP_TAG)) {
+        Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState())
+            .padding(horizontal = 24.dp, vertical = 22.dp),
+            verticalArrangement = Arrangement.spacedBy(18.dp)) {
+            Text("ACTIVITY SAVED", color = CompletionGreen, fontSize = 12.sp,
+                fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
+            if (item == null) {
+                Text(loadError ?: "Your activity is saved. Its details are still loading.", color = CompletionStrongInk,
+                    fontSize = 18.sp, lineHeight = 25.sp)
+            } else {
+                if (loadError != null) Text(loadError, color = CompletionStrongInk,
+                    fontSize = 13.sp, lineHeight = 19.sp)
+                Text(item.dateLabel, color = CompletionMutedInk, fontSize = 13.sp)
+                DistanceInstrument(splitMetric(item.metrics?.distance ?: "—"))
+                CompactMetrics(pace = splitMetric(item.metrics?.averagePace ?: "—"),
+                    active = item.metrics?.active ?: "—", modifier = Modifier.fillMaxWidth(),
+                    generousSpacing = true)
+                Text(item.metrics?.sourceLabel ?: "Metrics unavailable", color = CompletionMutedInk,
+                    fontSize = 12.sp)
+                CompletionEnergySummary(item.preRunEnergy, item.energy, true, false, false, false, {})
+                item.effort?.let { Text("Effort · ${it.displayLabel()}", color = CompletionStrongInk,
+                    fontSize = 14.sp) }
+                if (!localNote.isNullOrBlank()) {
+                    Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                        Text("YOUR NOTE", color = CompletionMutedInk, fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp)
+                        Text(localNote, color = CompletionStrongInk, fontSize = 16.sp, lineHeight = 23.sp)
+                    }
                 }
-            )
+                item.weatherSummary?.let { Text(it, color = CompletionMutedInk, fontSize = 13.sp,
+                    lineHeight = 19.sp) }
+                if (item.isGpsRun) {
+                    when (route) {
+                        is HistoryRouteDisplay.Ready -> GpsRoutePreview(route.data, coverage = item.telemetryCoverage)
+                        HistoryRouteDisplay.Failed -> Text("The recorded path couldn’t load. Your activity is saved.",
+                            color = CompletionMutedInk, fontSize = 13.sp, lineHeight = 19.sp)
+                        HistoryRouteDisplay.Loading, null -> Text("Loading your recorded path…",
+                            color = CompletionMutedInk, fontSize = 13.sp)
+                    }
+                    Box(Modifier.fillMaxWidth().background(CompletionStrongInk, RoundedCornerShape(12.dp))
+                        .padding(horizontal = 16.dp, vertical = 4.dp)) {
+                        HistorySplitsPanel(splits, onRetrySplits)
+                    }
+                }
+                item.reflectionText?.takeIf { it.isNotBlank() }?.let { exactText ->
+                    ReflectionPanel(RunCompleteReflectionDisplay.Ready(exactText), {}, false, item.isTestData)
+                }
+                if (item.reflectionText.isNullOrBlank()) {
+                    Text("Your activity is saved. You can check its reflection in Log History.",
+                        color = CompletionMutedInk, fontSize = 13.sp, lineHeight = 19.sp)
+                }
+                item.reflectionMusicSummary?.let { Text(it, color = CompletionMutedInk,
+                    fontSize = 12.sp, lineHeight = 18.sp) }
+            }
+            TextButton(onClick = onViewHistory, enabled = actionsEnabled,
+                modifier = Modifier.heightIn(min = 48.dp).testTag(RUN_COMPLETE_HISTORY_TAG)) {
+                Text("View in Log History")
+            }
+        }
+        Button(onClick = onDone, enabled = actionsEnabled,
+            colors = ButtonDefaults.buttonColors(containerColor = CompletionStrongInk),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 20.dp)
+                .heightIn(min = 56.dp), shape = RoundedCornerShape(16.dp)) {
+            Text("Done", fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
         }
     }
 }
@@ -479,7 +619,8 @@ private fun CompletionEnergySummary(
         ReflectionBranch.SPENT -> "Spent"
         ReflectionBranch.FEELING_GOOD -> "Feeling Good"
         ReflectionBranch.POWERED_UP -> "Powered Up"
-        ReflectionBranch.NO_SELECTION, null -> "Not selected"
+        ReflectionBranch.NO_SELECTION -> "Not sure"
+        null -> "Not selected"
     }
     val largeText = LocalDensity.current.fontScale > 1.3f
     Column(modifier = Modifier.fillMaxWidth().padding(top = 12.dp, bottom = 8.dp)) {
@@ -539,29 +680,37 @@ private fun EnergySummaryFact(
     }
 }
 
-/** Effort stays smaller than Energy and never implies that an answer is required. */
+/** A compact, skippable follow-up after Energy; reflection rendering proceeds independently. */
 @Composable
-private fun EffortControl(
-    selectedEffort: PostRunEffort?,
+private fun InlineEffortChoices(
     saving: Boolean,
     error: String?,
     enabled: Boolean,
-    onOpen: () -> Unit
+    onSelect: (PostRunEffort) -> Unit,
+    onSkip: () -> Unit
 ) {
-    Column(modifier = Modifier.fillMaxWidth().padding(top = 2.dp)) {
-        TextButton(
-            onClick = onOpen,
-            enabled = enabled && !saving,
-            colors = ButtonDefaults.textButtonColors(contentColor = CompletionMutedInk),
-            contentPadding = PaddingValues(horizontal = 0.dp, vertical = 8.dp),
-            modifier = Modifier.heightIn(min = 48.dp).testTag(RUN_COMPLETE_EFFORT_TAG)
-        ) {
-            Text(
-                text = selectedEffort?.let { "EFFORT · ${it.displayLabel().uppercase()}" } ?: "EFFORT +",
-                fontSize = 11.sp,
-                fontWeight = FontWeight.SemiBold,
-                letterSpacing = 1.2.sp
-            )
+    Column(modifier = Modifier.fillMaxWidth().padding(top = 12.dp).testTag(RUN_COMPLETE_EFFORT_TAG),
+        verticalArrangement = Arrangement.spacedBy(5.dp)) {
+        Text("How hard was that?", color = CompletionStrongInk, fontSize = 16.sp,
+            fontWeight = FontWeight.Medium)
+        Text("Optional · how much effort the run took", color = CompletionMutedInk,
+            fontSize = 12.sp, lineHeight = 18.sp)
+        if (!saving) {
+            PostRunEffort.entries.chunked(2).forEach { pair ->
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    pair.forEach { effort ->
+                        OutlinedButton(onClick = { onSelect(effort) }, enabled = enabled,
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = CompletionStrongInk),
+                            modifier = Modifier.weight(1f).heightIn(min = 48.dp)
+                                .testTag(RUN_COMPLETE_EFFORT_CHOICE_TAG_PREFIX + effort.name)) {
+                            Text(effort.displayLabel(), fontSize = 13.sp)
+                        }
+                    }
+                }
+            }
+            TextButton(onClick = onSkip, enabled = enabled, modifier = Modifier.heightIn(min = 48.dp)) {
+                Text("Skip", color = CompletionMutedInk)
+            }
         }
         if (saving) {
             Text("Saving Effort…", color = CompletionMutedInk, fontSize = 12.sp)
@@ -639,7 +788,8 @@ private fun ReflectionPanel(
     reflection: RunCompleteReflectionDisplay,
     onRetry: () -> Unit,
     retryEnabled: Boolean,
-    isTestData: Boolean
+    isTestData: Boolean,
+    isDraft: Boolean = false
 ) {
     Column(
         modifier = Modifier
@@ -683,7 +833,7 @@ private fun ReflectionPanel(
                     modifier = Modifier.padding(top = 18.dp)
                 )
                 Text(
-                    text = "Your run is already saved.",
+                    text = if (isDraft) "Your run is protected on this phone." else "Your run is already saved.",
                     color = CompletionMutedInk,
                     fontSize = 13.sp,
                     lineHeight = 19.sp,
@@ -703,7 +853,7 @@ private fun ReflectionPanel(
             )
 
             RunCompleteReflectionDisplay.ConnectionNeeded -> {
-                Text("Your run is saved on this phone.", color = CompletionStrongInk,
+                Text(if (isDraft) "Your run is protected on this phone." else "Your run is saved on this phone.", color = CompletionStrongInk,
                     fontSize = 19.sp, lineHeight = 26.sp, modifier = Modifier.padding(top = 18.dp))
                 Text("Energy and Effort can still be recorded here. Set up reflections on Start, then retry this run in Log History.",
                     color = CompletionMutedInk, fontSize = 13.sp, lineHeight = 19.sp,
@@ -719,7 +869,8 @@ private fun ReflectionPanel(
                     modifier = Modifier.padding(top = 18.dp)
                 )
                 Text(
-                    text = "Your run is saved. You can retry the reflection when a connection is available.",
+                    text = if (isDraft) "Your run is protected on this phone. You can retry the reflection when a connection is available."
+                        else "Your run is saved. You can retry the reflection when a connection is available.",
                     color = CompletionMutedInk,
                     fontSize = 13.sp,
                     lineHeight = 19.sp,
@@ -924,7 +1075,7 @@ private fun Modifier.completionBrackets(color: Color): Modifier = drawBehind {
 
 /** The reference uses one quiet line rather than a badge or a second page title. */
 @Composable
-private fun SavedStatus(sourceLabel: String, completionDateLabel: String?) {
+private fun SavedStatus(sourceLabel: String, completionDateLabel: String?, isDraft: Boolean = false) {
     val largeText = LocalDensity.current.fontScale > 1.35f
 
     if (largeText) {
@@ -934,7 +1085,7 @@ private fun SavedStatus(sourceLabel: String, completionDateLabel: String?) {
             verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             Text(
-                text = "RUN SAVED",
+                text = if (isDraft) "RUN COMPLETE" else "RUN SAVED",
                 color = CompletionGreen,
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Bold,
@@ -955,7 +1106,7 @@ private fun SavedStatus(sourceLabel: String, completionDateLabel: String?) {
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                text = "RUN SAVED",
+                text = if (isDraft) "RUN COMPLETE" else "RUN SAVED",
                 color = CompletionGreen,
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Bold,
@@ -987,7 +1138,6 @@ private fun SavedStatus(sourceLabel: String, completionDateLabel: String?) {
 @Composable
 private fun CompletionHero(
     distance: MetricParts,
-    elapsed: String,
     pace: MetricParts,
     active: String,
     phase: State<Float>,
@@ -1000,7 +1150,6 @@ private fun CompletionHero(
         if (!largeText && maxWidth >= 320.dp) {
             OffsetCompletionHero(
                 distance = distance,
-                elapsed = elapsed,
                 pace = pace,
                 active = active,
                 phase = phase,
@@ -1010,7 +1159,6 @@ private fun CompletionHero(
         } else {
             AccessibleCompletionHero(
                 distance = distance,
-                elapsed = elapsed,
                 pace = pace,
                 active = active,
                 phase = phase,
@@ -1025,7 +1173,6 @@ private fun CompletionHero(
 @Composable
 private fun OffsetCompletionHero(
     distance: MetricParts,
-    elapsed: String,
     pace: MetricParts,
     active: String,
     phase: State<Float>,
@@ -1039,12 +1186,11 @@ private fun OffsetCompletionHero(
         content = {
             DistanceInstrument(distance = distance, compact = true)
             CompactMetrics(
-                elapsed = elapsed,
                 pace = pace,
                 active = active,
                 compact = true
             )
-            CompletionVisualizer(phase, intakeTime, modifier = Modifier.size(80.dp).then(ringModifier))
+            CompletionVisualizer(phase, intakeTime, modifier = Modifier.size(104.dp).then(ringModifier))
         }
     ) { measurables, constraints ->
         val looseConstraints = constraints.copy(minWidth = 0, minHeight = 0)
@@ -1084,8 +1230,12 @@ private fun OffsetCompletionHero(
             distanceY + distancePlaceable.height,
             metricsY + metricsPlaceable.height
         )
-        val markY = if (markFitsBetween) 22.dp.roundToPx() else factsBottom + gap
-        val height = constraints.constrainHeight(maxOf(factsBottom, markY + markPlaceable.height))
+        val reservedMarkY = if (markFitsBetween) 22.dp.roundToPx() else factsBottom + gap
+        // Lift only the mark; keep its original reserved height so the rest of Completion
+        // stays put. The stacked fallback must never move back over the measured facts.
+        val markY = (reservedMarkY - 8.dp.roundToPx())
+            .coerceAtLeast(if (markFitsBetween) 0 else factsBottom)
+        val height = constraints.constrainHeight(maxOf(factsBottom, reservedMarkY + markPlaceable.height))
 
         layout(width, height) {
             distancePlaceable.placeRelative(0, distanceY)
@@ -1099,7 +1249,6 @@ private fun OffsetCompletionHero(
 @Composable
 private fun AccessibleCompletionHero(
     distance: MetricParts,
-    elapsed: String,
     pace: MetricParts,
     active: String,
     phase: State<Float>,
@@ -1113,12 +1262,11 @@ private fun AccessibleCompletionHero(
             intakeTime = intakeTime,
             modifier = Modifier
                 .align(Alignment.CenterHorizontally)
-                .padding(vertical = 18.dp)
+                .padding(top = 10.dp, bottom = 26.dp)
                 .size(116.dp)
                 .then(ringModifier)
         )
         CompactMetrics(
-            elapsed = elapsed,
             pace = pace,
             active = active,
             modifier = Modifier.fillMaxWidth(),
@@ -1205,7 +1353,6 @@ private fun DistanceRuler(modifier: Modifier = Modifier) {
 
 @Composable
 private fun CompactMetrics(
-    elapsed: String,
     pace: MetricParts,
     active: String,
     modifier: Modifier = Modifier,
@@ -1216,11 +1363,9 @@ private fun CompactMetrics(
         modifier = modifier.testTag(RUN_COMPLETE_METRICS_TAG),
         verticalArrangement = Arrangement.spacedBy(if (generousSpacing) 14.dp else 10.dp)
     ) {
-        CompactMetric(value = elapsed, label = "TIME", valueSize = if (compact) 20.sp else 22.sp,
+        CompactMetric(value = active, label = "TIME", valueSize = if (compact) 20.sp else 22.sp,
             compact = compact)
         CompactMetric(value = pace.value, unit = pace.unit, label = "PACE", valueSize = if (compact) 24.sp else 29.sp,
-            compact = compact)
-        CompactMetric(value = active, label = "ACTIVE", valueSize = if (compact) 20.sp else 22.sp,
             compact = compact)
     }
 }

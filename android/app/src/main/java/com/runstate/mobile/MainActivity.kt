@@ -66,6 +66,9 @@ import com.runstate.mobile.ui.AndroidReflectionSpeaker
 import com.runstate.mobile.ui.ReflectionSpeaker
 import com.runstate.mobile.ui.RunHistoryItem
 import com.runstate.mobile.ui.RunHistoryScreen
+import com.runstate.mobile.ui.RunActivityRecapScreen
+import com.runstate.mobile.ui.HistoryRouteDisplay
+import com.runstate.mobile.ui.HistorySplitDisplay
 import com.runstate.mobile.ui.RunStateScreen
 import com.runstate.mobile.ui.ShortRunDecisionDialog
 import com.runstate.mobile.ui.RunSettingsDialog
@@ -148,6 +151,7 @@ class MainActivity : ComponentActivity() {
                         runSettingsSessionId = runStateApplication.runSettingsSessionId,
                         nativeMapsEnabled = true,
                         onRetrySplits = runStateApplication::retryRunSplits,
+                        countdownSpeakerFactory = { AndroidReflectionSpeaker(it) },
 
                         // The Activity's own lifecycle gates the countdown, so nothing counts
                         // down — and no run is started — while the app is in the background.
@@ -209,7 +213,8 @@ internal fun RunJourneyRoot(
     onRetrySplits: suspend (String) -> Unit = {},
     gpsPreviewSourceOverride: ForegroundGpsPreviewSource? = null,
     gpsLocationReady: (Context) -> Boolean = ::preciseGpsLocationReady,
-    startGpsRun: (Context, PreRunEnergy?, Boolean, Boolean, Boolean) -> Unit = RunTrackingService::startNew
+    startGpsRun: (Context, PreRunEnergy?, Boolean, Boolean, Boolean) -> Unit = RunTrackingService::startNew,
+    countdownSpeakerFactory: ((Context) -> ReflectionSpeaker)? = null
 ) {
 
     val reflectionRequestsAvailable = reflectionConnection is ReflectionConnectionState.Hosted ||
@@ -232,6 +237,18 @@ internal fun RunJourneyRoot(
 
     // Navigation survives rotation; every saved value still comes from Room.
     var historyVisible by rememberSaveable { mutableStateOf(false) }
+    var recapRunId by rememberSaveable { mutableStateOf<String?>(null) }
+    var recapItem by remember { mutableStateOf<RunHistoryItem?>(null) }
+    var recapLoadError by remember { mutableStateOf<String?>(null) }
+    var recapRoute by remember { mutableStateOf<HistoryRouteDisplay?>(null) }
+    var recapSplits by remember { mutableStateOf<HistorySplitDisplay?>(null) }
+    var recapReload by remember { mutableStateOf(0) }
+    var activitySaving by remember { mutableStateOf(false) }
+    var activitySaveError by remember { mutableStateOf<String?>(null) }
+    var noteSavingRunId by remember { mutableStateOf<String?>(null) }
+    var noteError by remember { mutableStateOf<Pair<String, String>?>(null) }
+    var energyAnsweredRunId by rememberSaveable { mutableStateOf<String?>(null) }
+    var startNowRequested by remember { mutableStateOf(false) }
     var shortRunDecisionId by rememberSaveable { mutableStateOf<String?>(null) }
     var shortRunDecisionError by rememberSaveable { mutableStateOf<String?>(null) }
     // Only a completion performed in this UI (or its explicit retry) earns arrival speech.
@@ -318,7 +335,7 @@ internal fun RunJourneyRoot(
             // This never starts a new provider request after a process restart.
             reflectionCoordinator?.initialize()
             val reflectionsByRun = storedReflections.orEmpty().associateBy { it.runId }
-            historyItems = completedRuns.orEmpty().map { run ->
+            historyItems = completedRuns.orEmpty().filter { it.activityFinalized }.map { run ->
                 historyItemWithOptionalMusic(
                     run,
                     database.runDao().transitionsFor(run.runId),
@@ -333,6 +350,43 @@ internal fun RunJourneyRoot(
             historyItems = emptyList()
             historyError = "Log History couldn't load. Try opening it again."
         }
+    }
+
+    LaunchedEffect(recapRunId, completedRuns, storedReflections, storedWeather, storedSplits) {
+        recapLoadError = null
+        val id = recapRunId
+        val run = completedRuns?.firstOrNull { it.runId == id && it.activityFinalized }
+        if (id == null || run == null) { recapItem = null; return@LaunchedEffect }
+        try {
+            recapItem = historyItemWithOptionalMusic(run, database.runDao().transitionsFor(id),
+                storedReflections?.firstOrNull { it.runId == id }) {
+                database.musicObservationDao().observationsFor(id)
+            }.copy(weatherSummary = weatherSummaryFor(run, weatherByRun[id]),
+                splitStatus = splitsByRun[id]?.status)
+        } catch (cancelled: CancellationException) { throw cancelled }
+        catch (_: Exception) {
+            recapItem = null
+            recapLoadError = "Activity details couldn’t load. Your saved activity is available in Log History."
+        }
+    }
+    LaunchedEffect(recapRunId, recapReload, storedSplits) {
+        val id = recapRunId
+        recapRoute = null
+        recapSplits = null
+        if (id == null) return@LaunchedEffect
+        recapRoute = HistoryRouteDisplay.Loading
+        recapSplits = HistorySplitDisplay.Loading
+        try {
+            val points = database.locationDao().pointsFor(id)
+            recapRoute = HistoryRouteDisplay.Ready(withContext(Dispatchers.Default) { gpsRoutePreviewFor(id, points) })
+        } catch (cancelled: CancellationException) { throw cancelled }
+        catch (_: Exception) { recapRoute = HistoryRouteDisplay.Failed }
+        try {
+            val snapshot = database.splitDao().snapshotFor(id)
+            val rows = database.splitDao().rowsFor(id)
+            recapSplits = withContext(Dispatchers.Default) { historySplitsFor(snapshot, rows) }
+        } catch (cancelled: CancellationException) { throw cancelled }
+        catch (_: Exception) { recapSplits = HistorySplitDisplay.Failed }
     }
 
     val reflectionState = reflectionCoordinator?.let { activeCoordinator ->
@@ -358,7 +412,7 @@ internal fun RunJourneyRoot(
         }
     }
     val previewEnabled = gpsSelected && !gpsStartDispatched && activeRunId == null &&
-        !historyVisible && !runSettingsVisible && !connectionDialogVisible &&
+        !historyVisible && recapRunId == null && !runSettingsVisible && !connectionDialogVisible &&
         (model.state == RunUiState.ReadyToStart || model.state == RunUiState.Countdown)
     // Warm GPS while Start is visible, independent of map tiles. Retain this same listener
     // through countdown/cancel; the service remains the only durable run recorder.
@@ -370,6 +424,23 @@ internal fun RunJourneyRoot(
     var gpsReady by remember(context) { mutableStateOf(preciseLocationReady()) }
     var voiceForeground by remember(lifecycle) {
         mutableStateOf(lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED))
+    }
+    var countdownSpeaker by remember { mutableStateOf<ReflectionSpeaker?>(null) }
+    fun stopCountdownVoice() {
+        val owned = countdownSpeaker
+        countdownSpeaker = null
+        try { owned?.close() } catch (_: RuntimeException) { }
+    }
+    DisposableEffect(context) { onDispose { stopCountdownVoice() } }
+    LaunchedEffect(voiceForeground) { if (!voiceForeground) stopCountdownVoice() }
+    fun speakCountdownCue(step: Int?) {
+        if (step == null || !voiceForeground) { stopCountdownVoice(); return }
+        val factory = countdownSpeakerFactory ?: return
+        try {
+            val voice = countdownSpeaker ?: factory(context).also { countdownSpeaker = it }
+            voice.stop()
+            voice.speakReceipt(if (step == 10) "Starting in ten." else "$step.") { }
+        } catch (_: RuntimeException) { stopCountdownVoice() }
     }
 
     var musicAccessGranted by remember(context) { mutableStateOf(musicAccessProvider(context)) }
@@ -526,6 +597,22 @@ internal fun RunJourneyRoot(
             } finally {
                 effortSavingRunId = null
             }
+        }
+    }
+
+    fun saveLocalNote(runId: String, note: String?) {
+        if (noteSavingRunId != null) return
+        noteSavingRunId = runId
+        noteError = null
+        scope.launch {
+            try {
+                if (!coordinator.updatePostRunNote(runId, note)) {
+                    noteError = runId to "Note couldn’t save. Try again, or cancel your note changes."
+                }
+            } catch (cancelled: CancellationException) { throw cancelled }
+            catch (_: Exception) {
+                noteError = runId to "Note couldn’t save. Try again, or cancel your note changes."
+            } finally { noteSavingRunId = null }
         }
     }
 
@@ -704,6 +791,7 @@ internal fun RunJourneyRoot(
         }
     }
     LaunchedEffect(model.state) {
+        if (model.state != RunUiState.Countdown) startNowRequested = false
         if (model.state != RunUiState.Initializing && model.state != RunUiState.Countdown &&
             (model.state != RunUiState.ReadyToStart || !gpsStartRequested)) {
             gpsStartRequested = false
@@ -739,6 +827,8 @@ internal fun RunJourneyRoot(
         active = model.state == RunUiState.Countdown &&
             (!gpsSelected || gpsStartRequested && !gpsStartDispatched),
         lifecycle = lifecycle,
+        startNowRequested = startNowRequested,
+        onCountdownCue = ::speakCountdownCue,
         onFinished = {
 
             // The countdown only reaches here while the Activity is STARTED. If a Cancel is
@@ -823,7 +913,7 @@ internal fun RunJourneyRoot(
                                 savedRunReceiptFor(row, transitions)
                             }
                         } catch (cancelled: CancellationException) { throw cancelled }
-                        catch (_: Exception) { null } ?: "Run saved."
+                        catch (_: Exception) { null } ?: "Run complete."
                     }
                 }
             }) { coordinator.requestAction(kind) }
@@ -857,7 +947,12 @@ internal fun RunJourneyRoot(
     }
 
     val completionVisible = model.state == RunUiState.Saved &&
-        !historyVisible && voiceForeground
+        !historyVisible && recapRunId == null && voiceForeground
+    // Early writing and audio preparation continue, but an automatic no-answer timeout
+    // is not permission to present the reflection before this explicit check-in.
+    val completionEnergyAcknowledged = completedRunId != null &&
+        (energyAnsweredRunId == completedRunId ||
+            storedReflections?.firstOrNull { it.runId == completedRunId }?.postRunEnergy != null)
     RunCompleteReceiptEffect(
         completedRunId = completedRunId,
         receiptRunId = completionReceiptRunId,
@@ -868,6 +963,11 @@ internal fun RunJourneyRoot(
         finishedRunId = completionReceiptFinishedRunId,
         completionVisible = completionVisible,
         speakerFactory = completionSpeakerFactory,
+        shouldPromptEnergy = {
+            val id = completedRunId
+            reflectionCoordinator != null && id != null && energyAnsweredRunId != id &&
+                storedReflections?.firstOrNull { it.runId == id }?.postRunEnergy == null
+        },
         onStarted = { completionReceiptStartedRunId = it },
         onFinished = { id ->
             if (completionReceiptRunId == id) completionReceiptFinishedRunId = id
@@ -883,7 +983,8 @@ internal fun RunJourneyRoot(
         reflectionState = reflectionState,
         voicePreparation = voicePreparation,
         preparationVisible = completionVisible,
-        completionVisible = completionVisible && completionPresentationHeldRunId != completedRunId &&
+        completionVisible = completionVisible && completionEnergyAcknowledged &&
+            completionPresentationHeldRunId != completedRunId &&
             (completionReceiptRunId != completedRunId ||
             completionReceiptFinishedRunId == completedRunId),
         speakerFactory = completionSpeakerFactory,
@@ -971,6 +1072,52 @@ internal fun RunJourneyRoot(
         return
     }
 
+    fun leaveRecap() {
+        stopCompletionAudio?.invoke()
+        runGuarded {
+            try {
+                when (val admission = coordinator.journeySnapshot().admission) {
+                    is RunAdmission.RunCompleted -> {
+                        check(admission.session.runId == recapRunId)
+                        coordinator.prepareAnotherRun()
+                    }
+                    RunAdmission.ReadyForCountdown -> Unit // A new process already recovered a finalized run.
+                    else -> error("Run state is not ready to leave its recap.")
+                }
+                recapRunId = null
+                preRunEnergy = null
+                gpsMessage = null
+                gpsSelected = true
+                refresh()
+            } catch (cancelled: CancellationException) { throw cancelled }
+            catch (_: Exception) { recapLoadError = "Couldn’t return to Start yet. Your activity is saved; try Done again." }
+        }
+    }
+    BackHandler(recapRunId != null && !historyVisible && !actionInFlight) { leaveRecap() }
+    if (recapRunId != null) {
+        RunActivityRecapScreen(
+            item = recapItem,
+            localNote = completedRuns?.firstOrNull { it.runId == recapRunId }?.postRunNote,
+            onViewHistory = { historyVisible = true },
+            onDone = { if (!actionInFlight) leaveRecap() },
+            modifier = modifier,
+            route = recapRoute,
+            splits = recapSplits,
+            loadError = recapLoadError,
+            actionsEnabled = !actionInFlight,
+            onRetrySplits = {
+                val id = recapRunId
+                if (id != null) scope.launch {
+                    try { onRetrySplits(id) }
+                    catch (cancelled: CancellationException) { throw cancelled }
+                    catch (_: Exception) { recapSplits = HistorySplitDisplay.Failed }
+                    finally { recapReload++ }
+                }
+            }
+        )
+        return
+    }
+
     val activeReflection = reflectionState?.takeIf { current ->
         when (current) {
             is RunReflectionState.Preparing -> current.runId == completedRunId
@@ -993,6 +1140,7 @@ internal fun RunJourneyRoot(
         metrics = metrics,
         countdownDigit = countdownDigit,
         onStart = {
+            startNowRequested = false
             when {
                 runPreferences == null || runPreferencesError != null || preferenceWriteError != null ||
                     runPreferences.musicSetupComplete == false -> runSettingsVisible = true
@@ -1019,6 +1167,7 @@ internal fun RunJourneyRoot(
             }
         },
         onCancelCountdown = {
+            startNowRequested = false
             gpsStartRequested = false
             runGuarded {
                 coordinator.cancelCountdown()
@@ -1151,7 +1300,12 @@ internal fun RunJourneyRoot(
             }
         },
         onSelectEnergy = { branch ->
-            completedRunId?.let { reflectionCoordinator?.selectEnergy(it, branch) }
+            completedRunId?.let {
+                // Record the explicit tap immediately so the receipt never asks twice,
+                // including a deliberate Not sure while its durable write is pending.
+                energyAnsweredRunId = it
+                reflectionCoordinator?.selectEnergy(it, branch)
+            }
         },
         selectedEffort = completedRun?.postRunEffort,
         onSelectEffort = { effort -> completedRunId?.let { saveEffort(it, effort) } },
@@ -1204,7 +1358,33 @@ internal fun RunJourneyRoot(
         gpsStatusText = gpsPreview.startStatusText,
         setupLoading = runPreferences == null && runPreferencesError == null,
         reflectionSetupRequired = reflectionConnection == ReflectionConnectionState.NotConfigured ||
-            reflectionConnection == ReflectionConnectionState.Unavailable
+            reflectionConnection == ReflectionConnectionState.Unavailable,
+        onStartNow = { if (model.state == RunUiState.Countdown && !actionInFlight) startNowRequested = true },
+        onSaveActivity = {
+            completedRunId?.let { id ->
+                runGuarded {
+                    activitySaving = true
+                    activitySaveError = null
+                    try {
+                        if (coordinator.finalizeActivity(id)) {
+                            stopCompletionAudio?.invoke()
+                            completionSpeechEligibleRunId = null
+                            recapRunId = id
+                            refresh()
+                        } else activitySaveError = "Activity couldn’t be confirmed. Your run is protected; try again."
+                    } catch (cancelled: CancellationException) { throw cancelled }
+                    catch (_: Exception) {
+                        activitySaveError = "Activity couldn’t be confirmed. Your run is protected; try again."
+                    } finally { activitySaving = false }
+                }
+            }
+        },
+        activitySaving = activitySaving,
+        activitySaveError = activitySaveError,
+        localNote = completedRun?.postRunNote,
+        onSaveLocalNote = { note -> completedRunId?.let { saveLocalNote(it, note) } },
+        noteSaving = noteSavingRunId == completedRunId && completedRunId != null,
+        noteError = noteError?.takeIf { it.first == completedRunId }?.second
     )
 
     val settingsBusy = preferenceWritePending || runPreferencesSaving || connectionSaving ||
@@ -1221,6 +1401,10 @@ internal fun RunJourneyRoot(
             musicReflectionSharingAvailable = reflectionRequestsAvailable,
             weatherEnabled = runPreferences?.captureWeather == true,
             songSnippetsEnabled = runPreferences?.findSongSnippets == true,
+            distanceAnnouncements = runPreferences?.distanceAnnouncements != false,
+            onSetDistanceAnnouncements = { enabled ->
+                runPreferences?.let { saved -> savePreferences(saved.copy(distanceAnnouncements = enabled)) }
+            },
             onSetSongSnippets = { enabled ->
                 runPreferences?.let { saved -> savePreferences(saved.copy(
                     findSongSnippets = enabled && saved.shareMusicInReflection)) }
@@ -1338,13 +1522,17 @@ internal fun RunCompleteReceiptEffect(
     completionVisible: Boolean,
     speakerFactory: (Context) -> ReflectionSpeaker,
     onStarted: (String) -> Unit,
-    onFinished: (String) -> Unit
+    onFinished: (String) -> Unit,
+    shouldPromptEnergy: () -> Boolean = { false }
 ) {
     val context = LocalContext.current
     var speaker by remember { mutableStateOf<ReflectionSpeaker?>(null) }
     var activeReceiptRunId by remember { mutableStateOf<String?>(null) }
     var locallyFinishedRunId by remember { mutableStateOf<String?>(null) }
+    var followupStartedRunId by remember { mutableStateOf<String?>(null) }
     val finishCallback by rememberUpdatedState(onFinished)
+    val currentShouldPromptEnergy by rememberUpdatedState(shouldPromptEnergy)
+    val currentCompletionVisible by rememberUpdatedState(completionVisible)
 
     fun finish(id: String) {
         if (locallyFinishedRunId == id) return
@@ -1383,11 +1571,23 @@ internal fun RunCompleteReceiptEffect(
         }
         val text = receiptText ?: return@LaunchedEffect
         activeReceiptRunId = pendingId
+        followupStartedRunId = null
         onStarted(pendingId)
         try {
             val activeSpeaker = speakerFactory(context).also { speaker = it }
             activeSpeaker.speakReceipt(text) {
-                if (activeReceiptRunId == pendingId) finish(pendingId)
+                if (activeReceiptRunId == pendingId && followupStartedRunId != pendingId) {
+                    if (currentCompletionVisible && currentShouldPromptEnergy()) {
+                        try {
+                            followupStartedRunId = pendingId
+                            // This is a separate neutral invitation, never part of the
+                            // stored factual receipt or the AI reflection prompt.
+                            activeSpeaker.speakReceipt("How’s your energy now?") {
+                                if (activeReceiptRunId == pendingId) finish(pendingId)
+                            }
+                        } catch (_: RuntimeException) { finish(pendingId) }
+                    } else finish(pendingId)
+                }
             }
         } catch (_: RuntimeException) {
             finish(pendingId)

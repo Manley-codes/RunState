@@ -59,6 +59,10 @@ open class FakeRunDao : RunDao() {
     var duringDiscard: (suspend () -> Unit)? = null
     var failDiscardWith: Exception? = null
 
+    var duringFinalization: (suspend () -> Unit)? = null
+    var failFinalizationWith: Exception? = null
+    var failPendingCompletionReadWith: Exception? = null
+
     /**
      * How many times the discovery query has actually been reached.
      *
@@ -108,6 +112,29 @@ open class FakeRunDao : RunDao() {
         flowOf(inserted.filter { it.state == state }
             .sortedWith(compareByDescending<RunEntity> { it.officialStartEpochMillis }
                 .thenBy { it.runId }))
+
+    override suspend fun selectLatestUnfinalizedActivity(completedState: StoredRunState): RunEntity? {
+        failPendingCompletionReadWith?.let { throw it }
+        return inserted.filter { it.state == completedState && !it.activityFinalized && it.finishEpochMillis != null }
+            .sortedWith(compareByDescending<RunEntity> { it.finishEpochMillis }
+                .thenByDescending { it.officialStartEpochMillis }.thenBy { it.runId }).firstOrNull()
+    }
+
+    override suspend fun finalizeCompletedActivity(runId: String, completedState: StoredRunState): Int {
+        duringFinalization?.invoke()
+        failFinalizationWith?.let { throw it }
+        val index = inserted.indexOfFirst { it.runId == runId && it.state == completedState }
+        if (index < 0) return 0
+        inserted[index] = inserted[index].copy(activityFinalized = true)
+        return 1
+    }
+
+    override suspend fun updateCompletedRunNote(runId: String, completedState: StoredRunState, note: String?): Int {
+        val index = inserted.indexOfFirst { it.runId == runId && it.state == completedState }
+        if (index < 0) return 0
+        inserted[index] = inserted[index].copy(postRunNote = note)
+        return 1
+    }
 
     override suspend fun transitionsFor(runId: String): List<RunTransitionEntity> {
         transitionQueryCalls++
@@ -231,7 +258,8 @@ open class FakeRunDao : RunDao() {
                 finalDistanceMeters = finalDistanceMeters,
                 metricSource = metricSource,
                 telemetryCoverage = telemetryCoverage,
-                displayDistanceUnit = displayDistanceUnit
+                displayDistanceUnit = displayDistanceUnit,
+                activityFinalized = false
             )
         }
     }

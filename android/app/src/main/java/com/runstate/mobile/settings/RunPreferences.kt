@@ -9,7 +9,8 @@ internal data class RunPreferences(
     val shareMusicInReflection: Boolean = false,
     val musicSetupComplete: Boolean = false,
     val captureWeather: Boolean = false,
-    val findSongSnippets: Boolean = false
+    val findSongSnippets: Boolean = false,
+    val distanceAnnouncements: Boolean = true
 ) {
     init {
         require(!shareMusicInReflection || observeMusic) {
@@ -46,7 +47,8 @@ internal class StoredRunPreferences(
             musicSetupComplete = values.readBoolean(MUSIC_SETUP_COMPLETE) ?: false,
             captureWeather = values.readBoolean(CAPTURE_WEATHER) ?: false,
             findSongSnippets = observeMusic && (values.readBoolean(SHARE_MUSIC_IN_REFLECTION) ?: false) &&
-                (values.readBoolean(FIND_SONG_SNIPPETS) ?: false)
+                (values.readBoolean(FIND_SONG_SNIPPETS) ?: false),
+            distanceAnnouncements = values.readBoolean(DISTANCE_ANNOUNCEMENTS) ?: true
         )
     }
 
@@ -56,7 +58,8 @@ internal class StoredRunPreferences(
             SHARE_MUSIC_IN_REFLECTION to preferences.shareMusicInReflection,
             MUSIC_SETUP_COMPLETE to preferences.musicSetupComplete,
             CAPTURE_WEATHER to preferences.captureWeather,
-            FIND_SONG_SNIPPETS to preferences.findSongSnippets
+            FIND_SONG_SNIPPETS to preferences.findSongSnippets,
+            DISTANCE_ANNOUNCEMENTS to preferences.distanceAnnouncements
         )))
     }
 
@@ -72,6 +75,7 @@ internal class StoredRunPreferences(
         const val MUSIC_SETUP_COMPLETE = "music_setup_complete"
         const val CAPTURE_WEATHER = "capture_weather"
         const val FIND_SONG_SNIPPETS = "find_song_snippets"
+        const val DISTANCE_ANNOUNCEMENTS = "distance_announcements"
     }
 }
 

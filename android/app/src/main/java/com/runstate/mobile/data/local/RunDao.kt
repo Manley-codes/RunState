@@ -58,12 +58,43 @@ abstract class RunDao {
     @Query("SELECT * FROM runs WHERE run_id = :runId")
     abstract fun observeRunById(runId: String): Flow<RunEntity?>
 
-    /** History is a read of completed rows, newest first with stable ordering for ties. */
+    /** All durable completions, including protected activities awaiting Save Activity. */
     fun observeCompletedRuns(): Flow<List<RunEntity>> =
         observeRunsInState(StoredRunState.COMPLETED)
 
     @Query("SELECT * FROM runs WHERE state = :state ORDER BY official_start_epoch_millis DESC, run_id ASC")
     protected abstract fun observeRunsInState(state: StoredRunState): Flow<List<RunEntity>>
+
+    /** Recovery offers the newest protected completion only after checking for a live run. */
+    suspend fun findLatestUnfinalizedActivity(): RunEntity? =
+        selectLatestUnfinalizedActivity(StoredRunState.COMPLETED)
+
+    @Query("""
+        SELECT * FROM runs WHERE state = :completedState AND activity_finalized = 0
+            AND finish_epoch_millis IS NOT NULL
+        ORDER BY finish_epoch_millis DESC, official_start_epoch_millis DESC, run_id ASC LIMIT 1
+    """)
+    protected abstract suspend fun selectLatestUnfinalizedActivity(completedState: StoredRunState): RunEntity?
+
+    /** Idempotent: repeated taps never create another activity or touch its recorded facts. */
+    suspend fun finalizeActivity(runId: String): Boolean =
+        finalizeCompletedActivity(runId, StoredRunState.COMPLETED) == 1
+
+    @Query("UPDATE runs SET activity_finalized = 1 WHERE run_id = :runId AND state = :completedState")
+    protected abstract suspend fun finalizeCompletedActivity(runId: String, completedState: StoredRunState): Int
+
+    suspend fun setPostRunNote(runId: String, note: String?): Boolean {
+        val normalized = note?.trim()?.takeIf { it.isNotEmpty() }
+        require(normalized == null || normalized.length <= RunEntity.POST_RUN_NOTE_MAX_LENGTH) {
+            "A feeling note must be at most ${RunEntity.POST_RUN_NOTE_MAX_LENGTH} characters."
+        }
+        return updateCompletedRunNote(runId, StoredRunState.COMPLETED, normalized) == 1
+    }
+
+    @Query("UPDATE runs SET post_run_note = :note WHERE run_id = :runId AND state = :completedState")
+    protected abstract suspend fun updateCompletedRunNote(
+        runId: String, completedState: StoredRunState, note: String?
+    ): Int
 
     /**
      * Reads one run's pause and resume history in the order the events happened.
@@ -463,7 +494,8 @@ abstract class RunDao {
             final_distance_meters = :finalDistanceMeters,
             metric_source = :metricSource,
             telemetry_coverage = :telemetryCoverage,
-            display_distance_unit = :displayDistanceUnit
+            display_distance_unit = :displayDistanceUnit,
+            activity_finalized = 0
         WHERE run_id = :runId
           AND state = :expectedState
           AND last_checkpoint_epoch_millis <= :finishEpochMillis

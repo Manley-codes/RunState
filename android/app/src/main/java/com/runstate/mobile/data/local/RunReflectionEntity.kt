@@ -34,6 +34,7 @@ data class RunReflectionEntity(
     @ColumnInfo(name = "selection_deadline_epoch_millis") val selectionDeadlineEpochMillis: Long,
     @ColumnInfo(name = "status") val status: ReflectionStatus = ReflectionStatus.PENDING,
     @ColumnInfo(name = "selected_branch") val selectedBranch: ReflectionBranch? = null,
+    /** Null means unanswered; NO_SELECTION means the runner explicitly chose Not sure. */
     @ColumnInfo(name = "post_run_energy") val postRunEnergy: ReflectionBranch? = null,
     @ColumnInfo(name = "candidates_json") val candidatesJson: String? = null,
     @ColumnInfo(name = "text") val text: String? = null,
@@ -47,9 +48,6 @@ data class RunReflectionEntity(
             "Reflection identities must be canonical lowercase UUIDs."
         }
         require(evidenceJson.isNotBlank()) { "A reflection requires its saved evidence." }
-        require(postRunEnergy != ReflectionBranch.NO_SELECTION) {
-            "No selection is not an Energy answer."
-        }
         require(candidatesJson == null || candidatesJson.isNotBlank())
         if (status == ReflectionStatus.READY) {
             require(selectionWindowStarted) { "A ready reflection must have left its save receipt." }

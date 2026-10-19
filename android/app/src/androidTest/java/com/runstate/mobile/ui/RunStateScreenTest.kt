@@ -55,11 +55,9 @@ import androidx.lifecycle.LifecycleRegistry
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
-import androidx.test.core.app.ActivityScenario
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.ext.junit.rules.ActivityScenarioRule
-import com.runstate.mobile.MainActivity
 import com.runstate.mobile.R
 import com.runstate.mobile.RunCompleteSpeechEffect
 import com.runstate.mobile.RunCompleteReceiptEffect
@@ -122,8 +120,8 @@ import kotlin.coroutines.EmptyCoroutineContext
  * [RunStateScreen] and [HoldToStopButton] are rendered directly with plain values, and the
  * countdown is driven through a lifecycle this test owns. Bounded real-root cases use isolated
  * in-memory Room and fake GPS/service boundaries, never the phone's saved runs or location.
- * One test launches the real [MainActivity] to prove that genuine Activity recreation restarts
- * the countdown; deeper durable storage is proved in `RunSessionCoordinatorRoomTest`.
+ * Saved-state restoration checks recreate the timer/root composition in isolation; deeper
+ * durable storage is proved in `RunSessionCoordinatorRoomTest`.
  *
  * The absence assertions matter as much as the presence ones. Offering Cancel while a start
  * may already be stored, or Start over a blocked database, would be the screen contradicting
@@ -139,7 +137,7 @@ class RunStateScreenTest {
         const val STARTING = "Starting your run — saving its start"
         const val START_FAILED = "RunState couldn't save the start of your run."
         const val RUNNING = "You have a run in progress"
-        const val PAUSED = "You have a paused run"
+        const val PAUSED = "PAUSED"
         const val SAVED = "RUN SAVED"
         const val FAILED = "RunState couldn't get ready."
 
@@ -154,7 +152,7 @@ class RunStateScreenTest {
         const val NO_DIGIT = "none"
 
         /** Longer than a whole countdown, so "nothing happened" is not merely "not yet". */
-        const val LONGER_THAN_COUNTDOWN_MILLIS = 3 * COUNTDOWN_STEP_MILLIS + 500L
+        const val LONGER_THAN_COUNTDOWN_MILLIS = COUNTDOWN_SECONDS * COUNTDOWN_STEP_MILLIS + 500L
     }
 
     private lateinit var composeTestRule:
@@ -176,6 +174,7 @@ class RunStateScreenTest {
     /** Counts each callback, so a tap can be shown to reach the right one and only it. */
     private class RecordedActions {
         var starts = 0
+        var startsNow = 0
         var cancels = 0
         var initializationRetries = 0
         var startRetries = 0
@@ -188,7 +187,7 @@ class RunStateScreenTest {
         val energyAnswers = mutableListOf<ReflectionBranch>()
         var historyOpens = 0
 
-        val total get() = starts + cancels + initializationRetries + startRetries +
+        val total get() = starts + startsNow + cancels + initializationRetries + startRetries +
             pauses + resumes + stops + startAnothers + reflectionRetries + audioStops
     }
 
@@ -293,6 +292,7 @@ class RunStateScreenTest {
         fontScale: Float? = null,
         reflection: RunCompleteReflectionDisplay? = RunCompleteReflectionDisplay.Preparing,
         energyEnabled: Boolean = false,
+        selectedEnergy: ReflectionBranch? = ReflectionBranch.NO_SELECTION,
         isTestData: Boolean = false,
         showHistory: Boolean = false,
         reflectionAudioActive: Boolean = false
@@ -312,6 +312,7 @@ class RunStateScreenTest {
                     metrics = metrics,
                     countdownDigit = countdownDigit,
                     onStart = { actions.starts++ },
+                    onStartNow = { actions.startsNow++ },
                     onCancelCountdown = { actions.cancels++ },
                     onRetryInitialization = { actions.initializationRetries++ },
                     onRetryStart = { actions.startRetries++ },
@@ -323,6 +324,7 @@ class RunStateScreenTest {
                     onRetryReflection = { actions.reflectionRetries++ },
                     onSelectEnergy = { actions.energyAnswers += it },
                     energyEnabled = energyEnabled,
+                    selectedEnergy = selectedEnergy,
                     isTestData = isTestData,
                     onViewHistory = { actions.historyOpens++ },
                     showHistory = showHistory,
@@ -830,7 +832,7 @@ class RunStateScreenTest {
             composeTestRule.onNode(isDialog()).assertDoesNotExist()
             assertEquals(1, root.source.activeListeners)
             assertEquals(0, root.rowCount())
-            composeTestRule.mainClock.advanceTimeBy(2 * COUNTDOWN_STEP_MILLIS)
+            composeTestRule.mainClock.advanceTimeBy((COUNTDOWN_SECONDS - 1) * COUNTDOWN_STEP_MILLIS)
             assertEquals(0, root.serviceStarts)
             composeTestRule.mainClock.advanceTimeBy(COUNTDOWN_STEP_MILLIS + 100)
             root.awaitSingleHandoff()
@@ -896,6 +898,29 @@ class RunStateScreenTest {
             root.assertUnstarted()
             composeTestRule.onNodeWithTag(START_RUN_BUTTON_TAG).assertIsEnabled()
             assertEquals(3, root.source.registrations)
+        }
+    }
+
+    @Test
+    fun gpsRootStartNowClosesCountdownVoiceAndHandsOffOnlyOnce() {
+        val spoken = mutableListOf<String>()
+        var closes = 0
+        val voice = object : ReflectionSpeaker {
+            override fun speak(text: String) { spoken += text }
+            override fun stop() = Unit
+            override fun close() { closes++ }
+        }
+        GpsStartRootHarness(countdownVoice = voice).use { root ->
+            root.tapStart()
+            root.awaitCountdown()
+            awaitGpsRoot { spoken.isNotEmpty() }
+            assertEquals(listOf("Starting in ten."), spoken)
+            composeTestRule.onNodeWithTag(COUNTDOWN_START_NOW_TAG).performClick()
+            root.awaitSingleHandoff()
+            composeTestRule.mainClock.advanceTimeBy(LONGER_THAN_COUNTDOWN_MILLIS)
+            assertEquals(1, root.serviceStarts)
+            assertEquals(listOf("Starting in ten."), spoken)
+            assertTrue(closes >= 1)
         }
     }
 
@@ -1074,7 +1099,8 @@ class RunStateScreenTest {
 
     /** Synthetic fixes and isolated Room exercise the real root without requesting device GPS. */
     private inner class GpsStartRootHarness(
-        val source: ControlledGpsStartSource = ControlledGpsStartSource()
+        val source: ControlledGpsStartSource = ControlledGpsStartSource(),
+        private val countdownVoice: ReflectionSpeaker? = null
     ) : AutoCloseable {
         private val database = Room.inMemoryDatabaseBuilder(
             ApplicationProvider.getApplicationContext(), RunStateDatabase::class.java).build()
@@ -1110,6 +1136,7 @@ class RunStateScreenTest {
                     RunJourneyRoot(coordinator, null, database,
                         remember { MutableStateFlow<RunTrackingServiceState>(RunTrackingServiceState.Idle) },
                         lifecycleOwner.lifecycle, completionSpeakerFactory = { silentSpeaker },
+                        countdownSpeakerFactory = if (countdownVoice == null) null else ({ countdownVoice }),
                         musicAccessProvider = { false }, gpsPreviewSourceOverride = source,
                         gpsLocationReady = { locationReady && source.currentAvailability == GpsPreviewAvailability.READY }, startGpsRun = { _, _, _, _, _ ->
                             listenersAtHandoff += source.activeListeners
@@ -1370,6 +1397,21 @@ class RunStateScreenTest {
         assertEquals(1, actions.total)
     }
 
+    @Test
+    fun countdownStartNowReportsOnlyItsExplicitAction() {
+        val actions = renderScreen(RunUiModel(RunUiState.Countdown), countdownDigit = 10)
+        composeTestRule.onNodeWithTag(COUNTDOWN_START_NOW_TAG).assertIsDisplayed().performClick()
+        assertEquals(1, actions.startsNow)
+        assertEquals(1, actions.total)
+    }
+
+    @Test
+    fun countdownAwaitingLifecycleDoesNotOfferAnEnabledStartNow() {
+        val actions = renderScreen(RunUiModel(RunUiState.Countdown), countdownDigit = null)
+        composeTestRule.onNodeWithTag(COUNTDOWN_START_NOW_TAG).assertIsNotEnabled().performClick()
+        assertEquals(0, actions.total)
+    }
+
     /** Proves the system back gesture is the same exit as Cancel during a countdown. */
     @Test
     fun countdownBackActionCancelsTheCountdown() {
@@ -1538,8 +1580,8 @@ class RunStateScreenTest {
         composeTestRule.onNodeWithTag(ACTIVE_RUN_DISTANCE_TAG).assertTextEquals("0.11 mi")
         composeTestRule.onNodeWithText("Active time").performScrollTo().assertIsDisplayed()
         composeTestRule.onNodeWithTag(ACTIVE_RUN_ACTIVE_TAG).assertTextEquals("00:01:00")
-        composeTestRule.onNodeWithText("Total incl. breaks").performScrollTo().assertIsDisplayed()
-        composeTestRule.onNodeWithTag(ACTIVE_RUN_ELAPSED_TAG).assertTextEquals("00:02:00")
+        composeTestRule.onNodeWithText("Total incl. breaks").assertDoesNotExist()
+        composeTestRule.onNodeWithTag(ACTIVE_RUN_ELAPSED_TAG).assertDoesNotExist()
         composeTestRule.onNodeWithText("Avg pace").assertIsDisplayed()
         composeTestRule.onNodeWithTag(ACTIVE_RUN_PACE_TAG).assertTextEquals("8:56 /mi")
     }
@@ -1549,7 +1591,7 @@ class RunStateScreenTest {
     fun runningShowsTheValuesAndFixtureDisclosure() {
         renderScreen(model = RunUiModel(RunUiState.ActiveRunning), metrics = fixtureMetrics())
         assertFixtureMetricsDisplayed()
-        composeTestRule.onNodeWithText("Active time and distance are paused. Total time includes breaks.")
+        composeTestRule.onNodeWithText("Active time and distance are paused.")
             .assertDoesNotExist()
     }
 
@@ -1558,12 +1600,12 @@ class RunStateScreenTest {
     fun pausedShowsTheValuesAndFixtureDisclosure() {
         renderScreen(model = RunUiModel(RunUiState.ActivePaused), metrics = fixtureMetrics())
         assertFixtureMetricsDisplayed()
-        composeTestRule.onNodeWithText("Active time and distance are paused. Total time includes breaks.")
+        composeTestRule.onNodeWithText("Active time and distance are paused.")
             .performScrollTo().assertIsDisplayed()
     }
 
     @Test
-    fun pausedMainTimerStaysFixedWhileTotalIncludingBreaksAdvances() {
+    fun pausedMainTimerStaysFixedAndNeverDisplaysWallTimeIncludingBreaks() {
         var total by mutableStateOf("00:02:00")
         composeTestRule.setContent {
             ActiveRunScreen(true, fixtureMetrics().copy(elapsed = total), false, true, {}, {}, {})
@@ -1571,13 +1613,35 @@ class RunStateScreenTest {
         composeTestRule.onNodeWithTag(ACTIVE_RUN_ACTIVE_TAG).performScrollTo()
             .assertTextEquals("00:01:00")
         val active = composeTestRule.onNodeWithTag(ACTIVE_RUN_ACTIVE_TAG).fetchSemanticsNode()
-        val circle = composeTestRule.onNodeWithTag(ACTIVE_RUN_CIRCLE_TAG).fetchSemanticsNode()
-        assertTrue(active.positionInRoot.y >= circle.positionInRoot.y)
-        assertTrue(active.positionInRoot.y + active.size.height <= circle.positionInRoot.y + circle.size.height)
+        val panel = composeTestRule.onNodeWithTag(ACTIVE_RUN_METRICS_TAG).fetchSemanticsNode()
+        assertTrue(active.positionInRoot.y >= panel.positionInRoot.y)
+        assertTrue(active.positionInRoot.y + active.size.height <= panel.positionInRoot.y + panel.size.height)
         composeTestRule.runOnIdle { total = "00:02:45" }
         composeTestRule.onNodeWithTag(ACTIVE_RUN_ACTIVE_TAG).assertTextEquals("00:01:00")
-        composeTestRule.onNodeWithTag(ACTIVE_RUN_ELAPSED_TAG).performScrollTo()
-            .assertTextEquals("00:02:45")
+        composeTestRule.onNodeWithTag(ACTIVE_RUN_ELAPSED_TAG).assertDoesNotExist()
+        composeTestRule.onNodeWithText("00:02:45").assertDoesNotExist()
+    }
+
+    @Test
+    fun pausedPortraitKeepsAllMetricsAboveControlsWithoutScrolling() {
+        composeTestRule.setContent {
+            val density = LocalDensity.current
+            CompositionLocalProvider(LocalDensity provides Density(density.density, 1f)) {
+                ActiveRunScreen(true, fixtureMetrics(), false, true, {}, {}, {},
+                    modifier = Modifier.size(360.dp, 640.dp), isGpsRun = true,
+                    gpsServicePresent = true)
+            }
+        }
+        val controlTop = composeTestRule.onNodeWithText(RESUME)
+            .assertIsDisplayed().fetchSemanticsNode().positionInRoot.y
+        for (tag in listOf(ACTIVE_RUN_DISTANCE_TAG, ACTIVE_RUN_ACTIVE_TAG,
+            ACTIVE_RUN_PACE_TAG)) {
+            val node = composeTestRule.onNodeWithTag(tag).assertIsDisplayed().fetchSemanticsNode()
+            assertTrue("$tag must stay above the paused controls",
+                node.positionInRoot.y + node.size.height <= controlTop)
+        }
+        composeTestRule.onNodeWithTag(HOLD_TO_STOP_TAG).assertIsDisplayed()
+        saveNativePreview(ACTIVE_RUN_SCREEN_TAG, "debrief-paused.png")
     }
 
     @Test
@@ -1590,8 +1654,13 @@ class RunStateScreenTest {
     fun shortRunDecisionSurvivesScreenRestorationWithoutSaving() =
         shortRunDecisionThroughRoot(save = false, restore = true)
 
+    @Test
+    fun completionRootWaitsForExplicitNotSureBeforeVoiceAndRestoresItsAnswer() =
+        shortRunDecisionThroughRoot(save = true, verifyReflectionAcknowledgement = true)
+
     /** Real root + real isolated Room: these actions never touch the phone's runstate.db. */
-    private fun shortRunDecisionThroughRoot(save: Boolean, restore: Boolean = false) {
+    private fun shortRunDecisionThroughRoot(save: Boolean, restore: Boolean = false,
+        verifyReflectionAcknowledgement: Boolean = false) {
         val database = Room.inMemoryDatabaseBuilder(
             ApplicationProvider.getApplicationContext(), RunStateDatabase::class.java).build()
         val appScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -1605,13 +1674,21 @@ class RunStateScreenTest {
         val coordinator = RunSessionCoordinator(database.runDao(),
             PreparedRunFactory(clock, { ZoneOffset.UTC }, { id }), appScope,
             database.locationDao())
+        val exactReflection = "The prepared reply waits for the runner's check-in."
+        val reflectionOwner = if (verifyReflectionAcknowledgement)
+            com.runstate.mobile.reflection.RunReflectionCoordinator(database.runDao(),
+                com.runstate.mobile.reflection.RoomReflectionStore(database.reflectionDao()),
+                com.runstate.mobile.reflection.ReflectionGateway {
+                    com.runstate.mobile.reflection.ReflectionCandidates("Spent reply.", "Good reply.",
+                        "Powered reply.", exactReflection)
+                }, appScope, quietWindowMillis = 0L, nowMillis = { time }) else null
         var shown by mutableStateOf(true)
         var receipts = 0
         var reflections = 0
         val silentSpeaker = object : ReflectionSpeaker {
             override fun speak(text: String) { reflections++ }
             override fun speakReceipt(text: String, onFinished: () -> Unit) {
-                receipts++
+                if (text != "How’s your energy now?") receipts++
                 onFinished()
             }
             override fun stop() = Unit
@@ -1627,10 +1704,11 @@ class RunStateScreenTest {
             }
             val restoration = StateRestorationTester(composeTestRule)
             restoration.setContent {
-                if (shown) RunJourneyRoot(coordinator, null, database,
+                if (shown) RunJourneyRoot(coordinator, reflectionOwner, database,
                     remember { MutableStateFlow(RunTrackingServiceState.Idle) },
                     LocalLifecycleOwner.current.lifecycle,
-                    completionSpeakerFactory = { silentSpeaker })
+                    completionSpeakerFactory = { silentSpeaker },
+                    reflectionConnection = com.runstate.mobile.ReflectionConnectionState.Local)
             }
             composeTestRule.waitUntil(5_000L) {
                 composeTestRule.onAllNodesWithText(RESUME).fetchSemanticsNodes().isNotEmpty()
@@ -1676,7 +1754,7 @@ class RunStateScreenTest {
             }
             composeTestRule.onNodeWithText(if (save) "Save run" else "Discard run").performClick()
             composeTestRule.waitUntil(5_000L) {
-                composeTestRule.onAllNodesWithText(if (save) SAVED else READY).fetchSemanticsNodes().isNotEmpty()
+                composeTestRule.onAllNodesWithText(if (save) "RUN COMPLETE" else READY).fetchSemanticsNodes().isNotEmpty()
             }
             val stored = runBlocking { database.runDao().findById(id.toString()) }
             assertEquals(if (save) StoredRunState.COMPLETED else null, stored?.state)
@@ -1684,6 +1762,56 @@ class RunStateScreenTest {
             if (save) composeTestRule.waitUntil(5_000L) { receipts == 1 }
             assertEquals(if (save) 1 else 0, receipts)
             assertEquals(0, reflections)
+            if (save) {
+                if (verifyReflectionAcknowledgement) {
+                    composeTestRule.waitUntil(5_000L) {
+                        reflectionOwner?.state?.value is RunReflectionState.Ready
+                    }
+                    composeTestRule.onNodeWithTag(RUN_COMPLETE_REFLECTION_TAG).assertDoesNotExist()
+                    composeTestRule.onNodeWithTag(RUN_COMPLETE_ENERGY_TAG).assertExists()
+                    composeTestRule.onNodeWithTag(RUN_COMPLETE_SAVE_ACTIVITY_TAG).assertIsEnabled()
+                    composeTestRule.runOnIdle { assertEquals(0, reflections) }
+                    composeTestRule.onNodeWithText("Not sure").performScrollTo().performClick()
+                    composeTestRule.waitUntil(5_000L) { reflections == 1 }
+                    assertEquals(ReflectionBranch.NO_SELECTION, runBlocking {
+                        database.reflectionDao().findByRunId(id.toString()) }?.postRunEnergy)
+                    restoration.emulateSavedInstanceStateRestore()
+                    composeTestRule.waitUntil(5_000L) {
+                        composeTestRule.onAllNodesWithTag(RUN_COMPLETE_REFLECTION_TEXT_TAG)
+                            .fetchSemanticsNodes().isNotEmpty()
+                    }
+                    composeTestRule.onNodeWithTag(RUN_COMPLETE_ENERGY_TAG).assertDoesNotExist()
+                    composeTestRule.onNodeWithTag(RUN_COMPLETE_REFLECTION_TEXT_TAG)
+                        .performScrollTo().assertTextEquals(exactReflection)
+                    composeTestRule.runOnIdle { assertEquals(1, reflections) }
+                }
+                assertFalse(requireNotNull(stored).activityFinalized)
+                composeTestRule.onNodeWithText("Something else? Add a note").performScrollTo().performClick()
+                composeTestRule.onNodeWithTag(RUN_COMPLETE_NOTE_TAG).performScrollTo()
+                    .performTextInput("Legs tired, mind clear")
+                composeTestRule.onNodeWithTag(RUN_COMPLETE_NOTE_SAVE_TAG).performScrollTo().performClick()
+                composeTestRule.waitUntil(5_000L) {
+                    runBlocking { database.runDao().findById(id.toString()) }?.postRunNote == "Legs tired, mind clear"
+                }
+                composeTestRule.onNodeWithTag(RUN_COMPLETE_SAVE_ACTIVITY_TAG).assertIsEnabled().performClick()
+                composeTestRule.waitUntil(5_000L) {
+                    composeTestRule.onAllNodesWithTag(RUN_ACTIVITY_RECAP_TAG).fetchSemanticsNodes().isNotEmpty()
+                }
+                assertTrue(runBlocking { database.runDao().findById(id.toString()) }?.activityFinalized == true)
+                composeTestRule.onNodeWithText("Legs tired, mind clear").performScrollTo().assertIsDisplayed()
+                composeTestRule.onNodeWithTag(RUN_COMPLETE_HISTORY_TAG).performScrollTo().performClick()
+                composeTestRule.waitUntil(5_000L) {
+                    composeTestRule.onAllNodesWithTag(RUN_HISTORY_ROW_TAG_PREFIX + id).fetchSemanticsNodes().isNotEmpty()
+                }
+                composeTestRule.onNodeWithText("Back to run").performClick()
+                composeTestRule.onNodeWithTag(RUN_ACTIVITY_RECAP_TAG).assertIsDisplayed()
+                composeTestRule.onNodeWithText("Done").performClick()
+                composeTestRule.waitUntil(5_000L) {
+                    composeTestRule.onAllNodesWithTag(START_RUN_SCREEN_TAG).fetchSemanticsNodes().isNotEmpty()
+                }
+                assertEquals(1, runBlocking { database.runDao().countRuns() })
+                assertEquals(1, receipts)
+            }
         } finally {
             composeTestRule.runOnIdle { shown = false }
             composeTestRule.waitForIdle()
@@ -1704,11 +1832,11 @@ class RunStateScreenTest {
         composeTestRule.onNodeWithText("0.11").assertIsDisplayed()
         composeTestRule.onNodeWithText("MI").assertIsDisplayed()
         composeTestRule.onNodeWithText("TIME").assertIsDisplayed()
-        composeTestRule.onNodeWithText("00:02:00").assertIsDisplayed()
+        composeTestRule.onNodeWithText("00:02:00").assertDoesNotExist()
         composeTestRule.onNodeWithText("PACE").assertIsDisplayed()
         composeTestRule.onNodeWithText("8:56").assertIsDisplayed()
         composeTestRule.onNodeWithText("/MI").assertIsDisplayed()
-        composeTestRule.onNodeWithText("ACTIVE").assertIsDisplayed()
+        composeTestRule.onNodeWithText("ACTIVE").assertDoesNotExist()
         composeTestRule.onNodeWithText("00:01:00").assertIsDisplayed()
     }
 
@@ -1743,7 +1871,7 @@ class RunStateScreenTest {
             assertFalse("Completion mark covers distance or its unit", mark.overlaps(distance))
             assertFalse("Completion mark covers time, pace or active time", mark.overlaps(compactMetrics))
             assertFalse("Distance and compact metrics overlap", distance.overlaps(compactMetrics))
-            listOf("TIME", "PACE", "ACTIVE", "MI", metrics.active).forEach { text ->
+            listOf("TIME", "PACE", "MI", metrics.active).forEach { text ->
                 val layouts = mutableListOf<TextLayoutResult>()
                 composeTestRule.onNodeWithText(text).performSemanticsAction(
                     SemanticsActions.GetTextLayoutResult
@@ -1854,6 +1982,107 @@ class RunStateScreenTest {
         composeTestRule.mainClock.advanceTimeBy(800L)
         assertTrue("Undo must return Start to its original appearance", idle.contentEquals(dialPixels()))
         assertEquals(null, selected)
+    }
+
+    @Test
+    fun unansweredCompletionKeepsChoicesAndSaveAvailableWithoutAnyReflectionPanel() {
+        var display by mutableStateOf<RunCompleteReflectionDisplay>(RunCompleteReflectionDisplay.Preparing)
+        var saved = 0
+        composeTestRule.setContent {
+            RunCompleteScreen(fixtureMetrics(), display, {}, {}, true,
+                energyEnabled = true, onSaveActivity = { saved++ })
+        }
+        for (state in listOf(RunCompleteReflectionDisplay.Preparing,
+            RunCompleteReflectionDisplay.Ready("Background timeout already finalized this exact reply."),
+            RunCompleteReflectionDisplay.Failed, RunCompleteReflectionDisplay.ConnectionNeeded)) {
+            composeTestRule.runOnIdle { display = state }
+            composeTestRule.onNodeWithTag(RUN_COMPLETE_REFLECTION_TAG).assertDoesNotExist()
+            composeTestRule.onNodeWithTag(RUN_COMPLETE_ENERGY_TAG).assertExists()
+            composeTestRule.onNodeWithText("Energy +").assertDoesNotExist()
+            composeTestRule.onNodeWithTag(RUN_COMPLETE_SAVE_ACTIVITY_TAG).assertIsEnabled()
+        }
+        composeTestRule.onNodeWithTag(RUN_COMPLETE_SAVE_ACTIVITY_TAG).performClick()
+        assertEquals(1, saved)
+        composeTestRule.runOnIdle { display = RunCompleteReflectionDisplay.Ready("Ready before Not sure.") }
+        saveNativePreview(RUN_COMPLETE_SCREEN_TAG, "energy-reflection-hidden.png")
+        composeTestRule.onNodeWithText("Not sure").performScrollTo().performClick()
+        composeTestRule.onNodeWithTag(RUN_COMPLETE_ENERGY_TAG).assertDoesNotExist()
+        composeTestRule.onNodeWithTag(RUN_COMPLETE_REFLECTION_TEXT_TAG).performScrollTo()
+            .assertTextEquals("Ready before Not sure.")
+    }
+
+    @Test
+    fun alreadyPreparedReflectionStillWaitsForFirstEnergyIntakeAndVoiceAcknowledgement() {
+        composeTestRule.mainClock.autoAdvance = false
+        var selected by mutableStateOf<ReflectionBranch?>(null)
+        var held by mutableStateOf(false)
+        var spokenId by mutableStateOf<String?>(null)
+        val spoken = mutableListOf<String>()
+        val exact = "Already prepared, presented only after the intake."
+        val id = "prepared-before-choice"
+        val speaker = object : ReflectionSpeaker {
+            override fun speak(text: String) { spoken += text }
+            override fun stop() = Unit
+            override fun close() = Unit
+        }
+        composeTestRule.setContent {
+            RunCompleteSpeechEffect(id, id, spokenId, RunReflectionState.Ready(id, exact),
+                completionVisible = selected != null && !held, speakerFactory = { speaker },
+                onSpoken = { spokenId = it })
+            RunCompleteScreen(fixtureMetrics(), RunCompleteReflectionDisplay.Ready(exact), {}, {}, true,
+                selectedEnergy = selected, energyEnabled = true,
+                onSelectEnergy = { assertTrue(held); selected = it },
+                onReflectionPresentationHoldChange = { held = it })
+        }
+        composeTestRule.mainClock.advanceTimeByFrame()
+        composeTestRule.onNodeWithTag(RUN_COMPLETE_REFLECTION_TAG).assertDoesNotExist()
+        assertTrue(spoken.isEmpty())
+        composeTestRule.onNodeWithText("FEELING GOOD").performClick()
+        composeTestRule.mainClock.advanceTimeBy(500L)
+        composeTestRule.onNodeWithTag(RUN_COMPLETE_ENERGY_INTAKE_TAG).assertExists()
+        composeTestRule.onNodeWithTag(RUN_COMPLETE_REFLECTION_TAG).assertDoesNotExist()
+        assertTrue(spoken.isEmpty())
+        composeTestRule.mainClock.advanceTimeBy(1400L)
+        composeTestRule.onNodeWithTag(RUN_COMPLETE_REFLECTION_TEXT_TAG).assertTextEquals(exact)
+        saveNativePreview(RUN_COMPLETE_SCREEN_TAG, "energy-reflection-revealed.png")
+        composeTestRule.runOnIdle { assertEquals(listOf(exact), spoken) }
+    }
+
+    @Test
+    fun recoveredExplicitNotSureShowsSavedReflectionWithoutRepeatingEnergyOrIntake() {
+        composeTestRule.setContent {
+            RunCompleteScreen(fixtureMetrics(), RunCompleteReflectionDisplay.Ready("Exact restored reply."),
+                {}, {}, true, selectedEnergy = ReflectionBranch.NO_SELECTION, energyEnabled = true)
+        }
+        composeTestRule.onNodeWithTag(RUN_COMPLETE_ENERGY_TAG).assertDoesNotExist()
+        composeTestRule.onNodeWithTag(RUN_COMPLETE_ENERGY_INTAKE_TAG).assertDoesNotExist()
+        composeTestRule.onNodeWithText("Not sure").assertExists()
+        composeTestRule.onNodeWithTag(RUN_COMPLETE_REFLECTION_TEXT_TAG).performScrollTo()
+            .assertTextEquals("Exact restored reply.")
+    }
+
+    @Test
+    fun completionAndRecapUseOnlyActiveTimeAndNeverFallBackToWallTime() {
+        var recap by mutableStateOf(false)
+        var active by mutableStateOf("00:05:01")
+        composeTestRule.setContent {
+            val metrics = fixtureMetrics().copy(elapsed = "99:59:59", active = active)
+            if (recap) RunActivityRecapScreen(
+                RunHistoryItem("time-proof", "Today", metrics, null, null, null, false),
+                null, {}, {})
+            else RunCompleteScreen(metrics, null, {}, {}, true)
+        }
+        for (showRecap in listOf(false, true)) {
+            composeTestRule.runOnIdle { recap = showRecap; active = "00:05:01" }
+            composeTestRule.onNodeWithText("TIME").assertExists()
+            composeTestRule.onNodeWithText("00:05:01").assertExists()
+            composeTestRule.onNodeWithText("99:59:59").assertDoesNotExist()
+            composeTestRule.onNodeWithText("ACTIVE").assertDoesNotExist()
+            composeTestRule.runOnIdle { active = "—" }
+            composeTestRule.onNodeWithText("00:05:01").assertDoesNotExist()
+            composeTestRule.onNodeWithText("99:59:59").assertDoesNotExist()
+            composeTestRule.onNodeWithText("TIME").assertExists()
+        }
     }
 
     @Test
@@ -2112,7 +2341,7 @@ class RunStateScreenTest {
     }
 
     @Test
-    fun savedEffortCanBeAddedAndClearedWithoutChangingTheStoredReflection() {
+    fun completionEffortFollowsEnergyAndDoesNotHoldTheStoredReflection() {
         val exact = "Exact saved reflection."
         val choices = mutableListOf<PostRunEffort?>()
         val sheetStates = mutableListOf<Boolean>()
@@ -2138,21 +2367,21 @@ class RunStateScreenTest {
             )
         }
 
-        composeTestRule.onNodeWithTag(RUN_COMPLETE_EFFORT_TAG).performScrollTo()
-            .assertTextEquals("EFFORT +").performClick()
-        composeTestRule.onNodeWithTag(RUN_COMPLETE_EFFORT_CHOICE_TAG_PREFIX + "HEAVY")
-            .performClick()
-        composeTestRule.onNodeWithTag(RUN_COMPLETE_EFFORT_TAG)
-            .assertTextEquals("EFFORT · HEAVY").performClick()
-        composeTestRule.onNodeWithText("Clear Effort").performClick()
-
-        composeTestRule.onNodeWithTag(RUN_COMPLETE_EFFORT_TAG).assertTextEquals("EFFORT +")
+        composeTestRule.onNodeWithTag(RUN_COMPLETE_EFFORT_TAG).assertDoesNotExist()
+        composeTestRule.onNodeWithText("FEELING GOOD").performScrollTo().performClick()
+        composeTestRule.mainClock.advanceTimeBy(2000L)
         composeTestRule.onNodeWithTag(RUN_COMPLETE_REFLECTION_TEXT_TAG)
             .performScrollTo().assertTextEquals(exact)
-        assertEquals(listOf(PostRunEffort.HEAVY, null), choices)
-        assertEquals(0, energySelections)
+        composeTestRule.onNodeWithTag(RUN_COMPLETE_EFFORT_CHOICE_TAG_PREFIX + "HEAVY")
+            .performScrollTo().performClick()
+
+        composeTestRule.onNodeWithTag(RUN_COMPLETE_EFFORT_TAG).assertDoesNotExist()
+        composeTestRule.onNodeWithTag(RUN_COMPLETE_REFLECTION_TEXT_TAG)
+            .performScrollTo().assertTextEquals(exact)
+        assertEquals(listOf(PostRunEffort.HEAVY), choices)
+        assertEquals(1, energySelections)
         assertEquals(false, sheetStates.last())
-        assertTrue(sheetStates.count { it } >= 2)
+        assertFalse(sheetStates.any { it })
     }
 
     @Test
@@ -2170,9 +2399,100 @@ class RunStateScreenTest {
             )
         }
 
-        composeTestRule.onNodeWithTag(RUN_COMPLETE_EFFORT_TAG).performScrollTo()
-            .assertTextEquals("EFFORT · SMOOTH").assertIsNotEnabled()
+        composeTestRule.onNodeWithTag(RUN_COMPLETE_EFFORT_TAG).performScrollTo().assertIsDisplayed()
+        composeTestRule.onNodeWithTag(RUN_COMPLETE_EFFORT_CHOICE_TAG_PREFIX + "SMOOTH")
+            .assertDoesNotExist()
         composeTestRule.onNodeWithText("Saving Effort…").assertExists()
+    }
+
+    @Test
+    fun optionalEffortSkipKeepsReflectionAndSaveActivityAvailable() {
+        var saved = 0
+        var effortSelections = 0
+        val holds = mutableListOf<Boolean>()
+        composeTestRule.setContent {
+            RunCompleteScreen(fixtureMetrics(), RunCompleteReflectionDisplay.Ready("Exact final reflection."),
+                {}, {}, true, energyEnabled = true, effortEnabled = true,
+                onSelectEffort = { effortSelections++ }, onSaveActivity = { saved++ },
+                onEffortSheetOpenChange = { holds += it })
+        }
+        composeTestRule.onNodeWithText("SPENT").performScrollTo().performClick()
+        composeTestRule.mainClock.advanceTimeBy(2000L)
+        composeTestRule.onNodeWithText("Skip").performScrollTo().performClick()
+        composeTestRule.onNodeWithTag(RUN_COMPLETE_EFFORT_TAG).assertDoesNotExist()
+        composeTestRule.onNodeWithTag(RUN_COMPLETE_REFLECTION_TEXT_TAG).performScrollTo()
+            .assertTextEquals("Exact final reflection.")
+        composeTestRule.onNodeWithTag(RUN_COMPLETE_SAVE_ACTIVITY_TAG).assertIsEnabled().performClick()
+        assertEquals(1, saved)
+        assertEquals(0, effortSelections)
+        assertFalse(holds.any { it })
+    }
+
+    @Test
+    fun completionNoteHasExplicitSaveFailureAndCancelWithoutChangingEnergy() {
+        val notes = mutableListOf<String?>()
+        var energySelections = 0
+        var saveError by mutableStateOf<String?>(null)
+        composeTestRule.setContent {
+            RunCompleteScreen(fixtureMetrics(), null, {}, {}, true,
+                onSaveActivity = {}, localNote = "Original note", noteError = saveError,
+                onSaveLocalNote = { notes += it; saveError = "Note could not be saved. Try again." },
+                onSelectEnergy = { energySelections++ })
+        }
+        composeTestRule.onNodeWithText("Edit your note").performScrollTo().performClick()
+        composeTestRule.onNodeWithTag(RUN_COMPLETE_NOTE_TAG).performScrollTo()
+            .performTextInput("Physically tired, mentally great")
+        composeTestRule.onNodeWithTag(RUN_COMPLETE_SAVE_ACTIVITY_TAG).assertIsNotEnabled()
+        composeTestRule.onNodeWithTag(RUN_COMPLETE_NOTE_SAVE_TAG).performScrollTo().performClick()
+        composeTestRule.onNodeWithText("Note could not be saved. Try again.").assertExists()
+        composeTestRule.onNodeWithText("Cancel note changes").performScrollTo().performClick()
+        composeTestRule.onNodeWithTag(RUN_COMPLETE_NOTE_TAG).assertDoesNotExist()
+        composeTestRule.onNodeWithTag(RUN_COMPLETE_SAVE_ACTIVITY_TAG).assertIsEnabled()
+        assertEquals(1, notes.size)
+        assertEquals(0, energySelections)
+    }
+
+    @Test
+    fun notSureSavesAnUnknownEnergyAndActivityHasOnlyTheNewPrimaryAction() {
+        val choices = mutableListOf<ReflectionBranch>()
+        var saves = 0
+        composeTestRule.setContent {
+            RunCompleteScreen(fixtureMetrics(), RunCompleteReflectionDisplay.Preparing, {},
+                { throw AssertionError("Save must not start another run") }, true,
+                energyEnabled = true, onSelectEnergy = { choices += it }, showHistory = true,
+                onSaveActivity = { saves++ })
+        }
+        saveNativePreview(RUN_COMPLETE_SCREEN_TAG, "debrief-completion.png")
+        composeTestRule.onNodeWithText("Not sure").performScrollTo().performClick()
+        composeTestRule.onNodeWithTag(RUN_COMPLETE_ENERGY_TAG).assertDoesNotExist()
+        composeTestRule.onNodeWithTag(RUN_COMPLETE_HISTORY_TAG).assertDoesNotExist()
+        composeTestRule.onNodeWithText("Start another run").assertDoesNotExist()
+        composeTestRule.onNodeWithTag(RUN_COMPLETE_SAVE_ACTIVITY_TAG).performClick()
+        assertEquals(listOf(ReflectionBranch.NO_SELECTION), choices)
+        assertEquals(1, saves)
+    }
+
+    @Test
+    fun activityRecapShowsExactSavedFactsReflectionAndLocalNote() {
+        var historyOpens = 0
+        var done = 0
+        val item = RunHistoryItem("recap", "Oct 18 · morning", fixtureMetrics(), "READY",
+            "Exact saved reflection without a new generation.", "Feeling Good", true,
+            energy = ReflectionBranch.FEELING_GOOD, preRunEnergy = PreRunEnergy.LOW,
+            effort = PostRunEffort.WORKING)
+        composeTestRule.setContent {
+            RunActivityRecapScreen(item, "Legs tired, mind clear", { historyOpens++ }, { done++ })
+        }
+        composeTestRule.onNodeWithTag(RUN_ACTIVITY_RECAP_TAG).assertIsDisplayed()
+        composeTestRule.onNodeWithText("0.11").assertExists()
+        saveNativePreview(RUN_ACTIVITY_RECAP_TAG, "debrief-recap.png")
+        composeTestRule.onNodeWithText("Legs tired, mind clear").performScrollTo().assertIsDisplayed()
+        composeTestRule.onNodeWithTag(RUN_COMPLETE_REFLECTION_TEXT_TAG).performScrollTo()
+            .assertTextEquals(item.reflectionText!!)
+        composeTestRule.onNodeWithTag(RUN_COMPLETE_HISTORY_TAG).performScrollTo().performClick()
+        composeTestRule.onNodeWithText("Done").performClick()
+        assertEquals(1, historyOpens)
+        assertEquals(1, done)
     }
 
     @Test
@@ -3485,6 +3805,71 @@ class RunStateScreenTest {
     }
 
     @Test
+    fun energyInvitationFollowsFactsAndHoldsReflectionUntilItsOwnCompletion() {
+        val id = "0f6a2c1e-9d43-4b7a-9c21-7b5e8a4d1f30"
+        val utterances = mutableListOf<String>()
+        val doneCallbacks = mutableListOf<() -> Unit>()
+        val reflections = mutableListOf<String>()
+        val speaker = object : ReflectionSpeaker {
+            override fun speak(text: String) { reflections += text }
+            override fun speakReceipt(text: String, onFinished: () -> Unit) {
+                utterances += text
+                doneCallbacks += onFinished
+            }
+            override fun stop() = Unit
+            override fun close() = Unit
+        }
+        composeTestRule.setContent {
+            var started by remember { mutableStateOf<String?>(null) }
+            var finished by remember { mutableStateOf<String?>(null) }
+            var spoken by remember { mutableStateOf<String?>(null) }
+            RunCompleteReceiptEffect(id, id, "Run complete. Three miles.", started, finished,
+                true, { speaker }, { started = it }, { finished = it }, shouldPromptEnergy = { true })
+            RunCompleteSpeechEffect(id, id, spoken, RunReflectionState.Ready(id, "Exact reflection."),
+                finished == id, { speaker }, { spoken = it })
+        }
+        composeTestRule.runOnIdle {
+            assertEquals(listOf("Run complete. Three miles."), utterances)
+            doneCallbacks.first().invoke()
+            doneCallbacks.first().invoke() // Late duplicate facts callback cannot repeat the invitation.
+        }
+        composeTestRule.runOnIdle {
+            assertEquals(listOf("Run complete. Three miles.", "How’s your energy now?"), utterances)
+            assertTrue(reflections.isEmpty())
+            doneCallbacks.last().invoke()
+        }
+        composeTestRule.runOnIdle { assertEquals(listOf("Exact reflection."), reflections) }
+    }
+
+    @Test
+    fun choosingEnergyDuringFactsSkipsTheSpokenInvitation() {
+        val id = "0f6a2c1e-9d43-4b7a-9c21-7b5e8a4d1f30"
+        val utterances = mutableListOf<String>()
+        var done: (() -> Unit)? = null
+        var answered by mutableStateOf(false)
+        var finished: String? = null
+        val speaker = object : ReflectionSpeaker {
+            override fun speak(text: String) = Unit
+            override fun speakReceipt(text: String, onFinished: () -> Unit) {
+                utterances += text; done = onFinished
+            }
+            override fun stop() = Unit
+            override fun close() = Unit
+        }
+        composeTestRule.setContent {
+            var started by remember { mutableStateOf<String?>(null) }
+            RunCompleteReceiptEffect(id, id, "Run complete.", started, null, true,
+                { speaker }, { started = it }, { finished = it }, shouldPromptEnergy = { !answered })
+        }
+        composeTestRule.runOnIdle { answered = true }
+        composeTestRule.runOnIdle { requireNotNull(done).invoke() }
+        composeTestRule.runOnIdle {
+            assertEquals(listOf("Run complete."), utterances)
+            assertEquals(id, finished)
+        }
+    }
+
+    @Test
     fun restoredConsumedReceiptReleasesItsWindowWithoutRepeatingSpeech() {
         val runId = "0f6a2c1e-9d43-4b7a-9c21-7b5e8a4d1f30"
         val finished = mutableListOf<String>()
@@ -3537,21 +3922,21 @@ class RunStateScreenTest {
         composeTestRule.setContent {
             val density = LocalDensity.current
             CompositionLocalProvider(LocalDensity provides Density(density.density, 1.5f)) {
-                ActiveRunScreen(paused, fixtureMetrics().copy(elapsed = "10:59:59"), false, true,
+                ActiveRunScreen(paused, fixtureMetrics().copy(active = "10:59:59"), false, true,
                     {}, {}, {}, modifier = Modifier.size(360.dp, 480.dp))
             }
         }
         composeTestRule.onNodeWithText(PAUSE).assertIsDisplayed()
-        composeTestRule.onNodeWithTag(ACTIVE_RUN_ELAPSED_TAG).performScrollTo()
+        composeTestRule.onNodeWithTag(ACTIVE_RUN_ACTIVE_TAG).performScrollTo()
             .assertTextEquals("10:59:59").assertIsDisplayed()
         val layouts = mutableListOf<TextLayoutResult>()
-        composeTestRule.onNodeWithTag(ACTIVE_RUN_ELAPSED_TAG)
+        composeTestRule.onNodeWithTag(ACTIVE_RUN_ACTIVE_TAG)
             .performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
         assertFalse(layouts.single().hasVisualOverflow)
         composeTestRule.runOnIdle { paused = true }
         composeTestRule.onNodeWithText(RESUME).assertIsDisplayed()
         composeTestRule.onNodeWithTag(HOLD_TO_STOP_TAG).assertIsDisplayed()
-        composeTestRule.onNodeWithText("Active time and distance are paused. Total time includes breaks.")
+        composeTestRule.onNodeWithText("Active time and distance are paused.")
             .performScrollTo().assertIsDisplayed()
         composeTestRule.onNodeWithTag(ACTIVE_RUN_METRICS_TAG).performScrollTo().assertIsDisplayed()
     }
@@ -3591,7 +3976,7 @@ class RunStateScreenTest {
             val distance = composeTestRule.onNodeWithTag(ACTIVE_RUN_DISTANCE_TAG).fetchSemanticsNode()
             val circle = composeTestRule.onNodeWithTag(ACTIVE_RUN_CIRCLE_TAG).fetchSemanticsNode()
             assertTrue(distance.positionInRoot.y + distance.size.height <= circle.positionInRoot.y)
-            assertWholeValue(ACTIVE_RUN_ELAPSED_TAG, metrics.elapsed)
+            composeTestRule.onNodeWithTag(ACTIVE_RUN_ELAPSED_TAG).assertDoesNotExist()
             assertWholeValue(ACTIVE_RUN_PACE_TAG, metrics.averagePace)
             assertWholeValue(ACTIVE_RUN_ACTIVE_TAG, metrics.active)
             composeTestRule.onNodeWithText(metrics.sourceLabel).performScrollTo().assertIsDisplayed()
@@ -3599,7 +3984,7 @@ class RunStateScreenTest {
             composeTestRule.onNodeWithText(PAUSE).performClick()
             composeTestRule.onNodeWithText(RESUME).assertIsDisplayed()
             composeTestRule.onNodeWithTag(HOLD_TO_STOP_TAG).assertIsDisplayed()
-            composeTestRule.onNodeWithText("Active time and distance are paused. Total time includes breaks.")
+            composeTestRule.onNodeWithText("Active time and distance are paused.")
                 .performScrollTo().assertIsDisplayed()
             composeTestRule.onNodeWithText(RESUME).performClick()
         }
@@ -4346,18 +4731,22 @@ class RunStateScreenTest {
     /** What the countdown host observed. */
     private class CountdownRecord {
         val digitsSeen = mutableListOf<Int>()
+        val cues = mutableListOf<Int?>()
         var finishes = 0
     }
 
     /** Hosts the countdown over [owner]'s lifecycle and shows its digit under a tag. */
-    private fun renderCountdown(owner: TestLifecycle): CountdownRecord {
+    private fun renderCountdown(owner: TestLifecycle, startNow: () -> Boolean = { false },
+        active: () -> Boolean = { true }): CountdownRecord {
         val record = CountdownRecord()
 
         composeTestRule.setContent {
             val digit = rememberLifecycleCountdown(
-                active = true,
+                active = active(),
                 lifecycle = owner.lifecycle,
-                onFinished = { record.finishes++ }
+                onFinished = { record.finishes++ },
+                startNowRequested = startNow(),
+                onCountdownCue = { record.cues += it }
             )
 
             LaunchedEffect(digit) {
@@ -4408,17 +4797,9 @@ class RunStateScreenTest {
         composeTestRule.waitUntil(METRIC_TICK_MILLIS) { ticks[0] > stoppedAt }
     }
 
-    private fun waitForDigit(text: String, timeoutMillis: Long = 2 * COUNTDOWN_STEP_MILLIS) {
-        composeTestRule.waitUntil(timeoutMillis) {
-            composeTestRule.onNodeWithTag(DIGIT_TAG)
-                .fetchSemanticsNode().config[SemanticsProperties.Text]
-                .joinToString { it.text } == text
-        }
-    }
-
-    /** Proves the countdown visibly shows 3, then 2, then 1, and finishes exactly once. */
+    /** Every preparation second remains visible; only the opening and final three speak. */
     @Test
-    fun countdownShowsThreeTwoOneThenFinishesOnce() {
+    fun countdownShowsTenSecondsAndSpeaksOpeningAndFinalThreeThenFinishesOnce() {
         // Advance the same virtual clock as the effect's delays, keeping every visible
         // digit observable independently of physical-device semantics polling speed.
         composeTestRule.mainClock.autoAdvance = false
@@ -4427,26 +4808,21 @@ class RunStateScreenTest {
         val record = renderCountdown(owner)
 
         composeTestRule.mainClock.advanceTimeByFrame()
-        composeTestRule.onNodeWithTag(DIGIT_TAG).assertTextEquals("3")
-        assertEquals(0, record.finishes)
-        composeTestRule.mainClock.advanceTimeBy(COUNTDOWN_STEP_MILLIS)
-        composeTestRule.mainClock.advanceTimeByFrame()
-        composeTestRule.onNodeWithTag(DIGIT_TAG).assertTextEquals("2")
-        assertEquals(0, record.finishes)
-        composeTestRule.mainClock.advanceTimeBy(COUNTDOWN_STEP_MILLIS)
-        composeTestRule.mainClock.advanceTimeByFrame()
-        composeTestRule.onNodeWithTag(DIGIT_TAG).assertTextEquals("1")
-        assertEquals(0, record.finishes)
-        composeTestRule.mainClock.advanceTimeBy(COUNTDOWN_STEP_MILLIS)
-        composeTestRule.mainClock.advanceTimeByFrame()
-        assertEquals(listOf(3, 2, 1), record.digitsSeen)
+        for (expected in COUNTDOWN_SECONDS downTo 1) {
+            composeTestRule.onNodeWithTag(DIGIT_TAG).assertTextEquals(expected.toString())
+            assertEquals(0, record.finishes)
+            composeTestRule.mainClock.advanceTimeBy(COUNTDOWN_STEP_MILLIS)
+            composeTestRule.mainClock.advanceTimeByFrame()
+        }
+        assertEquals((COUNTDOWN_SECONDS downTo 1).toList(), record.digitsSeen)
+        assertEquals(listOf(10, 3, 2, 1, null), record.cues)
         assertEquals(1, record.finishes)
 
         // Assert: no further finish after more time passes.
         composeTestRule.mainClock.advanceTimeBy(LONGER_THAN_COUNTDOWN_MILLIS)
         composeTestRule.mainClock.advanceTimeByFrame()
         composeTestRule.waitForIdle()
-        assertEquals(listOf(3, 2, 1), record.digitsSeen)
+        assertEquals((COUNTDOWN_SECONDS downTo 1).toList(), record.digitsSeen)
         assertEquals(1, record.finishes)
     }
 
@@ -4473,10 +4849,10 @@ class RunStateScreenTest {
         // Act: mid-countdown, the app goes to the background again.
         moveTo(owner, Lifecycle.State.STARTED)
         composeTestRule.mainClock.advanceTimeByFrame()
-        composeTestRule.onNodeWithTag(DIGIT_TAG).assertTextEquals("3")
+        composeTestRule.onNodeWithTag(DIGIT_TAG).assertTextEquals("10")
         composeTestRule.mainClock.advanceTimeBy(COUNTDOWN_STEP_MILLIS)
         composeTestRule.mainClock.advanceTimeByFrame()
-        composeTestRule.onNodeWithTag(DIGIT_TAG).assertTextEquals("2")
+        composeTestRule.onNodeWithTag(DIGIT_TAG).assertTextEquals("9")
         moveTo(owner, Lifecycle.State.CREATED)
         composeTestRule.mainClock.advanceTimeByFrame()
         composeTestRule.mainClock.advanceTimeBy(LONGER_THAN_COUNTDOWN_MILLIS)
@@ -4484,62 +4860,139 @@ class RunStateScreenTest {
 
         // Assert: cleared, and never reached 1 or finished.
         composeTestRule.onNodeWithTag(DIGIT_TAG).assertTextEquals(NO_DIGIT)
-        assertEquals(listOf(3, 2), record.digitsSeen)
+        assertEquals(listOf(10, 9), record.digitsSeen)
+        assertEquals(listOf(10, null), record.cues)
         assertEquals(0, record.finishes)
     }
 
-    /** Proves returning to STARTED begins again at 3 rather than resuming part-way. */
+    /** An unreserved visual helper restarts, never silently finishes while backgrounded. */
     @Test
-    fun returningToStartedRestartsTheCountdownAtThree() {
+    fun returningToStartedRestartsTheCountdownAtTen() {
+        composeTestRule.mainClock.autoAdvance = false
         val owner = TestLifecycle()
         moveTo(owner, Lifecycle.State.RESUMED)
         val record = renderCountdown(owner)
 
-        // Act: reach 2, leave, come back.
-        waitForDigit("2")
+        composeTestRule.mainClock.advanceTimeByFrame()
+        composeTestRule.mainClock.advanceTimeBy(COUNTDOWN_STEP_MILLIS)
+        composeTestRule.mainClock.advanceTimeByFrame()
+        composeTestRule.onNodeWithTag(DIGIT_TAG).assertTextEquals("9")
         moveTo(owner, Lifecycle.State.CREATED)
         moveTo(owner, Lifecycle.State.RESUMED)
 
-        // Assert: 3 again, then a full countdown and one finish.
-        waitForDigit("3", timeoutMillis = COUNTDOWN_STEP_MILLIS / 2)
-        composeTestRule.waitUntil(4 * COUNTDOWN_STEP_MILLIS) { record.finishes > 0 }
-        assertEquals(listOf(3, 2, 3, 2, 1), record.digitsSeen)
+        composeTestRule.mainClock.advanceTimeByFrame()
+        composeTestRule.onNodeWithTag(DIGIT_TAG).assertTextEquals("10")
+        composeTestRule.mainClock.advanceTimeBy(LONGER_THAN_COUNTDOWN_MILLIS)
+        composeTestRule.mainClock.advanceTimeByFrame()
+        assertEquals(listOf(10, 9) + (COUNTDOWN_SECONDS downTo 1).toList(), record.digitsSeen)
         assertEquals(1, record.finishes)
     }
 
-    /**
-     * Proves a genuine Activity recreation during Countdown restarts it at 3.
-     *
-     * The real [MainActivity] over the real process coordinator. The countdown is cancelled
-     * before it reaches zero, so this test never makes a run official.
-     */
     @Test
-    fun activityRecreationDuringCountdownRestartsAtThree() {
-        ActivityScenario.launch(MainActivity::class.java).use { scenario ->
-            composeTestRule.waitUntil(10_000) {
-                composeTestRule.onAllNodesWithText(READY).fetchSemanticsNodes().isNotEmpty()
-            }
-
-            // Act: begin, and wait until the countdown has visibly moved past 3.
-            composeTestRule.onNodeWithText(START).performClick()
-            waitForText("3")
-            waitForText("2")
-
-            scenario.recreate()
-
-            // Assert: the new Activity starts again at 3, well before 1.
-            waitForText("3", timeoutMillis = COUNTDOWN_STEP_MILLIS / 2 + 500L)
-
-            // Clean up before zero: nothing official is created.
-            composeTestRule.onNodeWithText(CANCEL).performClick()
-            waitForText(READY)
-        }
+    fun startNowDuringFinalSecondFinishesOnlyOnceAndStopsSpokenCountdown() {
+        composeTestRule.mainClock.autoAdvance = false
+        val owner = TestLifecycle()
+        moveTo(owner, Lifecycle.State.RESUMED)
+        var startNow by mutableStateOf(false)
+        val record = renderCountdown(owner, startNow = { startNow })
+        composeTestRule.mainClock.advanceTimeByFrame()
+        composeTestRule.mainClock.advanceTimeBy((COUNTDOWN_SECONDS - 1) * COUNTDOWN_STEP_MILLIS)
+        composeTestRule.mainClock.advanceTimeByFrame()
+        composeTestRule.onNodeWithTag(DIGIT_TAG).assertTextEquals("1")
+        composeTestRule.runOnIdle { startNow = true }
+        composeTestRule.mainClock.advanceTimeByFrame()
+        assertEquals(1, record.finishes)
+        assertEquals(null, record.cues.last())
+        // The first frame applies the input and runs its effect; rendering that effect's
+        // cleared digit takes the next frame while automatic clock advancement is disabled.
+        composeTestRule.mainClock.advanceTimeByFrame()
+        composeTestRule.onNodeWithTag(DIGIT_TAG).assertTextEquals(NO_DIGIT)
+        composeTestRule.mainClock.advanceTimeBy(LONGER_THAN_COUNTDOWN_MILLIS)
+        moveTo(owner, Lifecycle.State.CREATED)
+        moveTo(owner, Lifecycle.State.RESUMED)
+        composeTestRule.mainClock.advanceTimeBy(LONGER_THAN_COUNTDOWN_MILLIS)
+        assertEquals(1, record.finishes)
+        assertEquals(listOf(10, 3, 2, 1, null), record.cues)
     }
 
-    private fun waitForText(text: String, timeoutMillis: Long = 3 * COUNTDOWN_STEP_MILLIS) {
-        composeTestRule.waitUntil(timeoutMillis) {
-            composeTestRule.onAllNodesWithText(text).fetchSemanticsNodes().isNotEmpty()
+    @Test
+    fun cancellingCountdownWinsAgainstPendingStartNowAndAllowsFreshPreparation() {
+        composeTestRule.mainClock.autoAdvance = false
+        val owner = TestLifecycle()
+        moveTo(owner, Lifecycle.State.RESUMED)
+        var active by mutableStateOf(true)
+        var startNow by mutableStateOf(false)
+        val record = renderCountdown(owner, startNow = { startNow }, active = { active })
+        composeTestRule.mainClock.advanceTimeByFrame()
+        composeTestRule.runOnIdle { active = false; startNow = true }
+        composeTestRule.mainClock.advanceTimeByFrame()
+        composeTestRule.mainClock.advanceTimeBy(LONGER_THAN_COUNTDOWN_MILLIS)
+        assertEquals(0, record.finishes)
+        assertEquals(null, record.cues.last())
+        composeTestRule.onNodeWithTag(DIGIT_TAG).assertTextEquals(NO_DIGIT)
+        composeTestRule.runOnIdle { startNow = false; active = true }
+        composeTestRule.mainClock.advanceTimeByFrame()
+        // Applying the new active input launches an effect; show its first digit next frame.
+        composeTestRule.mainClock.advanceTimeByFrame()
+        composeTestRule.onNodeWithTag(DIGIT_TAG).assertTextEquals("10")
+        composeTestRule.mainClock.advanceTimeBy(LONGER_THAN_COUNTDOWN_MILLIS)
+        assertEquals(1, record.finishes)
+    }
+
+    @Test
+    fun startNowWhileBackgroundedCannotFinishRun() {
+        composeTestRule.mainClock.autoAdvance = false
+        val owner = TestLifecycle()
+        moveTo(owner, Lifecycle.State.RESUMED)
+        var startNow by mutableStateOf(false)
+        val record = renderCountdown(owner, startNow = { startNow })
+        composeTestRule.mainClock.advanceTimeByFrame()
+        moveTo(owner, Lifecycle.State.CREATED)
+        composeTestRule.runOnIdle { startNow = true }
+        composeTestRule.mainClock.advanceTimeByFrame()
+        composeTestRule.mainClock.advanceTimeBy(LONGER_THAN_COUNTDOWN_MILLIS)
+        assertEquals(0, record.finishes)
+        assertEquals(listOf(10, null), record.cues)
+        composeTestRule.onNodeWithTag(DIGIT_TAG).assertTextEquals(NO_DIGIT)
+    }
+
+    /** The visual timer never restores a half-finished or already-authorized start. */
+    @Test
+    fun countdownCompositionRestorationRestartsAtTenWithoutFinishing() {
+        composeTestRule.mainClock.autoAdvance = false
+        val owner = TestLifecycle()
+        moveTo(owner, Lifecycle.State.RESUMED)
+        var active by mutableStateOf(true)
+        var entries = 0
+        var disposals = 0
+        var finishes = 0
+        val restoration = StateRestorationTester(composeTestRule)
+        restoration.setContent {
+            DisposableEffect(Unit) {
+                entries++
+                onDispose { disposals++ }
+            }
+            val digit = rememberLifecycleCountdown(active, owner.lifecycle, { finishes++ })
+            Text(digit?.toString() ?: NO_DIGIT, Modifier.testTag(DIGIT_TAG))
         }
+        composeTestRule.mainClock.advanceTimeByFrame()
+        composeTestRule.mainClock.advanceTimeBy(COUNTDOWN_STEP_MILLIS)
+        composeTestRule.mainClock.advanceTimeByFrame()
+        composeTestRule.onNodeWithTag(DIGIT_TAG).assertTextEquals("9")
+
+        // Restoration must actually dispose/recreate the composition. A paused clock could
+        // otherwise combine its removal/re-entry updates into the same frame.
+        composeTestRule.mainClock.autoAdvance = true
+        restoration.emulateSavedInstanceStateRestore()
+        composeTestRule.mainClock.autoAdvance = false
+        composeTestRule.mainClock.advanceTimeByFrame()
+        assertEquals(2, entries)
+        assertEquals(1, disposals)
+        composeTestRule.onNodeWithTag(DIGIT_TAG).assertTextEquals("10")
+        assertEquals(0, finishes)
+        composeTestRule.runOnIdle { active = false }
+        composeTestRule.mainClock.advanceTimeBy(LONGER_THAN_COUNTDOWN_MILLIS)
+        assertEquals(0, finishes)
     }
 
     // ---------------------------------------------------------------------------------

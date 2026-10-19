@@ -118,6 +118,45 @@ class RunSessionCoordinatorRoomTest {
             locationDao = database.locationDao()
         )
 
+    @Test
+    fun protectedCompletionAndLocalNoteSurviveReopenThenFinalizeExactlyOnce() = runBlocking {
+        val clock = SettableClock(OFFICIAL_START)
+        val first = coordinator(clock)
+        first.initialize()
+        first.beginCountdown()
+        first.requestStart().await()
+        assertFalse(first.finalizeActivity(RUN_ID))
+        assertFalse(first.updatePostRunNote(RUN_ID, "Too early"))
+        clock.nowMillis = FIRST_PAUSE
+        first.requestAction(RunActionKind.PAUSE).await()
+        clock.nowMillis = FINISH
+        first.requestAction(RunActionKind.COMPLETE).await()
+        assertTrue(first.updatePostRunNote(RUN_ID, "  Tired legs, happy mind  "))
+        val protectedRun = requireNotNull(database.runDao().findById(RUN_ID))
+        val transitions = database.runDao().transitionsFor(RUN_ID)
+        assertFalse(protectedRun.activityFinalized)
+        assertEquals("Tired legs, happy mind", protectedRun.postRunNote)
+        assertEquals(protectedRun, database.runDao().findLatestUnfinalizedActivity())
+
+        applicationScope.cancel()
+        database.close()
+        database = Room.databaseBuilder(context, RunStateDatabase::class.java, DATABASE_NAME).build()
+        applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+        val recovered = coordinator(clock)
+        val restored = recovered.initialize().admission as RunAdmission.RunCompleted
+        assertEquals(RUN_ID, restored.session.runId)
+        assertEquals(protectedRun, database.runDao().findById(RUN_ID))
+        assertTrue(runCatching { recovered.prepareAnotherRun() }.isFailure)
+        assertTrue(recovered.finalizeActivity(RUN_ID))
+        assertTrue(recovered.finalizeActivity(RUN_ID))
+        assertEquals(protectedRun.copy(activityFinalized = true), database.runDao().findById(RUN_ID))
+        assertEquals(transitions, database.runDao().transitionsFor(RUN_ID))
+        assertEquals(1, database.runDao().countRuns())
+        assertNull(database.runDao().findLatestUnfinalizedActivity())
+        recovered.prepareAnotherRun()
+        assertEquals(RunAdmission.ReadyForCountdown, recovered.journeySnapshot().admission)
+    }
+
     /**
      * Proves Start, Pause, Resume, Pause and Complete through the coordinator store one
      * completed run with ordered history, and report Saved.
@@ -267,6 +306,7 @@ class RunSessionCoordinatorRoomTest {
         owner.requestAction(RunActionKind.PAUSE).await()
         owner.requestAction(RunActionKind.COMPLETE).await()
         assertNull(owner.runMapEvidence(GpsSignalStatus.RECORDING))
+        owner.finalizeActivity(RUN_ID)
         owner.prepareAnotherRun()
         assertNull(owner.runMapEvidence(GpsSignalStatus.RECORDING))
         assertEquals(4, database.locationDao().pointsFor(RUN_ID).size)

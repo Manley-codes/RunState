@@ -44,6 +44,17 @@ abstract class ReflectionDao {
         selectionHeld: Boolean = false
     ): RunReflectionEntity {
         require(branch != ReflectionBranch.NO_SELECTION) { "Energy must name an Energy branch." }
+        return recordExplicitAnswer(runId, branch, now, selectionHeld)
+    }
+
+    /** A deliberate unknown is distinct from an automatic timeout, without inventing Energy. */
+    @Transaction
+    open suspend fun recordNotSure(runId: String, now: Long, selectionHeld: Boolean = false): RunReflectionEntity =
+        recordExplicitAnswer(runId, ReflectionBranch.NO_SELECTION, now, selectionHeld)
+
+    private suspend fun recordExplicitAnswer(
+        runId: String, branch: ReflectionBranch, now: Long, selectionHeld: Boolean
+    ): RunReflectionEntity {
         val stored = required(runId)
         val selected = stored.selectedBranch ?: if (!stored.selectionWindowStarted ||
             selectionHeld || now < stored.selectionDeadlineEpochMillis) {

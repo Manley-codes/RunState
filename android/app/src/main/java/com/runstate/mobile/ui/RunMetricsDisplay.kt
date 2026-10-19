@@ -72,17 +72,20 @@ internal fun savedRunReceiptFor(run: RunEntity, transitions: List<RunTransitionE
         }
         "$provenance$amount $unit."
     }
-    val duration = run.finishEpochMillis?.let { finish ->
-        val seconds = (finish - run.officialStartEpochMillis).coerceAtLeast(0) / 1_000L
+    // The runner-facing time excludes pauses. An omitted/incomplete saved timeline must
+    // not substitute wall-clock total and quietly count breaks as running.
+    val duration = transitions?.let { completedHistoryMetrics(run, it)?.activeMillis }?.let { activeMillis ->
+        val seconds = activeMillis / 1_000L
         val parts = listOf(seconds / 3_600L to "hour", seconds / 60L % 60 to "minute",
             seconds % 60 to "second").filter { it.first > 0 }
         val words = if (parts.isEmpty()) "0 seconds" else parts.joinToString(", ") { (count, unit) ->
             "$count $unit${if (count == 1L) "" else "s"}"
         }
-        "Elapsed time, $words."
+        "Active time, $words."
     }
     val pace = savedAveragePaceReceiptFor(run, transitions)
-    return listOfNotNull("Run saved.", distance, duration, pace).joinToString(" ")
+    return listOfNotNull(if (run.activityFinalized) "Run saved." else "Run complete.",
+        distance, duration, pace).joinToString(" ")
 }
 
 private fun savedAveragePaceReceiptFor(run: RunEntity, transitions: List<RunTransitionEntity>?): String? {
@@ -257,6 +260,7 @@ internal fun historyItemFor(
             ReflectionBranch.NO_SELECTION, null -> null
         },
         effort = run.postRunEffort,
+        postRunNote = run.postRunNote,
         energy = reflection?.postRunEnergy,
         isGpsRun = run.trackingMode == RunTrackingMode.GPS,
         isTestData = reflection?.takeIf { it.status == ReflectionStatus.READY }?.isTestData == true,

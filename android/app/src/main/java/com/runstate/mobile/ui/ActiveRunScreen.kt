@@ -24,6 +24,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -147,6 +148,8 @@ internal fun ActiveRunScreen(
         val circleSize = (maxWidth - 48.dp).coerceIn(120.dp,
             if (liveMapBackground) 160.dp else 240.dp)
         val largeText = LocalDensity.current.fontScale > 1.3f
+        val bodyScroll = rememberScrollState()
+        LaunchedEffect(paused) { bodyScroll.scrollTo(0) }
         val mapStatus = if (liveMapBackground) liveMapStatus ?: when {
             !gpsServicePresent -> "GPS STOPPED"
             paused -> "GPS PAUSED · LAST RECORDED POSITION"
@@ -186,19 +189,19 @@ internal fun ActiveRunScreen(
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxWidth()
-                    .verticalScroll(rememberScrollState())
+                    .verticalScroll(bodyScroll)
                     .padding(start = 24.dp, top = 22.dp, end = 24.dp, bottom = 24.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 ActiveHeader(paused, largeText)
-                Text(
-                    text = if (paused) "You have a paused run" else "You have a run in progress",
+                if (!paused) Text(
+                    text = "You have a run in progress",
                     color = ActiveInk.copy(alpha = 0.78f),
                     fontSize = 14.sp,
                     lineHeight = 20.sp,
                     modifier = Modifier.fillMaxWidth().padding(top = 10.dp)
                 )
-                Spacer(Modifier.height(16.dp))
+                Spacer(Modifier.height(if (paused) 10.dp else 16.dp))
 
                 Text(
                     text = if (isGpsRun) "GPS RUN" else "SAMPLE RUN · SIMULATED DISTANCE",
@@ -235,13 +238,15 @@ internal fun ActiveRunScreen(
                 )
                 ActiveFittedValue(
                     value = metrics?.distance ?: "—",
-                    maximumSize = 76,
+                    maximumSize = if (paused) 64 else 76,
                     compactDistanceUnit = true,
                     modifier = Modifier.padding(top = 4.dp).testTag(ACTIVE_RUN_DISTANCE_TAG)
                 )
-                Spacer(Modifier.height(14.dp))
+                Spacer(Modifier.height(if (paused) 10.dp else 14.dp))
 
-                Box(
+                if (paused) {
+                    PausedMetricsPanel(metrics)
+                } else Box(
                     modifier = Modifier
                         .align(if (liveMapBackground) Alignment.End else Alignment.CenterHorizontally)
                         .size(circleSize)
@@ -307,7 +312,7 @@ internal fun ActiveRunScreen(
                 }
                 if (paused) {
                     Text(
-                        text = "Active time and distance are paused. Total time includes breaks.",
+                        text = "Active time and distance are paused.",
                         color = ActiveInk.copy(alpha = 0.78f),
                         fontSize = 12.sp,
                         lineHeight = 18.sp,
@@ -326,7 +331,7 @@ internal fun ActiveRunScreen(
                     )
                 }
 
-                ActiveMetricsPanel(metrics, Modifier.padding(top = 16.dp))
+                if (!paused) ActiveMetricsPanel(metrics, Modifier.padding(top = 16.dp))
                 if (isGpsRun && !gpsServicePresent) {
                     Text(
                         text = gpsMessage ?: "GPS is not recording. Distance may be incomplete.",
@@ -356,7 +361,7 @@ internal fun ActiveRunScreen(
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(topStart = 30.dp, topEnd = 30.dp))
                     .background(Brush.horizontalGradient(listOf(ActiveForest, Color(0xFF1B2618))))
-                    .padding(horizontal = 24.dp, vertical = 20.dp),
+                    .padding(horizontal = 24.dp, vertical = if (paused) 12.dp else 20.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 if (actionFailed) {
@@ -381,7 +386,8 @@ internal fun ActiveRunScreen(
                 Button(
                     onClick = if (paused) onResume else onPause,
                     enabled = actionsEnabled,
-                    modifier = Modifier.fillMaxWidth().padding(top = 10.dp).heightIn(min = 58.dp),
+                    modifier = Modifier.fillMaxWidth().padding(top = 10.dp)
+                        .heightIn(min = if (paused) 50.dp else 58.dp),
                     shape = RoundedCornerShape(18.dp),
                     colors = ButtonDefaults.buttonColors(
                         containerColor = if (paused) ActiveLime else Color.White,
@@ -548,6 +554,34 @@ private fun ActiveFittedValue(
 }
 
 @Composable
+private fun PausedMetricsPanel(metrics: RunMetricsDisplay?) {
+    BoxWithConstraints(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(24.dp))
+            .background(Color.White.copy(alpha = 0.94f)).padding(16.dp)
+            .testTag(ACTIVE_RUN_METRICS_TAG)
+    ) {
+        // Keep the frozen timer and pace before the optional map/status details. They are
+        // immediately visible on ordinary portrait screens; large text can still scroll.
+        val stacked = LocalDensity.current.fontScale > 1.3f || maxWidth < 260.dp
+        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            if (stacked) {
+                ActiveMetric("Active time", metrics?.active ?: "—", ACTIVE_RUN_ACTIVE_TAG)
+                ActiveMetric("Avg pace", metrics?.averagePace ?: "—", ACTIVE_RUN_PACE_TAG)
+            } else {
+                Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                    ActiveMetric("Active time", metrics?.active ?: "—", ACTIVE_RUN_ACTIVE_TAG,
+                        Modifier.weight(1f))
+                    ActiveMetric("Avg pace", metrics?.averagePace ?: "—", ACTIVE_RUN_PACE_TAG,
+                        Modifier.weight(1f))
+                }
+            }
+            Text(metrics?.sourceLabel ?: "Metrics unavailable", color = ActiveInk.copy(alpha = 0.74f),
+                fontSize = 12.sp, lineHeight = 18.sp, fontWeight = FontWeight.SemiBold)
+        }
+    }
+}
+
+@Composable
 private fun ActiveMetricsPanel(metrics: RunMetricsDisplay?, modifier: Modifier = Modifier) {
     BoxWithConstraints(
         modifier = modifier
@@ -557,24 +591,8 @@ private fun ActiveMetricsPanel(metrics: RunMetricsDisplay?, modifier: Modifier =
             .padding(16.dp)
             .testTag(ACTIVE_RUN_METRICS_TAG)
     ) {
-        val stacked = LocalDensity.current.fontScale > 1.25f || maxWidth < 280.dp
         Column(modifier = Modifier.fillMaxWidth()) {
-            if (stacked) {
-                Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                    ActiveMetric("Avg pace", metrics?.averagePace ?: "—", ACTIVE_RUN_PACE_TAG)
-                    ActiveMetric("Total incl. breaks", metrics?.elapsed ?: "—", ACTIVE_RUN_ELAPSED_TAG)
-                }
-            } else {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(20.dp)
-                ) {
-                    ActiveMetric("Avg pace", metrics?.averagePace ?: "—", ACTIVE_RUN_PACE_TAG,
-                        Modifier.weight(1f))
-                    ActiveMetric("Total incl. breaks", metrics?.elapsed ?: "—", ACTIVE_RUN_ELAPSED_TAG,
-                        Modifier.weight(1f))
-                }
-            }
+            ActiveMetric("Avg pace", metrics?.averagePace ?: "—", ACTIVE_RUN_PACE_TAG)
             Text(
                 text = metrics?.sourceLabel ?: "Metrics unavailable",
                 color = ActiveInk.copy(alpha = 0.74f),

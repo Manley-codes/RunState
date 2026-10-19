@@ -70,6 +70,38 @@ class ReflectionDaoTest {
         return database.reflectionDao().also { it.ensurePending(pending) }
     }
 
+    @Test
+    fun explicitNotSureUsesSupportedRoomPathAndReopensDistinctFromTimeout() = runBlocking {
+        val dao = createPending()
+        val selected = RoomReflectionStore(dao).energy(completed.runId, ReflectionBranch.NO_SELECTION,
+            pending.selectionDeadlineEpochMillis - 1, false)
+        assertEquals(ReflectionBranch.NO_SELECTION, selected.selectedBranch)
+        assertEquals(ReflectionBranch.NO_SELECTION, selected.postRunEnergy)
+        dao.saveCandidates(completed.runId, pending.requestId, "{}", true)
+        assertTrue(dao.finalizeReady(completed.runId, pending.requestId, ReflectionBranch.NO_SELECTION,
+            "Exact unknown-energy reflection.", pending.selectionDeadlineEpochMillis))
+        val exact = dao.findByRunId(completed.runId)
+        database.close()
+        database = buildRunStateDatabase(context, DATABASE_NAME)
+        assertEquals(exact, database.reflectionDao().findByRunId(completed.runId))
+        val afterFeedback = database.reflectionDao().recordEnergy(completed.runId, ReflectionBranch.SPENT,
+            pending.selectionDeadlineEpochMillis + 1)
+        assertEquals("Exact unknown-energy reflection.", afterFeedback.text)
+        assertEquals(ReflectionBranch.NO_SELECTION, afterFeedback.selectedBranch)
+        assertEquals(ReflectionBranch.SPENT, afterFeedback.postRunEnergy)
+    }
+
+    @Test
+    fun automaticNoSelectionStillLeavesEnergyUnansweredUntilExplicitNotSure() = runBlocking {
+        val dao = createPending()
+        val automatic = dao.selectNoSelectionIfDue(completed.runId, pending.selectionDeadlineEpochMillis)
+        assertNull(automatic.postRunEnergy)
+        assertEquals(ReflectionBranch.NO_SELECTION, automatic.selectedBranch)
+        val explicit = dao.recordNotSure(completed.runId, pending.selectionDeadlineEpochMillis + 1)
+        assertEquals(ReflectionBranch.NO_SELECTION, explicit.postRunEnergy)
+        assertEquals(automatic.copy(postRunEnergy = ReflectionBranch.NO_SELECTION), explicit)
+    }
+
     /** Real Room/coordinator/HTTP serialization, isolated fixture storage and in-memory wire only. */
     @Test fun observedSongsThroughHostedContractSaveTheNonFirstWinnerAndReopenWithoutReplay() = runBlocking {
         val start = completed.officialStartEpochMillis

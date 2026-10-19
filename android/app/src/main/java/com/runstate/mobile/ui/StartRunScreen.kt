@@ -5,6 +5,9 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
@@ -51,6 +54,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.BlurredEdgeTreatment
+import androidx.compose.ui.draw.drawWithCache
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.RoundRect
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
@@ -59,6 +65,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathFillType
+import androidx.compose.ui.graphics.PathMeasure
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
@@ -121,6 +128,7 @@ internal const val START_RUN_UPPER_CONTENT_TAG = "startRunUpperContent"
 internal const val START_RUN_FALLBACK_SCROLL_TAG = "startRunFallbackScroll"
 internal const val START_AGENT_CARD_TAG = "startAgentCard"
 internal const val START_ENERGY_CHOICES_TAG = "startEnergyChoices"
+internal const val START_ENERGY_CUE_TAG = "startEnergyCue"
 internal const val START_FOOTER_TAG = "startFooter"
 internal const val START_MAP_STATUS_TAG = "startMapStatus"
 internal const val START_MAP_LOCATION_ACCESS_TAG = "startMapLocationAccess"
@@ -188,6 +196,18 @@ internal fun StartRunScreen(
     val tileBounds = remember { mutableStateMapOf<PreRunEnergy, Rect>() }
     var intake by remember { mutableStateOf<EnergyIntake?>(null) }
     val intakeTime = remember { Animatable(0f) }
+    val energyTilesVisible = rootBounds?.let { viewport ->
+        tileBounds.values.any { it.overlaps(viewport) }
+    } == true
+    val energyBeamActive = selectedPreRunEnergy == null && lifecycleStarted &&
+        animationsEnabled && actionsEnabled && energyTilesVisible
+    val energyCue = if (energyBeamActive) {
+        rememberInfiniteTransition(label = "energyEdgeLight").animateFloat(
+            initialValue = 0f, targetValue = 1f,
+            animationSpec = infiniteRepeatable(tween(2800, easing = LinearEasing)),
+            label = "energyEdgeTravel"
+        )
+    } else remember { mutableStateOf(0f) }
 
     DisposableEffect(lifecycle, view) {
         val observer = LifecycleEventObserver { _, event ->
@@ -208,7 +228,6 @@ internal fun StartRunScreen(
         intakeTime.animateTo(1630f, tween(1630, easing = LinearEasing))
         if (intake === current) intake = null
     }
-
     val ringVisible = rootBounds?.let { viewport -> ringBounds?.overlaps(viewport) } == true
     val ringPhase = rememberRunAgentPhase(lifecycleStarted && animationsEnabled && ringVisible)
 
@@ -426,7 +445,9 @@ internal fun StartRunScreen(
                     onTileBounds = { energy, bounds ->
                         if (tileBounds[energy] != null && tileBounds[energy] != bounds) intake = null
                         tileBounds[energy] = bounds
-                    }
+                    },
+                    cueProgress = { energyCue.value },
+                    beamActive = energyBeamActive
                 )
             }
 
@@ -659,17 +680,19 @@ private fun PreRunEnergyChoices(
     enabled: Boolean,
     intake: EnergyIntake?,
     intakeTime: () -> Float,
-    onTileBounds: (PreRunEnergy, Rect) -> Unit
+    onTileBounds: (PreRunEnergy, Rect) -> Unit,
+    cueProgress: () -> Float,
+    beamActive: Boolean
 ) {
     val tileHeight = 82.dp + 40.dp * (LocalDensity.current.fontScale - 1f).coerceAtLeast(0f)
     Column(modifier = Modifier.testTag(START_ENERGY_CHOICES_TAG),
         horizontalAlignment = Alignment.CenterHorizontally) {
         Text(
-            text = "PRE-RUN ENERGY",
+            text = "How’s your energy? · Optional",
             color = Color.White,
             fontSize = 12.sp,
-            fontWeight = FontWeight.ExtraBold,
-            letterSpacing = 2.sp,
+            fontWeight = FontWeight.SemiBold,
+            letterSpacing = 0.3.sp,
             modifier = Modifier
                 .graphicsLayer {
                     alpha = when {
@@ -685,11 +708,13 @@ private fun PreRunEnergyChoices(
         )
         Spacer(Modifier.height(10.dp))
         // Preserve the existing row height and Undo position while the tiles leave for the agent.
-        Box(Modifier.fillMaxWidth().height(tileHeight), contentAlignment = Alignment.Center) {
+        Box(Modifier.fillMaxWidth().height(tileHeight).testTag(START_ENERGY_CUE_TAG),
+            contentAlignment = Alignment.Center) {
             if (selected == null || intake != null) {
                 Row(
                     modifier = Modifier.fillMaxWidth()
                         .graphicsLayer { alpha = if (selected == null) 1f else 0f }
+                        .then(if (beamActive) Modifier.energyEdgeBeam(cueProgress) else Modifier)
                         .then(if (selected != null) Modifier.clearAndSetSemantics {} else Modifier),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
@@ -699,9 +724,10 @@ private fun PreRunEnergyChoices(
                             onClick = { onSelect(energy) },
                             selected = false,
                             enabled = enabled && selected == null,
-                            modifier = Modifier.weight(1f).onGloballyPositioned {
-                                onTileBounds(energy, it.boundsInRoot())
-                            },
+                            modifier = Modifier.weight(1f)
+                                .onGloballyPositioned {
+                                    onTileBounds(energy, it.boundsInRoot())
+                                },
                             tag = if (selected == null) when (energy) {
                                 PreRunEnergy.LOW -> START_ENERGY_LOW_TAG
                                 PreRunEnergy.MODERATE -> START_ENERGY_MODERATE_TAG
@@ -728,6 +754,40 @@ private fun PreRunEnergyChoices(
                         Text("Undo", color = StartInk, fontWeight = FontWeight.Bold)
                     }
                 }
+            }
+        }
+    }
+}
+
+/** One shared outer perimeter around the choices; the heading stays outside the beam. */
+private fun Modifier.energyEdgeBeam(phase: () -> Float): Modifier = drawWithCache {
+    val inset = -3.dp.toPx()
+    val outline = Path().apply {
+        addRoundRect(RoundRect(Rect(inset, inset, size.width - inset, size.height - inset),
+            CornerRadius(20.dp.toPx())))
+    }
+    val measure = PathMeasure().apply { setPath(outline, false) }
+    val length = measure.length
+    val segment = Path()
+    val halo = Stroke(width = 8.dp.toPx(), cap = StrokeCap.Round)
+    val glow = Stroke(width = 4.dp.toPx(), cap = StrokeCap.Round)
+    val core = Stroke(width = 1.25.dp.toPx(), cap = StrokeCap.Round)
+    onDrawWithContent {
+        drawContent()
+        if (length > 0f) {
+            val head = phase() * length
+            val trail = length * 0.19f
+            repeat(18) { index ->
+                val from = (head - trail + trail * index / 18f + length) % length
+                val to = from + trail / 18f
+                segment.reset()
+                measure.getSegment(from, to.coerceAtMost(length), segment)
+                if (to > length) measure.getSegment(0f, to - length, segment)
+                val strength = (index + 1f) / 18f
+                val opacity = strength * strength
+                drawPath(segment, Color.White.copy(alpha = opacity * 0.08f), style = halo)
+                drawPath(segment, Color.White.copy(alpha = opacity * 0.20f), style = glow)
+                drawPath(segment, Color.White.copy(alpha = opacity * 0.92f), style = core)
             }
         }
     }

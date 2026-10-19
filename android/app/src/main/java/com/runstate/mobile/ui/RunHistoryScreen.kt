@@ -896,7 +896,8 @@ internal data class RunHistoryItem(
     val preRunEnergy: PreRunEnergy? = null,
     val metricSource: MetricSource? = null,
     val insightEligible: Boolean = true,
-    val splitStatus: RunSplitStatus? = null
+    val splitStatus: RunSplitStatus? = null,
+    val postRunNote: String? = null
 )
 
 internal sealed interface HistoryRouteDisplay {
@@ -1321,8 +1322,7 @@ private fun HistoryMetricsPanel(
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 HistorySummaryMetric("PACE", item.metrics?.averagePace ?: "—", Modifier.weight(1f))
-                HistorySummaryMetric("TIME", item.metrics?.elapsed ?: "—", Modifier.weight(1f))
-                HistorySummaryMetric("ACTIVE", item.metrics?.active ?: "—", Modifier.weight(1f))
+                HistorySummaryMetric("TIME", item.metrics?.active ?: "—", Modifier.weight(1f))
             }
         }
     }
@@ -1417,7 +1417,7 @@ private fun HistoryRow(
                         letterSpacing = (-0.5).sp
                     )
                     Text(
-                        text = "${item.metrics?.elapsed ?: "—"} time · ${item.metrics?.averagePace ?: "—"} pace",
+                        text = "${item.metrics?.active ?: "—"} time · ${item.metrics?.averagePace ?: "—"} pace",
                         color = rowMuted,
                         fontSize = 11.sp,
                         lineHeight = 14.sp
@@ -1549,6 +1549,12 @@ private fun HistoryRow(
                         lineHeight = 20.sp,
                         modifier = Modifier.padding(top = 12.dp)
                     )
+                }
+                item.postRunNote?.takeIf { it.isNotBlank() }?.let { note ->
+                    Text("YOUR NOTE", color = rowMuted, fontSize = 10.sp,
+                        letterSpacing = 1.sp, modifier = Modifier.padding(top = 14.dp))
+                    Text(note, color = rowInk, fontSize = 13.sp, lineHeight = 20.sp,
+                        modifier = Modifier.padding(top = 4.dp))
                 }
                 if (item.reflectionStatus != null) {
                     TextButton(

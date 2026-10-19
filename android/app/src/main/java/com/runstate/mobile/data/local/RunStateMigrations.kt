@@ -355,3 +355,11 @@ val MIGRATION_15_16 = object : Migration(15, 16) {
         connection.execSQL("ALTER TABLE `runs` ADD COLUMN `song_snippet_lookup_allowed` INTEGER NOT NULL DEFAULT 0")
     }
 }
+
+/** Historical activities remain saved; no invented save time or feeling is added. */
+val MIGRATION_16_17 = object : Migration(16, 17) {
+    override fun migrate(connection: SQLiteConnection) {
+        connection.execSQL("ALTER TABLE `runs` ADD COLUMN `activity_finalized` INTEGER NOT NULL DEFAULT 1")
+        connection.execSQL("ALTER TABLE `runs` ADD COLUMN `post_run_note` TEXT")
+    }
+}
