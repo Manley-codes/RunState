@@ -39,6 +39,8 @@ public final class ElevenLabsReflectionSpeech implements ReflectionHttpServer.Sp
     static final int MAX_TEXT_LENGTH = 4_000;
     /** Run lines are short facts and cues; a tighter bound limits credits spent per request. */
     static final int MAX_RUN_VOICE_TEXT_LENGTH = 500;
+    /** A calmer pace for the run voice; ElevenLabs accepts 0.7 to 1.2, and 1.0 is its normal speed. */
+    static final double RUN_VOICE_SPEED = 0.9;
     static final int MAX_AUDIO_BYTES = 2 * 1024 * 1024;
     static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(20);
     private static final Duration CONNECTION_TIMEOUT = Duration.ofSeconds(3);
@@ -46,21 +48,26 @@ public final class ElevenLabsReflectionSpeech implements ReflectionHttpServer.Sp
     private final Transport transport;
     private final URI endpoint;
     private final int maxTextLength;
+    /** Null keeps the voice's own stored pace; the reflection voice never sends a speed. */
+    private final Double speed;
 
     ElevenLabsReflectionSpeech(String apiKey, Transport transport) {
-        this(apiKey, transport, ENDPOINT, MAX_TEXT_LENGTH);
+        this(apiKey, transport, ENDPOINT, MAX_TEXT_LENGTH, null);
     }
 
-    private ElevenLabsReflectionSpeech(String apiKey, Transport transport, URI endpoint, int maxTextLength) {
+    private ElevenLabsReflectionSpeech(String apiKey, Transport transport, URI endpoint, int maxTextLength,
+            Double speed) {
         this.apiKey = validatedKey(apiKey);
         this.transport = Objects.requireNonNull(transport, "transport");
         this.endpoint = endpoint;
         this.maxTextLength = maxTextLength;
+        this.speed = speed;
     }
 
     /** The run voice: same key, model and safeguards, its own voice and shorter text limit. */
     static ElevenLabsReflectionSpeech runVoice(String apiKey, Transport transport) {
-        return new ElevenLabsReflectionSpeech(apiKey, transport, RUN_VOICE_ENDPOINT, MAX_RUN_VOICE_TEXT_LENGTH);
+        return new ElevenLabsReflectionSpeech(apiKey, transport, RUN_VOICE_ENDPOINT, MAX_RUN_VOICE_TEXT_LENGTH,
+                RUN_VOICE_SPEED);
     }
 
     /** An absent key leaves the existing phone voice available without contacting this provider. */
@@ -92,6 +99,11 @@ public final class ElevenLabsReflectionSpeech implements ReflectionHttpServer.Sp
         JsonObject body = new JsonObject();
         body.addProperty("text", text);
         body.addProperty("model_id", MODEL_ID);
+        if (speed != null) {
+            JsonObject settings = new JsonObject();
+            settings.addProperty("speed", speed);
+            body.add("voice_settings", settings);
+        }
         try {
             TransportResponse response = transport.send(new TransportRequest(
                     endpoint, apiKey, body.toString(), REQUEST_TIMEOUT));

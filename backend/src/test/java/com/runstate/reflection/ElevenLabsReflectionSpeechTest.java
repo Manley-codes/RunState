@@ -83,7 +83,9 @@ class ElevenLabsReflectionSpeechTest {
         assertAll(
                 () -> assertEquals(URI.create("https://api.elevenlabs.io/v1/text-to-speech/"
                         + "HEtSzb2EMPNWlQY8Ofqf?output_format=mp3_44100_128"), captured.get().endpoint()),
-                () -> assertEquals(Set.of("text", "model_id"), body.keySet()),
+                () -> assertEquals(Set.of("text", "model_id", "voice_settings"), body.keySet()),
+                () -> assertEquals(Set.of("speed"), body.getAsJsonObject("voice_settings").keySet()),
+                () -> assertEquals(0.9, body.getAsJsonObject("voice_settings").get("speed").getAsDouble()),
                 () -> assertEquals("Starting in ten.", body.get("text").getAsString()),
                 () -> assertEquals("eleven_multilingual_v2", body.get("model_id").getAsString()),
                 () -> assertEquals(Duration.ofSeconds(20), captured.get().timeout()),

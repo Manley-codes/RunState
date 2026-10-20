@@ -401,6 +401,28 @@ class SpotifySongPassageTest {
         assertEquals(60_000L, session.snapshot().positionMillis)
     }
 
+    @Test fun songPausedOnlyForTheReflectionResumesAfterThePassage() = runBlocking {
+        val clock = Clock()
+        val session = Session(clock).apply {
+            current = current.copy(playback = PassagePlayback.PAUSED, canPlay = true, canPause = false)
+        }
+        val result = SpotifySongPassageController(session, clock).play(request.copy(resumePausedOriginal = true))
+        assertEquals(SongPassageStatus.FINISHED, result.status)
+        assertEquals(listOf("seek:5000", "play", "pause", "seek:60000", "play"), session.commands)
+        assertEquals(PassagePlayback.PLAYING, session.snapshot().playback)
+    }
+
+    @Test fun chosenTrackResumesTheRunnersSongWhenItWasPausedOnlyForTheReflection() = runBlocking {
+        val clock = Clock()
+        val session = Session(clock).apply { enableTrackSelection(originallyPlaying = false) }
+        assertEquals(SongPassageResult(SongPassageStatus.FINISHED, true),
+            SpotifySongPassageController(session, clock).play(selectedRequest.copy(resumePausedOriginal = true)))
+        assertEquals(listOf("prepareTrack:$selectedUri", "seek:45000", "play", "pause",
+            "prepareTrack:$originalUri", "seek:60000", "play"), session.commands)
+        assertEquals(originalUri, session.snapshot().mediaId)
+        assertEquals(PassagePlayback.PLAYING, session.snapshot().playback)
+    }
+
     @Test fun originallyPausedSongIsRestoredWithoutAnUnrequestedResume() = runBlocking {
         val clock = Clock()
         val session = Session(clock).apply {

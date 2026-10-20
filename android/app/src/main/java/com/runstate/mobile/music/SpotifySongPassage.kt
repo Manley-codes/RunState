@@ -38,7 +38,12 @@ internal data class SongPassageRequest(
     val durationMillis: Long = 10_000,
     val spotifyMediaId: String? = null,
     val allowTrackSwitch: Boolean = false,
-    val observedDurationMillis: Long? = null
+    val observedDurationMillis: Long? = null,
+    /**
+     * The runner's music was playing until RunState paused it for the spoken reflection. A
+     * paused original then resumes after the passage, as it would have without the pause.
+     */
+    val resumePausedOriginal: Boolean = false
 ) {
     init {
         require(trackTitle.isNotBlank() && artistName.isNotBlank())
@@ -201,6 +206,9 @@ internal class SpotifySongPassageController(
             report(null, reason)
             return SongPassageResult(SongPassageStatus.UNAVAILABLE)
         }
+        // Restoration target: the prior song and position, playing again if it was paused only for us.
+        val restoreTarget = if (request.resumePausedOriginal && initial.playback == PassagePlayback.PAUSED)
+            initial.copy(playback = PassagePlayback.PLAYING) else initial
         val current = Owner(initial).also { it.stageStartedAt = clock.nowMillis() }
         owner = current
         var completed = false
@@ -286,7 +294,7 @@ internal class SpotifySongPassageController(
                     else -> SongPassageReason.POSITION_DRIFT
                 })
             }
-            restoreOriginal(current, initial)
+            restoreOriginal(current, restoreTarget)
             completed = true
             report(current, SongPassageReason.FINISHED)
             return SongPassageResult(SongPassageStatus.FINISHED, playbackRestored = true)
@@ -296,12 +304,12 @@ internal class SpotifySongPassageController(
         } catch (interrupted: PassageInterrupted) {
             current.failureReason = interrupted.reason
             report(current, interrupted.reason)
-            completed = recoverPausedSelection(current, initial, interrupted.reason)
+            completed = recoverPausedSelection(current, restoreTarget, interrupted.reason)
             return SongPassageResult(SongPassageStatus.INTERRUPTED, playbackRestored = completed)
         } catch (_: RuntimeException) {
             current.failureReason = SongPassageReason.TRANSPORT_ERROR
             report(current, SongPassageReason.TRANSPORT_ERROR)
-            completed = recoverPausedSelection(current, initial, SongPassageReason.TRANSPORT_ERROR)
+            completed = recoverPausedSelection(current, restoreTarget, SongPassageReason.TRANSPORT_ERROR)
             return SongPassageResult(SongPassageStatus.FAILED, playbackRestored = completed)
         } finally {
             // Leaving cannot resume music. Cancel our unconfirmed play on the same valid recording,

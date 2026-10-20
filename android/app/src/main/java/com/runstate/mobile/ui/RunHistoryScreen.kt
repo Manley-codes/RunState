@@ -87,6 +87,7 @@ import com.runstate.mobile.RunStateApplication
 import com.runstate.mobile.reflection.ReflectionSpeechGateway
 import com.runstate.mobile.reflection.MAX_REFLECTION_AUDIO_BYTES
 import com.runstate.mobile.music.AndroidSpotifyPassageSession
+import com.runstate.mobile.music.PassagePlayback
 import com.runstate.mobile.music.SongPassageRequest
 import com.runstate.mobile.music.SongPassageStatus
 import com.runstate.mobile.music.SongPassageDiagnostic
@@ -174,6 +175,9 @@ internal interface ReflectionSpeechPlatform {
     fun prepareSongPassageConnection() = Unit
     fun initialize(onReady: (Boolean) -> Unit, onDone: (String) -> Unit, onError: (String) -> Unit)
     fun requestAudioFocus(utteranceId: String, onFocusLost: (String) -> Unit): Boolean
+    /** The spoken reflection pauses other audio instead of lowering it; custom platforms keep their focus. */
+    fun requestPausingAudioFocus(utteranceId: String, onFocusLost: (String) -> Unit): Boolean =
+        requestAudioFocus(utteranceId, onFocusLost)
     fun speak(utteranceId: String, text: String, rate: Float): Boolean
     /** The saved facts have their own delivery; reflection/fallback speech keeps its normal level. */
     fun speakReceipt(utteranceId: String, text: String, rate: Float): Boolean =
@@ -418,7 +422,7 @@ internal class AndroidReflectionSpeaker(
         current.cloudAudio = true
         current.phase = SpeechPhase.SPEAKING
         try {
-            if (!platform.requestAudioFocus(current.id) { id -> onMain {
+            if (!requestFocusFor(current) { id -> onMain {
                     if (request?.id == id && request?.phase in
                         setOf(SpeechPhase.SPEAKING, SpeechPhase.WAITING_FOR_MUSIC)) stop()
                 } }) {
@@ -479,7 +483,7 @@ internal class AndroidReflectionSpeaker(
         if (current.phase != SpeechPhase.WAITING_FOR_ENGINE) return
         current.phase = SpeechPhase.SPEAKING
         try {
-            if (!platform.requestAudioFocus(current.id) { id -> onMain {
+            if (!requestFocusFor(current) { id -> onMain {
                     if (request?.id == id && request?.phase in
                         setOf(SpeechPhase.SPEAKING, SpeechPhase.WAITING_FOR_MUSIC)) stop()
                 } }) {
@@ -498,6 +502,11 @@ internal class AndroidReflectionSpeaker(
             // Speech failure is independent of the saved reflection.
         }
     }
+
+    /** The reflection pauses the runner's music; facts, cues and announcements only lower it. */
+    private fun requestFocusFor(current: SpeechRequest, onFocusLost: (String) -> Unit): Boolean =
+        if (current.purpose == SpeechPurpose.REFLECTION) platform.requestPausingAudioFocus(current.id, onFocusLost)
+        else platform.requestAudioFocus(current.id, onFocusLost)
 
     private fun armSpeechTimeout(current: SpeechRequest) {
         val maximum = if (current.purpose == SpeechPurpose.RECEIPT) 120_000L else 600_000L
@@ -670,6 +679,8 @@ internal class AndroidReflectionSpeechPlatform(
         .build()
     private var engine: TextToSpeech? = null
     private var focusRequest: AudioFocusRequest? = null
+    private var pausedForUtterance: String? = null
+    private var resumeMusicAfter: String? = null
     private var instrumental: InstrumentalPlayback? = null
     private var reflectionAudio: ReflectionAudio? = null
     private var closed = false
@@ -698,9 +709,26 @@ internal class AndroidReflectionSpeechPlatform(
         }
     }
 
-    override fun requestAudioFocus(utteranceId: String, onFocusLost: (String) -> Unit): Boolean {
+    override fun requestAudioFocus(utteranceId: String, onFocusLost: (String) -> Unit): Boolean =
+        requestFocus(utteranceId, onFocusLost, AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK)
+
+    override fun requestPausingAudioFocus(utteranceId: String, onFocusLost: (String) -> Unit): Boolean {
+        // Note once per reflection whether Spotify was playing before this pause, so its snippet
+        // can resume the runner's song afterward. A repeat request for the same reflection keeps it.
+        if (pausedForUtterance != utteranceId) {
+            pausedForUtterance = utteranceId
+            resumeMusicAfter = if (spotifyIsPlaying()) utteranceId else null
+        }
+        return requestFocus(utteranceId, onFocusLost, AudioManager.AUDIOFOCUS_GAIN_TRANSIENT)
+    }
+
+    private fun spotifyIsPlaying(): Boolean = try {
+        AndroidSpotifyPassageSession(appContext).snapshot()?.playback == PassagePlayback.PLAYING
+    } catch (_: RuntimeException) { false }
+
+    private fun requestFocus(utteranceId: String, onFocusLost: (String) -> Unit, gain: Int): Boolean {
         // Every focus listener belongs to one utterance; a queued old LOSS cannot stop a new one.
-        val next = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK)
+        val next = AudioFocusRequest.Builder(gain)
             .setAudioAttributes(speechAttributes)
             .setWillPauseWhenDucked(true)
             .setOnAudioFocusChangeListener({ change -> if (change < 0) onFocusLost(utteranceId) }, mainHandler)
@@ -878,6 +906,8 @@ internal class AndroidReflectionSpeechPlatform(
     ): Boolean {
         stopSongPassage()
         if (closed) return false
+        // Music paused only for this reflection resumes after the snippet.
+        val passageToPlay = if (resumeMusicAfter == utteranceId) passage.copy(resumePausedOriginal = true) else passage
         passageId = utteranceId
         passageJob = passageScope.launch {
             try {
@@ -892,7 +922,11 @@ internal class AndroidReflectionSpeechPlatform(
                         onEntranceReady = ::releaseAudioFocus, quiescePausedBeforeEntry = true,
                         diagnosticObserver = passageDiagnostics)
                     passageController = controller
-                    try { session.expectTrack(passage); session.prepareForPlayback(); controller.play(passage) }
+                    try {
+                        session.expectTrack(passageToPlay)
+                        session.prepareForPlayback()
+                        controller.play(passageToPlay)
+                    }
                     finally {
                         withContext(NonCancellable) { session.release() }
                         if (passageController === controller) passageController = null
