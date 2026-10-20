@@ -43,6 +43,10 @@ import androidx.lifecycle.LifecycleEventObserver
 import com.runstate.mobile.reflection.RunReflectionCoordinator
 import com.runstate.mobile.reflection.RunReflectionState
 import com.runstate.mobile.reflection.ReflectionVoicePreparation
+import com.runstate.mobile.reflection.COUNTDOWN_VOICE_LINES
+import com.runstate.mobile.reflection.ENERGY_QUESTION_TEXT
+import com.runstate.mobile.reflection.RUN_VOICE_PREPARED_LINES
+import com.runstate.mobile.reflection.countdownCueText
 import com.runstate.mobile.data.local.ReflectionBranch
 import com.runstate.mobile.data.local.PreRunEnergy
 import com.runstate.mobile.data.local.PostRunEffort
@@ -489,9 +493,13 @@ internal fun RunJourneyRoot(
         mutableStateOf(lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED))
     }
     var countdownSpeaker by remember { mutableStateOf<ReflectionSpeaker?>(null) }
+    // Chosen once per countdown from fully prepared lines, so one countdown never mixes voices.
+    var countdownRunVoice by remember { mutableStateOf<Boolean?>(null) }
+    val runVoiceCues = remember(context) { (context.applicationContext as? RunStateApplication)?.runVoiceCues }
     fun stopCountdownVoice() {
         val owned = countdownSpeaker
         countdownSpeaker = null
+        countdownRunVoice = null
         try { owned?.close() } catch (_: RuntimeException) { }
     }
     DisposableEffect(context) { onDispose { stopCountdownVoice() } }
@@ -501,9 +509,23 @@ internal fun RunJourneyRoot(
         val factory = countdownSpeakerFactory ?: return
         try {
             val voice = countdownSpeaker ?: factory(context).also { countdownSpeaker = it }
+            val useRunVoice = countdownRunVoice
+                ?: (runVoiceCues?.hasAll(COUNTDOWN_VOICE_LINES) == true).also { countdownRunVoice = it }
             voice.stop()
-            voice.speakReceipt(if (step == 10) "Starting in ten." else "$step.") { }
+            voice.speakTimedCue(countdownCueText(step), useRunVoice)
         } catch (_: RuntimeException) { stopCountdownVoice() }
+    }
+    // Prepare the fixed run-voice lines while Start is on screen. Retry briefly while a sleeping
+    // server wakes, but never keep polling in the background or for an unsupported server.
+    val prepareRunVoice = voiceForeground && activeRunId == null &&
+        (model.state == RunUiState.ReadyToStart || model.state == RunUiState.Countdown)
+    LaunchedEffect(prepareRunVoice, runVoiceCues) {
+        val cues = runVoiceCues ?: return@LaunchedEffect
+        repeat(12) {
+            if (!prepareRunVoice || cues.hasAll(RUN_VOICE_PREPARED_LINES)) return@LaunchedEffect
+            cues.prefetch()
+            delay(15_000L)
+        }
     }
 
     var musicAccessGranted by remember(context) { mutableStateOf(musicAccessProvider(context)) }
@@ -1650,7 +1672,7 @@ internal fun RunCompleteReceiptEffect(
                             followupStartedRunId = pendingId
                             // This is a separate neutral invitation, never part of the
                             // stored factual receipt or the AI reflection prompt.
-                            activeSpeaker.speakReceipt("How’s your energy now?") {
+                            activeSpeaker.speakReceipt(ENERGY_QUESTION_TEXT) {
                                 if (activeReceiptRunId == pendingId) finish(pendingId)
                             }
                         } catch (_: RuntimeException) { finish(pendingId) }

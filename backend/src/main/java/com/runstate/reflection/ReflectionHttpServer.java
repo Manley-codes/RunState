@@ -36,6 +36,8 @@ public final class ReflectionHttpServer implements AutoCloseable {
 
     public static final String CANDIDATES_PATH = "/api/reflections/candidates";
     public static final String SPEECH_PATH = "/api/reflections/speech";
+    /** The separately chosen voice for countdown, facts and announcements; never the reflection voice. */
+    public static final String RUN_VOICE_PATH = "/api/run-voice/speech";
     public static final String SONG_PREPARATION_PATH = "/api/reflections/song-study";
     public static final String HEALTH_PATH = "/health";
     public static final String SONG_CUE_CAPABILITY_HEADER = "X-RunState-Song-Cue";
@@ -45,6 +47,10 @@ public final class ReflectionHttpServer implements AutoCloseable {
     public static final String SONG_SNIPPETS_CAPABILITY_HEADER = "X-RunState-Song-Snippets";
     public static final String SONG_SNIPPET_FALLBACKS_CAPABILITY_HEADER = "X-RunState-Song-Snippet-Fallbacks";
     public static final String REFLECTION_VOICE_CAPABILITY_HEADER = "X-RunState-Reflection-Voice";
+    public static final String RUN_VOICE_CAPABILITY_HEADER = "X-RunState-Run-Voice";
+    public static final int MAX_RUN_VOICE_TEXT_LENGTH = 500;
+    /** Short run lines get their own slots so a countdown or announcement never waits on a reflection. */
+    public static final int MAX_CONCURRENT_RUN_VOICE_CALLS = 2;
     public static final int MAX_REQUEST_BYTES = 64 * 1024;
     public static final int MAX_RESPONSE_BYTES = 64 * 1024;
     public static final int MAX_AUDIO_RESPONSE_BYTES = 2 * 1024 * 1024;
@@ -74,12 +80,14 @@ public final class ReflectionHttpServer implements AutoCloseable {
 
     private final ReflectionProvider provider;
     private final SpeechProvider speechProvider;
+    private final SpeechProvider runVoiceProvider;
     private final GenerationMode generationMode;
     private final HttpServer server;
     private final ExecutorService executor;
     private final RemoteAccess remoteAccess;
     private final Semaphore providerSlots;
     private final Semaphore songPreparationSlots;
+    private final Semaphore runVoiceSlots = new Semaphore(MAX_CONCURRENT_RUN_VOICE_CALLS);
     private final int maxCachedRequests;
     private final Object cacheLock = new Object();
     private final Map<String, RequestWork> workByRequestId = new HashMap<>();
@@ -93,10 +101,12 @@ public final class ReflectionHttpServer implements AutoCloseable {
             RemoteAccess remoteAccess,
             int maxConcurrentProviderCalls,
             int maxCachedRequests,
-            SpeechProvider speechProvider
+            SpeechProvider speechProvider,
+            SpeechProvider runVoiceProvider
     ) throws IOException {
         this.provider = Objects.requireNonNull(provider, "provider");
         this.speechProvider = speechProvider;
+        this.runVoiceProvider = runVoiceProvider;
         this.generationMode = Objects.requireNonNull(generationMode, "generationMode");
         requirePort(port);
         if (maxConcurrentProviderCalls < 1 || maxConcurrentProviderCalls >= SERVER_THREADS ||
@@ -138,8 +148,15 @@ public final class ReflectionHttpServer implements AutoCloseable {
     /** Voice is optional; legacy callers keep their existing reflection-only behavior. */
     public static ReflectionHttpServer create(ReflectionProvider provider, int port,
             GenerationMode generationMode, SpeechProvider speechProvider) throws IOException {
+        return create(provider, port, generationMode, speechProvider, null);
+    }
+
+    /** Both voices are optional and independent; the run voice never changes the reflection voice. */
+    public static ReflectionHttpServer create(ReflectionProvider provider, int port,
+            GenerationMode generationMode, SpeechProvider speechProvider, SpeechProvider runVoiceProvider)
+            throws IOException {
         return new ReflectionHttpServer(provider, port, generationMode, null,
-                MAX_CONCURRENT_PROVIDER_CALLS, MAX_CACHED_REQUESTS, speechProvider);
+                MAX_CONCURRENT_PROVIDER_CALLS, MAX_CACHED_REQUESTS, speechProvider, runVoiceProvider);
     }
 
     /**
@@ -159,8 +176,14 @@ public final class ReflectionHttpServer implements AutoCloseable {
     public static ReflectionHttpServer createRemote(ReflectionProvider provider, int port,
             GenerationMode generationMode, RemoteAccess remoteAccess, SpeechProvider speechProvider)
             throws IOException {
+        return createRemote(provider, port, generationMode, remoteAccess, speechProvider, null);
+    }
+
+    public static ReflectionHttpServer createRemote(ReflectionProvider provider, int port,
+            GenerationMode generationMode, RemoteAccess remoteAccess, SpeechProvider speechProvider,
+            SpeechProvider runVoiceProvider) throws IOException {
         return createRemote(provider, port, generationMode, remoteAccess,
-                MAX_CONCURRENT_PROVIDER_CALLS, MAX_CACHED_REQUESTS, speechProvider);
+                MAX_CONCURRENT_PROVIDER_CALLS, MAX_CACHED_REQUESTS, speechProvider, runVoiceProvider);
     }
 
     /** Smaller limits let loopback tests prove admission without filling the demo cache. */
@@ -179,9 +202,17 @@ public final class ReflectionHttpServer implements AutoCloseable {
     static ReflectionHttpServer createRemote(ReflectionProvider provider, int port,
             GenerationMode generationMode, RemoteAccess remoteAccess, int maxConcurrentProviderCalls,
             int maxCachedRequests, SpeechProvider speechProvider) throws IOException {
+        return createRemote(provider, port, generationMode, remoteAccess, maxConcurrentProviderCalls,
+                maxCachedRequests, speechProvider, null);
+    }
+
+    static ReflectionHttpServer createRemote(ReflectionProvider provider, int port,
+            GenerationMode generationMode, RemoteAccess remoteAccess, int maxConcurrentProviderCalls,
+            int maxCachedRequests, SpeechProvider speechProvider, SpeechProvider runVoiceProvider)
+            throws IOException {
         return new ReflectionHttpServer(provider, port, generationMode,
                 Objects.requireNonNull(remoteAccess, "remoteAccess"),
-                maxConcurrentProviderCalls, maxCachedRequests, speechProvider);
+                maxConcurrentProviderCalls, maxCachedRequests, speechProvider, runVoiceProvider);
     }
 
     private static void requirePort(int port) {
@@ -277,6 +308,9 @@ public final class ReflectionHttpServer implements AutoCloseable {
             if (speechProvider != null) {
                 exchange.getResponseHeaders().set(REFLECTION_VOICE_CAPABILITY_HEADER, "1");
             }
+            if (runVoiceProvider != null) {
+                exchange.getResponseHeaders().set(RUN_VOICE_CAPABILITY_HEADER, "1");
+            }
             return new EndpointResponse(200, "{\"status\":\"ok\"}");
         }
         if (remoteAccess != null && !remoteAccess.authorizes(exchange)) {
@@ -284,8 +318,10 @@ public final class ReflectionHttpServer implements AutoCloseable {
             return error(401, "unauthorized", "A valid demo access token is required.");
         }
         boolean speech = SPEECH_PATH.equals(exchange.getRequestURI().getRawPath());
+        boolean runVoice = RUN_VOICE_PATH.equals(exchange.getRequestURI().getRawPath());
         boolean songPreparation = SONG_PREPARATION_PATH.equals(exchange.getRequestURI().getRawPath());
-        if (!speech && !songPreparation && !CANDIDATES_PATH.equals(exchange.getRequestURI().getRawPath())) {
+        if (!speech && !runVoice && !songPreparation
+                && !CANDIDATES_PATH.equals(exchange.getRequestURI().getRawPath())) {
             return error(404, "not_found", "The requested endpoint does not exist.");
         }
         if (exchange.getRequestURI().getRawQuery() != null) {
@@ -315,6 +351,9 @@ public final class ReflectionHttpServer implements AutoCloseable {
         byte[] body = readBoundedBody(exchange);
         if (speech) {
             return synthesizeSpeech(ReflectionApiJson.parseSpeechRequest(body));
+        }
+        if (runVoice) {
+            return synthesizeRunVoice(ReflectionApiJson.parseSpeechRequest(body));
         }
         if (songPreparation) {
             return prepareSongOnce(ReflectionApiJson.parseSongPreparationRequest(body));
@@ -512,6 +551,33 @@ public final class ReflectionHttpServer implements AutoCloseable {
             return error(500, "internal_error", "The reflection voice could not be generated.");
         } finally {
             providerSlots.release();
+        }
+    }
+
+    /** Same request-scoped audio rules as the reflection voice, with its own slots and shorter limit. */
+    private EndpointResponse synthesizeRunVoice(String text) {
+        if (runVoiceProvider == null) {
+            return error(503, "provider_unavailable", "The run voice is not configured.");
+        }
+        if (text.length() > MAX_RUN_VOICE_TEXT_LENGTH) {
+            throw new IllegalArgumentException("Run voice text must contain 1 to 500 characters.");
+        }
+        if (!runVoiceSlots.tryAcquire()) {
+            return error(503, "server_busy", "The run voice is busy. Try again later.");
+        }
+        try {
+            byte[] audio = runVoiceProvider.synthesize(text);
+            if (audio == null || audio.length == 0 || audio.length > MAX_AUDIO_RESPONSE_BYTES) {
+                return speechProviderFailure(FailureType.INVALID_RESPONSE);
+            }
+            // Audio remains request-scoped: no cache entry, filename or durable storage.
+            return new EndpointResponse(200, audio, "audio/mpeg");
+        } catch (ReflectionProviderException failure) {
+            return speechProviderFailure(failure.failureType());
+        } catch (RuntimeException unexpected) {
+            return error(500, "internal_error", "The run voice could not be generated.");
+        } finally {
+            runVoiceSlots.release();
         }
     }
 

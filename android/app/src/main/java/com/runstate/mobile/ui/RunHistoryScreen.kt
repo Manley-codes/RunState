@@ -123,6 +123,10 @@ internal const val RUN_HISTORY_ENERGY_SHEET_TAG = "runHistoryEnergySheet"
 internal const val RUN_HISTORY_ENERGY_CHOICE_TAG_PREFIX = "runHistoryEnergyChoice:"
 // Survives one speaker being disposed/replaced while its cancelled foreign-player load cleans up.
 private val spotifyPassageMutex = Mutex()
+// The new run voice gets this long to arrive; then the phone voice says the same line on time.
+private const val RUN_VOICE_WAIT_MILLIS = 5_000L
+// Run-voice audio plays at the same level the phone voice uses for the saved facts.
+private const val RUN_VOICE_VOLUME = 0.8f
 
 /** Kept injectable so screen behavior can be checked without a device voice engine. */
 internal interface ReflectionSpeaker {
@@ -151,6 +155,11 @@ internal interface ReflectionSpeaker {
         speak(text)
         onFinished()
     }
+    /**
+     * A countdown line that must land on its second: prepared run-voice audio when [useRunVoice],
+     * otherwise the phone voice. It never waits on the network.
+     */
+    fun speakTimedCue(text: String, useRunVoice: Boolean) = speakReceipt(text) { }
     fun stop()
     fun close()
 }
@@ -158,6 +167,10 @@ internal interface ReflectionSpeaker {
 /** The Android boundary is separate so request ownership can be verified without playing audio. */
 internal interface ReflectionSpeechPlatform {
     fun reflectionSpeechGateway(): ReflectionSpeechGateway? = null
+    /** The separately chosen run voice; null keeps countdown, facts and announcements on the phone voice. */
+    fun runVoiceGateway(): ReflectionSpeechGateway? = null
+    /** Fixed run-voice lines prepared ahead of time, so timed lines never wait on the network. */
+    fun preparedRunVoiceAudio(text: String): ByteArray? = null
     fun prepareSongPassageConnection() = Unit
     fun initialize(onReady: (Boolean) -> Unit, onDone: (String) -> Unit, onError: (String) -> Unit)
     fun requestAudioFocus(utteranceId: String, onFocusLost: (String) -> Unit): Boolean
@@ -170,6 +183,11 @@ internal interface ReflectionSpeechPlatform {
         utteranceId: String, audio: ByteArray,
         onDone: (String) -> Unit, onUnavailable: (String) -> Unit, onError: (String) -> Unit
     ): Boolean = false
+    /** Run-voice audio: the same bounded in-memory playback, at the facts' level without the entry ease. */
+    fun playRunVoiceAudio(
+        utteranceId: String, audio: ByteArray,
+        onDone: (String) -> Unit, onUnavailable: (String) -> Unit, onError: (String) -> Unit
+    ): Boolean = playReflectionAudio(utteranceId, audio, onDone, onUnavailable, onError)
     fun stopReflectionAudio() = Unit
     fun playSongPassage(
         utteranceId: String,
@@ -200,6 +218,8 @@ internal class AndroidReflectionSpeaker(
 ) : ReflectionSpeaker {
     private enum class SpeechPhase { PREPARING_CLOUD, WAITING_FOR_ENGINE, SPEAKING, WAITING_FOR_MUSIC, INSTRUMENTAL }
     private enum class SpeechPurpose { RECEIPT, REFLECTION }
+    /** Where a run-voice line may come from. Timed countdown lines never use the network. */
+    private enum class RunVoiceMode { NONE, PREPARED_ONLY, PREPARED_OR_FETCH }
 
     private data class SpeechRequest(
         val id: String,
@@ -311,7 +331,13 @@ internal class AndroidReflectionSpeaker(
 
     override fun speakReceipt(text: String, onFinished: () -> Unit) {
         submit(text, rate = 0.96f, onFinished = onFinished, canPlayInstrumental = null,
-            purpose = SpeechPurpose.RECEIPT)
+            purpose = SpeechPurpose.RECEIPT, runVoice = RunVoiceMode.PREPARED_OR_FETCH)
+    }
+
+    override fun speakTimedCue(text: String, useRunVoice: Boolean) {
+        submit(text, rate = 0.96f, onFinished = null, canPlayInstrumental = null,
+            purpose = SpeechPurpose.RECEIPT,
+            runVoice = if (useRunVoice) RunVoiceMode.PREPARED_ONLY else RunVoiceMode.NONE)
     }
 
     private fun submit(
@@ -320,7 +346,8 @@ internal class AndroidReflectionSpeaker(
         onFinished: (() -> Unit)?,
         canPlayInstrumental: (() -> Boolean)?,
         songPassage: SongPassageRequest? = null,
-        purpose: SpeechPurpose = SpeechPurpose.REFLECTION
+        purpose: SpeechPurpose = SpeechPurpose.REFLECTION,
+        runVoice: RunVoiceMode = RunVoiceMode.NONE
     ) {
         // A matching silent request becomes this speech attempt's sole preparation. Detach it
         // before stop() clears the old owner, so an in-flight request is awaited, not repeated.
@@ -336,11 +363,24 @@ internal class AndroidReflectionSpeaker(
         val next = SpeechRequest(UUID.randomUUID().toString(), text, rate, purpose, onFinished,
             canPlayInstrumental, songPassage)
         request = next
-        val gateway = if (purpose == SpeechPurpose.REFLECTION) platform.reflectionSpeechGateway() else null
+        // A prepared run-voice line plays at once, so a timed cue never waits for the network.
+        val preparedRunVoice = if (runVoice == RunVoiceMode.NONE) null
+            else try { platform.preparedRunVoiceAudio(text) } catch (_: RuntimeException) { null }
+        if (preparedRunVoice != null) {
+            playCloudVoice(next, preparedRunVoice)
+            return
+        }
+        val gateway = when {
+            purpose == SpeechPurpose.REFLECTION -> platform.reflectionSpeechGateway()
+            runVoice == RunVoiceMode.PREPARED_OR_FETCH ->
+                try { platform.runVoiceGateway() } catch (_: RuntimeException) { null }
+            else -> null
+        }
         if (prepared == null && gateway == null) useLocalVoice(next) else {
             adoptedReflection = prepared
             next.phase = SpeechPhase.PREPARING_CLOUD
-            armTimeout(next.id, 25_000L)
+            // A run line waits only briefly for the new voice; the reflection keeps its longer wait.
+            armTimeout(next.id, if (purpose == SpeechPurpose.RECEIPT) RUN_VOICE_WAIT_MILLIS else 25_000L)
             preparation = voiceScope.launch {
                 val audio = if (prepared != null) {
                     try { prepared.audio.await() }
@@ -389,10 +429,12 @@ internal class AndroidReflectionSpeaker(
             armSpeechTimeout(current)
             fun ownsCloud(id: String) = request === current && current.id == id &&
                 current.cloudAudio && current.phase == SpeechPhase.SPEAKING && !closed
-            val accepted = platform.playReflectionAudio(current.id, audio,
-                { id -> onMain { if (ownsCloud(id)) finishSpeech(id) } },
-                { id -> onMain { if (ownsCloud(id)) useLocalVoice(current) } },
-                { id -> onMain { if (ownsCloud(id)) stop() } })
+            val onDone: (String) -> Unit = { id -> onMain { if (ownsCloud(id)) finishSpeech(id) } }
+            val onUnavailable: (String) -> Unit = { id -> onMain { if (ownsCloud(id)) useLocalVoice(current) } }
+            val onError: (String) -> Unit = { id -> onMain { if (ownsCloud(id)) stop() } }
+            val accepted = if (current.purpose == SpeechPurpose.RECEIPT)
+                platform.playRunVoiceAudio(current.id, audio, onDone, onUnavailable, onError)
+            else platform.playReflectionAudio(current.id, audio, onDone, onUnavailable, onError)
             if (!accepted && ownsCloud(current.id)) useLocalVoice(current)
         } catch (_: RuntimeException) {
             // The platform reports pre-playback failures explicitly. Unknown failures cannot repeat speech.
@@ -611,6 +653,10 @@ internal class AndroidReflectionSpeechPlatform(
     private val appContext = context.applicationContext
     override fun reflectionSpeechGateway(): ReflectionSpeechGateway? =
         (appContext as? RunStateApplication)?.reflectionSpeechGateway
+    override fun runVoiceGateway(): ReflectionSpeechGateway? =
+        (appContext as? RunStateApplication)?.runVoiceGateway
+    override fun preparedRunVoiceAudio(text: String): ByteArray? =
+        (appContext as? RunStateApplication)?.runVoiceCues?.audioFor(text)
     private val passageScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val passageDiagnostics = passageDiagnosticObserver
     private var passageController: SpotifySongPassageController? = null
@@ -680,6 +726,17 @@ internal class AndroidReflectionSpeechPlatform(
     override fun playReflectionAudio(
         utteranceId: String, audio: ByteArray,
         onDone: (String) -> Unit, onUnavailable: (String) -> Unit, onError: (String) -> Unit
+    ): Boolean = playMemoryAudio(utteranceId, audio, onDone, onUnavailable, onError, runVoice = false)
+
+    override fun playRunVoiceAudio(
+        utteranceId: String, audio: ByteArray,
+        onDone: (String) -> Unit, onUnavailable: (String) -> Unit, onError: (String) -> Unit
+    ): Boolean = playMemoryAudio(utteranceId, audio, onDone, onUnavailable, onError, runVoice = true)
+
+    private fun playMemoryAudio(
+        utteranceId: String, audio: ByteArray,
+        onDone: (String) -> Unit, onUnavailable: (String) -> Unit, onError: (String) -> Unit,
+        runVoice: Boolean
     ): Boolean {
         stopReflectionAudio()
         if (closed || audio.isEmpty()) return false
@@ -697,9 +754,11 @@ internal class AndroidReflectionSpeechPlatform(
             playback.player.isLooping = false
             playback.player.setOnPreparedListener { player ->
                 if (owns()) try {
+                    // Run lines keep the saved facts' level and start crisply; only the reflection eases in.
+                    if (runVoice) player.setVolume(RUN_VOICE_VOLUME, RUN_VOICE_VOLUME)
                     // Ease only this reflection's initial attack; keep the first word audible.
                     // This changes neither the designed voice nor the phone/Spotify volume.
-                    playback.entryShaper = try {
+                    playback.entryShaper = if (runVoice) null else try {
                         player.createVolumeShaper(VolumeShaper.Configuration.Builder()
                             .setDuration(320L)
                             .setCurve(floatArrayOf(0f, 0.55f, 1f), floatArrayOf(0.68f, 0.9f, 1f))

@@ -30,9 +30,12 @@ public final class ReflectionBackendMain {
                 : ReflectionHttpServer.GenerationMode.ANTHROPIC;
         ReflectionHttpServer.SpeechProvider speechProvider = options.fake() ? null
                 : ElevenLabsReflectionSpeech.fromEnvironment(environment).orElse(null);
+        ReflectionHttpServer.SpeechProvider runVoiceProvider = options.fake() ? null
+                : ElevenLabsReflectionSpeech.runVoiceFromEnvironment(environment).orElse(null);
         try (ReflectionHttpServer server = options.remote()
-                ? ReflectionHttpServer.createRemote(provider, port, generationMode, remoteAccess, speechProvider)
-                : ReflectionHttpServer.create(provider, port, generationMode, speechProvider)) {
+                ? ReflectionHttpServer.createRemote(provider, port, generationMode, remoteAccess,
+                        speechProvider, runVoiceProvider)
+                : ReflectionHttpServer.create(provider, port, generationMode, speechProvider, runVoiceProvider)) {
             server.start();
             Runtime.getRuntime().addShutdownHook(new Thread(
                     server::close,

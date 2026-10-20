@@ -15,6 +15,8 @@ import com.runstate.mobile.reflection.ReflectionConnectionConfig
 import com.runstate.mobile.reflection.ReflectionGateway
 import com.runstate.mobile.reflection.ReflectionSpeechGateway
 import com.runstate.mobile.reflection.ReflectionSpeechHttpClient
+import com.runstate.mobile.reflection.RunVoiceCueCache
+import com.runstate.mobile.reflection.SpeechVoice
 import com.runstate.mobile.reflection.HostedSongStudyPreparationClient
 import com.runstate.mobile.reflection.reflectionDestinationFingerprint
 import com.runstate.mobile.reflection.ReflectionBridgeException
@@ -450,6 +452,25 @@ class RunStateApplication : Application() {
             else -> null
         }
     }
+
+    /** The run voice (countdown, facts, energy question, announcements) follows the same destination rules. */
+    internal val runVoiceGateway: ReflectionSpeechGateway = ReflectionSpeechGateway { text ->
+        when (val connection = mutableReflectionConnection.value) {
+            is ReflectionConnectionState.Hosted ->
+                ReflectionSpeechHttpClient.hosted(connection.config, SpeechVoice.RUN).synthesize(text)
+            ReflectionConnectionState.Local -> if (reflectionBridgeEnabledForBuild()) {
+                val emulator = Build.PRODUCT.startsWith("sdk_") ||
+                    Build.DEVICE.startsWith("emu") || Build.HARDWARE == "ranchu"
+                ReflectionSpeechHttpClient.local(
+                    if (emulator) LOCAL_REFLECTION_ENDPOINT else PHONE_REFLECTION_ENDPOINT, SpeechVoice.RUN
+                ).synthesize(text)
+            } else null
+            else -> null
+        }
+    }
+
+    /** Fixed run-voice lines prepared while Start is open, so the countdown lands on time. Memory only. */
+    internal val runVoiceCues: RunVoiceCueCache by lazy { RunVoiceCueCache(applicationScope, runVoiceGateway) }
 
     private var reflectionOwner: RunReflectionCoordinator? = null
 

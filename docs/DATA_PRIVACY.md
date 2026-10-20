@@ -11,6 +11,32 @@ metadata, to Anthropic. See [the current Android checkpoint](design/project_curr
 and [backend documentation](../backend/README.md) for those implemented boundaries. The older
 console statement that RunState has no server does **not** apply to the Android app.
 
+## Run voice — October 20, 2026
+
+**Status: Building.** The code is on branch `claude/run-voice`. It has not yet been deployed to
+Render or heard on the phone.
+
+Manley chose a second ElevenLabs voice, "Black British Female Leader," for everything RunState
+speaks except the reflection: the countdown lines, the saved-facts confirmation, the
+“How’s your energy now?” question and every-mile announcements. The accepted reflection voice
+and its request path are unchanged.
+
+- **What is sent:** only the exact line being spoken, from the phone to RunState's server, which
+  forwards it to ElevenLabs with the same server-side key as the reflection voice. A line can
+  contain distance, active time and average pace. No location, route, music, note or saved History
+  is sent, and the key never reaches the phone.
+- **Separate path and limit:** run lines use their own server path (`/api/run-voice/speech`, with
+  its own health capability header) and a 500-character limit.
+- **Prepared lines:** the four countdown lines and the energy question are fixed text. They are
+  fetched while the Start screen is open and held in memory for the app session, so the countdown
+  lands on time. If they are not all ready when a countdown begins, that whole countdown uses the
+  phone's own voice.
+- **Fallback:** facts and announcements are requested when spoken. If the new voice is not back
+  within about five seconds, or anything fails, the phone's own voice speaks the same line.
+- **Storage:** neither the phone nor the backend writes generated audio to storage. Provider-side
+  retention follows the ElevenLabs account settings, as for the reflection voice.
+- **Cost:** every spoken line uses ElevenLabs credits, roughly a few hundred characters per run.
+
 ## Protected activities and optional notes — October 18, 2026
 
 The new Save Activity flow keeps an ended run recoverable on the phone before the runner explicitly
@@ -31,6 +57,8 @@ local Android speech and a remembered Off setting. Countdown speech and the brie
 also use local speech. They add no audio recording, cloud request, location collection or music
 sharing. Software and silent Moto checks passed, and all old fields in the 33 saved runs and related
 tables were preserved. Audible/field confirmation remains; exact scope is in project_current_state.md.
+**October 20 update:** when the server offers the new run voice, these lines and the saved facts are
+spoken through it instead; see "Run voice" above. Local speech remains the fallback.
 
 ## Android saved splits and Energy insight — October 17, 2026
 

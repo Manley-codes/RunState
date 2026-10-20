@@ -47,6 +47,36 @@ class ReflectionSpeechGatewayTest {
         assertTrue(health.disconnected && speech.disconnected)
     }
 
+    @Test fun runVoiceUsesItsOwnPathCapabilityAndShorterLimit() = runBlocking {
+        val health = FakeHttps(URL("https://reflection.example.com/health"), capability = "1",
+            capabilityName = "X-RunState-Run-Voice")
+        val speech = FakeHttps(URL("https://reflection.example.com/api/run-voice/speech"), mp3)
+        val urls = mutableListOf<URL>()
+        val result = ReflectionSpeechHttpClient.hosted(config, SpeechVoice.RUN) { url ->
+            urls += url
+            if (url.path == "/health") health else speech
+        }.synthesize("Starting in ten.")
+        assertArrayEquals(mp3, result)
+        assertEquals(listOf("/health", "/api/run-voice/speech"), urls.map { it.path })
+        assertEquals("Bearer ${config.accessCode}", speech.getRequestProperty("Authorization"))
+        val body = JsonParser.parseString(speech.sent.toString("UTF-8")).asJsonObject
+        assertEquals(setOf("text"), body.keySet())
+        assertEquals("Starting in ten.", body["text"].asString)
+
+        // A server offering only the reflection voice never receives run lines.
+        var calls = 0
+        val reflectionOnly = FakeHttps(URL(config.endpoint), capability = "1")
+        assertNull(ReflectionSpeechHttpClient.hosted(config, SpeechVoice.RUN) { calls++; reflectionOnly }
+            .synthesize("One."))
+        assertEquals(1, calls)
+        assertEquals(0, reflectionOnly.sent.size())
+
+        var opened = 0
+        assertNull(ReflectionSpeechHttpClient.hosted(config, SpeechVoice.RUN) { opened++; error("Unexpected") }
+            .synthesize("x".repeat(501)))
+        assertEquals(0, opened)
+    }
+
     @Test fun oldUnconfiguredRedirectedAndUnavailableHealthNeverUploadsText() = runBlocking {
         for ((status, capability) in listOf(200 to null, 200 to "0", 302 to "1", 503 to "1")) {
             var calls = 0
@@ -138,7 +168,8 @@ class ReflectionSpeechGatewayTest {
 
     private open class FakeHttps(url: URL, private val body: ByteArray = byteArrayOf(),
         val status: Int = 200, private val capability: String? = null,
-        val type: String = "audio/mpeg", val declaredLength: Long = body.size.toLong()
+        val type: String = "audio/mpeg", val declaredLength: Long = body.size.toLong(),
+        private val capabilityName: String = "X-RunState-Reflection-Voice"
     ) : HttpsURLConnection(url) {
         val sent = ByteArrayOutputStream()
         var disconnected = false
@@ -155,6 +186,6 @@ class ReflectionSpeechGatewayTest {
         override fun getContentType() = type
         override fun getContentLengthLong() = declaredLength
         override fun getHeaderField(name: String?): String? =
-            if (name.equals("X-RunState-Reflection-Voice", true)) capability else null
+            if (name.equals(capabilityName, true)) capability else null
     }
 }

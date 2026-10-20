@@ -69,6 +69,41 @@ class ElevenLabsReflectionSpeechTest {
     }
 
     @Test
+    void runVoiceUsesItsOwnChosenVoiceWithTheSameModelAndAShorterLimit() throws Exception {
+        AtomicReference<TransportRequest> captured = new AtomicReference<>();
+        AtomicInteger calls = new AtomicInteger();
+        ElevenLabsReflectionSpeech runVoice = ElevenLabsReflectionSpeech.runVoice(DUMMY_KEY, request -> {
+            calls.incrementAndGet();
+            captured.set(request);
+            return successful();
+        });
+
+        assertArrayEquals(AUDIO, runVoice.synthesize("Starting in ten."));
+        JsonObject body = JsonParser.parseString(captured.get().body()).getAsJsonObject();
+        assertAll(
+                () -> assertEquals(URI.create("https://api.elevenlabs.io/v1/text-to-speech/"
+                        + "HEtSzb2EMPNWlQY8Ofqf?output_format=mp3_44100_128"), captured.get().endpoint()),
+                () -> assertEquals(Set.of("text", "model_id"), body.keySet()),
+                () -> assertEquals("Starting in ten.", body.get("text").getAsString()),
+                () -> assertEquals("eleven_multilingual_v2", body.get("model_id").getAsString()),
+                () -> assertEquals(Duration.ofSeconds(20), captured.get().timeout()),
+                // The reflection voice keeps its own fixed voice.
+                () -> assertEquals(URI.create("https://api.elevenlabs.io/v1/text-to-speech/"
+                        + "DocoybWhaSQMUIs7gLNe?output_format=mp3_44100_128"), ElevenLabsReflectionSpeech.ENDPOINT),
+                () -> assertFalse(runVoice.toString().contains(DUMMY_KEY))
+        );
+        assertArrayEquals(AUDIO, runVoice.synthesize("x".repeat(500)));
+        ReflectionProviderException tooLong = assertThrows(ReflectionProviderException.class,
+                () -> runVoice.synthesize("x".repeat(501)));
+        assertEquals(FailureType.INVALID_RESPONSE, tooLong.failureType());
+        assertEquals(2, calls.get());
+        assertTrue(ElevenLabsReflectionSpeech.runVoiceFromEnvironment(Map.of()).isEmpty());
+        assertTrue(ElevenLabsReflectionSpeech.runVoiceFromEnvironment(Map.of("ELEVENLABS_API_KEY", " \t")).isEmpty());
+        assertTrue(ElevenLabsReflectionSpeech.runVoiceFromEnvironment(
+                Map.of("ELEVENLABS_API_KEY", DUMMY_KEY)).isPresent());
+    }
+
+    @Test
     void missingOrBlankKeyDisablesWithoutMakingARequest() {
         assertTrue(ElevenLabsReflectionSpeech.fromEnvironment(Map.of()).isEmpty());
         assertTrue(ElevenLabsReflectionSpeech.fromEnvironment(Map.of("ELEVENLABS_API_KEY", " \t")).isEmpty());

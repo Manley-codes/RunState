@@ -25,31 +25,43 @@ internal fun interface ReflectionSpeechGateway {
 
 internal const val MAX_REFLECTION_AUDIO_BYTES = 2 * 1024 * 1024
 
-/** Provider credentials never leave the server. Only this selected reflection is uploaded. */
+/**
+ * The two server voices. Each has its own path and capability, so adding the run voice never
+ * changes how the reflection voice is requested.
+ */
+internal enum class SpeechVoice(val path: String, val capabilityHeader: String, val maxTextLength: Int) {
+    /** The accepted custom voice that reads the selected reflection. */
+    REFLECTION("/api/reflections/speech", "X-RunState-Reflection-Voice", 4_000),
+    /** The separately chosen voice for the countdown, saved facts, energy question and announcements. */
+    RUN("/api/run-voice/speech", "X-RunState-Run-Voice", 500)
+}
+
+/** Provider credentials never leave the server. Only the exact line being spoken is uploaded. */
 internal class ReflectionSpeechHttpClient private constructor(
     private val endpoint: URL,
     private val accessCode: String?,
+    private val voice: SpeechVoice,
     private val connectionFactory: (URL) -> HttpURLConnection
 ) : ReflectionSpeechGateway {
     companion object {
-        fun hosted(config: ReflectionConnectionConfig,
+        fun hosted(config: ReflectionConnectionConfig, voice: SpeechVoice = SpeechVoice.REFLECTION,
             connectionFactory: (URL) -> HttpURLConnection = { it.openConnection() as HttpURLConnection }
-        ) = ReflectionSpeechHttpClient(URL(config.endpoint), config.accessCode, connectionFactory)
+        ) = ReflectionSpeechHttpClient(URL(config.endpoint), config.accessCode, voice, connectionFactory)
 
         /** Called only after the composition root admits the debug local bridge. */
-        fun local(endpoint: String,
+        fun local(endpoint: String, voice: SpeechVoice = SpeechVoice.REFLECTION,
             connectionFactory: (URL) -> HttpURLConnection = { it.openConnection() as HttpURLConnection }
         ): ReflectionSpeechHttpClient {
             val url = URL(endpoint)
             require(url.protocol == "http" && url.host in setOf("127.0.0.1", "10.0.2.2") &&
                 url.port == 8787 && url.path == "/api/reflections/candidates" &&
                 url.query == null && url.ref == null && url.userInfo == null)
-            return ReflectionSpeechHttpClient(url, null, connectionFactory)
+            return ReflectionSpeechHttpClient(url, null, voice, connectionFactory)
         }
     }
 
     override suspend fun synthesize(text: String): ByteArray? {
-        if (text.isBlank() || text.length > 4_000) return null
+        if (text.isBlank() || text.length > voice.maxTextLength) return null
         val active = AtomicReference<HttpURLConnection?>()
         return withTimeoutOrNull(20_000L) {
             coroutineScope {
@@ -88,13 +100,13 @@ internal class ReflectionSpeechHttpClient private constructor(
             health.requestMethod = "GET"
             health.readTimeout = remaining(2_000)
             val supported = health.responseCode == HttpURLConnection.HTTP_OK &&
-                health.getHeaderField("X-RunState-Reflection-Voice") == "1"
+                health.getHeaderField(voice.capabilityHeader) == "1"
             health.disconnect()
             active.compareAndSet(health, null)
             coroutineContext.ensureActive()
             if (!supported) return null
             val body = Gson().toJson(mapOf("text" to text)).toByteArray(StandardCharsets.UTF_8)
-            val speech = connect("/api/reflections/speech")
+            val speech = connect(voice.path)
             speech.requestMethod = "POST"
             speech.doOutput = true
             speech.setRequestProperty("Content-Type", "application/json; charset=utf-8")

@@ -25,21 +25,42 @@ import java.util.concurrent.Flow;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
-/** Optional reflection-only speech. Keeps provider credentials and generated audio in memory. */
+/**
+ * Optional server-side speech. Keeps provider credentials and generated audio in memory.
+ * The reflection voice and the separately chosen run voice share only the key and model.
+ */
 public final class ElevenLabsReflectionSpeech implements ReflectionHttpServer.SpeechProvider {
     static final URI ENDPOINT = URI.create("https://api.elevenlabs.io/v1/text-to-speech/"
             + "DocoybWhaSQMUIs7gLNe?output_format=mp3_44100_128");
+    /** Manley's chosen run voice ("Black British Female Leader"): countdown, facts and announcements. */
+    static final URI RUN_VOICE_ENDPOINT = URI.create("https://api.elevenlabs.io/v1/text-to-speech/"
+            + "HEtSzb2EMPNWlQY8Ofqf?output_format=mp3_44100_128");
     static final String MODEL_ID = "eleven_multilingual_v2";
     static final int MAX_TEXT_LENGTH = 4_000;
+    /** Run lines are short facts and cues; a tighter bound limits credits spent per request. */
+    static final int MAX_RUN_VOICE_TEXT_LENGTH = 500;
     static final int MAX_AUDIO_BYTES = 2 * 1024 * 1024;
     static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(20);
     private static final Duration CONNECTION_TIMEOUT = Duration.ofSeconds(3);
     private final String apiKey;
     private final Transport transport;
+    private final URI endpoint;
+    private final int maxTextLength;
 
     ElevenLabsReflectionSpeech(String apiKey, Transport transport) {
+        this(apiKey, transport, ENDPOINT, MAX_TEXT_LENGTH);
+    }
+
+    private ElevenLabsReflectionSpeech(String apiKey, Transport transport, URI endpoint, int maxTextLength) {
         this.apiKey = validatedKey(apiKey);
         this.transport = Objects.requireNonNull(transport, "transport");
+        this.endpoint = endpoint;
+        this.maxTextLength = maxTextLength;
+    }
+
+    /** The run voice: same key, model and safeguards, its own voice and shorter text limit. */
+    static ElevenLabsReflectionSpeech runVoice(String apiKey, Transport transport) {
+        return new ElevenLabsReflectionSpeech(apiKey, transport, RUN_VOICE_ENDPOINT, MAX_RUN_VOICE_TEXT_LENGTH);
     }
 
     /** An absent key leaves the existing phone voice available without contacting this provider. */
@@ -52,10 +73,20 @@ public final class ElevenLabsReflectionSpeech implements ReflectionHttpServer.Sp
         return Optional.of(new ElevenLabsReflectionSpeech(key, new JdkTransport()));
     }
 
+    /** The same absent-key rule: without a key, the phone keeps speaking run lines itself. */
+    public static Optional<ElevenLabsReflectionSpeech> runVoiceFromEnvironment(Map<String, String> environment) {
+        Objects.requireNonNull(environment, "environment");
+        String key = environment.get("ELEVENLABS_API_KEY");
+        if (key == null || key.isBlank()) {
+            return Optional.empty();
+        }
+        return Optional.of(runVoice(key, new JdkTransport()));
+    }
+
     /** One bounded request, with no retries, text rewriting, local files, or retained audio. */
     @Override
     public byte[] synthesize(String text) throws ReflectionProviderException {
-        if (text == null || text.isBlank() || text.length() > MAX_TEXT_LENGTH) {
+        if (text == null || text.isBlank() || text.length() > maxTextLength) {
             throw failure(FailureType.INVALID_RESPONSE, "Reflection speech text is invalid.");
         }
         JsonObject body = new JsonObject();
@@ -63,7 +94,7 @@ public final class ElevenLabsReflectionSpeech implements ReflectionHttpServer.Sp
         body.addProperty("model_id", MODEL_ID);
         try {
             TransportResponse response = transport.send(new TransportRequest(
-                    ENDPOINT, apiKey, body.toString(), REQUEST_TIMEOUT));
+                    endpoint, apiKey, body.toString(), REQUEST_TIMEOUT));
             if (response == null) {
                 throw failure(FailureType.INVALID_RESPONSE, "Reflection speech is unavailable.");
             }

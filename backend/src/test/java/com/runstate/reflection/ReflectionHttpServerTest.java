@@ -738,6 +738,84 @@ class ReflectionHttpServerTest {
     }
 
     @Test
+    void runVoiceIsSeparateFromTheReflectionVoiceAdvertisedOnlyWhenConfiguredAndBounded() throws Exception {
+        byte[] runAudio = new byte[]{'I', 'D', '3', 7};
+        AtomicReference<String> reflectionSpoken = new AtomicReference<>();
+        AtomicReference<String> runSpoken = new AtomicReference<>();
+        try (ReflectionHttpServer server = ReflectionHttpServer.create(evidence -> exactCandidates(), 0,
+                ReflectionHttpServer.GenerationMode.ANTHROPIC, text -> {
+                    reflectionSpoken.set(text);
+                    return new byte[]{'I', 'D', '3', 1};
+                }, text -> {
+                    runSpoken.set(text);
+                    return runAudio;
+                })) {
+            server.start();
+            HttpResponse<byte[]> response = client.send(runVoiceRequest(server, speechBody("Starting in ten.")),
+                    HttpResponse.BodyHandlers.ofByteArray());
+            HttpResponse<String> health = client.send(HttpRequest.newBuilder(URI.create("http://127.0.0.1:"
+                    + server.address().getPort() + ReflectionHttpServer.HEALTH_PATH)).GET().build(),
+                    HttpResponse.BodyHandlers.ofString());
+            assertAll(
+                    () -> assertEquals(200, response.statusCode()),
+                    () -> assertArrayEquals(runAudio, response.body()),
+                    () -> assertEquals("Starting in ten.", runSpoken.get()),
+                    () -> assertNull(reflectionSpoken.get()),
+                    () -> assertEquals("audio/mpeg", response.headers().firstValue("Content-Type").orElseThrow()),
+                    () -> assertEquals("no-store", response.headers().firstValue("Cache-Control").orElseThrow()),
+                    () -> assertEquals("1", health.headers().firstValue(
+                            ReflectionHttpServer.RUN_VOICE_CAPABILITY_HEADER).orElseThrow()),
+                    () -> assertEquals("1", health.headers().firstValue(
+                            ReflectionHttpServer.REFLECTION_VOICE_CAPABILITY_HEADER).orElseThrow())
+            );
+            runSpoken.set(null);
+            assertEquals(400, client.send(runVoiceRequest(server, speechBody("x".repeat(501))),
+                    HttpResponse.BodyHandlers.ofString()).statusCode());
+            assertNull(runSpoken.get());
+            assertEquals(200, client.send(runVoiceRequest(server, speechBody("x".repeat(500))),
+                    HttpResponse.BodyHandlers.ofString()).statusCode());
+            // The reflection voice keeps its own path, provider and longer limit.
+            assertEquals(200, client.send(speechRequest(server, speechBody("x".repeat(4_000))),
+                    HttpResponse.BodyHandlers.ofString()).statusCode());
+            assertEquals("x".repeat(4_000), reflectionSpoken.get());
+        }
+        try (ReflectionHttpServer server = startSpeech(text -> new byte[]{'I', 'D', '3'})) {
+            HttpResponse<String> health = client.send(HttpRequest.newBuilder(URI.create("http://127.0.0.1:"
+                    + server.address().getPort() + ReflectionHttpServer.HEALTH_PATH)).GET().build(),
+                    HttpResponse.BodyHandlers.ofString());
+            assertTrue(health.headers().firstValue(ReflectionHttpServer.RUN_VOICE_CAPABILITY_HEADER).isEmpty());
+            assertEquals(503, client.send(runVoiceRequest(server, speechBody("One.")),
+                    HttpResponse.BodyHandlers.ofString()).statusCode());
+        }
+    }
+
+    @Test
+    void runVoiceKeepsRemoteAuthenticationBeforeCallingProvider() throws Exception {
+        AtomicInteger calls = new AtomicInteger();
+        try (ReflectionHttpServer server = ReflectionHttpServer.createRemote(evidence -> exactCandidates(), 0,
+                ReflectionHttpServer.GenerationMode.ANTHROPIC,
+                new ReflectionHttpServer.RemoteAccess("127.0.0.1", DEMO_HOST, DUMMY_DEMO_TOKEN), null, text -> {
+                    calls.incrementAndGet();
+                    return "ID3fixture".getBytes(StandardCharsets.US_ASCII);
+                })) {
+            server.start();
+            String path = ReflectionHttpServer.RUN_VOICE_PATH;
+            String body = speechBody("One.");
+            assertError(rawRequest(server, "POST", path, List.of("Host: " + DEMO_HOST), body),
+                    401, "unauthorized");
+            assertError(rawRequest(server, "POST", path, List.of("Host: " + DEMO_HOST,
+                    "Authorization: Bearer incorrect"), body), 401, "unauthorized");
+            assertEquals(0, calls.get());
+            assertEquals(200, rawRequest(server, "POST", path, remoteHeaders(), body).status());
+            assertEquals(1, calls.get());
+            // Without a reflection voice, the reflection path still reports it is not configured.
+            assertError(rawRequest(server, "POST", ReflectionHttpServer.SPEECH_PATH, remoteHeaders(), body),
+                    503, "provider_unavailable");
+            assertEquals(1, calls.get());
+        }
+    }
+
+    @Test
     void localFakeSmokePreservesIdentifiersEvidenceAndExactCandidateText() throws Exception {
         AtomicInteger calls = new AtomicInteger();
         AtomicReference<CompletedRunEvidence> capturedEvidence = new AtomicReference<>();
@@ -1648,6 +1726,13 @@ class ReflectionHttpServerTest {
         JsonObject body = new JsonObject();
         body.addProperty("text", text);
         return body.toString();
+    }
+
+    private static HttpRequest runVoiceRequest(ReflectionHttpServer server, String body) {
+        return HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + server.address().getPort()
+                        + ReflectionHttpServer.RUN_VOICE_PATH)).timeout(Duration.ofSeconds(5))
+                .header("Content-Type", "application/json; charset=utf-8")
+                .POST(HttpRequest.BodyPublishers.ofString(body, StandardCharsets.UTF_8)).build();
     }
 
     private static HttpRequest speechRequest(ReflectionHttpServer server, String body) {
