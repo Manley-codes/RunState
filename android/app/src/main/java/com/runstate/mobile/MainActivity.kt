@@ -113,6 +113,12 @@ private fun preciseGpsLocationReady(context: Context): Boolean =
             ?.isProviderEnabled(LocationManager.GPS_PROVIDER) == true
 
 class MainActivity : ComponentActivity() {
+    // Spotify's approval screen returns here. The approval is then used to connect App Remote;
+    // no Spotify code or token is kept.
+    private val spotifyAuthorization = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result -> SpotifyAppRemoteConnection.get(this).onAuthorizationResult(result.resultCode, result.data) }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -183,6 +189,7 @@ class MainActivity : ComponentActivity() {
                                 "AuthenticationFailedException" -> "Spotify could not verify RunState's connection setup."
                                 "UserNotAuthorizedException" -> "Spotify authorization wasn't completed."
                                 "NotLoggedInException" -> "Sign in to Spotify, then connect again."
+                                "AuthorizationCancelled" -> "Spotify approval was cancelled. Connect again when ready."
                                 null -> "Connect Spotify for automatic snippets"
                                 else -> "Spotify authorization wasn't completed. Try connecting again."
                             }
@@ -194,7 +201,14 @@ class MainActivity : ComponentActivity() {
                             spotify.status != SpotifyRemoteConnectionStatus.READY,
                         spotifyDisconnectEnabled = spotify.status == SpotifyRemoteConnectionStatus.READY ||
                             spotify.status == SpotifyRemoteConnectionStatus.CONNECTING,
-                        onConnectSpotify = { spotifyConnection.authorize(this@MainActivity) },
+                        onConnectSpotify = {
+                            spotifyConnection.authorizationIntent(this@MainActivity)?.let { intent ->
+                                try { spotifyAuthorization.launch(intent) }
+                                catch (_: ActivityNotFoundException) {
+                                    spotifyConnection.onAuthorizationResult(RESULT_CANCELED, null)
+                                }
+                            }
+                        },
                         onDisconnectSpotify = spotifyConnection::disconnect,
 
                         // The Activity's own lifecycle gates the countdown, so nothing counts

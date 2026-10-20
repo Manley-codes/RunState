@@ -431,3 +431,9 @@ Source/license: https://github.com/spotify/android-sdk/blob/v0.8.0-appremote_v2.
 Apache License 2.0; the full license text appears earlier in this file and in app/libs/SPOTIFY_SDK_LICENSE.txt.
 Spotify Developer Terms apply separately to use of the playback service. Spotify plays the recording;
 RunState does not download or record Spotify audio.
+
+Spotify Android Auth library 5.0.0
+Artifact: com.spotify.android:auth:5.0.0 from Maven Central (unmodified)
+Source/license: https://github.com/spotify/android-auth
+Apache License 2.0; the full license text appears earlier in this file.
+Used only to show Spotify's approval screen. RunState does not store Spotify codes or tokens.

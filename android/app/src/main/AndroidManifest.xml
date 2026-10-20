@@ -54,6 +54,20 @@
                 <action android:name="android.service.notification.NotificationListenerService" />
             </intent-filter>
         </service>
+        <!-- Spotify's login library (5.0+) requires this declaration for its browser fallback.
+             The address must match the redirect URI registered in the Spotify developer dashboard. -->
+        <activity
+            android:name="com.spotify.sdk.android.auth.browser.RedirectUriReceiverActivity"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:host="spotify-callback"
+                    android:scheme="runstate" />
+            </intent-filter>
+        </activity>
     </application>
 
 </manifest>

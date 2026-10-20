@@ -1114,4 +1114,14 @@ class SpotifySongPassageTest {
         assertEquals(listOf("pause", "seek:5000", "play", "pause", "seek:60000", "play"), session.commands)
         assertEquals(10_000L, clock.time)
     }
+
+    @Test fun spotifyAuthorizationErrorCategoryIsBoundedAndSafe() {
+        assertEquals("AuthorizationError", spotifyAuthorizationErrorCategory(null))
+        assertEquals("AuthorizationError", spotifyAuthorizationErrorCategory("  "))
+        assertEquals("AuthorizationError_access_denied", spotifyAuthorizationErrorCategory("access_denied"))
+        assertEquals("AuthorizationError_User_not_registered_in_the_Developer_Dashboard",
+            spotifyAuthorizationErrorCategory("User not registered in the Developer Dashboard"))
+        val long = spotifyAuthorizationErrorCategory("x".repeat(200))
+        assertTrue(long.matches(Regex("[A-Za-z][A-Za-z0-9_]{0,79}")))
+    }
 }

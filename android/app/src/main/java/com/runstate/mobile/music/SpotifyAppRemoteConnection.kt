@@ -2,6 +2,7 @@ package com.runstate.mobile.music
 
 import android.app.Activity
 import android.content.Context
+import android.content.Intent
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
@@ -16,6 +17,9 @@ import com.spotify.android.appremote.api.error.UserNotAuthorizedException
 import com.spotify.protocol.client.Subscription
 import com.spotify.protocol.types.Capabilities
 import com.spotify.protocol.types.PlayerState
+import com.spotify.sdk.android.auth.AuthorizationClient
+import com.spotify.sdk.android.auth.AuthorizationRequest
+import com.spotify.sdk.android.auth.AuthorizationResponse
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -64,7 +68,52 @@ internal class SpotifyAppRemoteConnection private constructor(context: Context) 
         if (Looper.myLooper() == main.looper) action() else main.post(action)
     }
 
-    fun authorize(activity: Activity) = onMain { background = false; connect(activity, interactive = true) }
+    /**
+     * Explicit Connect Spotify. On Android 14+ the App Remote kit's own approval screen is started
+     * by Spotify from the background and blocked, so the connection hangs. Spotify's login library
+     * opens the same approval from RunState while it is on screen; once approved, App Remote
+     * connects without any approval UI. Returns null when Spotify is not configured or unavailable.
+     */
+    fun authorizationIntent(activity: Activity): Intent? {
+        check(Looper.myLooper() == main.looper)
+        if (!configured) return null
+        background = false
+        clearConnection(SpotifyRemoteConnectionStatus.CONNECTING)
+        // Keep this attempt alive while Spotify's approval screen puts RunState in the background.
+        interactiveConnecting = true
+        return try {
+            val request = AuthorizationRequest.Builder(BuildConfig.SPOTIFY_CLIENT_ID,
+                AuthorizationResponse.Type.CODE, BuildConfig.SPOTIFY_REDIRECT_URI)
+                .setScopes(arrayOf("app-remote-control")).build()
+            AuthorizationClient.createLoginActivityIntent(activity, request)
+        } catch (_: RuntimeException) {
+            authorizationFailed("AuthorizationUnavailable")
+            null
+        }
+    }
+
+    /** The returned code is never used or stored: App Remote relies on the Spotify app's own session. */
+    fun onAuthorizationResult(resultCode: Int, data: Intent?) = onMain {
+        val response = try { AuthorizationClient.getResponse(resultCode, data) } catch (_: RuntimeException) { null }
+        val errorCode = response?.error
+        when (response?.type) {
+            AuthorizationResponse.Type.CODE, AuthorizationResponse.Type.TOKEN -> {
+                preferences.edit().putString("authorized_client", BuildConfig.SPOTIFY_CLIENT_ID).apply()
+                clearConnection(SpotifyRemoteConnectionStatus.DISCONNECTED)
+                background = false
+                connect(appContext, interactive = false)
+            }
+            AuthorizationResponse.Type.CANCELLED -> authorizationFailed("AuthorizationCancelled")
+            AuthorizationResponse.Type.ERROR -> authorizationFailed(spotifyAuthorizationErrorCategory(errorCode))
+            else -> authorizationFailed("AuthorizationIncomplete")
+        }
+    }
+
+    private fun authorizationFailed(category: String) {
+        preferences.edit().remove("authorized_client").apply()
+        recordDebugFailure(category)
+        clearConnection(SpotifyRemoteConnectionStatus.NEEDS_AUTH, category)
+    }
     fun connectSilently() = onMain {
         if (!background && hasGrant()) connect(appContext, interactive = false)
     }
@@ -416,6 +465,12 @@ internal class SpotifyAppRemoteConnection private constructor(context: Context) 
 }
 
 internal enum class SpotifyLoadAction { WAIT, PAUSE_TARGET, RELEASE }
+
+/** Spotify's OAuth error code, bounded to a safe diagnostic word. It never contains a code or token. */
+internal fun spotifyAuthorizationErrorCategory(error: String?): String {
+    val cleaned = error?.replace(Regex("[^A-Za-z0-9]+"), "_")?.trim('_')?.take(60).orEmpty()
+    return if (cleaned.isEmpty()) "AuthorizationError" else "AuthorizationError_$cleaned"
+}
 
 internal fun spotifyRemoteFailureCategory(failure: Throwable): String = failure.javaClass.simpleName
     .takeIf { it.matches(Regex("[A-Za-z][A-Za-z0-9_]{0,79}")) } ?: "UnknownFailure"

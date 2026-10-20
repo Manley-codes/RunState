@@ -88,6 +88,9 @@ dependencies {
     implementation(libs.okhttp)
     // Official Spotify release, pinned locally; provenance and checksum are in third-party notices.
     implementation(files("libs/spotify-app-remote-release-0.8.0.aar"))
+    // Official Spotify login library (Maven Central). Opens Spotify's approval screen while
+    // RunState is on screen; see SpotifyAppRemoteConnection.authorizationIntent.
+    implementation(libs.spotify.auth)
 
     ksp(libs.androidx.room.compiler)
     testImplementation(libs.junit)
