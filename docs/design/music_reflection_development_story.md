@@ -1,5 +1,37 @@
 # How RunState music reflections developed
 
+### October 20 lesson: a connection that only waits may be blocked, not slow
+
+The October 19 repair did not end the "Spotify connection unavailable" message. Tapping Connect
+Spotify waited about 20 seconds and failed, and no Spotify approval screen ever appeared. RunState's
+safe diagnostic recorded a connection timeout with no remembered approval. The phone's own system
+log showed the cause: Android 14 and newer stop an app in the background from opening a screen, and
+Spotify was trying to open its approval screen from the background. Android blocked it ("Background
+activity launch blocked"), so the connection simply waited until RunState gave up. This matches an
+open issue in Spotify's Android SDK (spotify/android-sdk #377). The October 19 dashboard repair was
+still necessary; it was not sufficient.
+
+Before any code changed, a restore point was made: a Git tag and side branch at the checkpoint, a
+copy of the phone's RunState data, and a restore note. The fix uses Spotify's official login
+library (`com.spotify.android:auth` 5.0.0), so RunState opens Spotify's approval screen itself while
+RunState is on screen. After approval, the playback connection connects with no approval screen. No
+Spotify code or token is stored. Unit tests passed, and the app was updated in place with saved runs
+kept.
+
+Manley then approved the connection on the Moto and ran one controlled test: a short run with only
+Lovely Day, then a different song after finishing. After the reflection, Spotify switched to Lovely
+Day's chorus for the snippet and then returned to the other song. This is the first phone proof that
+RunState can play a selected song that is not the current one. It is one controlled test, not a
+real-run result. The fix is committed on a side branch (`claude/spotify-connection`, `263bb43`), not
+merged into master, and a real-run test is planned.
+
+The same test exposed three open issues, queued after the run-voice work. The other song kept playing
+at a lower volume under the spoken reflection, because the reflection voice asks other apps to lower
+their volume rather than pause. A song skipped after a few seconds can currently be chosen, because a
+reported PLAYING state is not listening time. And no minimum run length was found before a reflection
+is created. The lesson: when a connection only waits, check the phone's own log before changing
+settings. Something may be blocking it rather than slowing it.
+
 ### October 19 lesson: meaning and playback are different jobs
 
 The next failure was not necessarily a weak reflection. Our code required usable song analysis
