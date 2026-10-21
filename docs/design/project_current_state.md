@@ -18,6 +18,123 @@ missing check. A successful build, installation or controlled fixture is not pro
 | **Verified in use** | The stated behavior worked in actual use for the named scenario, not only with fictional test data. This does not prove every device, song or circumstance. |
 | **Complete for agreed scope** | The agreed behavior, necessary checks and documentation are finished. Explicit remaining limits are outside that scope; this does not mean every future idea is built. |
 
+## October 20 real-run feedback and checkpoint request
+
+Manley reports that the countdown and distance announcements sounded good, and a real-song
+snippet played from an earlier song rather than the last current track. This is user-reported
+field success for that run, not proof of universal snippet quality. He found a long gap between
+the run facts and reflection, an abrupt reflection entrance, and an ending that cut a drum sound
+associated with the chosen J. Cole line. The exact track, timing and latency cause are not yet
+verified. Completion audio remains **Building**. He wants live music paused throughout the
+completion sequence; the next proposed fix is one coordinated facts/check-in/reflection/snippet
+handoff, preserving the accepted creative writer and reflection voice.
+
+The local Start panel stack is **not accepted**. He wants a quieter layout, a recognizable gear
+and map icon, and a placement discussion before implementation. GPS could sit inside the Run
+State panel; History access and a small illustrative-map caption still need a design decision.
+The static beam preview does not establish whether the moving version looks right on the phone.
+The earlier software validation below remains valid, but does not imply design acceptance.
+
+The six-second post-run Energy deadline feels rushed. Read-only review confirms that expiry can
+freeze the neutral reflection branch even if a later answer is saved. Removing the deadline and
+using the first deliberate answer is recommended; this has not been implemented or approved as
+an exact code change. Explicit skipping, Save handling and existing frozen replies need coordinated
+handling. The broader purpose and mechanics of pre/post Energy still require a separate review.
+
+Manley requests commit/push commands before new implementation. Preserve the tested local filter,
+UI draft and notes in separate commits on the existing test branch; no assistant Git mutations.
+Do not describe the UI checkpoint as a final approved Start design. Further branch merge and
+Render deployment remain separate from this checkpoint.
+
+## October 20 earlier UI polish — software checked; Start design needs revision
+
+Manley authorized useful local work while away on his run. This bounded pass covers History
+readability and list-edge fades, clearer settings and map-control presentation, the shared
+pre-run Energy perimeter, and more legible backing for the Energy question. Preserve the clean
+layout. The beam still belongs around all three choices as one rectangle, never around the
+heading or each square separately. His report that the installed beam was not visible reopens
+that issue; the earlier installed/tested checkpoint is not proof it was resolved for him.
+
+Both unit-test variants passed **720 tests each**. Debug, release and instrumentation APK builds
+passed, including the final rebuild after correcting a large-font History caption. **24 distinct
+emulator screen checks passed**: 23 passed initially, and the corrected large-font case plus two
+normal History cases passed on rerun. Visual review confirms a wrapping, untruncated caption,
+soft list edges over the existing photograph, and scrollable exact multiline reflection, Effort
+and split content. These are separate from the 39 storage/migration checks for the filter below.
+
+The existing clean-Start screen check also passed in normal and reduced-motion settings; the
+latter is an additional scenario, not another distinct test case. Normal-motion captures at
+400 ms and 800 ms later differed in 13,820 pixels within the 974 × 320 Energy region. Visual
+inspection confirms a traveling beam around one shared rectangle. Reduced-motion captures were
+identical (zero changed pixels), with a visible static full perimeter and the heading excluded.
+The test clock had to be set before composition because its default setup canceled infinite
+animations; that was a test setup issue, not a production animation bug. The emulator's original
+`animator_duration_scale` value (`null`) was restored and verified.
+
+Final SHA-256 hashes of the normal emulator `runstate.db`, WAL and SHM match their pre-test values.
+Only the temporary `com.runstate.mobile.test` runner was removed; the main app remains. Known
+preview cache files were removed, while ignored host preview captures were retained for review.
+
+The Moto and backend have not been updated for this polish; today's run still uses the unchanged
+installed build. Phone visual review, especially beam visibility, remains required. No new permanent
+source/test/document files, provider calls, Git or deployment actions are part of this UI slice. The optional assistant,
+tentative History-circle placement and account timing are documented for later, not built here.
+Shoe-mechanics review and any further minimum-run policy remain separate follow-ups; this UI pass
+does not change shoes or add a run-length cutoff.
+Sample cleanup also remains a backup-and-UUID-review plan after return: preserve confirmed GPS
+and unknown-origin runs, keep two or three demos, and do not treat a test-reflection flag as a
+sample-run marker. No run deletion has been performed during this work. Full feedback and the
+cleanup boundary are in `ui_phase_handoff.md` section 6; future ideas are in `parked_feature_ideas.md`.
+
+## October 20 skipped-song filter — Ready to test — local only
+
+Manley approved requiring **60 seconds of observed Spotify playback per song** before it can
+be prepared or considered for a newly constructed music reflection. The local implementation
+uses the same rule for early preparation, the transactional preparation claim, legacy context,
+curated songs and final multi-song selection. It filters before the existing 12-song shortlist
+limit, so quick skips cannot consume candidate places. A run without an eligible song gets an
+ordinary run reflection. No new minimum-run cutoff was added; short-run Save/Discard is unchanged.
+
+Callbacks and five-second local samples share a monotonic tracker. They credit only bounded
+intervals between reports of the same playing recording, up to 7.5 seconds each. Pauses,
+capture/session loss, recording changes and longer unobserved gaps add no listening time.
+Earned intervals from later listens can accumulate for the same normalized title/artist without
+counting the intervening gap. Database writes also clamp credit to the current active interval.
+This remains observed playback, not proof of audible listening or a musical effect on performance.
+
+Room 18 adds a nullable playback-interval column; existing metadata-only rows remain unknown,
+with no duration backfill. Already frozen reflections, song pairings and retries are preserved.
+New evidence built from an old run cannot use its old metadata alone to satisfy the new rule.
+No new backend request fields, provider permissions or uploads of interval receipts are introduced.
+The accepted creative writer, voice settings and snippet timings are unchanged.
+
+The tradeoff is fewer potentially wasted paid song studies for skipped tracks, but preparation
+cannot begin for a song until its minute is observed. That leaves less preparation time on short
+runs. Local sampling adds modest storage and battery work, not new network polling; field cost
+is unmeasured. The phone and backend have **not** been updated by this slice.
+
+Verification passed: **720 unit tests in each debug/release variant**, all three APK builds,
+and **39 distinct emulator checks** (14 music DAO tests plus 25 migration tests). Two migration
+fixture errors were corrected before the migration rerun passed: a completed-run-only note had
+been seeded on an active run, and a post-migration new-song claim needed the new minute of
+playback receipts. The normal emulator `runstate.db`, WAL and SHM hashes were unchanged; the
+temporary test runner and new v17 fixture were removed. This is software/migration verification,
+not a phone installation or real-run proof of the filter.
+
+The only necessary new files are
+`android/app/src/main/java/com/runstate/mobile/music/SongPlaybackEligibility.kt` and
+`android/app/schemas/com.runstate.mobile.data.local.RunStateDatabase/18.json`. Existing source,
+tests and these notes carry the rest of the change. The Moto was untouched. No routine Git,
+provider, backend or deployment actions were performed for this local filter.
+
+**Installed/deployed baseline:** pushed commit `c17ee4a` includes Claude's Spotify approval
+repair and separate new run voice. Today's real run tests that unchanged phone build, not this
+local 60-second filter. Review confirmed Render is Live on `c17ee4a`, but its configured branch
+is still `master`. Do not choose **Deploy latest commit** before the intended changes are merged
+into that configured branch; it could replace the newer live build with the older branch version.
+The October 19 failed-authorization notes below are a historical checkpoint, superseded by this
+October 20 baseline; they are retained for the development record.
+
 ## October 19 snippet-only completion work — Building, local changes
 
 Manley made reliable automatic real-song snippets the sole current task. Do not label this

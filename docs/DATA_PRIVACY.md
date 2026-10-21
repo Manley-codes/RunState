@@ -11,10 +11,31 @@ metadata, to Anthropic. See [the current Android checkpoint](design/project_curr
 and [backend documentation](../backend/README.md) for those implemented boundaries. The older
 console statement that RunState has no server does **not** apply to the Android app.
 
+## Local song-duration evidence — October 20, 2026
+
+**Status: Ready to test — local only.** This update has not been installed on
+the phone or deployed to the backend. Under the existing music-observation choice, callbacks
+and local five-second samples record bounded Spotify playback intervals during active runs.
+Each credited interval is at most 7.5 seconds; pauses, capture/session loss and unobserved gaps
+are not treated as listening. No audio is recorded. Room 18 adds a nullable interval field;
+old metadata-only rows remain unknown, with no historical duration backfill. Frozen reflections
+and their retry evidence remain unchanged.
+
+For new evidence, the separately authorized song preparation/sharing paths require at least
+60 seconds of observed playback for a song before early preparation, durable claims or final
+legacy/curated/multi-song selection. Skipped songs are filtered before the 12-candidate limit;
+no eligible song means an ordinary run reflection, not a new minimum-run restriction. The
+interval receipts remain local and add no backend/provider request fields. Local samples add
+storage and battery work; avoiding studies of quick skips can reduce paid calls, while waiting
+for a minute gives preparation less head start. Observed playback is not proof of audible
+listening. See `design/project_current_state.md` for validation and activation status.
+
 ## Run voice — October 20, 2026
 
-**Status: Building.** The code is on branch `claude/run-voice`. It has not yet been deployed to
-Render or heard on the phone.
+**Status: Installed/deployed; broader field listening remains to verify.** The October 20
+Claude handoff reports the phone update and the new countdown voice heard. Review confirms
+Render Live on `c17ee4a`, which includes this run-voice work. That is not evidence that the
+new facts, Energy question and mile announcements have all been heard during a real run.
 
 Manley chose a second ElevenLabs voice, "Black British Female Leader," for everything RunState
 speaks except the reflection: the countdown lines, the saved-facts confirmation, the
@@ -32,7 +53,9 @@ and its request path are unchanged.
   lands on time. If they are not all ready when a countdown begins, that whole countdown uses the
   phone's own voice.
 - **Fallback:** facts and announcements are requested when spoken. If the new voice is not back
-  within about five seconds, or anything fails, the phone's own voice speaks the same line.
+  within about five seconds, or preparation fails before playback begins, the phone's own voice
+  speaks the same line. An error after playback begins stops that attempt rather than repeating
+  the line in another voice.
 - **Storage:** neither the phone nor the backend writes generated audio to storage. Provider-side
   retention follows the ElevenLabs account settings, as for the reflection voice.
 - **Cost:** every spoken line uses ElevenLabs credits, roughly a few hundred characters per run.

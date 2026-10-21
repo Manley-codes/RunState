@@ -10,6 +10,44 @@ status: LIVE — read this file
 
 **Read this file.** Not archived, not parked.
 
+## October 20 — sixty seconds before a song becomes eligible
+
+**Status: Ready to test — local only.** Manley approved a 60-second song rule.
+This change has not been installed on the phone or deployed to the backend. The accepted
+reflection writer, voice settings and snippet timings are unchanged.
+
+For newly constructed reflection evidence, a Spotify title/artist must accumulate at least
+60 seconds of observed `PLAYING` during active portions of this run. Callback observations
+and local five-second samples share one monotonic continuity tracker, so they cannot count
+the same interval twice. A credited interval is at most 7.5 seconds; longer unobserved gaps
+are discarded rather than filled in. Pauses, capture/session loss and recording changes break
+continuity. Separate listens to the same normalized title/artist can add up, but time between
+them does not count. This is evidence of reported playback, not proof that the runner heard it.
+
+The same eligibility helper gates early preparation, its durable database claim, legacy
+single-song context, curated selection and final multi-song selection. Filtering happens
+before the existing 12-song shortlist limit; briefly skipped songs do not take those places.
+A preparation claim cannot make an otherwise ineligible song qualify. Existing recording
+identity checks still protect the eventual snippet. With no eligible song, the run receives
+an ordinary run reflection. This adds no separate minimum-run rule; the existing short-run
+Save/Discard behavior remains.
+
+Room 18 stores nullable local playback-interval receipts. Old metadata-only observations stay
+unknown; their timestamps are not turned into invented listening duration. Existing frozen
+reflections, pairings and retries keep their saved evidence. If an old run needs a new evidence
+snapshot, its old metadata alone cannot qualify a song. No duration receipts or new fields
+are added to backend/provider requests.
+
+Waiting a minute can avoid paid song studies for quick skips, but gives preparation less
+head start on short runs. The local samples add modest storage and battery work; that cost
+has not been measured in the field. The only necessary new files for this slice are the shared
+`SongPlaybackEligibility.kt` helper and generated Room schema `18.json`; source, tests and
+documentation otherwise reuse existing files. All 720 unit tests per debug/release variant,
+three APK builds and 39 distinct emulator DAO/migration checks passed. The normal emulator
+database/WAL/SHM were unchanged and temporary test artifacts were removed. The Moto and backend
+were untouched by this slice; phone installation and field validation remain. See
+`project_current_state.md` for the installed `c17ee4a` baseline and deployment-branch warning.
+
 ## October 19 — snippet completion resumed as the sole task
 
 Local implementation now separates musical meaning from playback availability. A negotiated

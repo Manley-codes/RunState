@@ -1,11 +1,14 @@
 ---
 name: ui-phase-handoff
-description: UI phase history through August 25 2026, with the October 15 native Android visual checkpoint. Records prototype decisions, native presentation boundaries, and remaining work.
+description: UI phase history through August 25 2026, the October 15 native Android checkpoint, and October 20 local polish queue. Records prototype decisions, native presentation boundaries, and remaining work.
 metadata:
   type: project
 ---
 
-# UI phase — handoff, updated October 15 2026
+# UI phase — handoff, updated October 20 2026
+
+Latest feedback and the bounded local polish scope are recorded in section 6's October 20 queue.
+Earlier prototype and installed-checkpoint descriptions below remain historical evidence.
 
 Written because the session that produced this got very long. Everything needed to continue is here.
 Amended August 7 2026: interaction behavior, `Share` status, the song-location requirement, the
@@ -496,6 +499,61 @@ voice styling never changes the facts.
 ---
 
 ## 6. What comes next
+
+### October 20 — current local polish queue
+
+**Status: Software checked — local only; Start design needs revision.** After reviewing the preview,
+Manley rejected the extra Start panel stack. Discuss gear/map icons, quieter map labeling, GPS
+inside the Run State panel and History navigation before further layout edits. The bounded pass
+below remains a checkpoint, not an accepted final design; the Moto has not been updated.
+The real-run audio debrief and proposed untimed Energy follow-up are in `project_current_state.md`.
+
+- **History readability:** improve the legibility of **YOUR SAVED RUNS** and activity entries.
+  Review hierarchy and contrast without filling the screen with extra panels.
+- **List boundaries:** the hard clipping at the list edges needs a softer fade. Keep the content
+  readable and scrolling usable; the fade is presentation, not removal of saved entries.
+- **Settings:** review both the settings object/entry point and the contents of settings. Make
+  the control feel intentional and keep its purpose understandable.
+- **Map navigation:** History, Live Map and GPS text/actions placed over the map need deliberate
+  placement and hierarchy. Preserve direct navigation and truthful GPS state.
+- **Pre-run Energy beam:** Manley reports that it is not visible in actual use, despite earlier
+  software/visual checkpoint claims. Investigate that discrepancy; do not mark it resolved from
+  the previous tests. The requested shape is still **one shared rectangle around all three
+  Energy choices only**, excluding the heading, never a separate outline around each square.
+- **Energy question backing:** it is too transparent. Give the question enough backing and
+  contrast to read clearly while keeping the surrounding layout clean.
+
+The full debug/release unit checks passed with 720 tests in each variant, and all three APKs
+build. All 24 distinct emulator screen checks now pass: the first run exposed a large-font
+History caption problem, which was corrected and rerun with two normal History cases. Visual
+review confirms that the caption wraps without truncation, list edges fade over the existing
+image, and exact multiline reflections, Effort and splits remain scrollable. This is local
+screen evidence, not confirmation that the beam is now visible on Manley's phone.
+
+The existing clean-Start case passed again with normal motion and in an additional reduced-motion
+scenario; it is still one of the 24 distinct cases. Captures visually confirm one shared moving
+rectangle around the three choices, excluding the heading. Normal captures changed 13,820 pixels
+in the 974 × 320 Energy region over 800 ms; reduced-motion captures changed none and retain a
+visible static full perimeter. The animation test clock was corrected before composition to avoid
+the test harness canceling the infinite animation; no production animation defect is inferred.
+The original emulator animation setting was restored and verified. Normal database/WAL/SHM hashes
+are unchanged; the temporary test runner and known preview cache files were removed, the main
+app was preserved, and ignored host previews remain available. Phone review remains pending.
+
+The possible assistant circle/search and RunState account timing are later planning items in
+`parked_feature_ideas.md`; they are not being built as part of this polish pass. History-circle
+placement is still tentative, and normal controls must remain usable without an assistant.
+Shoe-mechanics review and any further minimum-run policy discussion remain separate follow-ups;
+this local visual pass adds neither shoe mechanics nor a run-length cutoff.
+
+**Sample cleanup plan — review after Manley returns:** preserve every confirmed GPS run and
+every record whose origin is uncertain. First make a recoverable backup, then prepare an explicit
+UUID-based keep/remove list for review, keeping two or three useful demonstration runs. A test
+reflection flag is not evidence that the run itself was a sample; real runs may contain a test
+reflection. Do not delete records while a run is active. This is a plan only: no cleanup or
+deletion is authorized by the current local visual work, and no deletion has been performed here.
+
+### Earlier roadmap and prototype sequence
 
 **Roadmap position, September 13:** the narrow Core Running Foundation Review, music inventory, and
 mobile architecture / telemetry / completed-run contracts are complete at the decision level. The

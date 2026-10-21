@@ -13,6 +13,34 @@ live in parked_music_recommendation.md. This file now holds TWO categories (July
 and **accepted/later** (committed to the vision, waiting for its proper phase — currently
 the automatic-splits/telemetry entry).
 
+## Optional running assistant — parked, October 20, 2026
+
+Manley is considering making the current circle an entry point for an AI assistant. Possible
+uses include asking about trails or scenery, browsing a useful list, or opening a search box.
+A separate possibility is a circle in the History summary for questions such as which saved run
+was fastest or longest, or other questions about the runner's history. **The History placement
+is tentative, not a locked layout decision.** This is a later idea to preserve, not part of the
+current local UI polish and not authorization to build an assistant now.
+
+Keep the assistant optional. Existing navigation, run controls, settings and access to History
+must remain directly usable without typing or speaking to AI. Trail answers would need suitable
+sources; personal-history answers should use the runner's actual saved records and leave missing
+information unknown. Decide the first useful question and entry point when this idea returns,
+rather than adding a broad chat surface to every screen.
+
+## RunState accounts — timing recommendation, October 20, 2026
+
+Recommended timing is after the core running experience is stable, before inviting independent
+external testers or introducing private cloud synchronization. A local guest demonstration
+can remain useful without an account. This records a recommendation, not an approved account,
+login or cloud-sync implementation for the current work.
+
+Spotify authorization only connects the music service; it is not a RunState account and does not
+establish ownership of saved RunState history. Before adding accounts, settle who owns each run,
+how a guest's existing local history attaches to the chosen account, and how switching accounts
+avoids mixing people's data. Preserve current run UUIDs, facts, reflections and related records
+during that migration; signing in must not erase or silently replace local history.
+
 ## Activity recap after Save Activity — future direction, October 18, 2026
 
 Manley wants Completion's main action to become **Save Activity**, followed by an activity recap
