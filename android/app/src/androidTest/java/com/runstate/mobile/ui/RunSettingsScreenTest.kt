@@ -95,6 +95,9 @@ class RunSettingsScreenTest {
         var history = 0
         var settings = 0
         var energy by mutableStateOf<com.runstate.mobile.data.local.PreRunEnergy?>(null)
+        // Keep the infinite decorative animation alive from its first composition.
+        // Auto-advancing test clocks cancel it while trying to settle the screen.
+        compose.mainClock.autoAdvance = false
         compose.setContent {
             StartRunScreen(
                 selectedPreRunEnergy = energy,
@@ -111,6 +114,8 @@ class RunSettingsScreenTest {
                 modifier = Modifier.systemBarsPadding()
             )
         }
+        compose.mainClock.advanceTimeByFrame()
+        compose.mainClock.advanceTimeByFrame()
         // Permission/provider readiness alone does not claim an acquired satellite fix.
         // The real journey supplies GPS-ready copy separately from its preview evidence.
         compose.onNodeWithText("GPS enabled").assertIsDisplayed()
@@ -120,7 +125,6 @@ class RunSettingsScreenTest {
         compose.onNodeWithTag(START_MUSIC_SHARING_TOGGLE_TAG).assertDoesNotExist()
         compose.onNodeWithTag(START_REFLECTION_SETUP_TAG).assertDoesNotExist()
         savePreview(START_RUN_SCREEN_TAG, "demo-start-clean.png")
-        compose.mainClock.autoAdvance = false
         compose.mainClock.advanceTimeBy(400L)
         savePreview(START_ENERGY_CHOICES_TAG, "energy-edge-beam-a.png")
         compose.mainClock.advanceTimeBy(800L)

@@ -2332,6 +2332,93 @@ class RunStateScreenTest {
         assertEquals(1, spoken.size)
     }
 
+    @Test
+    fun shortLargeTextHistoryKeepsHeadingAndLastSavedDetailsReachable() {
+        val exact = "You kept your own rhythm through the morning.\n" +
+            "Three miles are saved with the time and pace you actually recorded.\n" +
+            "This final sentence must remain available with the rest of the exact saved reply."
+        val rows = (1..12).map { number ->
+            energyInsightHistoryRun(number).copy(preRunEnergy = null,
+                reflectionText = if (number == 12) exact else "Saved reply $number.",
+                splitStatus = RunSplitStatus.READY)
+        }
+        val last = rows.last()
+        val spoken = mutableListOf<String>()
+        val energies = mutableListOf<Pair<String, ReflectionBranch>>()
+        val efforts = mutableListOf<Pair<String, PostRunEffort?>>()
+        composeTestRule.setContent {
+            val density = LocalDensity.current
+            CompositionLocalProvider(LocalDensity provides Density(density.density, 1.5f)) {
+                RunHistoryScreen(rows, onBack = {},
+                    onRetryReflection = { throw AssertionError("Reading saved details must not regenerate a reply") },
+                    modifier = Modifier.size(360.dp, 480.dp),
+                    speakerFactory = { object : ReflectionSpeaker {
+                        override fun speak(text: String) { spoken += text }
+                        override fun stop() = Unit
+                        override fun close() = Unit
+                    } },
+                    onSelectEnergy = { id, energy -> energies += id to energy },
+                    onSelectEffort = { id, effort -> efforts += id to effort },
+                    splitLoader = { HistorySplitDisplay.Ready(listOf(
+                        RunSplitDisplayRow("1 mi", "10:12", "10:12/mi"),
+                        RunSplitDisplayRow("Final 0.25 mi", "2:33", "10:12/mi")
+                    ), "mi") })
+            }
+        }
+        val heading = composeTestRule.onNodeWithText("YOUR SAVED RUNS")
+        val headingBounds = heading.assertIsDisplayed().fetchSemanticsNode().boundsInRoot
+        assertTrue(heading.fetchSemanticsNode().config.contains(SemanticsProperties.Heading))
+        saveNativePreview(RUN_HISTORY_SCREEN_TAG, "qa-history-short-large-top.png")
+        for (text in listOf("YOUR SAVED RUNS", "12 activities")) {
+            val layouts = mutableListOf<TextLayoutResult>()
+            composeTestRule.onNodeWithText(text).assertIsDisplayed()
+                .performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
+            val layout = layouts.single()
+            assertFalse("The enlarged History caption must not truncate $text: size=${layout.size}, " +
+                "paragraph=${layout.multiParagraph.width}x${layout.multiParagraph.height}, " +
+                "widthOverflow=${layout.didOverflowWidth}, heightOverflow=${layout.didOverflowHeight}",
+                layout.hasVisualOverflow)
+        }
+        composeTestRule.onNodeWithTag(RUN_HISTORY_LIST_TAG).performScrollToIndex(5)
+            .performSemanticsAction(SemanticsActions.ScrollBy) { it(0f, 35f) }
+        saveNativePreview(RUN_HISTORY_SCREEN_TAG, "qa-history-short-large-scrolled.png")
+        composeTestRule.onNodeWithTag(RUN_HISTORY_LIST_TAG).performScrollToIndex(rows.lastIndex)
+        composeTestRule.onNodeWithTag(RUN_HISTORY_ROW_TAG_PREFIX + last.runId)
+            .assertIsDisplayed().performClick()
+        val reflection = composeTestRule.onNodeWithTag(RUN_HISTORY_REFLECTION_TAG_PREFIX + last.runId)
+        reflection.performScrollTo().assertIsDisplayed().assertTextEquals(exact)
+        val layouts = mutableListOf<TextLayoutResult>()
+        reflection.performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
+        assertFalse("The saved reply must wrap rather than truncate", layouts.single().hasVisualOverflow)
+        assertEquals(exact.length, layouts.single().getLineEnd(layouts.single().lineCount - 1, visibleEnd = true))
+        saveNativePreview(RUN_HISTORY_SCREEN_TAG, "qa-history-short-large-expanded.png")
+        composeTestRule.onNodeWithText("Final 0.25 mi").performScrollTo().assertIsDisplayed()
+        composeTestRule.onNodeWithText("2:33").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Estimated from recorded GPS. Times exclude pauses.")
+            .performScrollTo().assertIsDisplayed()
+        composeTestRule.onNodeWithTag(RUN_HISTORY_ENERGY_TAG_PREFIX + last.runId)
+            .performScrollTo().assertIsDisplayed().assertIsEnabled().performClick()
+        composeTestRule.onNodeWithTag(RUN_HISTORY_ENERGY_CHOICE_TAG_PREFIX + "FEELING_GOOD")
+            .assertIsDisplayed().performClick()
+        composeTestRule.onNodeWithTag(RUN_HISTORY_EFFORT_TAG_PREFIX + last.runId)
+            .performScrollTo().assertIsDisplayed().assertIsEnabled().performClick()
+        composeTestRule.onNodeWithTag(RUN_COMPLETE_EFFORT_CHOICE_TAG_PREFIX + "WORKING")
+            .assertIsDisplayed().performClick()
+        composeTestRule.onNodeWithTag(RUN_HISTORY_EFFORT_TAG_PREFIX + last.runId)
+            .performScrollTo().assertIsDisplayed()
+        saveNativePreview(RUN_HISTORY_SCREEN_TAG, "qa-history-short-large-feedback.png")
+        heading.assertIsDisplayed()
+        assertEquals("The History heading stays fixed while saved details scroll", headingBounds,
+            heading.fetchSemanticsNode().boundsInRoot)
+        composeTestRule.onNodeWithText("12 activities").assertIsDisplayed()
+        reflection.assertTextEquals(exact)
+        composeTestRule.runOnIdle {
+            assertEquals(listOf(exact), spoken)
+            assertEquals(listOf(last.runId to ReflectionBranch.FEELING_GOOD), energies)
+            assertEquals(listOf(last.runId to PostRunEffort.WORKING), efforts)
+        }
+    }
+
     private fun saveNativePreview(tag: String, name: String) {
         val bitmap = composeTestRule.onNodeWithTag(tag).captureToImage().asAndroidBitmap()
         val file = File(InstrumentationRegistry.getInstrumentation().targetContext.cacheDir, name)

@@ -199,8 +199,9 @@ internal fun StartRunScreen(
     val energyTilesVisible = rootBounds?.let { viewport ->
         tileBounds.values.any { it.overlaps(viewport) }
     } == true
-    val energyBeamActive = selectedPreRunEnergy == null && lifecycleStarted &&
-        animationsEnabled && actionsEnabled && energyTilesVisible
+    val energyBeamVisible = selectedPreRunEnergy == null && lifecycleStarted &&
+        actionsEnabled && energyTilesVisible
+    val energyBeamActive = energyBeamVisible && animationsEnabled
     val energyCue = if (energyBeamActive) {
         rememberInfiniteTransition(label = "energyEdgeLight").animateFloat(
             initialValue = 0f, targetValue = 1f,
@@ -295,121 +296,71 @@ internal fun StartRunScreen(
                     }
                 )
                 Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 10.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
+                    modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Column(Modifier.weight(1f).padding(end = 8.dp)) {
-                        Text(
-                            text = if (liveMapBackground) liveMapStatus ?: "Finding your location…"
-                                else "ILLUSTRATIVE MAP",
-                            color = StartInk,
-                            fontSize = 9.sp,
-                            lineHeight = 14.sp,
-                            fontWeight = FontWeight.Bold,
-                            letterSpacing = 0.8.sp,
-                            modifier = Modifier
-                                .testTag(START_MAP_STATUS_TAG)
-                                .clip(RoundedCornerShape(14.dp))
-                                .background(StartCream.copy(alpha = 0.92f))
-                                .padding(horizontal = 10.dp, vertical = 8.dp)
-                        )
-                        if (liveMapBackground && onRequestMapLocation != null) {
-                            TextButton(
-                                onClick = onRequestMapLocation,
-                                enabled = actionsEnabled && !setupLoading,
-                                modifier = Modifier.heightIn(min = 48.dp)
-                                    .testTag(START_MAP_LOCATION_ACCESS_TAG)
-                            ) {
-                                Text("Enable location", color = StartInk, fontSize = 12.sp,
-                                    fontWeight = FontWeight.SemiBold)
-                            }
-                        } else if (onOpenMap != null) {
-                            TextButton(onClick = onOpenMap,
-                                modifier = Modifier.heightIn(min = 48.dp).testTag("startExpandMap")) {
-                                Text("Live map", color = StartInk, fontSize = 12.sp,
-                                    fontWeight = FontWeight.SemiBold)
-                            }
-                        }
-                    }
+                    StartUtilityButton("Run settings", StartUtilityIcon.SETTINGS,
+                        onClick = onOpenRunSettings, enabled = actionsEnabled && !setupLoading,
+                        modifier = Modifier.weight(1f).testTag(START_RUN_SETTINGS_TAG))
                     if (showHistory) {
-                        TextButton(
-                            onClick = onViewHistory,
-                            enabled = actionsEnabled,
-                            modifier = Modifier
-                                .heightIn(min = 48.dp)
-                                .testTag(START_HISTORY_TAG)
-                        ) {
-                            Text(
-                                "Log History",
-                                color = StartInk,
-                                fontWeight = FontWeight.SemiBold,
-                                fontSize = 12.sp
-                            )
-                        }
+                        StartUtilityButton("Log History", StartUtilityIcon.HISTORY,
+                            onClick = onViewHistory, enabled = actionsEnabled,
+                            modifier = Modifier.weight(1f).testTag(START_HISTORY_TAG))
                     }
                 }
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 4.dp)
-                        .testTag(START_RUN_STATUS_TAG),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    verticalAlignment = Alignment.Top
-                ) {
-                    Column(Modifier.weight(1f).padding(top = 12.dp)) {
-                        Text(
-                            text = when {
-                                setupLoading -> "Loading run preferences…"
-                                !gpsSelected -> "Sample demo · simulated distance"
-                                gpsStatusText != null -> gpsStatusText
-                                gpsReady -> if (liveMapBackground) "GPS run selected" else "GPS enabled"
-                                else -> "Location setup on Start"
-                            },
-                            color = StartInk,
-                            fontSize = 12.sp,
-                            lineHeight = 17.sp,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                        if (!setupLoading) {
+                Column(Modifier.fillMaxWidth().padding(top = 10.dp).testTag(START_RUN_STATUS_TAG)) {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        verticalAlignment = Alignment.CenterVertically) {
+                        Row(Modifier.weight(1f)
+                            .background(StartCream.copy(alpha = 0.96f), RoundedCornerShape(14.dp))
+                            .border(1.dp, StartForest.copy(alpha = 0.18f), RoundedCornerShape(14.dp))
+                            .padding(horizontal = 10.dp, vertical = 9.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+                            Canvas(Modifier.size(7.dp).clearAndSetSemantics {}) {
+                                drawCircle(StartForest.copy(alpha = 0.75f))
+                            }
                             Text(
                                 text = when {
-                                    !musicSelected -> "Music observation off"
-                                    !musicAccessGranted -> "Music observation needs access"
-                                    else -> "Music observation on"
+                                    setupLoading -> "Loading run preferences…"
+                                    !gpsSelected -> "Sample demo · simulated distance"
+                                    gpsStatusText != null -> gpsStatusText
+                                    gpsReady -> if (liveMapBackground) "GPS run selected" else "GPS enabled"
+                                    else -> "Location setup on Start"
                                 },
-                                color = StartInk.copy(alpha = 0.72f),
-                                fontSize = 11.sp,
-                                lineHeight = 16.sp
+                                color = StartInk, fontSize = 12.sp, lineHeight = 17.sp,
+                                fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f)
                             )
-                            if (reflectionSetupRequired) {
-                                Text(
-                                    "Set up reflections in Run settings",
-                                    color = StartInk.copy(alpha = 0.72f),
-                                    fontSize = 11.sp,
-                                    lineHeight = 16.sp
-                                )
-                            }
-                            if (gpsMessage != null) {
-                                Text(
-                                    gpsMessage,
-                                    color = StartInk,
-                                    fontSize = 11.sp,
-                                    lineHeight = 16.sp,
-                                    modifier = Modifier.padding(top = 3.dp)
-                                )
-                            }
+                        }
+                        if (liveMapBackground && onRequestMapLocation != null) {
+                            StartUtilityButton("Enable location", StartUtilityIcon.MAP,
+                                onClick = onRequestMapLocation, enabled = actionsEnabled && !setupLoading,
+                                modifier = Modifier.weight(0.85f).testTag(START_MAP_LOCATION_ACCESS_TAG))
+                        } else if (onOpenMap != null) {
+                            StartUtilityButton("Live map", StartUtilityIcon.MAP,
+                                onClick = onOpenMap, enabled = actionsEnabled,
+                                modifier = Modifier.weight(0.85f).testTag("startExpandMap"))
                         }
                     }
-                    TextButton(
-                        onClick = onOpenRunSettings,
-                        enabled = actionsEnabled && !setupLoading,
-                        modifier = Modifier.heightIn(min = 48.dp).testTag(START_RUN_SETTINGS_TAG)
-                    ) {
-                        Text("Run settings", color = StartInk, fontSize = 12.sp,
-                            fontWeight = FontWeight.SemiBold)
+                    Column(Modifier.fillMaxWidth().padding(top = 7.dp)
+                        .background(StartCream.copy(alpha = 0.92f), RoundedCornerShape(12.dp))
+                        .padding(horizontal = 10.dp, vertical = 7.dp)) {
+                        Text(text = if (liveMapBackground) liveMapStatus ?: "Finding your location…"
+                            else "ILLUSTRATIVE MAP", color = StartInk,
+                            fontSize = 10.sp, lineHeight = 15.sp, fontWeight = FontWeight.SemiBold,
+                            letterSpacing = 0.5.sp, modifier = Modifier.testTag(START_MAP_STATUS_TAG))
+                        if (!setupLoading) {
+                            Text(text = when {
+                                !musicSelected -> "Music observation off"
+                                !musicAccessGranted -> "Music observation needs access"
+                                else -> "Music observation on"
+                            }, color = StartInk.copy(alpha = 0.86f), fontSize = 11.sp, lineHeight = 16.sp)
+                            if (reflectionSetupRequired) Text("Set up reflections in Run settings",
+                                color = StartInk.copy(alpha = 0.86f), fontSize = 11.sp, lineHeight = 16.sp)
+                            if (gpsMessage != null) Text(gpsMessage, color = StartInk,
+                                fontSize = 11.sp, lineHeight = 16.sp, modifier = Modifier.padding(top = 3.dp))
+                        }
                     }
                 }
             }
@@ -447,7 +398,8 @@ internal fun StartRunScreen(
                         tileBounds[energy] = bounds
                     },
                     cueProgress = { energyCue.value },
-                    beamActive = energyBeamActive
+                    beamActive = energyBeamActive,
+                    beamVisible = energyBeamVisible
                 )
             }
 
@@ -465,6 +417,68 @@ internal fun StartRunScreen(
         intake?.let { current ->
             EnergyIntakeOverlay(current, time = { intakeTime.value })
         }
+    }
+}
+
+private enum class StartUtilityIcon { SETTINGS, HISTORY, MAP }
+
+@Composable
+private fun StartUtilityButton(
+    label: String,
+    icon: StartUtilityIcon,
+    onClick: () -> Unit,
+    enabled: Boolean,
+    modifier: Modifier = Modifier
+) {
+    val shape = RoundedCornerShape(15.dp)
+    val ink = StartInk.copy(alpha = if (enabled) 1f else 0.5f)
+    Row(modifier.heightIn(min = 48.dp)
+        .shadow(2.dp, shape, clip = false)
+        .clip(shape)
+        .background(StartCream.copy(alpha = 0.97f))
+        .border(1.dp, StartForest.copy(alpha = 0.22f), shape)
+        .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
+        .padding(horizontal = 12.dp, vertical = 10.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically) {
+        Canvas(Modifier.size(18.dp).clearAndSetSemantics {}) {
+            val stroke = 1.6.dp.toPx()
+            fun point(x: Float, y: Float) = Offset(size.width * x, size.height * y)
+            fun line(x1: Float, y1: Float, x2: Float, y2: Float) =
+                drawLine(ink, point(x1, y1), point(x2, y2), strokeWidth = stroke, cap = StrokeCap.Round)
+            when (icon) {
+                StartUtilityIcon.SETTINGS -> {
+                    listOf(0.22f to 0.35f, 0.5f to 0.68f, 0.78f to 0.4f).forEach { (y, x) ->
+                        line(0.1f, y, 0.9f, y)
+                        drawCircle(StartCream, 2.4.dp.toPx(), point(x, y))
+                        drawCircle(ink, 2.4.dp.toPx(), point(x, y), style = Stroke(stroke))
+                    }
+                }
+                StartUtilityIcon.HISTORY -> {
+                    drawCircle(ink, size.minDimension * 0.38f, style = Stroke(stroke))
+                    line(0.5f, 0.27f, 0.5f, 0.51f)
+                    line(0.5f, 0.51f, 0.69f, 0.61f)
+                }
+                StartUtilityIcon.MAP -> {
+                    val map = Path().apply {
+                        moveTo(size.width * 0.08f, size.height * 0.22f)
+                        lineTo(size.width * 0.36f, size.height * 0.1f)
+                        lineTo(size.width * 0.64f, size.height * 0.22f)
+                        lineTo(size.width * 0.92f, size.height * 0.1f)
+                        lineTo(size.width * 0.92f, size.height * 0.78f)
+                        lineTo(size.width * 0.64f, size.height * 0.9f)
+                        lineTo(size.width * 0.36f, size.height * 0.78f)
+                        lineTo(size.width * 0.08f, size.height * 0.9f)
+                        close()
+                    }
+                    drawPath(map, ink, style = Stroke(stroke, cap = StrokeCap.Round))
+                    line(0.36f, 0.1f, 0.36f, 0.78f)
+                    line(0.64f, 0.22f, 0.64f, 0.9f)
+                }
+            }
+        }
+        Text(label, color = ink, fontSize = 12.sp, lineHeight = 17.sp,
+            fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
     }
 }
 
@@ -682,7 +696,8 @@ private fun PreRunEnergyChoices(
     intakeTime: () -> Float,
     onTileBounds: (PreRunEnergy, Rect) -> Unit,
     cueProgress: () -> Float,
-    beamActive: Boolean
+    beamActive: Boolean,
+    beamVisible: Boolean
 ) {
     val tileHeight = 82.dp + 40.dp * (LocalDensity.current.fontScale - 1f).coerceAtLeast(0f)
     Column(modifier = Modifier.testTag(START_ENERGY_CHOICES_TAG),
@@ -702,7 +717,8 @@ private fun PreRunEnergyChoices(
                     }
                 }
                 .clip(RoundedCornerShape(12.dp))
-                .background(StartForest.copy(alpha = 0.75f))
+                .background(StartForest.copy(alpha = 0.96f))
+                .border(1.dp, Color.White.copy(alpha = 0.22f), RoundedCornerShape(12.dp))
                 .padding(horizontal = 16.dp, vertical = 8.dp)
                 .then(if (selected != null) Modifier.clearAndSetSemantics {} else Modifier)
         )
@@ -714,7 +730,7 @@ private fun PreRunEnergyChoices(
                 Row(
                     modifier = Modifier.fillMaxWidth()
                         .graphicsLayer { alpha = if (selected == null) 1f else 0f }
-                        .then(if (beamActive) Modifier.energyEdgeBeam(cueProgress) else Modifier)
+                        .then(if (beamVisible) Modifier.energyEdgeBeam(cueProgress, beamActive) else Modifier)
                         .then(if (selected != null) Modifier.clearAndSetSemantics {} else Modifier),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
@@ -760,21 +776,26 @@ private fun PreRunEnergyChoices(
 }
 
 /** One shared outer perimeter around the choices; the heading stays outside the beam. */
-private fun Modifier.energyEdgeBeam(phase: () -> Float): Modifier = drawWithCache {
-    val inset = -3.dp.toPx()
+private fun Modifier.energyEdgeBeam(phase: () -> Float, animated: Boolean): Modifier = drawWithCache {
+    // The complete stroke stays inside this row, including when an ancestor clips its layer.
+    val inset = 4.dp.toPx()
     val outline = Path().apply {
         addRoundRect(RoundRect(Rect(inset, inset, size.width - inset, size.height - inset),
-            CornerRadius(20.dp.toPx())))
+            CornerRadius(15.dp.toPx())))
     }
     val measure = PathMeasure().apply { setPath(outline, false) }
     val length = measure.length
     val segment = Path()
-    val halo = Stroke(width = 8.dp.toPx(), cap = StrokeCap.Round)
+    val halo = Stroke(width = 6.dp.toPx(), cap = StrokeCap.Round)
     val glow = Stroke(width = 4.dp.toPx(), cap = StrokeCap.Round)
-    val core = Stroke(width = 1.25.dp.toPx(), cap = StrokeCap.Round)
+    val core = Stroke(width = 1.75.dp.toPx(), cap = StrokeCap.Round)
     onDrawWithContent {
         drawContent()
-        if (length > 0f) {
+        // Keep a shared, quiet outline when motion is disabled; the cue never depends on animation.
+        drawPath(outline, StartForestDeep.copy(alpha = 0.55f), style = glow)
+        drawPath(outline, Color.White.copy(alpha = if (animated) 0.28f else 0.72f),
+            style = Stroke(1.dp.toPx()))
+        if (animated && length > 0f) {
             val head = phase() * length
             val trail = length * 0.19f
             repeat(18) { index ->
@@ -785,9 +806,9 @@ private fun Modifier.energyEdgeBeam(phase: () -> Float): Modifier = drawWithCach
                 if (to > length) measure.getSegment(0f, to - length, segment)
                 val strength = (index + 1f) / 18f
                 val opacity = strength * strength
-                drawPath(segment, Color.White.copy(alpha = opacity * 0.08f), style = halo)
-                drawPath(segment, Color.White.copy(alpha = opacity * 0.20f), style = glow)
-                drawPath(segment, Color.White.copy(alpha = opacity * 0.92f), style = core)
+                drawPath(segment, Color.White.copy(alpha = opacity * 0.18f), style = halo)
+                drawPath(segment, Color.White.copy(alpha = opacity * 0.36f), style = glow)
+                drawPath(segment, Color.White.copy(alpha = opacity), style = core)
             }
         }
     }

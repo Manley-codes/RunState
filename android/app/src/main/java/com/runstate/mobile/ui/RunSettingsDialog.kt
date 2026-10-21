@@ -151,7 +151,7 @@ internal fun RunSettingsDialog(
                 SettingsSectionTitle("MUSIC")
                 SettingsPreference(
                     title = "Observe music",
-                    description = "Save available song title, artist, album, duration and Spotify recording ID while Running. " +
+                    description = "Save available song title, artist, album, recording details and observed playback time during your run. " +
                         "These observations stay on your phone unless you separately choose music in reflections. " +
                         "No audio is recorded.",
                     checked = musicObservationEnabled,
@@ -176,7 +176,8 @@ internal fun RunSettingsDialog(
                 }
                 SettingsPreference(
                     title = "Music in reflection",
-                    description = "Optional: compare up to 12 Spotify songs observed during this run for your reflection. " +
+                    description = "Optional: compare up to 12 Spotify songs from this run for your reflection. " +
+                        "A song needs one minute of observed playback to qualify. " +
                         "Titles and artists go to RunState’s reflection service, Musixmatch and Anthropic. " +
                         "Preparation starts while you run and may use AI credits even if you discard the run. " +
                         "No phone audio, notification text or listening outside this run is sent.",
@@ -275,13 +276,13 @@ internal fun RunSettingsDialog(
 
 @Composable
 private fun SettingsSectionTitle(title: String) {
-    Text(title, color = SettingsInk.copy(alpha = 0.75f), fontSize = 10.sp,
-        fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+    Text(title, color = SettingsInk.copy(alpha = 0.88f), fontSize = 11.sp,
+        fontWeight = FontWeight.Bold, letterSpacing = 0.8.sp)
 }
 
 @Composable
 private fun SettingsDescription(text: String) {
-    Text(text, color = SettingsInk.copy(alpha = 0.8f), fontSize = 12.sp, lineHeight = 18.sp)
+    Text(text, color = SettingsInk.copy(alpha = 0.88f), fontSize = 13.sp, lineHeight = 20.sp)
 }
 
 @Composable

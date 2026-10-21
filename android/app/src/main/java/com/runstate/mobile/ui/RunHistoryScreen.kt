@@ -57,10 +57,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -72,6 +76,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
@@ -1266,13 +1271,19 @@ internal fun RunHistoryScreen(
                     }
                 }
                 Row(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 25.dp, vertical = 7.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 5.dp)
+                        .background(Color(0xFFF5F7EE).copy(alpha = 0.86f), RoundedCornerShape(12.dp))
+                        .padding(horizontal = 12.dp, vertical = 9.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text("YOUR SAVED RUNS", color = HistoryDark, fontSize = 9.sp,
-                        fontWeight = FontWeight.Bold, letterSpacing = 1.2.sp)
+                    Text("YOUR SAVED RUNS", color = HistoryDark, fontSize = 12.sp,
+                        lineHeight = 18.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.8.sp,
+                        modifier = Modifier.weight(1f).padding(end = 12.dp).semantics { heading() })
                     Text("${visibleItems.size} ${if (visibleItems.size == 1) "activity" else "activities"}",
-                        color = HistoryDark, fontSize = 11.sp)
+                        color = HistoryDark, fontSize = 13.sp, lineHeight = 18.sp,
+                        fontWeight = FontWeight.Medium, textAlign = TextAlign.End,
+                        modifier = Modifier.weight(0.7f))
                 }
             }
 
@@ -1281,6 +1292,26 @@ internal fun RunHistoryScreen(
                 contentPadding = PaddingValues(start = 20.dp, top = 4.dp, end = 20.dp, bottom = 32.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
                 modifier = Modifier.fillMaxWidth().weight(1f).testTag(RUN_HISTORY_LIST_TAG)
+                    .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
+                    .drawWithContent {
+                        drawContent()
+                        val fadeAtTop = listState.canScrollBackward
+                        val fadeAtBottom = listState.canScrollForward
+                        if (size.height > 0f && (fadeAtTop || fadeAtBottom)) {
+                            val fadeFraction = (20.dp.toPx() / size.height).coerceAtMost(0.5f)
+                            // Fade only the scrolling content, revealing the existing photograph.
+                            // The first/last resting edge and fixed headings stay fully readable.
+                            drawRect(
+                                brush = Brush.verticalGradient(
+                                    0f to Color.Black.copy(alpha = if (fadeAtTop) 0f else 1f),
+                                    fadeFraction to Color.Black,
+                                    (1f - fadeFraction) to Color.Black,
+                                    1f to Color.Black.copy(alpha = if (fadeAtBottom) 0f else 1f)
+                                ),
+                                blendMode = BlendMode.DstIn
+                            )
+                        }
+                    }
             ) {
                 if (filter != HistoryFilter.SAMPLES && stateInsight != null) {
                     item(key = "runner-state-insight") { RunnerStateInsightPanel(stateInsight) }
