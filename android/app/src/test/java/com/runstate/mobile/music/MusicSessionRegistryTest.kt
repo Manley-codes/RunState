@@ -17,6 +17,7 @@ class MusicSessionRegistryTest {
         var registrations = 0
         var removals = 0
         val callbacks = mutableListOf<(MusicObservationKind) -> Unit>()
+        val endedCallbacks = mutableListOf<() -> Unit>()
 
         override val token: Any get() {
             identityFailure?.let { throw it }
@@ -24,9 +25,10 @@ class MusicSessionRegistryTest {
         }
         override val isOwnApp: Boolean get() = ownApp
 
-        override fun registerCallback(onEvent: (MusicObservationKind) -> Unit) {
+        override fun registerCallback(onEvent: (MusicObservationKind) -> Unit, onSessionEnded: () -> Unit) {
             registrations++
             callbacks += onEvent
+            endedCallbacks += onSessionEnded
             // Model registration that installs a callback and then reports failure.
             registrationFailure?.let { throw it }
         }
@@ -47,13 +49,18 @@ class MusicSessionRegistryTest {
         val observations = mutableListOf<Observation>()
         var controllerFailures = 0
         var accessLosses = 0
+        var continuityLosses = 0
+        var afterObservation: ((Observation) -> Unit)? = null
         val registry = MusicSessionRegistry<Controller>(
             onObservation = { runId, controller, kind ->
                 controller.snapshotFailure?.let { throw it }
-                observations += Observation(runId, controller, kind)
+                val observation = Observation(runId, controller, kind)
+                observations += observation
+                afterObservation?.invoke(observation)
             },
             onControllerFailure = { controllerFailures++ },
-            onAccessLost = { accessLosses++ }
+            onAccessLost = { accessLosses++ },
+            onContinuityLost = { continuityLosses++ }
         )
     }
 
@@ -230,5 +237,100 @@ class MusicSessionRegistryTest {
         })
         assertEquals(0, fixture.controllerFailures)
         assertEquals(0, fixture.accessLosses)
+    }
+
+    @Test fun repeatedSamplesObserveOnlyTheRequestedRegisteredPlayerWithoutReplacingCallbacks() {
+        val fixture = Fixture()
+        val spotify = Controller("spotify")
+        val other = Controller("other")
+        fixture.registry.start("run-a")
+        fixture.registry.reconcile(listOf(spotify, other))
+        fixture.observations.clear()
+
+        repeat(3) { fixture.registry.sample { it === spotify } }
+        other.emit()
+
+        assertEquals(List(3) { Observation("run-a", spotify, MusicObservationKind.PLAYBACK_SAMPLE) } +
+            Observation("run-a", other, MusicObservationKind.METADATA_CHANGED), fixture.observations)
+        assertEquals(1, spotify.registrations)
+        assertEquals(1, other.registrations)
+        fixture.registry.stop()
+        fixture.observations.clear()
+        fixture.registry.sample()
+        assertTrue(fixture.observations.isEmpty())
+    }
+
+    @Test fun samplingCannotCrossAStoppedAndReplacedCaptureOwner() {
+        val fixture = Fixture()
+        val first = Controller("first")
+        val second = Controller("second")
+        val replacement = Controller("replacement")
+        fixture.registry.start("run-a")
+        fixture.registry.reconcile(listOf(first, second))
+        fixture.observations.clear()
+        fixture.afterObservation = { observation ->
+            if (observation.kind == MusicObservationKind.PLAYBACK_SAMPLE && observation.controller === first) {
+                fixture.registry.start("run-b")
+                fixture.registry.reconcile(listOf(replacement))
+            }
+        }
+
+        fixture.registry.sample()
+        assertEquals(listOf(
+            Observation("run-a", first, MusicObservationKind.PLAYBACK_SAMPLE),
+            Observation("run-b", replacement, MusicObservationKind.SESSION_SNAPSHOT)
+        ), fixture.observations)
+        fixture.observations.clear()
+        first.emit()
+        second.emit()
+        fixture.registry.sample()
+        assertEquals(listOf(Observation("run-b", replacement, MusicObservationKind.PLAYBACK_SAMPLE)),
+            fixture.observations)
+    }
+
+    @Test fun destroyedSessionCannotSupplyCachedSamplesOrRetireItsReplacement() {
+        val fixture = Fixture()
+        val original = Controller("spotify")
+        val replacement = Controller("spotify")
+        fixture.registry.start("run-a")
+        fixture.registry.reconcile(listOf(original))
+        val oldEnd = original.endedCallbacks.single()
+        oldEnd()
+        fixture.observations.clear()
+        original.emit()
+        fixture.registry.sample()
+        assertTrue(fixture.observations.isEmpty())
+        assertEquals(1, fixture.continuityLosses)
+        assertEquals(1, original.removals)
+
+        fixture.registry.reconcile(listOf(replacement))
+        fixture.observations.clear()
+        oldEnd()
+        fixture.registry.sample()
+        assertEquals(1, fixture.continuityLosses)
+        assertEquals(listOf(Observation("run-a", replacement, MusicObservationKind.PLAYBACK_SAMPLE)),
+            fixture.observations)
+    }
+
+    @Test fun unreadableSampleLeavesAnHonestGapAndAccessLossStopsFurtherSampling() {
+        val fixture = Fixture()
+        val recovering = Controller("recovering")
+        val healthy = Controller("spotify")
+        fixture.registry.start("run-a")
+        fixture.registry.reconcile(listOf(recovering, healthy))
+        fixture.observations.clear()
+        recovering.snapshotFailure = IllegalStateException("unreadable")
+        fixture.registry.sample()
+        assertEquals(1, fixture.controllerFailures)
+        assertEquals(listOf(Observation("run-a", healthy, MusicObservationKind.PLAYBACK_SAMPLE)),
+            fixture.observations)
+
+        fixture.observations.clear()
+        recovering.snapshotFailure = SecurityException("revoked")
+        fixture.registry.sample()
+        healthy.emit()
+        fixture.registry.sample()
+        assertEquals(1, fixture.accessLosses)
+        assertTrue(fixture.observations.isEmpty())
     }
 }

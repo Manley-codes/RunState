@@ -57,6 +57,33 @@ class MusicObservationDaoTest {
         eventKind = MusicObservationKind.SESSION_SNAPSHOT
     )
 
+    /** An initial callback alone has no duration; only subsequent measured samples earn credit. */
+    private suspend fun recordPlayback(
+        key: String,
+        startOffsetMillis: Long,
+        title: String = "Observed title",
+        artist: String = "Observed artist",
+        durationMillis: Long = 60_000L
+    ): RunMusicObservationEntity {
+        val dao = database.musicObservationDao()
+        val base = observation(key, startOffsetMillis).copy(
+            sourcePackage = "com.spotify.music", title = title, artist = artist)
+        val first = dao.recordObservation(base)
+        var credited = 0L
+        while (credited < durationMillis) {
+            val interval = minOf(5_000L, durationMillis - credited)
+            credited += interval
+            dao.recordObservation(base.copy(
+                observationKey = "$key-$credited",
+                observedAtEpochMillis = run.officialStartEpochMillis + startOffsetMillis + credited,
+                elapsedRealtimeNanos = (startOffsetMillis + credited) * 1_000_000L,
+                eventKind = MusicObservationKind.PLAYBACK_SAMPLE,
+                playbackIntervalMillis = interval
+            ))
+        }
+        return first
+    }
+
     @Test
     fun optedInObservationIsOrderedRetrySafeAndSurvivesReopen() = runBlocking {
         database.runDao().insert(run)
@@ -125,6 +152,78 @@ class MusicObservationDaoTest {
     }
 
     @Test
+    fun playbackIntervalsRequireBoundedMeasuredSpotifyPlayingEvidence() {
+        val source = observation("measured", 10_000).copy(
+            sourcePackage = "com.spotify.music", eventKind = MusicObservationKind.PLAYBACK_SAMPLE)
+        assertEquals(7_500L, source.copy(playbackIntervalMillis = 7_500L).playbackIntervalMillis)
+        assertEquals(0L, source.copy(playbackState = MusicPlaybackState.PAUSED,
+            playbackIntervalMillis = 0L).playbackIntervalMillis)
+        assertEquals(5_000L, source.copy(eventKind = MusicObservationKind.PLAYBACK_CHANGED,
+            playbackIntervalMillis = 5_000L).playbackIntervalMillis)
+        listOf(-1L, 7_501L, Long.MAX_VALUE).forEach { duration ->
+            assertThrows(IllegalArgumentException::class.java) { source.copy(playbackIntervalMillis = duration) }
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            source.copy(sourcePackage = "com.example.player", playbackIntervalMillis = 5_000L)
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            source.copy(playbackState = MusicPlaybackState.BUFFERING, playbackIntervalMillis = 5_000L)
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            source.copy(eventKind = MusicObservationKind.SESSION_SNAPSHOT, playbackIntervalMillis = 5_000L)
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            source.copy(elapsedRealtimeNanos = null, playbackIntervalMillis = 5_000L)
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            source.copy(elapsedRealtimeNanos = 4_999_999_999L, playbackIntervalMillis = 5_000L)
+        }
+    }
+
+    @Test
+    fun storedPlaybackCreditCannotCrossStartOrPauseResumeAndSurvivesReopen() = runBlocking {
+        database.runDao().insert(run.copy(musicReflectionSharingAllowed = true))
+        val dao = database.musicObservationDao()
+        fun sample(key: String, offset: Long) = observation(key, offset).copy(
+            sourcePackage = "com.spotify.music", elapsedRealtimeNanos = (offset + 20_000L) * 1_000_000L,
+            eventKind = MusicObservationKind.PLAYBACK_SAMPLE, playbackIntervalMillis = 7_500L)
+        val atStart = dao.recordObservation(sample("start-crossing", 1_000))
+        assertEquals(1_000L, atStart.playbackIntervalMillis)
+        database.runDao().pauseRun(run.runId, run.officialStartEpochMillis + 2_000)
+        assertThrows(IllegalStateException::class.java) {
+            runBlocking { dao.recordObservation(sample("while-paused", 50_000)) }
+        }
+        database.runDao().resumeRun(run.runId, run.officialStartEpochMillis + 100_000)
+        val oldOwner = dao.recordObservation(sample("old-owner", 1_500))
+        val afterResume = dao.recordObservation(sample("resume-crossing", 102_000))
+        assertEquals(0L, oldOwner.playbackIntervalMillis)
+        assertEquals(2_000L, afterResume.playbackIntervalMillis)
+        assertEquals(afterResume, dao.recordObservation(sample("resume-crossing", 108_000)))
+        database.close()
+        database = buildRunStateDatabase(context, DATABASE_NAME)
+        assertEquals(listOf(atStart, oldOwner, afterResume),
+            database.musicObservationDao().observationsFor(run.runId))
+    }
+
+    @Test
+    fun metadataOnlyAndSkippedSongsCannotClaimEvenAfterALongRun() = runBlocking {
+        database.runDao().insert(run.copy(musicReflectionSharingAllowed = true))
+        val dao = database.musicObservationDao()
+        val unknown = dao.recordObservation(observation("old-metadata-only", 1_000)
+            .copy(sourcePackage = "com.spotify.music", title = "Unknown duration"))
+        val skipped = recordPlayback("skipped", 2_000, title = "Skipped", durationMillis = 2_000)
+        assertNull(dao.claimPreparation(run.runId, UUID.randomUUID().toString(), unknown.sequenceNumber,
+            FINGERPRINT, run.officialStartEpochMillis + 600_000))
+        assertNull(dao.claimPreparation(run.runId, UUID.randomUUID().toString(), skipped.sequenceNumber,
+            FINGERPRINT, run.officialStartEpochMillis + 600_000))
+        val eligible = recordPlayback("eligible", 10_000)
+        assertNull(dao.claimPreparation(run.runId, UUID.randomUUID().toString(), eligible.sequenceNumber,
+            FINGERPRINT, run.officialStartEpochMillis + 69_999))
+        assertEquals(eligible.sequenceNumber, dao.claimPreparation(run.runId, UUID.randomUUID().toString(),
+            eligible.sequenceNumber, FINGERPRINT, run.officialStartEpochMillis + 70_000)?.observationSequenceNumber)
+    }
+
+    @Test
     fun spotifyMetadataCaptureUsesCanonicalMediaIdentityAndDropsUnavailableFields() {
         val primary = "spotify:track:0bRXwKfigvpKZUurwqAlEh"
         val alternate = "spotify:track:4fzsfWzRhPawzqhX8Qt9F3"
@@ -181,10 +280,10 @@ class MusicObservationDaoTest {
         val sharing = run.copy(musicReflectionSharingAllowed = true)
         database.runDao().insert(sharing)
         val dao = database.musicObservationDao()
-        val observed = dao.recordObservation(observation("song", 1_000).copy(sourcePackage = "com.spotify.music"))
+        val observed = recordPlayback("song", 1_000)
         val preparationId = UUID.randomUUID().toString()
         val claimed = requireNotNull(dao.claimPreparation(run.runId, preparationId,
-            observed.sequenceNumber, FINGERPRINT, run.officialStartEpochMillis + 30_000))
+            observed.sequenceNumber, FINGERPRINT, run.officialStartEpochMillis + 61_000))
         assertEquals(SongPreparationClaimStatus.CLAIMED, claimed.status)
         assertEquals("Observed title", claimed.trackTitle)
         assertEquals(observed.sequenceNumber, claimed.observationSequenceNumber)
@@ -193,7 +292,7 @@ class MusicObservationDaoTest {
         val reopened = database.musicObservationDao()
         assertEquals(claimed, reopened.preparationFor(run.runId))
         assertNull(reopened.claimPreparation(run.runId, UUID.randomUUID().toString(),
-            observed.sequenceNumber, FINGERPRINT, run.officialStartEpochMillis + 60_000))
+            observed.sequenceNumber, FINGERPRINT, run.officialStartEpochMillis + 120_000))
         reopened.finishPreparation(run.runId, UUID.randomUUID().toString(), true)
         assertEquals(SongPreparationClaimStatus.CLAIMED, reopened.preparationFor(run.runId)?.status)
         reopened.finishPreparation(run.runId, preparationId, true)
@@ -202,19 +301,20 @@ class MusicObservationDaoTest {
     }
 
     @Test
-    fun preparationCountsOnlyActiveTimeAndRequiresCurrentlyRunningWithBothChoices() = runBlocking {
+    fun preparationRequiresSixtyObservedSecondsAndCurrentlyRunningWithBothChoices() = runBlocking {
         val dao = database.musicObservationDao()
         val sharing = run.copy(musicReflectionSharingAllowed = true)
         database.runDao().insert(sharing)
-        val observed = dao.recordObservation(observation("song", 1_000).copy(sourcePackage = "com.spotify.music"))
+        val observed = recordPlayback("song", 1_000, durationMillis = 15_000)
         suspend fun claim(offset: Long) = dao.claimPreparation(run.runId, UUID.randomUUID().toString(),
             observed.sequenceNumber, FINGERPRINT, run.officialStartEpochMillis + offset)
         assertNull(claim(29_999))
         database.runDao().pauseRun(run.runId, run.officialStartEpochMillis + 20_000)
         assertNull(claim(99_000))
         database.runDao().resumeRun(run.runId, run.officialStartEpochMillis + 100_000)
-        assertNull(claim(109_999))
-        assertEquals(SongPreparationClaimStatus.CLAIMED, claim(110_000)?.status)
+        recordPlayback("resumed-song", 100_000, durationMillis = 45_000)
+        assertNull(claim(144_999))
+        assertEquals(SongPreparationClaimStatus.CLAIMED, claim(145_000)?.status)
 
         for (unsupported in listOf(
             sharing.copy(runId = UUID.randomUUID().toString(), musicReflectionSharingAllowed = false),
@@ -240,14 +340,13 @@ class MusicObservationDaoTest {
         dao.recordObservation(observation("too-long", 3_000).copy(sourcePackage = "com.spotify.music", title = "x".repeat(201)))
         dao.recordObservation(observation("paused-song", 4_000).copy(sourcePackage = "com.spotify.music",
             playbackState = MusicPlaybackState.PAUSED))
-        val first = dao.recordObservation(observation("first-eligible", 5_000).copy(sourcePackage = "com.spotify.music",
-            title = "  First title  ", artist = "  First artist  "))
-        val later = dao.recordObservation(observation("later", 6_000).copy(sourcePackage = "com.spotify.music"))
+        val first = recordPlayback("first-eligible", 5_000, title = "  First title  ", artist = "  First artist  ")
+        val later = recordPlayback("later", 70_000)
         assertNull(dao.claimPreparation(run.runId, UUID.randomUUID().toString(), later.sequenceNumber,
-            FINGERPRINT, run.officialStartEpochMillis + 30_000))
+            FINGERPRINT, run.officialStartEpochMillis + 130_000))
         val outcomes = (1..2).map {
             async(Dispatchers.IO) { dao.claimPreparation(run.runId, UUID.randomUUID().toString(),
-                first.sequenceNumber, FINGERPRINT, run.officialStartEpochMillis + 30_000) }
+                first.sequenceNumber, FINGERPRINT, run.officialStartEpochMillis + 130_000) }
         }.awaitAll()
         val claim = outcomes.single { it != null }
         assertEquals(1, outcomes.count { it != null })
@@ -259,20 +358,19 @@ class MusicObservationDaoTest {
     fun multipleClaimsDeduplicateIdentityKeepVersionsAndBindTheFirstDestination() = runBlocking {
         database.runDao().insert(run.copy(musicReflectionSharingAllowed = true))
         val dao = database.musicObservationDao()
-        val first = dao.recordObservation(observation("first", 1_000).copy(sourcePackage = "com.spotify.music"))
+        val first = recordPlayback("first", 1_000)
         val firstClaim = requireNotNull(dao.claimPreparation(run.runId, UUID.randomUUID().toString(),
-            first.sequenceNumber, FINGERPRINT, run.officialStartEpochMillis + 30_000))
+            first.sequenceNumber, FINGERPRINT, run.officialStartEpochMillis + 61_000))
         dao.finishPreparation(run.runId, firstClaim.preparationId, false)
-        val duplicate = dao.recordObservation(observation("duplicate", 2_000).copy(sourcePackage = "com.spotify.music",
+        val duplicate = dao.recordObservation(observation("duplicate", 62_000).copy(sourcePackage = "com.spotify.music",
             title = "  OBSERVED   title ", artist = " observed ARTIST "))
         assertNull(dao.claimPreparation(run.runId, UUID.randomUUID().toString(), duplicate.sequenceNumber,
-            FINGERPRINT, run.officialStartEpochMillis + 31_000))
-        val live = dao.recordObservation(observation("live-version", 3_000).copy(sourcePackage = "com.spotify.music",
-            title = "Observed title (Live)"))
+            FINGERPRINT, run.officialStartEpochMillis + 62_000))
+        val live = recordPlayback("live-version", 70_000, title = "Observed title (Live)")
         assertNull(dao.claimPreparation(run.runId, UUID.randomUUID().toString(), live.sequenceNumber,
-            "b".repeat(64), run.officialStartEpochMillis + 32_000))
+            "b".repeat(64), run.officialStartEpochMillis + 130_000))
         val liveClaim = requireNotNull(dao.claimPreparation(run.runId, UUID.randomUUID().toString(),
-            live.sequenceNumber, FINGERPRINT, run.officialStartEpochMillis + 32_000))
+            live.sequenceNumber, FINGERPRINT, run.officialStartEpochMillis + 130_000))
         dao.finishPreparation(run.runId, liveClaim.preparationId, true)
         database.close()
         database = buildRunStateDatabase(context, DATABASE_NAME)
@@ -285,16 +383,17 @@ class MusicObservationDaoTest {
     fun twelveClaimsAreADurableBudgetAcrossReopen() = runBlocking {
         database.runDao().insert(run.copy(musicReflectionSharingAllowed = true))
         val dao = database.musicObservationDao()
-        val observations = (1..13).map { index -> dao.recordObservation(observation("song-$index", index * 1_000L)
-            .copy(sourcePackage = "com.spotify.music", title = "Title $index")) }
+        val observations = (1..13).map { index ->
+            recordPlayback("song-$index", index * 65_000L, title = "Title $index")
+        }
         observations.take(12).forEach { observed ->
             assertEquals(observed.sequenceNumber, dao.claimPreparation(run.runId, UUID.randomUUID().toString(),
-                observed.sequenceNumber, FINGERPRINT, run.officialStartEpochMillis + 30_000)?.observationSequenceNumber)
+                observed.sequenceNumber, FINGERPRINT, run.officialStartEpochMillis + 905_000)?.observationSequenceNumber)
         }
         database.close()
         database = buildRunStateDatabase(context, DATABASE_NAME)
         assertNull(database.musicObservationDao().claimPreparation(run.runId, UUID.randomUUID().toString(),
-            observations.last().sequenceNumber, FINGERPRINT, run.officialStartEpochMillis + 40_000))
+            observations.last().sequenceNumber, FINGERPRINT, run.officialStartEpochMillis + 905_000))
         assertEquals(12, database.musicObservationDao().preparationsFor(run.runId).size)
     }
 

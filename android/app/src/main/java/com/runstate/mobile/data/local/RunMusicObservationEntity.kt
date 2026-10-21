@@ -9,7 +9,7 @@ import java.util.Locale
 import java.util.UUID
 
 /** A media-session event observed by RunState; it is not proof of a whole song play. */
-enum class MusicObservationKind { SESSION_SNAPSHOT, METADATA_CHANGED, PLAYBACK_CHANGED }
+enum class MusicObservationKind { SESSION_SNAPSHOT, METADATA_CHANGED, PLAYBACK_CHANGED, PLAYBACK_SAMPLE }
 
 /** The coarse state reported by the other app's media session at observation time. */
 enum class MusicPlaybackState { PLAYING, PAUSED, STOPPED, BUFFERING, OTHER, UNKNOWN }
@@ -98,12 +98,15 @@ data class RunMusicObservationEntity(
     /** Exact recording identity reported by Spotify; never inferred for old observations. */
     @ColumnInfo(name = "spotify_track_uri") val spotifyTrackUri: String? = null,
     @ColumnInfo(name = "album_name") val albumName: String? = null,
-    @ColumnInfo(name = "track_duration_millis") val trackDurationMillis: Long? = null
+    @ColumnInfo(name = "track_duration_millis") val trackDurationMillis: Long? = null,
+    /** A bounded interval verified by the live observer; old callbacks remain unknown. */
+    @ColumnInfo(name = "playback_interval_millis") val playbackIntervalMillis: Long? = null
 ) {
     init {
         require(sequenceNumber >= 1) { "Music observation sequence must begin at 1." }
         validateMusicObservation(observationKey, observedAtEpochMillis, elapsedRealtimeNanos, sourcePackage)
         validateSpotifyRecording(sourcePackage, spotifyTrackUri, albumName, trackDurationMillis)
+        validatePlaybackInterval(playbackIntervalMillis, sourcePackage, playbackState, eventKind, elapsedRealtimeNanos)
     }
 }
 
@@ -120,11 +123,31 @@ data class RunMusicObservation(
     val eventKind: MusicObservationKind,
     val spotifyTrackUri: String? = null,
     val albumName: String? = null,
-    val trackDurationMillis: Long? = null
+    val trackDurationMillis: Long? = null,
+    val playbackIntervalMillis: Long? = null
 ) {
     init {
         validateMusicObservation(observationKey, observedAtEpochMillis, elapsedRealtimeNanos, sourcePackage)
         validateSpotifyRecording(sourcePackage, spotifyTrackUri, albumName, trackDurationMillis)
+        validatePlaybackInterval(playbackIntervalMillis, sourcePackage, playbackState, eventKind, elapsedRealtimeNanos)
+    }
+}
+
+private fun validatePlaybackInterval(
+    intervalMillis: Long?,
+    sourcePackage: String,
+    playbackState: MusicPlaybackState,
+    eventKind: MusicObservationKind,
+    elapsedRealtimeNanos: Long?
+) {
+    if (intervalMillis == null) return
+    require(sourcePackage == "com.spotify.music" && intervalMillis in 0L..7_500L) {
+        "Observed playback intervals must be bounded Spotify evidence."
+    }
+    require(intervalMillis == 0L || playbackState == MusicPlaybackState.PLAYING &&
+        eventKind != MusicObservationKind.SESSION_SNAPSHOT &&
+        elapsedRealtimeNanos != null && elapsedRealtimeNanos >= intervalMillis * 1_000_000L) {
+        "Positive playback requires a continuing playing observation with measured timing."
     }
 }
 

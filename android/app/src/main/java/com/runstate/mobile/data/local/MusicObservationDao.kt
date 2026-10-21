@@ -5,8 +5,7 @@ import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Transaction
-import com.runstate.mobile.run.RunTimeline
-import com.runstate.mobile.run.TransitionHistoryCoverage
+import com.runstate.mobile.music.observedSongPlaybackEligible
 
 /** Run-owned, ordered evidence from Android media sessions. No row means unknown, not silence. */
 @Dao
@@ -33,20 +32,11 @@ abstract class MusicObservationDao {
         if (run.state != StoredRunState.RUNNING || !run.musicObservationRequested ||
             !run.musicReflectionSharingAllowed || run.transitionHistoryComplete != true ||
             nowEpochMillis < run.officialStartEpochMillis) return null
-        val active = RunTimeline.activeMillis(
-            officialStartEpochMillis = run.officialStartEpochMillis,
-            finishEpochMillis = run.finishEpochMillis,
-            currentState = run.state,
-            transitions = transitionsForPreparation(runId),
-            nowEpochMillis = nowEpochMillis,
-            historyCoverage = TransitionHistoryCoverage.COMPLETE
-        ) ?: return null
-        if (active < 30_000L) return null
         val claimedIdentities = previous.mapNotNull { songPreparationIdentity(it.trackTitle, it.artistName) }.toSet()
-        val first = observationsFor(runId).firstOrNull {
-            it.sourcePackage == "com.spotify.music" && it.playbackState == MusicPlaybackState.PLAYING &&
-                it.observedAtEpochMillis in run.officialStartEpochMillis..nowEpochMillis &&
-                songPreparationIdentity(it.title, it.artist)?.let { identity -> identity !in claimedIdentities } == true
+        val first = observedSongPlaybackEligible(
+            runId, run.officialStartEpochMillis, nowEpochMillis, observationsFor(runId)
+        ).firstOrNull {
+            songPreparationIdentity(it.title, it.artist)?.let { identity -> identity !in claimedIdentities } == true
         } ?: return null
         if (first.sequenceNumber != observationSequenceNumber) return null
         val row = SongPreparationClaimEntity(
@@ -77,6 +67,17 @@ abstract class MusicObservationDao {
             "Music observations belong only to a RUNNING run."
         }
 
+        // The observer may race a durable Pause/Resume. Credit can belong only to the
+        // currently active interval, never to a paused interval or an earlier owner.
+        val interval = observation.playbackIntervalMillis?.let { measured ->
+            val latest = transitionsForPreparation(observation.runId).lastOrNull()
+            if (run.transitionHistoryComplete != true || latest?.transitionType == RunTransitionType.PAUSE) 0L
+            else {
+                val activeStart = maxOf(run.officialStartEpochMillis,
+                    latest?.occurredAtEpochMillis ?: run.officialStartEpochMillis)
+                minOf(measured, (observation.observedAtEpochMillis - activeStart).coerceAtLeast(0L))
+            }
+        }
         val row = RunMusicObservationEntity(
             runId = observation.runId,
             sequenceNumber = (highestSequenceNumber(observation.runId) ?: 0) + 1,
@@ -90,7 +91,8 @@ abstract class MusicObservationDao {
             eventKind = observation.eventKind,
             spotifyTrackUri = observation.spotifyTrackUri,
             albumName = observation.albumName,
-            trackDurationMillis = observation.trackDurationMillis
+            trackDurationMillis = observation.trackDurationMillis,
+            playbackIntervalMillis = interval
         )
         insert(row)
         return row

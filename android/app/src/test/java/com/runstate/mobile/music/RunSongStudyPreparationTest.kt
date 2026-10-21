@@ -14,15 +14,40 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class RunSongStudyPreparationTest {
+    companion object {
+        /** A real baseline followed by bounded, durably observed playback deltas. */
+        private fun playback(runId: String, title: String = "First title", artist: String = "First artist",
+            startMillis: Long = 1_000L, firstSequence: Int = 1, durationMillis: Long = 60_000L
+        ): List<RunMusicObservationEntity> {
+            val rows = mutableListOf(RunMusicObservationEntity(runId, firstSequence,
+                "observation-$firstSequence", startMillis, startMillis * 1_000_000L,
+                "com.spotify.music", title, artist, MusicPlaybackState.PLAYING,
+                MusicObservationKind.SESSION_SNAPSHOT))
+            var observed = 0L
+            while (observed < durationMillis) {
+                val delta = minOf(5_000L, durationMillis - observed)
+                observed += delta
+                val sequence = firstSequence + rows.size
+                rows += rows.first().copy(sequenceNumber = sequence, observationKey = "observation-$sequence",
+                    observedAtEpochMillis = startMillis + observed,
+                    elapsedRealtimeNanos = (startMillis + observed) * 1_000_000L,
+                    eventKind = MusicObservationKind.PLAYBACK_SAMPLE, playbackIntervalMillis = delta)
+            }
+            return rows
+        }
+    }
+
     private class Store : SongPreparationStore {
         val runId = "175d6171-19cb-4968-bd32-2abb075d95a4"
         var runs = listOf(RunEntity(runId, StoredRunState.RUNNING, 1_000L, "America/Chicago", 1_000L,
             transitionHistoryComplete = true, musicObservationRequested = true,
             musicReflectionSharingAllowed = true))
         var timeline = emptyList<RunTransitionEntity>()
-        var music = listOf(RunMusicObservationEntity(runId, 1, "first-observation", 1_100L, null,
-            "com.spotify.music", "First title", "First artist", MusicPlaybackState.PLAYING,
-            MusicObservationKind.SESSION_SNAPSHOT))
+        var music = playback(runId)
+        fun appendSong(title: String, artist: String = "First artist", durationMillis: Long = 60_000L) {
+            music += playback(runId, title, artist, music.maxOf { it.observedAtEpochMillis },
+                music.maxOf { it.sequenceNumber } + 1, durationMillis)
+        }
         val claims = mutableListOf<SongPreparationClaimEntity>()
         val claim: SongPreparationClaimEntity? get() = claims.firstOrNull()
         var preparationReadFails = false
@@ -78,7 +103,7 @@ class RunSongStudyPreparationTest {
         }
     }
 
-    private class Harness(val store: Store = Store(), val gateway: Gateway = Gateway(), activeMillis: Long = 30_000L) {
+    private class Harness(val store: Store = Store(), val gateway: Gateway = Gateway(), activeMillis: Long = 60_000L) {
         val uncaught = mutableListOf<Throwable>()
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined +
             CoroutineExceptionHandler { _, failure -> uncaught += failure })
@@ -99,25 +124,57 @@ class RunSongStudyPreparationTest {
             now += millis
             waits.removeFirst().complete(Unit)
         }
+        fun reachLatestObservation() { now = store.music.maxOf { it.observedAtEpochMillis } }
         fun close() = scope.cancel()
     }
 
-    @Test fun oneInitialCallbackStillPreparesAfterThirtyActiveSecondsAndPinsOnlyTheFirstSong() {
-        val fixture = Harness(activeMillis = 0L)
+    @Test fun fiftyNineSecondsOfObservedPlaybackCannotClaimButSixtySecondsCan() {
+        // The run already passes the active-time gate; only observed song playback is short.
+        val fixture = Harness(activeMillis = 60_000L)
         try {
+            fixture.store.music = playback(fixture.store.runId, durationMillis = 59_000L)
             fixture.observe()
             assertEquals(0, fixture.gateway.capabilityReads)
-            fixture.advance(29_999L)
-            assertEquals(0, fixture.gateway.capabilityReads)
-            fixture.advance(1L)
+            assertNull(fixture.store.claim)
+            fixture.store.music += fixture.store.music.last().let { last -> last.copy(
+                sequenceNumber = last.sequenceNumber + 1, observationKey = "sixtieth-second",
+                observedAtEpochMillis = 61_000L, elapsedRealtimeNanos = 61_000_000_000L,
+                playbackIntervalMillis = 1_000L) }
+            fixture.advance(1_000L)
             val claim = requireNotNull(fixture.store.claim)
             assertEquals(SongPreparationClaimStatus.READY, claim.status)
             assertEquals(Triple(claim.preparationId, "First title", "First artist"), fixture.gateway.prepared.single())
-            fixture.store.music = fixture.store.music + fixture.store.music.first().copy(
-                sequenceNumber = 2, title = "Second title", artist = "Second artist")
+            assertEquals(1, claim.observationSequenceNumber)
+            fixture.store.appendSong("Second title", "Second artist")
+            fixture.reachLatestObservation()
             fixture.observe()
             assertEquals(1, fixture.gateway.prepared.size)
             assertEquals("First title", fixture.store.claim?.trackTitle)
+        } finally { fixture.close() }
+    }
+
+    @Test fun elapsedRunTimeNeverTurnsOneUnknownCallbackIntoObservedPlayback() {
+        val fixture = Harness()
+        try {
+            fixture.store.music = fixture.store.music.take(1)
+            fixture.observe()
+            fixture.advance(300_000L)
+            assertEquals(0, fixture.gateway.capabilityReads)
+            assertNull(fixture.store.claim)
+            assertTrue(fixture.gateway.prepared.isEmpty())
+        } finally { fixture.close() }
+    }
+
+    @Test fun skippedFirstSongDoesNotBlockTheLaterEligibleSongOrUseItsBudget() {
+        val fixture = Harness()
+        try {
+            fixture.store.music = playback(fixture.store.runId, "Skipped song", durationMillis = 5_000L)
+            fixture.store.appendSong("Eligible song", "Another artist")
+            fixture.reachLatestObservation()
+            fixture.observe()
+            assertEquals(listOf("Eligible song"), fixture.gateway.prepared.map { it.second })
+            assertEquals(1, fixture.store.claims.size)
+            assertEquals("Another artist", fixture.store.claim?.artistName)
         } finally { fixture.close() }
     }
 
@@ -165,9 +222,10 @@ class RunSongStudyPreparationTest {
         } finally { original.close() }
     }
 
-    @Test fun pausedTimeDoesNotCountTowardTheThirtySecondThreshold() {
+    @Test fun pausedTimeDoesNotCountTowardTheSixtySecondThreshold() {
         val fixture = Harness(activeMillis = 10_000L)
         try {
+            fixture.store.music = playback(fixture.store.runId, durationMillis = 10_000L)
             fixture.observe()
             fixture.controller.cancel()
             fixture.store.timeline = listOf(RunTransitionEntity(fixture.store.runId, 1,
@@ -175,9 +233,11 @@ class RunSongStudyPreparationTest {
                 RunTransitionType.RESUME, 71_000L))
             fixture.store.runs = fixture.store.runs.map { it.copy(lastCheckpointEpochMillis = 71_000L) }
             fixture.now = 71_000L
+            fixture.store.music += playback(fixture.store.runId, startMillis = 71_000L,
+                firstSequence = fixture.store.music.last().sequenceNumber + 1, durationMillis = 50_000L)
             fixture.waits.clear()
             fixture.observe()
-            fixture.advance(19_999L)
+            fixture.advance(49_999L)
             assertEquals(0, fixture.gateway.capabilityReads)
             fixture.advance(1L)
             assertEquals(1, fixture.gateway.prepared.size)
@@ -245,12 +305,12 @@ class RunSongStudyPreparationTest {
         val pending = CompletableDeferred<Boolean>()
         val fixture = Harness(gateway = Gateway().apply { multiple = true; preparationReply = pending })
         try {
-            val first = fixture.store.music.single()
-            fixture.store.music += listOf(
-                first.copy(sequenceNumber = 2, title = "  FIRST   title ", artist = " first ARTIST "),
-                first.copy(sequenceNumber = 3, title = "First title (Live)"),
-                first.copy(sequenceNumber = 4, title = "Second title", artist = "Second artist")
-            )
+            fixture.store.music = fixture.store.music.mapIndexed { index, row ->
+                if (index > 0) row.copy(title = "  FIRST   title ", artist = " first ARTIST ") else row
+            }
+            fixture.store.appendSong("First title (Live)")
+            fixture.store.appendSong("Second title", "Second artist")
+            fixture.reachLatestObservation()
             fixture.observe()
             assertEquals(1, fixture.gateway.prepared.size)
             assertEquals(1, fixture.store.claims.size)
@@ -267,8 +327,8 @@ class RunSongStudyPreparationTest {
         val fixture = Harness(gateway = Gateway().apply { multiple = true; ready = false })
         try {
             fixture.observe()
-            val first = fixture.store.music.single()
-            fixture.store.music += (2..15).map { index -> first.copy(sequenceNumber = index, title = "Title $index") }
+            (2..15).forEach { index -> fixture.store.appendSong("Title $index") }
+            fixture.reachLatestObservation()
             fixture.observe()
             fixture.advance(1_000L)
             assertEquals(12, fixture.gateway.prepared.size)
@@ -292,18 +352,20 @@ class RunSongStudyPreparationTest {
             fixture.observe()
             fixture.controller.cancel()
             assertEquals(SongPreparationClaimStatus.UNAVAILABLE, fixture.store.claim?.status)
-            val second = fixture.store.music.single().copy(sequenceNumber = 2, title = "Second title")
-            fixture.store.music += second
+            fixture.store.appendSong("Second title")
+            fixture.reachLatestObservation()
             fixture.gateway.preparationReply = null
             fixture.gateway.ready = false
             fixture.observe()
             assertEquals(listOf("First title", "Second title"), fixture.gateway.prepared.map { it.second })
             fixture.controller.cancel()
-            val restarted = Harness(fixture.store, Gateway().apply { multiple = true })
+            val restarted = Harness(fixture.store, Gateway().apply { multiple = true },
+                activeMillis = fixture.now - 1_000L)
             try {
                 restarted.observe()
                 assertTrue(restarted.gateway.prepared.isEmpty())
-                restarted.store.music += second.copy(sequenceNumber = 3, title = "Third title")
+                restarted.store.appendSong("Third title")
+                restarted.reachLatestObservation()
                 restarted.advance(1_000L)
                 assertEquals("Third title", restarted.gateway.prepared.single().second)
             } finally { restarted.close() }
@@ -314,8 +376,9 @@ class RunSongStudyPreparationTest {
         val fixture = Harness()
         try {
             fixture.observe()
-            fixture.store.music += fixture.store.music.single().copy(sequenceNumber = 2, title = "Second title")
-            val restarted = Harness(fixture.store)
+            fixture.store.appendSong("Second title")
+            val restarted = Harness(fixture.store,
+                activeMillis = fixture.store.music.maxOf { it.observedAtEpochMillis } - 1_000L)
             try {
                 restarted.observe()
                 assertTrue(restarted.gateway.prepared.isEmpty())
@@ -339,17 +402,21 @@ class RunSongStudyPreparationTest {
     @Test fun excludedObservationsCannotUsePreparationBudget() {
         val fixture = Harness(gateway = Gateway().apply { multiple = true })
         try {
-            val first = fixture.store.music.single()
-            fixture.store.music = listOf(
-                first.copy(runId = UUID.randomUUID().toString()),
-                first.copy(sequenceNumber = 2, sourcePackage = "com.other.player"),
-                first.copy(sequenceNumber = 3, playbackState = MusicPlaybackState.PAUSED),
-                first.copy(sequenceNumber = 4, title = " "),
-                first.copy(sequenceNumber = 5, observedAtEpochMillis = 999L),
-                first.copy(sequenceNumber = 6, observedAtEpochMillis = 999_999L),
-                first.copy(sequenceNumber = 7, title = "x".repeat(201)),
-                first.copy(sequenceNumber = 8, artist = "Bad\nArtist")
-            )
+            fixture.store.music = (0..7).flatMap { index ->
+                playback(fixture.store.runId, title = "Excluded $index", firstSequence = index * 100 + 1)
+                    .map { row ->
+                        when (index) {
+                            0 -> row.copy(runId = "5041fd6f-7fd0-44ed-b293-9da2d36af445")
+                            1 -> row.copy(sourcePackage = "com.other.player", playbackIntervalMillis = null)
+                            2 -> row.copy(playbackState = MusicPlaybackState.PAUSED, playbackIntervalMillis = 0L)
+                            3 -> row.copy(title = " ")
+                            4 -> row.copy(observedAtEpochMillis = 999L)
+                            5 -> row.copy(observedAtEpochMillis = 999_999L)
+                            6 -> row.copy(title = "x".repeat(201))
+                            else -> row.copy(artist = "Bad\nArtist")
+                        }
+                    }
+            }
             fixture.observe()
             assertEquals(0, fixture.gateway.capabilityReads)
             assertTrue(fixture.store.claims.isEmpty())

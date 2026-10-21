@@ -13,6 +13,7 @@ import com.runstate.mobile.data.local.RunTransitionEntity
 import com.runstate.mobile.data.local.MusicPlaybackState
 import com.runstate.mobile.data.local.StoredRunState
 import com.runstate.mobile.data.local.TelemetryCoverage
+import com.runstate.mobile.data.local.songPreparationIdentity
 import com.runstate.mobile.run.RunTimeline
 import com.runstate.mobile.run.TransitionHistoryCoverage
 import com.runstate.mobile.weather.RunWeatherSnapshot
@@ -20,6 +21,7 @@ import com.runstate.mobile.music.SongReflectionPlan
 import com.runstate.mobile.music.selectSongReflectionPlan
 import com.runstate.mobile.music.reflectionSongCatalog
 import com.runstate.mobile.music.canonicalSpotifyTrackUri
+import com.runstate.mobile.music.observedSongPlaybackEligible
 import java.util.Locale
 import java.io.ByteArrayOutputStream
 import java.io.InputStream
@@ -210,16 +212,22 @@ internal fun reflectionRequestFromSavedRun(
     // Preserve the original pinned identity for an older server. A capable server can
     // instead compare the separately frozen, explicitly shared multi-song shortlist.
     val sharedMusicAllowed = run.musicObservationRequested && run.musicReflectionSharingAllowed
+    val eligibleObservations = if (sharedMusicAllowed) observedSongPlaybackEligible(
+        run.runId, run.officialStartEpochMillis, finishEpochMillis, musicObservations) else emptyList()
     val pinnedObservation = songPreparation?.takeIf { it.runId == run.runId && sharedMusicAllowed }?.let { claim ->
-        musicObservations.singleOrNull { observation ->
+        eligibleObservations.singleOrNull { observation ->
             observation.runId == run.runId && observation.sequenceNumber == claim.observationSequenceNumber &&
                 observation.sourcePackage == "com.spotify.music" && observation.playbackState == MusicPlaybackState.PLAYING &&
                 observation.observedAtEpochMillis in run.officialStartEpochMillis..finishEpochMillis &&
                 observation.title?.trim() == claim.trackTitle && observation.artist?.trim() == claim.artistName
         }
     }
-    val usableObservations = if (songPreparation == null) musicObservations else listOfNotNull(
-        pinnedObservation?.copy(title = songPreparation.trackTitle, artist = songPreparation.artistName))
+    val usableObservations = if (songPreparation == null) eligibleObservations else if (pinnedObservation == null) {
+        emptyList()
+    } else eligibleObservations.filter {
+        songPreparationIdentity(it.title?.trim(), it.artist?.trim()) ==
+            songPreparationIdentity(songPreparation.trackTitle, songPreparation.artistName)
+    }.map { it.copy(title = songPreparation.trackTitle, artist = songPreparation.artistName) }
     val song = selectSongReflectionPlan(run, finishEpochMillis, usableObservations)
     val musicContext = if (song == null) {
         reflectionMusicContextFromSavedRun(run, finishEpochMillis, usableObservations)
@@ -260,7 +268,8 @@ internal fun reflectionSongCandidates(
     fun key(value: String) = value.trim().lowercase(Locale.ROOT).replace(Regex("\\s+"), " ")
     fun valid(value: String?) = value != null && value.trim().isNotEmpty() && value.trim().length <= 200 &&
         value.codePoints().noneMatch { Character.isISOControl(it) || it in 0xd800..0xdfff }
-    return observations.asSequence().filter {
+    return observedSongPlaybackEligible(run.runId, run.officialStartEpochMillis,
+        finishEpochMillis, observations).asSequence().filter {
         it.runId == run.runId && it.sourcePackage == "com.spotify.music" &&
             it.playbackState == MusicPlaybackState.PLAYING && it.sequenceNumber > 0 &&
             it.observedAtEpochMillis in run.officialStartEpochMillis..finishEpochMillis && valid(it.title) && valid(it.artist)
@@ -363,7 +372,8 @@ private fun reflectionMusicContextFromSavedRun(
     observations: List<RunMusicObservationEntity>
 ): ReflectionMusicContext {
     if (!run.musicObservationRequested || !run.musicReflectionSharingAllowed) return ReflectionMusicContext()
-    val latest = observations.asSequence().filter { observation ->
+    val latest = observedSongPlaybackEligible(run.runId, run.officialStartEpochMillis,
+        finishEpochMillis, observations).asSequence().filter { observation ->
         observation.runId == run.runId &&
             observation.sourcePackage == "com.spotify.music" &&
             observation.playbackState == MusicPlaybackState.PLAYING &&

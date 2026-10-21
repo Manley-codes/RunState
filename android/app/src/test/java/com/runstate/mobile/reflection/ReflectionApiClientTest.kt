@@ -47,7 +47,7 @@ class ReflectionApiClientTest {
         val row = musicObservation().copy(title = "Stronger", artist = "Kanye West", albumName = "Graduation",
             spotifyTrackUri = "spotify:track:4fzsfWzRhPawzqhX8Qt9F3", trackDurationMillis = 312_000)
         val request = reflectionRequestFromSavedRun(REQUEST_ID, sharingRun().copy(songSnippetLookupAllowed = true),
-            completedTransitions(), listOf(row))
+            completedTransitions(), qualifiedMusic(listOf(row)))
         val candidate = request.evidence.songCandidates!!.single()
         val receipt = ReflectionSongSnippet("recording_v2_opening_0_8000", "RUNSTATE_RECORDING", "opening",
             "Stronger", "Kanye West", "Graduation", 312_000, 0, 8_000, "RECORDING_OPENING_FALLBACK", 2)
@@ -73,10 +73,10 @@ class ReflectionApiClientTest {
         val row = musicObservation().copy(title = "Example song", artist = "Example artist", albumName = null,
             spotifyTrackUri = "spotify:track:" + "a".repeat(22), trackDurationMillis = 180_000)
         val run = sharingRun().copy(songSnippetLookupAllowed = true)
-        val selected = reflectionSongCandidates(run, FINISH, listOf(row)).single()
+        val selected = reflectionSongCandidates(run, FINISH, qualifiedMusic(listOf(row))).single()
         assertNotNull(selected.recording); assertNull(selected.recording!!.albumName)
-        assertNull(reflectionSongCandidates(run, FINISH, listOf(row.copy(trackDurationMillis = null))).single().recording)
-        assertNull(reflectionSongCandidates(run, FINISH, listOf(row.copy(spotifyTrackUri = null))).single().recording)
+        assertNull(reflectionSongCandidates(run, FINISH, qualifiedMusic(listOf(row.copy(trackDurationMillis = null)))).single().recording)
+        assertNull(reflectionSongCandidates(run, FINISH, qualifiedMusic(listOf(row.copy(spotifyTrackUri = null)))).single().recording)
         val response = openingResponse().apply { getAsJsonObject("songSnippet").remove("albumName") }
         val parsed = parseReflectionResponse(response.toString(), REQUEST_ID, RUN_ID, null, listOf(selected), true, true)
         assertNull(parsed.songSnippet!!.albumName)
@@ -141,33 +141,33 @@ class ReflectionApiClientTest {
         val complete = first.copy(sequenceNumber = 2, observationKey = "later", spotifyTrackUri = "spotify:track:4fzsfWzRhPawzqhX8Qt9F3",
             albumName = "Graduation", trackDurationMillis = 312_000)
         val run = sharingRun().copy(songSnippetLookupAllowed = true)
-        val chosen = reflectionSongCandidates(run, FINISH, listOf(first, complete)).single()
+        val chosen = reflectionSongCandidates(run, FINISH, qualifiedMusic(listOf(first, complete))).single()
         assertEquals("1", chosen.candidateId)
         assertEquals(complete.spotifyTrackUri, chosen.songPassage?.spotifyTrackUri)
         assertTrue(chosen.songPassage!!.allowTrackSwitch)
         val ambiguous = complete.copy(sequenceNumber = 3, observationKey = "version", spotifyTrackUri = "spotify:track:" + "b".repeat(22))
-        assertNull(reflectionSongCandidates(run, FINISH, listOf(first, complete, ambiguous)).single().recording)
+        assertNull(reflectionSongCandidates(run, FINISH, qualifiedMusic(listOf(first, complete, ambiguous))).single().recording)
         for (partialConflict in listOf(
             ambiguous.copy(albumName = null, trackDurationMillis = null),
             ambiguous.copy(spotifyTrackUri = null, albumName = "Other edition", trackDurationMillis = null),
             ambiguous.copy(spotifyTrackUri = null, albumName = null, trackDurationMillis = 320_000L))) {
-            val conflict = reflectionSongCandidates(run, FINISH, listOf(first, complete, partialConflict)).single()
+            val conflict = reflectionSongCandidates(run, FINISH, qualifiedMusic(listOf(first, complete, partialConflict))).single()
             assertNull(conflict.recording)
             assertFalse(conflict.songPassage!!.allowTrackSwitch)
         }
-        assertFalse(reflectionSongCandidates(sharingRun(), FINISH, listOf(complete)).single().songPassage!!.allowTrackSwitch)
+        assertFalse(reflectionSongCandidates(sharingRun(), FINISH, qualifiedMusic(listOf(complete))).single().songPassage!!.allowTrackSwitch)
     }
 
     @Test fun differentRecordingOfCuratedSongNeedsItsOwnTimingBeforeItCanBeLoaded() {
         val otherEdition = musicObservation(1).copy(title = "Good as Hell", artist = "Lizzo",
             spotifyTrackUri = "spotify:track:" + "a".repeat(22), albumName = "Different Edition", trackDurationMillis = 180_000L)
         val chosen = reflectionSongCandidates(sharingRun().copy(songSnippetLookupAllowed = true), FINISH,
-            listOf(otherEdition)).single()
+            qualifiedMusic(listOf(otherEdition))).single()
         assertNotNull(chosen.recording)
         assertNull(chosen.musicContext.songCue)
         assertNull(chosen.songPassage)
         // The older opt-out/current-track behavior and all accepted cue values remain intact.
-        val legacy = reflectionSongCandidates(sharingRun(), FINISH, listOf(otherEdition)).single()
+        val legacy = reflectionSongCandidates(sharingRun(), FINISH, qualifiedMusic(listOf(otherEdition))).single()
         assertNotNull(legacy.songPassage)
         assertFalse(legacy.songPassage!!.allowTrackSwitch)
     }
@@ -244,7 +244,7 @@ class ReflectionApiClientTest {
         val row = musicObservation().copy(title = "Example song", artist = "Example artist", albumName = "Example album",
             spotifyTrackUri = "spotify:track:" + "a".repeat(22), trackDurationMillis = 180_000)
         return reflectionRequestFromSavedRun(REQUEST_ID, sharingRun().copy(songSnippetLookupAllowed = true),
-            completedTransitions(), listOf(row))
+            completedTransitions(), qualifiedMusic(listOf(row)))
     }
 
     private fun snippetResponse(): JsonObject = JsonParser.parseString(response(generationMode = "ANTHROPIC")).asJsonObject.apply {
@@ -268,7 +268,12 @@ class ReflectionApiClientTest {
             musicObservation(9).copy(title = ""),
             musicObservation(10).copy(title = "bad\nidentity")
         )
-        val shortlist = reflectionSongCandidates(sharingRun(), FINISH, rows.reversed())
+        val valid = qualifiedMusic(rows.take(4))
+        val laterFinish = START + 240_000L
+        val invalid = rows.drop(4).map {
+            if (it.observedAtEpochMillis > FINISH) it.copy(observedAtEpochMillis = laterFinish + 1) else it
+        }
+        val shortlist = reflectionSongCandidates(sharingRun(), laterFinish, (valid + invalid).reversed())
         assertEquals(listOf("1", "3", "4"), shortlist.map { it.candidateId })
         assertEquals("Stronger - Live", shortlist[1].musicContext.trackTitle)
         assertNull(shortlist[1].songPassage)
@@ -277,9 +282,47 @@ class ReflectionApiClientTest {
     }
 
     @Test fun multiSongShortlistHasADeterministicProviderBudget() {
-        val rows = (1..20).map { musicObservation(it).copy(title = "Song $it") }
-        val songs = reflectionSongCandidates(sharingRun(), FINISH, rows.reversed())
+        val rows = qualifiedMusic((1..20).map { musicObservation(it).copy(title = "Song $it") })
+        val songs = reflectionSongCandidates(sharingRun(), START + 1_400_000L, rows.reversed())
         assertEquals((1..12).map(Int::toString), songs.map { it.candidateId })
+    }
+
+    @Test fun fiftyNineSecondsCannotEnterAnyMusicPathButSixtySecondsCan() {
+        val first = musicObservation().copy(title = "Stronger", artist = "Kanye West")
+        val claim = SongPreparationClaimEntity(RUN_ID, REQUEST_ID, first.title!!, first.artist!!,
+            first.sequenceNumber, "a".repeat(64), START + 61_000L)
+        for (millis in listOf(59_000L, 60_000L)) {
+            val rows = qualifiedMusic(listOf(first), millis)
+            for (preparation in listOf(null, claim)) {
+                val evidence = reflectionRequestFromSavedRun(REQUEST_ID, sharingRun(), completedTransitions(),
+                    rows, songPreparation = preparation).evidence
+                if (millis < 60_000L) {
+                    assertEquals(ReflectionMusicContext(), evidence.musicContext)
+                    assertTrue(evidence.songCandidates.orEmpty().isEmpty())
+                    assertNull(evidence.songPassage)
+                    assertNull(evidence.songPreparationReference)
+                } else {
+                    assertEquals("Stronger", evidence.musicContext.trackTitle)
+                    assertEquals("1", evidence.songCandidates!!.single().candidateId)
+                    assertNotNull(evidence.songPassage)
+                    assertEquals(preparation?.preparationId, evidence.songPreparationReference?.preparationId)
+                }
+            }
+        }
+        val legacyWithoutReceipts = reflectionRequestFromSavedRun(REQUEST_ID, sharingRun(), completedTransitions(),
+            listOf(first), songPreparation = claim).evidence
+        assertEquals(ReflectionMusicContext(), legacyWithoutReceipts.musicContext)
+        assertNull(legacyWithoutReceipts.songPreparationReference)
+    }
+
+    @Test fun skippedFirstTwelveSongsDoNotConsumeTheQualifiedSongBudget() {
+        val skipped = (1..12).map { musicObservation(it).copy(title = "Skipped $it") }
+        val heard = musicObservation(13).copy(title = "Lovely Day", artist = "Bill Withers",
+            observedAtEpochMillis = START + 61_000L)
+        val evidence = reflectionRequestFromSavedRun(REQUEST_ID, longerSharingRun(), longerSharingTransitions(),
+            skipped + qualifiedMusic(listOf(heard))).evidence
+        assertEquals(listOf("13"), evidence.songCandidates!!.map { it.candidateId })
+        assertEquals("Lovely Day", evidence.musicContext.trackTitle)
     }
 
     @Test fun selectedSongMustBelongToFrozenShortlistAndCueMustBelongToWinner() {
@@ -330,7 +373,8 @@ class ReflectionApiClientTest {
             assertEquals(supported, body.has("songCandidates"))
             assertFalse(body.getAsJsonObject("evidence").has("songCandidates"))
             listOf("songPassage", "startPositionMillis", "durationMillis", "destinationFingerprint",
-                "preparationReference", "selectedSongId", "songSelectionMethod").forEach { assertFalse(raw.contains(it)) }
+                "preparationReference", "selectedSongId", "songSelectionMethod",
+                "playbackIntervalMillis", "elapsedRealtimeNanos").forEach { assertFalse(raw.contains(it)) }
             if (supported) {
                 val first = body.getAsJsonArray("songCandidates")[0].asJsonObject
                 assertEquals(setOf("candidateId", "musicContext", "songPreparationId"), first.keySet())
@@ -351,15 +395,16 @@ class ReflectionApiClientTest {
         assertFalse(JsonParser.parseString(post.sent.toString("UTF-8")).asJsonObject.has("songCandidates"))
     }
 
-    private fun multiSongRequest() = reflectionRequestFromSavedRun(REQUEST_ID, sharingRun(), completedTransitions(),
-        listOf(musicObservation(1).copy(title = "Stronger", artist = "Kanye West"),
-            musicObservation(2).copy(title = "Lovely Day", artist = "Bill Withers")))
+    private fun multiSongRequest() = reflectionRequestFromSavedRun(REQUEST_ID, longerSharingRun(), longerSharingTransitions(),
+        qualifiedMusic(listOf(musicObservation(1).copy(title = "Stronger", artist = "Kanye West"),
+            musicObservation(2).copy(title = "Lovely Day", artist = "Bill Withers"))))
     private companion object {
         const val REQUEST_ID = "c4e1b8a2-7d35-4f61-8b0c-2a9e6d4f13b7"
         const val RUN_ID = "0f6a2c1e-9d43-4b7a-9c21-7b5e8a4d1f30"
         const val START = 1_780_000_000_000L
         const val PAUSE = START + 65_432L
         const val FINISH = START + 90_123L
+        const val LONG_MUSIC_FINISH = START + 240_000L
     }
 
     @Test fun mapsRawSavedFactsAndUnknownUncapturedInputs() {
@@ -465,7 +510,7 @@ class ReflectionApiClientTest {
     }
 
     @Test fun localCaptureDoesNotAuthorizeCloudMusicSharing() {
-        val observed = listOf(musicObservation())
+        val observed = qualifiedMusic(listOf(musicObservation()))
         listOf(
             completedRun(), // Legacy and untouched new runs both default to no sharing.
             completedRun().copy(musicObservationRequested = true)
@@ -484,16 +529,16 @@ class ReflectionApiClientTest {
         val latest = musicObservation(sequence = 3).copy(
             title = "  Latest observed title  ", artist = "  Reported artist  "
         )
-        val observations = listOf(
-            latest,
+        val observations = qualifiedMusic(listOf(
+            musicObservation(sequence = 1).copy(title = "Earlier title"), latest
+        )) + listOf(
             musicObservation(sequence = 4).copy(playbackState = MusicPlaybackState.PAUSED),
             musicObservation(sequence = 5).copy(title = null),
             musicObservation(sequence = 6).copy(sourcePackage = "other.player"),
-            musicObservation(sequence = 7).copy(observedAtEpochMillis = FINISH + 1),
-            musicObservation(sequence = 1).copy(title = "Earlier title")
+            musicObservation(sequence = 7).copy(observedAtEpochMillis = LONG_MUSIC_FINISH + 1)
         )
         val context = reflectionRequestFromSavedRun(
-            REQUEST_ID, sharingRun(), completedTransitions(), observations
+            REQUEST_ID, longerSharingRun(), longerSharingTransitions(), observations
         ).evidence.musicContext
 
         assertEquals(ReflectionMusicContext(
@@ -525,11 +570,42 @@ class ReflectionApiClientTest {
                 ).evidence.musicContext
             )
         }
+        val qualifying = qualifiedMusic(listOf(musicObservation()))
+        val receipt = qualifying.first { (it.playbackIntervalMillis ?: 0L) > 0L }
+        // Full listening receipts must not bypass metadata, ownership or run-window checks.
+        // Other players/non-playing states cannot carry a positive receipt at all.
+        ineligible.forEach { invalid ->
+            if (invalid.sourcePackage != "com.spotify.music" || invalid.playbackState != MusicPlaybackState.PLAYING) {
+                assertThrows(IllegalArgumentException::class.java) {
+                    receipt.copy(sourcePackage = invalid.sourcePackage, playbackState = invalid.playbackState)
+                }
+            } else {
+                val invalidReceipts = qualifying.map { row ->
+                    row.copy(runId = invalid.runId, title = invalid.title, artist = invalid.artist,
+                        observedAtEpochMillis = if (invalid.observedAtEpochMillis in START..FINISH)
+                            row.observedAtEpochMillis else invalid.observedAtEpochMillis)
+                }
+                val evidence = reflectionRequestFromSavedRun(REQUEST_ID, sharingRun(), completedTransitions(),
+                    invalidReceipts).evidence
+                assertEquals(ReflectionMusicContext(), evidence.musicContext)
+                assertTrue(evidence.songCandidates.orEmpty().isEmpty())
+            }
+        }
+        // Invalid later callbacks also cannot replace an already qualified identity.
+        // Whitespace differs so accidentally choosing that callback would be observable.
+        ineligible.forEachIndexed { index, invalid ->
+            val newer = invalid.copy(sequenceNumber = 2_000 + index, observationKey = "invalid-$index",
+                title = invalid.title?.let { " $it " })
+            val context = reflectionRequestFromSavedRun(REQUEST_ID, sharingRun(), completedTransitions(),
+                qualifying + newer).evidence.musicContext
+            assertEquals("Reported title", context.trackTitle)
+            assertEquals("Reported artist", context.artistName)
+        }
     }
 
     @Test fun observedMusicPayloadContainsOnlyApprovedTitleArtistAndProvenance() {
         val request = reflectionRequestFromSavedRun(
-            REQUEST_ID, sharingRun(), completedTransitions(), listOf(musicObservation())
+            REQUEST_ID, sharingRun(), completedTransitions(), qualifiedMusic(listOf(musicObservation()))
         )
         val gson = GsonBuilder().serializeNulls().create()
         val json = gson.toJsonTree(request).asJsonObject
@@ -542,7 +618,7 @@ class ReflectionApiClientTest {
         assertTrue(music.get("artistDescription").isJsonNull)
         val serialized = gson.toJson(request)
         listOf("sourcePackage", "observedAtEpochMillis", "elapsedRealtimeNanos", "eventKind",
-            "observationKey", "sequenceNumber", "com.spotify.music").forEach { privateField ->
+            "observationKey", "sequenceNumber", "playbackIntervalMillis", "com.spotify.music").forEach { privateField ->
             assertFalse("Raw music field leaked: $privateField", serialized.contains(privateField))
         }
         val controlled = request.copy(evidence = request.evidence.copy(musicContext = ReflectionMusicContext(
@@ -878,10 +954,10 @@ class ReflectionApiClientTest {
     }
 
     private fun acceptedSongRequest() = reflectionRequestFromSavedRun(REQUEST_ID, sharingRun(),
-        completedTransitions(), listOf(musicObservation().copy(title = "Lovely Day", artist = "Bill Withers")))
+        completedTransitions(), qualifiedMusic(listOf(musicObservation().copy(title = "Lovely Day", artist = "Bill Withers"))))
 
     private fun knownSongRequest() = reflectionRequestFromSavedRun(REQUEST_ID, sharingRun(),
-        completedTransitions(), listOf(musicObservation().copy(title = "Sunday Best", artist = "Surfaces")))
+        completedTransitions(), qualifiedMusic(listOf(musicObservation().copy(title = "Sunday Best", artist = "Surfaces"))))
 
     private class FakeHttpsConnection(url: URL, private val body: String, private val status: Int = 200,
         private val cueCapability: String? = null,
@@ -992,19 +1068,20 @@ class ReflectionApiClientTest {
         val first = musicObservation().copy(title = "Lovely Day", artist = "Bill Withers")
         val latest = musicObservation(2).copy(title = "Stronger", artist = "Kanye West")
         val claim = SongPreparationClaimEntity(RUN_ID, REQUEST_ID, first.title!!, first.artist!!,
-            first.sequenceNumber, "a".repeat(64), START + 31_000L)
-        val request = reflectionRequestFromSavedRun(REQUEST_ID, sharingRun(), completedTransitions(),
-            listOf(first, latest), songPreparation = claim)
+            first.sequenceNumber, "a".repeat(64), START + 61_000L)
+        val qualified = qualifiedMusic(listOf(first, latest))
+        val request = reflectionRequestFromSavedRun(REQUEST_ID, longerSharingRun(), longerSharingTransitions(),
+            qualified, songPreparation = claim)
         assertEquals("Lovely Day", request.evidence.musicContext.trackTitle)
         assertEquals(REQUEST_ID, request.evidence.songPreparationReference?.preparationId)
-        val missing = reflectionRequestFromSavedRun(REQUEST_ID, sharingRun(), completedTransitions(),
-            listOf(latest), songPreparation = claim)
+        val missing = reflectionRequestFromSavedRun(REQUEST_ID, longerSharingRun(), longerSharingTransitions(),
+            qualifiedMusic(listOf(latest)), songPreparation = claim)
         assertEquals("UNKNOWN", missing.evidence.musicContext.state)
         assertNull(missing.evidence.songPreparationReference)
-        val legacy = reflectionRequestFromSavedRun(REQUEST_ID, sharingRun(), completedTransitions(), listOf(first, latest))
+        val legacy = reflectionRequestFromSavedRun(REQUEST_ID, longerSharingRun(), longerSharingTransitions(), qualified)
         assertEquals("Stronger", legacy.evidence.musicContext.trackTitle)
         val revoked = reflectionRequestFromSavedRun(REQUEST_ID, completedRun(), completedTransitions(),
-            listOf(first, latest), songPreparation = claim)
+            qualified, songPreparation = claim)
         assertEquals("UNKNOWN", revoked.evidence.musicContext.state)
     }
 
@@ -1049,6 +1126,43 @@ class ReflectionApiClientTest {
     private fun sharingRun() = completedRun().copy(
         musicObservationRequested = true, musicReflectionSharingAllowed = true
     )
+
+    private fun longerSharingRun() = sharingRun().copy(
+        finishEpochMillis = LONG_MUSIC_FINISH, lastCheckpointEpochMillis = LONG_MUSIC_FINISH
+    )
+
+    private fun longerSharingTransitions() = listOf(
+        RunTransitionEntity(RUN_ID, 1, RunTransitionType.PAUSE, LONG_MUSIC_FINISH)
+    )
+
+    /** Preserve candidate IDs while adding separately timed, bounded listening receipts. */
+    private fun qualifiedMusic(
+        rows: List<RunMusicObservationEntity>,
+        playbackMillis: Long = 60_000L
+    ): List<RunMusicObservationEntity> {
+        var sequence = (rows.maxOfOrNull { it.sequenceNumber } ?: 0) + 1_000
+        var nextStart = START + 1_000L
+        val samples = rows.groupBy { requireNotNull(songPreparationIdentity(it.title, it.artist)) }
+            .values.flatMap { reports ->
+                val first = reports.first()
+                val anchor = maxOf(nextStart, reports.maxOf { it.observedAtEpochMillis })
+                nextStart = anchor + playbackMillis + 5_000L
+                val result = mutableListOf<RunMusicObservationEntity>()
+                var credited = 0L
+                while (credited < playbackMillis) {
+                    val interval = minOf(5_000L, playbackMillis - credited)
+                    credited += interval
+                    val time = anchor + credited
+                    result += first.copy(sequenceNumber = sequence++,
+                        observationKey = "${first.observationKey}-sample-$credited",
+                        observedAtEpochMillis = time,
+                        elapsedRealtimeNanos = (time - START + 1_000L) * 1_000_000L,
+                        eventKind = MusicObservationKind.PLAYBACK_SAMPLE, playbackIntervalMillis = interval)
+                }
+                result
+            }
+        return rows + samples
+    }
 
     private fun completedTransitions() = listOf(
         RunTransitionEntity(RUN_ID, 1, RunTransitionType.PAUSE, PAUSE)

@@ -7,7 +7,7 @@ import java.util.concurrent.CancellationException
 internal interface MusicSessionHandle {
     val token: Any
     val isOwnApp: Boolean
-    fun registerCallback(onEvent: (MusicObservationKind) -> Unit)
+    fun registerCallback(onEvent: (MusicObservationKind) -> Unit, onSessionEnded: () -> Unit)
     fun unregisterCallback()
 }
 
@@ -19,7 +19,8 @@ internal interface MusicSessionHandle {
 internal class MusicSessionRegistry<C : MusicSessionHandle>(
     private val onObservation: (String, C, MusicObservationKind) -> Unit,
     private val onControllerFailure: () -> Unit,
-    private val onAccessLost: () -> Unit
+    private val onAccessLost: () -> Unit,
+    private val onContinuityLost: () -> Unit = {}
 ) {
     private class Owner(val runId: String)
     private class Registration<C>(val owner: Owner, val token: Any, val controller: C)
@@ -56,6 +57,7 @@ internal class MusicSessionRegistry<C : MusicSessionHandle>(
         }
         registrations.keys.filter { it !in byToken }.forEach { token ->
             val removed = registrations.remove(token) ?: return@forEach
+            onContinuityLost()
             guardController { removed.controller.unregisterCallback() }
             if (owner !== current) return
         }
@@ -64,7 +66,10 @@ internal class MusicSessionRegistry<C : MusicSessionHandle>(
                 val registration = Registration(current, token, controller)
                 registrations[token] = registration
                 val registered = guardController {
-                    controller.registerCallback { kind -> observe(registration, kind) }
+                    controller.registerCallback(
+                        onEvent = { kind -> observe(registration, kind) },
+                        onSessionEnded = { retire(registration) }
+                    )
                 }
                 if (owner !== current) return
                 if (registered) {
@@ -77,6 +82,27 @@ internal class MusicSessionRegistry<C : MusicSessionHandle>(
                 if (owner !== current) return
             }
         }
+    }
+
+    /** A caller-owned timer samples only the requested players; this never sends playback commands. */
+    fun sample(shouldSample: (C) -> Boolean = { true }) {
+        val current = owner ?: return
+        registrations.values.toList().forEach { registration ->
+            if (owner !== current) return
+            if (registrations[registration.token] !== registration) return@forEach
+            guardController {
+                if (shouldSample(registration.controller)) {
+                    observe(registration, MusicObservationKind.PLAYBACK_SAMPLE)
+                }
+            }
+        }
+    }
+
+    private fun retire(registration: Registration<C>) {
+        if (owner !== registration.owner || registrations[registration.token] !== registration) return
+        registrations.remove(registration.token)
+        onContinuityLost()
+        guardController { registration.controller.unregisterCallback() }
     }
 
     private fun observe(registration: Registration<C>, kind: MusicObservationKind) {

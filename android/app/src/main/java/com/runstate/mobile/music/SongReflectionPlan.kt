@@ -120,7 +120,8 @@ internal fun selectSongReflectionPlan(
     catalog: List<CuratedReflectionSong> = reflectionSongCatalog
 ): CuratedReflectionSong? {
     if (!run.musicObservationRequested || !run.musicReflectionSharingAllowed) return null
-    return observations.asSequence()
+    return observedSongPlaybackEligible(run.runId, run.officialStartEpochMillis,
+        finishEpochMillis, observations).asSequence()
         .filter { it.runId == run.runId && it.sourcePackage == "com.spotify.music" &&
             it.playbackState == MusicPlaybackState.PLAYING &&
             it.observedAtEpochMillis in run.officialStartEpochMillis..finishEpochMillis }

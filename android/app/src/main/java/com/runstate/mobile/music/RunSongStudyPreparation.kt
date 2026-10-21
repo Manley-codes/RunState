@@ -48,10 +48,11 @@ internal class SongPreparationDestination(val fingerprint: String, val gateway: 
 }
 
 /**
- * Starts only after a real durable media callback. The local timer covers a single initial
- * callback without polling Spotify or depending on the GPS save path. Distinct observed songs
- * are prepared sequentially. A persisted identity is never retried automatically, including
- * after process death, cancellation or provider failure. Old servers retain one-song behavior.
+ * Starts only after durable playback receipts establish an eligible song. The local timer
+ * rechecks stored evidence without inferring listening from elapsed run time or polling Spotify.
+ * Distinct eligible songs are prepared sequentially. A persisted identity is never retried
+ * automatically, including after process death, cancellation or provider failure. Old servers
+ * retain one-song behavior.
  */
 internal class RunSongStudyPreparation(
     private val scope: CoroutineScope,
@@ -124,7 +125,8 @@ internal class RunSongStudyPreparation(
                 val claimedIdentities = previous.mapNotNull {
                     songPreparationIdentity(it.trackTitle, it.artistName)
                 }.toSet()
-                val observation = if (active >= MINIMUM_ACTIVE_MILLIS) store.observations(run.runId)
+                val observation = if (active >= MINIMUM_ACTIVE_MILLIS) observedSongPlaybackEligible(
+                    run.runId, run.officialStartEpochMillis, now, store.observations(run.runId))
                     .asSequence().filter { row ->
                         row.runId == run.runId && row.sourcePackage == "com.spotify.music" &&
                             row.playbackState == MusicPlaybackState.PLAYING &&
@@ -182,6 +184,6 @@ internal class RunSongStudyPreparation(
     }
 
     companion object {
-        const val MINIMUM_ACTIVE_MILLIS = 30_000L
+        const val MINIMUM_ACTIVE_MILLIS = MINIMUM_SONG_PLAYBACK_MILLIS
     }
 }

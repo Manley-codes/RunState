@@ -630,7 +630,7 @@ class RunReflectionCoordinatorTest {
                     musicObservationRequested = capture, musicReflectionSharingAllowed = sharing
                 )
             }
-            val store = MemoryReflectionStore().apply { observedMusic = listOf(sampleMusicObservation()) }
+            val store = MemoryReflectionStore().apply { observedMusic = qualifiedMusic(listOf(sampleMusicObservation())) }
             val requests = mutableListOf<ReflectionApiRequest>()
             val coordinator = RunReflectionCoordinator(
                 runDao = dao, store = store,
@@ -651,7 +651,7 @@ class RunReflectionCoordinatorTest {
                 musicObservationRequested = true, musicReflectionSharingAllowed = true
             )
         }
-        val store = MemoryReflectionStore().apply { observedMusic = listOf(sampleMusicObservation()) }
+        val store = MemoryReflectionStore().apply { observedMusic = qualifiedMusic(listOf(sampleMusicObservation())) }
         val ids = ArrayDeque(listOf(UUID.fromString(FIRST_REQUEST_ID), UUID.fromString(SECOND_REQUEST_ID)))
         val requests = mutableListOf<ReflectionApiRequest>()
         val coordinator = RunReflectionCoordinator(
@@ -669,7 +669,8 @@ class RunReflectionCoordinatorTest {
         val original = store.rows.getValue(RUN_ID).evidenceJson
         assertEquals(ReflectionStatus.FAILED, store.rows.getValue(RUN_ID).status)
         assertEquals("First observed title", requests.single().evidence.musicContext.trackTitle)
-        store.observedMusic = listOf(sampleMusicObservation().copy(sequenceNumber = 2, title = "Later observed title"))
+        store.observedMusic = qualifiedMusic(listOf(sampleMusicObservation().copy(sequenceNumber = 2,
+            observationKey = "later-title", title = "Later observed title")))
         coordinator.retry(RUN_ID)
         coordinator.onSavedVisible(RUN_ID)
 
@@ -701,6 +702,43 @@ class RunReflectionCoordinatorTest {
         assertEquals(1, store.musicReads)
         assertEquals(ReflectionMusicContext(), requests.single().evidence.musicContext)
         assertEquals(RunReflectionState.Ready(RUN_ID, NO_SELECTION_TEXT), coordinator.state.value)
+    }
+
+    @Test fun skippedSongProducesOrdinaryReflectionAndOneMinuteEnablesMusicWithoutChangingRunFacts() {
+        for (listenedMillis in listOf(59_000L, 60_000L)) {
+            val dao = completedDao().apply {
+                inserted[0] = inserted[0].copy(musicObservationRequested = true, musicReflectionSharingAllowed = true)
+            }
+            val originalRun = dao.inserted.single()
+            val store = MemoryReflectionStore().apply {
+                observedMusic = qualifiedMusic(listOf(sampleMusicObservation().copy(
+                    title = "Lovely Day", artist = "Bill Withers")), listenedMillis)
+            }
+            val requests = mutableListOf<ReflectionApiRequest>()
+            val coordinator = RunReflectionCoordinator(dao, store, ReflectionGateway { request ->
+                requests += request
+                candidates().copy(isTestData = false, songCueId = request.evidence.musicContext.songCue?.cueId)
+            }, scope(), quietWindowMillis = 0L, nowMillis = { 100L })
+
+            coordinator.onSavedVisible(RUN_ID)
+
+            val evidence = requests.single().evidence
+            val ready = coordinator.state.value as RunReflectionState.Ready
+            assertEquals(NO_SELECTION_TEXT, ready.text)
+            assertEquals(originalRun, dao.inserted.single())
+            assertEquals(60_000L, evidence.activeDurationMillis)
+            assertEquals(180.0, evidence.metrics.distanceMeters!!, 0.0)
+            if (listenedMillis < 60_000L) {
+                assertEquals(ReflectionMusicContext(), evidence.musicContext)
+                assertTrue(evidence.songCandidates.orEmpty().isEmpty())
+                assertNull(ready.passage)
+            } else {
+                assertEquals("Lovely Day", evidence.musicContext.trackTitle)
+                assertEquals("1", evidence.songCandidates!!.single().candidateId)
+                assertNotNull(ready.passage)
+            }
+            assertFalse(store.rows.getValue(RUN_ID).evidenceJson.contains("playbackIntervalMillis"))
+        }
     }
 
     @Test fun weatherSnapshotRemainsFrozenAcrossRetryLaterWeatherAndProcessReopen() {
@@ -967,10 +1005,10 @@ class RunReflectionCoordinatorTest {
                 musicReflectionSharingAllowed = true)
         }
         val store = MemoryReflectionStore().apply {
-            observedMusic = listOf(sampleMusicObservation().copy(title = "Stronger", artist = "Kanye West"))
-            val first = observedMusic.single()
+            observedMusic = qualifiedMusic(listOf(sampleMusicObservation().copy(title = "Stronger", artist = "Kanye West")))
+            val first = observedMusic.first()
             preparedSong = SongPreparationClaimEntity(RUN_ID, FIRST_REQUEST_ID, first.title!!, first.artist!!,
-                first.sequenceNumber, "a".repeat(64), first.observedAtEpochMillis)
+                first.sequenceNumber, "a".repeat(64), START + 60_000L)
         }
         val requests = mutableListOf<ReflectionApiRequest>()
         val ids = ArrayDeque(listOf(UUID.fromString(FIRST_REQUEST_ID), UUID.fromString(SECOND_REQUEST_ID)))
@@ -983,7 +1021,7 @@ class RunReflectionCoordinatorTest {
         coordinator.onSavedVisible(RUN_ID)
         assertEquals(ReflectionStatus.FAILED, store.rows.getValue(RUN_ID).status)
         coordinator.selectEnergy(RUN_ID, ReflectionBranch.SPENT)
-        store.observedMusic = listOf(sampleMusicObservation().copy(title = "Lovely Day", artist = "Bill Withers"))
+        store.observedMusic = qualifiedMusic(listOf(sampleMusicObservation().copy(title = "Lovely Day", artist = "Bill Withers")))
         coordinator.retry(RUN_ID)
 
         assertEquals(2, requests.size)
@@ -1011,11 +1049,15 @@ class RunReflectionCoordinatorTest {
 
     @Test fun chosenNonFirstSongIsSavedWithReplyAndDoesNotReplayAfterReopening() {
         val dao = completedDao().apply {
-            inserted[0] = inserted[0].copy(musicObservationRequested = true, musicReflectionSharingAllowed = true)
+            inserted[0] = inserted[0].copy(musicObservationRequested = true, musicReflectionSharingAllowed = true,
+                lastCheckpointEpochMillis = START + 180_000L, finishEpochMillis = START + 180_000L)
+            transitions.clear()
+            transitions += RunTransitionEntity(RUN_ID, 1, RunTransitionType.PAUSE, START + 180_000L)
         }
         val store = MemoryReflectionStore().apply {
-            observedMusic = listOf(sampleMusicObservation().copy(title = "Stronger", artist = "Kanye West"),
-                sampleMusicObservation().copy(sequenceNumber = 2, title = "Lovely Day", artist = "Bill Withers"))
+            observedMusic = qualifiedMusic(listOf(sampleMusicObservation().copy(title = "Stronger", artist = "Kanye West"),
+                sampleMusicObservation().copy(sequenceNumber = 2, observationKey = "second-song",
+                    observedAtEpochMillis = START + 65_000L, title = "Lovely Day", artist = "Bill Withers")))
         }
         val coordinator = RunReflectionCoordinator(dao, store, ReflectionGateway { request ->
             assertEquals(2, request.evidence.songCandidates!!.size)
@@ -1044,8 +1086,8 @@ class RunReflectionCoordinatorTest {
         }
         val uri = "spotify:track:" + "a".repeat(22)
         val store = MemoryReflectionStore().apply {
-            observedMusic = listOf(sampleMusicObservation().copy(title = "Example Song", artist = "Example Artist",
-                spotifyTrackUri = uri, albumName = "Example Album", trackDurationMillis = 180_000L))
+            observedMusic = qualifiedMusic(listOf(sampleMusicObservation().copy(title = "Example Song", artist = "Example Artist",
+                spotifyTrackUri = uri, albumName = "Example Album", trackDurationMillis = 180_000L)))
         }
         val snippet = ReflectionSongSnippet("lrclib_v1_123_32000_36000", "LRCLIB", "123",
             "Example Song", "Example Artist", "Example Album", 180_000L, 32_000L, 4_000L, "REPEATED_HOOK", 1)
@@ -1081,8 +1123,8 @@ class RunReflectionCoordinatorTest {
         }
         val uri = "spotify:track:" + "a".repeat(22)
         val store = MemoryReflectionStore().apply {
-            observedMusic = listOf(sampleMusicObservation().copy(title = "Example Song", artist = "Example Artist",
-                spotifyTrackUri = uri, albumName = null, trackDurationMillis = 180_000L))
+            observedMusic = qualifiedMusic(listOf(sampleMusicObservation().copy(title = "Example Song", artist = "Example Artist",
+                spotifyTrackUri = uri, albumName = null, trackDurationMillis = 180_000L)))
         }
         val snippet = ReflectionSongSnippet("recording_v2_opening_0_8000", "RUNSTATE_RECORDING", "opening",
             "Example Song", "Example Artist", null, 180_000, 0, 8_000, "RECORDING_OPENING_FALLBACK", 2)
@@ -1113,8 +1155,8 @@ class RunReflectionCoordinatorTest {
                 musicReflectionSharingAllowed = true, songSnippetLookupAllowed = true)
         }
         val store = MemoryReflectionStore().apply {
-            observedMusic = listOf(sampleMusicObservation().copy(title = "Example Song", artist = "Example Artist",
-                spotifyTrackUri = "spotify:track:" + "a".repeat(22), albumName = null, trackDurationMillis = 180_000L))
+            observedMusic = qualifiedMusic(listOf(sampleMusicObservation().copy(title = "Example Song", artist = "Example Artist",
+                spotifyTrackUri = "spotify:track:" + "a".repeat(22), albumName = null, trackDurationMillis = 180_000L)))
             failFinalizationOnce = true
         }
         val snippet = ReflectionSongSnippet("recording_v2_opening_0_8000", "RUNSTATE_RECORDING", "opening",
@@ -1142,8 +1184,8 @@ class RunReflectionCoordinatorTest {
                 musicReflectionSharingAllowed = true, songSnippetLookupAllowed = true)
         }
         val store = MemoryReflectionStore().apply {
-            observedMusic = listOf(sampleMusicObservation().copy(title = "Example Song", artist = "Example Artist",
-                spotifyTrackUri = "spotify:track:" + "a".repeat(22), albumName = "Example Album", trackDurationMillis = 180_000L))
+            observedMusic = qualifiedMusic(listOf(sampleMusicObservation().copy(title = "Example Song", artist = "Example Artist",
+                spotifyTrackUri = "spotify:track:" + "a".repeat(22), albumName = "Example Album", trackDurationMillis = 180_000L)))
             failFinalizationOnce = true
         }
         val snippet = ReflectionSongSnippet("lrclib_v1_123_32000_36000", "LRCLIB", "123",
@@ -1173,7 +1215,7 @@ class RunReflectionCoordinatorTest {
             inserted[0] = inserted[0].copy(musicObservationRequested = true, musicReflectionSharingAllowed = true)
         }
         val store = MemoryReflectionStore().apply {
-            observedMusic = listOf(sampleMusicObservation().copy(title = "Lovely Day", artist = "Bill Withers"))
+            observedMusic = qualifiedMusic(listOf(sampleMusicObservation().copy(title = "Lovely Day", artist = "Bill Withers")))
             failFinalizationOnce = true
         }
         var calls = 0
@@ -1200,7 +1242,7 @@ class RunReflectionCoordinatorTest {
                 musicReflectionSharingAllowed = true)
         }
         val store = MemoryReflectionStore().apply {
-            observedMusic = listOf(sampleMusicObservation().copy(title = "Good as Hell", artist = "Lizzo"))
+            observedMusic = qualifiedMusic(listOf(sampleMusicObservation().copy(title = "Good as Hell", artist = "Lizzo")))
         }
         val coordinator = RunReflectionCoordinator(dao, store,
             ReflectionGateway { candidates().copy(isTestData = false) }, scope(),
@@ -1303,8 +1345,37 @@ class RunReflectionCoordinatorTest {
 
     private fun sampleMusicObservation() = RunMusicObservationEntity(
         runId = RUN_ID, sequenceNumber = 1, observationKey = "fictional-first-report",
-        observedAtEpochMillis = START + 1_000L, elapsedRealtimeNanos = 1_000_000L,
+        observedAtEpochMillis = START, elapsedRealtimeNanos = 1_000_000_000L,
         sourcePackage = "com.spotify.music", title = "First observed title", artist = "Reported artist",
         playbackState = MusicPlaybackState.PLAYING, eventKind = MusicObservationKind.SESSION_SNAPSHOT
     )
+
+    /** Each song contributes twelve separate five-second receipts, never one inferred whole play. */
+    private fun qualifiedMusic(
+        rows: List<RunMusicObservationEntity>,
+        playbackMillis: Long = 60_000L
+    ): List<RunMusicObservationEntity> {
+        var sequence = (rows.maxOfOrNull { it.sequenceNumber } ?: 0) + 1_000
+        var nextStart = START
+        val samples = rows.groupBy { requireNotNull(songPreparationIdentity(it.title, it.artist)) }
+            .values.flatMap { reports ->
+                val first = reports.first()
+                val anchor = maxOf(nextStart, reports.maxOf { it.observedAtEpochMillis })
+                nextStart = anchor + playbackMillis + 5_000L
+                val result = mutableListOf<RunMusicObservationEntity>()
+                var credited = 0L
+                while (credited < playbackMillis) {
+                    val interval = minOf(5_000L, playbackMillis - credited)
+                    credited += interval
+                    val time = anchor + credited
+                    result += first.copy(sequenceNumber = sequence++,
+                        observationKey = "${first.observationKey}-sample-$credited",
+                        observedAtEpochMillis = time,
+                        elapsedRealtimeNanos = (time - START + 1_000L) * 1_000_000L,
+                        eventKind = MusicObservationKind.PLAYBACK_SAMPLE, playbackIntervalMillis = interval)
+                }
+                result
+            }
+        return rows + samples
+    }
 }

@@ -22,7 +22,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 /**
@@ -43,25 +45,48 @@ internal class RunMusicNotificationListener : NotificationListenerService() {
     private var captureJob: Job? = null
     private var captureScope: CoroutineScope? = null
     private var sessionsChanged: MediaSessionManager.OnActiveSessionsChangedListener? = null
+    private val playbackIntervals = SongPlaybackIntervalTracker()
     private val controllers = MusicSessionRegistry<WatchedController>(
-        onObservation = { ownerRunId, watched, kind -> capture(ownerRunId, watched.controller, kind) },
-        onControllerFailure = { Log.w(TAG, "A media controller did not provide a usable observation.") },
-        onAccessLost = { stopCapture() }
+        onObservation = { ownerRunId, watched, kind -> capture(ownerRunId, watched, kind) },
+        onControllerFailure = {
+            playbackIntervals.reset()
+            Log.w(TAG, "A media controller did not provide a usable observation.")
+        },
+        onAccessLost = { stopCapture() },
+        onContinuityLost = { playbackIntervals.reset() }
     )
 
     private inner class WatchedController(val controller: MediaController) : MusicSessionHandle {
         override val token: Any get() = controller.sessionToken
         override val isOwnApp: Boolean get() = controller.packageName == packageName
         private var callback: MediaController.Callback? = null
+        var metadataCallbackActive = false
+            private set
+        var callbackMetadata: MediaMetadata? = null
+            private set
+        var playbackCallbackActive = false
+            private set
+        var callbackPlaybackState: PlaybackState? = null
+            private set
 
-        override fun registerCallback(onEvent: (MusicObservationKind) -> Unit) {
+        override fun registerCallback(onEvent: (MusicObservationKind) -> Unit, onSessionEnded: () -> Unit) {
             val next = object : MediaController.Callback() {
                 override fun onMetadataChanged(metadata: MediaMetadata?) {
-                    onEvent(MusicObservationKind.METADATA_CHANGED)
+                    metadataCallbackActive = true
+                    callbackMetadata = metadata
+                    try { onEvent(MusicObservationKind.METADATA_CHANGED) }
+                    finally { metadataCallbackActive = false; callbackMetadata = null }
                 }
 
                 override fun onPlaybackStateChanged(state: PlaybackState?) {
-                    onEvent(MusicObservationKind.PLAYBACK_CHANGED)
+                    playbackCallbackActive = true
+                    callbackPlaybackState = state
+                    try { onEvent(MusicObservationKind.PLAYBACK_CHANGED) }
+                    finally { playbackCallbackActive = false; callbackPlaybackState = null }
+                }
+
+                override fun onSessionDestroyed() {
+                    onSessionEnded()
                 }
             }
             callback = next
@@ -128,6 +153,15 @@ internal class RunMusicNotificationListener : NotificationListenerService() {
                 callbackHandler
             )
             controllers.reconcile(sessionManager.getActiveSessions(component).map { WatchedController(it) })
+            if (captureJob === ownerJob) captureScope?.launch {
+                // Only Spotify needs listening-time evidence for reflection selection. Other
+                // apps remain callback-only, and this capture owner never controls playback.
+                while (isActive && captureJob === ownerJob && runId == nextRunId) {
+                    delay(SONG_PLAYBACK_SAMPLE_MILLIS)
+                    if (captureJob !== ownerJob || runId != nextRunId) break
+                    controllers.sample { it.controller.packageName == SPOTIFY_PACKAGE }
+                }
+            }
         } catch (cancelled: CancellationException) {
             stopCapture()
             throw cancelled
@@ -141,6 +175,7 @@ internal class RunMusicNotificationListener : NotificationListenerService() {
 
     private fun stopCapture() {
         app.cancelSongStudyPreparation()
+        playbackIntervals.reset()
         runId = null
         captureJob?.cancel()
         captureJob = null
@@ -157,25 +192,56 @@ internal class RunMusicNotificationListener : NotificationListenerService() {
         }
     }
 
-    private fun capture(ownerRunId: String, controller: MediaController, kind: MusicObservationKind) {
+    private fun capture(ownerRunId: String, watched: WatchedController, kind: MusicObservationKind) {
         if (runId != ownerRunId) return
         val currentScope = captureScope ?: return
+        val controller = watched.controller
         // The registry handles unreadable snapshots per controller and stops on permission loss.
         val metadata = controller.metadata
-        val recording = spotifyObservationRecording(controller.packageName, metadata)
+        val sourcePackage = controller.packageName
+        val recording = spotifyObservationRecording(sourcePackage, metadata)
+        val title = metadata?.getString(MediaMetadata.METADATA_KEY_TITLE)?.takeIf(String::isNotBlank)
+        val artist = metadata?.getString(MediaMetadata.METADATA_KEY_ARTIST)?.takeIf(String::isNotBlank)
+        val playbackState = playbackStateOf(controller.playbackState)
+        val elapsedRealtimeNanos = SystemClock.elapsedRealtimeNanos()
+        val intervalMillis = if (sourcePackage == SPOTIFY_PACKAGE) {
+            // Android may deliver a Pause/Resume or A/B/A callback batch after the live
+            // controller already reports the latest state. Preserve those gap boundaries.
+            if (watched.playbackCallbackActive) {
+                playbackIntervals.onReportedPlaybackState(playbackStateOf(watched.callbackPlaybackState))
+            }
+            if (watched.metadataCallbackActive) {
+                val reported = watched.callbackMetadata
+                playbackIntervals.onReportedRecording(
+                    reported?.getString(MediaMetadata.METADATA_KEY_TITLE),
+                    reported?.getString(MediaMetadata.METADATA_KEY_ARTIST),
+                    spotifyObservationRecording(sourcePackage, reported)?.trackUri)
+            }
+            playbackIntervals.observe(
+                runId = ownerRunId,
+                sessionToken = controller.sessionToken,
+                title = title,
+                artist = artist,
+                spotifyTrackUri = recording?.trackUri,
+                playbackState = playbackState,
+                elapsedRealtimeNanos = elapsedRealtimeNanos,
+                resetContinuity = kind == MusicObservationKind.SESSION_SNAPSHOT
+            )
+        } else null
         val observation = RunMusicObservation(
             runId = ownerRunId,
             observationKey = UUID.randomUUID().toString(),
             observedAtEpochMillis = System.currentTimeMillis(),
-            elapsedRealtimeNanos = SystemClock.elapsedRealtimeNanos(),
-            sourcePackage = controller.packageName,
-            title = metadata?.getString(MediaMetadata.METADATA_KEY_TITLE)?.takeIf(String::isNotBlank),
-            artist = metadata?.getString(MediaMetadata.METADATA_KEY_ARTIST)?.takeIf(String::isNotBlank),
-            playbackState = playbackStateOf(controller.playbackState),
+            elapsedRealtimeNanos = elapsedRealtimeNanos,
+            sourcePackage = sourcePackage,
+            title = title,
+            artist = artist,
+            playbackState = playbackState,
             eventKind = kind,
             spotifyTrackUri = recording?.trackUri,
             albumName = recording?.albumName,
-            trackDurationMillis = recording?.durationMillis
+            trackDurationMillis = recording?.durationMillis,
+            playbackIntervalMillis = intervalMillis
         )
         currentScope.launch {
             try {
@@ -201,6 +267,7 @@ internal class RunMusicNotificationListener : NotificationListenerService() {
 
     private companion object {
         const val TAG = "RunMusicObservation"
+        const val SPOTIFY_PACKAGE = "com.spotify.music"
     }
 }
 

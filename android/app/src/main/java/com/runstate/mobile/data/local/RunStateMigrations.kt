@@ -363,3 +363,10 @@ val MIGRATION_16_17 = object : Migration(16, 17) {
         connection.execSQL("ALTER TABLE `runs` ADD COLUMN `post_run_note` TEXT")
     }
 }
+
+/** Existing metadata callbacks are not proof of any listening duration. */
+val MIGRATION_17_18 = object : Migration(17, 18) {
+    override fun migrate(connection: SQLiteConnection) {
+        connection.execSQL("ALTER TABLE `run_music_observations` ADD COLUMN `playback_interval_millis` INTEGER")
+    }
+}
