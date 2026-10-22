@@ -28,6 +28,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
@@ -52,6 +53,9 @@ import com.runstate.mobile.data.local.PreRunEnergy
 import com.runstate.mobile.data.local.PostRunEffort
 import com.runstate.mobile.data.local.RunTrackingMode
 import com.runstate.mobile.data.local.RunStateDatabase
+import com.runstate.mobile.data.local.ShoePairEntity
+import com.runstate.mobile.data.local.ShoeWithMileage
+import com.runstate.mobile.data.local.ShoeArchiveUndo
 import com.runstate.mobile.run.RunActionKind
 import com.runstate.mobile.run.RunAdmission
 import com.runstate.mobile.run.RunSessionCoordinator
@@ -78,6 +82,9 @@ import com.runstate.mobile.ui.RunActivityRecapScreen
 import com.runstate.mobile.ui.HistoryRouteDisplay
 import com.runstate.mobile.ui.HistorySplitDisplay
 import com.runstate.mobile.ui.RunStateScreen
+import com.runstate.mobile.ui.OpeningScreen
+import com.runstate.mobile.ui.ShoeSelectionSheet
+import com.runstate.mobile.ui.ShoePairDisplay
 import com.runstate.mobile.ui.ShortRunDecisionDialog
 import com.runstate.mobile.ui.RunSettingsDialog
 import com.runstate.mobile.settings.RunPreferences
@@ -102,6 +109,10 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
+import java.util.Locale
+import java.util.UUID
 
 /**
  * The app's one screen, wired to the process-scoped coordinator.
@@ -119,6 +130,22 @@ private fun preciseGpsLocationReady(context: Context): Boolean =
             ?.isProviderEnabled(LocationManager.GPS_PROVIDER) == true
 
 class MainActivity : ComponentActivity() {
+    // A launcher tap is an entrance; returning from Spotify or permission UI is not.
+    // Retain the serial on recreation so a rotation cannot create another entrance.
+    private var openingRequestId by mutableIntStateOf(0)
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        if (intent.action == Intent.ACTION_MAIN && intent.hasCategory(Intent.CATEGORY_LAUNCHER)) {
+            openingRequestId++
+        }
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        outState.putInt("runstate.openingRequestId", openingRequestId)
+        super.onSaveInstanceState(outState)
+    }
+
     // Spotify's approval screen returns here. The approval is then used to connect App Remote;
     // no Spotify code or token is kept.
     private val spotifyAuthorization = registerForActivityResult(
@@ -133,6 +160,9 @@ class MainActivity : ComponentActivity() {
         // The existing process-scoped instance. Nothing new is constructed, and no second
         // database is opened.
         val runStateApplication = application as RunStateApplication
+        openingRequestId = savedInstanceState?.getInt("runstate.openingRequestId")
+            ?: if (intent?.action == Intent.ACTION_MAIN &&
+                intent?.hasCategory(Intent.CATEGORY_LAUNCHER) == true) 1 else 0
         val coordinator = runStateApplication.runSessionCoordinator
         val database = runStateApplication.database
         runStateApplication.initializeReflectionConnection()
@@ -220,6 +250,7 @@ class MainActivity : ComponentActivity() {
                         // The Activity's own lifecycle gates the countdown, so nothing counts
                         // down — and no run is started — while the app is in the background.
                         lifecycle = lifecycle,
+                        openingRequestId = openingRequestId,
                         modifier = Modifier.padding(innerPadding)
                     )
                 }
@@ -283,7 +314,8 @@ internal fun RunJourneyRoot(
     spotifyConnectEnabled: Boolean = false,
     spotifyDisconnectEnabled: Boolean = false,
     onConnectSpotify: () -> Unit = {},
-    onDisconnectSpotify: () -> Unit = {}
+    onDisconnectSpotify: () -> Unit = {},
+    openingRequestId: Int = 0
 ) {
 
     val reflectionRequestsAvailable = reflectionConnection is ReflectionConnectionState.Hosted ||
@@ -292,6 +324,14 @@ internal fun RunJourneyRoot(
     // The last answer the coordinator gave, and nothing more. `remember` rather than
     // `rememberSaveable` for the reason above.
     var model by remember { mutableStateOf(RunUiModel(RunUiState.Initializing)) }
+    var openingPending by rememberSaveable(openingRequestId) { mutableStateOf(openingRequestId > 0) }
+    // Recovery always runs first. Returning to any live/pending run or recovery error
+    // bypasses the entrance permanently for this launch, even after a later retry.
+    LaunchedEffect(model.state, openingRequestId) {
+        if (model.state != RunUiState.Initializing && model.state != RunUiState.ReadyToStart) {
+            openingPending = false
+        }
+    }
 
     // A formatted answer, not a timer or a run owner. Rotation discards it and asks the
     // process coordinator again, just as it does for the journey model.
@@ -376,6 +416,46 @@ internal fun RunJourneyRoot(
     val musicSelected = runPreferences?.observeMusic == true
     val musicReflectionSharingSelected = runPreferences?.shareMusicInReflection == true
     var runSettingsVisible by rememberSaveable { mutableStateOf(false) }
+    var shoesVisible by rememberSaveable { mutableStateOf(false) }
+    var shoeRows by remember(database) { mutableStateOf<List<ShoeWithMileage>>(emptyList()) }
+    var selectedShoeId by remember(database) { mutableStateOf<String?>(null) }
+    var shoeLoading by remember(database) { mutableStateOf(true) }
+    var shoeLoadError by remember(database) { mutableStateOf<String?>(null) }
+    var shoeWriteError by remember { mutableStateOf<String?>(null) }
+    var shoeWritePending by remember { mutableStateOf(false) }
+    var shoeReload by remember { mutableIntStateOf(0) }
+    var pendingShoeAddId by rememberSaveable { mutableStateOf<String?>(null) }
+    var pendingShoeAddKey by rememberSaveable { mutableStateOf<String?>(null) }
+    var pendingShoeAddCreatedAt by rememberSaveable { mutableStateOf(0L) }
+    var archivedShoeId by rememberSaveable { mutableStateOf<String?>(null) }
+    var archivedShoeWasSelected by rememberSaveable { mutableStateOf(false) }
+    var archivedShoeSelectionRevision by rememberSaveable { mutableStateOf(0L) }
+    var archivedShoeLabel by rememberSaveable { mutableStateOf<String?>(null) }
+    LaunchedEffect(database, shoeReload) {
+        shoeLoading = true
+        shoeLoadError = null
+        try {
+            combine(database.shoeDao().observeShoes(), database.shoeDao().observeSelectedPairId()) {
+                pairs, selected -> pairs to selected
+            }.collect { (pairs, selected) ->
+                shoeRows = pairs
+                selectedShoeId = selected
+                shoeLoading = false
+            }
+        } catch (cancelled: CancellationException) { throw cancelled }
+        catch (_: Exception) {
+            shoeLoading = false
+            shoeLoadError = "Your shoes couldn't load. Try again."
+        }
+    }
+    val shoeDisplays = remember(shoeRows) {
+        shoeRows.map { row ->
+            ShoePairDisplay(row.pair.shoePairId, row.pair.brand, row.pair.model, row.pair.nickname,
+                String.format(Locale.US, "%.1f MI", row.totalDistanceMeters / 1609.344), row.pair.archived)
+        }
+    }
+    val shoesById = remember(shoeDisplays) { shoeDisplays.associateBy { it.id } }
+    val selectedShoe = shoesById[selectedShoeId]?.takeUnless { it.archived }
     var preferenceWritePending by remember { mutableStateOf(false) }
     var preferenceWriteError by remember { mutableStateOf<String?>(null) }
     var historyItems by remember { mutableStateOf<List<RunHistoryItem>>(emptyList()) }
@@ -398,7 +478,7 @@ internal fun RunJourneyRoot(
     }.collectAsState(initial = emptyList())
     val splitsByRun = remember(storedSplits) { storedSplits.associateBy { it.runId } }
 
-    LaunchedEffect(historyVisible, completedRuns, storedReflections, storedWeather, storedSplits, reflectionCoordinator) {
+    LaunchedEffect(historyVisible, completedRuns, storedReflections, storedWeather, storedSplits, reflectionCoordinator, shoesById) {
         if (!historyVisible || completedRuns == null || storedReflections == null) return@LaunchedEffect
         try {
             // Repair older pending rows locally even when Run Complete is no longer visible.
@@ -412,7 +492,9 @@ internal fun RunJourneyRoot(
                     reflectionsByRun[run.runId]
                 ) { database.musicObservationDao().observationsFor(run.runId) }
                     .copy(weatherSummary = weatherSummaryFor(run, weatherByRun[run.runId]),
-                        splitStatus = splitsByRun[run.runId]?.status)
+                        splitStatus = splitsByRun[run.runId]?.status,
+                        shoeLabel = shoesById[run.shoePairId]?.let { "${it.brand} ${it.model}" +
+                            (it.nickname?.let { name -> " · $name" } ?: "") })
             }
             historyError = null
         } catch (cancelled: CancellationException) { throw cancelled }
@@ -422,7 +504,7 @@ internal fun RunJourneyRoot(
         }
     }
 
-    LaunchedEffect(recapRunId, completedRuns, storedReflections, storedWeather, storedSplits) {
+    LaunchedEffect(recapRunId, completedRuns, storedReflections, storedWeather, storedSplits, shoesById) {
         recapLoadError = null
         val id = recapRunId
         val run = completedRuns?.firstOrNull { it.runId == id && it.activityFinalized }
@@ -432,7 +514,9 @@ internal fun RunJourneyRoot(
                 storedReflections?.firstOrNull { it.runId == id }) {
                 database.musicObservationDao().observationsFor(id)
             }.copy(weatherSummary = weatherSummaryFor(run, weatherByRun[id]),
-                splitStatus = splitsByRun[id]?.status)
+                splitStatus = splitsByRun[id]?.status,
+                shoeLabel = shoesById[run.shoePairId]?.let { "${it.brand} ${it.model}" +
+                    (it.nickname?.let { name -> " · $name" } ?: "") })
         } catch (cancelled: CancellationException) { throw cancelled }
         catch (_: Exception) {
             recapItem = null
@@ -482,7 +566,7 @@ internal fun RunJourneyRoot(
         }
     }
     val previewEnabled = gpsSelected && !gpsStartDispatched && activeRunId == null &&
-        !historyVisible && recapRunId == null && !runSettingsVisible && !connectionDialogVisible &&
+        !historyVisible && recapRunId == null && !runSettingsVisible && !shoesVisible && !connectionDialogVisible &&
         (model.state == RunUiState.ReadyToStart || model.state == RunUiState.Countdown)
     // Warm GPS while Start is visible, independent of map tiles. Retain this same listener
     // through countdown/cancel; the service remains the only durable run recorder.
@@ -667,6 +751,26 @@ internal fun RunJourneyRoot(
     var actionInFlight by remember { mutableStateOf(false) }
 
     val scope = rememberCoroutineScope()
+
+    fun changeShoes(closeAfterSave: Boolean = false, afterSuccess: () -> Unit = {}, operation: suspend () -> Unit) {
+        if (shoeWritePending || shoeLoading || shoeLoadError != null ||
+            actionInFlight || model.state != RunUiState.ReadyToStart) return
+        shoeWritePending = true
+        shoeWriteError = null
+        scope.launch {
+            try {
+                operation()
+                // Confirm current storage before dismissing; a database commit alone is not
+                // permission to show a guessed selection while the observation catches up.
+                selectedShoeId = database.shoeDao().selectedActivePairId()
+                shoeRows = database.shoeDao().observeShoes().first()
+                afterSuccess()
+                if (closeAfterSave) shoesVisible = false
+            } catch (cancelled: CancellationException) { throw cancelled }
+            catch (_: Exception) { shoeWriteError = "That shoe change didn't finish. Try again." }
+            finally { shoeWritePending = false }
+        }
+    }
 
     fun savePreferences(next: RunPreferences, afterSave: () -> Unit = {}) {
         if (preferenceWritePending || runPreferencesSaving) return
@@ -1120,6 +1224,21 @@ internal fun RunJourneyRoot(
         )
     }
 
+    // Keep recovery, GPS preparation and preference loading composed above the artwork.
+    // Only presentation is held; saved runs and the recording service are untouched.
+    val openingBlockedByNavigation = historyVisible || recapRunId != null || runSettingsVisible || shoesVisible ||
+        connectionDialogVisible || mapVisible || gpsStartRequested || actionInFlight
+    LaunchedEffect(openingRequestId, openingBlockedByNavigation) {
+        // Consume an ineligible launcher tap now; never defer it until the runner closes a sheet.
+        if (openingBlockedByNavigation) openingPending = false
+    }
+    if (openingPending && model.state == RunUiState.ReadyToStart && !openingBlockedByNavigation) {
+        key(openingRequestId) {
+            OpeningScreen(onFinished = { openingPending = false }, lifecycle = lifecycle)
+        }
+        return
+    }
+
     if (connectionDialogVisible && model.state == RunUiState.ReadyToStart) {
         ReflectionConnectionDialog(
             initialEndpoint = (reflectionConnection as? ReflectionConnectionState.Hosted)?.config?.endpoint.orEmpty(),
@@ -1268,6 +1387,8 @@ internal fun RunJourneyRoot(
         onStart = {
             startNowRequested = false
             when {
+                shoeLoading || shoeWritePending -> Unit
+                shoeLoadError != null -> shoesVisible = true
                 runPreferences == null || runPreferencesError != null || preferenceWriteError != null ||
                     runPreferences.musicSetupComplete == false -> runSettingsVisible = true
                 runPreferencesSaving || preferenceWritePending -> Unit
@@ -1471,6 +1592,7 @@ internal fun RunJourneyRoot(
         onStopReflectionAudio = { stopCompletionAudio?.invoke() },
         showHistory = true,
         actionsEnabled = !actionInFlight && !reflectionConnectionSaving && !gpsStartDispatched &&
+            !(model.state == RunUiState.ReadyToStart && (shoeLoading || shoeWritePending)) &&
             !(gpsStartRequested && model.state == RunUiState.ReadyToStart),
         modifier = modifier,
         savedPreRunEnergy = completedRun?.preRunEnergy,
@@ -1484,6 +1606,13 @@ internal fun RunJourneyRoot(
             gpsStartRequested = false
             previewController.stopBeforeRun()
             runSettingsVisible = true
+        },
+        selectedShoe = selectedShoe,
+        onOpenShoes = {
+            gpsStartRequested = false
+            previewController.stopBeforeRun()
+            shoeWriteError = null
+            shoesVisible = true
         },
         gpsReady = gpsReady,
         gpsStatusText = gpsPreview.startStatusText,
@@ -1518,6 +1647,58 @@ internal fun RunJourneyRoot(
         noteSaving = noteSavingRunId == completedRunId && completedRunId != null,
         noteError = noteError?.takeIf { it.first == completedRunId }?.second
     )
+
+    if (shoesVisible && model.state == RunUiState.ReadyToStart && !historyVisible &&
+        !runSettingsVisible && !connectionDialogVisible) {
+        ShoeSelectionSheet(
+            shoes = shoeDisplays,
+            selectedShoeId = selectedShoeId,
+            enabled = !shoeLoading && !shoeWritePending && shoeLoadError == null && !actionInFlight,
+            loading = shoeLoading,
+            onRetryLoad = { shoeReload++ },
+            onDismiss = { if (!shoeWritePending) shoesVisible = false },
+            onSelect = { id -> changeShoes(closeAfterSave = true) { database.shoeDao().selectPair(id) } },
+            onAdd = { brand, shoeModel, nickname ->
+                val key = listOf(brand.trim(), shoeModel.trim(), nickname.orEmpty().trim()).joinToString("\u0000")
+                if (pendingShoeAddKey != key || pendingShoeAddId == null) {
+                    pendingShoeAddKey = key
+                    pendingShoeAddId = UUID.randomUUID().toString()
+                    pendingShoeAddCreatedAt = System.currentTimeMillis()
+                }
+                val id = checkNotNull(pendingShoeAddId)
+                changeShoes(closeAfterSave = true, afterSuccess = {
+                    pendingShoeAddKey = null
+                    pendingShoeAddId = null
+                }) {
+                    database.shoeDao().addAndSelect(ShoePairEntity(id, brand.trim(), shoeModel.trim(),
+                        nickname?.trim()?.takeIf { it.isNotEmpty() }, pendingShoeAddCreatedAt))
+                }
+            },
+            onArchive = { id -> changeShoes {
+                database.shoeDao().archivePair(id)?.let { receipt ->
+                    archivedShoeId = receipt.shoePairId
+                    archivedShoeWasSelected = receipt.wasSelected
+                    archivedShoeSelectionRevision = receipt.selectionRevision
+                    archivedShoeLabel = shoesById[id]?.displayName
+                }
+            } },
+            onRestore = { id -> changeShoes(closeAfterSave = true) {
+                database.shoeDao().restorePair(id)
+                archivedShoeId = null
+                archivedShoeLabel = null
+            } },
+            onUndoArchive = {
+                archivedShoeId?.let { id -> changeShoes {
+                    database.shoeDao().undoArchive(ShoeArchiveUndo(id, archivedShoeWasSelected,
+                        archivedShoeSelectionRevision))
+                    archivedShoeId = null
+                    archivedShoeLabel = null
+                } }
+            },
+            undoLabel = archivedShoeLabel?.let { "$it removed" },
+            error = shoeLoadError ?: shoeWriteError
+        )
+    }
 
     val settingsBusy = preferenceWritePending || runPreferencesSaving || connectionSaving ||
         reflectionConnectionSaving

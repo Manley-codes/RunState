@@ -143,7 +143,9 @@ internal fun RunStateScreen(
     localNote: String? = null,
     onSaveLocalNote: ((String?) -> Unit)? = null,
     noteSaving: Boolean = false,
-    noteError: String? = null
+    noteError: String? = null,
+    selectedShoe: ShoePairDisplay? = null,
+    onOpenShoes: () -> Unit = {}
 ) {
     val state = model.state
 
@@ -291,6 +293,8 @@ internal fun RunStateScreen(
             musicSelected = musicSelected,
             musicAccessGranted = musicAccessGranted,
             onOpenSpotify = onOpenSpotify,
+            selectedShoe = selectedShoe,
+            onOpenShoes = onOpenShoes,
             onOpenRunSettings = onOpenRunSettings,
             gpsReady = gpsReady,
             gpsStatusText = gpsStatusText,

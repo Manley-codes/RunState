@@ -437,3 +437,144 @@ Artifact: com.spotify.android:auth:5.0.0 from Maven Central (unmodified)
 Source/license: https://github.com/spotify/android-auth
 Apache License 2.0; the full license text appears earlier in this file.
 Used only to show Spotify's approval screen. RunState does not store Spotify codes or tokens.
+
+Opening-screen photographs - Pexels and Unsplash
+The following 33 photographs are bundled as opening-screen imagery.
+Images were resized/recompressed to WebP; the original aspect ratios are retained.
+No generative edits were applied during packaging. Photographs are displayed as
+decorative imagery; pictured people and brands do not endorse RunState.
+Pexels License: https://www.pexels.com/license/
+Unsplash License: https://unsplash.com/license
+Exact file hashes, dimensions and source records: opening-photo-sources.json
+
+opening/blue-shoes.webp - Photo by Ray Piedra on Pexels
+Source: https://www.pexels.com/photo/colorful-fashioned-pair-of-sports-shoes-1456706/
+License: https://www.pexels.com/license/
+
+opening/city-stride.webp - Photo by Florian Kurrasch on Unsplash
+Source: https://unsplash.com/photos/man-in-black-shorts-and-shirt-jogging-at-sidewalk-zkctapwhzxc
+License: https://unsplash.com/license
+
+opening/forest-run.webp - Photo by Alin Serban on Pexels
+Source: https://www.pexels.com/photo/man-jogging-on-forest-trail-during-summer-32798751/
+License: https://www.pexels.com/license/
+
+opening/headphone-runner.webp - Photo by Safari Consoler on Pexels
+Source: https://www.pexels.com/photo/young-man-running-on-the-track-11001166/
+License: https://www.pexels.com/license/
+
+opening/hydration.webp - Photo by RUN 4 FFWPU on Pexels
+Source: https://www.pexels.com/photo/a-man-drinking-water-while-running-10226372/
+License: https://www.pexels.com/license/
+
+opening/motion-city.webp - Photo by Taras Chuiko on Pexels
+Source: https://www.pexels.com/photo/man-running-on-city-street-11886766/
+License: https://www.pexels.com/license/
+
+opening/motion-green.webp - Photo by Nick Gosset on Pexels
+Source: https://www.pexels.com/photo/a-blurry-shot-of-a-man-running-12125332/
+License: https://www.pexels.com/license/
+
+opening/motion-street.webp - Photo by Mathias Reding on Pexels
+Source: https://www.pexels.com/photo/dynamic-black-and-white-urban-running-scene-33995240/
+License: https://www.pexels.com/license/
+
+opening/orange-bottle.webp - Photo by Anna Shvets on Pexels
+Source: https://www.pexels.com/photo/bottle-of-water-on-sport-ground-5069203/
+License: https://www.pexels.com/license/
+
+opening/pick-01.webp - Photo by RUN 4 FFWPU on Pexels
+Source: https://www.pexels.com/photo/men-running-on-track-field-5961847/
+License: https://www.pexels.com/license/
+
+opening/pick-02.webp - Photo by Mathias Reding on Pexels
+Source: https://www.pexels.com/photo/runner-s-shadow-silhouette-in-black-and-white-33995259/
+License: https://www.pexels.com/license/
+
+opening/pick-03.webp - Photo by Pixabay on Pexels
+Source: https://www.pexels.com/photo/person-stands-on-wooden-platform-260044/
+License: https://www.pexels.com/license/
+
+opening/pick-04.webp - Photo by George Shervashidze on Pexels
+Source: https://www.pexels.com/photo/modern-wireless-headphones-on-green-grass-4547849/
+License: https://www.pexels.com/license/
+
+opening/pick-06.webp - Photo by Mathias Reding on Unsplash
+Source: https://unsplash.com/photos/man-running-across-a-blurred-city-street-MiRyAuFhepg
+License: https://unsplash.com/license
+
+opening/pick-07.webp - Photo by Tom Morbey on Unsplash
+Source: https://unsplash.com/photos/runner-starting-sprint-on-red-track-6PujGXV5kyc
+License: https://unsplash.com/license
+
+opening/pick-09.webp - Photo by SUNDAY II SUNDAY on Unsplash
+Source: https://unsplash.com/photos/a-woman-is-doing-a-yoga-pose-on-the-floor-oeXyYdiLHZY
+License: https://unsplash.com/license
+
+opening/pick-10.webp - Photo by Maksim Goncharenok on Pexels
+Source: https://www.pexels.com/photo/woman-in-black-sports-bra-and-white-shorts-jumping-4348631/
+License: https://www.pexels.com/license/
+
+opening/pick-11.webp - Photo by Monstera Production on Pexels
+Source: https://www.pexels.com/photo/diverse-women-doing-crescent-lunge-pose-together-5384551/
+License: https://www.pexels.com/license/
+
+opening/pick-12.webp - Photo by Jayro Cerqueira da Silva on Pexels
+Source: https://www.pexels.com/photo/model-in-black-and-white-22742248/
+License: https://www.pexels.com/license/
+
+opening/pick-13.webp - Photo by Muhammad-Taha Ibrahim on Pexels
+Source: https://www.pexels.com/photo/pensive-black-runner-in-hat-on-sportsground-4953499/
+License: https://www.pexels.com/license/
+
+opening/pick-14.webp - Photo by Liliana Drew on Pexels
+Source: https://www.pexels.com/photo/man-in-black-shorts-tie-shoelaces-on-black-sneakers-8554990/
+License: https://www.pexels.com/license/
+
+opening/pick-15.webp - Photo by cottonbro studio on Pexels
+Source: https://www.pexels.com/photo/people-walking-on-gray-concrete-pavement-5319324/
+License: https://www.pexels.com/license/
+
+opening/pick-19.webp - Photo by Arnie Watkins on Pexels
+Source: https://www.pexels.com/photo/woman-drinking-water-from-glass-bottle-3124674/
+License: https://www.pexels.com/license/
+
+opening/pick-20.webp - Photo by Polina Tankilevitch on Pexels
+Source: https://www.pexels.com/photo/woman-wearing-red-top-sitting-on-white-sand-4728018/
+License: https://www.pexels.com/license/
+
+opening/pick-21.webp - Photo by Ketut Subiyanto on Pexels
+Source: https://www.pexels.com/photo/a-man-in-crew-neck-t-shirt-drinking-energy-drink-4803671/
+License: https://www.pexels.com/license/
+
+opening/pick-22.webp - Photo by Liliana Drew on Pexels
+Source: https://www.pexels.com/photo/man-in-tank-top-drinking-water-8555478/
+License: https://www.pexels.com/license/
+
+opening/pick-23.webp - Photo by Alexis Kiza on Pexels
+Source: https://www.pexels.com/photo/young-athlete-hydrating-in-urban-environment-32759045/
+License: https://www.pexels.com/license/
+
+opening/pick-24.webp - Photo by Sasha Rubaniuk on Unsplash
+Source: https://unsplash.com/photos/a-woman-in-a-red-top-eating-a-mango-HiRfMmKWRIc
+License: https://unsplash.com/license
+
+opening/pick-25.webp - Photo by TVBEATS on Unsplash
+Source: https://unsplash.com/photos/woman-in-black-tank-top-and-black-shorts-sitting-on-gray-concrete-road-during-daytime-NGc_qyGDrnc
+License: https://unsplash.com/license
+
+opening/purple-sneakers.webp - Photo by Rohit Dey on Unsplash
+Source: https://unsplash.com/photos/a-pair-of-shoes-hanging-from-a-string-2RCYkW3us_4
+License: https://unsplash.com/license
+
+opening/race-celebration.webp - Photo by RUN 4 FFWPU on Pexels
+Source: https://www.pexels.com/photo/people-running-a-marathon-and-smiling-18409435/
+License: https://www.pexels.com/license/
+
+opening/run-friends.webp - Photo by cottonbro studio on Pexels
+Source: https://www.pexels.com/photo/group-of-people-jogging-on-the-street-5319316/
+License: https://www.pexels.com/license/
+
+opening/track-partners.webp - Photo by Yaroslav Shuraev on Pexels
+Source: https://www.pexels.com/photo/women-about-to-run-8692123/
+License: https://www.pexels.com/license/

@@ -574,6 +574,8 @@ internal fun RunActivityRecapScreen(
                     Text("Your activity is saved. You can check its reflection in Log History.",
                         color = CompletionMutedInk, fontSize = 13.sp, lineHeight = 19.sp)
                 }
+                item.shoeLabel?.let { Text("Shoes · $it", color = CompletionMutedInk,
+                    fontSize = 13.sp, lineHeight = 19.sp) }
                 item.reflectionMusicSummary?.let { Text(it, color = CompletionMutedInk,
                     fontSize = 12.sp, lineHeight = 18.sp) }
             }

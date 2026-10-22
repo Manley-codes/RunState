@@ -85,6 +85,7 @@ import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.window.DialogProperties
@@ -117,6 +118,7 @@ internal const val START_ENERGY_INTAKE_TAG = "startEnergyIntake"
 internal const val START_GPS_TOGGLE_TAG = "startGpsToggle"
 internal const val START_MUSIC_TOGGLE_TAG = "startMusicToggle"
 internal const val START_OPEN_SPOTIFY_TAG = "startOpenSpotify"
+internal const val START_OPEN_SHOES_TAG = "startOpenShoes"
 internal const val START_MUSIC_SHARING_TOGGLE_TAG = "startMusicSharingToggle"
 internal const val START_REFLECTION_SETUP_TAG = "startReflectionSetup"
 internal const val START_RUN_SETTINGS_TAG = "startRunSettings"
@@ -180,7 +182,9 @@ internal fun StartRunScreen(
     liveMapStatus: String? = null,
     onRequestMapLocation: (() -> Unit)? = null,
     onOpenMap: (() -> Unit)? = null,
-    onOpenSpotify: () -> Unit = {}
+    onOpenSpotify: () -> Unit = {},
+    selectedShoe: ShoePairDisplay? = null,
+    onOpenShoes: () -> Unit = {}
 ) {
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     val view = LocalView.current
@@ -350,7 +354,9 @@ internal fun StartRunScreen(
                 energySelected = selectedPreRunEnergy != null,
                 phase = ringPhase,
                 onOpenSpotify = onOpenSpotify,
-                musicEnabled = actionsEnabled
+                musicEnabled = actionsEnabled,
+                selectedShoe = selectedShoe,
+                onOpenShoes = onOpenShoes
             )
         }
 
@@ -963,6 +969,8 @@ private fun StartFooter(
     phase: State<Float>,
     onOpenSpotify: () -> Unit,
     musicEnabled: Boolean,
+    selectedShoe: ShoePairDisplay?,
+    onOpenShoes: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val readyGlow by animateFloatAsState(
@@ -1015,7 +1023,7 @@ private fun StartFooter(
             verticalAlignment = Alignment.Bottom,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            FooterLabel("SHOES", "LATER", R.drawable.ic_shoe_sneaker)
+            ShoeFooterControl(selectedShoe, enabled, onOpenShoes)
             Column(
                 modifier = Modifier
                     .clip(RoundedCornerShape(24.dp))
@@ -1051,6 +1059,34 @@ private fun StartFooter(
                     .clickable(enabled = musicEnabled, role = Role.Button,
                         onClickLabel = "Open Spotify", onClick = onOpenSpotify)
                     .testTag(START_OPEN_SPOTIFY_TAG))
+        }
+    }
+}
+
+@Composable
+private fun ShoeFooterControl(shoe: ShoePairDisplay?, enabled: Boolean, onClick: () -> Unit) {
+    Column(
+        modifier = Modifier.width(72.dp).padding(bottom = 6.dp)
+            .clip(RoundedCornerShape(14.dp))
+            .clickable(enabled = enabled, role = Role.Button, onClickLabel = "Choose shoes", onClick = onClick)
+            .semantics { stateDescription = shoe?.let { "${it.fullName}, ${it.mileageLabel}" } ?: "No shoes selected" }
+            .testTag(START_OPEN_SHOES_TAG),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        ShoeIllustration(Modifier.size(64.dp))
+        Spacer(Modifier.height(7.dp))
+        Text("SHOES", color = Color.White.copy(alpha = 0.78f), fontSize = 10.sp,
+            fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+        if (shoe == null) {
+            Text("ADD PAIR", color = Color.White.copy(alpha = 0.6f), fontSize = 8.sp,
+                fontWeight = FontWeight.SemiBold, letterSpacing = 1.sp)
+        } else {
+            Text(shoe.displayName, color = Color.White.copy(alpha = 0.86f), fontSize = 10.sp,
+                lineHeight = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis,
+                textAlign = TextAlign.Center, modifier = Modifier.padding(top = 2.dp))
+            Text(shoe.mileageLabel, color = Color.White.copy(alpha = 0.62f), fontSize = 9.sp,
+                lineHeight = 11.sp, fontWeight = FontWeight.Medium, maxLines = 1,
+                modifier = Modifier.padding(top = 2.dp))
         }
     }
 }

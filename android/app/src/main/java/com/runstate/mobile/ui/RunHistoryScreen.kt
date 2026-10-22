@@ -1246,7 +1246,8 @@ internal data class RunHistoryItem(
     val metricSource: MetricSource? = null,
     val insightEligible: Boolean = true,
     val splitStatus: RunSplitStatus? = null,
-    val postRunNote: String? = null
+    val postRunNote: String? = null,
+    val shoeLabel: String? = null
 )
 
 internal sealed interface HistoryRouteDisplay {
@@ -1916,6 +1917,10 @@ private fun HistoryRow(
                     modifier = Modifier.padding(top = 4.dp)
                 )
                 if (item.isGpsRun) HistorySplitsPanel(splits, onRetrySplits)
+                item.shoeLabel?.let { shoe ->
+                    Text("Shoes · $shoe", color = rowInk, fontSize = 13.sp, lineHeight = 20.sp,
+                        modifier = Modifier.padding(top = 12.dp).testTag("historyShoes:" + item.runId))
+                }
                 if (item.preRunEnergyLabel != null) {
                     Text(
                         text = "Before run · ${item.preRunEnergyLabel}",
