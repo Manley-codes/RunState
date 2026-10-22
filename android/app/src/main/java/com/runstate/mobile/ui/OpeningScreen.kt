@@ -254,8 +254,15 @@ internal fun OpeningScreen(
         }
         Text(
             text = buildAnnotatedString {
-                withStyle(SpanStyle(color = Color(0xFFFFFDF6))) { append("Run") }
-                withStyle(SpanStyle(color = Color(0xFFE2EDC9))) { append("State") }
+                // Approved October 22: a medium purple R and light orange n echo the collage's
+                // purple sneakers and orange bottle; an olive a (the app's olive, brightened to
+                // read on the dark band) completes the spaced accents. Other letters keep cream/sage.
+                withStyle(SpanStyle(color = Color(0xFF8F6FE3))) { append("R") }
+                withStyle(SpanStyle(color = Color(0xFFFFFDF6))) { append("u") }
+                withStyle(SpanStyle(color = Color(0xFFF9A869))) { append("n") }
+                withStyle(SpanStyle(color = Color(0xFFE2EDC9))) { append("St") }
+                withStyle(SpanStyle(color = Color(0xFF7F9C54))) { append("a") }
+                withStyle(SpanStyle(color = Color(0xFFE2EDC9))) { append("te") }
             },
             fontFamily = OpeningFont,
             fontWeight = FontWeight.Medium,
