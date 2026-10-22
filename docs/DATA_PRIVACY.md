@@ -11,6 +11,19 @@ metadata, to Anthropic. See [the current Android checkpoint](design/project_curr
 and [backend documentation](../backend/README.md) for those implemented boundaries. The older
 console statement that RunState has no server does **not** apply to the Android app.
 
+## Local shoe pairs and mileage — October 22, 2026
+
+**Status: Ready to test — installed on Moto; software/device checks passed, user real-run review remains.**
+The optional shoe picker stores brand, model, optional pair nickname, creation time and archive
+state in the phone database. Current selection is local, and a new run records only its selected
+physical-pair ID. Mileage is calculated from that pair's explicitly saved, measured GPS activities;
+Samples and unavailable distance do not count. Removal archives a pair without deleting history.
+Room 19 adds nullable links to old runs without assigning shoes or inventing past mileage.
+
+This adds no network call, location permission, account, shoe shopping service or reflection
+request field. Generic shoe illustrations and the small model list are bundled in code. The
+private pre-installation backup is kept locally under ignored `docs/local/shoe-check-2026-10-22/`.
+
 ## Completion rhythm follow-up — October 21, 2026
 
 **Status: Complete for agreed scope — installed; controlled phone facts pacing and shorter handoff accepted.**

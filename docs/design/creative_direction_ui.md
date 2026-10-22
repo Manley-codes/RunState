@@ -478,3 +478,73 @@ screen is gorgeous but unfindable, the art never lands; it's hidden behind frust
 - Run-picture gallery — a future feature (a home for run photos). Out of current scope; revisit later under the
   scope rule. The frame-breaking photo *device* can be used now regardless.
 - Build-tech decision (native vs Flutter vs mobile web) — later.
+
+---
+
+## October 22, 2026 — Existing brand wording collected for review
+
+**Purpose:** preserve the wording already scattered through the project so Manley can compare it
+without losing its original context. The search found no dedicated list of approved slogans.
+These 21 entries are existing positioning statements, historical phrases, or music-specific
+expressions; collecting them here does not approve them as public slogans. Short excerpts remain
+excerpts, and historical material does not become current merely by appearing in this list.
+Wording is reproduced exactly, with wrapped source lines joined for readability.
+
+**Opening-screen boundary:** none of these entries is approved for the opening screen. Its text
+remains unchanged; this is a reference collection, not an instruction to add a subtitle or slogan.
+
+### Existing candidates and their original context
+
+| # | Existing wording | Classification and original context | Source |
+| --- | --- | --- | --- |
+| 1 | “RunState helps you understand what your run meant, not just what you recorded.” | Positioning — recorded core-purpose sentence; not an approved opening tagline. | [user_goals.md, lines 113–114](user_goals.md#L113) |
+| 2 | “RunState is built from running culture outward. It helps runners understand the state they brought into a run, what the run demanded, and what they carried out of it.” | Positioning — explicitly called the positioning line in its source. | [user_goals.md, lines 118–119](user_goals.md#L118) |
+| 3 | “A runner alone at 5am with no followers and no feed still feels like they belong to something.” | Positioning — recorded north-star sentence, rather than short public copy. | [user_goals.md, lines 120–121](user_goals.md#L120) |
+| 4 | “RunState is a running app designed to understand a run beyond its numbers by interpreting the environment surrounding the experience.” | Positioning — current public project introduction. | [README.md, line 4](../../README.md#L4) |
+| 5 | “More than a fitness tracker.” | Positioning — existing headline in the earlier creative direction. | [Earlier positioning, line 333](#1-positioning) |
+| 6 | “A special weapon in a runner's arsenal.” | Positioning — quoted phrase in the earlier creative direction. | [Earlier positioning, line 337](#1-positioning) |
+| 7 | “the app that knows you” | Positioning — identity shorthand in the cold-start discussion, which also cautions against pretending to know a runner before evidence exists. | [Earlier cold-start principle, line 309](creative_direction_ui.md#L309) |
+| 8 | “personal in value, cultural in voice, communal only ever in texture.” | Positioning — exact fragment describing the product's relationship to culture and community. | [user_goals.md, line 122](user_goals.md#L122) |
+| 9 | “the best run is not always the fastest” | Positioning — quoted principle behind the proposed Top Run Highlights feature. | [parked_feature_ideas.md, lines 116–117](parked_feature_ideas.md#L116) |
+| 10 | “the best run is not always the fastest or longest run.” | Historical — exact fragment from the earlier Top Run Highlights rationale. | [Archived/UNIQUE_IDEAS.md, line 93](../Archived/UNIQUE_IDEAS.md#L93) |
+| 11 | “progress is more than one number.” | Historical — exact fragment identified as a main theme in the earlier ideas document. | [Archived/IDEAS.md, line 182](../Archived/IDEAS.md#L182) |
+| 12 | “a run has more than one result.” | Historical — exact fragment from the earlier brand-direction explanation. | [Archived/BRANDING.md, line 42](../Archived/BRANDING.md#L42) |
+| 13 | “Clean enough for a boardroom, cool enough for the culture.” | Historical — identity sentence in the superseded visual brief; not a current design requirement. | [ui-design-brief-v1.md, line 20](../ui-design-brief-v1.md#L20) |
+| 14 | “Small footprint, high meaning” | Positioning — exact fragment from the earlier creative direction. | [Earlier positioning, line 338](#1-positioning) |
+| 15 | “you were seen, your work isn't unnoticed.” | Positioning — intended emotional effect of the post-run response, not previously designated a slogan. | [Signature moment, line 462](#11-the-signature-moment-resolved--see-0) |
+| 16 | “the taste matched the discipline” | Music-specific — quoted signature-moment phrase associated with the AI reply card. | [Earlier signature-moment decision, lines 66–67](creative_direction_ui.md#L66) |
+| 17 | “your best-run soundtracks” | Music-specific — existing expression for music tied to the runner's own run history. | [Earlier music-screen concept, line 323](creative_direction_ui.md#L323) |
+| 18 | “RunState aims to help a runner feel seen after a run.” | Music-specific — purpose statement introducing the reflection feature's development story. | [music_reflection_development_story.md, line 61](music_reflection_development_story.md#L61) |
+| 19 | “The music can answer the reflection without the reflection naming the song or explaining it.” | Music-specific — explanation of the reflection-to-song experience. | [music_reflection_development_story.md, line 64](music_reflection_development_story.md#L64) |
+| 20 | “RunState is a run tracker that records performance and how each run felt, so runners can eventually learn what conditions help them perform their best.” | Historical — explicitly labeled “Pitch” in the earlier ideas document. | [Archived/IDEAS.md, line 78](../Archived/IDEAS.md#L78) |
+| 21 | “The app should feel like a personal run tracker that helps runners understand how their runs are going, not just how far or how fast they ran.” | Historical — earlier brand-direction sentence, written as guidance rather than finished public copy. | [Archived/BRANDING.md, line 40](../Archived/BRANDING.md#L40) |
+
+### Supporting principles, not public slogans
+
+- **Identity pillars:** “RUN CULTURE,” “STATE-AWARE REFLECTION,” “MUSIC IDENTITY,” and
+  “PRIVACY-FIRST PERSONAL INSIGHT” — [user_goals.md, lines 111–116](user_goals.md#L111).
+- **Core product loop:** “log a run → track how you felt → learn something meaningful from it.”
+  — [user_goals.md, line 134](user_goals.md#L134).
+- **Internal design language:** “The UI dresses like a runner.”; “Restraint is the brand.”;
+  “Fewer features, done beautifully.” — [Rules of the look](#6-rules-of-the-look).
+- **Internal usability shorthand:** “bold skin, familiar bones” — [the existing guardrail](#10-guardrail-bold-skin-familiar-bones).
+- **Historical design principle:** “Every screen should feel like it was art-directed, not just
+  designed.” — [ui-design-brief-v1.md, line 22](../ui-design-brief-v1.md#L22).
+- **Feature subtitle, not app slogan:** “Interesting habits and patterns from your runs.” —
+  [Archived/IDEAS.md, line 231](../Archived/IDEAS.md#L231).
+
+Ordinary UI questions, saved-run confirmations, Energy labels, and one-off reflection examples
+are not included as brand candidates. The earlier names RunNet and MoodPace remain naming
+history. The superseded claim “RunState is not a fitness tracker” is also excluded: the later
+positioning explicitly keeps competent run tracking as the foundation.
+
+### Recommendation for the next copy discussion — advice, not a prior decision
+
+Start with these three existing lines. None is selected or approved by this recommendation:
+
+1. **“RunState helps you understand what your run meant, not just what you recorded.”** — the
+   clearest explanation of the product's distinct purpose.
+2. **“a run has more than one result.”** — the shortest expression of the broader runner-state
+   idea, preserving the existing source fragment rather than inventing a revised tagline.
+3. **“the best run is not always the fastest”** — a concrete running principle that invites
+   conversation about Energy, effort and context without implying a medical or training promise.

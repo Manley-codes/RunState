@@ -8,6 +8,12 @@ status: CURRENT NATIVE DECISIONS plus dated prototype history; verification live
 
 # Start Run — where this screen actually is
 
+**October 22 shoe follow-up — Ready to test, installed on Moto:** the former `SHOES / LATER` object is connected to
+the native saved-pair picker. Original sneaker illustration on an organic sage/lime backing replaces
+the shaded pebble, with selected model/nickname and mileage below it. Start/music sizes and placement,
+the accepted Agent-panel utilities, Energy and opening design remain unchanged. Canonical behavior
+and installation evidence are in `design_shoe_selection.md` and `project_current_state.md`.
+
 **October 22 current Start direction — Complete for agreed scope, installed and accepted:** the compact GPS
 status, Map, History and gear sit inside the white Agent panel, replacing the external utility/
 status stack. There is **no Energy beam or decorative Energy outline**, superseding the earlier

@@ -40,6 +40,182 @@ prototype, and no full editor for other run fields was added.
 
 ---
 
+## October 22 shoes — Ready to test; installed on Moto
+
+The native shoe sheet retains the original Add Shoes/search/Your Shoes/Browse structure, with
+custom pairs and optional nicknames, archive/Undo/restore and explicit no-selection. The Start
+control now has original sneaker artwork on an organic sage/lime backing; its footprint preserves
+Start and Energy placement. Generic artwork is not a photograph of the named catalog products.
+Selection, per-run association and measured saved-GPS mileage are durable in Room 19. Old runs
+remain unassigned; Samples never add mileage. See `design_shoe_selection.md` for mechanics.
+
+Both 739-unit suites/three APKs, 30 unique storage/migration cases and 18 silent Moto root/component
+checks passed across the documented fixture/harness corrections. Normal Start and the actual empty
+sheet were inspected on the phone. All 44 completed runs/old fields/four preferences survived;
+temporary test package and loose inspection copies removed. No actual pair selected, new run,
+audio, Git or backend change. User visual/real-run acceptance remains. Receipts are in ignored
+`docs/local/shoe-check-2026-10-22/` and `project_current_state.md`.
+
+Existing slogan candidates (21, with context/source) are collected in `creative_direction_ui.md`;
+none has been placed on the opening screen. Energy walkthrough resumes after this bounded work.
+
+## October 22 opening screen — Complete for agreed scope; installed and visually accepted
+
+Manley accepted the result: “It looks absolutely great.” Keep the 4.8-second duration, small skip
+hint and approved photos/arrangement/speed. Opening copy needs separate approval.
+
+**Current accepted selection:** Manley chose only replacement #4 (Rohit Dey's purple sneaker
+still life) and #5 (RUN 4 FFWPU's celebrating runners), clarifying his initial “4 and 6.”
+They replace pick-17 and pick-18 in his own arrangement; paid-preview pick-05, pick-08 and
+pick-16 are removed. All other 31 photos retain their order. The resulting 33-photo collage
+uses six alternating horizontal rows at the approved 51.75–57.5 dp/second in Android.
+The browser migrates the existing saved order rather than resetting it; all 33 images loaded
+in the verified user order after refresh. No other suggested replacement was added.
+
+`OpeningScreen.kt` now renders the accepted collage locally, with the existing Barlow Condensed
+font, cream/sage wordmark, shading and photo treatment. `MainActivity` admits it on an app-icon
+launch, including reopening the existing background task, after recovery confirms Start is available.
+Returning to an active/paused run, pending completion, setup callback or an Activity restoration
+bypasses it. Ordinary foreground resumes do not replay it, and launcher requests while Settings,
+History, map or recap is open are consumed rather than delayed. Recovery, preferences and
+foreground GPS preparation continue independently. Tap anywhere
+or Back skips; otherwise it continues after 4.8 seconds of foreground display, extended at
+Manley's request after the reopening correction. Motion and its
+timer pause in the background; Android reduced-motion settings keep the artwork still.
+At Manley's request, a quiet 12sp “Tap to skip” hint sits above the bottom system navigation;
+the entire opening remains tappable. No button box, headline, progress bars or photo editor.
+
+The 33 bundled WebP photos total **2,254,486 bytes** and require no network at launch.
+`assets/opening-photo-sources.json` records source/license URLs, authors, dimensions and hashes;
+all 33 credits were appended to the existing app notices. No paid previews or generated images
+are bundled. Bitmap decoding is sampled, off the main thread and bounded; a missing asset pack
+cannot trap the runner at entry. A standalone component test suite and isolated Room journey
+tests cover the new presentation and recovery boundary.
+No database migration, provider/backend change or Git mutation is part of this integration.
+
+**Duration/hint follow-up:** Manley asked for just under five seconds and a low-hierarchy skip
+cue. Extended 2.8 to 4.8 seconds without changing the photographs, arrangement or movement speed.
+Updated the two existing timer expectations; the timing/background, reduced-motion, tap and
+compact/large-text checks passed on Moto (four checks, 8.802s). A compact-only repeat passed in
+2.552s after adjusting hint spacing. Final debug build and in-place update passed; portrait and
+compact screenshots were inspected, temporary test package removed. No new source files or Git.
+
+**Reopening correction:** Manley reported that closing and reopening skipped the artwork. The
+initial process-wide gate was the cause: Android could retain the process/background task.
+Removed that gate; `singleTop` plus a saved launcher-request serial now handles both new Activities
+and `onNewIntent` without treating Spotify/permission returns as new entrances. The serial is
+saved through recreation and only keys the opening, not the run journey. No photo/order/speed change.
+
+**Final verification after that correction:** both debug/release suites passed all 737 unit tests;
+debug, release and instrumentation APKs built successfully (1m46s). All **15 focused Moto tests
+passed in 24.915s**, including rendered motion, background pause, reduced motion, tap/Back,
+compact landscape with 2x text, all 33 photos decoded, repeated launcher requests, restoration,
+ordinary resume/non-launcher entry, Settings/History consumption and recovered running/paused/pending
+activities. Two actual Home-to-launcher repetitions kept the same process alive and both showed
+the collage then automatically returned to Start; captured frames were visually inspected.
+Fresh-launch, normal and compact compositions were also inspected earlier. An earlier emulator
+attempt timed out waiting for a screenshot redraw and was stopped; it is not a passing receipt.
+The same full device set passed on the physical Moto, which is the accepted verification target.
+
+All **44 completed runs**, every value across nine business tables and all four preference-file
+hashes remained identical. Room18 integrity is OK and foreign-key checks are clear. The app was
+updated in place, never uninstalled. The temporary test package and loose private inspection
+database copies were removed; the gitignored before-update backup remains under
+`docs/local/opening-check-2026-10-22/` and the correction backup/screenshots/receipt under
+`docs/local/opening-reopen-check-2026-10-22/`. Main app reopened. No run or audio was started. Phone
+visual approval from Manley is the remaining review; no outdoor run is needed for this change.
+
+The earlier design exploration below is historical; its 36-photo/pending-integration statements
+describe those checkpoints, not the current selection.
+
+Manley paused the Energy walkthrough to explore an opening screen from his supplied moving
+photo-collage reference. The requested direction is horizontal rows moving in opposite directions,
+with a vertical comparison available, and **RunState** appearing centrally. Do not copy the
+reference's marketing headline, progress bars, Next action or other surrounding interface.
+
+Photography direction: photogenic, stylish real sports photography; prominent Black representation
+within a diverse mix; runners alone/together, music/headphones, hydration, shoes, apparel and
+accessories, plus a few actual motion-blurred running photographs. No generated/AI/CGI imagery.
+Keep color, strong composition and natural lighting. Manley accepted the collage design, then
+selected 25 replacement/additional photos. Current study uses all 25 plus 11 retained originals,
+cream/pale-sage Barlow Condensed lettering and center shading. Five selected Unsplash+ photos are
+remote review previews only; licensed copies are needed before native app integration.
+Athletic and clean lettering are comparison options, not a finalized app logo.
+
+Earlier photo/motion revision: removed the seated man in blue shorts, both navy-jacket track
+photos, the older bearded man in a jacket, and both orange/yellow-shoe leg crops from every row.
+Source IDs: track-recovery, track-music, track-runner, urban-headphones, orange-shoes, sun-runner.
+Original local assets remain archived, not displayed. Motion now uses 15–16.5 px/second (roughly
+two-thirds faster), calculated from row length; alternating direction, title entrance and
+reduced-motion behavior are retained. New selections load from provider URLs for this review.
+
+The next follow-up also removed both gray-hoodie/pants photos (city-earbuds, park-runner),
+the headphones/devices still life (yellow-headphones) and the brown-shirt-led running group
+(run-club). Keep pick-04, headphones in green foliage. Added user picks21–25, all free-source
+hydration/food/recovery photos. Strong colors now begin in middle/lower rows: warm track canopy
+and blue-sky hydration in row3, colorful shoes/red athlete in row4, lime shoes/red beach photo
+in row5, and the orange bottle in row6. Existing 15–16.5px/s motion and photo treatment are
+unchanged. Extra photo-by-photo brightness/contrast/color correction was discussed as possible;
+that change rebalanced placement rather than applying a new color treatment.
+
+**Earlier placement/motion revision — preview interactions checked:** the same 36 photos remained. The top
+row held quieter imagery; the jumping woman (pick-10) was in row2, four male track runners
+(pick-01) in row3, and the black-and-white legs/shadow (pick-02) in row5. Similar drinking and
+hydration photos were separated, one per row, rather than clustered together. Motion was
+36–40 px/second, with distance-based timing so longer rows do not move faster accidentally.
+
+Manley then requested direct control over placement. The preview's **Arrange photos** modal
+lives outside the phone design: six labeled rows of six images, with tap-two or drag-to-swap,
+Undo and reset. It preserves all 36 images and remembers only their ordered IDs in this
+browser's local storage; it does not rewrite the source, synchronize an account or change the
+Android app. Closing the editor returns to the moving preview. Browser checks verified cross-row
+tap swaps reflected in the collage, persistence after refresh, Reset and Undo, and a real native
+drag swap. All six photo tracks paused while arranging, with no browser warnings/errors during
+these checks. These receipts cover the standalone design preview, not native Android integration
+or phone QA.
+
+**Latest speed-only follow-up — verified in the browser:** Manley finished rearranging the
+photos himself; his saved browser layout supersedes the earlier row suggestions and must be
+preserved with the same 36 images. He requested more speed again: exactly 25% above 41.4–46,
+now 51.75–57.5 px/second. Alternating directions and distance-based timing remain. Browser checks
+verified identical before/after row IDs, all 36 photos loaded and six running animations at the
+requested rates within minor layout rounding. The 28-file protected-runtime check, TypeScript
+and Vite build passed; prior editor checks remain recorded above.
+No native integration, source-image additions, placement reset or Git action is included.
+
+**Earlier integration preparation / replacement search:** Manley accepted the speed and asked to
+connect the opening screen to the app, preserving his arrangement. Official source checks found
+five paid Unsplash+ selections (pick-05,08,16,17,18). He then requested carefully chosen colorful,
+high-quality free replacements. The separate review gallery at
+`http://127.0.0.1:5188/replacement-photo-review.html` shows five visually inspected recommendations:
+Camilo.raw/Pexels13940072 (yellow/blue athlete), Chris Kim Creatives/Pexels9226723 (orange-wall
+runner), Madethese/Pexels7952236 (red sprinter), Rohit Dey/Unsplash2RCYkW3us_4 (purple sneaker
+still life), and RUN 4 FFWPU/Pexels18409435 (race celebration). Each official page offers free use;
+no generated image was selected. Gallery links retain the sources. These are recommendations,
+not yet substituted into the collage; his 36-photo arrangement and accepted speed are untouched.
+The portrait sprinter and shoe still life need careful crop review in the wide slots before use.
+
+Asset preparation added 31 free photographs under `android/app/src/main/assets/opening/`, WebP,
+maximum dimension900, original aspect ratios retained (2,132,526 bytes total). The five paid
+previews were not downloaded. Credits still need to be carried into the app with final assets.
+No native opening route/code, install, provider or Git mutation has been performed. Integration
+remains unfinished; this asset pack is preparation only. Preserve active-run recovery and quick
+app entry when implementing the opening screen.
+
+Standalone preview: `http://127.0.0.1:5188/` while its local server is running.
+Files: `C:/Users/Owner/.codex/visualizations/2026/10/03/01a103b6-bff0-72d1-8008-7b8b20f78035/runstate-opening/`.
+That folder contains the source, local photographs, `photo-sources.json`, photo credits,
+horizontal/vertical captures and `design-qa.md`. It is outside this Git repository; transfer the
+accepted source/assets into the project during the agreed integration step. No Android opening
+route, app installation, backend change, forced launch delay or Git action is part of this study.
+Native entry/exit behavior and final image/type selection await review. Preserve fast app entry.
+
+**Resume Energy after this design slice:** continue from the October 22 walkthrough, without
+restarting it. Pre/post Energy feed the current local Insights; Effort is saved but unused by the
+Android reflection/Insights. Recommended next bounded improvements remain clearer explanations and
+keeping Effort accessible after Not sure; later consider one useful descriptive Effort pattern.
+Those changes are recommendations, not implemented or approved by this opening-screen request.
+
 ## October 15 native Android visual checkpoint
 
 **Queued opening screen and app logo:** Manley has a basic opening-screen concept to share. Ask

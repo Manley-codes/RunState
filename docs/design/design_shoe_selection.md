@@ -3,10 +3,46 @@ name: design-shoe-selection
 description: "Current shoe selection and mileage direction as of August 14 2026 — the first resolved slice of the progressive-input ladder"
 metadata:
   type: project
-status: CURRENT DESIGN FOUNDATION — interactive prototype accepted; removal Undo and image cleanup remain
+status: READY TO TEST — October 22 native feature installed and software/device checks passed; user visual and real-run review remain
 ---
 
 # Shoe selection and mileage
+
+## October 22, 2026 — native shoe feature
+
+Manley explicitly authorized completing the shoe mechanics and redesigning its Start object while
+away. Energy discussion remains paused; no commit/push or other new feature is authorized by this slice.
+
+The original `Add Shoes` flow is retained in a near-white/sage bottom sheet: searchable saved pairs
+first, a small six-model browse list, and a custom brand/model entry for any other pair. Optional
+nicknames distinguish two physical pairs of the same model. Selecting or adding a pair closes only
+after storage confirms it. `Run without tracking shoes` explicitly clears the remembered selection;
+dismissal leaves it unchanged. This is local selection, not a product recommendation or live catalog.
+
+The Start control uses an original illustrated sneaker with an irregular sage/lime backing, closer
+to the music artwork and visually distinct from the Start dial. Its footprint preserves the main
+Start placement. Selected model/nickname and mileage replace `LATER`. Illustrations are neutral
+shoe artwork, not photographs of specific listed products: the recovered prototype had mismatched
+product filenames/labels and did not contain photo licenses, so those product pictures are not reused.
+
+Room 19 stores physical-pair IDs and current selection. The official start freezes the selected ID
+in the existing run row; pause/resume, start retries and recovery retain it. Mileage is derived from
+finalized GPS runs with known measured distance, once per run ID. Pending completion, discarded runs,
+Samples and unavailable distance add nothing. A measured partial GPS distance counts only the known
+distance, with no extrapolation. Old runs remain unassigned; no historical mileage is invented.
+
+Removal archives the pair, never deletes its run associations. Undo restores it and restores the
+former selection only if the runner has made no later selection. Archived pairs can be restored
+with all their mileage. The browse list suppresses already-owned/archived models; adding a second
+physical pair is explicit through the custom entry. History and the saved-activity recap show the
+associated brand/model/nickname. Shoe data stays on the phone and is not sent to reflection services.
+
+Verification and installation receipts are recorded in `project_current_state.md`. New files are
+limited to `ShoeDao.kt`, `ShoeSelectionSheet.kt`, and Room's required exported `19.json`; existing
+test files are extended. There is no shoe service, network request, new permission or backend change.
+
+The August/October 15 descriptions below remain the design history and explain the original flow;
+their statements that native mechanics are unimplemented are superseded by this dated section.
 
 ## Status and boundary
 

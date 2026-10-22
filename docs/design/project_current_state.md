@@ -18,6 +18,77 @@ missing check. A successful build, installation or controlled fixture is not pro
 | **Verified in use** | The stated behavior worked in actual use for the named scenario, not only with fictional test data. This does not prove every device, song or circumstance. |
 | **Complete for agreed scope** | The agreed behavior, necessary checks and documentation are finished. Explicit remaining limits are outside that scope; this does not mean every future idea is built. |
 
+## October 22 shoe selection — Ready to test; installed on Moto
+
+Manley authorized completing shoes and collecting existing slogans while away; Energy remains
+the next major discussion. No Git operations were authorized or performed. The original Add Shoes
+flow is now native: search saved pairs and a small offline browse list, add any brand/model with an
+optional nickname, select a physical pair, or explicitly run without shoe tracking. Selection is
+remembered; the sheet closes after storage confirms it. The Start object is an original sneaker
+illustration on an organic sage/lime shape, distinct from the Start dial. History and saved recap
+show the associated pair. Catalog artwork is generic, not a photo of each named model.
+
+Room 19 adds physical pairs, selection and a nullable run association. Official start freezes the
+selected pair across retries/recovery. Mileage comes once from finalized, measured GPS activities;
+pending activities, Samples and unavailable distance add nothing. Old runs remain unassigned.
+Archive/Undo/restore preserve mileage and historical associations; later deliberate selection wins
+over an old Undo. Shoe information stays local and adds no reflection/backend request field.
+
+Verification: all 739 unit checks passed per debug/release variant; debug, release and test APKs
+built. Thirty unique emulator storage/migration cases passed across runs: the new v18 fixture first
+contained an invalid positive-duration initial music snapshot, then passed after correcting only
+that synthetic fixture. Seven Moto shoe component cases passed (23.947s), including custom fields,
+search, callbacks and compact large text; eleven isolated root/opening cases passed (25.424s),
+including add/selection restoration and archive/Undo/clear. The new root tests initially stalled
+with the opening harness's paused animation clock; automatic timing is now limited to those two
+shoe tests. No production workaround was introduced. Normal phone Start and empty shoe sheet were
+opened and visually inspected; no actual pair was added and no run/audio test was started.
+
+The in-place phone update preserved all 44 completed runs, every original field across nine
+business tables and all four preference hashes. Room 19 integrity/FKs passed, shoe tables are
+empty and all old shoe IDs null. Private backups/receipts/screenshots are in ignored
+`docs/local/shoe-check-2026-10-22/`; loose inspection databases and the Moto test package were
+removed. Necessary new shoe files are `ShoeDao.kt`, `ShoeSelectionSheet.kt`, and generated schema
+`19.json`; existing test/docs files were extended. No commits, pushes, merges or deployment.
+Remaining: Manley's design review and first real run with his own selected pair.
+
+Twenty-one existing brand/positioning phrases were collected with sources in
+`creative_direction_ui.md` §October 22. No slogan was added to the opening screen.
+
+## October 22 photographic opening — Complete for agreed scope; installed and visually accepted
+
+Manley's latest response: “It looks absolutely great.” Preserve its arrangement, speed, 4.8-second
+entrance and small Tap to skip. Slogan collection is separate and requires approval before display.
+
+The requested opening is connected to Android with Manley's arrangement and approved motion.
+Only the purple sneaker photo and celebrating runners were accepted from the replacement board;
+three other paid-preview slots were removed. The 33 free-source photographs are bundled offline
+with credits/provenance. Six horizontal rows alternate direction around the central RunState
+wordmark. An app-icon launch, including reopening the existing background task, shows it briefly
+(4.8 seconds foreground time, extended at Manley's request), with tap/Back to skip and a small,
+secondary “Tap to skip” hint near the bottom. Live/paused/pending runs, ordinary resumes
+and Activity restoration bypass it; open Settings/History/map/recap consume a launcher request.
+The initial once-per-process gate caused Manley's reported missing opening and was replaced by
+a saved launcher-request serial and `singleTop` dispatch. No new setup gate, database
+change, provider request, account or backend work was introduced.
+
+Final debug/release suites: **737 tests each passed**; three APK builds passed. **15 focused Moto
+checks passed in 24.915s**, including all33photo readiness, motion/background/reduced-motion,
+skip, compact/large-text rendering, repeat-launch/restoration, navigation and recovery. Two actual
+Home-to-launcher repetitions in the same app process each showed the collage then Start; screenshots
+were inspected. Earlier emulator screenshot redraw timed out; that attempt was stopped and is not
+counted as verification. All **44 completed runs**, nine full business tables and four preference
+hashes are unchanged; Room18 integrity/FKs clean. Updated in place, temporary test package and
+inspection copies removed, private backup retained. No audio, real run or Git operation.
+
+Phone visual approval remains. Details, sources and the paused Energy discussion checkpoint live
+in `ui_phase_handoff.md` under the October22opening section. Return to that Energy discussion
+after this review, without restarting the walkthrough or silently implementing its suggestions.
+
+The later 4.8-second duration/small skip-hint follow-up is installed: debug build, four focused
+timing/skip/rendering checks and the final compact-spacing repeat passed. Portrait and compact
+screenshots inspected; arrangement/speed unchanged, temporary test package removed, no Git.
+
 ## October 22 Start cleanup — Complete for agreed scope; installed and visually accepted
 
 Manley explicitly requested **no pre-run Energy beam or decorative Energy outlines**, superseding
