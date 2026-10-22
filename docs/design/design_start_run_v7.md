@@ -8,6 +8,42 @@ status: CURRENT NATIVE DECISIONS plus dated prototype history; verification live
 
 # Start Run — where this screen actually is
 
+**October 22 panel revision — Ready to test, installed on Moto:** Manley asked to restore the compact Run State card,
+remove its divider/utility footer and move Map, History and Settings into a right-aligned vertical
+icon-only stack immediately below it. Visible action labels and `Map artwork` are removed;
+accessibility labels and 48 dp targets remain. The actual GPS status replaces `Ready when you are`
+under `READY / TO RUN`; healthy live evidence reads `GPS Ready`, while connecting/weak/lost/setup
+and Sample states remain honest. This supersedes the earlier accepted utilities-inside-card layout.
+Energy, Shoes, Music and the opening screen retain their existing behavior. Both 739-unit suites,
+three APK builds and 14 silent Moto checks passed; the new arrangement was visually inspected.
+All 44 runs, every field across 11 tables and four preferences were preserved. Exact receipts are
+in `project_current_state.md`; no Git action was performed. User visual review remains.
+
+**Panel content scaling follow-up, installed:** Manley found the card's contents too small for
+its available space. RUN/STATE/AGENT and especially READY/TO RUN/GPS are larger, side padding and
+column gaps are tighter, and the ring grows only 6 dp (90 dp narrow/106 dp wide). The compact card
+and external icons remain. Debug/test builds and four existing Moto layout/GPS checks passed;
+normal screenshot inspected, 44 runs/all stored fields/preferences preserved. No new source file
+or Git action; visual acceptance remains with Manley.
+
+**Alignment/typography follow-up, installed:** READY/TO RUN/GPS now share a left edge inside a
+right-positioned text group, matching the left branding's alignment without pulling the group
+toward the ring. READY is secondary (17sp); TO RUN leads (22sp black), mirroring RUN/STATE.
+GPS keeps its existing size and live wording but uses AGENT READY's bold weight/letter spacing.
+Debug/test builds and two existing normal/large-text Moto checks passed; screenshot inspected,
+all44runs/11-table fields/four preferences preserved. No new tests/source files/Git action.
+
+**Latest panel/Energy polish, installed:** the pre-run Undo control is removed completely. The
+selected Energy still reaches the agent and Start; its empty reserved slot keeps the footer stable.
+No replacement reset gesture was introduced. The ring is now 108dp narrow/128dp wide, with 4dp
+vertical padding, bringing it nearer the panel border while retaining room for its receiving swell.
+Horizontal padding/gaps are 12dp/4dp. Upper READY aligns to the right inset, mirroring RUN's left
+inset; TO RUN/GPS retain their shared left edge. Upper READY and READY beside AGENT use a softer
+gray, and the separator dot is brand lime. Debug/test builds and ten unique focused Moto cases
+passed across a test-only timing correction; screenshot inspected and all saved data preserved.
+No new source files/Git action. This supersedes the earlier pre-run Undo and shared-three-line
+alignment descriptions; user visual review remains.
+
 **October 22 shoe follow-up — Ready to test, installed on Moto:** the former `SHOES / LATER` object is connected to
 the native saved-pair picker. Original sneaker illustration on an organic sage/lime backing replaces
 the shaded pebble, with selected model/nickname and mileage below it. Start/music sizes and placement,

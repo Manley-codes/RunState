@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -84,6 +85,9 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.input.KeyboardType
@@ -112,7 +116,6 @@ internal const val START_ENERGY_LOW_TAG = "startEnergyLow"
 internal const val START_ENERGY_MODERATE_TAG = "startEnergyModerate"
 internal const val START_ENERGY_HIGH_TAG = "startEnergyHigh"
 internal const val START_ENERGY_SELECTED_TAG = "startEnergySelected"
-internal const val START_ENERGY_UNDO_TAG = "startEnergyUndo"
 internal const val START_AGENT_VISUALIZER_TAG = "startAgentVisualizer"
 internal const val START_ENERGY_INTAKE_TAG = "startEnergyIntake"
 internal const val START_GPS_TOGGLE_TAG = "startGpsToggle"
@@ -126,6 +129,7 @@ internal const val START_RUN_STATUS_TAG = "startRunStatus"
 internal const val START_RUN_UPPER_CONTENT_TAG = "startRunUpperContent"
 internal const val START_RUN_FALLBACK_SCROLL_TAG = "startRunFallbackScroll"
 internal const val START_AGENT_CARD_TAG = "startAgentCard"
+internal const val START_UTILITY_ACTIONS_TAG = "startUtilityActions"
 internal const val START_ENERGY_CHOICES_TAG = "startEnergyChoices"
 internal const val START_ENERGY_CUE_TAG = "startEnergyCue"
 internal const val START_FOOTER_TAG = "startFooter"
@@ -229,7 +233,7 @@ internal fun StartRunScreen(
                 rootBounds = bounds
             }
     ) {
-        val agentRingSize = if (maxWidth < 400.dp) 84.dp else 100.dp
+        val agentRingSize = if (maxWidth < 400.dp) 108.dp else 128.dp
         // A very short landscape window cannot keep both controls and upper details visible.
         // In that case use one continuous flow; regular phone heights retain the anchored layout.
         val fallbackHeight = 400.dp + 60.dp * (LocalDensity.current.fontScale - 1f).coerceAtLeast(0f)
@@ -273,6 +277,14 @@ internal fun StartRunScreen(
             ) {
                 AgentReadyCard(
                     selectedEnergy = selectedPreRunEnergy,
+                    gpsStatus = when {
+                        setupLoading -> "Loading run preferences…"
+                        !gpsSelected -> "Sample demo · simulated distance"
+                        gpsStatusText.equals("GPS ready", ignoreCase = true) -> "GPS Ready"
+                        gpsStatusText != null -> gpsStatusText
+                        gpsReady -> "GPS connecting…"
+                        else -> "Location setup on Start"
+                    },
                     ringSize = agentRingSize,
                     phase = ringPhase,
                     intakeTime = { if (intake != null) intakeTime.value else null },
@@ -281,35 +293,26 @@ internal fun StartRunScreen(
                         if (ringBounds != null && ringBounds != bounds) intake = null
                         ringBounds = bounds
                     }
-                ) {
-                    StartUtilityFooter(
-                        gpsStatus = when {
-                            setupLoading -> "Loading run preferences…"
-                            !gpsSelected -> "Sample demo · simulated distance"
-                            gpsStatusText != null -> gpsStatusText
-                            gpsReady -> if (liveMapBackground) "GPS run selected" else "GPS enabled"
-                            else -> "Location setup on Start"
-                        },
-                        mapStatus = if (liveMapBackground) liveMapStatus ?: "Finding your location…"
-                            else "Map artwork",
-                        onMapClick = if (liveMapBackground && onRequestMapLocation != null)
-                            onRequestMapLocation else onOpenMap,
-                        mapNeedsLocation = liveMapBackground && onRequestMapLocation != null,
-                        onViewHistory = onViewHistory,
-                        showHistory = showHistory,
-                        onOpenRunSettings = onOpenRunSettings,
-                        actionsEnabled = actionsEnabled,
-                        setupLoading = setupLoading,
-                        musicStatus = when {
-                            !musicSelected -> "Music observation off"
-                            !musicAccessGranted -> "Music observation needs access"
-                            else -> "Music observation on"
-                        },
-                        musicAccessNeeded = musicSelected && !musicAccessGranted,
-                        reflectionSetupRequired = reflectionSetupRequired,
-                        gpsMessage = gpsMessage
-                    )
-                }
+                )
+                StartUtilityActions(
+                    mapStatus = if (liveMapBackground) liveMapStatus else null,
+                    onMapClick = if (liveMapBackground && onRequestMapLocation != null)
+                        onRequestMapLocation else onOpenMap,
+                    mapNeedsLocation = liveMapBackground && onRequestMapLocation != null,
+                    onViewHistory = onViewHistory,
+                    showHistory = showHistory,
+                    onOpenRunSettings = onOpenRunSettings,
+                    actionsEnabled = actionsEnabled,
+                    setupLoading = setupLoading,
+                    musicStatus = when {
+                        !musicSelected -> "Music observation off"
+                        !musicAccessGranted -> "Music observation needs access"
+                        else -> "Music observation on"
+                    },
+                    musicAccessNeeded = musicSelected && !musicAccessGranted,
+                    reflectionSetupRequired = reflectionSetupRequired,
+                    gpsMessage = gpsMessage
+                )
             }
             Box(Modifier.fillMaxWidth().padding(horizontal = 20.dp)
                 .padding(top = 12.dp, bottom = 12.dp)) {
@@ -367,9 +370,8 @@ internal fun StartRunScreen(
 }
 
 @Composable
-private fun StartUtilityFooter(
-    gpsStatus: String,
-    mapStatus: String,
+private fun StartUtilityActions(
+    mapStatus: String?,
     onMapClick: (() -> Unit)?,
     mapNeedsLocation: Boolean,
     onViewHistory: () -> Unit,
@@ -382,59 +384,39 @@ private fun StartUtilityFooter(
     reflectionSetupRequired: Boolean,
     gpsMessage: String?
 ) {
-    Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp)) {
-        BoxWithConstraints(Modifier.fillMaxWidth()) {
-            // Keep the same compact row normally; larger text gets its own status line rather
-            // than squeezing icons, truncating status, or shrinking any 48 dp touch target.
-            val stacked = LocalDensity.current.fontScale > 1.25f || maxWidth < 270.dp
-            val settingsState = buildList {
-                add(musicStatus)
-                if (setupLoading) add("Loading run preferences")
-                if (reflectionSetupRequired) add("Reflection setup required")
-            }.joinToString(". ")
-            val actions: @Composable () -> Unit = {
-                Row(
-                    modifier = if (stacked) Modifier.fillMaxWidth() else Modifier,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    val actionModifier = if (stacked) Modifier.weight(1f) else Modifier.width(48.dp)
-                    if (onMapClick != null) {
-                        StartUtilityButton("Map", StartUtilityIcon.MAP, onMapClick,
-                            enabled = actionsEnabled && (!mapNeedsLocation || !setupLoading),
-                            modifier = actionModifier.testTag(if (mapNeedsLocation)
-                                START_MAP_LOCATION_ACCESS_TAG else "startExpandMap"),
-                            accessibilityLabel = if (mapNeedsLocation) "Enable location" else "Open live map",
-                            actionState = if (mapNeedsLocation) "Location access needed" else null)
-                    }
-                    if (showHistory) {
-                        StartUtilityButton("History", StartUtilityIcon.HISTORY, onViewHistory,
-                            enabled = actionsEnabled,
-                            modifier = actionModifier.testTag(START_HISTORY_TAG),
-                            accessibilityLabel = "Log History")
-                    }
-                    StartUtilityButton("Settings", StartUtilityIcon.SETTINGS, onOpenRunSettings,
-                        enabled = actionsEnabled && !setupLoading,
-                        modifier = actionModifier.testTag(START_RUN_SETTINGS_TAG),
-                        accessibilityLabel = "Run settings", actionState = settingsState)
-                }
+    Column(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalAlignment = Alignment.End) {
+        val settingsState = buildList {
+            add(musicStatus)
+            if (setupLoading) add("Loading run preferences")
+            if (reflectionSetupRequired) add("Reflection setup required")
+        }.joinToString(". ")
+        Column(
+            modifier = Modifier.testTag(START_UTILITY_ACTIONS_TAG),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            val actionModifier = Modifier.size(48.dp)
+            if (onMapClick != null) {
+                StartUtilityButton("Map", StartUtilityIcon.MAP, onMapClick,
+                    enabled = actionsEnabled && (!mapNeedsLocation || !setupLoading),
+                    modifier = actionModifier.testTag(if (mapNeedsLocation)
+                        START_MAP_LOCATION_ACCESS_TAG else "startExpandMap"),
+                    accessibilityLabel = if (mapNeedsLocation) "Enable location" else "Open live map",
+                    actionState = if (mapNeedsLocation) "Location access needed" else mapStatus)
             }
-            if (stacked) {
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    StartLocationSummary(gpsStatus, mapStatus, Modifier.fillMaxWidth())
-                    actions()
-                }
-            } else {
-                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    StartLocationSummary(gpsStatus, mapStatus, Modifier.weight(1f))
-                    actions()
-                }
+            if (showHistory) {
+                StartUtilityButton("History", StartUtilityIcon.HISTORY, onViewHistory,
+                    enabled = actionsEnabled,
+                    modifier = actionModifier.testTag(START_HISTORY_TAG),
+                    accessibilityLabel = "Log History")
             }
+            StartUtilityButton("Settings", StartUtilityIcon.SETTINGS, onOpenRunSettings,
+                enabled = actionsEnabled && !setupLoading,
+                modifier = actionModifier.testTag(START_RUN_SETTINGS_TAG),
+                accessibilityLabel = "Run settings", actionState = settingsState)
         }
         if (!setupLoading) {
-            // Exceptions stay actionable in the card; normal music on/off lives in Settings
-            // semantics and the existing settings screen, without another everyday panel.
+            // Keep exceptional setup actions reachable outside the clean Agent card.
             if (musicAccessNeeded) {
                 StartSetupNotice("Music observation needs access", onOpenRunSettings, actionsEnabled)
             }
@@ -444,20 +426,6 @@ private fun StartUtilityFooter(
             if (!gpsMessage.isNullOrBlank()) {
                 StartSetupNotice(gpsMessage, onOpenRunSettings, actionsEnabled)
             }
-        }
-    }
-}
-
-@Composable
-private fun StartLocationSummary(status: String, mapStatus: String, modifier: Modifier = Modifier) {
-    Row(modifier.testTag(START_RUN_STATUS_TAG), horizontalArrangement = Arrangement.spacedBy(7.dp)) {
-        Box(Modifier.padding(top = 5.dp).size(7.dp)
-            .background(Color(0xFF91A28F), CircleShape).clearAndSetSemantics {})
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            Text(status, color = StartInk, fontSize = 12.sp, lineHeight = 16.sp,
-                fontWeight = FontWeight.SemiBold)
-            Text(mapStatus, color = StartInk.copy(alpha = 0.72f), fontSize = 10.sp, lineHeight = 14.sp,
-                modifier = Modifier.testTag(START_MAP_STATUS_TAG))
         }
     }
 }
@@ -506,21 +474,17 @@ private fun StartUtilityButton(
             .addPath(pathData = PathParser().parsePathString(icon.pathData).toNodes(), fill = SolidColor(Color.Black))
             .build()
     }
-    Column(modifier.widthIn(min = 48.dp).heightIn(min = 48.dp)
+    Box(modifier.widthIn(min = 48.dp).heightIn(min = 48.dp)
         .clip(RoundedCornerShape(8.dp))
         .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
         .semantics(mergeDescendants = true) {
             contentDescription = accessibilityLabel
             if (actionState != null) stateDescription = actionState
         }
-        .padding(horizontal = 2.dp, vertical = 4.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center) {
+        .padding(4.dp),
+        contentAlignment = Alignment.Center) {
         Image(imageVector = image, contentDescription = null, colorFilter = ColorFilter.tint(ink),
-            modifier = Modifier.size(23.dp))
-        Spacer(Modifier.height(2.dp))
-        Text(label, color = ink, fontSize = 10.sp, lineHeight = 14.sp, textAlign = TextAlign.Center,
-            modifier = Modifier.clearAndSetSemantics {})
+            modifier = Modifier.size(25.dp))
     }
 }
 
@@ -643,13 +607,13 @@ internal fun ReflectionConnectionDialog(
 @Composable
 private fun AgentReadyCard(
     selectedEnergy: PreRunEnergy?,
+    gpsStatus: String,
     ringSize: Dp,
     phase: State<Float>,
     intakeTime: () -> Float?,
-    ringModifier: Modifier,
-    footer: @Composable () -> Unit
+    ringModifier: Modifier
 ) {
-    Column(
+    Row(
         modifier = Modifier
             .fillMaxWidth()
             .testTag(START_AGENT_CARD_TAG)
@@ -659,34 +623,38 @@ private fun AgentReadyCard(
             .clip(RoundedCornerShape(24.dp))
             .background(Color.White)
             .border(1.dp, Color(0xFFDDE7E2), RoundedCornerShape(24.dp))
-    ) {
-        Row(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 6.dp),
+            .padding(horizontal = 12.dp, vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
+        horizontalArrangement = Arrangement.spacedBy(4.dp)
     ) {
         Column(Modifier.weight(1f)) {
             Text(
                 text = "RUN",
                 color = StartLime,
-                fontSize = 13.sp,
+                fontSize = 17.sp,
                 fontWeight = FontWeight.ExtraBold,
-                letterSpacing = 2.sp
+                letterSpacing = 2.sp,
+                lineHeight = 22.sp
             )
             Text(
                 text = "STATE",
                 color = StartInk,
-                fontSize = 23.sp,
+                fontSize = 28.sp,
                 fontWeight = FontWeight.Black,
-                letterSpacing = 2.sp,
-                lineHeight = 26.sp
+                letterSpacing = 1.sp,
+                lineHeight = 32.sp
             )
             Text(
-                text = "AGENT  •  READY",
+                text = buildAnnotatedString {
+                    append("AGENT  ")
+                    withStyle(SpanStyle(color = StartLime)) { append("•") }
+                    withStyle(SpanStyle(color = StartInk.copy(alpha = 0.70f))) { append("  READY") }
+                },
                 color = StartInk,
-                fontSize = 10.sp,
+                fontSize = 12.sp,
                 fontWeight = FontWeight.Bold,
-                letterSpacing = 0.4.sp
+                letterSpacing = 0.1.sp,
+                lineHeight = 16.sp
             )
         }
         // Reserve the agent's size; side text can wrap instead of squeezing it at large font sizes.
@@ -706,33 +674,39 @@ private fun AgentReadyCard(
                 )
             )
         }
-        Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.End) {
-            Text(
-                text = "READY",
-                color = StartInk,
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Black,
-                letterSpacing = 1.sp
-            )
-            Text(
-                text = "TO RUN",
-                color = StartInk,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Bold,
-                letterSpacing = 0.8.sp
-            )
-            Text(
-                text = "Ready when you are",
-                color = StartInk.copy(alpha = 0.72f),
-                fontSize = 9.sp,
-                maxLines = 2,
-                textAlign = TextAlign.End
-            )
+        Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.CenterEnd) {
+            Column(Modifier.width(IntrinsicSize.Max), horizontalAlignment = Alignment.End) {
+                Text(
+                    text = "READY",
+                    color = StartInk.copy(alpha = 0.70f),
+                    fontSize = 17.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    letterSpacing = 2.sp,
+                    lineHeight = 22.sp,
+                    modifier = Modifier.align(Alignment.End),
+                    textAlign = TextAlign.End
+                )
+                Text(
+                    text = "TO RUN",
+                    color = StartInk,
+                    fontSize = 22.sp,
+                    fontWeight = FontWeight.Black,
+                    letterSpacing = 1.sp,
+                    lineHeight = 32.sp,
+                    textAlign = TextAlign.End
+                )
+                Text(
+                    text = gpsStatus,
+                    color = StartInk.copy(alpha = 0.72f),
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 0.1.sp,
+                    lineHeight = 16.sp,
+                    textAlign = TextAlign.End,
+                    modifier = Modifier.fillMaxWidth().testTag(START_RUN_STATUS_TAG)
+                )
+            }
         }
-        }
-        Box(Modifier.fillMaxWidth().padding(horizontal = 12.dp).height(1.dp)
-            .background(Color(0xFFDDE7E2)))
-        footer()
     }
 }
 
@@ -769,7 +743,7 @@ private fun PreRunEnergyChoices(
                 .then(if (selected != null) Modifier.clearAndSetSemantics {} else Modifier)
         )
         Spacer(Modifier.height(10.dp))
-        // Preserve the existing row height and Undo position while the tiles leave for the agent.
+        // Keep the reserved Energy space stable while the tiles leave for the agent.
         Box(Modifier.fillMaxWidth().height(tileHeight).testTag(START_ENERGY_CUE_TAG),
             contentAlignment = Alignment.Center) {
             if (selected == null || intake != null) {
@@ -796,23 +770,6 @@ private fun PreRunEnergyChoices(
                             } else null,
                             tileHeight = tileHeight
                         )
-                    }
-                }
-            }
-            if (selected != null) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    Spacer(Modifier.width(106.dp).height(tileHeight))
-                    TextButton(
-                        onClick = { onSelect(null) },
-                        enabled = enabled,
-                        modifier = Modifier
-                            .heightIn(min = 48.dp)
-                            .testTag(START_ENERGY_UNDO_TAG)
-                    ) {
-                        Text("Undo", color = StartInk, fontWeight = FontWeight.Bold)
                     }
                 }
             }

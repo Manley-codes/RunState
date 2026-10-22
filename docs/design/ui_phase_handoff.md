@@ -40,6 +40,38 @@ prototype, and no full editor for other run fields was added.
 
 ---
 
+## October 22 Start panel revision — Ready to test; installed on Moto
+
+The latest user instruction supersedes the utilities-inside-card checkpoint below: restore the
+compact original Agent card, show current GPS status under READY / TO RUN, and stack Map,
+History and Settings icons vertically just below its right edge. No visible icon labels or
+Map artwork subtitle. Healthy live GPS says GPS Ready; connecting/weak/lost/setup remain honest.
+48 dp touch targets and screen-reader names stay intact. Both 739-unit suites/three APKs and all
+14 silent Moto checks passed; the arrangement was visually inspected. All 44 runs/every field
+across 11 tables/four preferences were preserved; temporary tests/inspection copies removed and
+the app reopened. Exact receipts are in `project_current_state.md`; no new source file or Git
+action. Energy, shoe, opening, GPS recording and audio behavior are unchanged. User review remains.
+
+Manley then asked to fill the card more fully: larger left branding/status, substantially larger
+READY/TO RUN/GPS and a 6dp ring increase, with tighter side padding/gaps. This scaling follow-up is
+installed; debug/test builds/four existing Moto layout/GPS cases passed and the normal screenshot
+was inspected. All44runs/11-table fields/fourprefs preserved; no new source files/Git. Exact sizes
+and receipts are in `project_current_state.md`; user visual review remains.
+
+The next requested alignment pass is also installed: READY/TO RUN/GPS share a left edge within
+the right-positioned group. Smaller READY above stronger TO RUN mirrors the left RUN/STATE
+hierarchy; GPS uses AGENT READY's bold weight/spacing. Debug/test builds/two existing Moto
+normal-and-large-text checks passed and screenshot inspected. All saved data preserved; no new
+source/test files or Git action. See the latest `project_current_state.md` receipt for exact values.
+
+Latest requested polish supersedes the shared-three-left-edges and pre-run Undo descriptions:
+Undo is removed entirely; ring108/128dp with4dp vertical padding; upper READY sits at the right
+inset and uses softer gray. READY beside AGENT is also softer, with a lime separator dot.
+TO RUN/GPS keep their shared left edge. The selected draft/intake and stable Energy slot remain;
+shoe Undo is unchanged. Debug/test builds/ten unique Moto cases passed across documented test-only
+timing corrections, normal screenshot inspected, all44runs/11-table fields/fourprefs preserved.
+Temporary tests/inspection copies removed, app reopened; no new source/test files or Git action.
+
 ## October 22 shoes — Ready to test; installed on Moto
 
 The native shoe sheet retains the original Add Shoes/search/Your Shoes/Browse structure, with

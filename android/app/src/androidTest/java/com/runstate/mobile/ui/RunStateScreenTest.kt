@@ -136,7 +136,7 @@ class RunStateScreenTest {
 
     private companion object {
         const val INITIALIZING = "Getting things ready"
-        const val READY = "Ready when you are"
+        const val READY = "TO RUN"
         const val COUNTDOWN = "Getting ready to run"
         const val STARTING = "Starting your run — saving its start"
         const val START_FAILED = "RunState couldn't save the start of your run."
@@ -401,14 +401,15 @@ class RunStateScreenTest {
     }
 
     @Test
-    fun startEnergyIsOptionalUndoableAndPassedToTheStartAction() {
+    fun startEnergyIsOptionalAndSelectionRemainsUntilTheStartAction() {
         var selectedAtStart: PreRunEnergy? = PreRunEnergy.HIGH
+        var selected by mutableStateOf<PreRunEnergy?>(null)
+        val choices = mutableListOf<PreRunEnergy?>()
         var historyOpens = 0
         composeTestRule.setContent {
-            var selected by remember { mutableStateOf<PreRunEnergy?>(null) }
             StartRunScreen(
                 selectedPreRunEnergy = selected,
-                onSelectPreRunEnergy = { selected = it },
+                onSelectPreRunEnergy = { selected = it; choices += it },
                 onStart = { selectedAtStart = selected },
                 actionsEnabled = true,
                 onViewHistory = { historyOpens++ },
@@ -421,17 +422,22 @@ class RunStateScreenTest {
 
         composeTestRule.onNodeWithTag(START_ENERGY_LOW_TAG).performClick()
         composeTestRule.onNodeWithTag(START_ENERGY_SELECTED_TAG).assertIsDisplayed()
-        composeTestRule.onNodeWithTag(START_ENERGY_UNDO_TAG).performClick()
-        composeTestRule.onNodeWithTag(START_ENERGY_MODERATE_TAG).performClick()
+        composeTestRule.onNodeWithTag("startEnergyUndo").assertDoesNotExist()
+        composeTestRule.onNodeWithText("Undo").assertDoesNotExist()
+        composeTestRule.onNodeWithTag(START_ENERGY_MODERATE_TAG).assertDoesNotExist()
+        // The selected agent is an indicator, not a replacement reset control.
+        composeTestRule.onNodeWithTag(START_ENERGY_SELECTED_TAG).performTouchInput { click() }
         composeTestRule.onNodeWithTag(START_RUN_BUTTON_TAG).performClick()
-        assertEquals(PreRunEnergy.MODERATE, selectedAtStart)
+        assertEquals(PreRunEnergy.LOW, selectedAtStart)
+        assertEquals(PreRunEnergy.LOW, selected)
+        assertEquals(listOf(PreRunEnergy.LOW), choices)
 
         composeTestRule.onNodeWithTag(START_HISTORY_TAG).performClick()
         assertEquals(1, historyOpens)
     }
 
     @Test
-    fun startBlankAndEnergySwipesKeepNormalPhoneLayoutFixedAndIntakeUndoWorks() {
+    fun startBlankAndEnergySwipesKeepNormalPhoneLayoutFixedAndSelectionPersists() {
         composeTestRule.mainClock.autoAdvance = false
         var selected by mutableStateOf<PreRunEnergy?>(null)
         var selectedAtStart: PreRunEnergy? = null
@@ -443,18 +449,58 @@ class RunStateScreenTest {
                 StartRunScreen(
                     selectedPreRunEnergy = selected, onSelectPreRunEnergy = { selected = it },
                     onStart = { selectedAtStart = selected }, actionsEnabled = true,
-                    onViewHistory = {}, showHistory = true, gpsReady = true,
+                    onViewHistory = {}, showHistory = true, gpsReady = true, gpsStatusText = "GPS ready",
                     onOpenMap = {}, modifier = Modifier.fillMaxSize().systemBarsPadding()
                 )
             }
         }
         composeTestRule.mainClock.advanceTimeByFrame()
-        val fixedTags = listOf(START_AGENT_CARD_TAG, START_AGENT_VISUALIZER_TAG,
+        val fixedTags = listOf(START_AGENT_CARD_TAG, START_AGENT_VISUALIZER_TAG, START_UTILITY_ACTIONS_TAG,
             START_ENERGY_CHOICES_TAG, START_ENERGY_LOW_TAG, START_ENERGY_MODERATE_TAG,
             START_ENERGY_HIGH_TAG, START_FOOTER_TAG, START_RUN_BUTTON_TAG)
         val boundsBefore = fixedTags.associateWith { tag ->
             composeTestRule.onNodeWithTag(tag).assertIsDisplayed().fetchSemanticsNode().boundsInRoot
         }
+        val card = boundsBefore.getValue(START_AGENT_CARD_TAG)
+        val gps = composeTestRule.onNodeWithTag(START_RUN_STATUS_TAG)
+            .assertIsDisplayed().assertTextEquals("GPS Ready").fetchSemanticsNode().boundsInRoot
+        assertTrue("Current GPS status belongs inside the compact Agent panel",
+            gps.left >= card.left && gps.right <= card.right && gps.top >= card.top && gps.bottom <= card.bottom)
+        val ready = composeTestRule.onNodeWithText("READY").fetchSemanticsNode().boundsInRoot
+        val toRun = composeTestRule.onNodeWithText("TO RUN").fetchSemanticsNode().boundsInRoot
+        assertEquals("GPS must share READY's right edge", ready.right, gps.right, 1f)
+        assertEquals("The entire run-status group must share one right edge", toRun.right, gps.right, 1f)
+        assertEquals("RUN and READY must begin on the same row",
+            composeTestRule.onNodeWithText("RUN").fetchSemanticsNode().boundsInRoot.top, ready.top, 1f)
+        assertEquals("STATE and TO RUN must begin on the same row",
+            composeTestRule.onNodeWithText("STATE").fetchSemanticsNode().boundsInRoot.top, toRun.top, 1f)
+        assertEquals("AGENT and GPS must begin on the same row",
+            composeTestRule.onNodeWithText("AGENT  •  READY").fetchSemanticsNode().boundsInRoot.top, gps.top, 1f)
+        val utilities = boundsBefore.getValue(START_UTILITY_ACTIONS_TAG)
+        assertTrue("The utility stack must sit outside and below the Agent panel", utilities.top >= card.bottom)
+        val utilityTags = listOf("startExpandMap", START_HISTORY_TAG, START_RUN_SETTINGS_TAG)
+        val descriptions = listOf("Open live map", "Log History", "Run settings")
+        val utilityBounds = utilityTags.mapIndexed { index, tag ->
+            val node = composeTestRule.onNodeWithTag(tag).assertIsDisplayed().assertIsEnabled()
+                .fetchSemanticsNode()
+            assertEquals(Role.Button, node.config[SemanticsProperties.Role])
+            assertEquals(listOf(descriptions[index]), node.config[SemanticsProperties.ContentDescription])
+            assertTrue("Utility actions use icons without visible text", !node.config.contains(SemanticsProperties.Text))
+            node.boundsInRoot.also { bounds ->
+                assertTrue("Each utility target must remain at least 48 dp wide", bounds.width + 1f >= 48f * densityValue)
+                assertTrue("Each utility target must remain at least 48 dp tall", bounds.height + 1f >= 48f * densityValue)
+                assertTrue("Utilities cannot overlap the Agent panel", bounds.top >= card.bottom)
+            }
+        }
+        utilityBounds.zipWithNext().forEach { (above, below) ->
+            assertTrue("Map, History and Settings must form one vertical stack", above.bottom <= below.top)
+            assertEquals("Utility icons share a horizontal center", above.center.x, below.center.x, 1f)
+        }
+        for (label in listOf("Ready when you are", "Map artwork", "Map", "History", "Settings")) {
+            composeTestRule.onNodeWithText(label, useUnmergedTree = true).assertDoesNotExist()
+        }
+        composeTestRule.onNodeWithTag(START_MAP_STATUS_TAG).assertDoesNotExist()
+        saveNativePreview(START_RUN_SCREEN_TAG, "start-compact-agent-external-icons-preview.png")
         fun assertFixed() {
             fixedTags.forEach { tag ->
                 assertEquals("A swipe must not move $tag on the normal Start screen",
@@ -499,7 +545,12 @@ class RunStateScreenTest {
         composeTestRule.onNodeWithTag(START_ENERGY_INTAKE_TAG).assertIsDisplayed()
         composeTestRule.onNodeWithTag(START_RUN_BUTTON_TAG).performClick()
         composeTestRule.runOnIdle { assertEquals(PreRunEnergy.MODERATE, selectedAtStart) }
-        composeTestRule.onNodeWithTag(START_ENERGY_UNDO_TAG).assertIsDisplayed().performTouchInput { click() }
+        composeTestRule.onNodeWithTag("startEnergyUndo").assertDoesNotExist()
+        composeTestRule.mainClock.advanceTimeBy(1_900L)
+        composeTestRule.onNodeWithTag(START_ENERGY_INTAKE_TAG).assertDoesNotExist()
+        composeTestRule.runOnIdle { assertEquals(PreRunEnergy.MODERATE, selected) }
+        // A new isolated draft restores the original layout; no UI reset is offered.
+        composeTestRule.runOnIdle { selected = null }
         composeTestRule.mainClock.advanceTimeByFrame()
         composeTestRule.onNodeWithTag(START_ENERGY_INTAKE_TAG).assertDoesNotExist()
         composeTestRule.runOnIdle { assertEquals(null, selected) }
@@ -528,7 +579,8 @@ class RunStateScreenTest {
             }
         }
         for (scale in listOf(1.5f, 2f)) {
-            composeTestRule.runOnIdle { fontScale = scale }
+            // Each font-scale scenario starts from a fresh test-owned draft.
+            composeTestRule.runOnIdle { fontScale = scale; selected = null }
             listOf(START_ENERGY_LOW_TAG, START_ENERGY_MODERATE_TAG, START_ENERGY_HIGH_TAG)
                 .forEach { composeTestRule.onNodeWithTag(it).assertIsDisplayed().assertIsEnabled() }
             composeTestRule.onNodeWithTag(START_RUN_BUTTON_TAG).assertIsDisplayed().assertIsEnabled()
@@ -550,8 +602,8 @@ class RunStateScreenTest {
             composeTestRule.onNodeWithTag(START_ENERGY_MODERATE_TAG).performClick()
             composeTestRule.onNodeWithTag(START_RUN_BUTTON_TAG).performClick()
             composeTestRule.runOnIdle { assertEquals(PreRunEnergy.MODERATE, selectedAtStart) }
-            composeTestRule.onNodeWithTag(START_ENERGY_UNDO_TAG).assertIsDisplayed().performClick()
-            composeTestRule.runOnIdle { assertEquals(null, selected) }
+            composeTestRule.onNodeWithTag("startEnergyUndo").assertDoesNotExist()
+            composeTestRule.runOnIdle { assertEquals(PreRunEnergy.MODERATE, selected) }
         }
         composeTestRule.runOnIdle {
             assertEquals(2, settingsOpens)
@@ -586,20 +638,17 @@ class RunStateScreenTest {
         composeTestRule.onNodeWithTag(START_ENERGY_MODERATE_TAG).performScrollTo()
             .assertIsDisplayed().performTouchInput { click() }
         composeTestRule.runOnIdle { assertEquals(PreRunEnergy.MODERATE, selected) }
-        composeTestRule.onNodeWithTag(START_ENERGY_UNDO_TAG).performScrollTo()
-            .assertIsDisplayed().performTouchInput { click() }
-        composeTestRule.runOnIdle { assertEquals(null, selected) }
+        composeTestRule.onNodeWithTag("startEnergyUndo").assertDoesNotExist()
 
         composeTestRule.onNodeWithTag(START_FOOTER_TAG).performScrollTo().assertIsDisplayed()
-        val moderate = composeTestRule.onNodeWithTag(START_ENERGY_MODERATE_TAG)
+        val energySlot = composeTestRule.onNodeWithTag(START_ENERGY_CUE_TAG)
             .assertIsDisplayed().fetchSemanticsNode().boundsInRoot
         val footer = composeTestRule.onNodeWithTag(START_FOOTER_TAG).fetchSemanticsNode().boundsInRoot
         val start = composeTestRule.onNodeWithTag(START_RUN_BUTTON_TAG)
             .assertIsDisplayed().fetchSemanticsNode().boundsInRoot
         assertTrue("The scrolling landscape stack preserves the Energy/footer gap",
-            moderate.bottom + 12f <= footer.top + 1f)
+            energySlot.bottom + 12f <= footer.top + 1f)
         assertTrue("The Start control remains inside the same measured footer", start.top >= footer.top)
-        composeTestRule.onNodeWithTag(START_ENERGY_MODERATE_TAG).performTouchInput { click() }
         composeTestRule.onNodeWithTag(START_RUN_BUTTON_TAG).performTouchInput { click() }
         composeTestRule.runOnIdle {
             assertEquals(PreRunEnergy.MODERATE, selectedAtStart)
@@ -678,7 +727,7 @@ class RunStateScreenTest {
             .assertIsDisplayed().fetchSemanticsNode().boundsInRoot
         val target = composeTestRule.onNodeWithTag(START_AGENT_VISUALIZER_TAG)
             .fetchSemanticsNode().boundsInRoot.center
-        composeTestRule.onNodeWithTag(START_ENERGY_UNDO_TAG).assertIsEnabled()
+        composeTestRule.onNodeWithTag("startEnergyUndo").assertDoesNotExist()
         composeTestRule.onNodeWithTag(START_RUN_BUTTON_TAG).performClick()
         assertEquals(PreRunEnergy.HIGH, selectedAtStart)
 
@@ -696,13 +745,13 @@ class RunStateScreenTest {
         assertTrue(agentState[SemanticsProperties.Selected])
         assertEquals("Pre-run energy: HIGH", agentState[SemanticsProperties.StateDescription])
         composeTestRule.onNodeWithTag(START_ENERGY_HIGH_TAG).assertDoesNotExist()
-        composeTestRule.onNodeWithTag(START_ENERGY_UNDO_TAG).assertIsDisplayed().assertIsEnabled()
+        composeTestRule.onNodeWithTag("startEnergyUndo").assertDoesNotExist()
         assertEquals(PreRunEnergy.HIGH, selected)
     }
 
-    /** A cancelled flight cannot clear or replace a subsequent choice when its old time expires. */
+    /** Replacing a draft cancels its old decorative flight without changing the new selection. */
     @Test
-    fun undoDuringEnergyIntakeAllowsAFreshChoiceWithoutStaleCompletion() {
+    fun freshDraftDuringEnergyIntakeDoesNotReceiveStaleCompletion() {
         composeTestRule.mainClock.autoAdvance = false
         var selected by mutableStateOf<PreRunEnergy?>(null)
         var selectedAtStart: PreRunEnergy? = null
@@ -725,10 +774,16 @@ class RunStateScreenTest {
         composeTestRule.onNodeWithTag(START_ENERGY_HIGH_TAG).performClick()
         composeTestRule.mainClock.advanceTimeBy(700L)
         composeTestRule.onNodeWithTag(START_ENERGY_INTAKE_TAG).assertIsDisplayed()
-        composeTestRule.onNodeWithTag(START_ENERGY_UNDO_TAG).performClick()
-        composeTestRule.runOnIdle { assertEquals(null, selected) }
-        // With automatic time disabled, publish the callback's state in the next UI frame.
-        composeTestRule.mainClock.advanceTimeByFrame()
+        composeTestRule.onNodeWithTag("startEnergyUndo").assertDoesNotExist()
+        // Simulate the journey owner supplying a fresh draft, not a hidden UI reset.
+        composeTestRule.runOnIdle { selected = null }
+        // The effect clears the old flight after this external state change; its removal then
+        // needs another composition frame. Stay well short of the original flight's finish.
+        for (frame in 1..10) {
+            composeTestRule.mainClock.advanceTimeByFrame()
+            composeTestRule.waitForIdle()
+            if (composeTestRule.onAllNodesWithTag(START_ENERGY_INTAKE_TAG).fetchSemanticsNodes().isEmpty()) break
+        }
         composeTestRule.onNodeWithTag(START_ENERGY_INTAKE_TAG).assertDoesNotExist()
         composeTestRule.onNodeWithTag(START_ENERGY_LOW_TAG).performClick()
         composeTestRule.mainClock.advanceTimeBy(1_000L)
@@ -740,8 +795,8 @@ class RunStateScreenTest {
         composeTestRule.mainClock.advanceTimeBy(900L)
         composeTestRule.onNodeWithTag(START_ENERGY_INTAKE_TAG).assertDoesNotExist()
         assertEquals(PreRunEnergy.LOW, selected)
-        assertEquals(listOf(PreRunEnergy.HIGH, null, PreRunEnergy.LOW), choices)
-        composeTestRule.onNodeWithTag(START_ENERGY_UNDO_TAG).assertIsDisplayed().assertIsEnabled()
+        assertEquals(listOf(PreRunEnergy.HIGH, PreRunEnergy.LOW), choices)
+        composeTestRule.onNodeWithTag("startEnergyUndo").assertDoesNotExist()
     }
 
     /** Restoring or backgrounding preserves the draft without replaying an old visual hand-off. */
@@ -769,8 +824,9 @@ class RunStateScreenTest {
         composeTestRule.onNodeWithTag(START_ENERGY_INTAKE_TAG).assertDoesNotExist()
         composeTestRule.mainClock.advanceTimeBy(1_900L)
         composeTestRule.onNodeWithTag(START_ENERGY_INTAKE_TAG).assertDoesNotExist()
-        composeTestRule.onNodeWithTag(START_ENERGY_UNDO_TAG).performClick()
-        composeTestRule.runOnIdle { assertEquals(null, selected) }
+        composeTestRule.onNodeWithTag("startEnergyUndo").assertDoesNotExist()
+        // Begin a fresh fixture draft before testing a new flight's lifecycle.
+        composeTestRule.runOnIdle { selected = null }
         composeTestRule.mainClock.advanceTimeByFrame()
         composeTestRule.onNodeWithTag(START_ENERGY_MODERATE_TAG).performClick()
         composeTestRule.mainClock.advanceTimeBy(650L)
@@ -785,12 +841,14 @@ class RunStateScreenTest {
         composeTestRule.onNodeWithTag(START_ENERGY_INTAKE_TAG).assertDoesNotExist()
         composeTestRule.onNodeWithTag(START_RUN_BUTTON_TAG).performClick()
         assertEquals(PreRunEnergy.MODERATE, selectedAtStart)
-        composeTestRule.onNodeWithTag(START_ENERGY_UNDO_TAG).assertIsDisplayed().assertIsEnabled()
+        composeTestRule.onNodeWithTag("startEnergyUndo").assertDoesNotExist()
     }
 
     @Test
     fun startReportsGpsReadinessWithoutAModeSwitch() {
         var gpsReady by mutableStateOf(false)
+        var gpsSelected by mutableStateOf(true)
+        var loading by mutableStateOf(false)
         var statusText by mutableStateOf<String?>(null)
         composeTestRule.setContent {
             StartRunScreen(
@@ -800,30 +858,48 @@ class RunStateScreenTest {
                 actionsEnabled = true,
                 onViewHistory = {},
                 showHistory = false,
-                gpsSelected = true,
+                gpsSelected = gpsSelected,
                 gpsReady = gpsReady,
-                gpsStatusText = statusText
+                gpsStatusText = statusText,
+                setupLoading = loading
             )
         }
 
         composeTestRule.onNodeWithText("Location setup on Start").assertExists()
+        composeTestRule.onNodeWithText("GPS Ready").assertDoesNotExist()
         composeTestRule.onNodeWithTag(START_GPS_TOGGLE_TAG).assertDoesNotExist()
         composeTestRule.runOnIdle { gpsReady = true }
-        composeTestRule.onNodeWithText("GPS enabled").assertExists()
+        // Permission alone is not a current usable GPS fix.
+        composeTestRule.onNodeWithTag(START_RUN_STATUS_TAG).assertTextEquals("GPS connecting…")
+        composeTestRule.onNodeWithText("GPS Ready").assertDoesNotExist()
         composeTestRule.onNodeWithText("Sample demo · simulated distance").assertDoesNotExist()
         for (label in listOf("GPS connecting…", "GPS signal weak", "GPS signal lost", "GPS ready")) {
             composeTestRule.runOnIdle { statusText = label }
-            composeTestRule.onNodeWithText(label).assertExists()
+            composeTestRule.onNodeWithTag(START_RUN_STATUS_TAG)
+                .assertTextEquals(if (label == "GPS ready") "GPS Ready" else label)
             composeTestRule.onNodeWithText("GPS enabled").assertDoesNotExist()
+            if (label != "GPS ready") composeTestRule.onNodeWithText("GPS Ready").assertDoesNotExist()
             composeTestRule.onNodeWithTag(START_RUN_BUTTON_TAG).assertIsEnabled()
             composeTestRule.onNode(isDialog()).assertDoesNotExist()
         }
+        composeTestRule.runOnIdle { loading = true }
+        composeTestRule.onNodeWithTag(START_RUN_STATUS_TAG).assertTextEquals("Loading run preferences…")
+        composeTestRule.onNodeWithText("GPS Ready").assertDoesNotExist()
+        composeTestRule.onNodeWithTag(START_RUN_BUTTON_TAG).assertIsNotEnabled()
+        composeTestRule.runOnIdle { loading = false; gpsSelected = false }
+        composeTestRule.onNodeWithTag(START_RUN_STATUS_TAG).assertTextEquals("Sample demo · simulated distance")
+        composeTestRule.onNodeWithText("GPS Ready").assertDoesNotExist()
+        composeTestRule.runOnIdle { gpsSelected = true; gpsReady = false; statusText = null }
+        composeTestRule.onNodeWithTag(START_RUN_STATUS_TAG).assertTextEquals("Location setup on Start")
+        composeTestRule.onNodeWithText("GPS Ready").assertDoesNotExist()
+        composeTestRule.onNodeWithTag(START_RUN_BUTTON_TAG).assertIsEnabled()
     }
 
     @Test
     fun gpsRootWarmsTheStaticStartScreenWithoutStartingARun() {
         GpsStartRootHarness().use { root ->
-            composeTestRule.onNodeWithText("Map artwork").assertIsDisplayed()
+            composeTestRule.onNodeWithText("Map artwork").assertDoesNotExist()
+            composeTestRule.onNodeWithTag(START_MAP_STATUS_TAG).assertDoesNotExist()
             composeTestRule.onNodeWithText("GPS connecting…").assertExists()
             composeTestRule.onNode(isDialog()).assertDoesNotExist()
             composeTestRule.onNodeWithTag(START_RUN_BUTTON_TAG).assertIsEnabled()
@@ -832,7 +908,7 @@ class RunStateScreenTest {
             assertEquals(1, root.source.registrations)
             assertEquals(1, root.source.activeListeners)
             root.emit(gpsStartFix())
-            composeTestRule.onNodeWithText("GPS ready").assertExists()
+            composeTestRule.onNodeWithText("GPS Ready").assertExists()
             root.assertUnstarted()
         }
     }
@@ -859,11 +935,11 @@ class RunStateScreenTest {
     fun gpsRootCachedOrWeakFixNeverClaimsReadyButDoesNotBlockStart() {
         GpsStartRootHarness(ControlledGpsStartSource(gpsStartFix())).use { root ->
             assertEquals(1, root.source.cacheReads)
-            composeTestRule.onNodeWithText("GPS ready").assertDoesNotExist()
+            composeTestRule.onNodeWithText("GPS Ready").assertDoesNotExist()
             composeTestRule.onNodeWithTag(START_RUN_BUTTON_TAG).assertIsEnabled()
             root.emit(gpsStartFix(accuracyMeters = 100.0))
             composeTestRule.onNodeWithText("GPS signal weak").assertExists()
-            composeTestRule.onNodeWithText("GPS ready").assertDoesNotExist()
+            composeTestRule.onNodeWithText("GPS Ready").assertDoesNotExist()
             root.tapStart()
             root.awaitCountdown()
             composeTestRule.mainClock.advanceTimeBy(LONGER_THAN_COUNTDOWN_MILLIS)
@@ -875,7 +951,7 @@ class RunStateScreenTest {
     fun gpsRootLiveFixKeepsListenerUntilSingleHandoffAndRestoresOnlyDispatchedMarker() {
         GpsStartRootHarness().use { root ->
             root.emit(gpsStartFix())
-            composeTestRule.onNodeWithText("GPS ready").assertExists()
+            composeTestRule.onNodeWithText("GPS Ready").assertExists()
             root.tapStart()
             root.awaitCountdown()
             assertEquals(1, root.source.registrations)
@@ -902,7 +978,7 @@ class RunStateScreenTest {
             composeTestRule.runOnUiThread { firstListener.sample(gpsStartFix()) }
             composeTestRule.mainClock.advanceTimeBy(LONGER_THAN_COUNTDOWN_MILLIS)
             root.assertUnstarted()
-            composeTestRule.onNodeWithText("GPS ready").assertDoesNotExist()
+            composeTestRule.onNodeWithText("GPS Ready").assertDoesNotExist()
             assertEquals(2, root.source.registrations)
             root.tapStart()
             root.awaitCountdown()
@@ -951,7 +1027,7 @@ class RunStateScreenTest {
             assertEquals(0, root.source.removals)
             assertEquals(1, root.source.activeListeners)
             root.emit(gpsStartFix())
-            composeTestRule.onNodeWithText("GPS ready").assertExists()
+            composeTestRule.onNodeWithText("GPS Ready").assertExists()
             root.tapStart()
             root.awaitCountdown()
             composeTestRule.mainClock.advanceTimeBy(LONGER_THAN_COUNTDOWN_MILLIS)
@@ -971,7 +1047,7 @@ class RunStateScreenTest {
             awaitGpsRoot { root.source.activeListeners == 1 }
             composeTestRule.mainClock.advanceTimeBy(LONGER_THAN_COUNTDOWN_MILLIS)
             root.assertUnstarted()
-            composeTestRule.onNodeWithText("GPS ready").assertDoesNotExist()
+            composeTestRule.onNodeWithText("GPS Ready").assertDoesNotExist()
             root.tapStart()
             root.awaitCountdown()
             val counting = root.source.callbacks.last()
@@ -1324,7 +1400,7 @@ class RunStateScreenTest {
         }
         assertEquals("Music observation off", composeTestRule.onNodeWithTag(START_RUN_SETTINGS_TAG)
             .fetchSemanticsNode().config[SemanticsProperties.StateDescription])
-        composeTestRule.onNodeWithTag(START_ENERGY_UNDO_TAG).assertExists()
+        composeTestRule.onNodeWithTag("startEnergyUndo").assertDoesNotExist()
         music.assertIsNotEnabled().performTouchInput { click() }
         composeTestRule.runOnIdle {
             assertEquals(1, spotifyOpens)
@@ -2217,7 +2293,7 @@ class RunStateScreenTest {
     }
 
     @Test
-    fun selectedEnergyIlluminatesStartAndUndoRestoresItsIdleAppearance() {
+    fun selectedEnergyIlluminatesStartAndFreshDraftRestoresItsIdleAppearance() {
         composeTestRule.mainClock.autoAdvance = false
         var selected by mutableStateOf<PreRunEnergy?>(null)
         composeTestRule.setContent {
@@ -2233,9 +2309,12 @@ class RunStateScreenTest {
         composeTestRule.mainClock.advanceTimeBy(1_900L)
         composeTestRule.onNodeWithTag(START_RUN_BUTTON_TAG).assertIsEnabled()
         assertFalse("Energy must visibly illuminate the actual Start control", idle.contentEquals(dialPixels()))
-        composeTestRule.onNodeWithTag(START_ENERGY_UNDO_TAG).performClick()
+        composeTestRule.onNodeWithTag("startEnergyUndo").assertDoesNotExist()
+        assertEquals(PreRunEnergy.HIGH, selected)
+        // This is a new test-owned draft, not an interaction available on Start.
+        composeTestRule.runOnIdle { selected = null }
         composeTestRule.mainClock.advanceTimeBy(800L)
-        assertTrue("Undo must return Start to its original appearance", idle.contentEquals(dialPixels()))
+        assertTrue("A fresh draft must return Start to its original appearance", idle.contentEquals(dialPixels()))
         assertEquals(null, selected)
     }
 
@@ -3852,16 +3931,30 @@ class RunStateScreenTest {
     @Test
     fun startOpensRunSettingsWithoutShowingBackendControls() {
         var loading by mutableStateOf(true)
+        var actionsEnabled by mutableStateOf(true)
         var opens = 0
+        var maps = 0
+        var histories = 0
         composeTestRule.setContent {
-            StartRunScreen(null, {}, {}, true, {}, false,
-                onOpenRunSettings = { opens++ }, setupLoading = loading)
+            StartRunScreen(null, {}, {}, actionsEnabled, { histories++ }, true,
+                onOpenMap = { maps++ }, onOpenRunSettings = { opens++ }, setupLoading = loading)
         }
         composeTestRule.onNodeWithTag(START_REFLECTION_SETUP_TAG).assertDoesNotExist()
         composeTestRule.onNodeWithTag(START_RUN_SETTINGS_TAG).assertIsNotEnabled()
+            .performTouchInput { click() }
+        composeTestRule.runOnIdle { assertEquals(0, opens) }
         composeTestRule.runOnIdle { loading = false }
         composeTestRule.onNodeWithTag(START_RUN_SETTINGS_TAG).performClick()
-        composeTestRule.runOnIdle { assertEquals(1, opens) }
+        composeTestRule.onNodeWithTag("startExpandMap").performClick()
+        composeTestRule.onNodeWithTag(START_HISTORY_TAG).performClick()
+        composeTestRule.runOnIdle {
+            assertEquals(1, opens); assertEquals(1, maps); assertEquals(1, histories)
+            actionsEnabled = false
+        }
+        for (tag in listOf(START_RUN_SETTINGS_TAG, "startExpandMap", START_HISTORY_TAG)) {
+            composeTestRule.onNodeWithTag(tag).assertIsNotEnabled().performTouchInput { click() }
+        }
+        composeTestRule.runOnIdle { assertEquals(1, opens); assertEquals(1, maps); assertEquals(1, histories) }
     }
 
     @Test

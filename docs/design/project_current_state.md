@@ -18,6 +18,75 @@ missing check. A successful build, installation or controlled fixture is not pro
 | **Verified in use** | The stated behavior worked in actual use for the named scenario, not only with fictional test data. This does not prove every device, song or circumstance. |
 | **Complete for agreed scope** | The agreed behavior, necessary checks and documentation are finished. Explicit remaining limits are outside that scope; this does not mean every future idea is built. |
 
+## October 22 compact Start panel and external icons — Ready to test; installed on Moto
+
+Manley requested restoring the compact Agent card and placing Map, History and Settings vertically
+outside and below it, without visible labels. A right-aligned stack preserves the open map area;
+each icon retains its accessible name and 48 dp touch target. The divider/footer and `Map artwork`
+are removed. Current GPS status replaces `Ready when you are` beneath `READY / TO RUN`;
+`GPS Ready` requires actual usable live evidence, while permission alone stays connecting. Weak,
+lost, missing setup, preference loading and Sample states remain visible in that same position.
+This is a presentation change, with existing actions, GPS capture and other screens unchanged.
+Both 739-unit suites and all three APK builds passed. Fourteen focused silent Moto checks passed
+(37.674s): normal fixed layout/intake/Undo, GPS subtitle truth, independent accessible 48 dp icon
+actions and disabled/loading states, large text, landscape, map permission/close and root GPS
+listener/navigation behavior. The controlled healthy-GPS screenshot was visually inspected at
+`start-compact-agent-external-icons-preview.png` in the local receipts folder. No real run, audio
+or music playback was started. The normal app was reopened after cleanup.
+
+All 44 completed runs/every field across 11 business tables (including shoes/selection) and all
+four preference hashes matched the pre-update backup. Room 19 integrity/FKs passed. Temporary
+Moto test package and loose inspection databases were removed; ignored receipts/private backup
+use `docs/local/shoe-check-2026-10-22/start-panel-*`. No new source file, dependency, schema,
+provider configuration or Git action. User visual review remains.
+
+**Panel content scaling follow-up — Ready to test, installed:** at Manley's request, RUN 17sp,
+STATE 28sp/32sp line height, AGENT 12sp, READY 22sp, TO RUN 18sp and GPS 12sp/16sp line height fill
+more of the card. Horizontal padding is 14dp and gaps 6dp; ring size rises only 6dp to 90/106dp.
+Status text keeps full wrapping and system font scaling. Debug/test APK builds and four existing
+Moto cases passed (14.481s): normal fixed layout/intake, 1.5–2x text, landscape and GPS states.
+Normal screenshot `panel-scale-preview.png` was inspected; no additional tests were authored or
+unit suites repeated for this presentation-only follow-up. All44runs/every11-table field/four
+preference hashes unchanged; Room19 integrity/FKs clean, temporary tests/inspection copies removed
+and app reopened. Ignored receipts/backup use the same local folder's `panel-scale-*` prefix.
+No new source file or Git action. User visual review remains.
+
+**Alignment and type hierarchy follow-up — Ready to test, installed:** all three right-hand lines
+share a left edge in an intrinsic-width group positioned at the right of its allotted column.
+This removes the ragged right-aligned staircase while retaining the group's placement. READY is
+17sp ExtraBold with 2sp spacing; TO RUN is 22sp Black/26sp line height with 1sp spacing. GPS stays
+12sp/16sp with Bold/0.1sp spacing, matching AGENT READY's weight and spacing; live wording/case
+remain unchanged. The preceding scaling receipt's 22sp READY/18sp TO RUN is superseded.
+Debug/test APK builds passed, followed by two existing normal/large-text Moto checks (10.931s).
+`panel-align-preview.png` was inspected. All44runs/every11-table field/four preference hashes
+matched the fresh snapshot, Room19 integrity/FKs passed, temporary tests/inspection copies were
+removed and app reopened. Ignored receipts/backup use `panel-align-*` in the same local folder.
+No new source/test files, new tests, broader test repetition, Git or provider change. User review remains.
+
+**Latest panel/Energy refinement — Ready to test, installed:** pre-run Undo is removed from both
+rendering and accessibility, including its old constant. Choosing Energy remains immediate and
+the selected draft continues into Start; no replacement tap/long-press reset was added. The
+reserved Energy slot remains to prevent layout jumps. Shoe archive Undo and post-run controls
+are unchanged. Existing tests now assert absence/persistence and use explicit fixture-owned draft
+resets where exercising a new context; four old Undo-oriented test names were updated.
+
+Ring size is 108/128dp, vertical panel padding 4dp and horizontal padding/gaps 12/4dp. Its idle
+drawing sits closer to the border while its receiving swell stays within the measured drawing.
+Upper READY now aligns to the right edge of the right-hand group, opposite RUN's left inset;
+TO RUN/GPS remain left-aligned. Upper READY and READY in AGENT use StartInk at70% opacity, while
+the separating dot uses StartLime. The earlier three-shared-left-edges receipt is superseded.
+
+Debug/test APK builds passed. Ten unique focused Moto checks passed across runs: nine initial
+passes (25.021s batch) plus corrected `freshDraftDuringEnergyIntakeDoesNotReceiveStaleCompletion`
+(3.775s). The fixture reset needed effect/recomposition time after UI Undo removal; the first
+wait correction invoked semantics on the test clock's main thread and was rejected by Compose.
+The final bounded test-thread frame loop allows at most160ms, well before the old flight would
+finish. Production code was not changed for either test failure. Normal `panel-refine-preview.png`
+was visually inspected. All44completed runs/every field across11tables/fourprefs matched the
+fresh snapshot, Room19 integrity/FKs passed, temporary tests/inspection copies removed and app
+reopened. Ignored receipts use `panel-refine-*`; the unchanged snapshot reused the retained
+private backup. No new source/test files, new tests, Git, backend or provider change. User review remains.
+
 ## October 22 shoe selection — Ready to test; installed on Moto
 
 Manley authorized completing shoes and collecting existing slogans while away; Energy remains
