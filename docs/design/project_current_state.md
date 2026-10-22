@@ -18,6 +18,22 @@ missing check. A successful build, installation or controlled fixture is not pro
 | **Verified in use** | The stated behavior worked in actual use for the named scenario, not only with fictional test data. This does not prove every device, song or circumstance. |
 | **Complete for agreed scope** | The agreed behavior, necessary checks and documentation are finished. Explicit remaining limits are outside that scope; this does not mean every future idea is built. |
 
+## October 22 opening wordmark colors — Complete for agreed scope; installed and visually accepted
+
+At Manley's request, the opening wordmark keeps its cream/sage base and gains three spaced accent
+letters: a medium purple **R** (#8F6FE3), a light orange **n** (#F9A869) and an olive **a**
+(#7F9C54). The **u** stays cream (#FFFDF6) and the rest of **State** stays sage (#E2EDC9). The
+purple echoes the collage's purple sneakers and the orange its orange bottle; the olive is the
+app's own olive (#53673B), brightened so it stays readable on the dark center band.
+
+Before any code changed, the options were compared as previews rendered from the app's own 33
+photos, Barlow Condensed font, row layout and shading, calibrated against a Moto screenshot
+(wordmark position within a few pixels). Manley chose "G + olive a" and confirmed it on the phone:
+“It came out really good.” Only the wordmark colors in `OpeningScreen.kt` changed; photos,
+arrangement, motion, 4.8-second timing, shading and the Tap to skip hint are unchanged. The first
+color update ran the unit suite and installed; the final olive-a update was install-only. Both
+installed on the Moto as normal updates. No schema, data, backend or provider change.
+
 ## October 22 compact Start panel and external icons — Ready to test; installed on Moto
 
 Manley requested restoring the compact Agent card and placing Map, History and Settings vertically

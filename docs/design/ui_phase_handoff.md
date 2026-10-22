@@ -93,6 +93,11 @@ none has been placed on the opening screen. Energy walkthrough resumes after thi
 
 ## October 22 opening screen — Complete for agreed scope; installed and visually accepted
 
+**Later October 22 wordmark color update — installed and visually accepted:** the wordmark now
+uses a medium purple R (#8F6FE3), cream u, light orange n (#F9A869), sage St, olive a (#7F9C54)
+and sage te. This replaces the all cream/sage wordmark described below; photos, arrangement,
+motion and timing are unchanged. Details are in `project_current_state.md`.
+
 Manley accepted the result: “It looks absolutely great.” Keep the 4.8-second duration, small skip
 hint and approved photos/arrangement/speed. Opening copy needs separate approval.
 
