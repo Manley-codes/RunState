@@ -14,6 +14,7 @@ import java.util.UUID
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -107,6 +108,107 @@ class RunStateDatabaseTest {
         isolatedConnections.clear()
         database.close()
         context.deleteDatabase(DATABASE_NAME)
+    }
+
+    @Test
+    fun savedPhysicalPairsSelectionAndArchiveUndoSurviveReopenWithoutMergingModels() = runBlocking {
+        val first = ShoePairEntity(UUID.randomUUID().toString(), "Brooks", "Ghost", "Blue pair", OFFICIAL_START)
+        val second = first.copy(shoePairId = UUID.randomUUID().toString(), nickname = "Race pair")
+        database.shoeDao().addAndSelect(first)
+        database.shoeDao().addAndSelect(first)
+        database.shoeDao().addAndSelect(second)
+        assertEquals(2, database.shoeDao().observeShoes().first().size)
+        assertEquals(second.shoePairId, database.shoeDao().selectedActivePairId())
+        database.shoeDao().selectPair(first.shoePairId)
+        database.close()
+        database = openDatabase()
+        assertEquals(first.shoePairId, database.shoeDao().selectedActivePairId())
+        val receipt = requireNotNull(database.shoeDao().archivePair(first.shoePairId))
+        assertNull(database.shoeDao().selectedActivePairId())
+        assertTrue(database.shoeDao().findPair(first.shoePairId)!!.archived)
+        assertTrue(database.shoeDao().undoArchive(receipt))
+        assertEquals(first.shoePairId, database.shoeDao().selectedActivePairId())
+        assertEquals(first, database.shoeDao().findPair(first.shoePairId))
+
+        val laterReceipt = requireNotNull(database.shoeDao().archivePair(first.shoePairId))
+        database.shoeDao().selectPair(second.shoePairId)
+        database.shoeDao().undoArchive(laterReceipt)
+        assertEquals(second.shoePairId, database.shoeDao().selectedActivePairId())
+        database.shoeDao().archivePair(first.shoePairId)
+        assertTrue(database.shoeDao().restorePair(first.shoePairId))
+        assertEquals(first.shoePairId, database.shoeDao().selectedActivePairId())
+        database.shoeDao().selectPair(null)
+        database.close()
+        database = openDatabase()
+        assertNull(database.shoeDao().observeSelectedPairId().first())
+        assertEquals(2, database.shoeDao().observeShoes().first().size)
+    }
+
+    @Test
+    fun shoeMileageCountsOnlyFinalizedKnownGpsDistanceOnceAndKeepsArchivedHistory() = runBlocking {
+        val pair = ShoePairEntity(UUID.randomUUID().toString(), "ASICS", "Novablast", null, OFFICIAL_START)
+        database.shoeDao().addAndSelect(pair)
+        fun completed(distance: Double?, finalized: Boolean = true,
+                      tracking: RunTrackingMode? = RunTrackingMode.GPS,
+                      source: MetricSource = MetricSource.GPS,
+                      coverage: TelemetryCoverage = TelemetryCoverage.COMPLETE,
+                      shoeId: String? = pair.shoePairId): RunEntity = runningRun.copy(
+            runId = UUID.randomUUID().toString(), state = StoredRunState.COMPLETED,
+            lastCheckpointEpochMillis = FINISHED_AT, finishEpochMillis = FINISHED_AT,
+            finalDistanceMeters = distance, metricSource = source, telemetryCoverage = coverage,
+            displayDistanceUnit = DistanceUnit.MILES, trackingMode = tracking,
+            activityFinalized = finalized, shoePairId = shoeId
+        )
+        val pending = completed(1_000.0, finalized = false)
+        val partial = completed(250.0, coverage = TelemetryCoverage.PARTIAL)
+        listOf(pending, partial,
+            completed(9_000.0, tracking = RunTrackingMode.FIXTURE, source = MetricSource.FIXTURE),
+            completed(8_000.0, tracking = null),
+            completed(7_000.0, source = MetricSource.FIXTURE),
+            completed(null, coverage = TelemetryCoverage.UNAVAILABLE),
+            completed(6_000.0, shoeId = null),
+            runningRun.copy(shoePairId = pair.shoePairId, trackingMode = RunTrackingMode.GPS)
+        ).forEach { database.runDao().insert(it) }
+        suspend fun meters() = database.shoeDao().observeShoes().first().single().totalDistanceMeters
+        assertEquals(250.0, meters(), 0.0)
+        assertTrue(database.runDao().finalizeActivity(pending.runId))
+        assertTrue(database.runDao().finalizeActivity(pending.runId))
+        assertEquals(1_250.0, meters(), 0.0)
+        val runBeforeArchive = database.runDao().findById(pending.runId)
+        database.shoeDao().archivePair(pair.shoePairId)
+        assertEquals(1_250.0, meters(), 0.0)
+        assertEquals(runBeforeArchive, database.runDao().findById(pending.runId))
+        database.close()
+        database = openDatabase()
+        database.shoeDao().restorePair(pair.shoePairId)
+        assertEquals(1_250.0, meters(), 0.0)
+        assertEquals(runBeforeArchive, database.runDao().findById(pending.runId))
+    }
+
+    @Test
+    fun failedShoeArchiveRollsBackSelectionAndPairAndForeignKeysProtectRunAssociation() = runBlocking {
+        val pair = ShoePairEntity(UUID.randomUUID().toString(), "Nike", "Pegasus", null, OFFICIAL_START)
+        database.shoeDao().addAndSelect(pair)
+        database.runDao().insert(runningRun.copy(shoePairId = pair.shoePairId))
+        database.openHelper.writableDatabase.execSQL("""
+            CREATE TRIGGER block_test_shoe_selection BEFORE INSERT ON shoe_selection
+            BEGIN SELECT RAISE(ABORT, 'test storage failure'); END
+        """.trimIndent())
+        assertTrue(runCatching { database.shoeDao().archivePair(pair.shoePairId) }.isFailure)
+        assertEquals(pair, database.shoeDao().findPair(pair.shoePairId))
+        assertEquals(pair.shoePairId, database.shoeDao().selectedActivePairId())
+        database.openHelper.writableDatabase.execSQL("DROP TRIGGER block_test_shoe_selection")
+        database.shoeDao().selectPair(null)
+        assertTrue(runCatching {
+            database.openHelper.writableDatabase.execSQL("DELETE FROM shoe_pairs WHERE shoe_pair_id = ?",
+                arrayOf(pair.shoePairId))
+        }.isFailure)
+        assertTrue(runCatching {
+            database.runDao().insert(runningRun.copy(runId = UUID.randomUUID().toString(),
+                shoePairId = UUID.randomUUID().toString()))
+        }.isFailure)
+        assertEquals(1, database.runDao().countRuns())
+        assertEquals(pair.shoePairId, database.runDao().findById(runningRun.runId)?.shoePairId)
     }
 
     @Test

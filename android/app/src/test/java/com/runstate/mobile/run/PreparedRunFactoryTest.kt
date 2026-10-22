@@ -1,6 +1,7 @@
 package com.runstate.mobile.run
 
 import com.runstate.mobile.data.local.RunEntity
+import com.runstate.mobile.data.local.ShoePairEntity
 import com.runstate.mobile.data.local.FakeRunDao
 import com.runstate.mobile.data.local.PreRunEnergy
 import com.runstate.mobile.data.local.StoredRunState
@@ -23,6 +24,34 @@ import org.junit.Test
  * value merely looks like a UUID or is roughly the current time.
  */
 class PreparedRunFactoryTest {
+
+    @Test
+    fun `physical shoe selection is optional and frozen into the official row`() {
+        val pair = ShoePairEntity("03689ffc-65d9-4907-ae77-7a17b3ad77a6", "Brooks", "Ghost", "Blue pair", OFFICIAL_START)
+        val factory = PreparedRunFactory(
+            clock = Clock.fixed(Instant.ofEpochMilli(OFFICIAL_START), ZoneOffset.UTC),
+            zoneIdSupplier = { ZoneOffset.UTC }, uuidSupplier = { UUID.fromString(RUN_ID) }
+        )
+        assertEquals(null, factory.create().shoePairId)
+        val prepared = factory.create(trackingMode = RunTrackingMode.GPS, shoePairId = pair.shoePairId)
+        assertEquals(pair.shoePairId, prepared.shoePairId)
+        assertEquals(pair.shoePairId, prepared.copy(lastCheckpointEpochMillis = OFFICIAL_START + 1000).shoePairId)
+        assertThrows(IllegalArgumentException::class.java) { factory.create(shoePairId = "a model name") }
+    }
+
+    @Test
+    fun `physical pair input rejects blank untrimmed oversized or noncanonical identities`() {
+        val pair = ShoePairEntity("03689ffc-65d9-4907-ae77-7a17b3ad77a6", "Brooks", "Ghost", null, OFFICIAL_START)
+        assertThrows(IllegalArgumentException::class.java) { pair.copy(brand = " ") }
+        assertThrows(IllegalArgumentException::class.java) { pair.copy(model = " Ghost") }
+        assertThrows(IllegalArgumentException::class.java) { pair.copy(brand = "b".repeat(61)) }
+        assertThrows(IllegalArgumentException::class.java) { pair.copy(model = "m".repeat(81)) }
+        assertThrows(IllegalArgumentException::class.java) { pair.copy(nickname = "n".repeat(41)) }
+        assertThrows(IllegalArgumentException::class.java) { pair.copy(nickname = "") }
+        assertThrows(IllegalArgumentException::class.java) { pair.copy(shoePairId = pair.shoePairId.uppercase()) }
+        assertEquals(60, pair.copy(brand = "b".repeat(60), model = "m".repeat(80),
+            nickname = "n".repeat(40)).brand.length)
+    }
 
     @Test
     fun `readTime and create capture each source once and freeze prepared timing through retry`() {

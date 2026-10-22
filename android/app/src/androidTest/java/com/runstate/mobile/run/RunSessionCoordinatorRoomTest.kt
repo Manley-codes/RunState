@@ -11,6 +11,7 @@ import com.runstate.mobile.data.local.MusicPlaybackState
 import com.runstate.mobile.data.local.RunMusicObservation
 import com.runstate.mobile.data.local.RunLocationObservation
 import com.runstate.mobile.data.local.RunStateDatabase
+import com.runstate.mobile.data.local.ShoePairEntity
 import com.runstate.mobile.data.local.RunTrackingMode
 import com.runstate.mobile.data.local.RunTransitionType
 import com.runstate.mobile.data.local.StoredRunState
@@ -34,6 +35,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.async
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.flow.first
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -115,8 +117,52 @@ class RunSessionCoordinatorRoomTest {
                 timingMarkSupplier = timingMarkSupplier
             ),
             applicationScope = applicationScope,
-            locationDao = database.locationDao()
+            locationDao = database.locationDao(),
+            shoeDao = database.shoeDao()
         )
+
+    @Test
+    fun chosenPhysicalPairIsFrozenAcrossStartRetryAndRecoveryAndDoesNotCountSampleDistance() = runBlocking {
+        val pair = ShoePairEntity(UUID.randomUUID().toString(), "HOKA", "Clifton", "Daily pair", OFFICIAL_START)
+        val nextPair = pair.copy(shoePairId = UUID.randomUUID().toString(), nickname = "Second pair")
+        database.shoeDao().addAndSelect(pair)
+        val clock = SettableClock(OFFICIAL_START)
+        val first = coordinator(clock)
+        first.initialize()
+        first.beginCountdown()
+        first.cancelCountdown()
+        assertEquals(0, database.runDao().countRuns())
+        assertEquals(pair.shoePairId, database.shoeDao().selectedActivePairId())
+        first.beginCountdown()
+        database.openHelper.writableDatabase.execSQL("""
+            CREATE TRIGGER block_test_shoe_run_start BEFORE INSERT ON runs
+            BEGIN SELECT RAISE(ABORT, 'test storage failure'); END
+        """.trimIndent())
+        assertTrue(runCatching { first.requestStart().await() }.isFailure)
+        database.shoeDao().addAndSelect(nextPair)
+        database.shoeDao().archivePair(pair.shoePairId)
+        database.openHelper.writableDatabase.execSQL("DROP TRIGGER block_test_shoe_run_start")
+        clock.nowMillis += 1_000L
+        first.requestStart().await()
+        assertEquals(pair.shoePairId, database.runDao().findById(RUN_ID)?.shoePairId)
+        assertEquals(OFFICIAL_START, database.runDao().findById(RUN_ID)?.officialStartEpochMillis)
+        clock.nowMillis = FIRST_PAUSE
+        first.requestAction(RunActionKind.PAUSE).await()
+        applicationScope.cancel()
+        database.close()
+        database = Room.databaseBuilder(context, RunStateDatabase::class.java, DATABASE_NAME).build()
+        applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+        val recovered = coordinator(clock)
+        recovered.initialize()
+        clock.nowMillis = FINISH
+        recovered.requestAction(RunActionKind.COMPLETE).await()
+        recovered.finalizeActivity(RUN_ID)
+        recovered.finalizeActivity(RUN_ID)
+        assertEquals(pair.shoePairId, database.runDao().findById(RUN_ID)?.shoePairId)
+        assertEquals(nextPair.shoePairId, database.shoeDao().selectedActivePairId())
+        assertTrue(database.shoeDao().observeShoes().first().all { it.totalDistanceMeters == 0.0 })
+        assertEquals(1, database.runDao().countRuns())
+    }
 
     @Test
     fun protectedCompletionAndLocalNoteSurviveReopenThenFinalizeExactlyOnce() = runBlocking {

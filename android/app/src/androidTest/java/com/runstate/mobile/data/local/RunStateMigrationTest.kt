@@ -5,6 +5,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.flow.first
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -57,6 +58,79 @@ class RunStateMigrationTest {
 
     /** The same context the helper writes its database files under. */
     private val context = InstrumentationRegistry.getInstrumentation().targetContext
+
+    @Test
+    fun versionEighteenAddsEmptyShoesAndPreservesEveryExistingFieldWithoutAssigningOldMileage() {
+        val name = "runstate-v18-shoes-test.db"
+        val old = helper.createDatabase(name, 18)
+        val activeId = "03689ffc-65d9-4907-ae77-7a17b3ad77a6"
+        val pausedId = "4ca0ea04-a703-40a1-a014-47f08a67c127"
+        val finish = OFFICIAL_START + 1_920_000L
+        old.insertVersionTwoRun(state = "COMPLETED", lastCheckpointEpochMillis = finish,
+            finishEpochMillis = finish)
+        old.insertVersionTwoRun(runId = activeId, state = "RUNNING",
+            lastCheckpointEpochMillis = OFFICIAL_START + 30_000L, finishEpochMillis = null)
+        old.insertVersionTwoRun(runId = pausedId, state = "PAUSED",
+            lastCheckpointEpochMillis = OFFICIAL_START + 20_000L, finishEpochMillis = null)
+        old.execSQL("UPDATE runs SET transition_history_complete=1, music_observation_requested=1, " +
+            "music_reflection_sharing_allowed=1, song_snippet_lookup_allowed=1, " +
+            "pre_run_energy='HIGH', tracking_mode='GPS'")
+        old.execSQL("""
+            UPDATE runs SET final_distance_meters=5432.1, metric_source='GPS',
+                telemetry_coverage='PARTIAL', display_distance_unit='MILES', activity_finalized=0,
+                post_run_note='Preserve the pending activity exactly', post_run_effort='WORKING'
+            WHERE run_id=?
+        """.trimIndent(), arrayOf(RUN_ID))
+        old.execSQL("""
+            INSERT INTO run_music_observations (run_id,sequence_number,observation_key,
+                observed_at_epoch_millis,elapsed_realtime_nanos,source_package,title,artist,playback_state,event_kind,
+                spotify_track_uri,album_name,track_duration_millis,playback_interval_millis)
+            VALUES (?,1,'existing-song',?,1000000000,'com.spotify.music','Exact old title','Exact old artist',
+                'PLAYING','SESSION_SNAPSHOT','spotify:track:0bRXwKfigvpKZUurwqAlEh','Original album',254000,0)
+        """.trimIndent(), arrayOf<Any>(RUN_ID, OFFICIAL_START + 1_000L))
+        old.execSQL("""
+            INSERT INTO run_music_observations (run_id,sequence_number,observation_key,
+                observed_at_epoch_millis,elapsed_realtime_nanos,source_package,title,artist,playback_state,event_kind,
+                spotify_track_uri,album_name,track_duration_millis,playback_interval_millis)
+            VALUES (?,2,'existing-song-sample',?,2000000000,'com.spotify.music','Exact old title','Exact old artist',
+                'PLAYING','PLAYBACK_SAMPLE','spotify:track:0bRXwKfigvpKZUurwqAlEh','Original album',254000,1000)
+        """.trimIndent(), arrayOf<Any>(RUN_ID, OFFICIAL_START + 2_000L))
+        val tables = listOf("runs", "run_transitions", "run_location_points", "run_music_observations",
+            "run_reflections", "run_weather", "run_split_snapshots", "run_splits", "run_song_preparations")
+        val columns = tables.associateWith { table ->
+            old.query("SELECT * FROM `$table` LIMIT 0").use { it.columnNames.toList() }
+        }
+        fun rows(db: SupportSQLiteDatabase, table: String): List<List<String?>> {
+            val originalColumns = columns.getValue(table)
+            return db.query("SELECT ${originalColumns.joinToString(",") { "`$it`" }} FROM `$table` ORDER BY 1,2")
+                .use { cursor -> buildList {
+                    while (cursor.moveToNext()) add(originalColumns.indices.map { index ->
+                        if (cursor.isNull(index)) null else cursor.getString(index)
+                    })
+                } }
+        }
+        val before = tables.associateWith { rows(old, it) }
+        old.close()
+        helper.runMigrationsAndValidate(name, 19, true, MIGRATION_18_19).use { migrated ->
+            tables.forEach { table -> assertEquals(table, before.getValue(table), rows(migrated, table)) }
+            migrated.query("SELECT shoe_pair_id FROM runs").use { cursor ->
+                assertEquals(3, cursor.count)
+                while (cursor.moveToNext()) assertTrue(cursor.isNull(0))
+            }
+            migrated.query("PRAGMA foreign_key_check").use { assertEquals(0, it.count) }
+        }
+        val reopened = openDatabaseThroughFactory(name)
+        runBlocking {
+            assertTrue(reopened.shoeDao().observeShoes().first().isEmpty())
+            assertNull(reopened.shoeDao().selectedActivePairId())
+            assertNull(reopened.runDao().findById(RUN_ID)?.shoePairId)
+            assertEquals(listOf(0L, 1000L), reopened.musicObservationDao().observationsFor(RUN_ID)
+                .map { it.playbackIntervalMillis })
+            assertEquals("Preserve the pending activity exactly", reopened.runDao().findById(RUN_ID)?.postRunNote)
+            assertEquals(RUN_ID, reopened.runDao().findLatestUnfinalizedActivity()?.runId)
+        }
+        reopened.close()
+    }
 
     @Test
     fun versionSeventeenPreservesAllOldFieldsAndLeavesListeningDurationUnknown() {

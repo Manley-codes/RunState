@@ -364,6 +364,7 @@ class RunStateApplication : Application() {
         RunSessionCoordinator(
             runDao = database.runDao(),
             locationDao = database.locationDao(),
+            shoeDao = database.shoeDao(),
 
             // The phone's zone is read when each run is prepared, not captured here, so a
             // run records the zone it actually began in.

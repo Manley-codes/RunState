@@ -55,7 +55,8 @@ internal class PreparedRunFactory(
         trackingMode: RunTrackingMode = RunTrackingMode.FIXTURE,
         musicObservationRequested: Boolean = false,
         musicReflectionSharingAllowed: Boolean = false,
-        songSnippetLookupAllowed: Boolean = false
+        songSnippetLookupAllowed: Boolean = false,
+        shoePairId: String? = null
     ): RunEntity {
         require(!musicReflectionSharingAllowed || musicObservationRequested) {
             "Music reflection sharing requires this run's music observation opt-in."
@@ -86,7 +87,8 @@ internal class PreparedRunFactory(
             musicReflectionSharingAllowed = musicReflectionSharingAllowed,
             songSnippetLookupAllowed = songSnippetLookupAllowed,
             startElapsedRealtimeMillis = reading.timingMark?.elapsedRealtimeMillis,
-            timingSessionId = reading.timingMark?.sessionId
+            timingSessionId = reading.timingMark?.sessionId,
+            shoePairId = shoePairId
         )
     }
 

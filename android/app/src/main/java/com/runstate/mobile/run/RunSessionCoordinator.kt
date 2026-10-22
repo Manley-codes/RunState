@@ -5,6 +5,7 @@ import com.runstate.mobile.data.local.FinalRunMetrics
 import com.runstate.mobile.data.local.LocationDao
 import com.runstate.mobile.data.local.MetricSource
 import com.runstate.mobile.data.local.RunDao
+import com.runstate.mobile.data.local.ShoeDao
 import com.runstate.mobile.data.local.RunEntity
 import com.runstate.mobile.data.local.RunLocationPointEntity
 import com.runstate.mobile.location.GpsCoverageEvaluator
@@ -252,7 +253,8 @@ internal class RunSessionCoordinator(
     private val preparedRunFactory: PreparedRunFactory,
     private val applicationScope: CoroutineScope,
     private val locationDao: LocationDao? = null,
-    private val fixtureDistanceCalculator: FixtureDistanceCalculator = FixtureDistanceCalculator()
+    private val fixtureDistanceCalculator: FixtureDistanceCalculator = FixtureDistanceCalculator(),
+    private val shoeDao: ShoeDao? = null
 ) {
 
     /**
@@ -1101,7 +1103,10 @@ internal class RunSessionCoordinator(
             trackingMode,
             musicObservationRequested,
             musicReflectionSharingAllowed,
-            songSnippetLookupAllowed
+            songSnippetLookupAllowed,
+            // Resolve only on first preparation. Save retries retain the original physical pair,
+            // even if its current selection changes before the same run is successfully inserted.
+            shoePairId = shoeDao?.selectedActivePairId()
         )
             .also { preparedRun = it }
 

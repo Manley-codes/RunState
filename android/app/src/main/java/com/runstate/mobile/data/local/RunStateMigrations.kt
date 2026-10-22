@@ -370,3 +370,35 @@ val MIGRATION_17_18 = object : Migration(17, 18) {
         connection.execSQL("ALTER TABLE `run_music_observations` ADD COLUMN `playback_interval_millis` INTEGER")
     }
 }
+
+/** Add pair identity without rebuilding runs or assigning any old activity to a shoe. */
+val MIGRATION_18_19 = object : Migration(18, 19) {
+    override fun migrate(connection: SQLiteConnection) {
+        connection.execSQL("""
+            CREATE TABLE IF NOT EXISTS `shoe_pairs` (
+                `shoe_pair_id` TEXT NOT NULL,
+                `brand` TEXT NOT NULL,
+                `model` TEXT NOT NULL,
+                `nickname` TEXT,
+                `created_at_epoch_millis` INTEGER NOT NULL,
+                `archived` INTEGER NOT NULL DEFAULT 0,
+                PRIMARY KEY(`shoe_pair_id`)
+            )
+        """.trimIndent())
+        connection.execSQL("""
+            CREATE TABLE IF NOT EXISTS `shoe_selection` (
+                `selection_id` INTEGER NOT NULL,
+                `shoe_pair_id` TEXT,
+                `revision` INTEGER NOT NULL,
+                PRIMARY KEY(`selection_id`),
+                FOREIGN KEY(`shoe_pair_id`) REFERENCES `shoe_pairs`(`shoe_pair_id`)
+                    ON UPDATE NO ACTION ON DELETE NO ACTION
+            )
+        """.trimIndent())
+        connection.execSQL("CREATE INDEX IF NOT EXISTS `index_shoe_selection_shoe_pair_id` " +
+            "ON `shoe_selection` (`shoe_pair_id`)")
+        connection.execSQL("ALTER TABLE `runs` ADD COLUMN `shoe_pair_id` TEXT " +
+            "REFERENCES `shoe_pairs` (`shoe_pair_id`) ON UPDATE NO ACTION ON DELETE NO ACTION")
+        connection.execSQL("CREATE INDEX IF NOT EXISTS `index_runs_shoe_pair_id` ON `runs` (`shoe_pair_id`)")
+    }
+}

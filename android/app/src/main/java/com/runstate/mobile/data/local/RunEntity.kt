@@ -2,6 +2,8 @@ package com.runstate.mobile.data.local
 
 import androidx.room.ColumnInfo
 import androidx.room.Entity
+import androidx.room.ForeignKey
+import androidx.room.Index
 import androidx.room.PrimaryKey
 import com.runstate.mobile.run.RunTimingMark
 import java.time.DateTimeException
@@ -112,7 +114,15 @@ data class FinalRunMetrics(
  * or a zone that cannot be read back is a defect worth failing on immediately, not
  * one worth discovering when History tries to render the run months later.
  */
-@Entity(tableName = "runs")
+@Entity(
+    tableName = "runs",
+    foreignKeys = [ForeignKey(
+        entity = ShoePairEntity::class,
+        parentColumns = ["shoe_pair_id"], childColumns = ["shoe_pair_id"],
+        onDelete = ForeignKey.NO_ACTION
+    )],
+    indices = [Index("shoe_pair_id")]
+)
 data class RunEntity(
 
     /**
@@ -239,13 +249,21 @@ data class RunEntity(
 
     /** Optional local-only feeling description, separate from comparable Energy/Effort. */
     @ColumnInfo(name = "post_run_note")
-    val postRunNote: String? = null
+    val postRunNote: String? = null,
+
+    /** Physical pair chosen at official start. Older runs remain unassigned forever. */
+    @ColumnInfo(name = "shoe_pair_id")
+    val shoePairId: String? = null
 ) {
     companion object {
         const val POST_RUN_NOTE_MAX_LENGTH = 280
     }
 
     init {
+
+        require(shoePairId == null || isCanonicalUuidText(shoePairId)) {
+            "A run's shoe pair id must be canonical lowercase UUID text, or absent."
+        }
 
         require(postRunNote == null || (state == StoredRunState.COMPLETED &&
             postRunNote.isNotBlank() && postRunNote.length <= POST_RUN_NOTE_MAX_LENGTH)) {
