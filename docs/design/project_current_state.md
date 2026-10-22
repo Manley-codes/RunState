@@ -18,6 +18,208 @@ missing check. A successful build, installation or controlled fixture is not pro
 | **Verified in use** | The stated behavior worked in actual use for the named scenario, not only with fictional test data. This does not prove every device, song or circumstance. |
 | **Complete for agreed scope** | The agreed behavior, necessary checks and documentation are finished. Explicit remaining limits are outside that scope; this does not mean every future idea is built. |
 
+## October 22 Start cleanup — Complete for agreed scope; installed and visually accepted
+
+Manley explicitly requested **no pre-run Energy beam or decorative Energy outlines**, superseding
+the earlier individual-edge/shared-rectangle directions, and approved the compact layout preview.
+After reviewing the installed result, he confirmed: **“Okay, this looks good.”**
+The installed `StartRunScreen.kt` places **GPS status, Map, History and gear** inside the existing
+white Agent panel and removes the external utility/status stack. Original map artwork, orbs,
+main footer, lower objects, anchored Energy, selection/intake, Undo and Agent motion remain.
+Routine music observation on/off lives in Settings and accessibility/status information;
+**only actionable access/setup/error messages remain inline**.
+
+**Software and installation:** debug, release and instrumentation APK builds passed in **2 minutes
+19 seconds**, with **124 tasks / 20 executed**. The main app was updated in place on the Moto.
+`cleanStartKeepsEnergyStartHistoryAndSettingsWithoutPerRunControlPills` passed in **5.713 seconds**,
+including Map/History/Settings callbacks, inside-card bounds and 48 dp touch-target assertions.
+Another **13 focused `RunStateScreenTest` cases passed in 40.632 seconds**, for **14 final silent
+Moto cases**. Coverage includes 360×480 layouts at 1.5×/2× text, 640×320 landscape, truthful GPS
+and music/access states, stationary swipes/intake/Undo, measured and cancelled intake, ring
+animation, selected Start glow/Undo, map/root and History/Settings warmup, optional map/location
+without starting a run, and disabled Spotify-launch behavior.
+
+The initial beam-only build/clean-Start check passed, but the first emulator intake visibility
+assertion failed (then line 668). That test now settles two initial layout frames before tapping,
+and the focused final Moto intake check passed. Production intake behavior was not changed.
+This records the resolved test-start scheduling issue, not a claim that the whole emulator batch
+was rerun or that real-run GPS behavior was newly accepted.
+
+The isolated native screenshot `start-approved-layout-20261022-isolated.png`, Energy crop
+`start-energy-clean-20261022.png` and final normal-app screenshot
+`start-approved-layout-20261022-moto.png` under `android/app/build/outputs/runstate-qa` were
+inspected. The normal 720×1604 screen matches the approved direction: controls inside the white
+panel, clean Energy edges, retained lower artwork/footer and truthful indoor “GPS signal lost”
+status. **Manley accepted the installed result on October 22.** No new live audio,
+GPS run, provider request or playback-control test was performed for this UI slice.
+
+Post-check comparison preserved **all 44 saved runs and every current field across nine business
+tables**, with Room 18 integrity OK and zero foreign-key violations. All four preference hashes
+matched. All 29 pre-existing cache files were retained and only two new test preview files were
+removed. The pre-existing test runner and private safety backup were retained. The main app was
+never uninstalled and was reopened after verification.
+
+Preserve the accepted October 21 facts pace, reflection entry, song handoff, voices and exact
+creative baseline below; writer/audio/backend behavior is unchanged. Uncommitted work remains
+for Manley's Git workflow; no staging, commit, push or provider changes were made. No source or
+document files or dependencies were added. Necessary ignored build/capture/preview outputs are
+local verification artifacts.
+
+## October 21 completion facts pacing and musical handoff — Complete for agreed scope
+
+**Installed and accepted in the controlled phone audition.** Manley confirmed **“The pace feels
+right”** and **“The transition feels connected.”** This closes the bounded facts-pacing and shorter
+musical-handoff adjustment. Preserve this tuning; no further change is requested. The broader
+completion flow remains **Ready to test** for real runs, new-writing latency and preparation gaps.
+The frozen settings are also recorded in the accepted delivery amendment in
+`music_reflection_accepted_baseline.md`; its earlier writing and audio examples remain preserved.
+
+After the replay below, Manley described the sequence as **“pretty good”**, but the facts sounded
+slightly too fast and the reflection-to-snippet pause felt awkward and unrhythmic. He wants an
+almost-immediate musical entrance with a brief connected breath. This is positive feedback on
+the controlled example, not acceptance of every completion path or real-run latency.
+
+The bounded installed change slows **completion facts only**: cloud audio playback uses **0.90 speed
+with pitch 1**, while local fallback uses **0.864 instead of 0.96**. Dedicated
+`speakCompletionFacts` / `playCompletionFactsAudio` paths keep countdowns, distance announcements,
+the Energy invitation and the reflection unchanged. Backend voice IDs, the accepted writer and
+the selected clip are unchanged; this is client playback timing, not a new voice or generation rule.
+The current **480 ms reflection entry envelope** is also retained.
+
+The intentional reflection-to-song handoff is now **150 ms**, superseding **650 ms** for
+this behavior. The earlier accepted 650 ms baseline and the phone receipts below remain historical
+evidence. **150 ms is not promised audible onset**: controller/SDK preparation, seeking and Play
+can add delay. The opt-in harness now measures the actual playback-command gap, the first PLAYING
+confirmation gap and facts duration, and observes music pause across the reflection too. These
+are timing/count observations; no new song metadata, permission or sharing field is introduced.
+
+**Software and installation:** the final build took **2 minutes 42 seconds**, passed **737 debug
+and 737 release unit tests**, and produced all three APKs. The main and test APKs were updated in
+place on the Moto. **Five focused silent Moto cases passed in 11.516 seconds**: the two new facts
+routing/rate cases, exact selected handoff at 150 ms, cancellation during the cloud-song gap, and
+the Energy invitation after facts. This tuning adds no schema or permanent files and requires no
+backend deployment or provider setting change; no Git action was performed.
+
+### Native rhythm audition — listener accepted the pace and connection
+
+The new native sequence passed in **29.735 seconds**, using the same exact accepted reflection
+and **48.910–53.550-second Lizzo hook**, with **no new AI writing**. RUN facts audio was used and
+lasted **7,705 ms**. Facts completion to reflection platform call was **6 ms**. Reflection completion
+to song-controller handoff was **152 ms**, to the actual Play command **552 ms**, and to observed
+PLAYING confirmation **769 ms**. These are command/state boundaries, not exact audible onset:
+Spotify/controller work added about **400 ms** before Play and another **217 ms** before confirmation.
+
+The expanded observation window covered the reflection too, unlike the earlier receipt below.
+It recorded **187 PAUSED samples** overall, including **71 during facts**, **103 during reflection**
+and **2 during the song gap**, with **zero PLAYING samples throughout the observed hold up to song
+handoff**. No post-facts preparation-wait sample occurred. The original recording returned to
+**PLAYING**, with restoration position error **88 ms**. This checks one prepared native sequence;
+it does not establish a genuine prolonged Energy/preparation hold or new-writing latency.
+
+After the audition, all **44 COMPLETED runs**, no-active-run state and all old fields in nine
+business tables remained unchanged; Room 18 integrity was OK and foreign-key violations were
+zero. Preferences were unchanged. Temporary inspection copies were removed and the normal app
+reopened; the existing private safety backup remains, with no additional permanent files.
+The user accepted this audition's facts pace and musical connection with the statements above.
+Status is **Complete for agreed scope** for these two adjustments, installed and checked with the
+controlled phone sequence. Normal real-run generation latency, prolonged preparation delays and
+broader musical timing remain unproven. The source was unchanged after the verified build.
+
+## Earlier October 21 completion audio and untimed Energy — Ready to test, installed
+
+After committing/pushing the earlier checkpoint through `658a333`, Manley approved the bounded
+completion follow-up. The installed implementation now gives the separate facts and reflection
+speakers one shared audio owner. It keeps music paused across the facts, the Energy check-in and
+any preparation gap, then hands control to the short song passage. Stop, navigation, background,
+replacement or focus loss invalidates the old delivery. Resuming an originally playing recording
+requires the same observed recording/session and no conflicting seek; originally paused music
+does not become an automatic resume. The controlled checks below passed and received qualified
+positive feedback; the newer rhythm tuning above is accepted for its controlled scope. Real-run
+completion behavior still needs checking.
+
+New completions have **no six-second Energy deadline**. The first deliberate Energy or Not sure
+answer chooses the prepared branch whenever the runner responds. An unanswered, still-PENDING
+legacy reflection belonging to an unfinalized activity also becomes untimed during recovery.
+Explicit Save Activity without an answer selects the neutral branch only after the activity is
+durably finalized; it leaves Energy unanswered rather than inventing Not sure. Save does not wait
+for AI or require an answer. Cached candidates, a delayed response and recovery after a missed
+Save callback use the same durable decision. Existing selections/READY text remain frozen;
+later feedback never rewrites that reflection. Lost generation still needs the existing retry.
+
+This uses a reserved value in the existing deadline column, with no schema migration or new
+permanent files. This installed checkpoint retained the accepted writer, both chosen voices and
+**650 ms reflection-to-song gap**; the newer installed 150 ms tuning above supersedes that timing.
+No new creative restrictions or musical-ending detection were added. The custom
+reflection player's entry envelope is eased from 320 ms/0.68 initial gain to 480 ms/0.58 initial
+gain, reaching the same full level; this is not a voice/persona or system-volume change. Exact
+selected-voice preparation can overlap the remaining facts, but the controlled timing below does
+not establish a real-run latency improvement. An untimed check-in also means the shared music pause can last until the runner
+answers, saves or leaves/stops completion.
+
+Debug diagnostics contain only completion stage names and elapsed milliseconds, with no run
+facts, Energy values, reflection text, song identity or credentials. Existing sharing choices and
+approved services remain unchanged. The opt-in supplied-text audition now exercises two native
+speakers sharing the owner and observes Spotify's pause/restoration; it does not generate another
+reflection or write saved activities.
+
+**Software checks completed:** the final debug and release unit suites passed **737 tests each**,
+and debug, release and instrumentation APKs built. The emulator registered 71 cases: 12 explicit
+live-provider/audio gates skipped, and one ActivityScenario PAUSED-to-DESTROYED cleanup timed out.
+That case passed its isolated rerun against the latest APKs in **20.629 seconds**, making **59
+distinct silent cases passed across the run and retry**. The temporary emulator test runner was
+removed; the normal emulator database, WAL and SHM retained their exact hashes.
+
+The user confirmed the Moto was ready. A necessary fresh private safety backup was created at
+`android/app/build/outputs/moto-private-safety-20261021-230021.tar` (**10,324,480 bytes**, ignored).
+The main APK was updated in place, and Room 18 now has **44 COMPLETED runs and no active run**.
+Every old field in all nine business tables was preserved; database integrity was OK and the
+foreign-key check returned zero violations. The **2,590 existing music rows have null interval
+evidence**, with no invented listening duration. Inspection copies were removed; the private
+safety backup remains. The Moto test runner already existed and was updated for the upcoming
+listening check. No Git mutation or backend deployment was performed.
+
+The 60-second skipped-song filter is now installed too; its real-run behavior remains to be
+checked. The rejected Start panel stack is a separate design discussion and has not been revised here.
+
+### Controlled native phone timing check — October 21
+
+A read-only preflight confirmed the selected solo **Good as Hell** recording (159,736 ms) was
+PLAYING. The first audition stopped before any voice or network request because the test harness
+incorrectly required a Play action while Spotify was already playing. The bounded harness repair
+now requires Pause when PLAYING or Play when PAUSED, with Seek and all recording/restoration
+guards unchanged. Only the test APK was rebuilt (42 seconds) and installed for this retry; no
+production voice, writer or clip setting changed in that correction.
+
+The corrected full audio check passed in **29.438 seconds**. It used the RUN facts voice and the
+exact previously accepted Lizzo reflection, with **no new AI-generated writing**. Facts completion
+to reflection platform handoff was **5 ms**. Native stage logs placed the reflection player start
+**29 ms** after facts completion; these are different code boundaries, neither an exact audible
+silence measurement. Reflection completion to the song-controller handoff was **653 ms**, retaining
+the accepted 650 ms design gap.
+
+There were **67 observed PAUSED samples before the reflection**, including **61 during facts**,
+and **zero PLAYING samples in that observed window**. There were no idle-wait samples: the exact
+reflection voice was already prepared **2.781 seconds** into the chain. This checks the coordinated
+native path for that prepared example, not a prolonged post-facts wait or fresh hosted writing.
+The owner pause stage was at **8 ms**, facts finished at **8.763 seconds**, the reflection player
+started at **8.792 seconds**, and the passage-ready stage was at **21.913 seconds**.
+
+The controller completed the short **48.910–53.550-second hook** and restored the original recording
+to **PLAYING**, with position within **100 ms** of the captured restoration point. These are
+controlled playback observations, not full real-run latency or general Spotify reliability proof.
+Manley requested a replay rather than giving a verdict. The identical replay also passed in
+**29.928 seconds**: **4 ms** facts-to-reflection platform handoff, **653 ms** song handoff,
+**65 PAUSED samples** before reflection (56 during facts), zero observed PLAYING samples, and
+original PLAYING restoration within **155 ms**. There was again no idle-wait sample. A post-replay
+database inspection preserved all 44 completed runs and every old field in the nine business
+tables, with Room 18 integrity OK and zero foreign-key violations. Temporary copies were removed
+and the normal app reopened without another Spotify command.
+Manley subsequently judged the replay **“pretty good”**, while requesting slower facts and a more
+connected snippet entrance, captured in the newest section above. That tuning has now passed its
+controlled audition and listener check. Broader audible-silence and normal real-run timing checks
+remain **pending**. This earlier installed checkpoint
+stays **Ready to test**; it was not a new external-provider writing benchmark.
+
 ## October 20 real-run feedback and checkpoint request
 
 Manley reports that the countdown and distance announcements sounded good, and a real-song
@@ -37,9 +239,9 @@ The earlier software validation below remains valid, but does not imply design a
 
 The six-second post-run Energy deadline feels rushed. Read-only review confirms that expiry can
 freeze the neutral reflection branch even if a later answer is saved. Removing the deadline and
-using the first deliberate answer is recommended; this has not been implemented or approved as
-an exact code change. Explicit skipping, Save handling and existing frozen replies need coordinated
-handling. The broader purpose and mechanics of pre/post Energy still require a separate review.
+using the first deliberate answer was recommended at this checkpoint. That implementation status
+is superseded by the October 21 section above, including explicit Save and frozen-reply handling.
+The broader purpose and mechanics of pre/post Energy still require a separate review.
 
 Manley requests commit/push commands before new implementation. Preserve the tested local filter,
 UI draft and notes in separate commits on the existing test branch; no assistant Git mutations.
@@ -51,9 +253,9 @@ Render deployment remain separate from this checkpoint.
 Manley authorized useful local work while away on his run. This bounded pass covers History
 readability and list-edge fades, clearer settings and map-control presentation, the shared
 pre-run Energy perimeter, and more legible backing for the Energy question. Preserve the clean
-layout. The beam still belongs around all three choices as one rectangle, never around the
-heading or each square separately. His report that the installed beam was not visible reopens
-that issue; the earlier installed/tested checkpoint is not proof it was resolved for him.
+layout. At this checkpoint the requested beam surrounded all three choices as one rectangle,
+never the heading or each square separately. His report that the installed beam was not visible
+reopened that issue. **This beam direction is superseded by the October 22 removal request above.**
 
 Both unit-test variants passed **720 tests each**. Debug, release and instrumentation APK builds
 passed, including the final rebuild after correcting a large-font History caption. **24 distinct
@@ -203,7 +405,10 @@ confirmation remains. Song-loading/source-coverage work is the next return point
 pace/time have a positive user-reported outdoor comparison; measured distance and broader field
 checks remain. This report does not establish full GPS completion.
 
-## Energy-beam clarification and Completion alignment — current visual follow-up
+## October 18 historical Energy-beam clarification and Completion alignment
+
+The beam direction in this checkpoint is superseded by the October 22 request to remove it.
+The installation and verification receipts below remain historical evidence.
 
 Pause handoff: Manley requested grouped commit/push commands and a break after this checkpoint.
 No further implementation is queued during the pause. On return, resume the parked chosen-song

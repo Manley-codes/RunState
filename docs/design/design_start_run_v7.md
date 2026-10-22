@@ -8,6 +8,20 @@ status: CURRENT NATIVE DECISIONS plus dated prototype history; verification live
 
 # Start Run — where this screen actually is
 
+**October 22 current Start direction — Complete for agreed scope, installed and accepted:** the compact GPS
+status, Map, History and gear sit inside the white Agent panel, replacing the external utility/
+status stack. There is **no Energy beam or decorative Energy outline**, superseding the earlier
+individual-square/shared-rectangle requests. Original map artwork, orbs, main footer, lower
+objects, anchored Energy, intake/Undo and Agent motion remain.
+
+Routine music on/off lives in Settings and accessibility/status; only actionable access/setup/
+errors remain inline. No additional navigation screen was added. All three APK builds and 14
+focused silent Moto cases passed, including callback/touch-target, responsive-layout and intake
+checks. The isolated/normal phone screenshots and Energy crop were inspected; **Manley accepted
+the result: “Okay, this looks good.”** Saved data/preferences and accepted October 21
+completion audio are unchanged. This UI check does not newly establish outdoor GPS or audio
+acceptance; exact receipts and remaining checks live in `project_current_state.md`.
+
 **October 18 corrected GPS Start direction — installed and checked:** Manley rejected
 the large Finding GPS interruption. The GPS Start screen quietly prepares location while visible,
 using existing precise permission. Start immediately enters the normal 3-second countdown; a weak

@@ -7,6 +7,80 @@ metadata:
 
 Every successfully saved run gets a contextual response. No exceptions.
 
+## Completion rhythm follow-up — October 21, 2026
+
+**Complete for agreed scope — installed; controlled phone facts pace and shorter handoff accepted.**
+Manley confirmed “The pace feels right” and “The transition feels connected.” Preserve this tuning;
+the broader completion flow remains Ready to test for real-run generation/preparation delays.
+Manley judged the earlier
+replay “pretty good,” with facts slightly too fast and the music entrance insufficiently rhythmic.
+Completion facts alone now use 0.90 cloud playback speed at pitch 1, or 0.864 local fallback
+instead of 0.96, through dedicated `speakCompletionFacts` / `playCompletionFactsAudio` paths.
+Countdowns, distance announcements, Energy invitation, reflection voice, backend voice IDs,
+accepted writer and clip remain unchanged. Retain the current 480 ms reflection entry envelope.
+
+The intentional reflection-to-song handoff is **150 ms** in this installed revision, replacing the
+earlier **650 ms** setting while preserving that accepted historical baseline below. The goal is
+a brief connected breath; SDK preparation, seeking and playback can still make actual onset later.
+Instrumentation now separates playback-command and first PLAYING-confirmation gaps, measures
+facts duration, and observes pause through reflection. No new data sharing or creative rules.
+Final checks passed 737 unit tests per variant, all three APKs and five focused silent Moto cases
+(11.516 s); both Moto APKs were updated in place. The new exact-text native audition passed in
+29.735 s, with RUN facts lasting 7,705 ms, a 6 ms facts-to-reflection platform call, and song-controller,
+Play-command and PLAYING-confirmation gaps of 152/552/769 ms. Those are code/state boundaries,
+not exact audible onset. Across the expanded hold observation through reflection, all 187 samples
+were PAUSED and none PLAYING; no post-facts preparation wait occurred. Original PLAYING was restored
+with 88 ms position error. Saved data/preferences remained unchanged. No new AI writing, schema,
+backend or Git change. The user's acceptance applies to this controlled facts-pacing/musical-handoff
+check; full real-run generation latency and prolonged preparation waits remain unproven.
+
+## Untimed check-in and shared completion audio — October 21, 2026
+
+**Ready to test — installed on Moto; controlled checks passed with qualified positive feedback.**
+The separate facts-pacing/shorter-handoff revision above is installed and accepted for its bounded
+controlled phone scope; broader completion and untimed waiting still need real-run verification.
+This supersedes the six-second no-selection rule for new completions. The first deliberate
+Energy answer, including Not sure, chooses the branch without a deadline. Still-PENDING,
+unselected and unanswered legacy rows are promoted only when their activity is not finalized.
+Already selected/READY reflections retain their exact text and branch.
+
+Save Activity remains independent of answering or waiting for AI. After durable finalization,
+an unanswered activity selects the neutral branch and leaves the Energy answer null. Not sure
+is an explicit unknown answer, stored distinctly. Generation can finish afterward; local recovery
+reconciles a missed Save callback, and failed generation retains the existing explicit retry path.
+A later feedback change cannot replace the frozen reflection. The durable untimed marker uses
+the existing deadline column; no schema change is needed.
+
+Facts and reflection use separate speakers under one completion audio owner, retaining the music
+pause during the check-in and any quiet preparation gap. Exact selected-text voice preparation
+may overlap facts, without synthesizing the unused Energy branches or regenerating the writing.
+Stop, departure, backgrounding or lost focus cancels the old delivery. The safe snippet handoff
+releases the shared pause; queued callbacks from the old owner cannot revive it. Previously
+playing music may resume only while the original recording/session/position is still owned.
+
+Preserve the accepted writer and the chosen run/custom reflection voices. This installed checkpoint
+used a **650 ms** reflection-to-song gap; the newer installed revision above uses **150 ms**. A musical
+tail, new snippet endpoint and creative-rule changes are outside
+this slice. An untimed answer can prolong the music pause, so Save/leave/Stop remain exits.
+Debug stage/elapsed-time diagnostics add no song data, reflection text or new sharing.
+Final unit suites passed 737 tests per variant, all three APKs built, and 59 distinct silent
+emulator cases passed across the main run and an isolated cleanup-timeout retry. Moto installation
+preserved all 44 completed activities and every old field checked; backend unchanged.
+
+The controlled native audition passed in 29.438 seconds using RUN facts and the exact accepted
+Lizzo reflection, with no new AI writing. Facts-to-reflection platform handoff was 5 ms; the native
+player-start stage was 29 ms after facts completion, not an exact audible gap. Song-controller
+handoff followed reflection completion by 653 ms. All 67 observed pre-reflection samples were
+PAUSED (61 during facts); no idle wait was sampled because voice preparation had already finished.
+The short hook completed and original PLAYING state/position were restored within 100 ms. The
+user requested replay, not an acceptance verdict. That identical replay also passed in 29.928 s,
+with a 4 ms platform handoff, 653 ms song handoff, 65 paused/zero playing observations before the
+reflection and original PLAYING restoration within 155 ms. All old saved fields remained unchanged.
+After replay, Manley called the result “pretty good” and requested the speed/rhythm adjustments
+above. That qualified feedback does not establish broad acceptance of the new local timing.
+Real-run generation latency and audible silence remain unverified; see `project_current_state.md`
+for the full receipt and preflight harness repair.
+
 ## Early song study before completion — approved October18,2026
 
 Manley approved moving matched song understanding earlier, with possible early AI charges for
@@ -357,14 +431,15 @@ family is required before implementation. This does not remove basic factual/saf
 
 ## Mobile Run Complete delivery contract — prototype-validated August 22, 2026
 
-**STATUS: CORE NATIVE DELIVERY IMPLEMENTED OCTOBER 13, 2026; VISUAL CHOREOGRAPHY AND PHONE AUDIO
-REVIEW REMAIN.** This contract governs the mobile flow. The shipped console agent still uses the
-implementation described later in this file.
+**STATUS: CORE NATIVE DELIVERY IMPLEMENTED OCTOBER 13, 2026; OCTOBER 21 UNTIMED/SHARED-AUDIO
+UPDATE IS INSTALLED AND READY TO TEST.** The October 21 section supersedes older deadline/audio ownership
+details below. This contract governs the mobile flow; the shipped console agent uses the later
+console implementation description.
 
 ### Sequence
 
-1. The run is durably saved locally before any success language or response preparation. `Run
-   saved` means the phone can recover the run; it does not claim that server sync has finished.
+1. The ended run is durably protected locally before response preparation. Explicit Save Activity
+   finalizes it separately; neither local protection nor finalization claims server synchronization.
 2. Metrics appear immediately with a short audible factual receipt built from saved run facts. That
    receipt is deterministic confirmation, not the contextual reflection.
 3. All three post-run Energy choices are visible and prominent while the receipt plays. Effort stays
@@ -375,13 +450,15 @@ implementation described later in this file.
    first-class no-selection response.
 5. Choosing Energy immediately sends that choice into the visualizer. The selected post-run state
    lands beside the pre-run state, and its prepared reflection arrives directly out of the same
-   choreography; there is no additional waiting period after the absorption completes.
-6. If the runner chooses no Energy, a quiet window of approximately six seconds after the factual
-   receipt selects the no-selection response. Opening the Effort sheet holds that path while the
-   runner is interacting. No countdown or `Skip` button is shown.
+   choreography. There is no added selection timer after absorption; unfinished generation or
+   voice preparation can still require a wait.
+6. New completions wait indefinitely for the first deliberate Energy or Not sure answer. Save
+   Activity without an answer selects the neutral branch after durable finalization, leaving the
+   Energy field unanswered. The former approximately six-second rule remains historical only.
 7. Only the selected response is revealed, spoken and stored in Log History; the unused candidates
    disappear. A late Energy answer still saves for future learning but never replaces the response
-   already committed to that run. No answer is required to receive a response.
+   already committed to that run. No answer is required to save the activity or receive its neutral
+   response once preparation succeeds.
 
 ### Durable selected-reflection record — DEFAULT
 
@@ -458,7 +535,8 @@ RunState understand the runner across runs.**
   is available. As of October 13, a newly completed run also speaks the exact selected reflection
   once on arrival; reopening an older saved run stays quiet, and leaving/backgrounding stops it.
   The subsequent October 13 pass implements the deterministic spoken receipt from saved facts.
-  Receipt completion/failure/interruption starts the quiet window once; the reflection cannot
+  At that historical checkpoint, receipt completion/failure/interruption started the quiet window
+  once; the October 21 untimed policy above supersedes that timer. The reflection cannot
   reveal or overlap that receipt. Room v9 preserves window state and recovery never replays a
   consumed receipt. Speech requests temporary Android audio focus and returns it on completion,
   error or stop. Physical-phone audio quality has not been checked.

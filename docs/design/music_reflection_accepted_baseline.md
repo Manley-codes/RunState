@@ -19,6 +19,32 @@ run facts truthful and missing inputs unknown, but do not confuse factual reliab
 flattening the voice. No model, prompt, output filter, accepted text or voice setting was changed
 for this direction. The preserved recipe below remains the reproducible historical baseline.
 
+## Accepted delivery amendment — October 21, 2026
+
+The original October 17 writing, examples and historical audio settings below remain intact.
+The installed delivery now uses the following accepted settings, which supersede only the older
+audio timing/pacing where stated:
+
+- Completion facts use the chosen RUN voice (`HEtSzb2EMPNWlQY8Ofqf`) with **0.90× local playback
+  speed and unchanged pitch**, in addition to the existing backend voice speed. Their phone-TTS
+  fallback rate is **0.864**. Countdown, distance announcements and Energy invitation do not use
+  this additional slowdown.
+- The reflection keeps voice `DocoybWhaSQMUIs7gLNe`, its exact selected words and existing service
+  settings. Its entry envelope is **480 ms**, gain **[0.58, 0.90, 1.0]** at time fractions
+  **[0, 0.55, 1]**. This softens the attack without changing the persona or system volume.
+- Separate facts/reflection speakers share one completion pause, including the Energy check-in
+  and preparation gap. The short song handoff now waits **150 ms** after reflection completion,
+  replacing the earlier 650 ms delay. Existing recording, seek, stop and restoration checks remain.
+- The controlled Good as Hell check retained its accepted **48,910–53,550 ms** hook and exact
+  reflection. It passed in **29.735 s**, with **152 ms** to controller handoff, **552 ms** to the
+  Spotify play command and **769 ms** to PLAYING confirmation. Those are software/state boundaries,
+  not exact audible onset. Spotify adds its own preparation and playback time.
+- Manley accepted the new facts pace ("The pace feels right") and the song entrance ("The
+  transition feels connected"). Preserve these as the current delivery reference. This is a
+  controlled listening acceptance, not proof of fresh-generation latency on a real run.
+
+See `project_current_state.md` for the full build, listening and data-preservation receipts.
+
 ## What is preserved
 
 The exact accepted words, fictional facts, source identities, creative directions, editorial

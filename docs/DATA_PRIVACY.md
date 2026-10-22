@@ -11,14 +11,80 @@ metadata, to Anthropic. See [the current Android checkpoint](design/project_curr
 and [backend documentation](../backend/README.md) for those implemented boundaries. The older
 console statement that RunState has no server does **not** apply to the Android app.
 
+## Completion rhythm follow-up — October 21, 2026
+
+**Status: Complete for agreed scope — installed; controlled phone facts pacing and shorter handoff accepted.**
+The user confirmed the pace felt right and the transition connected. Completion facts alone
+use slower client playback (cloud speed 0.90/pitch 1; local fallback 0.864 instead of 0.96), and
+the intentional song handoff is shortened from 650 ms to 150 ms. Countdown, distance updates,
+Energy invitation, reflection voice, writer, voice IDs and selected clip are unchanged; the current
+480 ms reflection entry envelope is retained. Actual
+audio onset can occur later because of controller/SDK preparation, seeking and playback.
+
+The opt-in harness adds timing/count observations of the playback command, first PLAYING
+confirmation, facts duration and pause during reflection. It adds no song metadata, permission,
+sharing field or music recording. The updated main/test APKs are installed on Moto; no backend/provider
+configuration change, Git action or new permanent file is part of this tuning.
+
+The supplied-text native audition passed without new AI writing. It used the existing approved
+voice service and observed 187 paused samples, zero playing samples through the reflection to
+song handoff, and original playback restoration. No post-facts preparation wait was observed;
+command/state timestamps are not exact audible-onset measurements. All 44 completed activities,
+the old fields in nine business tables and preferences remained unchanged, with clean Room 18
+integrity and foreign-key checks. Inspection copies were removed, the normal app reopened and
+the existing private backup retained. User acceptance applies to this controlled pacing/transition
+check. The broader completion flow remains Ready to test for real-run generation/preparation delay.
+
+## Untimed Energy and completion audio ownership — October 21, 2026
+
+**Status: Ready to test — installed on Moto; qualified positive feedback, real-run timing pending.**
+The newer rhythm revision above is installed and accepted for its bounded controlled scope.
+Broader real-run completion verification remains pending. The backend is unchanged.
+New completion check-ins no longer choose a
+neutral reflection automatically after six seconds. The first deliberate Energy or Not sure
+answer selects the branch; unanswered/unselected PENDING legacy completions are promoted only
+while their activity remains unfinalized. Save Activity without an answer selects neutral after
+durable finalization and keeps the Energy answer null. Not sure remains an explicit unknown.
+Existing selected reflections are not rewritten. This policy reuses the local deadline column,
+with no new schema, permission, provider request field or historical-answer backfill.
+
+The facts and reflection speakers share a temporary audio-focus owner so music can remain paused
+through the check-in and preparation gap. The exact selected reflection can be synthesized while
+facts finish, using the existing approved voice service. This does not synthesize all four branch
+voices, generate another reflection, record music or add audio retention. The chosen voices remain
+unchanged. The 650 ms gap belongs to this earlier installed checkpoint; the installed follow-up uses
+150 ms. Leaving, stopping or losing focus cancels the
+delivery; an untimed check-in may keep music paused until the runner responds, saves or exits.
+
+Debug-only completion diagnostics contain bounded stage names and elapsed milliseconds, not run
+facts, Energy answers, text, song metadata, coordinates or credentials. The explicit supplied-text
+audition records only timing/count/boolean observations of pause/restoration and makes no saved-run
+or preference changes. Existing music observation/sharing choices continue to govern normal use;
+there is no new sharing permission or background listening collection in this slice. Final check
+results and activation status belong in `design/project_current_state.md`. Installation preserved
+all 44 completed activities and the checked old fields, with clean integrity and foreign-key
+results. A necessary ignored private safety backup remains; temporary inspection copies were
+removed. No Git mutation or new backend deployment accompanied the installation.
+
+The corrected October 21 controlled audition used supplied, previously accepted text with the
+existing voice services; it did not ask an AI to write another reflection, change saved activities
+or change sharing preferences. Its first attempt stopped at a test-only control check before any
+voice/network request. After the state-aware preflight repair, the native sequence passed with
+67 observed paused samples, zero observed playing samples before the reflection, and original
+playback restored. There was no idle-wait sample. The timing/count observations are not a recording
+of the music or proof of audible silence. The replay also passed with 65 pre-reflection paused
+samples and zero observed playing samples; the user called it “pretty good” but requested slower
+facts and a better-connected song entrance. The new tuning subsequently passed its controlled
+listener check as recorded above; broader real-run verification remains pending.
+
 ## Local song-duration evidence — October 20, 2026
 
-**Status: Ready to test — local only.** This update has not been installed on
-the phone or deployed to the backend. Under the existing music-observation choice, callbacks
+**Status: Ready to test — installed on Moto October 21; real-run filter check pending.** No
+backend deployment was needed. Under the existing music-observation choice, callbacks
 and local five-second samples record bounded Spotify playback intervals during active runs.
 Each credited interval is at most 7.5 seconds; pauses, capture/session loss and unobserved gaps
 are not treated as listening. No audio is recorded. Room 18 adds a nullable interval field;
-old metadata-only rows remain unknown, with no historical duration backfill. Frozen reflections
+all 2,590 old metadata-only rows remain unknown/null, with no historical duration backfill. Frozen reflections
 and their retry evidence remain unchanged.
 
 For new evidence, the separately authorized song preparation/sharing paths require at least
@@ -69,7 +135,9 @@ post-run note; older completed records remain finalized and their existing field
 An optional note is limited to 280 characters, stored locally, and is not added to reflection,
 song-study, weather or voice-service requests. Notes do not automatically become an Energy answer.
 The later explicit “Not sure” response is retained as an unknown answer in the existing post-run
-Energy field; automatic timeout leaves it unanswered. Neither is treated as a measured Energy level
+Energy field; the older automatic timeout left it unanswered. The October 21 local update replaces
+that timer with an untimed answer or neutral selection on explicit Save, as described above.
+Neither unknown nor unanswered is treated as a measured Energy level
 by insights. Hiding the reflection panel until a response is a presentation change; early preparation
 and previously authorized provider requests continue.
 Ending a run still starts the existing authorized reflection process; pressing Save Activity is

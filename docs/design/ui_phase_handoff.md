@@ -1,13 +1,13 @@
 ---
 name: ui-phase-handoff
-description: UI phase history through August 25 2026, the October 15 native Android checkpoint, and October 20 local polish queue. Records prototype decisions, native presentation boundaries, and remaining work.
+description: UI phase history through August 25 2026, native Android checkpoints, and the installed October 22 Start cleanup. Records prototype decisions, native presentation boundaries, and remaining work.
 metadata:
   type: project
 ---
 
-# UI phase — handoff, updated October 20 2026
+# UI phase — handoff, updated October 22 2026
 
-Latest feedback and the bounded local polish scope are recorded in section 6's October 20 queue.
+Latest feedback and the bounded local scope are recorded in section 6's October 22 update.
 Earlier prototype and installed-checkpoint descriptions below remain historical evidence.
 
 Written because the session that produced this got very long. Everything needed to continue is here.
@@ -500,13 +500,34 @@ voice styling never changes the facts.
 
 ## 6. What comes next
 
-### October 20 — current local polish queue
+### October 22 — compact Start layout installed and visually accepted
+
+**Status: Complete for agreed scope, installed and accepted on the Moto.** The layout keeps compact GPS status,
+Map, History and gear inside the white Agent panel and removes the external utility/status
+stack. There is no Energy beam or decorative Energy outline, superseding the older individual-
+edge/shared-rectangle requests. Original map artwork, orbs, main footer, lower objects, anchored
+Energy, selection/intake, Undo and Agent motion remain. Routine music on/off is available through
+Settings and accessibility/status; only actionable access/setup/errors remain inline.
+
+All three APK builds and 14 focused silent Moto cases passed, including callbacks, touch targets,
+large-text/landscape reachability, status truth and intake/Undo. The isolated and normal native
+screenshots and clean Energy crop were inspected against the approved direction. **Manley accepted
+the installed result: “Okay, this looks good.”** All 44 saved runs/current business fields and
+preferences were preserved. Exact receipts, including the initial test-clock settling correction,
+are in `project_current_state.md`; this is not new broad GPS or audio acceptance.
+
+The accepted October 21 audio settings and receipts are unchanged. No Git/provider operations,
+new source/document files or dependencies are part of this slice; ignored build/capture/preview
+outputs are local verification artifacts.
+
+### October 20 — earlier local polish queue
 
 **Status: Software checked — local only; Start design needs revision.** After reviewing the preview,
 Manley rejected the extra Start panel stack. Discuss gear/map icons, quieter map labeling, GPS
 inside the Run State panel and History navigation before further layout edits. The bounded pass
 below remains a checkpoint, not an accepted final design; the Moto has not been updated.
-The real-run audio debrief and proposed untimed Energy follow-up are in `project_current_state.md`.
+The real-run audio debrief and subsequent October 21 untimed Energy/audio implementation are in
+`project_current_state.md`.
 
 - **History readability:** improve the legibility of **YOUR SAVED RUNS** and activity entries.
   Review hierarchy and contrast without filling the screen with extra panels.
@@ -516,10 +537,9 @@ The real-run audio debrief and proposed untimed Energy follow-up are in `project
   the control feel intentional and keep its purpose understandable.
 - **Map navigation:** History, Live Map and GPS text/actions placed over the map need deliberate
   placement and hierarchy. Preserve direct navigation and truthful GPS state.
-- **Pre-run Energy beam:** Manley reports that it is not visible in actual use, despite earlier
-  software/visual checkpoint claims. Investigate that discrepancy; do not mark it resolved from
-  the previous tests. The requested shape is still **one shared rectangle around all three
-  Energy choices only**, excluding the heading, never a separate outline around each square.
+- **Pre-run Energy beam — historical request, superseded October 22:** at this checkpoint Manley
+  reported that it was not visible in actual use and wanted one shared rectangle around the
+  three Energy choices, excluding the heading. He now requests its removal, not further tuning.
 - **Energy question backing:** it is too transparent. Give the question enough backing and
   contrast to read clearly while keeping the surrounding layout clean.
 
