@@ -21,6 +21,8 @@ import com.runstate.mobile.music.SpotifyRemoteConnectionStatus
 import com.runstate.mobile.music.SongPassageStatus
 import com.runstate.mobile.music.SongPassageSession
 import com.runstate.mobile.music.SongPassageSnapshot
+import com.runstate.mobile.music.SongPassageStage
+import com.runstate.mobile.music.SongPassageReason
 import com.runstate.mobile.music.RunMusicNotificationListener
 import com.runstate.mobile.music.canonicalSpotifyTrackUri
 import com.runstate.mobile.music.spotifyObservationRecording
@@ -406,7 +408,7 @@ class ReflectionVoiceSpeechTest {
                 }
             }
             check(finished.await(120, TimeUnit.SECONDS) && receiptCompleted.get() && cloudCompleted.get() &&
-                songCompleted.get() && !failed.get() && songHandoffGap.get() >= 650L)
+                songCompleted.get() && !failed.get() && songHandoffGap.get() >= REFLECTION_SONG_HANDOFF_MILLIS)
             advance("RESTORATION")
             check(priorTrackIsUnchanged())
             instrumentation.sendStatus(2, android.os.Bundle().apply {
@@ -1271,7 +1273,8 @@ class ReflectionVoiceSpeechTest {
                     playerHandoffAt.get() >= factsFinishedAt.get())
             assertTrue("The normal paired Spotify passage did not complete naturally.",
                 songAccepted.get() && songCompleted.get())
-            assertTrue("The reflection-to-song pause was shorter than intended.", songHandoffGap.get() >= 650L)
+            assertTrue("The reflection-to-song pause was shorter than intended.",
+                songHandoffGap.get() >= REFLECTION_SONG_HANDOFF_MILLIS)
             assertFalse("The normal sequence used a local reflection voice.", localFallback.get())
             assertFalse("The normal sequence substituted the instrumental.", instrumentalAttempted.get())
             assertFalse("The normal sequence reported a playback failure.", failed.get())
@@ -1316,7 +1319,9 @@ class ReflectionVoiceSpeechTest {
         val arguments = InstrumentationRegistry.getArguments()
         assumeTrue(arguments.getString("allowRealMusicAnalysisAudio") == "yes")
         val context = InstrumentationRegistry.getInstrumentation().targetContext
-        var speaker: AndroidReflectionSpeaker? = null
+        var factsSpeaker: AndroidReflectionSpeaker? = null
+        var reflectionSpeaker: AndroidReflectionSpeaker? = null
+        var completionOwner: CompletionAudioSession? = null
         try {
             val scenario = arguments.getString("musicScenario") ?: "sunday_best"
             require(scenario in setOf("sunday_best", "stronger", "custom"))
@@ -1359,13 +1364,24 @@ class ReflectionVoiceSpeechTest {
 
             // Fail before any voice or network request if the explicitly auditioned recording is absent.
             val session = AndroidSpotifyPassageSession(context)
-            val snapshot = session.snapshot()
-            assertNotNull("Queue and pause the selected original recording before the optional audio check.", snapshot)
+            val snapshotOnMain = AtomicReference<SongPassageSnapshot?>()
+            rule.runOnUiThread { snapshotOnMain.set(session.snapshot()) }
+            val snapshot = snapshotOnMain.get()
+            assertNotNull("Queue the selected original recording before the optional audio check.", snapshot)
             val original = requireNotNull(snapshot)
-            assertTrue("The optional audio check requires the selected original recording, paused.",
+            val requirePlayingBaseline = arguments.getString("requirePlayingMusicBaseline") == "yes"
+            // Spotify exposes state-dependent actions: pause while playing, play while paused.
+            val hasBaselineControl = when (original.playback) {
+                PassagePlayback.PLAYING -> original.canPause
+                PassagePlayback.PAUSED -> original.canPlay
+                else -> false
+            }
+            assertTrue("The optional audio check requires the selected original recording and usable controls.",
                 original.sourcePackage == "com.spotify.music" &&
                     original.title.equals(title, true) && original.artist.equals(artist, true) &&
-                    original.playback == PassagePlayback.PAUSED && original.canPlay && original.canSeek &&
+                    original.playback in setOf(PassagePlayback.PAUSED, PassagePlayback.PLAYING) &&
+                    (!requirePlayingBaseline || original.playback == PassagePlayback.PLAYING) &&
+                    hasBaselineControl && original.canSeek &&
                     original.durationMillis >= passageStart + passageDuration + 2_000L &&
                     (expectedDuration == null || kotlin.math.abs(original.durationMillis - expectedDuration) <= 1_500L) &&
                     original.positionMillis in 0..original.durationMillis)
@@ -1375,44 +1391,76 @@ class ReflectionVoiceSpeechTest {
             assertNotNull("The optional audio check needs the saved hosted connection.", config)
             val connection = requireNotNull(config)
             val receipt = when (runScenario) {
-                "morning_feeling_good" -> "Sample run. Distance, three miles. Elapsed time, thirty-three minutes. " +
-                    "Active time, thirty-two minutes."
-                "evening_no_selection" -> "Sample run. Distance, four miles. Elapsed time, forty-five minutes. " +
-                    "Active time, forty-three minutes."
+                "morning_feeling_good" -> "Sample run. Distance, three miles. Active time, thirty-two minutes."
+                "evening_no_selection" -> "Sample run. Distance, four miles. Active time, forty-three minutes."
                 "late_morning_powered_up" -> "Sample run. Distance, two point seven five miles. " +
-                    "Elapsed time, thirty minutes. Active time, twenty-eight minutes."
+                    "Active time, twenty-eight minutes."
                 else -> if (stronger || custom) "Sample run. Distance, four point two miles. " +
-                "Elapsed time, forty-two minutes. Active time, forty minutes. " +
+                "Active time, forty minutes. " +
                 "Average pace, nine minutes, thirty-one seconds per mile."
                 else "Sample run saved. Three miles of sample distance in thirty-two minutes."
             }
             val receiptId = AtomicReference<String?>()
             val receiptCompleted = AtomicBoolean(false)
+            val receiptUsedRunVoice = AtomicBoolean(false)
+            val receiptUsedLocalVoice = AtomicBoolean(false)
+            val receiptStartedAt = AtomicLong(0)
+            val receiptCompletedAt = AtomicLong(0)
             val cloudAccepted = AtomicBoolean(false)
             val cloudCompleted = AtomicBoolean(false)
+            val reflectionStartedAt = AtomicLong(0)
             val songAccepted = AtomicBoolean(false)
             val songCompleted = AtomicBoolean(false)
             val reflectionCompletedAt = AtomicLong(0)
             val songHandoffGap = AtomicLong(-1)
+            val songPlayCommandAt = AtomicLong(0)
+            val songPlayingConfirmedAt = AtomicLong(0)
             val instrumentalAttempted = AtomicBoolean(false)
             val localFallback = AtomicBoolean(false)
             val failed = AtomicBoolean(false)
             val finished = CountDownLatch(1)
+            val baselineBeforeHold = AtomicReference<SongPassageSnapshot?>()
+            val firstObservedPause = AtomicReference<SongPassageSnapshot?>()
+            val holdStartedAt = AtomicLong(0)
+            var measurablePauseSamples = 0
+            var playingDuringHold = 0
+            var pausedDuringFacts = 0
+            var pausedDuringWait = 0
+            var pausedDuringReflection = 0
+            var pausedDuringSongGap = 0
+            fun sameRecording(left: SongPassageSnapshot, right: SongPassageSnapshot): Boolean =
+                left.sessionKey == right.sessionKey && left.sourcePackage == right.sourcePackage &&
+                    left.mediaId == right.mediaId && left.title == right.title && left.artist == right.artist &&
+                    left.durationMillis > 0L && kotlin.math.abs(left.durationMillis - right.durationMillis) <= 1L
+            fun receiptFinishedNaturally() {
+                if (receiptCompleted.compareAndSet(false, true)) receiptCompletedAt.set(SystemClock.uptimeMillis())
+            }
             rule.runOnUiThread {
-                val android = AndroidReflectionSpeechPlatform(context) { diagnostic ->
+                val factsAndroid = AndroidReflectionSpeechPlatform(context)
+                val reflectionAndroid = AndroidReflectionSpeechPlatform(context) { diagnostic ->
+                    if (diagnostic.reason == SongPassageReason.ENTERED) when (diagnostic.stage) {
+                        SongPassageStage.ENTRANCE_PLAY -> songPlayCommandAt.compareAndSet(0, SystemClock.uptimeMillis())
+                        SongPassageStage.PLAYING -> songPlayingConfirmedAt.compareAndSet(0, SystemClock.uptimeMillis())
+                        else -> Unit
+                    }
                     // Explicit audition only: enum stages and bounded timing deltas, never track metadata.
                     InstrumentationRegistry.getInstrumentation().sendStatus(2, android.os.Bundle().apply {
                         putString("runstate_passage_diagnostic", diagnostic.toString())
                     })
                 }
-                val witnessed = object : ReflectionSpeechPlatform by android {
-                    override fun reflectionSpeechGateway(): ReflectionSpeechGateway =
-                        ReflectionSpeechHttpClient.hosted(connection)
-
+                val factsWitnessed = object : ReflectionSpeechPlatform by factsAndroid {
+                    override fun runVoiceGateway(): ReflectionSpeechGateway {
+                        val hosted = ReflectionSpeechHttpClient.hosted(connection,
+                            com.runstate.mobile.reflection.SpeechVoice.RUN)
+                        return ReflectionSpeechGateway { text ->
+                            if (text != receipt) failed.set(true)
+                            hosted.synthesize(text)
+                        }
+                    }
                     override fun initialize(onReady: (Boolean) -> Unit,
                         onDone: (String) -> Unit, onError: (String) -> Unit) {
-                        android.initialize(onReady, { id ->
-                            if (id == receiptId.get()) receiptCompleted.set(true)
+                        factsAndroid.initialize(onReady, { id ->
+                            if (id == receiptId.get() && receiptUsedLocalVoice.get()) receiptFinishedNaturally()
                             onDone(id)
                         }, { id ->
                             if (id == receiptId.get() && !receiptCompleted.get()) failed.set(true)
@@ -1423,19 +1471,44 @@ class ReflectionVoiceSpeechTest {
                     override fun speakReceipt(id: String, text: String, rate: Float): Boolean {
                         if (text != receipt) failed.set(true)
                         receiptId.set(id)
-                        return android.speakReceipt(id, text, rate)
+                        receiptUsedLocalVoice.set(true)
+                        receiptStartedAt.set(SystemClock.uptimeMillis())
+                        return factsAndroid.speakReceipt(id, text, rate)
+                    }
+
+                    override fun playCompletionFactsAudio(id: String, audio: ByteArray,
+                        onDone: (String) -> Unit, onUnavailable: (String) -> Unit,
+                        onError: (String) -> Unit): Boolean {
+                        receiptId.set(id)
+                        receiptStartedAt.set(SystemClock.uptimeMillis())
+                        val accepted = factsAndroid.playCompletionFactsAudio(id, audio,
+                            { doneId -> receiptFinishedNaturally(); onDone(doneId) },
+                            { unavailableId -> onUnavailable(unavailableId) },
+                            { errorId -> failed.set(true); onError(errorId) })
+                        receiptUsedRunVoice.set(accepted)
+                        return accepted
+                    }
+                }
+                val reflectionWitnessed = object : ReflectionSpeechPlatform by reflectionAndroid {
+                    override fun reflectionSpeechGateway(): ReflectionSpeechGateway {
+                        val hosted = ReflectionSpeechHttpClient.hosted(connection)
+                        return ReflectionSpeechGateway { text ->
+                            if (text != reflection) failed.set(true)
+                            hosted.synthesize(text)
+                        }
                     }
 
                     override fun speak(id: String, text: String, rate: Float): Boolean {
                         localFallback.set(true)
-                        return android.speak(id, text, rate)
+                        return reflectionAndroid.speak(id, text, rate)
                     }
 
                     override fun playReflectionAudio(id: String, audio: ByteArray,
                         onDone: (String) -> Unit, onUnavailable: (String) -> Unit,
                         onError: (String) -> Unit): Boolean {
                         if (!receiptCompleted.get()) failed.set(true)
-                        val accepted = android.playReflectionAudio(id, audio,
+                        reflectionStartedAt.set(SystemClock.uptimeMillis())
+                        val accepted = reflectionAndroid.playReflectionAudio(id, audio,
                             { doneId ->
                                 reflectionCompletedAt.set(SystemClock.uptimeMillis())
                                 cloudCompleted.set(true)
@@ -1452,7 +1525,7 @@ class ReflectionVoiceSpeechTest {
                         onFocusLost: (String) -> Unit): Boolean {
                         if (!cloudCompleted.get()) failed.set(true)
                         songHandoffGap.set(SystemClock.uptimeMillis() - reflectionCompletedAt.get())
-                        val accepted = android.playSongPassage(id, passage,
+                        val accepted = reflectionAndroid.playSongPassage(id, passage,
                             { doneId -> songCompleted.set(true); onDone(doneId) },
                             { errorId -> failed.set(true); onError(errorId) },
                             { lostId -> failed.set(true); onFocusLost(lostId) })
@@ -1467,42 +1540,131 @@ class ReflectionVoiceSpeechTest {
                         return false
                     }
                 }
-                val owned = AndroidReflectionSpeaker(context, witnessed)
-                speaker = owned
-                owned.speakReceipt(receipt) {
-                    owned.speakWithSongPassage(reflection, selectedPassage,
+                val facts = AndroidReflectionSpeaker(context, factsWitnessed)
+                factsSpeaker = facts
+                val reflectionVoice = AndroidReflectionSpeaker(context, reflectionWitnessed)
+                reflectionSpeaker = reflectionVoice
+                // Capture the audible baseline immediately before the shared native pause starts.
+                val latest = requireNotNull(session.snapshot())
+                check(sameRecording(original, latest) &&
+                    latest.playback in setOf(PassagePlayback.PAUSED, PassagePlayback.PLAYING) &&
+                    (!requirePlayingBaseline || latest.playback == PassagePlayback.PLAYING))
+                baselineBeforeHold.set(latest)
+                val owner = completionAudioSessionFor(context) {
+                    failed.set(true)
+                    factsSpeaker?.stop()
+                    reflectionSpeaker?.stop()
+                    finished.countDown()
+                }
+                completionOwner = owner
+                holdStartedAt.set(SystemClock.uptimeMillis())
+                facts.attachCompletionAudio(owner)
+                reflectionVoice.attachCompletionAudio(owner)
+                if (!owner.canContinue) {
+                    failed.set(true)
+                    finished.countDown()
+                    return@runOnUiThread
+                }
+                // Exact supplied text only: no reflection generation, song lookup or Room writes.
+                reflectionVoice.prepare(reflection)
+                reflectionVoice.prepareSongPassageConnection()
+                owner.note(CompletionAudioSession.Event.RECEIPT_REQUESTED)
+                facts.speakCompletionFacts(receipt) {
+                    owner.note(CompletionAudioSession.Event.RECEIPT_FINISHED)
+                    if (!receiptCompleted.get() || failed.get() || !owner.canContinue) {
+                        failed.set(true)
+                        owner.cancel()
+                        finished.countDown()
+                    } else reflectionVoice.speakWithSongPassage(reflection, selectedPassage,
                         canPlayPassage = { cloudCompleted.get() && !failed.get() },
-                        onFinished = { finished.countDown() })
+                        onFinished = {
+                            if (!failed.get() && songCompleted.get()) owner.finish() else owner.cancel()
+                            finished.countDown()
+                        })
+                }
+            }
+            val deadline = SystemClock.uptimeMillis() + 120_000L
+            var completed = false
+            while (SystemClock.uptimeMillis() < deadline) {
+                if (finished.await(100, TimeUnit.MILLISECONDS)) { completed = true; break }
+                // Observe only. Leave a short settling allowance for Spotify's focus-loss callback.
+                if (!failed.get() && !songAccepted.get() &&
+                    SystemClock.uptimeMillis() - holdStartedAt.get() >= 1_500L) {
+                    val baseline = baselineBeforeHold.get()
+                    val observed = session.snapshot()
+                    if (baseline != null && observed != null && sameRecording(baseline, observed)) {
+                        measurablePauseSamples++
+                        if (observed.playback == PassagePlayback.PLAYING) playingDuringHold++
+                        if (observed.playback == PassagePlayback.PAUSED) {
+                            firstObservedPause.compareAndSet(null, observed)
+                            when {
+                                !receiptCompleted.get() -> if (receiptStartedAt.get() > 0L) pausedDuringFacts++
+                                reflectionStartedAt.get() == 0L -> pausedDuringWait++
+                                !cloudCompleted.get() -> pausedDuringReflection++
+                                else -> pausedDuringSongGap++
+                            }
+                        }
+                    }
                 }
             }
             assertTrue("The optional supplied-reflection audio sequence did not finish in time.",
-                finished.await(120, TimeUnit.SECONDS))
-            assertTrue("The local sample facts did not finish naturally.", receiptCompleted.get())
+                completed)
+            assertTrue("The sample facts did not finish naturally through the run voice or phone fallback.",
+                receiptCompleted.get() && (receiptUsedRunVoice.get() || receiptUsedLocalVoice.get()))
             assertTrue("The supplied reflection did not complete with the real cloud voice.",
                 cloudAccepted.get() && cloudCompleted.get())
             assertFalse("The optional supplied-reflection check used local reflection speech.", localFallback.get())
             assertTrue("The automatic Spotify passage did not complete naturally.",
                 songAccepted.get() && songCompleted.get())
             assertTrue("The song started without the intended pause after reflection speech.",
-                songHandoffGap.get() >= 650L)
+                songHandoffGap.get() >= REFLECTION_SONG_HANDOFF_MILLIS)
+            assertTrue("The Spotify entrance was not confirmed.",
+                songPlayCommandAt.get() >= reflectionCompletedAt.get() &&
+                    songPlayingConfirmedAt.get() >= songPlayCommandAt.get())
             InstrumentationRegistry.getInstrumentation().sendStatus(2, android.os.Bundle().apply {
                 putLong("runstate_reflection_song_gap_ms", songHandoffGap.get().coerceAtMost(120_000L))
+                // Spotify command/report boundaries, not sample-accurate audible onset.
+                putLong("runstate_reflection_song_play_command_ms",
+                    (songPlayCommandAt.get() - reflectionCompletedAt.get()).coerceIn(0L, 120_000L))
+                putLong("runstate_reflection_song_play_confirmed_ms",
+                    (songPlayingConfirmedAt.get() - reflectionCompletedAt.get()).coerceIn(0L, 120_000L))
+                putLong("runstate_facts_audio_duration_ms",
+                    (receiptCompletedAt.get() - receiptStartedAt.get()).coerceIn(0L, 120_000L))
+                putLong("runstate_facts_reflection_gap_ms",
+                    (reflectionStartedAt.get() - receiptCompletedAt.get()).coerceIn(0L, 120_000L))
+                putBoolean("runstate_facts_used_run_voice", receiptUsedRunVoice.get() && !receiptUsedLocalVoice.get())
+                putBoolean("runstate_original_was_playing", baselineBeforeHold.get()?.playback == PassagePlayback.PLAYING)
+                putInt("runstate_pause_observed_samples", measurablePauseSamples)
+                putInt("runstate_paused_facts_samples", pausedDuringFacts)
+                putInt("runstate_paused_wait_samples", pausedDuringWait)
+                putInt("runstate_paused_reflection_samples", pausedDuringReflection)
+                putInt("runstate_paused_song_gap_samples", pausedDuringSongGap)
+                putInt("runstate_playing_during_hold_samples", playingDuringHold)
             })
+            if (requirePlayingBaseline) {
+                assertTrue("Spotify's pause during the facts was not observed.", pausedDuringFacts > 0)
+                assertTrue("Spotify's pause during the reflection was not observed.", pausedDuringReflection > 0)
+            }
+            if (measurablePauseSamples > 0) {
+                assertEquals("Spotify resumed while the facts or reflection preparation still owned the pause.",
+                    0, playingDuringHold)
+            }
             assertFalse("The song check must not substitute the instrumental.", instrumentalAttempted.get())
             assertFalse("The optional supplied-reflection sequence reported a playback failure.", failed.get())
             val restored = session.snapshot()
-            assertTrue("Spotify did not restore the same paused recording and original position.",
-                restored != null && restored.playback == PassagePlayback.PAUSED &&
-                    restored.sessionKey == original.sessionKey && restored.sourcePackage == original.sourcePackage &&
-                    restored.mediaId == original.mediaId && restored.title == original.title &&
-                    restored.artist == original.artist && restored.durationMillis > 0L &&
-                    kotlin.math.abs(restored.durationMillis - original.durationMillis) <= 1L &&
-                    kotlin.math.abs(restored.positionMillis - original.positionMillis) <= 2_000L)
+            val baseline = requireNotNull(baselineBeforeHold.get())
+            val pausedPosition = firstObservedPause.get()?.positionMillis ?: baseline.positionMillis
+            assertTrue("Spotify did not restore the original recording, playback state and paused position.",
+                restored != null && restored.playback == baseline.playback && sameRecording(baseline, restored) &&
+                    kotlin.math.abs(restored.positionMillis - pausedPosition) <= 2_000L)
         } catch (_: Exception) {
             // Never echo supplied text, private connection details or transport/provider diagnostics.
             throw AssertionError("The optional supplied-reflection music check could not complete.")
         } finally {
-            rule.runOnUiThread { speaker?.close() }
+            rule.runOnUiThread {
+                try { completionOwner?.cancel() }
+                finally { try { factsSpeaker?.close() } finally { reflectionSpeaker?.close() } }
+            }
         }
     }
 
@@ -1632,7 +1794,7 @@ class ReflectionVoiceSpeechTest {
                 val releasesBeforeCompletion = platform.focusReleases
                 voice.done(voice.id)
                 val (handoff, delay) = scheduled.last()
-                assertEquals(650L, delay)
+                assertEquals(150L, delay)
                 assertEquals(releasesBeforeCompletion, platform.focusReleases)
                 assertTrue(platform.songs.isEmpty())
                 voice.done(voice.id)

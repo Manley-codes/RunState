@@ -13,9 +13,10 @@ enum class ReflectionBranch { SPENT, FEELING_GOOD, POWERED_UP, NO_SELECTION }
 /**
  * One durable reflection attempt and selection for a completed run.
  *
- * Evidence is captured once. A new run can await its save receipt before starting
- * its selection deadline exactly once. Retry changes the request identity, never
- * the evidence or a started window. Once READY, the selected text is permanent; later
+ * Evidence is captured once. New completions use an untimed selection marker and
+ * wait for a deliberate Energy answer or durable Save Activity. The receipt still
+ * gates audible delivery; finite deadlines belong to historical records. Retry
+ * changes the request identity, never the evidence. Once READY, the text is permanent; later
  * Energy answers remain useful feedback without rewriting what the runner read.
  */
 @Entity(

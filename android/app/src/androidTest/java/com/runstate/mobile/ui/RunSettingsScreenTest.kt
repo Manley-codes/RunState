@@ -11,6 +11,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
@@ -94,6 +95,7 @@ class RunSettingsScreenTest {
         var starts = 0
         var history = 0
         var settings = 0
+        var maps = 0
         var energy by mutableStateOf<com.runstate.mobile.data.local.PreRunEnergy?>(null)
         // Keep the infinite decorative animation alive from its first composition.
         // Auto-advancing test clocks cancel it while trying to settle the screen.
@@ -111,6 +113,7 @@ class RunSettingsScreenTest {
                 musicSelected = true,
                 musicAccessGranted = true,
                 onOpenRunSettings = { settings++ },
+                onOpenMap = { maps++ },
                 modifier = Modifier.systemBarsPadding()
             )
         }
@@ -119,23 +122,34 @@ class RunSettingsScreenTest {
         // Permission/provider readiness alone does not claim an acquired satellite fix.
         // The real journey supplies GPS-ready copy separately from its preview evidence.
         compose.onNodeWithText("GPS enabled").assertIsDisplayed()
-        compose.onNodeWithText("Music observation on").assertIsDisplayed()
+        assertEquals("Music observation on", compose.onNodeWithTag(START_RUN_SETTINGS_TAG)
+            .fetchSemanticsNode().config[SemanticsProperties.StateDescription])
+        compose.onNodeWithText("Music observation on").assertDoesNotExist()
+        compose.onNodeWithText("Map artwork").assertIsDisplayed()
+        val card = compose.onNodeWithTag(START_AGENT_CARD_TAG).fetchSemanticsNode().boundsInRoot
+        for (tag in listOf("startExpandMap", START_HISTORY_TAG, START_RUN_SETTINGS_TAG)) {
+            val control = compose.onNodeWithTag(tag).assertIsDisplayed().fetchSemanticsNode().boundsInRoot
+            assertTrue("The utility stays within the white Run State panel", card.contains(control.topLeft) &&
+                card.contains(control.bottomRight - androidx.compose.ui.geometry.Offset(1f, 1f)))
+            val minimum = with(compose.density) { androidx.compose.ui.unit.Dp(48f).toPx() }
+            assertTrue("The utility retains an accessible touch target",
+                control.width >= minimum - 1f && control.height >= minimum - 1f)
+        }
         compose.onNodeWithTag(START_GPS_TOGGLE_TAG).assertDoesNotExist()
         compose.onNodeWithTag(START_MUSIC_TOGGLE_TAG).assertDoesNotExist()
         compose.onNodeWithTag(START_MUSIC_SHARING_TOGGLE_TAG).assertDoesNotExist()
         compose.onNodeWithTag(START_REFLECTION_SETUP_TAG).assertDoesNotExist()
         savePreview(START_RUN_SCREEN_TAG, "demo-start-clean.png")
-        compose.mainClock.advanceTimeBy(400L)
-        savePreview(START_ENERGY_CHOICES_TAG, "energy-edge-beam-a.png")
-        compose.mainClock.advanceTimeBy(800L)
-        savePreview(START_ENERGY_CHOICES_TAG, "energy-edge-beam-b.png")
+        savePreview(START_ENERGY_CHOICES_TAG, "start-energy-clean.png")
         compose.mainClock.autoAdvance = true
+        compose.onNodeWithTag("startExpandMap").performClick()
         compose.onNodeWithTag(START_HISTORY_TAG).performClick()
         compose.onNodeWithTag(START_RUN_SETTINGS_TAG).performClick()
         compose.onNodeWithTag(START_ENERGY_HIGH_TAG).assertIsDisplayed().performClick()
         compose.onNodeWithTag(START_RUN_BUTTON_TAG).performClick()
         assertEquals(1, history)
         assertEquals(1, settings)
+        assertEquals(1, maps)
         assertEquals(1, starts)
         assertEquals(com.runstate.mobile.data.local.PreRunEnergy.HIGH, energy)
     }
@@ -386,7 +400,8 @@ class RunSettingsScreenTest {
         restoration.emulateSavedInstanceStateRestore()
         waitForTag(START_RUN_SCREEN_TAG)
         compose.onNodeWithTag(SETTINGS_DIALOG_TAG).assertDoesNotExist()
-        compose.onNodeWithText("Music observation off").assertIsDisplayed()
+        assertEquals("Music observation off", compose.onNodeWithTag(START_RUN_SETTINGS_TAG)
+            .fetchSemanticsNode().config[SemanticsProperties.StateDescription])
         assertEquals(1, fixture.preferenceWrites)
         assertEquals(0, runBlocking { fixture.database.runDao().countRuns() })
     }

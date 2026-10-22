@@ -658,6 +658,12 @@ class RunStateScreenTest {
             )
         }
 
+        // The frozen clock must deliver layout and its measured ring bounds before intake.
+        composeTestRule.mainClock.advanceTimeByFrame()
+        composeTestRule.waitForIdle()
+        composeTestRule.mainClock.advanceTimeByFrame()
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithTag(START_AGENT_VISUALIZER_TAG).assertIsDisplayed()
         composeTestRule.onNodeWithTag(START_ENERGY_HIGH_TAG).performClick()
         composeTestRule.runOnIdle {
             assertEquals(listOf(PreRunEnergy.HIGH), choices)
@@ -708,6 +714,10 @@ class RunStateScreenTest {
             )
         }
 
+        composeTestRule.mainClock.advanceTimeByFrame()
+        composeTestRule.waitForIdle()
+        composeTestRule.mainClock.advanceTimeByFrame()
+        composeTestRule.waitForIdle()
         composeTestRule.onNodeWithTag(START_ENERGY_HIGH_TAG).performClick()
         composeTestRule.mainClock.advanceTimeBy(700L)
         composeTestRule.onNodeWithTag(START_ENERGY_INTAKE_TAG).assertIsDisplayed()
@@ -809,7 +819,7 @@ class RunStateScreenTest {
     @Test
     fun gpsRootWarmsTheStaticStartScreenWithoutStartingARun() {
         GpsStartRootHarness().use { root ->
-            composeTestRule.onNodeWithText("ILLUSTRATIVE MAP").assertIsDisplayed()
+            composeTestRule.onNodeWithText("Map artwork").assertIsDisplayed()
             composeTestRule.onNodeWithText("GPS connecting…").assertExists()
             composeTestRule.onNode(isDialog()).assertDoesNotExist()
             composeTestRule.onNodeWithTag(START_RUN_BUTTON_TAG).assertIsEnabled()
@@ -1308,7 +1318,8 @@ class RunStateScreenTest {
             assertEquals(0, settingsOpens)
             actionsEnabled = false
         }
-        composeTestRule.onNodeWithText("Music observation off").assertExists()
+        assertEquals("Music observation off", composeTestRule.onNodeWithTag(START_RUN_SETTINGS_TAG)
+            .fetchSemanticsNode().config[SemanticsProperties.StateDescription])
         composeTestRule.onNodeWithTag(START_ENERGY_UNDO_TAG).assertExists()
         music.assertIsNotEnabled().performTouchInput { click() }
         composeTestRule.runOnIdle {
@@ -1341,11 +1352,15 @@ class RunStateScreenTest {
         }
 
         composeTestRule.onNodeWithTag(START_MUSIC_TOGGLE_TAG).assertDoesNotExist()
-        composeTestRule.onNodeWithText("Music observation off").assertExists()
+        assertEquals("Music observation off", composeTestRule.onNodeWithTag(START_RUN_SETTINGS_TAG)
+            .fetchSemanticsNode().config[SemanticsProperties.StateDescription])
+        composeTestRule.onNodeWithText("Music observation off").assertDoesNotExist()
         composeTestRule.runOnIdle { musicSelected = true }
         composeTestRule.onNodeWithText("Music observation needs access").assertExists()
         composeTestRule.runOnIdle { accessGranted = true }
-        composeTestRule.onNodeWithText("Music observation on").assertExists()
+        assertEquals("Music observation on", composeTestRule.onNodeWithTag(START_RUN_SETTINGS_TAG)
+            .fetchSemanticsNode().config[SemanticsProperties.StateDescription])
+        composeTestRule.onNodeWithText("Music observation needs access").assertDoesNotExist()
     }
 
     @Test
@@ -3126,6 +3141,123 @@ class RunStateScreenTest {
         composeTestRule.runOnIdle { includeEffect = false }
         composeTestRule.waitForIdle()
         assertEquals(1, closes)
+    }
+
+    @Test
+    fun completionDeliveryFinishesOnlyAfterTheSpeakerChainCallbackNotSilentPreparationOrFacts() {
+        val runId = "completion-shared-hold-finish"
+        val exact = "Exact reflection prepared behind the facts."
+        val speaker = ControlledCompletionSpeaker()
+        var held = false
+        var releases = 0
+        var finished = 0
+        var cancelled = 0
+        var visible by mutableStateOf(false)
+        var spokenId by mutableStateOf<String?>(null)
+        var audioActive = false
+        val session = CompletionAudioSession(snapshot = { null },
+            requestPause = { held = true; true },
+            releasePause = { held = false; releases++ }, onInterrupted = {})
+        assertTrue(session.begin()) // The facts own the shared pause before the reflection is visible.
+        composeTestRule.setContent {
+            RunCompleteSpeechEffect(runId, runId, spokenId, RunReflectionState.Ready(runId, exact),
+                visible, { speaker }, { spokenId = it },
+                onAudioActiveChange = { audioActive = it },
+                voicePreparation = ReflectionVoicePreparation(runId, "shared-hold-request", exact),
+                preparationVisible = true,
+                onDeliveryFinished = { finished++; session.finish() },
+                onDeliveryCancelled = { cancelled++; session.cancel() })
+        }
+        composeTestRule.runOnIdle {
+            assertEquals(listOf(exact), speaker.preparations)
+            assertTrue(speaker.requests.isEmpty())
+            assertEquals(0, finished)
+            assertEquals(0, cancelled)
+            assertFalse(audioActive)
+            assertTrue(held)
+            assertEquals(0, releases)
+            visible = true // Facts/intake have released the reflection gate.
+        }
+        composeTestRule.runOnIdle {
+            assertEquals(exact, speaker.requests.single().text)
+            assertTrue(audioActive)
+            assertEquals(0, finished)
+            assertTrue(held)
+            speaker.requests.single().finished()
+        }
+        composeTestRule.runOnIdle {
+            assertFalse(audioActive)
+            assertEquals(1, finished)
+            assertEquals(0, cancelled)
+            assertFalse(held)
+            assertEquals(1, releases)
+            speaker.requests.single().finished() // Duplicate engine completion is stale.
+            visible = false
+        }
+        composeTestRule.runOnIdle {
+            assertEquals(1, finished)
+            assertEquals(0, cancelled)
+            assertEquals(1, releases)
+        }
+    }
+
+    @Test
+    fun completionFactoryAndSpeechSetupFailuresCancelDeliveryAndReleaseTheSharedHold() {
+        var runId by mutableStateOf("completion-factory-setup-failure")
+        var spokenId by mutableStateOf<String?>(null)
+        val held = mutableSetOf<String>()
+        val releases = mutableMapOf<String, Int>()
+        val finished = mutableListOf<String>()
+        val cancelled = mutableListOf<String>()
+        val sessions = mutableMapOf<String, CompletionAudioSession>()
+        var factories = 0
+        var stops = 0
+        fun beginSession(id: String) {
+            val session = CompletionAudioSession(snapshot = { null },
+                requestPause = { held += id; true },
+                releasePause = { held -= id; releases[id] = releases.getOrDefault(id, 0) + 1 },
+                onInterrupted = {})
+            sessions[id] = session
+            assertTrue(session.begin())
+        }
+        beginSession(runId)
+        composeTestRule.setContent {
+            val deliveryId = runId
+            RunCompleteSpeechEffect(deliveryId, deliveryId, spokenId,
+                RunReflectionState.Ready(deliveryId, "Exact saved reflection remains available."), true,
+                {
+                    factories++
+                    if (deliveryId == "completion-factory-setup-failure") error("Fictional factory failure")
+                    object : ReflectionSpeaker {
+                        override fun speak(text: String) = error("Unexpected plain speech")
+                        override fun speakWithInstrumental(text: String, canPlayInstrumental: () -> Boolean,
+                            onFinished: () -> Unit) = error("Fictional chain setup failure")
+                        override fun stop() { stops++ }
+                        override fun close() = Unit
+                    }
+                }, { spokenId = it },
+                onDeliveryFinished = { finished += deliveryId; sessions.getValue(deliveryId).finish() },
+                onDeliveryCancelled = { cancelled += deliveryId; sessions.getValue(deliveryId).cancel() })
+        }
+        composeTestRule.runOnIdle {
+            assertEquals(listOf("completion-factory-setup-failure"), cancelled)
+            assertTrue(finished.isEmpty())
+            assertTrue(held.isEmpty())
+            assertEquals(1, releases[runId])
+            assertEquals(1, factories)
+            val nextId = "completion-speech-setup-failure"
+            beginSession(nextId)
+            runId = nextId
+        }
+        composeTestRule.runOnIdle {
+            assertEquals(listOf("completion-factory-setup-failure", "completion-speech-setup-failure"), cancelled)
+            assertTrue(finished.isEmpty())
+            assertTrue(held.isEmpty())
+            assertEquals(1, releases[runId])
+            assertEquals(2, factories)
+            assertEquals(1, stops)
+            assertEquals(runId, spokenId)
+        }
     }
 
     @Test

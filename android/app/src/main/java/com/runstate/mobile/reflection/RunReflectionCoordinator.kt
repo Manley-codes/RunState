@@ -32,6 +32,8 @@ internal interface ReflectionStore {
     suspend fun ensure(record: RunReflectionEntity): RunReflectionEntity
     suspend fun energy(runId: String, branch: ReflectionBranch, now: Long, selectionHeld: Boolean): RunReflectionEntity
     suspend fun defaultSelection(runId: String, now: Long): RunReflectionEntity
+    suspend fun waitForEnergyWithoutDeadline(runId: String): RunReflectionEntity
+    suspend fun selectForSavedActivity(runId: String): RunReflectionEntity
     suspend fun beginSelectionWindow(runId: String, deadline: Long): RunReflectionEntity
     suspend fun candidates(runId: String, requestId: String, json: String, isTestData: Boolean): Boolean
     suspend fun ready(runId: String, requestId: String, branch: ReflectionBranch, text: String, now: Long): Boolean
@@ -57,6 +59,8 @@ internal class RoomReflectionStore(
         if (branch == ReflectionBranch.NO_SELECTION) dao.recordNotSure(runId, now, selectionHeld)
         else dao.recordEnergy(runId, branch, now, selectionHeld)
     override suspend fun defaultSelection(runId: String, now: Long) = dao.selectNoSelectionIfDue(runId, now)
+    override suspend fun waitForEnergyWithoutDeadline(runId: String) = dao.waitForEnergyWithoutDeadline(runId)
+    override suspend fun selectForSavedActivity(runId: String) = dao.selectForSavedActivity(runId)
     override suspend fun beginSelectionWindow(runId: String, deadline: Long) = dao.beginSelectionWindow(runId, deadline)
     override suspend fun candidates(runId: String, requestId: String, json: String, isTestData: Boolean) = dao.saveCandidates(runId, requestId, json, isTestData)
     override suspend fun ready(runId: String, requestId: String, branch: ReflectionBranch, text: String, now: Long) = dao.finalizeReady(runId, requestId, branch, text, now)
@@ -80,7 +84,8 @@ internal class RunReflectionCoordinator(
     private val gateway: ReflectionGateway,
     private val applicationScope: CoroutineScope,
     private val requestIdSupplier: () -> UUID = UUID::randomUUID,
-    private val quietWindowMillis: Long = 6_000L,
+    // Finite values remain a seam for legacy-policy tests, never the production default.
+    private val quietWindowMillis: Long = ReflectionDao.UNTIMED_SELECTION_DEADLINE,
     private val nowMillis: () -> Long = System::currentTimeMillis,
     private val quietDelay: suspend (Long) -> Unit = { delay(it) }
 ) {
@@ -109,9 +114,10 @@ internal class RunReflectionCoordinator(
                 mutex.withLock {
                     // A process restart consumes any interrupted receipt. Recover selection
                     // locally without another audible receipt or provider request.
-                    val recovered = if (!record.selectionWindowStarted) {
-                        store.beginSelectionWindow(record.runId, nowMillis() + quietWindowMillis)
-                    } else record
+                    val policy = reconcileActivitySelection(record)
+                    val recovered = if (!policy.selectionWindowStarted) {
+                        store.beginSelectionWindow(policy.runId, selectionDeadline(nowMillis(), policy))
+                    } else policy
                     if (recovered.status == ReflectionStatus.PENDING) {
                         if (recovered.candidatesJson == null) store.fail(recovered.runId, recovered.requestId)
                         else finalizeIfPossible(recovered.runId)
@@ -155,7 +161,7 @@ internal class RunReflectionCoordinator(
                         record = store.ensure(RunReflectionEntity(
                             runId = runId, requestId = request.requestId,
                             evidenceJson = gson.toJson(request.evidence),
-                            selectionDeadlineEpochMillis = (receiptFinishedAt ?: nowMillis()) + quietWindowMillis,
+                            selectionDeadlineEpochMillis = selectionDeadline(receiptFinishedAt ?: nowMillis()),
                             selectionWindowStarted = !awaitingReceipt || receiptFinishedAt != null))
                     }
                     finalizeIfPossible(runId)
@@ -212,7 +218,21 @@ internal class RunReflectionCoordinator(
         catch (_: Exception) { publishFailure(runId) }
     }
 
-    /** Start the quiet window once after receipt completion, failure or interruption. */
+    /** Call after Save Activity succeeds. Local selection never delays the durable activity save. */
+    fun onActivitySaved(runId: String): Job = applicationScope.launch {
+        try {
+            initialize()
+            mutex.withLock {
+                // If the row is not created yet, onSavedVisible reconciles the saved parent later.
+                if (store.find(runId) == null) return@withLock
+                finalizeIfPossible(runId)
+                store.find(runId)?.let(::publish)
+            }
+        } catch (cancelled: CancellationException) { throw cancelled }
+        catch (_: Exception) { publishFailure(runId) }
+    }
+
+    /** Release delivery after facts finish; new completions still wait indefinitely for Energy. */
     fun finishReceipt(runId: String): Job {
         val finishedAt = nowMillis()
         return applicationScope.launch {
@@ -222,8 +242,8 @@ internal class RunReflectionCoordinator(
                     // Keep the actual receipt completion time even if Room is delayed or
                     // a transient write fails. A later local retry uses this same deadline.
                     val originalFinishedAt = finishedReceipts.getOrPut(runId) { finishedAt }
-                    if (store.find(runId) == null) return@withLock
-                    val started = store.beginSelectionWindow(runId, originalFinishedAt + quietWindowMillis)
+                    val record = store.find(runId) ?: return@withLock
+                    val started = store.beginSelectionWindow(runId, selectionDeadline(originalFinishedAt, record))
                     finalizeIfPossible(runId)
                     store.find(runId)?.let(::publish)
                     if (started.status == ReflectionStatus.PENDING) {
@@ -260,7 +280,7 @@ internal class RunReflectionCoordinator(
                 val record = store.find(runId) ?: return@withLock
                 if (!record.selectionWindowStarted) {
                     finishedReceipts[runId]?.let { finishedAt ->
-                        store.beginSelectionWindow(runId, finishedAt + quietWindowMillis)
+                        store.beginSelectionWindow(runId, selectionDeadline(finishedAt, record))
                     }
                 }
                 // A failed receipt-window write may leave a PENDING cached family.
@@ -282,6 +302,7 @@ internal class RunReflectionCoordinator(
     }
 
     private fun scheduleSelection(runId: String, deadline: Long) {
+        if (deadline == ReflectionDao.UNTIMED_SELECTION_DEADLINE) return
         if (!timers.add(runId)) return
         applicationScope.launch {
             try {
@@ -329,7 +350,7 @@ internal class RunReflectionCoordinator(
     }
 
     private suspend fun finalizeIfPossible(runId: String) {
-        val beforeSelection = store.find(runId) ?: return
+        val beforeSelection = reconcileActivitySelection(store.find(runId) ?: return)
         if (!beforeSelection.selectionWindowStarted) return
         val record = if (runId in effortSheetHolds && beforeSelection.selectedBranch == null) {
             beforeSelection
@@ -353,6 +374,32 @@ internal class RunReflectionCoordinator(
         if (store.ready(runId, record.requestId, branch, text, nowMillis())) {
             (candidates.songSnippet?.takeIf { it.version == 2 }?.cueId ?: candidates.songCueId)
                 ?.let { completedSongCues[runId] = record.requestId to it }
+        }
+    }
+
+    private fun selectionDeadline(startedAt: Long, existing: RunReflectionEntity? = null): Long {
+        if (existing?.selectionDeadlineEpochMillis == ReflectionDao.UNTIMED_SELECTION_DEADLINE ||
+            (existing == null && quietWindowMillis == ReflectionDao.UNTIMED_SELECTION_DEADLINE)) {
+            return ReflectionDao.UNTIMED_SELECTION_DEADLINE
+        }
+        // Old finite-policy rows that already chose a branch retain their receipt behavior.
+        val duration = quietWindowMillis.takeUnless { it == ReflectionDao.UNTIMED_SELECTION_DEADLINE } ?: 6_000L
+        return startedAt + duration
+    }
+
+    /** Repair a crash between Save and its callback, or promote only an unanswered legacy draft. */
+    private suspend fun reconcileActivitySelection(record: RunReflectionEntity): RunReflectionEntity {
+        if (record.status == ReflectionStatus.READY) return record
+        val untimed = record.selectionDeadlineEpochMillis == ReflectionDao.UNTIMED_SELECTION_DEADLINE
+        val canPromote = !untimed && quietWindowMillis == ReflectionDao.UNTIMED_SELECTION_DEADLINE &&
+            record.status == ReflectionStatus.PENDING && record.selectedBranch == null && record.postRunEnergy == null
+        val canFinishSaved = untimed && (record.selectedBranch == null || !record.selectionWindowStarted)
+        if (!canPromote && !canFinishSaved) return record
+        val run = runDao.findById(record.runId)?.takeIf { it.state == StoredRunState.COMPLETED } ?: return record
+        return when {
+            canPromote && !run.activityFinalized -> store.waitForEnergyWithoutDeadline(record.runId)
+            canFinishSaved && run.activityFinalized -> store.selectForSavedActivity(record.runId)
+            else -> record
         }
     }
 

@@ -5,9 +5,6 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
@@ -29,6 +26,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.CircleShape
@@ -54,9 +52,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.BlurredEdgeTreatment
-import androidx.compose.ui.draw.drawWithCache
-import androidx.compose.ui.geometry.CornerRadius
-import androidx.compose.ui.geometry.RoundRect
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
@@ -65,12 +60,14 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathFillType
-import androidx.compose.ui.graphics.PathMeasure
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.withTransform
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.vector.PathParser
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -196,20 +193,6 @@ internal fun StartRunScreen(
     val tileBounds = remember { mutableStateMapOf<PreRunEnergy, Rect>() }
     var intake by remember { mutableStateOf<EnergyIntake?>(null) }
     val intakeTime = remember { Animatable(0f) }
-    val energyTilesVisible = rootBounds?.let { viewport ->
-        tileBounds.values.any { it.overlaps(viewport) }
-    } == true
-    val energyBeamVisible = selectedPreRunEnergy == null && lifecycleStarted &&
-        actionsEnabled && energyTilesVisible
-    val energyBeamActive = energyBeamVisible && animationsEnabled
-    val energyCue = if (energyBeamActive) {
-        rememberInfiniteTransition(label = "energyEdgeLight").animateFloat(
-            initialValue = 0f, targetValue = 1f,
-            animationSpec = infiniteRepeatable(tween(2800, easing = LinearEasing)),
-            label = "energyEdgeTravel"
-        )
-    } else remember { mutableStateOf(0f) }
-
     DisposableEffect(lifecycle, view) {
         val observer = LifecycleEventObserver { _, event ->
             lifecycleStarted = lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)
@@ -294,74 +277,34 @@ internal fun StartRunScreen(
                         if (ringBounds != null && ringBounds != bounds) intake = null
                         ringBounds = bounds
                     }
-                )
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    StartUtilityButton("Run settings", StartUtilityIcon.SETTINGS,
-                        onClick = onOpenRunSettings, enabled = actionsEnabled && !setupLoading,
-                        modifier = Modifier.weight(1f).testTag(START_RUN_SETTINGS_TAG))
-                    if (showHistory) {
-                        StartUtilityButton("Log History", StartUtilityIcon.HISTORY,
-                            onClick = onViewHistory, enabled = actionsEnabled,
-                            modifier = Modifier.weight(1f).testTag(START_HISTORY_TAG))
-                    }
-                }
-                Column(Modifier.fillMaxWidth().padding(top = 10.dp).testTag(START_RUN_STATUS_TAG)) {
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp),
-                        verticalAlignment = Alignment.CenterVertically) {
-                        Row(Modifier.weight(1f)
-                            .background(StartCream.copy(alpha = 0.96f), RoundedCornerShape(14.dp))
-                            .border(1.dp, StartForest.copy(alpha = 0.18f), RoundedCornerShape(14.dp))
-                            .padding(horizontal = 10.dp, vertical = 9.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(7.dp)) {
-                            Canvas(Modifier.size(7.dp).clearAndSetSemantics {}) {
-                                drawCircle(StartForest.copy(alpha = 0.75f))
-                            }
-                            Text(
-                                text = when {
-                                    setupLoading -> "Loading run preferences…"
-                                    !gpsSelected -> "Sample demo · simulated distance"
-                                    gpsStatusText != null -> gpsStatusText
-                                    gpsReady -> if (liveMapBackground) "GPS run selected" else "GPS enabled"
-                                    else -> "Location setup on Start"
-                                },
-                                color = StartInk, fontSize = 12.sp, lineHeight = 17.sp,
-                                fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f)
-                            )
-                        }
-                        if (liveMapBackground && onRequestMapLocation != null) {
-                            StartUtilityButton("Enable location", StartUtilityIcon.MAP,
-                                onClick = onRequestMapLocation, enabled = actionsEnabled && !setupLoading,
-                                modifier = Modifier.weight(0.85f).testTag(START_MAP_LOCATION_ACCESS_TAG))
-                        } else if (onOpenMap != null) {
-                            StartUtilityButton("Live map", StartUtilityIcon.MAP,
-                                onClick = onOpenMap, enabled = actionsEnabled,
-                                modifier = Modifier.weight(0.85f).testTag("startExpandMap"))
-                        }
-                    }
-                    Column(Modifier.fillMaxWidth().padding(top = 7.dp)
-                        .background(StartCream.copy(alpha = 0.92f), RoundedCornerShape(12.dp))
-                        .padding(horizontal = 10.dp, vertical = 7.dp)) {
-                        Text(text = if (liveMapBackground) liveMapStatus ?: "Finding your location…"
-                            else "ILLUSTRATIVE MAP", color = StartInk,
-                            fontSize = 10.sp, lineHeight = 15.sp, fontWeight = FontWeight.SemiBold,
-                            letterSpacing = 0.5.sp, modifier = Modifier.testTag(START_MAP_STATUS_TAG))
-                        if (!setupLoading) {
-                            Text(text = when {
-                                !musicSelected -> "Music observation off"
-                                !musicAccessGranted -> "Music observation needs access"
-                                else -> "Music observation on"
-                            }, color = StartInk.copy(alpha = 0.86f), fontSize = 11.sp, lineHeight = 16.sp)
-                            if (reflectionSetupRequired) Text("Set up reflections in Run settings",
-                                color = StartInk.copy(alpha = 0.86f), fontSize = 11.sp, lineHeight = 16.sp)
-                            if (gpsMessage != null) Text(gpsMessage, color = StartInk,
-                                fontSize = 11.sp, lineHeight = 16.sp, modifier = Modifier.padding(top = 3.dp))
-                        }
-                    }
+                    StartUtilityFooter(
+                        gpsStatus = when {
+                            setupLoading -> "Loading run preferences…"
+                            !gpsSelected -> "Sample demo · simulated distance"
+                            gpsStatusText != null -> gpsStatusText
+                            gpsReady -> if (liveMapBackground) "GPS run selected" else "GPS enabled"
+                            else -> "Location setup on Start"
+                        },
+                        mapStatus = if (liveMapBackground) liveMapStatus ?: "Finding your location…"
+                            else "Map artwork",
+                        onMapClick = if (liveMapBackground && onRequestMapLocation != null)
+                            onRequestMapLocation else onOpenMap,
+                        mapNeedsLocation = liveMapBackground && onRequestMapLocation != null,
+                        onViewHistory = onViewHistory,
+                        showHistory = showHistory,
+                        onOpenRunSettings = onOpenRunSettings,
+                        actionsEnabled = actionsEnabled,
+                        setupLoading = setupLoading,
+                        musicStatus = when {
+                            !musicSelected -> "Music observation off"
+                            !musicAccessGranted -> "Music observation needs access"
+                            else -> "Music observation on"
+                        },
+                        musicAccessNeeded = musicSelected && !musicAccessGranted,
+                        reflectionSetupRequired = reflectionSetupRequired,
+                        gpsMessage = gpsMessage
+                    )
                 }
             }
             Box(Modifier.fillMaxWidth().padding(horizontal = 20.dp)
@@ -396,10 +339,7 @@ internal fun StartRunScreen(
                     onTileBounds = { energy, bounds ->
                         if (tileBounds[energy] != null && tileBounds[energy] != bounds) intake = null
                         tileBounds[energy] = bounds
-                    },
-                    cueProgress = { energyCue.value },
-                    beamActive = energyBeamActive,
-                    beamVisible = energyBeamVisible
+                    }
                 )
             }
 
@@ -420,7 +360,128 @@ internal fun StartRunScreen(
     }
 }
 
-private enum class StartUtilityIcon { SETTINGS, HISTORY, MAP }
+@Composable
+private fun StartUtilityFooter(
+    gpsStatus: String,
+    mapStatus: String,
+    onMapClick: (() -> Unit)?,
+    mapNeedsLocation: Boolean,
+    onViewHistory: () -> Unit,
+    showHistory: Boolean,
+    onOpenRunSettings: () -> Unit,
+    actionsEnabled: Boolean,
+    setupLoading: Boolean,
+    musicStatus: String,
+    musicAccessNeeded: Boolean,
+    reflectionSetupRequired: Boolean,
+    gpsMessage: String?
+) {
+    Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp)) {
+        BoxWithConstraints(Modifier.fillMaxWidth()) {
+            // Keep the same compact row normally; larger text gets its own status line rather
+            // than squeezing icons, truncating status, or shrinking any 48 dp touch target.
+            val stacked = LocalDensity.current.fontScale > 1.25f || maxWidth < 270.dp
+            val settingsState = buildList {
+                add(musicStatus)
+                if (setupLoading) add("Loading run preferences")
+                if (reflectionSetupRequired) add("Reflection setup required")
+            }.joinToString(". ")
+            val actions: @Composable () -> Unit = {
+                Row(
+                    modifier = if (stacked) Modifier.fillMaxWidth() else Modifier,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    val actionModifier = if (stacked) Modifier.weight(1f) else Modifier.width(48.dp)
+                    if (onMapClick != null) {
+                        StartUtilityButton("Map", StartUtilityIcon.MAP, onMapClick,
+                            enabled = actionsEnabled && (!mapNeedsLocation || !setupLoading),
+                            modifier = actionModifier.testTag(if (mapNeedsLocation)
+                                START_MAP_LOCATION_ACCESS_TAG else "startExpandMap"),
+                            accessibilityLabel = if (mapNeedsLocation) "Enable location" else "Open live map",
+                            actionState = if (mapNeedsLocation) "Location access needed" else null)
+                    }
+                    if (showHistory) {
+                        StartUtilityButton("History", StartUtilityIcon.HISTORY, onViewHistory,
+                            enabled = actionsEnabled,
+                            modifier = actionModifier.testTag(START_HISTORY_TAG),
+                            accessibilityLabel = "Log History")
+                    }
+                    StartUtilityButton("Settings", StartUtilityIcon.SETTINGS, onOpenRunSettings,
+                        enabled = actionsEnabled && !setupLoading,
+                        modifier = actionModifier.testTag(START_RUN_SETTINGS_TAG),
+                        accessibilityLabel = "Run settings", actionState = settingsState)
+                }
+            }
+            if (stacked) {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    StartLocationSummary(gpsStatus, mapStatus, Modifier.fillMaxWidth())
+                    actions()
+                }
+            } else {
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    StartLocationSummary(gpsStatus, mapStatus, Modifier.weight(1f))
+                    actions()
+                }
+            }
+        }
+        if (!setupLoading) {
+            // Exceptions stay actionable in the card; normal music on/off lives in Settings
+            // semantics and the existing settings screen, without another everyday panel.
+            if (musicAccessNeeded) {
+                StartSetupNotice("Music observation needs access", onOpenRunSettings, actionsEnabled)
+            }
+            if (reflectionSetupRequired) {
+                StartSetupNotice("Set up reflections in Run settings", onOpenRunSettings, actionsEnabled)
+            }
+            if (!gpsMessage.isNullOrBlank()) {
+                StartSetupNotice(gpsMessage, onOpenRunSettings, actionsEnabled)
+            }
+        }
+    }
+}
+
+@Composable
+private fun StartLocationSummary(status: String, mapStatus: String, modifier: Modifier = Modifier) {
+    Row(modifier.testTag(START_RUN_STATUS_TAG), horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+        Box(Modifier.padding(top = 5.dp).size(7.dp)
+            .background(Color(0xFF91A28F), CircleShape).clearAndSetSemantics {})
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(status, color = StartInk, fontSize = 12.sp, lineHeight = 16.sp,
+                fontWeight = FontWeight.SemiBold)
+            Text(mapStatus, color = StartInk.copy(alpha = 0.72f), fontSize = 10.sp, lineHeight = 14.sp,
+                modifier = Modifier.testTag(START_MAP_STATUS_TAG))
+        }
+    }
+}
+
+@Composable
+private fun StartSetupNotice(text: String, onClick: () -> Unit, enabled: Boolean) {
+    TextButton(onClick = onClick, enabled = enabled,
+        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
+        Text(text, color = StartInk, fontSize = 11.sp, lineHeight = 16.sp,
+            modifier = Modifier.fillMaxWidth())
+    }
+}
+
+// Unmodified Google Material Design outlined 24px icon paths.
+// Copyright 2014 Google Inc. All Rights Reserved.
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use these icon paths except in compliance with the License.
+// You may obtain a copy at https://www.apache.org/licenses/LICENSE-2.0.
+// Unless required by applicable law or agreed to in writing, these paths are
+// distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND,
+// either express or implied. See the License for the specific language governing
+// permissions and limitations under the License.
+// https://github.com/google/material-design-icons/blob/master/src/maps/map/materialiconsoutlined/24px.svg
+// https://github.com/google/material-design-icons/blob/master/src/action/history/materialiconsoutlined/24px.svg
+// https://github.com/google/material-design-icons/blob/master/src/action/settings/materialiconsoutlined/24px.svg
+private enum class StartUtilityIcon(val pathData: String) {
+    MAP("M20.5 3l-.16.03L15 5.1 9 3 3.36 4.9c-.21.07-.36.25-.36.48V20.5c0 .28.22.5.5.5l.16-.03L9 18.9l6 2.1 5.64-1.9c.21-.07.36-.25.36-.48V3.5c0-.28-.22-.5-.5-.5zM10 5.47l4 1.4v11.66l-4-1.4V5.47zm-5 .99l3-1.01v11.7l-3 1.16V6.46zm14 11.08l-3 1.01V6.86l3-1.16v11.84z"),
+    HISTORY("M13 3c-4.97 0-9 4.03-9 9H1l3.89 3.89.07.14L9 12H6c0-3.87 3.13-7 7-7s7 3.13 7 7-3.13 7-7 7c-1.93 0-3.68-.79-4.94-2.06l-1.42 1.42C8.27 19.99 10.51 21 13 21c4.97 0 9-4.03 9-9s-4.03-9-9-9zm-1 5v5l4.25 2.52.77-1.28-3.52-2.09V8z"),
+    SETTINGS("M19.43 12.98c.04-.32.07-.64.07-.98 0-.34-.03-.66-.07-.98l2.11-1.65c.19-.15.24-.42.12-.64l-2-3.46c-.09-.16-.26-.25-.44-.25-.06 0-.12.01-.17.03l-2.49 1c-.52-.4-1.08-.73-1.69-.98l-.38-2.65C14.46 2.18 14.25 2 14 2h-4c-.25 0-.46.18-.49.42l-.38 2.65c-.61.25-1.17.59-1.69.98l-2.49-1c-.06-.02-.12-.03-.18-.03-.17 0-.34.09-.43.25l-2 3.46c-.13.22-.07.49.12.64l2.11 1.65c-.04.32-.07.65-.07.98 0 .33.03.66.07.98l-2.11 1.65c-.19.15-.24.42-.12.64l2 3.46c.09.16.26.25.44.25.06 0 .12-.01.17-.03l2.49-1c.52.4 1.08.73 1.69.98l.38 2.65c.03.24.24.42.49.42h4c.25 0 .46-.18.49-.42l.38-2.65c.61-.25 1.17-.59 1.69-.98l2.49 1c.06.02.12.03.18.03.17 0 .34-.09.43-.25l2-3.46c.12-.22.07-.49-.12-.64l-2.11-1.65zm-1.98-1.71c.04.31.05.52.05.73 0 .21-.02.43-.05.73l-.14 1.13.89.7 1.08.84-.7 1.21-1.27-.51-1.04-.42-.9.68c-.43.32-.84.56-1.25.73l-1.06.43-.16 1.13-.2 1.35h-1.4l-.19-1.35-.16-1.13-1.06-.43c-.43-.18-.83-.41-1.23-.71l-.91-.7-1.06.43-1.27.51-.7-1.21 1.08-.84.89-.7-.14-1.13c-.03-.31-.05-.54-.05-.74s.02-.43.05-.73l.14-1.13-.89-.7-1.08-.84.7-1.21 1.27.51 1.04.42.9-.68c.43-.32.84-.56 1.25-.73l1.06-.43.16-1.13.2-1.35h1.39l.19 1.35.16 1.13 1.06.43c.43.18.83.41 1.23.71l.91.7 1.06-.43 1.27-.51.7 1.21-1.07.85-.89.7.14 1.13zM12 8c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4-1.79-4-4-4zm0 6c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2z")
+}
 
 @Composable
 private fun StartUtilityButton(
@@ -428,57 +489,32 @@ private fun StartUtilityButton(
     icon: StartUtilityIcon,
     onClick: () -> Unit,
     enabled: Boolean,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    accessibilityLabel: String = label,
+    actionState: String? = null
 ) {
-    val shape = RoundedCornerShape(15.dp)
     val ink = StartInk.copy(alpha = if (enabled) 1f else 0.5f)
-    Row(modifier.heightIn(min = 48.dp)
-        .shadow(2.dp, shape, clip = false)
-        .clip(shape)
-        .background(StartCream.copy(alpha = 0.97f))
-        .border(1.dp, StartForest.copy(alpha = 0.22f), shape)
+    val image = remember(icon) {
+        ImageVector.Builder(name = "Material${icon.name}", defaultWidth = 24.dp, defaultHeight = 24.dp,
+            viewportWidth = 24f, viewportHeight = 24f)
+            .addPath(pathData = PathParser().parsePathString(icon.pathData).toNodes(), fill = SolidColor(Color.Black))
+            .build()
+    }
+    Column(modifier.widthIn(min = 48.dp).heightIn(min = 48.dp)
+        .clip(RoundedCornerShape(8.dp))
         .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
-        .padding(horizontal = 12.dp, vertical = 10.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalAlignment = Alignment.CenterVertically) {
-        Canvas(Modifier.size(18.dp).clearAndSetSemantics {}) {
-            val stroke = 1.6.dp.toPx()
-            fun point(x: Float, y: Float) = Offset(size.width * x, size.height * y)
-            fun line(x1: Float, y1: Float, x2: Float, y2: Float) =
-                drawLine(ink, point(x1, y1), point(x2, y2), strokeWidth = stroke, cap = StrokeCap.Round)
-            when (icon) {
-                StartUtilityIcon.SETTINGS -> {
-                    listOf(0.22f to 0.35f, 0.5f to 0.68f, 0.78f to 0.4f).forEach { (y, x) ->
-                        line(0.1f, y, 0.9f, y)
-                        drawCircle(StartCream, 2.4.dp.toPx(), point(x, y))
-                        drawCircle(ink, 2.4.dp.toPx(), point(x, y), style = Stroke(stroke))
-                    }
-                }
-                StartUtilityIcon.HISTORY -> {
-                    drawCircle(ink, size.minDimension * 0.38f, style = Stroke(stroke))
-                    line(0.5f, 0.27f, 0.5f, 0.51f)
-                    line(0.5f, 0.51f, 0.69f, 0.61f)
-                }
-                StartUtilityIcon.MAP -> {
-                    val map = Path().apply {
-                        moveTo(size.width * 0.08f, size.height * 0.22f)
-                        lineTo(size.width * 0.36f, size.height * 0.1f)
-                        lineTo(size.width * 0.64f, size.height * 0.22f)
-                        lineTo(size.width * 0.92f, size.height * 0.1f)
-                        lineTo(size.width * 0.92f, size.height * 0.78f)
-                        lineTo(size.width * 0.64f, size.height * 0.9f)
-                        lineTo(size.width * 0.36f, size.height * 0.78f)
-                        lineTo(size.width * 0.08f, size.height * 0.9f)
-                        close()
-                    }
-                    drawPath(map, ink, style = Stroke(stroke, cap = StrokeCap.Round))
-                    line(0.36f, 0.1f, 0.36f, 0.78f)
-                    line(0.64f, 0.22f, 0.64f, 0.9f)
-                }
-            }
+        .semantics(mergeDescendants = true) {
+            contentDescription = accessibilityLabel
+            if (actionState != null) stateDescription = actionState
         }
-        Text(label, color = ink, fontSize = 12.sp, lineHeight = 17.sp,
-            fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+        .padding(horizontal = 2.dp, vertical = 4.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center) {
+        Image(imageVector = image, contentDescription = null, colorFilter = ColorFilter.tint(ink),
+            modifier = Modifier.size(23.dp))
+        Spacer(Modifier.height(2.dp))
+        Text(label, color = ink, fontSize = 10.sp, lineHeight = 14.sp, textAlign = TextAlign.Center,
+            modifier = Modifier.clearAndSetSemantics {})
     }
 }
 
@@ -604,9 +640,10 @@ private fun AgentReadyCard(
     ringSize: Dp,
     phase: State<Float>,
     intakeTime: () -> Float?,
-    ringModifier: Modifier
+    ringModifier: Modifier,
+    footer: @Composable () -> Unit
 ) {
-    Row(
+    Column(
         modifier = Modifier
             .fillMaxWidth()
             .testTag(START_AGENT_CARD_TAG)
@@ -616,7 +653,9 @@ private fun AgentReadyCard(
             .clip(RoundedCornerShape(24.dp))
             .background(Color.White)
             .border(1.dp, Color(0xFFDDE7E2), RoundedCornerShape(24.dp))
-            .padding(horizontal = 20.dp, vertical = 6.dp),
+    ) {
+        Row(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
@@ -684,6 +723,10 @@ private fun AgentReadyCard(
                 textAlign = TextAlign.End
             )
         }
+        }
+        Box(Modifier.fillMaxWidth().padding(horizontal = 12.dp).height(1.dp)
+            .background(Color(0xFFDDE7E2)))
+        footer()
     }
 }
 
@@ -694,10 +737,7 @@ private fun PreRunEnergyChoices(
     enabled: Boolean,
     intake: EnergyIntake?,
     intakeTime: () -> Float,
-    onTileBounds: (PreRunEnergy, Rect) -> Unit,
-    cueProgress: () -> Float,
-    beamActive: Boolean,
-    beamVisible: Boolean
+    onTileBounds: (PreRunEnergy, Rect) -> Unit
 ) {
     val tileHeight = 82.dp + 40.dp * (LocalDensity.current.fontScale - 1f).coerceAtLeast(0f)
     Column(modifier = Modifier.testTag(START_ENERGY_CHOICES_TAG),
@@ -730,7 +770,6 @@ private fun PreRunEnergyChoices(
                 Row(
                     modifier = Modifier.fillMaxWidth()
                         .graphicsLayer { alpha = if (selected == null) 1f else 0f }
-                        .then(if (beamVisible) Modifier.energyEdgeBeam(cueProgress, beamActive) else Modifier)
                         .then(if (selected != null) Modifier.clearAndSetSemantics {} else Modifier),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
@@ -770,45 +809,6 @@ private fun PreRunEnergyChoices(
                         Text("Undo", color = StartInk, fontWeight = FontWeight.Bold)
                     }
                 }
-            }
-        }
-    }
-}
-
-/** One shared outer perimeter around the choices; the heading stays outside the beam. */
-private fun Modifier.energyEdgeBeam(phase: () -> Float, animated: Boolean): Modifier = drawWithCache {
-    // The complete stroke stays inside this row, including when an ancestor clips its layer.
-    val inset = 4.dp.toPx()
-    val outline = Path().apply {
-        addRoundRect(RoundRect(Rect(inset, inset, size.width - inset, size.height - inset),
-            CornerRadius(15.dp.toPx())))
-    }
-    val measure = PathMeasure().apply { setPath(outline, false) }
-    val length = measure.length
-    val segment = Path()
-    val halo = Stroke(width = 6.dp.toPx(), cap = StrokeCap.Round)
-    val glow = Stroke(width = 4.dp.toPx(), cap = StrokeCap.Round)
-    val core = Stroke(width = 1.75.dp.toPx(), cap = StrokeCap.Round)
-    onDrawWithContent {
-        drawContent()
-        // Keep a shared, quiet outline when motion is disabled; the cue never depends on animation.
-        drawPath(outline, StartForestDeep.copy(alpha = 0.55f), style = glow)
-        drawPath(outline, Color.White.copy(alpha = if (animated) 0.28f else 0.72f),
-            style = Stroke(1.dp.toPx()))
-        if (animated && length > 0f) {
-            val head = phase() * length
-            val trail = length * 0.19f
-            repeat(18) { index ->
-                val from = (head - trail + trail * index / 18f + length) % length
-                val to = from + trail / 18f
-                segment.reset()
-                measure.getSegment(from, to.coerceAtMost(length), segment)
-                if (to > length) measure.getSegment(0f, to - length, segment)
-                val strength = (index + 1f) / 18f
-                val opacity = strength * strength
-                drawPath(segment, Color.White.copy(alpha = opacity * 0.18f), style = halo)
-                drawPath(segment, Color.White.copy(alpha = opacity * 0.36f), style = glow)
-                drawPath(segment, Color.White.copy(alpha = opacity), style = core)
             }
         }
     }

@@ -92,6 +92,109 @@ class ReflectionDaoTest {
     }
 
     @Test
+    fun untimedEnergySurvivesReopenAndReceiptWithoutAnyDeadlineOrInventedAnswer() = runBlocking {
+        database.runDao().insert(completed.copy(activityFinalized = false))
+        var dao = database.reflectionDao()
+        dao.ensurePending(pending.copy(selectionDeadlineEpochMillis = ReflectionDao.UNTIMED_SELECTION_DEADLINE,
+            selectionWindowStarted = false))
+        dao.saveCandidates(completed.runId, pending.requestId, "{}", true)
+        database.close()
+        database = buildRunStateDatabase(context, DATABASE_NAME)
+        dao = database.reflectionDao()
+        val opened = dao.beginSelectionWindow(completed.runId, pending.selectionDeadlineEpochMillis)
+        assertEquals(ReflectionDao.UNTIMED_SELECTION_DEADLINE, opened.selectionDeadlineEpochMillis)
+        assertEquals(opened, dao.selectNoSelectionIfDue(completed.runId, Long.MAX_VALUE))
+        assertNull(opened.selectedBranch)
+        assertNull(opened.postRunEnergy)
+        val selected = dao.recordEnergy(completed.runId, ReflectionBranch.SPENT, Long.MAX_VALUE)
+        assertEquals(ReflectionBranch.SPENT, selected.selectedBranch)
+        assertEquals(ReflectionBranch.SPENT, selected.postRunEnergy)
+        assertTrue(dao.finalizeReady(completed.runId, pending.requestId, ReflectionBranch.SPENT,
+            "Exact late Energy reflection.", pending.selectionDeadlineEpochMillis + 1))
+    }
+
+    @Test
+    fun savingUntimedActivitySelectsNeutralOnlyAfterDurableSaveAndKeepsEnergyUnanswered() = runBlocking {
+        val original = completed.copy(activityFinalized = false)
+        database.runDao().insert(original)
+        val dao = database.reflectionDao()
+        val waiting = pending.copy(selectionDeadlineEpochMillis = ReflectionDao.UNTIMED_SELECTION_DEADLINE,
+            selectionWindowStarted = false)
+        dao.ensurePending(waiting)
+        assertEquals(waiting, dao.selectForSavedActivity(completed.runId))
+        assertTrue(database.runDao().finalizeActivity(completed.runId))
+        val selected = dao.selectForSavedActivity(completed.runId)
+        assertEquals(ReflectionBranch.NO_SELECTION, selected.selectedBranch)
+        assertNull(selected.postRunEnergy)
+        assertTrue(selected.selectionWindowStarted)
+        assertEquals(selected, dao.selectForSavedActivity(completed.runId))
+        assertEquals(original.copy(activityFinalized = true), database.runDao().findById(completed.runId))
+        assertTrue(dao.saveCandidates(completed.runId, pending.requestId, "{}", true))
+        assertTrue(dao.finalizeReady(completed.runId, pending.requestId, ReflectionBranch.NO_SELECTION,
+            "Exact unanswered reflection.", pending.selectionDeadlineEpochMillis))
+        val ready = dao.findByRunId(completed.runId)
+        database.close()
+        database = buildRunStateDatabase(context, DATABASE_NAME)
+        assertEquals(ready, database.reflectionDao().selectForSavedActivity(completed.runId))
+    }
+
+    @Test
+    fun durableSaveWinsAgainstLateEnergyBeforeTheSaveCallbackRuns() = runBlocking {
+        database.runDao().insert(completed.copy(activityFinalized = false))
+        val dao = database.reflectionDao()
+        dao.ensurePending(pending.copy(selectionDeadlineEpochMillis = ReflectionDao.UNTIMED_SELECTION_DEADLINE))
+        assertTrue(database.runDao().finalizeActivity(completed.runId))
+        val lateAnswer = dao.recordEnergy(completed.runId, ReflectionBranch.SPENT,
+            pending.selectionDeadlineEpochMillis + 60_000L)
+        assertEquals(ReflectionBranch.NO_SELECTION, lateAnswer.selectedBranch)
+        assertEquals(ReflectionBranch.SPENT, lateAnswer.postRunEnergy)
+        assertEquals(lateAnswer, dao.selectForSavedActivity(completed.runId))
+    }
+
+    @Test
+    fun deliberateNotSureStaysDistinctFromSavingAnUnansweredUntimedActivity() = runBlocking {
+        database.runDao().insert(completed.copy(activityFinalized = false))
+        val dao = database.reflectionDao()
+        dao.ensurePending(pending.copy(selectionDeadlineEpochMillis = ReflectionDao.UNTIMED_SELECTION_DEADLINE))
+        val chosen = dao.recordNotSure(completed.runId, pending.selectionDeadlineEpochMillis + 86_400_000L)
+        assertEquals(ReflectionBranch.NO_SELECTION, chosen.selectedBranch)
+        assertEquals(ReflectionBranch.NO_SELECTION, chosen.postRunEnergy)
+        assertTrue(database.runDao().finalizeActivity(completed.runId))
+        assertEquals(chosen, dao.selectForSavedActivity(completed.runId))
+    }
+
+    @Test
+    fun onlyUnansweredUnfinalizedLegacyPendingRowsCanBecomeUntimed() = runBlocking {
+        database.runDao().insert(completed.copy(activityFinalized = false))
+        val dao = database.reflectionDao()
+        dao.ensurePending(pending)
+        val promoted = dao.waitForEnergyWithoutDeadline(completed.runId)
+        assertEquals(pending.copy(selectionDeadlineEpochMillis = ReflectionDao.UNTIMED_SELECTION_DEADLINE), promoted)
+        assertEquals(promoted, dao.waitForEnergyWithoutDeadline(completed.runId))
+        dao.recordEnergy(completed.runId, ReflectionBranch.POWERED_UP, pending.selectionDeadlineEpochMillis + 60_000L)
+        assertTrue(dao.saveCandidates(completed.runId, pending.requestId, "{}", true))
+        assertTrue(dao.finalizeReady(completed.runId, pending.requestId, ReflectionBranch.POWERED_UP,
+            "  Exact selected text.\n", pending.selectionDeadlineEpochMillis + 60_001L))
+        val ready = requireNotNull(dao.findByRunId(completed.runId))
+        assertTrue(database.runDao().finalizeActivity(completed.runId))
+        assertEquals(ready, dao.waitForEnergyWithoutDeadline(completed.runId))
+        assertEquals(ready, dao.selectForSavedActivity(completed.runId))
+    }
+
+    @Test
+    fun legacySavedAndAlreadySelectedRowsKeepTheirOriginalPolicy() = runBlocking {
+        val dao = createPending() // A historical activity is already finalized.
+        assertEquals(pending, dao.waitForEnergyWithoutDeadline(completed.runId))
+        assertEquals(pending, dao.selectForSavedActivity(completed.runId))
+        val selected = dao.recordEnergy(completed.runId, ReflectionBranch.SPENT,
+            pending.selectionDeadlineEpochMillis - 1L)
+        database.openHelper.writableDatabase.execSQL(
+            "UPDATE runs SET activity_finalized = 0 WHERE run_id = ?", arrayOf(completed.runId))
+        assertEquals(selected, dao.waitForEnergyWithoutDeadline(completed.runId))
+        assertEquals(selected, dao.selectForSavedActivity(completed.runId))
+    }
+
+    @Test
     fun automaticNoSelectionStillLeavesEnergyUnansweredUntilExplicitNotSure() = runBlocking {
         val dao = createPending()
         val automatic = dao.selectNoSelectionIfDue(completed.runId, pending.selectionDeadlineEpochMillis)
@@ -105,7 +208,7 @@ class ReflectionDaoTest {
     /** Real Room/coordinator/HTTP serialization, isolated fixture storage and in-memory wire only. */
     @Test fun observedSongsThroughHostedContractSaveTheNonFirstWinnerAndReopenWithoutReplay() = runBlocking {
         val start = completed.officialStartEpochMillis
-        val finish = requireNotNull(completed.finishEpochMillis)
+        val finish = start + 150_000L
         val runId = completed.runId
         database.runDao().insert(completed.copy(state = StoredRunState.RUNNING,
             finishEpochMillis = null, lastCheckpointEpochMillis = start,
@@ -118,11 +221,24 @@ class ReflectionDaoTest {
             source: String = "com.spotify.music") = music.recordObservation(RunMusicObservation(
                 runId, key, start + offset, null, source, title, artist, playback,
                 MusicObservationKind.METADATA_CHANGED))
-        observe("first", 1_000L, "Stronger", "Kanye West")
-        observe("winner", 10_000L, "Lovely Day", "Bill Withers")
-        observe("duplicate", 15_000L, " LOVELY  DAY ", "Bill Withers")
-        observe("paused", 20_000L, "Paused report", "Fixture artist", MusicPlaybackState.PAUSED)
-        observe("other-player", 25_000L, "Other player", "Fixture artist", source = "other.player")
+        suspend fun listenForOneMinute(key: String, beginsAt: Long, title: String, artist: String) {
+            repeat(12) { sample ->
+                val offset = beginsAt + (sample + 1) * 5_000L
+                music.recordObservation(RunMusicObservation(runId, "$key-sample-$sample",
+                    start + offset, (offset + 1_000L) * 1_000_000L, "com.spotify.music", title, artist,
+                    MusicPlaybackState.PLAYING, MusicObservationKind.PLAYBACK_SAMPLE,
+                    playbackIntervalMillis = 5_000L))
+            }
+        }
+        val firstSequence = observe("first", 1_000L, "Stronger", "Kanye West").sequenceNumber
+        listenForOneMinute("first", 1_000L, "Stronger", "Kanye West")
+        val winnerSequence = observe("winner", 65_000L, "Lovely Day", "Bill Withers").sequenceNumber
+        listenForOneMinute("winner", 65_000L, "Lovely Day", "Bill Withers")
+        assertEquals(1, firstSequence)
+        assertEquals(14, winnerSequence)
+        observe("duplicate", 126_000L, " LOVELY  DAY ", "Bill Withers")
+        observe("paused", 130_000L, "Paused report", "Fixture artist", MusicPlaybackState.PAUSED)
+        observe("other-player", 135_000L, "Other player", "Fixture artist", source = "other.player")
         observe("before-start", -1L, "Old report", "Fixture artist")
         observe("after-finish", finish - start + 1L, "Late report", "Fixture artist")
 
@@ -130,8 +246,8 @@ class ReflectionDaoTest {
         val fingerprint = reflectionDestinationFingerprint(config)
         val firstPreparation = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
         val secondPreparation = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
-        requireNotNull(music.claimPreparation(runId, firstPreparation, 1, fingerprint, start + 35_000L))
-        requireNotNull(music.claimPreparation(runId, secondPreparation, 2, fingerprint, start + 36_000L))
+        requireNotNull(music.claimPreparation(runId, firstPreparation, firstSequence, fingerprint, start + 62_000L))
+        requireNotNull(music.claimPreparation(runId, secondPreparation, winnerSequence, fingerprint, start + 127_000L))
         music.finishPreparation(runId, firstPreparation, true)
         music.finishPreparation(runId, secondPreparation, true)
         database.runDao().pauseRun(runId, finish)
@@ -157,7 +273,7 @@ class ReflectionDaoTest {
                         addProperty("runId", request.get("runId").asString)
                         // Simulated production envelope exercises passage eligibility; no provider is contacted.
                         addProperty("generationMode", "ANTHROPIC")
-                        addProperty("selectedSongId", "2")
+                        addProperty("selectedSongId", winnerSequence.toString())
                         addProperty("songSelectionMethod", "CONTEXT_MATCH")
                         addProperty("songCueId", "lovely_day_bill_withers_v1")
                         add("candidates", JsonObject().apply {
@@ -189,7 +305,8 @@ class ReflectionDaoTest {
             assertEquals(1, healthChecks.get())
             val wire = requireNotNull(sent.get())
             val songs = wire.getAsJsonArray("songCandidates")
-            assertEquals(listOf("1", "2"), songs.map { it.asJsonObject.get("candidateId").asString })
+            assertEquals(listOf(firstSequence.toString(), winnerSequence.toString()),
+                songs.map { it.asJsonObject.get("candidateId").asString })
             assertEquals(listOf(firstPreparation, secondPreparation),
                 songs.map { it.asJsonObject.get("songPreparationId").asString })
             assertEquals("Stronger", wire.getAsJsonObject("evidence").getAsJsonObject("musicContext")
@@ -201,7 +318,7 @@ class ReflectionDaoTest {
             assertFalse(wire.getAsJsonObject("evidence").has("songCandidates"))
             val saved = requireNotNull(database.reflectionDao().findByRunId(runId))
             val selected = Gson().fromJson(saved.evidenceJson, CompletedRunEvidence::class.java)
-            assertEquals("2", selected.selectedSongId)
+            assertEquals(winnerSequence.toString(), selected.selectedSongId)
             assertEquals("CONTEXT_MATCH", selected.songSelectionMethod)
             assertEquals("Lovely Day", selected.musicContext.trackTitle)
             assertEquals("Lovely Day", selected.songPassage?.trackTitle)

@@ -307,6 +307,62 @@ class SongPassageSpeechTest {
     )
 
     @Test
+    fun completionFactsSlowOnlyTheirLocalFallback() {
+        composeTestRule.runOnUiThread {
+            val platform = ControlledPlatform()
+            val speaker = speaker(platform)
+            try {
+                platform.ready(true)
+                speaker.speakCompletionFacts("Your saved run facts.") { }
+                assertEquals(0.864f, platform.spoken.last().rate, 0.0001f)
+                speaker.speakReceipt("Choose your Energy when you are ready.") { }
+                assertEquals(0.96f, platform.spoken.last().rate, 0.0001f)
+                speaker.speakTimedCue("Three", useRunVoice = false)
+                assertEquals(0.96f, platform.spoken.last().rate, 0.0001f)
+                speaker.speak("Your exact saved reflection.")
+                assertEquals(0.94f, platform.spoken.last().rate, 0.0001f)
+                assertEquals(listOf("Your saved run facts.", "Choose your Energy when you are ready.",
+                    "Three", "Your exact saved reflection."), platform.spoken.map { it.text })
+            } finally { speaker.close() }
+        }
+    }
+
+    @Test
+    fun completionFactsUseTheirOwnCloudPlaybackWithoutChangingOtherRunLines() {
+        composeTestRule.runOnUiThread {
+            val platform = ControlledPlatform()
+            val routes = mutableListOf<String>()
+            val witnessed = object : ReflectionSpeechPlatform by platform {
+                override fun preparedRunVoiceAudio(text: String): ByteArray = byteArrayOf(1, 2, 3)
+                override fun playCompletionFactsAudio(
+                    utteranceId: String, audio: ByteArray,
+                    onDone: (String) -> Unit, onUnavailable: (String) -> Unit, onError: (String) -> Unit
+                ): Boolean {
+                    routes += "completion-facts"
+                    return true
+                }
+                override fun playRunVoiceAudio(
+                    utteranceId: String, audio: ByteArray,
+                    onDone: (String) -> Unit, onUnavailable: (String) -> Unit, onError: (String) -> Unit
+                ): Boolean {
+                    routes += "run-voice"
+                    return true
+                }
+            }
+            val speaker = AndroidReflectionSpeaker(composeTestRule.activity, witnessed,
+                scheduleTimeout = { _, _ -> }, cancelTimeout = { })
+            try {
+                speaker.speakCompletionFacts("Your saved run facts.") { }
+                speaker.speakReceipt("Choose your Energy when you are ready.") { }
+                speaker.speakReceipt("One mile completed.") { }
+                speaker.speakTimedCue("Three", useRunVoice = true)
+                assertEquals(listOf("completion-facts", "run-voice", "run-voice", "run-voice"), routes)
+                assertTrue("Prepared run audio must not also speak through the phone engine.", platform.spoken.isEmpty())
+            } finally { speaker.close() }
+        }
+    }
+
+    @Test
     fun exactSpeechCompletesBeforeSelectedPassageAndFinishesOnlyOnce() {
         composeTestRule.runOnUiThread {
             val platform = ControlledPlatform()
@@ -327,7 +383,7 @@ class SongPassageSpeechTest {
 
                 platform.voiceDone(voice.id)
                 assertTrue("Music must wait after the reflection ends.", platform.passages.isEmpty())
-                assertEquals(650L, delays.last())
+                assertEquals(150L, delays.last())
                 assertEquals("Speech focus is retained during the quiet gap.", "voice", platform.events.last())
                 val handoff = deadlines.last()
                 platform.voiceDone(voice.id)

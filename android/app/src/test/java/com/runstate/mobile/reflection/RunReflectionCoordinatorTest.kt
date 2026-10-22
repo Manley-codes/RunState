@@ -87,6 +87,7 @@ class RunReflectionCoordinatorTest {
             return old.copy(
                 selectedBranch = old.selectedBranch
                     ?: if (!old.selectionWindowStarted || selectionHeld ||
+                        old.selectionDeadlineEpochMillis == ReflectionDao.UNTIMED_SELECTION_DEADLINE ||
                         now < old.selectionDeadlineEpochMillis) branch
                     else ReflectionBranch.NO_SELECTION,
                 postRunEnergy = branch
@@ -96,9 +97,26 @@ class RunReflectionCoordinatorTest {
         override suspend fun defaultSelection(runId: String, now: Long): RunReflectionEntity {
             val old = rows.getValue(runId)
             if (!old.selectionWindowStarted || old.selectedBranch != null ||
+                old.selectionDeadlineEpochMillis == ReflectionDao.UNTIMED_SELECTION_DEADLINE ||
                 now < old.selectionDeadlineEpochMillis) return old
             return old.copy(selectedBranch = ReflectionBranch.NO_SELECTION)
                 .also { rows[runId] = it }
+        }
+
+        override suspend fun waitForEnergyWithoutDeadline(runId: String): RunReflectionEntity {
+            val old = rows.getValue(runId)
+            if (old.status != ReflectionStatus.PENDING || old.selectedBranch != null || old.postRunEnergy != null) return old
+            return old.copy(selectionDeadlineEpochMillis = ReflectionDao.UNTIMED_SELECTION_DEADLINE)
+                .also { rows[runId] = it }
+        }
+
+        // The coordinator checks the fake parent; the real DAO rechecks inside its transaction.
+        override suspend fun selectForSavedActivity(runId: String): RunReflectionEntity {
+            val old = rows.getValue(runId)
+            if (old.status == ReflectionStatus.READY ||
+                old.selectionDeadlineEpochMillis != ReflectionDao.UNTIMED_SELECTION_DEADLINE) return old
+            return old.copy(selectedBranch = old.selectedBranch ?: ReflectionBranch.NO_SELECTION,
+                selectionWindowStarted = true).also { rows[runId] = it }
         }
 
         override suspend fun beginSelectionWindow(runId: String, deadline: Long): RunReflectionEntity {
@@ -106,7 +124,8 @@ class RunReflectionCoordinatorTest {
             if (old.selectionWindowStarted) return old
             return old.copy(
                 selectionWindowStarted = true,
-                selectionDeadlineEpochMillis = deadline
+                selectionDeadlineEpochMillis = if (old.selectionDeadlineEpochMillis == ReflectionDao.UNTIMED_SELECTION_DEADLINE)
+                    ReflectionDao.UNTIMED_SELECTION_DEADLINE else deadline
             ).also { rows[runId] = it }
         }
 
@@ -165,6 +184,200 @@ class RunReflectionCoordinatorTest {
         }
     }
 
+    @Test fun untimedCheckInWaitsPastReceiptAndRecreationUntilTheFirstDeliberateAnswer() {
+        val dao = completedDao()
+        val store = MemoryReflectionStore()
+        var now = 100L
+        var calls = 0
+        var timers = 0
+        val first = RunReflectionCoordinator(dao, store,
+            ReflectionGateway { calls++; candidates() }, scope(),
+            requestIdSupplier = { UUID.fromString(FIRST_REQUEST_ID) }, nowMillis = { now },
+            quietDelay = { timers++; error("An untimed check-in must not schedule a deadline") })
+        first.onSavedVisible(RUN_ID, awaitingReceipt = true)
+        first.finishReceipt(RUN_ID)
+        now += 24 * 60 * 60 * 1_000L
+        first.onSavedVisible(RUN_ID)
+        val waiting = store.rows.getValue(RUN_ID)
+        assertEquals(ReflectionDao.UNTIMED_SELECTION_DEADLINE, waiting.selectionDeadlineEpochMillis)
+        assertNull(waiting.selectedBranch)
+        assertNull(waiting.postRunEnergy)
+        assertNotNull(waiting.candidatesJson)
+        assertNull(first.voicePreparation.value)
+
+        val reopened = RunReflectionCoordinator(dao, store,
+            ReflectionGateway { error("The prepared family must survive recreation") }, scope(),
+            nowMillis = { now }, quietDelay = { timers++; error("No deadline") })
+        reopened.onSavedVisible(RUN_ID)
+        assertEquals(waiting, store.rows.getValue(RUN_ID))
+        assertEquals(RunReflectionState.Preparing(RUN_ID), reopened.state.value)
+        reopened.selectEnergy(RUN_ID, ReflectionBranch.SPENT)
+        val ready = store.rows.getValue(RUN_ID)
+        assertEquals(RunReflectionState.Ready(RUN_ID, SPENT_TEXT, ReflectionBranch.SPENT), reopened.state.value)
+        assertEquals(1, calls)
+        assertEquals(0, timers)
+        reopened.selectEnergy(RUN_ID, ReflectionBranch.POWERED_UP)
+        assertEquals(ready.copy(postRunEnergy = ReflectionBranch.POWERED_UP), store.rows.getValue(RUN_ID))
+    }
+
+    @Test fun lateNotSureIsDeliberateUnknownRatherThanAnAutomaticAnswer() {
+        val store = MemoryReflectionStore()
+        var now = 100L
+        val coordinator = RunReflectionCoordinator(completedDao(), store,
+            ReflectionGateway { candidates() }, scope(), nowMillis = { now })
+        coordinator.onSavedVisible(RUN_ID, awaitingReceipt = true)
+        coordinator.finishReceipt(RUN_ID)
+        now = Long.MAX_VALUE
+        coordinator.selectEnergy(RUN_ID, ReflectionBranch.NO_SELECTION)
+        assertEquals(RunReflectionState.Ready(RUN_ID, NO_SELECTION_TEXT, ReflectionBranch.NO_SELECTION),
+            coordinator.state.value)
+        assertEquals(ReflectionBranch.NO_SELECTION, store.rows.getValue(RUN_ID).postRunEnergy)
+    }
+
+    @Test fun saveWithoutAnAnswerWaitsForDurableSaveButNeverForGenerationOrReceipt() {
+        val dao = completedDao()
+        val store = MemoryReflectionStore()
+        val response = CompletableDeferred<ReflectionCandidates>()
+        var calls = 0
+        val coordinator = RunReflectionCoordinator(dao, store,
+            ReflectionGateway { calls++; response.await() }, scope(), nowMillis = { 100L })
+        coordinator.onSavedVisible(RUN_ID, awaitingReceipt = true)
+        coordinator.onActivitySaved(RUN_ID)
+        assertNull(store.rows.getValue(RUN_ID).selectedBranch)
+        assertFalse(store.rows.getValue(RUN_ID).selectionWindowStarted)
+        assertTrue(runBlocking { dao.finalizeActivity(RUN_ID) })
+        coordinator.onActivitySaved(RUN_ID)
+        val savedWhileWaiting = store.rows.getValue(RUN_ID)
+        assertEquals(ReflectionBranch.NO_SELECTION, savedWhileWaiting.selectedBranch)
+        assertNull(savedWhileWaiting.postRunEnergy)
+        assertTrue(savedWhileWaiting.selectionWindowStarted)
+        assertEquals(ReflectionStatus.PENDING, savedWhileWaiting.status)
+        assertTrue(runBlocking { dao.findById(RUN_ID) }!!.activityFinalized)
+        coordinator.onActivitySaved(RUN_ID)
+        assertEquals(savedWhileWaiting, store.rows.getValue(RUN_ID))
+        response.complete(candidates())
+        assertEquals(RunReflectionState.Ready(RUN_ID, NO_SELECTION_TEXT), coordinator.state.value)
+        assertEquals(1, calls)
+    }
+
+    @Test fun savePreservesAnAnswerChosenBeforeFactsFinish() {
+        val dao = completedDao()
+        val store = MemoryReflectionStore()
+        val coordinator = RunReflectionCoordinator(dao, store,
+            ReflectionGateway { candidates() }, scope(), nowMillis = { 100L })
+        coordinator.onSavedVisible(RUN_ID, awaitingReceipt = true)
+        coordinator.selectEnergy(RUN_ID, ReflectionBranch.POWERED_UP)
+        assertEquals(ReflectionStatus.PENDING, store.rows.getValue(RUN_ID).status)
+        runBlocking { dao.finalizeActivity(RUN_ID) }
+        coordinator.onActivitySaved(RUN_ID)
+        assertEquals(RunReflectionState.Ready(RUN_ID, POWERED_UP_TEXT, ReflectionBranch.POWERED_UP),
+            coordinator.state.value)
+        val ready = store.rows.getValue(RUN_ID)
+        coordinator.finishReceipt(RUN_ID)
+        coordinator.onActivitySaved(RUN_ID)
+        assertEquals(ready, store.rows.getValue(RUN_ID))
+    }
+
+    @Test fun saveBeforeReflectionRowCreationIsRecoveredFromTheActivity() {
+        val dao = completedDao()
+        val store = MemoryReflectionStore()
+        var calls = 0
+        val coordinator = RunReflectionCoordinator(dao, store,
+            ReflectionGateway { calls++; candidates() }, scope(), nowMillis = { 100L })
+        runBlocking { dao.finalizeActivity(RUN_ID) }
+        coordinator.onActivitySaved(RUN_ID)
+        assertTrue(store.rows.isEmpty())
+        assertEquals(0, calls)
+        coordinator.onSavedVisible(RUN_ID, awaitingReceipt = true)
+        assertEquals(RunReflectionState.Ready(RUN_ID, NO_SELECTION_TEXT), coordinator.state.value)
+        assertNull(store.rows.getValue(RUN_ID).postRunEnergy)
+        assertEquals(1, calls)
+    }
+
+    @Test fun savedActivityRecoversCachedUntimedReplyAfterMissingSaveCallbackWithoutNetwork() {
+        val dao = completedDao()
+        runBlocking { dao.finalizeActivity(RUN_ID) }
+        val store = MemoryReflectionStore(listOf(RunReflectionEntity(
+            RUN_ID, FIRST_REQUEST_ID, "{}", ReflectionDao.UNTIMED_SELECTION_DEADLINE,
+            candidatesJson = gson.toJson(candidates()), selectionWindowStarted = false)))
+        val coordinator = RunReflectionCoordinator(dao, store,
+            ReflectionGateway { error("Save recovery is local") }, scope(), nowMillis = { 100L })
+        coordinator.onSavedVisible(RUN_ID)
+        assertEquals(RunReflectionState.Ready(RUN_ID, NO_SELECTION_TEXT), coordinator.state.value)
+        assertNull(store.rows.getValue(RUN_ID).postRunEnergy)
+        val ready = store.rows.getValue(RUN_ID)
+        val reopened = RunReflectionCoordinator(dao, store,
+            ReflectionGateway { error("A ready reply is immutable") }, scope(), nowMillis = { 200L })
+        reopened.onSavedVisible(RUN_ID)
+        assertEquals(ready, store.rows.getValue(RUN_ID))
+    }
+
+    @Test fun failedUntimedReplyRetainsLateEnergyAndRetryUsesThatSameBranch() {
+        val dao = completedDao()
+        val store = MemoryReflectionStore()
+        var calls = 0
+        var now = 100L
+        val ids = ArrayDeque(listOf(UUID.fromString(FIRST_REQUEST_ID), UUID.fromString(SECOND_REQUEST_ID)))
+        val coordinator = RunReflectionCoordinator(dao, store, ReflectionGateway {
+            if (++calls == 1) error("Fictional provider failure")
+            candidates()
+        }, scope(), requestIdSupplier = { ids.removeFirst() }, nowMillis = { now })
+        coordinator.onSavedVisible(RUN_ID)
+        assertEquals(ReflectionStatus.FAILED, store.rows.getValue(RUN_ID).status)
+        now += 60 * 60 * 1_000L
+        coordinator.selectEnergy(RUN_ID, ReflectionBranch.SPENT)
+        assertEquals(ReflectionBranch.SPENT, store.rows.getValue(RUN_ID).selectedBranch)
+        runBlocking { dao.finalizeActivity(RUN_ID) }
+        coordinator.onActivitySaved(RUN_ID)
+        assertEquals(1, calls)
+        coordinator.retry(RUN_ID)
+        assertEquals(RunReflectionState.Ready(RUN_ID, SPENT_TEXT, ReflectionBranch.SPENT), coordinator.state.value)
+        assertEquals(2, calls)
+    }
+
+    @Test fun recoveryPromotesOnlyUnansweredLegacyDraftAndKeepsSelectedHistoricalReplyFrozen() {
+        val dao = completedDao(RUN_ID, SECOND_RUN_ID)
+        val legacy = RunReflectionEntity(RUN_ID, FIRST_REQUEST_ID, "{}", 100L,
+            candidatesJson = gson.toJson(candidates()), selectionWindowStarted = false)
+        val historical = RunReflectionEntity(SECOND_RUN_ID, SECOND_REQUEST_ID, "{\"old\":true}", 100L,
+            status = ReflectionStatus.READY, selectedBranch = ReflectionBranch.NO_SELECTION,
+            text = "  Exact historical reply.\n", finalizedAtEpochMillis = 101L)
+        val store = MemoryReflectionStore(listOf(legacy, historical))
+        val coordinator = RunReflectionCoordinator(dao, store,
+            ReflectionGateway { error("Recovered candidates already exist") }, scope(), nowMillis = { 90_000L })
+        coordinator.onSavedVisible(RUN_ID)
+        assertEquals(legacy.copy(selectionDeadlineEpochMillis = ReflectionDao.UNTIMED_SELECTION_DEADLINE,
+            selectionWindowStarted = true), store.rows.getValue(RUN_ID))
+        coordinator.selectEnergy(RUN_ID, ReflectionBranch.SPENT)
+        assertEquals(SPENT_TEXT, store.rows.getValue(RUN_ID).text)
+        coordinator.onSavedVisible(SECOND_RUN_ID)
+        assertEquals(historical, store.rows.getValue(SECOND_RUN_ID))
+    }
+
+    @Test fun failedUnansweredSavedActivityRecoversNeutralAndOnlyRetriesWhenAsked() {
+        val dao = completedDao()
+        val store = MemoryReflectionStore()
+        val first = RunReflectionCoordinator(dao, store,
+            ReflectionGateway { error("Fictional generation failure") }, scope(),
+            requestIdSupplier = { UUID.fromString(FIRST_REQUEST_ID) }, nowMillis = { 100L })
+        first.onSavedVisible(RUN_ID, awaitingReceipt = true)
+        assertEquals(ReflectionStatus.FAILED, store.rows.getValue(RUN_ID).status)
+        runBlocking { dao.finalizeActivity(RUN_ID) }
+        // No onActivitySaved callback: process recovery must observe the committed activity.
+        var calls = 0
+        val reopened = RunReflectionCoordinator(dao, store,
+            ReflectionGateway { calls++; candidates() }, scope(),
+            requestIdSupplier = { UUID.fromString(SECOND_REQUEST_ID) }, nowMillis = { 90_000L })
+        reopened.onSavedVisible(RUN_ID)
+        assertEquals(RunReflectionState.Failed(RUN_ID), reopened.state.value)
+        assertEquals(ReflectionBranch.NO_SELECTION, store.rows.getValue(RUN_ID).selectedBranch)
+        assertNull(store.rows.getValue(RUN_ID).postRunEnergy)
+        assertEquals(0, calls)
+        reopened.retry(RUN_ID)
+        assertEquals(RunReflectionState.Ready(RUN_ID, NO_SELECTION_TEXT), reopened.state.value)
+        assertEquals(1, calls)
+    }
+
     @Test fun receiptHoldsEarlyEnergyAndReadyCandidatesUntilItFinishes() {
         val store = MemoryReflectionStore()
         var now = 100L
@@ -179,7 +392,7 @@ class RunReflectionCoordinatorTest {
 
         coordinator.onSavedVisible(RUN_ID, awaitingReceipt = true)
         assertNull(coordinator.voicePreparation.value)
-        now = 9_000L // The unused placeholder deadline has passed while receipt plays.
+        now = 9_000L // Energy remains available throughout the receipt.
         coordinator.selectEnergy(RUN_ID, ReflectionBranch.SPENT)
         val waiting = store.rows.getValue(RUN_ID)
         assertFalse(waiting.selectionWindowStarted)
@@ -196,7 +409,7 @@ class RunReflectionCoordinatorTest {
         coordinator.finishReceipt(RUN_ID)
         val ready = store.rows.getValue(RUN_ID)
         assertTrue(ready.selectionWindowStarted)
-        assertEquals(15_000L, ready.selectionDeadlineEpochMillis)
+        assertEquals(ReflectionDao.UNTIMED_SELECTION_DEADLINE, ready.selectionDeadlineEpochMillis)
         assertEquals(RunReflectionState.Ready(RUN_ID, SPENT_TEXT, ReflectionBranch.POWERED_UP), coordinator.state.value)
         now = 12_000L
         coordinator.finishReceipt(RUN_ID)
@@ -288,7 +501,7 @@ class RunReflectionCoordinatorTest {
         assertEquals(1, calls)
     }
 
-    @Test fun noEnergyGetsAFullQuietWindowAfterReceiptFinishes() {
+    @Test fun legacyNoEnergyGetsAFullQuietWindowAfterReceiptFinishes() {
         val store = MemoryReflectionStore()
         var now = 100L
         var requestedDelay = -1L
@@ -297,7 +510,7 @@ class RunReflectionCoordinatorTest {
             runDao = completedDao(), store = store,
             gateway = ReflectionGateway { candidates() }, applicationScope = scope(),
             requestIdSupplier = { UUID.fromString(FIRST_REQUEST_ID) },
-            nowMillis = { now }, quietDelay = { requestedDelay = it; release.await() }
+            quietWindowMillis = 6_000L, nowMillis = { now }, quietDelay = { requestedDelay = it; release.await() }
         )
 
         coordinator.onSavedVisible(RUN_ID, awaitingReceipt = true)
@@ -329,7 +542,7 @@ class RunReflectionCoordinatorTest {
         assertEquals(RunReflectionState.Ready(RUN_ID, NO_SELECTION_TEXT), coordinator.state.value)
     }
 
-    @Test fun delayedRowCreationUsesReceiptCompletionTimeRatherThanRestartingTheWindow() {
+    @Test fun legacyDelayedRowCreationUsesReceiptCompletionTimeRatherThanRestartingTheWindow() {
         val store = MemoryReflectionStore()
         var now = 100L
         var requestedDelay = -1L
@@ -338,7 +551,7 @@ class RunReflectionCoordinatorTest {
             runDao = completedDao(), store = store,
             gateway = ReflectionGateway { candidates() }, applicationScope = scope(),
             requestIdSupplier = { UUID.fromString(FIRST_REQUEST_ID) },
-            nowMillis = { now }, quietDelay = { requestedDelay = it; release.await() }
+            quietWindowMillis = 6_000L, nowMillis = { now }, quietDelay = { requestedDelay = it; release.await() }
         )
         coordinator.finishReceipt(RUN_ID)
         now = 2_000L // Saved/Room initialization completes well after voice delivery ended.
@@ -383,12 +596,12 @@ class RunReflectionCoordinatorTest {
         now = 10_000L
         coordinator.retry(RUN_ID)
         assertEquals(RunReflectionState.Ready(RUN_ID, SPENT_TEXT, ReflectionBranch.SPENT), coordinator.state.value)
-        assertEquals(15_000L, backing.rows.getValue(RUN_ID).selectionDeadlineEpochMillis)
+        assertEquals(ReflectionDao.UNTIMED_SELECTION_DEADLINE, backing.rows.getValue(RUN_ID).selectionDeadlineEpochMillis)
         assertEquals(1, requests)
         assertEquals(1, requestIds)
     }
 
-    @Test fun interruptedReceiptRecoversCachedFamilyLocallyWithOneNewWindow() {
+    @Test fun legacyInterruptedReceiptRecoversCachedFamilyLocallyWithOneNewWindow() {
         val store = MemoryReflectionStore(listOf(RunReflectionEntity(
             runId = RUN_ID, requestId = FIRST_REQUEST_ID, evidenceJson = "{}",
             selectionDeadlineEpochMillis = 100L, selectionWindowStarted = false,
@@ -400,7 +613,7 @@ class RunReflectionCoordinatorTest {
         val coordinator = RunReflectionCoordinator(
             runDao = completedDao(), store = store,
             gateway = ReflectionGateway { calls++; candidates() }, applicationScope = scope(),
-            nowMillis = { now }, quietDelay = { release.await() }
+            quietWindowMillis = 6_000L, nowMillis = { now }, quietDelay = { release.await() }
         )
         runBlocking { coordinator.initialize() }
         coordinator.onSavedVisible(RUN_ID)
@@ -417,14 +630,14 @@ class RunReflectionCoordinatorTest {
         assertEquals(0, calls)
     }
 
-    @Test fun energyDuringEffortHoldCanSelectEvenAfterQuietDeadline() {
+    @Test fun legacyEnergyDuringEffortHoldCanSelectEvenAfterQuietDeadline() {
         val store = MemoryReflectionStore()
         var now = 100L
         val coordinator = RunReflectionCoordinator(
             runDao = completedDao(), store = store,
             gateway = ReflectionGateway { candidates() }, applicationScope = scope(),
             requestIdSupplier = { UUID.fromString(FIRST_REQUEST_ID) },
-            nowMillis = { now }, quietDelay = { CompletableDeferred<Unit>().await() }
+            quietWindowMillis = 6_000L, nowMillis = { now }, quietDelay = { CompletableDeferred<Unit>().await() }
         )
         coordinator.onSavedVisible(RUN_ID)
         coordinator.setEffortSheetOpen(RUN_ID, true)
@@ -968,7 +1181,7 @@ class RunReflectionCoordinatorTest {
         )
     }
 
-    @Test fun processRestartLeavesUnresolvedRequestFailedUntilExplicitRetry() {
+    @Test fun legacyProcessRestartLeavesUnresolvedRequestFailedUntilExplicitRetry() {
         val dao = completedDao()
         val store = MemoryReflectionStore(listOf(
             RunReflectionEntity(
@@ -985,6 +1198,7 @@ class RunReflectionCoordinatorTest {
             store = store,
             gateway = ReflectionGateway { calls++; candidates() },
             applicationScope = scope(),
+            quietWindowMillis = 6_000L,
             nowMillis = { 100L }
         )
 
@@ -1330,7 +1544,8 @@ class RunReflectionCoordinatorTest {
                 metricSource = MetricSource.FIXTURE,
                 telemetryCoverage = TelemetryCoverage.COMPLETE,
                 displayDistanceUnit = DistanceUnit.MILES,
-                transitionHistoryComplete = true
+                transitionHistoryComplete = true,
+                activityFinalized = false
             )
             transitions += RunTransitionEntity(runId, 1, RunTransitionType.PAUSE, PAUSE)
         }

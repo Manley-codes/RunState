@@ -5,6 +5,7 @@ import android.media.AudioAttributes
 import android.media.AudioFocusRequest
 import android.media.AudioManager
 import android.media.MediaPlayer
+import android.media.PlaybackParams
 import android.media.VolumeShaper
 import android.media.MediaDataSource
 import android.os.Bundle
@@ -97,6 +98,7 @@ import com.runstate.mobile.music.SongPassageRequest
 import com.runstate.mobile.music.SongPassageStatus
 import com.runstate.mobile.music.SongPassageDiagnostic
 import com.runstate.mobile.music.SongPassageSession
+import com.runstate.mobile.music.SongPassageSnapshot
 import com.runstate.mobile.music.SpotifySongPassageController
 import com.runstate.mobile.music.SpotifyAppRemoteConnection
 import kotlinx.coroutines.CoroutineScope
@@ -133,9 +135,123 @@ private val spotifyPassageMutex = Mutex()
 private const val RUN_VOICE_WAIT_MILLIS = 5_000L
 // Run-voice audio plays at the same level the phone voice uses for the saved facts.
 private const val RUN_VOICE_VOLUME = 0.8f
+private const val COMPLETION_FACTS_PLAYBACK_SPEED = 0.90f
+internal const val REFLECTION_SONG_HANDOFF_MILLIS = 150L
+
+/** One completion owns the pause, even while neither of its separate speakers is talking. */
+internal class CompletionAudioSession(
+    private val snapshot: () -> SongPassageSnapshot?,
+    private val requestPause: (() -> Unit) -> Boolean,
+    private val releasePause: () -> Unit,
+    private val onInterrupted: () -> Unit,
+    private val diagnostic: (Event, Long) -> Unit = { _, _ -> }
+) {
+    enum class Event { PAUSE_HELD, RECEIPT_REQUESTED, RECEIPT_FINISHED, ENERGY_CHOSEN,
+        TEXT_READY, VOICE_READY, REFLECTION_STARTED, PASSAGE_READY, FINISHED, CANCELLED }
+    private enum class Phase { NEW, HOLDING, PASSAGE, FINISHED, CANCELLED }
+    private var phase = Phase.NEW
+    private var held = false
+    private var original: SongPassageSnapshot? = null
+    private val voices = mutableMapOf<Any, Pair<String, (String) -> Unit>>()
+    private val createdAtNanos = System.nanoTime()
+    private val notedEvents = mutableSetOf<Event>()
+    val canContinue: Boolean get() = phase == Phase.NEW || phase == Phase.HOLDING
+
+    fun note(event: Event) {
+        if (notedEvents.add(event)) {
+            diagnostic(event, ((System.nanoTime() - createdAtNanos) / 1_000_000L).coerceAtLeast(0))
+        }
+    }
+
+    fun begin(): Boolean {
+        if (phase != Phase.NEW) return phase == Phase.HOLDING && held
+        original = try { snapshot() } catch (_: RuntimeException) { null }
+        phase = Phase.HOLDING
+        held = true // Also owns cleanup if the driver synchronously reports loss/denial.
+        val granted = try {
+            requestPause {
+                // A queued loss after handing control to Spotify belongs to the old lease.
+                if (phase == Phase.HOLDING) {
+                    val callbacks = voices.values.toList()
+                    phase = Phase.CANCELLED
+                    voices.clear()
+                    releaseHold()
+                    note(Event.CANCELLED)
+                    onInterrupted()
+                    callbacks.forEach { (id, lost) -> lost(id) }
+                }
+            }
+        } catch (_: RuntimeException) { false }
+        if (phase != Phase.HOLDING) {
+            return false
+        }
+        if (!granted) {
+            phase = Phase.CANCELLED
+            releaseHold()
+            onInterrupted()
+        } else note(Event.PAUSE_HELD)
+        return granted
+    }
+
+    fun acquireVoice(owner: Any, id: String, onLost: (String) -> Unit): Boolean {
+        if (!begin()) return false
+        voices[owner] = id to onLost
+        return true
+    }
+
+    fun releaseVoice(owner: Any) { voices.remove(owner) }
+
+    fun resumePausedOriginal(admitted: SongPassageSnapshot? = null): Boolean {
+        val before = original ?: return false
+        val now = try { snapshot() } catch (_: RuntimeException) { null } ?: return false
+        val sameAdmitted = admitted == null ||
+            (admitted.sourcePackage == now.sourcePackage && admitted.mediaId == now.mediaId &&
+                (now.mediaId != null || admitted.title == now.title && admitted.artist == now.artist) &&
+                kotlin.math.abs(admitted.durationMillis - now.durationMillis) <= 1L)
+        return sameAdmitted && phase == Phase.HOLDING && before.playback == PassagePlayback.PLAYING &&
+            now.playback == PassagePlayback.PAUSED && before.sessionKey == now.sessionKey &&
+            before.sourcePackage == now.sourcePackage && before.mediaId == now.mediaId &&
+            before.title == now.title && before.artist == now.artist &&
+            kotlin.math.abs(before.durationMillis - now.durationMillis) <= 1L &&
+            kotlin.math.abs(before.positionMillis - now.positionMillis) <= 2_000L
+    }
+
+    fun releaseForPassage() {
+        if (phase != Phase.HOLDING) return
+        phase = Phase.PASSAGE
+        note(Event.PASSAGE_READY)
+        voices.clear()
+        releaseHold()
+    }
+
+    fun finish() {
+        if (phase == Phase.FINISHED || phase == Phase.CANCELLED) return
+        phase = Phase.FINISHED
+        note(Event.FINISHED)
+        voices.clear()
+        releaseHold()
+    }
+
+    fun cancel() {
+        if (phase == Phase.FINISHED || phase == Phase.CANCELLED) return
+        val callbacks = voices.values.toList()
+        phase = Phase.CANCELLED
+        note(Event.CANCELLED)
+        voices.clear()
+        releaseHold()
+        callbacks.forEach { (id, lost) -> lost(id) }
+    }
+
+    private fun releaseHold() {
+        if (!held) return
+        held = false
+        try { releasePause() } catch (_: RuntimeException) { }
+    }
+}
 
 /** Kept injectable so screen behavior can be checked without a device voice engine. */
 internal interface ReflectionSpeaker {
+    fun attachCompletionAudio(session: CompletionAudioSession) = Unit
     /** Prepare one exact reflection silently; custom speakers can retain their existing behavior. */
     fun prepare(text: String) = Unit
     fun cancelPreparation() = Unit
@@ -161,6 +277,8 @@ internal interface ReflectionSpeaker {
         speak(text)
         onFinished()
     }
+    /** Only the completed run's factual recap uses the gentler delivery pace. */
+    fun speakCompletionFacts(text: String, onFinished: () -> Unit) = speakReceipt(text, onFinished)
     /**
      * A countdown line that must land on its second: prepared run-voice audio when [useRunVoice],
      * otherwise the phone voice. It never waits on the network.
@@ -172,6 +290,7 @@ internal interface ReflectionSpeaker {
 
 /** The Android boundary is separate so request ownership can be verified without playing audio. */
 internal interface ReflectionSpeechPlatform {
+    fun attachCompletionAudio(session: CompletionAudioSession) = Unit
     fun reflectionSpeechGateway(): ReflectionSpeechGateway? = null
     /** The separately chosen run voice; null keeps countdown, facts and announcements on the phone voice. */
     fun runVoiceGateway(): ReflectionSpeechGateway? = null
@@ -197,6 +316,10 @@ internal interface ReflectionSpeechPlatform {
         utteranceId: String, audio: ByteArray,
         onDone: (String) -> Unit, onUnavailable: (String) -> Unit, onError: (String) -> Unit
     ): Boolean = playReflectionAudio(utteranceId, audio, onDone, onUnavailable, onError)
+    fun playCompletionFactsAudio(
+        utteranceId: String, audio: ByteArray,
+        onDone: (String) -> Unit, onUnavailable: (String) -> Unit, onError: (String) -> Unit
+    ): Boolean = playRunVoiceAudio(utteranceId, audio, onDone, onUnavailable, onError)
     fun stopReflectionAudio() = Unit
     fun playSongPassage(
         utteranceId: String,
@@ -238,6 +361,7 @@ internal class AndroidReflectionSpeaker(
         val onFinished: (() -> Unit)?,
         val canPlayInstrumental: (() -> Boolean)?,
         val songPassage: SongPassageRequest? = null,
+        val completionFacts: Boolean = false,
         var phase: SpeechPhase = SpeechPhase.WAITING_FOR_ENGINE,
         var cloudAudio: Boolean = false
     )
@@ -254,6 +378,7 @@ internal class AndroidReflectionSpeaker(
     private var request: SpeechRequest? = null
     private var speechTimeout: Runnable? = null
     private var closed = false
+    private var completionSession: CompletionAudioSession? = null
 
     init {
         try {
@@ -283,8 +408,13 @@ internal class AndroidReflectionSpeaker(
         submit(text, rate = 0.94f, onFinished = null, canPlayInstrumental = null)
     }
 
+    override fun attachCompletionAudio(session: CompletionAudioSession) {
+        completionSession = session
+        platform.attachCompletionAudio(session)
+    }
+
     override fun prepare(text: String) {
-        if (closed || !validSpeechText(text)) {
+        if (closed || completionSession?.canContinue == false || !validSpeechText(text)) {
             cancelPreparation()
             return
         }
@@ -292,7 +422,9 @@ internal class AndroidReflectionSpeaker(
         cancelPreparation()
         val gateway = try { platform.reflectionSpeechGateway() } catch (_: RuntimeException) { null } ?: return
         preparedReflection = PreparedReflection(text, voiceScope.async {
-            withTimeoutOrNull(20_000L) { synthesizeAudio(gateway, text) }
+            withTimeoutOrNull(20_000L) { synthesizeAudio(gateway, text) }?.also {
+                completionSession?.note(CompletionAudioSession.Event.VOICE_READY)
+            }
         })
     }
 
@@ -343,6 +475,12 @@ internal class AndroidReflectionSpeaker(
             purpose = SpeechPurpose.RECEIPT, runVoice = RunVoiceMode.PREPARED_OR_FETCH)
     }
 
+    override fun speakCompletionFacts(text: String, onFinished: () -> Unit) {
+        submit(text, rate = 0.864f, onFinished = onFinished, canPlayInstrumental = null,
+            purpose = SpeechPurpose.RECEIPT, runVoice = RunVoiceMode.PREPARED_OR_FETCH,
+            completionFacts = true)
+    }
+
     override fun speakTimedCue(text: String, useRunVoice: Boolean) {
         submit(text, rate = 0.96f, onFinished = null, canPlayInstrumental = null,
             purpose = SpeechPurpose.RECEIPT,
@@ -356,7 +494,8 @@ internal class AndroidReflectionSpeaker(
         canPlayInstrumental: (() -> Boolean)?,
         songPassage: SongPassageRequest? = null,
         purpose: SpeechPurpose = SpeechPurpose.REFLECTION,
-        runVoice: RunVoiceMode = RunVoiceMode.NONE
+        runVoice: RunVoiceMode = RunVoiceMode.NONE,
+        completionFacts: Boolean = false
     ) {
         // A matching silent request becomes this speech attempt's sole preparation. Detach it
         // before stop() clears the old owner, so an in-flight request is awaited, not repeated.
@@ -365,12 +504,12 @@ internal class AndroidReflectionSpeaker(
         }
         if (prepared != null) preparedReflection = null
         stop()
-        if (closed || !validSpeechText(text)) {
+        if (closed || completionSession?.canContinue == false || !validSpeechText(text)) {
             onFinished?.invoke()
             return
         }
         val next = SpeechRequest(UUID.randomUUID().toString(), text, rate, purpose, onFinished,
-            canPlayInstrumental, songPassage)
+            canPlayInstrumental, songPassage, completionFacts)
         request = next
         // A prepared run-voice line plays at once, so a timed cue never waits for the network.
         val preparedRunVoice = if (runVoice == RunVoiceMode.NONE) null
@@ -441,9 +580,11 @@ internal class AndroidReflectionSpeaker(
             val onDone: (String) -> Unit = { id -> onMain { if (ownsCloud(id)) finishSpeech(id) } }
             val onUnavailable: (String) -> Unit = { id -> onMain { if (ownsCloud(id)) useLocalVoice(current) } }
             val onError: (String) -> Unit = { id -> onMain { if (ownsCloud(id)) stop() } }
-            val accepted = if (current.purpose == SpeechPurpose.RECEIPT)
-                platform.playRunVoiceAudio(current.id, audio, onDone, onUnavailable, onError)
-            else platform.playReflectionAudio(current.id, audio, onDone, onUnavailable, onError)
+            val accepted = when {
+                current.completionFacts -> platform.playCompletionFactsAudio(current.id, audio, onDone, onUnavailable, onError)
+                current.purpose == SpeechPurpose.RECEIPT -> platform.playRunVoiceAudio(current.id, audio, onDone, onUnavailable, onError)
+                else -> platform.playReflectionAudio(current.id, audio, onDone, onUnavailable, onError)
+            }
             if (!accepted && ownsCloud(current.id)) useLocalVoice(current)
         } catch (_: RuntimeException) {
             // The platform reports pre-playback failures explicitly. Unknown failures cannot repeat speech.
@@ -508,7 +649,7 @@ internal class AndroidReflectionSpeaker(
         }
     }
 
-    /** The reflection pauses the runner's music; facts, cues and announcements only lower it. */
+    /** Standalone cues duck; completion participants use their shared pause through the platform. */
     private fun requestFocusFor(current: SpeechRequest, onFocusLost: (String) -> Unit): Boolean =
         if (current.purpose == SpeechPurpose.REFLECTION) platform.requestPausingAudioFocus(current.id, onFocusLost)
         else platform.requestAudioFocus(current.id, onFocusLost)
@@ -546,8 +687,8 @@ internal class AndroidReflectionSpeaker(
         }
         speechTimeout = handoff
         try {
-            if (scheduleTimeout != null) scheduleTimeout.invoke(handoff, 650L)
-            else mainHandler.postDelayed(handoff, 650L)
+            if (scheduleTimeout != null) scheduleTimeout.invoke(handoff, REFLECTION_SONG_HANDOFF_MILLIS)
+            else mainHandler.postDelayed(handoff, REFLECTION_SONG_HANDOFF_MILLIS)
         } catch (_: RuntimeException) {
             if (request === current) stop()
         }
@@ -634,6 +775,40 @@ internal class AndroidReflectionSpeaker(
     }
 }
 
+/** Native focus is acquired lazily by a real speaker, never by an injected silent test speaker. */
+internal fun completionAudioSessionFor(context: Context, onInterrupted: () -> Unit): CompletionAudioSession {
+    val appContext = context.applicationContext
+    val manager = appContext.getSystemService(AudioManager::class.java)
+    val handler = Handler(Looper.getMainLooper())
+    var ownedFocus: AudioFocusRequest? = null
+    return CompletionAudioSession(
+        snapshot = { AndroidSpotifyPassageSession(appContext).snapshot() },
+        requestPause = { lost ->
+            val focus = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT)
+                .setAudioAttributes(AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_ASSISTANCE_NAVIGATION_GUIDANCE)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH).build())
+                .setWillPauseWhenDucked(true)
+                .setOnAudioFocusChangeListener({ change -> if (change < 0) lost() }, handler)
+                .build()
+            ownedFocus = focus
+            manager?.requestAudioFocus(focus) == AudioManager.AUDIOFOCUS_REQUEST_GRANTED
+        },
+        releasePause = {
+            val focus = ownedFocus
+            ownedFocus = null
+            if (focus != null) manager?.abandonAudioFocusRequest(focus)
+            Unit
+        },
+        onInterrupted = onInterrupted,
+        diagnostic = { event, elapsedMillis ->
+            // Timing only: never song titles, run facts, Energy values, text or credentials.
+            if (com.runstate.mobile.BuildConfig.DEBUG) android.util.Log.d(
+                "RunStateCompletionAudio", "stage=${event.name} elapsedMs=$elapsedMillis")
+        }
+    )
+}
+
 internal class AndroidReflectionSpeechPlatform(
     context: Context,
     private val passageSessionFactory: (() -> SongPassageSession)? = null,
@@ -684,11 +859,21 @@ internal class AndroidReflectionSpeechPlatform(
         .build()
     private var engine: TextToSpeech? = null
     private var focusRequest: AudioFocusRequest? = null
+    private var completionAudio: CompletionAudioSession? = null
+    private val completionParticipant = Any()
     private var pausedForUtterance: String? = null
     private var resumeMusicAfter: String? = null
+    private var localReceiptId: String? = null
     private var instrumental: InstrumentalPlayback? = null
     private var reflectionAudio: ReflectionAudio? = null
     private var closed = false
+
+    override fun attachCompletionAudio(session: CompletionAudioSession) {
+        if (completionAudio === session) return
+        releaseAudioFocus()
+        completionAudio = session
+        session.begin()
+    }
 
     override fun initialize(onReady: (Boolean) -> Unit, onDone: (String) -> Unit, onError: (String) -> Unit) {
         engine = TextToSpeech(appContext) { result ->
@@ -698,7 +883,11 @@ internal class AndroidReflectionSpeechPlatform(
                     try {
                         val activeEngine = engine
                         val listener = object : UtteranceProgressListener() {
-                            override fun onStart(utteranceId: String?) = Unit
+                            override fun onStart(utteranceId: String?) {
+                                if (utteranceId != null && utteranceId != localReceiptId) mainHandler.post {
+                                    completionAudio?.note(CompletionAudioSession.Event.REFLECTION_STARTED)
+                                }
+                            }
                             override fun onDone(utteranceId: String?) { utteranceId?.let(onDone) }
                             @Deprecated("Required by the Android speech listener")
                             override fun onError(utteranceId: String?) { utteranceId?.let(onError) }
@@ -720,7 +909,7 @@ internal class AndroidReflectionSpeechPlatform(
     override fun requestPausingAudioFocus(utteranceId: String, onFocusLost: (String) -> Unit): Boolean {
         // Note once per reflection whether Spotify was playing before this pause, so its snippet
         // can resume the runner's song afterward. A repeat request for the same reflection keeps it.
-        if (pausedForUtterance != utteranceId) {
+        if (completionAudio == null && pausedForUtterance != utteranceId) {
             pausedForUtterance = utteranceId
             resumeMusicAfter = if (spotifyIsPlaying()) utteranceId else null
         }
@@ -732,6 +921,7 @@ internal class AndroidReflectionSpeechPlatform(
     } catch (_: RuntimeException) { false }
 
     private fun requestFocus(utteranceId: String, onFocusLost: (String) -> Unit, gain: Int): Boolean {
+        completionAudio?.let { return it.acquireVoice(completionParticipant, utteranceId, onFocusLost) }
         // Every focus listener belongs to one utterance; a queued old LOSS cannot stop a new one.
         val next = AudioFocusRequest.Builder(gain)
             .setAudioAttributes(speechAttributes)
@@ -745,8 +935,10 @@ internal class AndroidReflectionSpeechPlatform(
     override fun speak(utteranceId: String, text: String, rate: Float): Boolean =
         speakLocally(utteranceId, text, rate, volume = 1.0f)
 
-    override fun speakReceipt(utteranceId: String, text: String, rate: Float): Boolean =
-        speakLocally(utteranceId, text, rate, volume = 0.8f)
+    override fun speakReceipt(utteranceId: String, text: String, rate: Float): Boolean {
+        localReceiptId = utteranceId
+        return speakLocally(utteranceId, text, rate, volume = 0.8f)
+    }
 
     private fun speakLocally(utteranceId: String, text: String, rate: Float, volume: Float): Boolean {
         val activeEngine = engine ?: return false
@@ -766,10 +958,17 @@ internal class AndroidReflectionSpeechPlatform(
         onDone: (String) -> Unit, onUnavailable: (String) -> Unit, onError: (String) -> Unit
     ): Boolean = playMemoryAudio(utteranceId, audio, onDone, onUnavailable, onError, runVoice = true)
 
+    override fun playCompletionFactsAudio(
+        utteranceId: String, audio: ByteArray,
+        onDone: (String) -> Unit, onUnavailable: (String) -> Unit, onError: (String) -> Unit
+    ): Boolean = playMemoryAudio(utteranceId, audio, onDone, onUnavailable, onError,
+        runVoice = true, playbackSpeed = COMPLETION_FACTS_PLAYBACK_SPEED)
+
     private fun playMemoryAudio(
         utteranceId: String, audio: ByteArray,
         onDone: (String) -> Unit, onUnavailable: (String) -> Unit, onError: (String) -> Unit,
-        runVoice: Boolean
+        runVoice: Boolean,
+        playbackSpeed: Float = 1.0f
     ): Boolean {
         stopReflectionAudio()
         if (closed || audio.isEmpty()) return false
@@ -793,12 +992,13 @@ internal class AndroidReflectionSpeechPlatform(
                     // This changes neither the designed voice nor the phone/Spotify volume.
                     playback.entryShaper = if (runVoice) null else try {
                         player.createVolumeShaper(VolumeShaper.Configuration.Builder()
-                            .setDuration(320L)
-                            .setCurve(floatArrayOf(0f, 0.55f, 1f), floatArrayOf(0.68f, 0.9f, 1f))
+                            .setDuration(480L)
+                            .setCurve(floatArrayOf(0f, 0.55f, 1f), floatArrayOf(0.58f, 0.9f, 1f))
                             .setInterpolatorType(VolumeShaper.Configuration.INTERPOLATOR_TYPE_CUBIC_MONOTONIC)
                             .build())
                     } catch (_: RuntimeException) { null }
                     player.start()
+                    if (!runVoice) completionAudio?.note(CompletionAudioSession.Event.REFLECTION_STARTED)
                     playback.started = true
                     try { playback.entryShaper?.apply(VolumeShaper.Operation.PLAY) }
                     catch (_: RuntimeException) {
@@ -816,6 +1016,13 @@ internal class AndroidReflectionSpeechPlatform(
             }
             playback.player.setOnErrorListener { _, _, _ -> failed(); true }
             playback.player.setDataSource(playback.source)
+            if (playbackSpeed != 1.0f) try {
+                // Set this while Initialized: a nonzero speed set after preparation starts playback.
+                playback.player.playbackParams = PlaybackParams().allowDefaults()
+                    .setSpeed(playbackSpeed).setPitch(1.0f)
+            } catch (_: RuntimeException) {
+                // An unsupported pace must still deliver the same facts at the original speed.
+            }
             playback.player.prepareAsync()
             true
         } catch (_: Exception) {
@@ -886,7 +1093,9 @@ internal class AndroidReflectionSpeechPlatform(
                 }, mainHandler)
                 .build()
             playback.focus = nextFocus
-            val granted = audioManager?.requestAudioFocus(nextFocus) == AudioManager.AUDIOFOCUS_REQUEST_GRANTED
+            val granted = completionAudio?.acquireVoice(completionParticipant, utteranceId, onFocusLost)
+                ?: (audioManager?.requestAudioFocus(nextFocus) == AudioManager.AUDIOFOCUS_REQUEST_GRANTED)
+            if (completionAudio != null) playback.focus = null
             if (!granted || instrumental !== playback || playback.released || closed) {
                 releaseInstrumental(playback)
                 return false
@@ -912,7 +1121,6 @@ internal class AndroidReflectionSpeechPlatform(
         stopSongPassage()
         if (closed) return false
         // Music paused only for this reflection resumes after the snippet.
-        val passageToPlay = if (resumeMusicAfter == utteranceId) passage.copy(resumePausedOriginal = true) else passage
         passageId = utteranceId
         passageJob = passageScope.launch {
             try {
@@ -924,12 +1132,18 @@ internal class AndroidReflectionSpeechPlatform(
                         ?: SpotifyAppRemoteConnection.get(appContext).newPassageSession()
                         ?: AndroidSpotifyPassageSession(appContext)
                     val controller = SpotifySongPassageController(session,
-                        onEntranceReady = ::releaseAudioFocus, quiescePausedBeforeEntry = true,
+                        onEntranceReady = {
+                            completionAudio?.releaseForPassage() ?: releaseAudioFocus()
+                        }, quiescePausedBeforeEntry = true,
                         diagnosticObserver = passageDiagnostics)
                     passageController = controller
                     try {
-                        session.expectTrack(passageToPlay)
+                        session.expectTrack(passage)
                         session.prepareForPlayback()
+                        // Recheck after every queued/SDK wait, against the track being admitted.
+                        val resumeOriginal = completionAudio?.resumePausedOriginal(session.snapshot())
+                            ?: (passage.resumePausedOriginal || resumeMusicAfter == utteranceId)
+                        val passageToPlay = passage.copy(resumePausedOriginal = resumeOriginal)
                         controller.play(passageToPlay)
                     }
                     finally {
@@ -989,6 +1203,7 @@ internal class AndroidReflectionSpeechPlatform(
         engine?.stop()
     }
     override fun releaseAudioFocus() {
+        completionAudio?.let { it.releaseVoice(completionParticipant); return }
         val owned = focusRequest ?: return
         focusRequest = null
         audioManager?.abandonAudioFocusRequest(owned)

@@ -11,6 +11,11 @@ import kotlinx.coroutines.flow.Flow
 /** All read/check/write operations are transactions, including selection versus response races. */
 @Dao
 abstract class ReflectionDao {
+    companion object {
+        /** Durable policy marker: an answer or Save Activity, never a timer, selects this reply. */
+        const val UNTIMED_SELECTION_DEADLINE = Long.MAX_VALUE
+    }
+
     @Query("SELECT * FROM run_reflections WHERE run_id = :runId")
     abstract suspend fun findByRunId(runId: String): RunReflectionEntity?
 
@@ -35,7 +40,7 @@ abstract class ReflectionDao {
         return entity
     }
 
-    /** First on-time (or held-window) Energy selects; later answers only update feedback. */
+    /** The first deliberate answer selects an untimed reply; later answers update feedback only. */
     @Transaction
     open suspend fun recordEnergy(
         runId: String,
@@ -56,11 +61,14 @@ abstract class ReflectionDao {
         runId: String, branch: ReflectionBranch, now: Long, selectionHeld: Boolean
     ): RunReflectionEntity {
         val stored = required(runId)
-        val selected = stored.selectedBranch ?: if (!stored.selectionWindowStarted ||
-            selectionHeld || now < stored.selectionDeadlineEpochMillis) {
-            branch
-        } else {
-            ReflectionBranch.NO_SELECTION
+        val selected = stored.selectedBranch ?: when {
+            // Save Activity is already durable even if its coordinator callback has not run.
+            stored.selectionDeadlineEpochMillis == UNTIMED_SELECTION_DEADLINE &&
+                parentFinalized(runId, StoredRunState.COMPLETED) == true -> ReflectionBranch.NO_SELECTION
+            stored.selectionDeadlineEpochMillis == UNTIMED_SELECTION_DEADLINE ||
+                !stored.selectionWindowStarted || selectionHeld ||
+                now < stored.selectionDeadlineEpochMillis -> branch
+            else -> ReflectionBranch.NO_SELECTION
         }
         val updated = stored.copy(postRunEnergy = branch, selectedBranch = selected)
         update(updated)
@@ -71,13 +79,41 @@ abstract class ReflectionDao {
     open suspend fun selectNoSelectionIfDue(runId: String, now: Long): RunReflectionEntity {
         val stored = required(runId)
         if (!stored.selectionWindowStarted || stored.selectedBranch != null ||
+            stored.selectionDeadlineEpochMillis == UNTIMED_SELECTION_DEADLINE ||
             now < stored.selectionDeadlineEpochMillis) return stored
         val updated = stored.copy(selectedBranch = ReflectionBranch.NO_SELECTION)
         update(updated)
         return updated
     }
 
-    /** The save receipt starts this deadline once; recreation and retry cannot move it. */
+    /** Upgrade an unfinished, unanswered legacy completion without rewriting any frozen choice. */
+    @Transaction
+    open suspend fun waitForEnergyWithoutDeadline(runId: String): RunReflectionEntity {
+        val stored = required(runId)
+        if (stored.status != ReflectionStatus.PENDING || stored.selectedBranch != null ||
+            stored.postRunEnergy != null || stored.selectionDeadlineEpochMillis == UNTIMED_SELECTION_DEADLINE ||
+            parentFinalized(runId, StoredRunState.COMPLETED) != false) return stored
+        val updated = stored.copy(selectionDeadlineEpochMillis = UNTIMED_SELECTION_DEADLINE)
+        update(updated)
+        return updated
+    }
+
+    /** Save may close unanswered Energy, but it never invents an explicit Not sure answer. */
+    @Transaction
+    open suspend fun selectForSavedActivity(runId: String): RunReflectionEntity {
+        val stored = required(runId)
+        if (stored.status == ReflectionStatus.READY ||
+            stored.selectionDeadlineEpochMillis != UNTIMED_SELECTION_DEADLINE ||
+            parentFinalized(runId, StoredRunState.COMPLETED) != true) return stored
+        val updated = stored.copy(
+            selectedBranch = stored.selectedBranch ?: ReflectionBranch.NO_SELECTION,
+            selectionWindowStarted = true
+        )
+        if (updated != stored) update(updated)
+        return updated
+    }
+
+    /** Receipt completion releases delivery once; an untimed check-in stays untimed. */
     @Transaction
     open suspend fun beginSelectionWindow(
         runId: String,
@@ -87,7 +123,8 @@ abstract class ReflectionDao {
         if (stored.selectionWindowStarted) return stored
         val updated = stored.copy(
             selectionWindowStarted = true,
-            selectionDeadlineEpochMillis = deadline
+            selectionDeadlineEpochMillis = if (stored.selectionDeadlineEpochMillis == UNTIMED_SELECTION_DEADLINE)
+                UNTIMED_SELECTION_DEADLINE else deadline
         )
         update(updated)
         return updated
@@ -164,6 +201,9 @@ abstract class ReflectionDao {
 
     @Query("SELECT state FROM runs WHERE run_id = :runId")
     protected abstract suspend fun parentState(runId: String): StoredRunState?
+
+    @Query("SELECT activity_finalized FROM runs WHERE run_id = :runId AND state = :completedState")
+    protected abstract suspend fun parentFinalized(runId: String, completedState: StoredRunState): Boolean?
 
     @Insert(onConflict = OnConflictStrategy.ABORT)
     protected abstract suspend fun insert(entity: RunReflectionEntity)

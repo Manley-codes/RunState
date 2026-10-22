@@ -70,6 +70,8 @@ import com.runstate.mobile.ui.RunMetricsTicker
 import com.runstate.mobile.ui.RunCompleteReflectionDisplay
 import com.runstate.mobile.ui.AndroidReflectionSpeaker
 import com.runstate.mobile.ui.ReflectionSpeaker
+import com.runstate.mobile.ui.completionAudioSessionFor
+import com.runstate.mobile.ui.CompletionAudioSession
 import com.runstate.mobile.ui.RunHistoryItem
 import com.runstate.mobile.ui.RunHistoryScreen
 import com.runstate.mobile.ui.RunActivityRecapScreen
@@ -323,6 +325,7 @@ internal fun RunJourneyRoot(
     var completionSpeechEligibleRunId by rememberSaveable { mutableStateOf<String?>(null) }
     var completionSpeechSpokenRunId by rememberSaveable { mutableStateOf<String?>(null) }
     var completionAudioActive by remember { mutableStateOf(false) }
+    var completionAudioAttempt by remember { mutableStateOf(0) }
     var completionPresentationHeldRunId by remember { mutableStateOf<String?>(null) }
     var stopCompletionAudio by remember { mutableStateOf<(() -> Unit)?>(null) }
     var completionReceiptRunId by rememberSaveable { mutableStateOf<String?>(null) }
@@ -487,6 +490,21 @@ internal fun RunJourneyRoot(
         gpsPreviewRestart, gpsPreviewSourceOverride)
     val gpsPreview by previewController
     val context = LocalContext.current
+    val completionAudioSession = remember(context, completedRunId, completionAudioAttempt) {
+        completionAudioSessionFor(context) {
+            completionSpeechEligibleRunId = null
+            stopCompletionAudio?.invoke()
+        }
+    }
+    DisposableEffect(completionAudioSession) {
+        onDispose { completionAudioSession.cancel() }
+    }
+    val completionSequenceSpeakerFactory: (Context) -> ReflectionSpeaker =
+        remember(completionSpeakerFactory, completionAudioSession) {
+            { speakerContext -> completionSpeakerFactory(speakerContext).also {
+                it.attachCompletionAudio(completionAudioSession)
+            } }
+        }
     fun preciseLocationReady(): Boolean = gpsLocationReady(context)
     var gpsReady by remember(context) { mutableStateOf(preciseLocationReady()) }
     var voiceForeground by remember(lifecycle) {
@@ -532,10 +550,12 @@ internal fun RunJourneyRoot(
 
     // Permissions are separate from saved choices. Recheck on return; effective capture
     // still requires current access at the official start, without rewriting consent.
-    DisposableEffect(lifecycle, context) {
+    DisposableEffect(lifecycle, context, completionAudioSession) {
         val observer = LifecycleEventObserver { _, event ->
             voiceForeground = lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)
             if (event == Lifecycle.Event.ON_PAUSE) {
+                completionSpeechEligibleRunId = null
+                completionAudioSession.cancel()
                 stopCompletionAudio?.invoke()
                 effortSheetRunId?.let { reflectionCoordinator?.setEffortSheetOpen(it, false) }
             }
@@ -630,6 +650,8 @@ internal fun RunJourneyRoot(
         }
         if (!historyVisible && model.state == RunUiState.Saved && completedRunId == runId) {
             completionSpeechEligibleRunId = runId
+            completionSpeechSpokenRunId = null
+            completionAudioAttempt++
         }
         if (localBridgePermissionGranted()) reflectionCoordinator.retry(runId)
         else {
@@ -1038,6 +1060,14 @@ internal fun RunJourneyRoot(
     val completionEnergyAcknowledged = completedRunId != null &&
         (energyAnsweredRunId == completedRunId ||
             storedReflections?.firstOrNull { it.runId == completedRunId }?.postRunEnergy != null)
+    LaunchedEffect(completedRunId, voicePreparation, completionVisible, completionAudioSession) {
+        if (completionVisible && voicePreparation?.runId == completedRunId && voicePreparation != null)
+            completionAudioSession.note(CompletionAudioSession.Event.TEXT_READY)
+    }
+    LaunchedEffect(completedRunId, energyAnsweredRunId, completionAudioSession) {
+        if (completedRunId != null && energyAnsweredRunId == completedRunId)
+            completionAudioSession.note(CompletionAudioSession.Event.ENERGY_CHOSEN)
+    }
     RunCompleteReceiptEffect(
         completedRunId = completedRunId,
         receiptRunId = completionReceiptRunId,
@@ -1047,20 +1077,24 @@ internal fun RunJourneyRoot(
         startedRunId = completionReceiptStartedRunId,
         finishedRunId = completionReceiptFinishedRunId,
         completionVisible = completionVisible,
-        speakerFactory = completionSpeakerFactory,
+        speakerFactory = completionSequenceSpeakerFactory,
         shouldPromptEnergy = {
             val id = completedRunId
             reflectionCoordinator != null && id != null && energyAnsweredRunId != id &&
                 storedReflections?.firstOrNull { it.runId == id }?.postRunEnergy == null
         },
-        onStarted = { completionReceiptStartedRunId = it },
+        onStarted = {
+            completionAudioSession.note(CompletionAudioSession.Event.RECEIPT_REQUESTED)
+            completionReceiptStartedRunId = it
+        },
         onFinished = { id ->
+            completionAudioSession.note(CompletionAudioSession.Event.RECEIPT_FINISHED)
             if (completionReceiptRunId == id) completionReceiptFinishedRunId = id
             reflectionCoordinator?.finishReceipt(id)
         }
     )
     // Changing destination closes the old player's pending audio before a new one can prepare.
-    key(reflectionConnection, completedRunId) {
+    key(reflectionConnection, completedRunId, completionAudioAttempt) {
         RunCompleteSpeechEffect(
         completedRunId = completedRunId,
         eligibleRunId = completionSpeechEligibleRunId,
@@ -1072,10 +1106,17 @@ internal fun RunJourneyRoot(
             completionPresentationHeldRunId != completedRunId &&
             (completionReceiptRunId != completedRunId ||
             completionReceiptFinishedRunId == completedRunId),
-        speakerFactory = completionSpeakerFactory,
+        speakerFactory = completionSequenceSpeakerFactory,
         onSpoken = { completionSpeechSpokenRunId = it },
         onAudioActiveChange = { completionAudioActive = it },
-        onStopReady = { stopCompletionAudio = it }
+        onStopReady = { stop ->
+            stopCompletionAudio = stop?.let { action -> {
+                completionAudioSession.cancel()
+                action()
+            } }
+        },
+        onDeliveryFinished = { completionAudioSession.finish() },
+        onDeliveryCancelled = { completionAudioSession.cancel() }
         )
     }
 
@@ -1389,6 +1430,11 @@ internal fun RunJourneyRoot(
                 // Record the explicit tap immediately so the receipt never asks twice,
                 // including a deliberate Not sure while its durable write is pending.
                 energyAnsweredRunId = it
+                if (completionSpeechSpokenRunId != it && !completionAudioSession.canContinue) {
+                    completionAudioAttempt++
+                    completionSpeechEligibleRunId = it
+                }
+                completionAudioSession.note(CompletionAudioSession.Event.ENERGY_CHOSEN)
                 reflectionCoordinator?.selectEnergy(it, branch)
             }
         },
@@ -1452,6 +1498,7 @@ internal fun RunJourneyRoot(
                     activitySaveError = null
                     try {
                         if (coordinator.finalizeActivity(id)) {
+                            reflectionCoordinator?.onActivitySaved(id)
                             stopCompletionAudio?.invoke()
                             completionSpeechEligibleRunId = null
                             recapRunId = id
@@ -1665,7 +1712,7 @@ internal fun RunCompleteReceiptEffect(
         onStarted(pendingId)
         try {
             val activeSpeaker = speakerFactory(context).also { speaker = it }
-            activeSpeaker.speakReceipt(text) {
+            activeSpeaker.speakCompletionFacts(text) {
                 if (activeReceiptRunId == pendingId && followupStartedRunId != pendingId) {
                     if (currentCompletionVisible && currentShouldPromptEnergy()) {
                         try {
@@ -1698,7 +1745,9 @@ internal fun RunCompleteSpeechEffect(
     onAudioActiveChange: (Boolean) -> Unit = {},
     onStopReady: ((() -> Unit)?) -> Unit = {},
     voicePreparation: ReflectionVoicePreparation? = null,
-    preparationVisible: Boolean = completionVisible
+    preparationVisible: Boolean = completionVisible,
+    onDeliveryFinished: () -> Unit = {},
+    onDeliveryCancelled: () -> Unit = {}
 ) {
     val context = LocalContext.current
     var speaker by remember { mutableStateOf<ReflectionSpeaker?>(null) }
@@ -1709,6 +1758,8 @@ internal fun RunCompleteSpeechEffect(
     val currentVisible by rememberUpdatedState(completionVisible)
     val audioCallback by rememberUpdatedState(onAudioActiveChange)
     val stopReadyCallback by rememberUpdatedState(onStopReady)
+    val deliveryFinishedCallback by rememberUpdatedState(onDeliveryFinished)
+    val deliveryCancelledCallback by rememberUpdatedState(onDeliveryCancelled)
 
     fun stopAudio() {
         // Invalidate first: stop may synchronously deliver an engine completion callback.
@@ -1778,6 +1829,7 @@ internal fun RunCompleteSpeechEffect(
                 if (activeAttempt === attempt) {
                     activeAttempt = null
                     audioCallback(false)
+                    deliveryFinishedCallback()
                 }
             }
             val passage = (reflectionState as? RunReflectionState.Ready)?.passage
@@ -1788,6 +1840,7 @@ internal fun RunCompleteSpeechEffect(
             }
         } catch (_: RuntimeException) {
             stopAudio()
+            deliveryCancelledCallback()
             // Consume this arrival attempt once; a missing engine never replays on resume.
         }
     }
