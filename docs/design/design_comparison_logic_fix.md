@@ -67,18 +67,19 @@ Additionally, "faster AND farther than average simultaneously" rewards a physiol
 
 ## The right long-term direction (Option A)
 
-The gold-standard amateur improvement signal is: *same pace, less effort over time*.
+A candidate personal signal to investigate is: *similar pace, lower reported effort over time*.
 
-**Note (July 25, 2026):** energy and effort are now separate axes. Energy is how the runner
-*finished* (pre/post energy levels). Effort is what the run *cost* (`EffortLevel` — Smooth →
-Empty tank). They are not the same as RPE, though effort is RPE-adjacent. The original note
-that "pre/post energy is essentially RPE" was accurate at the time this was written; it is no
-longer correct now that effort cost is a distinct field.
+**Scientific correction, October 22, 2026:** Energy and exertion measure different concepts;
+the old statement that pre/post Energy was essentially RPE was an error, not something that
+became incorrect only after adding a separate field. Custom Effort labels are RPE-adjacent, not
+automatically a validated exertion scale. See `research_app_landscape.md` for the current sources
+and proposed measurement/benefit tests.
 
-Redirecting the effort axis as a progress metric is:
-- Correct (scientifically)
-- Always positively framed (so "never mention below average" comes for free)
-- Built from data already in the model
+Lower reported effort during otherwise comparable running is a useful hypothesis to investigate,
+not by itself proof of fitness improvement. Weather, pacing, run purpose, recovery and changing
+interpretation of the question can affect it. Positive delivery should preserve contradictory
+evidence in the analytical record. Existing console thresholds are product heuristics; this
+review does not change code or authorize their direct port into native Energy Insights.
 
 **Why:** Agreed June 2026 after research review. Not blocking UI phase — treat as Phase 5.5 polish pass.
 

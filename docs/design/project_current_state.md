@@ -18,6 +18,130 @@ missing check. A successful build, installation or controlled fixture is not pro
 | **Verified in use** | The stated behavior worked in actual use for the named scenario, not only with fictional test data. This does not prove every device, song or circumstance. |
 | **Complete for agreed scope** | The agreed behavior, necessary checks and documentation are finished. Explicit remaining limits are outside that scope; this does not mean every future idea is built. |
 
+## October 22 AfroTech scope — existing functionality and UI
+
+Manley set the scope through the end of AfroTech: complete, verify and polish existing
+functionality and the remaining UI. Do not expand the feature list or add screens unless
+strictly necessary; any small optional additions need an explicit decision. This supersedes
+earlier queue suggestions to broaden the product before the event.
+
+Commit/push the current Energy foundation checkpoint first, using the existing branch.
+Then address the brief black frame before the opening collage: the launch should show an
+opening-compatible visual from the first displayed frame, without an intermediate black screen.
+The delay has been reported, not yet diagnosed or fixed; do not claim literally zero OS startup time.
+Countdown and Live Run are the only two screens identified as needing substantial remaining
+design work. Preserve accepted Start/Completion/opening layouts, voices and musical timing while
+checking their functionality. Energy stays a working foundation for real use, not a new feature
+expansion project before AfroTech. No new implementation or deployment is part of this checkpoint.
+
+Account timing recommendation: plan sign-up after AfroTech, before cloud backup/sync or private
+online profiles require user ownership and access control. Separate local histories on individual
+phones do not by themselves require accounts. Keep the current demo free of a mandatory sign-up;
+revisit earlier only for a concrete requirement, not as a prerequisite for finishing existing UI.
+
+## October 22 Energy foundation implementation — Ready to test; installed on Moto
+
+Manley explicitly approved implementing the researched foundation, reviewing prior presentation
+ideas and connecting it to Android. Pre-run Energy supplies a starting point that may help a
+beginner notice their own experience and already reaches the reflection writer; it is not a
+happiness question or a guarantee that running raises energy. The old RunStyle multi-card screen
+was reconsidered alongside ADR001. This slice uses the existing History **Your Energy** card and
+an inspectable **View check-ins** sheet, rather than a new dashboard destination.
+
+Copy follow-up: Manley wants clear controls rather than a manual-like screen. Keep
+**Physical energy now · Optional**, but remove the repeated Optional from **Plan this run**
+and trim redundant plan, Effort and check-in instructions. Retain scale anchors, the short
+same-route naming hint and actual comparison criteria/counts. This changes wording only.
+Debug/test builds and three existing silent Moto checks (plan, independent Effort and
+check-in evidence) passed after this cleanup; the updated app is installed. No Git actions.
+
+Implemented locally:
+- Optional Start **Plan this run**: Keep it easy / Steady / Hard effort, with No target as null,
+  plus an optional runner-named familiar route. The route is a label, not a verified GPS match.
+  Intention/route/pre-energy answer time are frozen at official start and reset for another run.
+- Clarified physical-energy wording and anchors before/after, retaining the friendly existing
+  labels and reflection branch IDs. Version2 distinguishes these questions from earlier answers;
+  neither old nor new labels are subtracted into a numerical energy gain.
+- Separate optional whole-run Effort **1–10**, anchored 1–3 Easy,4–6 Moderate,7–8 Hard,9–10 Very hard.
+  This is a product scale, not a claim of validated session-RPE. It follows Energy **or Not sure**,
+  can be skipped and edited in History, and is never inferred from the energy choice.
+- Room20 additive migration retains old raw Effort and all history. New fields are nullable.
+  Question versions, actual answer times, first answers and latest edit times preserve original
+  versus retrospective responses. Migration does not invent dates, intentions or answers.
+- Current-question Insights includes missing answers in its latest20 real, finalized GPS window,
+  keeps older question versions separate, and allows inspection from the first new saved run.
+  Existing earlier descriptive summaries retain their original wording. Samples never count.
+- Optional **Similar easy runs** uses the newest eligible Keep it easy run as anchor: same
+  normalized user route label, complete distance/time, and both distance and active duration
+  within20%. Three comparable runs unlock descriptive counts, not scientific confidence.
+  All effort/outcome values and missingness remain visible; weather, start time and shoes are
+  context. No causal claims, performance ranking, readiness score or fitness-improvement claim.
+- Reflection audit confirms durable pre-run Energy already reaches Anthropic. A transport test
+  checks that new local intention/route/Effort/provenance fields are not uploaded. Accepted
+  writing, voices, song selection and timing are unchanged; no backend deployment is needed.
+
+Verification: both debug/release unit suites pass **758 tests each**; debug, release and
+instrumentation APKs build. **31 Moto storage/migration checks** passed, including the complete
+registered migration chain, original/latest feedback, numeric clear and immutable reflections.
+**16 unique silent UI/root checks** passed across the initial and final receipts: optional plan,
+Energy/Not sure→Effort, skip/save, History evidence, legacy editing, GPS handoff, normal/large-text
+and landscape layouts. The first screen pass found two issues: an existing164vs166pixel text-box
+assertion and a compact-layout regression from an over-eager full-screen scrolling threshold.
+The former now checks optical row alignment within2dp (exact right-edge checks remain), without
+changing the accepted panel. The latter is fixed by keeping the original anchored-layout threshold
+and moving the optional plan into the scrollable upper actions on short/large-text screens.
+The four affected layout checks passed after repair. One test-tool connection reset interrupted
+an intermediate receipt; the complete final rerun is saved. Native screenshots were inspected.
+
+The updated normal app is installed/reopened. Post-update verification confirms **all44 completed
+activities**, every old field across11 business tables, four preference files and all existing
+reflections preserved. Room20 integrity/foreign-key checks are clean; all14 new fields remain
+unknown on old runs. No synthetic activity was added to personal history. Temporary test package
+removed. Necessary private backup/manifest, receipts and screen checks are under ignored
+`docs/local/shoe-check-2026-10-22/energy-foundation-*`. Temporary database inspection copies were
+automatically removed. The new exported Room20 schema is the only new tracked file. Existing
+source/tests/docs were edited; no staging, commit, push, backend/provider change or real run/audio
+test occurred. User visual/comprehension review and repeated real-run benefit testing remain.
+
+Next: review the wording/interaction with Manley, then use ordinary real runs to gather consistent
+answers. A later small prospective pilot should test whether inspecting comparable runs helps
+someone choose and evaluate a useful change; software checks do not establish that benefit.
+
+## October 22 Energy foundation review — historical research checkpoint, superseded by implementation above
+
+Manley resumed Energy after Claude's design work and clarified the goal: a credible, extensible
+foundation with a way to establish runner benefit, not polished unsupported claims or a complete
+system before AfroTech. Prior assumptions may change. Review started from clean
+`claude/run-voice` at `8f5e28c`; opening accents and the prior Start changes are committed locally,
+with the local tracking reference aligned. No remote fetch/push/deployment was performed.
+
+The code review confirms native Insights is a local latest-20 genuine-GPS count card requiring
+three paired answers in a starting category. Effort is saved but unused by native Insights and
+the immediate reflection. Console ComparisonService/RunStyle are separate heuristic systems,
+not shipped mobile intelligence or scientifically validated confidence. Existing tests establish
+arithmetic/state behavior, not useful decisions, measurement validity or fitness improvement.
+
+Research and a concrete proposed test sequence are in `research_app_landscape.md` §October22.
+The old Energy=RPE and Energy-times-duration claims are corrected there and in the comparison
+design note. Specific gaps: ambiguous energy/mood/effort labels; Effort's immediate invitation
+missing after Not sure; no assessment-time/question-version/edit trail; no comparable-run analysis
+or prospective benefit evaluation. Current counts do correctly retain missingness and avoid
+subtracting the different pre/post scales. No new behavior or numerical threshold is approved.
+
+Recommended next: short question-meaning and mechanics walkthrough, then one agreed implementation
+slice. A small repeated-use pilot can follow beyond the demonstration; fixture success, positive
+listener feedback and formative interviews are not efficacy proof. Preserve creative reflection
+quality while keeping analytical evidence independently inspectable.
+
+Review also found an unresolved prior UI receipt: `docs/local/shoe-check-2026-10-22/panel-final-moto.txt`
+records three passes and one normal-panel alignment assertion failure (164 versus166 pixels).
+The current test still uses a one-pixel tolerance; no later passing receipt was found. Do not roll
+the older ten-pass checkpoint forward as verification of that final typography change. This is a
+separate Start-panel follow-up, not an Energy failure; no code/test/device change was made here.
+
+This turn changes only four existing documentation files. No new files, build, test execution,
+phone installation, history mutation, provider setting, stage, commit or push.
+
 ## October 22 opening wordmark colors — Complete for agreed scope; installed and visually accepted
 
 At Manley's request, the opening wordmark keeps its cream/sage base and gains three spaced accent

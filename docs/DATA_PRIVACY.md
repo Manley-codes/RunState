@@ -11,6 +11,27 @@ metadata, to Anthropic. See [the current Android checkpoint](design/project_curr
 and [backend documentation](../backend/README.md) for those implemented boundaries. The older
 console statement that RunState has no server does **not** apply to the Android app.
 
+## Local Energy learning foundation — October 22, 2026
+
+**Status: Ready to test — installed on Moto; software/device checks passed, user review remains.** Optional intention and runner-named route labels,
+physical-energy question versions/answer times, and a separate numeric whole-run Effort answer
+are stored on the phone. First Energy/Effort answers and latest edit times distinguish original
+reports from corrections. Room20 adds nullable columns without converting old categorical
+answers or inventing their timing. New numeric Effort can be cleared without reviving a hidden
+old category as the current answer. Frozen reflections remain unchanged when feedback is edited.
+
+History's Energy details recompute from up to20 recent real, explicitly saved GPS activities;
+samples are excluded and older questions remain separate. Optional comparable easy-run grouping
+uses the runner's route name and similar distance/active time, not verified identical GPS paths.
+Existing local weather and shoe records supply context. These are descriptive observations,
+not causal findings or a validated physiological score.
+
+No new network service, permission or account is added. Intention, route name, numeric Effort,
+answer timestamps and original-answer metadata stay local. Pre-run Energy continues through the
+existing reflection request as before; voice, writer and music permissions are unchanged.
+An ignored local safety backup was made before installation; verification and activation details
+are recorded in `design/project_current_state.md`.
+
 ## Local shoe pairs and mileage — October 22, 2026
 
 **Status: Ready to test — installed on Moto; software/device checks passed, user real-run review remains.**
