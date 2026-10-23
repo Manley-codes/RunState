@@ -1,6 +1,10 @@
 package com.runstate.mobile.ui
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -33,6 +37,7 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.zIndex
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.repeatOnLifecycle
 import com.runstate.mobile.data.local.ReflectionBranch
@@ -65,8 +70,8 @@ internal const val COUNTDOWN_START_NOW_TAG = "countdownStartNow"
  * tells the caller a button was pressed, and the caller asks the coordinator. That is what
  * keeps the coordinator the single place where a run's rules live.
  *
- * Ready, Active and Saved delegate to their dedicated visual screens. Countdown and error
- * states retain the plain lifecycle foundation while those transitions are refined.
+ * Ready, Countdown, Active and Saved delegate to their dedicated visual screens.
+ * Lifecycle ownership and error states remain with the existing coordinator.
  *
  * @param countdownDigit the digit to show during [RunUiState.Countdown], or null for none.
  *   Passed separately from the model because it is composition-local timing, not an answer
@@ -233,6 +238,24 @@ internal fun RunStateScreen(
     // screens and disposes tile rendering; recording itself stays with the run coordinator.
     Column(modifier.fillMaxSize()) {
     Box(Modifier.weight(1f).fillMaxWidth()) {
+        val countdownVisible = state == RunUiState.Countdown || state == RunUiState.StartingRun
+        // The active run is already recording underneath this short visual exit. Keep the
+        // existing coordinator/timer authoritative; animation never starts or delays a run.
+        androidx.compose.animation.AnimatedVisibility(
+            visible = countdownVisible,
+            enter = EnterTransition.None,
+            exit = if (state == RunUiState.ActiveRunning || state == RunUiState.ActivePaused)
+                fadeOut(tween(240)) else ExitTransition.None,
+            modifier = Modifier.fillMaxSize().zIndex(2f)
+        ) {
+            CountdownScreen(
+                digit = if (state == RunUiState.Countdown) countdownDigit else null,
+                actionsEnabled = actionsEnabled && state == RunUiState.Countdown,
+                onStartNow = onStartNow,
+                onCancel = onCancelCountdown,
+                transitioning = state != RunUiState.Countdown
+            )
+        }
         if (showLiveMap) {
             RecordedRunMapBackground(
                 evidence = mapEvidence,
@@ -246,6 +269,7 @@ internal fun RunStateScreen(
                 onStatusChange = { mapAvailability = it }
             )
         }
+        if (countdownVisible) return@Box
         if (showLiveMap) {
             Column(Modifier.fillMaxSize().testTag(ACTIVE_RUN_MAP_DIALOG_TAG)) {
                 Column(Modifier.fillMaxWidth().onSizeChanged { mapHeaderHeight = it.height }) {
@@ -359,27 +383,7 @@ internal fun RunStateScreen(
         when (state) {
             RunUiState.ReadyToStart -> Unit // Drawn above as the dedicated Start surface.
 
-            RunUiState.Countdown -> {
-                if (countdownDigit != null) {
-                    Text(
-                        text = countdownDigit.toString(),
-                        style = MaterialTheme.typography.displayLarge,
-                        modifier = Modifier.padding(top = 24.dp)
-                    )
-                }
-
-                ScreenAction(
-                    label = "Start now",
-                    enabled = actionsEnabled && countdownDigit != null,
-                    onClick = onStartNow,
-                    modifier = Modifier.testTag(COUNTDOWN_START_NOW_TAG)
-                )
-                SecondaryAction(
-                    label = "Cancel",
-                    enabled = actionsEnabled,
-                    onClick = onCancelCountdown
-                )
-            }
+            RunUiState.Countdown -> Unit // Drawn above; its exit overlays the active screen.
 
             RunUiState.StartFailed -> {
                 ScreenAction(

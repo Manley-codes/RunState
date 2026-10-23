@@ -139,8 +139,7 @@ class RunStateScreenTest {
     private companion object {
         const val INITIALIZING = "Getting things ready"
         const val READY = "TO RUN"
-        const val COUNTDOWN = "Getting ready to run"
-        const val STARTING = "Starting your run — saving its start"
+        const val COUNTDOWN = "RUNSTATE"
         const val START_FAILED = "RunState couldn't save the start of your run."
         const val RUNNING = "You have a run in progress"
         const val PAUSED = "PAUSED"
@@ -1719,11 +1718,13 @@ class RunStateScreenTest {
     /** Proves a countdown shows its digit, offers a way out, and never a second Start. */
     @Test
     fun countdownShowsTheDigitAndOffersCancel() {
-        val actions = renderScreen(RunUiModel(RunUiState.Countdown), countdownDigit = 2)
+        val actions = renderScreen(RunUiModel(RunUiState.Countdown), countdownDigit = 2,
+            modifier = Modifier.fillMaxSize().systemBarsPadding())
 
         composeTestRule.onNodeWithText(COUNTDOWN).assertIsDisplayed()
         composeTestRule.onNodeWithText("2").assertIsDisplayed()
         composeTestRule.onNodeWithText(START).assertDoesNotExist()
+        saveNativePreview(COUNTDOWN_SCREEN_TAG, "countdown-frosted-drift.png")
 
         // Act
         composeTestRule.onNodeWithText(CANCEL).performClick()
@@ -1736,6 +1737,8 @@ class RunStateScreenTest {
     @Test
     fun countdownStartNowReportsOnlyItsExplicitAction() {
         val actions = renderScreen(RunUiModel(RunUiState.Countdown), countdownDigit = 10)
+        composeTestRule.onNodeWithText("10").assertIsDisplayed()
+        assertNoCountdownCompletionWords()
         composeTestRule.onNodeWithTag(COUNTDOWN_START_NOW_TAG).assertIsDisplayed().performClick()
         assertEquals(1, actions.startsNow)
         assertEquals(1, actions.total)
@@ -1745,6 +1748,63 @@ class RunStateScreenTest {
     fun countdownAwaitingLifecycleDoesNotOfferAnEnabledStartNow() {
         val actions = renderScreen(RunUiModel(RunUiState.Countdown), countdownDigit = null)
         composeTestRule.onNodeWithTag(COUNTDOWN_START_NOW_TAG).assertIsNotEnabled().performClick()
+        assertNoCountdownCompletionWords()
+        assertEquals(0, actions.total)
+    }
+
+    private fun assertNoCountdownCompletionWords() {
+        listOf("0", "GO", "Let's go", "LET'S GO", "Let’s go").forEach { label ->
+            composeTestRule.onNodeWithText(label).assertDoesNotExist()
+        }
+    }
+
+    /** The visual handoff cannot claim a live run until the owner confirms its start. */
+    @Test
+    fun countdownHandoffRevealsLiveMetricsWithoutGoOrLetsGo() {
+        composeTestRule.mainClock.autoAdvance = false
+        var state by mutableStateOf(RunUiState.Countdown)
+        val actions = RecordedActions()
+        composeTestRule.setContent {
+            RunStateScreen(
+                model = RunUiModel(state),
+                metrics = fixtureMetrics(),
+                countdownDigit = if (state == RunUiState.Countdown) 1 else null,
+                onStart = { actions.starts++ },
+                onStartNow = { actions.startsNow++ },
+                onCancelCountdown = { actions.cancels++ },
+                onRetryInitialization = { actions.initializationRetries++ },
+                onRetryStart = { actions.startRetries++ },
+                onPause = { actions.pauses++ },
+                onResume = { actions.resumes++ },
+                onStop = { actions.stops++ },
+                onStartAnother = { actions.startAnothers++ }
+            )
+        }
+        composeTestRule.mainClock.advanceTimeByFrame()
+        composeTestRule.onNodeWithText("1").assertIsDisplayed()
+        assertNoCountdownCompletionWords()
+
+        composeTestRule.runOnIdle { state = RunUiState.StartingRun }
+        composeTestRule.mainClock.advanceTimeByFrame()
+        composeTestRule.onNodeWithTag(COUNTDOWN_START_NOW_TAG).assertIsNotEnabled().performClick()
+        composeTestRule.onNodeWithText(CANCEL).assertDoesNotExist()
+        composeTestRule.onNodeWithText(PAUSE).assertDoesNotExist()
+        composeTestRule.onNodeWithTag(ACTIVE_RUN_DISTANCE_TAG).assertDoesNotExist()
+        assertNoCountdownCompletionWords()
+        assertEquals(0, actions.total)
+
+        composeTestRule.runOnIdle { state = RunUiState.ActiveRunning }
+        composeTestRule.mainClock.advanceTimeByFrame()
+        assertNoCountdownCompletionWords()
+        composeTestRule.mainClock.advanceTimeBy(400L)
+        composeTestRule.mainClock.advanceTimeByFrame()
+        composeTestRule.onNodeWithTag(COUNTDOWN_SCREEN_TAG).assertDoesNotExist()
+        composeTestRule.onNodeWithTag(COUNTDOWN_START_NOW_TAG).assertDoesNotExist()
+        composeTestRule.onNodeWithText(PAUSE).assertIsDisplayed().assertIsEnabled()
+        composeTestRule.onNodeWithTag(ACTIVE_RUN_DISTANCE_TAG).assertTextEquals("0.11 mi")
+        composeTestRule.onNodeWithTag(ACTIVE_RUN_ACTIVE_TAG).assertTextEquals("00:01:00")
+        composeTestRule.onNodeWithTag(ACTIVE_RUN_PACE_TAG).assertTextEquals("8:56 /mi")
+        assertNoCountdownCompletionWords()
         assertEquals(0, actions.total)
     }
 
@@ -1770,7 +1830,9 @@ class RunStateScreenTest {
     fun startingRunOffersNoCancelAndNoBackOverride() {
         renderScreen(RunUiState.StartingRun)
 
-        composeTestRule.onNodeWithText(STARTING).assertIsDisplayed()
+        composeTestRule.onNodeWithText(COUNTDOWN).assertIsDisplayed()
+        composeTestRule.onNodeWithTag(COUNTDOWN_START_NOW_TAG).assertIsNotEnabled()
+        assertNoCountdownCompletionWords()
         assertNoActionsOffered()
         assertFalse(backIsIntercepted())
     }
