@@ -53,6 +53,7 @@ import com.runstate.mobile.data.local.PreRunEnergy
 import com.runstate.mobile.data.local.PostRunEffort
 import com.runstate.mobile.data.local.RunEntity
 import com.runstate.mobile.data.local.RunIntention
+import com.runstate.mobile.data.local.effortScaleForEditing
 import com.runstate.mobile.data.local.RunTrackingMode
 import com.runstate.mobile.data.local.RunStateDatabase
 import com.runstate.mobile.data.local.ShoePairEntity
@@ -1613,6 +1614,9 @@ internal fun RunJourneyRoot(
         selectedEffort = completedRun?.postRunEffort,
         onSelectEffort = { effort -> completedRunId?.let { saveEffort(it, effort) } },
         selectedEffortRating = completedRun?.postRunEffortRating,
+        effortRatingScale = effortScaleForEditing(completedRun?.postRunEffortQuestionVersion,
+            completedRun?.postRunEffortRating, completedRun?.firstPostRunEffortRating,
+            completedRun?.postRunEffortRecordedAtEpochMillis, completedRun?.postRunEffortUpdatedAtEpochMillis),
         onSelectEffortRating = { rating -> completedRunId?.let { saveEffortRating(it, rating) } },
         effortEnabled = completedRunId != null,
         effortSaving = effortSavingRunId == completedRunId,

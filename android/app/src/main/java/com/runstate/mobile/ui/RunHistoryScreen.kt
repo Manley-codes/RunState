@@ -1641,9 +1641,10 @@ internal fun RunHistoryScreen(
             }
         }
         val editingItem = items.firstOrNull { it.runId == editingEffortRunId }
-        if (editingItem != null && (editingItem.energyQuestionVersion == 2 || editingItem.postRunEffortQuestionVersion == 1)) {
+        if (editingItem != null && (editingItem.energyQuestionVersion == 2 || editingItem.hasNumericEffortHistory())) {
             EffortRatingSheet(
                 selectedRating = editingItem.postRunEffortRating,
+                scale = editingItem.effortScaleForEditor(),
                 enabled = effortSavingRunId != editingItem.runId,
                 onDismiss = { editingEffortRunId = null },
                 onSelect = { rating ->
@@ -2015,8 +2016,8 @@ private fun HistoryRow(
                 ) {
                     Text(
                         text = when {
-                            item.postRunEffortQuestionVersion == 1 -> item.postRunEffortRating
-                                ?.let { "EFFORT · $it / 10" } ?: "EFFORT +"
+                            item.hasNumericEffortHistory() -> item.postRunEffortRating
+                                ?.let { "EFFORT · ${historyEffortLabel(item)}" } ?: "EFFORT +"
                             item.effort != null -> "EFFORT · ${item.effort.displayLabel().uppercase()}"
                             else -> "EFFORT +"
                         },
@@ -2024,6 +2025,10 @@ private fun HistoryRow(
                         fontWeight = FontWeight.SemiBold,
                         letterSpacing = 1.1.sp
                     )
+                }
+                intentionEffortDescription(item)?.let { description ->
+                    Text(description, color = rowInk, fontSize = 13.sp, lineHeight = 20.sp,
+                        modifier = Modifier.testTag("runHistoryIntentionEffort:" + item.runId))
                 }
                 if (effortSaving) {
                     Text("Saving Effort…", color = rowMuted, fontSize = 12.sp)

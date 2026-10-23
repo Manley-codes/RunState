@@ -78,6 +78,45 @@ enum class RunIntention {
     HARD_EFFORT
 }
 
+/** Versioned whole-session Effort wording. Numbers from different versions are not equivalent. */
+enum class EffortRatingScale(val version: Int, val ratings: IntRange, val title: String) {
+    ORIGINAL(1, 1..10, "Earlier 1–10 scale"),
+    FOSTER(2, 0..10, "Session effort · 0–10");
+
+    fun anchor(rating: Int): String? = when (this) {
+        ORIGINAL -> when (rating) {
+            in 1..3 -> "Easy"
+            in 4..6 -> "Moderate"
+            in 7..8 -> "Hard"
+            in 9..10 -> "Very hard"
+            else -> null
+        }
+        FOSTER -> when (rating) {
+            0 -> "Rest"
+            1 -> "Very, very easy"
+            2 -> "Easy"
+            3 -> "Moderate"
+            4 -> "Somewhat hard"
+            5 -> "Hard"
+            7 -> "Very hard"
+            10 -> "Maximal"
+            else -> null // 6, 8 and 9 are intermediate numbers, not invented anchors.
+        }
+    }
+
+    companion object {
+        fun fromVersion(version: Int?): EffortRatingScale? = entries.firstOrNull { it.version == version }
+    }
+}
+
+/** A run keeps the scale of its first numeric report, including an unknown original scale. */
+fun effortScaleForEditing(version: Int?, rating: Int?, firstRating: Int?,
+    recordedAt: Long?, updatedAt: Long?): EffortRatingScale? = when {
+    version != null -> EffortRatingScale.fromVersion(version)
+    rating != null || firstRating != null || recordedAt != null || updatedAt != null -> null
+    else -> EffortRatingScale.FOSTER
+}
+
 /**
  * Metric values that become durable in the same write that completes a run.
  *
@@ -313,7 +352,7 @@ data class RunEntity(
         const val POST_RUN_NOTE_MAX_LENGTH = 280
         const val ROUTE_LABEL_MAX_LENGTH = 80
         const val CURRENT_ENERGY_QUESTION_VERSION = 2
-        const val CURRENT_EFFORT_QUESTION_VERSION = 1
+        const val CURRENT_EFFORT_QUESTION_VERSION = 2
     }
 
     init {
@@ -329,8 +368,9 @@ data class RunEntity(
             firstPostRunEnergyQuestionVersion, postRunEffortQuestionVersion).all { it == null || it > 0 }) {
             "Question versions must be positive when known."
         }
-        require(listOf(postRunEffortRating, firstPostRunEffortRating).all { it == null || it in 1..10 }) {
-            "Numeric Effort must be between 1 and 10 when answered."
+        val effortRange = EffortRatingScale.fromVersion(postRunEffortQuestionVersion)?.ratings ?: 1..10
+        require(listOf(postRunEffortRating, firstPostRunEffortRating).all { it == null || it in effortRange }) {
+            "Numeric Effort must be within its recorded question's scale."
         }
         require(state == StoredRunState.COMPLETED || listOf(postRunEffortRating,
             firstPostRunEffortRating, postRunEffortRecordedAtEpochMillis,

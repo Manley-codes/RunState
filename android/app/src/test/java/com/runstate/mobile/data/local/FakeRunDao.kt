@@ -172,16 +172,17 @@ open class FakeRunDao : RunDao() {
     }
 
     override suspend fun updateEffortRatingIfCompleted(
-        runId: String, completedState: StoredRunState, rating: Int?, now: Long, questionVersion: Int
+        runId: String, completedState: StoredRunState, rating: Int?, now: Long, questionVersion: Int?
     ): Int {
         val index = inserted.indexOfFirst { it.runId == runId && it.state == completedState }
         if (index < 0) return 0
         val old = inserted[index]
         inserted[index] = old.copy(
             postRunEffortRating = rating,
-            firstPostRunEffortRating = old.firstPostRunEffortRating ?: rating,
+            firstPostRunEffortRating = old.firstPostRunEffortRating ?: old.postRunEffortRating ?: rating,
             postRunEffortRecordedAtEpochMillis = old.postRunEffortRecordedAtEpochMillis
-                ?: now.takeIf { rating != null },
+                ?: now.takeIf { rating != null && old.postRunEffortRating == null &&
+                    old.firstPostRunEffortRating == null && old.postRunEffortUpdatedAtEpochMillis == null },
             postRunEffortUpdatedAtEpochMillis = now,
             postRunEffortQuestionVersion = questionVersion
         )

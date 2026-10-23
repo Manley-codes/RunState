@@ -18,6 +18,33 @@ class RunEntityTest {
     private val canonicalUuid = "0f6a2c1e-9d43-4b7a-9c21-7b5e8a4d1f30"
 
     @Test
+    fun `zero belongs only to the new scale and the anchors keep distinct meanings`() {
+        val completed = runWith(state = StoredRunState.COMPLETED)
+        assertEquals(0, completed.copy(postRunEffortRating = 0, firstPostRunEffortRating = 0,
+            postRunEffortQuestionVersion = 2).postRunEffortRating)
+        listOf<Int?>(null, 1, 3).forEach { version ->
+            assertThrows(IllegalArgumentException::class.java) {
+                completed.copy(firstPostRunEffortRating = 0, postRunEffortQuestionVersion = version)
+            }
+        }
+        assertEquals("Moderate", EffortRatingScale.ORIGINAL.anchor(5))
+        assertEquals("Hard", EffortRatingScale.FOSTER.anchor(5))
+        assertEquals("Rest", EffortRatingScale.FOSTER.anchor(0))
+        assertEquals("Maximal", EffortRatingScale.FOSTER.anchor(10))
+        listOf(6, 8, 9).forEach { assertNull(EffortRatingScale.FOSTER.anchor(it)) }
+    }
+
+    @Test
+    fun `editing retains old scale and cannot infer unknown original wording after a clear`() {
+        assertEquals(EffortRatingScale.FOSTER, effortScaleForEditing(null, null, null, null, null))
+        assertEquals(EffortRatingScale.ORIGINAL, effortScaleForEditing(1, null, 4, 10, 20))
+        assertNull(effortScaleForEditing(null, 4, null, null, null))
+        assertNull(effortScaleForEditing(null, null, 4, null, 20))
+        assertNull(effortScaleForEditing(null, null, null, 10, null))
+        assertNull(effortScaleForEditing(3, 4, null, 10, 20))
+    }
+
+    @Test
     fun `energy foundation leaves old reports unknown and validates independent new answers`() {
         val old = runWith(state = StoredRunState.COMPLETED, postRunEffort = PostRunEffort.HEAVY)
         assertNull(old.energyQuestionVersion)

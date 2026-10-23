@@ -33,6 +33,8 @@ import com.runstate.mobile.data.local.MetricSource
 import com.runstate.mobile.data.local.PreRunEnergy
 import com.runstate.mobile.data.local.ReflectionBranch
 import com.runstate.mobile.data.local.RunIntention
+import com.runstate.mobile.data.local.EffortRatingScale
+import com.runstate.mobile.data.local.effortScaleForEditing
 import com.runstate.mobile.data.local.TelemetryCoverage
 import java.time.Instant
 import java.time.ZoneId
@@ -46,7 +48,6 @@ internal const val RUNNER_ENERGY_EVIDENCE_TAG = "runnerEnergyEvidence"
 private const val RECENT_GPS_RUN_LIMIT = 20
 private const val MINIMUM_PAIRED_RUNS = 3
 private const val CURRENT_ENERGY_VERSION = 2
-private const val NUMERIC_EFFORT_VERSION = 1
 // A visible product grouping rule, not validated physiological equivalence.
 private const val SIMILAR_LENGTH_FRACTION = 0.20
 
@@ -146,13 +147,16 @@ internal data class EasyRunComparison(
     val anchor: RunHistoryItem,
     val runs: List<RunHistoryItem>
 ) {
+    val effortScale: EffortRatingScale? get() = anchor.effortScaleForEditor()
     val hasEnoughRuns: Boolean get() = runs.size >= MINIMUM_PAIRED_RUNS
     val pairedCount: Int get() = runs.count { it.hasCurrentEnergyPair() }
-    val effortRatings: List<Int> get() = runs.mapNotNull { it.numericEffort() }
+    val effortRatings: List<Int> get() = runs.filter {
+        it.postRunEffortQuestionVersion == effortScale?.version
+    }.mapNotNull { it.numericEffort() }
     val effortDescription: String get() {
         if (effortRatings.isEmpty()) return "No numeric Effort answers in this group yet."
         val counts = effortRatings.groupingBy { it }.eachCount().toSortedMap()
-        return "Reported Effort: " + counts.entries.joinToString("; ") { (rating, count) ->
+        return "Reported Effort (${effortScale?.title}): " + counts.entries.joinToString("; ") { (rating, count) ->
             "$rating/10 on $count ${if (count == 1) "run" else "runs"}"
         } + ". ${effortRatings.size} of ${runs.size} runs answered."
     }
@@ -181,11 +185,13 @@ internal fun easyRunComparisonFor(currentRuns: List<RunHistoryItem>): EasyRunCom
             normalizedRouteLabel(row.routeLabel) != null && validMetrics(row)
     }
     val anchor = eligible.firstOrNull() ?: return null
+    val effortScale = anchor.effortScaleForEditor() ?: return null
     val distance = requireNotNull(anchor.distanceMeters)
     val duration = requireNotNull(anchor.activeDurationMillis).toDouble()
     val route = normalizedRouteLabel(anchor.routeLabel)
     val matches = eligible.filter { row ->
         normalizedRouteLabel(row.routeLabel) == route &&
+            row.effortScaleForEditor() == effortScale &&
             abs(requireNotNull(row.distanceMeters) / distance - 1.0) <= SIMILAR_LENGTH_FRACTION + 1e-9 &&
             abs(requireNotNull(row.activeDurationMillis).toDouble() / duration - 1.0) <= SIMILAR_LENGTH_FRACTION + 1e-9
     }
@@ -199,8 +205,16 @@ private fun RunHistoryItem.hasCurrentEnergyPair(): Boolean = energyQuestionVersi
     postRunEnergyQuestionVersion == CURRENT_ENERGY_VERSION && preRunEnergy != null && energy.isReportedEnergy()
 
 private fun RunHistoryItem.numericEffort(): Int? = postRunEffortRating?.takeIf {
-    postRunEffortQuestionVersion == NUMERIC_EFFORT_VERSION && it in 1..10
+    EffortRatingScale.fromVersion(postRunEffortQuestionVersion)?.ratings?.contains(it) == true
 }
+
+internal fun RunHistoryItem.hasNumericEffortHistory(): Boolean = postRunEffortQuestionVersion != null ||
+    postRunEffortRating != null || firstPostRunEffortRating != null ||
+    postRunEffortRecordedAtEpochMillis != null || postRunEffortUpdatedAtEpochMillis != null
+
+internal fun RunHistoryItem.effortScaleForEditor(): EffortRatingScale? = effortScaleForEditing(
+    postRunEffortQuestionVersion, postRunEffortRating, firstPostRunEffortRating,
+    postRunEffortRecordedAtEpochMillis, postRunEffortUpdatedAtEpochMillis)
 
 private fun canonicalRunId(raw: String): String? = try {
     UUID.fromString(raw).toString().takeIf { it.equals(raw, ignoreCase = true) }
@@ -228,10 +242,26 @@ private fun ReflectionBranch?.answerLabel(): String = when (this) {
 }
 
 internal fun historyEffortLabel(item: RunHistoryItem): String = when {
-    item.postRunEffortQuestionVersion == NUMERIC_EFFORT_VERSION ->
-        item.numericEffort()?.let { "$it / 10" } ?: "Not recorded"
+    item.hasNumericEffortHistory() -> item.postRunEffortRating?.let { rating ->
+        val scale = EffortRatingScale.fromVersion(item.postRunEffortQuestionVersion)
+        "$rating / 10" + (scale?.anchor(rating)?.let { " · $it" } ?: "") + when (scale) {
+            EffortRatingScale.ORIGINAL -> " · earlier scale"
+            null -> " · scale unknown"
+            EffortRatingScale.FOSTER -> ""
+        }
+    } ?: "Not recorded"
     item.effort != null -> item.effort.displayLabel()
     else -> "Not recorded"
+}
+
+/** A juxtaposition of two reports, not a verdict, target intensity or coaching prescription. */
+internal fun intentionEffortDescription(item: RunHistoryItem): String? {
+    val intention = item.runIntention ?: return null
+    val rating = item.numericEffort() ?: return null
+    val scale = requireNotNull(EffortRatingScale.fromVersion(item.postRunEffortQuestionVersion))
+    return "Planned: ${intention.insightLabel()}. Reported: $rating/10" +
+        (scale.anchor(rating)?.let { " — $it" } ?: "") +
+        (if (scale == EffortRatingScale.ORIGINAL) " (earlier scale)" else "") + "."
 }
 
 private fun RunIntention?.insightLabel(): String = when (this) {
@@ -346,7 +376,8 @@ internal fun RunnerEnergyEvidenceSheet(foundation: RunnerEnergyFoundation, onDis
                     Text("Keep it easy · ${comparison.anchor.routeLabel}", fontSize = 18.sp,
                         fontWeight = FontWeight.Medium, lineHeight = 23.sp)
                     Text("Same route name; distance and active time each within 20% of your newest matching run " +
-                        "(${comparison.anchor.dateLabel}). Route names are yours, not verified GPS matches.",
+                        "(${comparison.anchor.dateLabel}). Same Effort scale: ${comparison.effortScale?.title}. " +
+                        "Route names are yours, not verified GPS matches.",
                         fontSize = 12.sp, lineHeight = 18.sp)
                     Text(if (comparison.hasEnoughRuns) "${comparison.runs.size} similar-length runs · early observations"
                         else "${comparison.runs.size} of 3 comparable runs",
@@ -379,6 +410,7 @@ private fun EnergyEvidenceRow(row: RunHistoryItem) {
         Text("Start · ${row.preRunEnergy?.displayLabel() ?: "Not recorded"}    Finish · ${row.energy.answerLabel()}",
             fontSize = 13.sp, lineHeight = 19.sp)
         Text("Effort · ${historyEffortLabel(row)}", fontSize = 13.sp)
+        intentionEffortDescription(row)?.let { Text(it, fontSize = 13.sp, lineHeight = 19.sp) }
         if (row.energy != null) {
             Text(energyAnswerTimingDescription(row), fontSize = 11.sp, lineHeight = 16.sp)
             if (row.firstPostRunEnergy != null && row.firstPostRunEnergy != row.energy) {

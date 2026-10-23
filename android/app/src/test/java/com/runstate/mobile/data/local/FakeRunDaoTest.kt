@@ -2,6 +2,9 @@ package com.runstate.mobile.data.local
 
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -61,6 +64,53 @@ class FakeRunDaoTest {
         lastCheckpointEpochMillis = FINISHED_AT,
         finishEpochMillis = FINISHED_AT
     )
+
+    @Test
+    fun `new numeric reports accept zero and preserve it as the original after clear and edit`() = runBlocking {
+        val dao = FakeRunDao()
+        dao.insert(completedRun)
+        assertTrue(dao.recordEffortRating(completedRun.runId, null, FINISHED_AT + 1))
+        assertEquals(completedRun, dao.findById(completedRun.runId))
+        assertTrue(dao.recordEffortRating(completedRun.runId, 0, FINISHED_AT + 2))
+        assertTrue(dao.recordEffortRating(completedRun.runId, null, FINISHED_AT + 3))
+        assertTrue(dao.recordEffortRating(completedRun.runId, 7, FINISHED_AT + 4))
+        val saved = requireNotNull(dao.findById(completedRun.runId))
+        assertEquals(2, saved.postRunEffortQuestionVersion)
+        assertEquals(0, saved.firstPostRunEffortRating)
+        assertEquals(7, saved.postRunEffortRating)
+        assertEquals(FINISHED_AT + 2, saved.postRunEffortRecordedAtEpochMillis)
+    }
+
+    @Test
+    fun `older numeric edits keep the old scale and unknown answer time`() = runBlocking {
+        val dao = FakeRunDao()
+        dao.insert(completedRun.copy(postRunEffortRating = 5, postRunEffortQuestionVersion = 1))
+        assertTrue(dao.recordEffortRating(completedRun.runId, null, FINISHED_AT + 1))
+        assertThrows(IllegalArgumentException::class.java) {
+            runBlocking { dao.recordEffortRating(completedRun.runId, 0, FINISHED_AT + 2) }
+        }
+        assertTrue(dao.recordEffortRating(completedRun.runId, 7, FINISHED_AT + 3))
+        val saved = requireNotNull(dao.findById(completedRun.runId))
+        assertEquals(1, saved.postRunEffortQuestionVersion)
+        assertEquals(5, saved.firstPostRunEffortRating)
+        assertNull(saved.postRunEffortRecordedAtEpochMillis)
+    }
+
+    @Test
+    fun `unknown version report may be cleared but never silently reclassified`() = runBlocking {
+        val dao = FakeRunDao()
+        val old = completedRun.copy(postRunEffortRating = 5)
+        dao.insert(old)
+        assertFalse(dao.recordEffortRating(old.runId, 7, FINISHED_AT + 1))
+        assertEquals(old, dao.findById(old.runId))
+        assertTrue(dao.recordEffortRating(old.runId, null, FINISHED_AT + 2))
+        assertFalse(dao.recordEffortRating(old.runId, 7, FINISHED_AT + 3))
+        val saved = requireNotNull(dao.findById(old.runId))
+        assertNull(saved.postRunEffortRating)
+        assertNull(saved.postRunEffortQuestionVersion)
+        assertEquals(5, saved.firstPostRunEffortRating)
+        assertNull(saved.postRunEffortRecordedAtEpochMillis)
+    }
 
     /**
      * Proves the fake filters and orders exactly as the real discovery query does.

@@ -93,6 +93,7 @@ import com.runstate.mobile.reflection.RunReflectionState
 import com.runstate.mobile.reflection.ReflectionVoicePreparation
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Assert.assertSame
 import org.junit.Rule
@@ -2765,6 +2766,14 @@ class RunStateScreenTest {
         }
     }
 
+    private fun saveDialogPreview(name: String) {
+        val bitmap = composeTestRule.onNode(isDialog()).captureToImage().asAndroidBitmap()
+        File(InstrumentationRegistry.getInstrumentation().targetContext.cacheDir, name)
+            .outputStream().use { output ->
+                assertTrue(bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, output))
+            }
+    }
+
     @Test
     fun optionalRunPlanSavesOnlyOnConfirmationAndDoesNotChooseEnergyOrStart() {
         var intention by mutableStateOf<RunIntention?>(null)
@@ -3058,7 +3067,7 @@ class RunStateScreenTest {
         val rows = (1..3).map { number ->
             val began = start - number * 86_400_000L
             energyInsightHistoryRun(number).copy(energyQuestionVersion = 2,
-                postRunEnergyQuestionVersion = 2, postRunEffortQuestionVersion = 1,
+                postRunEnergyQuestionVersion = 2, postRunEffortQuestionVersion = 2,
                 postRunEffortRating = number + 2, runIntention = RunIntention.KEEP_EASY,
                 routeLabel = "Park loop", distanceMeters = 5_000.0,
                 activeDurationMillis = 1_800_000, telemetryCoverage = TelemetryCoverage.COMPLETE,
@@ -3078,8 +3087,48 @@ class RunStateScreenTest {
         composeTestRule.onNodeWithText("3 similar-length runs · early observations").assertExists()
         composeTestRule.onNodeWithTag("runnerEnergyEvidenceRun:" + rows.first().runId)
             .performScrollTo().assertIsDisplayed()
-        composeTestRule.onNodeWithText("Effort · 3 / 10").assertExists()
+        composeTestRule.onNodeWithText("Effort · 3 / 10 · Moderate").assertExists()
+        composeTestRule.onNodeWithText("Planned: Keep it easy. Reported: 3/10 — Moderate.").assertExists()
         saveNativePreview(RUNNER_ENERGY_EVIDENCE_TAG, "energy-foundation-evidence.png")
+    }
+
+    @Test
+    fun wholeRunEffortOffersZeroWithFosterDescriptionsAndNoAutomaticAnswer() {
+        var selected: Int? = null
+        composeTestRule.setContent {
+            EffortRatingSheet(null, onDismiss = {}, onSelect = { selected = it })
+        }
+        composeTestRule.onNodeWithText("How hard was the whole run?").assertIsDisplayed()
+        composeTestRule.onNodeWithText("0 Rest · 1 Very, very easy · 2 Easy\n3 Moderate · 4 Somewhat hard · 5 Hard\n7 Very hard · 10 Maximal\n6, 8 and 9 fall between the descriptions.").assertExists()
+        assertNull(selected)
+        saveDialogPreview("rpe-effort-sheet.png")
+        composeTestRule.onNodeWithTag(RUN_COMPLETE_EFFORT_RATING_TAG_PREFIX + "0").performScrollTo().performClick()
+        assertEquals(0, selected)
+    }
+
+    @Test
+    fun earlierEffortEditorKeepsItsOriginalDescriptionsAndRange() {
+        var selected: Int? = null
+        composeTestRule.setContent {
+            EffortRatingSheet(5, scale = com.runstate.mobile.data.local.EffortRatingScale.ORIGINAL,
+                onDismiss = {}, onSelect = { selected = it })
+        }
+        composeTestRule.onNodeWithText("Earlier scale · kept for this run\n1–3 Easy · 4–6 Moderate\n7–8 Hard · 9–10 Very hard").assertExists()
+        composeTestRule.onNodeWithTag(RUN_COMPLETE_EFFORT_RATING_TAG_PREFIX + "0").assertDoesNotExist()
+        composeTestRule.onNodeWithTag(RUN_COMPLETE_EFFORT_RATING_TAG_PREFIX + "7").performScrollTo().performClick()
+        assertEquals(7, selected)
+    }
+
+    @Test
+    fun unknownEffortEditorAllowsClearWithoutOfferingNewNumericMeaning() {
+        var cleared = false
+        composeTestRule.setContent {
+            EffortRatingSheet(5, scale = null, onDismiss = {}, onSelect = { cleared = it == null })
+        }
+        composeTestRule.onNodeWithText("This answer's original scale is unknown. You can keep or clear it.").assertExists()
+        composeTestRule.onNodeWithTag(RUN_COMPLETE_EFFORT_RATING_TAG_PREFIX + "5").assertDoesNotExist()
+        composeTestRule.onNodeWithText("Clear Effort").performScrollTo().performClick()
+        assertTrue(cleared)
     }
 
     @Test

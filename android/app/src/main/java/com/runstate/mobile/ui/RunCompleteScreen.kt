@@ -68,6 +68,7 @@ import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.testTag
@@ -91,6 +92,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.runstate.mobile.data.local.ReflectionBranch
 import com.runstate.mobile.R
 import com.runstate.mobile.data.local.PostRunEffort
+import com.runstate.mobile.data.local.EffortRatingScale
 import com.runstate.mobile.data.local.PreRunEnergy
 import kotlin.math.roundToInt
 
@@ -199,6 +201,7 @@ internal fun RunCompleteScreen(
     noteSaving: Boolean = false,
     noteError: String? = null,
     selectedEffortRating: Int? = null,
+    effortRatingScale: EffortRatingScale? = EffortRatingScale.FOSTER,
     onSelectEffortRating: (Int?) -> Unit = {}
 ) {
     val distance = splitMetric(metrics?.distance ?: "—")
@@ -391,7 +394,7 @@ internal fun RunCompleteScreen(
                 }
                 if (effortEnabled && !initialPresentationHeld &&
                     (effortFollowupOpen || effortSaving)) {
-                    InlineEffortRatingChoices(selectedEffortRating, effortSaving, effortError, actionsEnabled,
+                    InlineEffortRatingChoices(selectedEffortRating, effortRatingScale, effortSaving, effortError, actionsEnabled,
                         onSelect = { effort ->
                             effortFollowupOpen = false
                             onSelectEffortRating(effort)
@@ -549,7 +552,7 @@ internal fun RunActivityRecapScreen(
                 Text(item.metrics?.sourceLabel ?: "Metrics unavailable", color = CompletionMutedInk,
                     fontSize = 12.sp)
                 CompletionEnergySummary(item.preRunEnergy, item.energy, true, false, false, false, {})
-                if (item.postRunEffortQuestionVersion == 1 || item.effort != null) {
+                if (item.hasNumericEffortHistory() || item.effort != null) {
                     Text("Effort · ${historyEffortLabel(item)}", color = CompletionStrongInk,
                         fontSize = 14.sp)
                 }
@@ -694,6 +697,7 @@ private fun EnergySummaryFact(
 @Composable
 private fun InlineEffortRatingChoices(
     selectedRating: Int?,
+    scale: EffortRatingScale?,
     saving: Boolean,
     error: String?,
     enabled: Boolean,
@@ -705,7 +709,7 @@ private fun InlineEffortRatingChoices(
         Text("How hard was the whole run?", color = CompletionStrongInk, fontSize = 16.sp,
             fontWeight = FontWeight.Medium)
         if (!saving) {
-            EffortRatingChoices(selectedRating, enabled, onSelect)
+            EffortRatingChoices(selectedRating, scale, enabled, onSelect)
             TextButton(onClick = onSkip, enabled = enabled, modifier = Modifier.heightIn(min = 48.dp)) {
                 Text("Skip", color = CompletionMutedInk)
             }
@@ -721,12 +725,18 @@ private fun InlineEffortRatingChoices(
 
 /** One whole-run scale, shared with History; legacy words are never converted into numbers. */
 @Composable
-private fun EffortRatingChoices(selectedRating: Int?, enabled: Boolean, onSelect: (Int) -> Unit) {
-    Text("1–3 Easy · 4–6 Moderate\n7–8 Hard · 9–10 Very hard",
+private fun EffortRatingChoices(selectedRating: Int?, scale: EffortRatingScale?, enabled: Boolean, onSelect: (Int) -> Unit) {
+    if (scale == null) {
+        Text("This answer's original scale is unknown. You can keep or clear it.",
+            color = CompletionMutedInk, fontSize = 12.sp, lineHeight = 19.sp)
+        return
+    }
+    Text(if (scale == EffortRatingScale.ORIGINAL) "Earlier scale · kept for this run\n1–3 Easy · 4–6 Moderate\n7–8 Hard · 9–10 Very hard"
+        else "0 Rest · 1 Very, very easy · 2 Easy\n3 Moderate · 4 Somewhat hard · 5 Hard\n7 Very hard · 10 Maximal\n6, 8 and 9 fall between the descriptions.",
         color = CompletionMutedInk, fontSize = 12.sp, lineHeight = 19.sp,
         modifier = Modifier.padding(top = 3.dp, bottom = 4.dp))
     Column(Modifier.fillMaxWidth().selectableGroup(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        (1..10).chunked(5).forEach { row ->
+        scale.ratings.chunked(if (scale == EffortRatingScale.ORIGINAL) 5 else 4).forEach { row ->
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 row.forEach { rating ->
                     OutlinedButton(
@@ -740,7 +750,11 @@ private fun EffortRatingChoices(selectedRating: Int?, enabled: Boolean, onSelect
                         ),
                         modifier = Modifier.weight(1f).heightIn(min = 48.dp)
                             .testTag(RUN_COMPLETE_EFFORT_RATING_TAG_PREFIX + rating)
-                            .semantics { selected = rating == selectedRating }
+                            .semantics {
+                                selected = rating == selectedRating
+                                contentDescription = "$rating out of 10" +
+                                    (scale.anchor(rating)?.let { ", $it" } ?: "")
+                            }
                     ) {
                         Text(rating.toString(), fontSize = 16.sp,
                             fontWeight = if (rating == selectedRating) FontWeight.Bold else FontWeight.Medium)
@@ -755,6 +769,7 @@ private fun EffortRatingChoices(selectedRating: Int?, enabled: Boolean, onSelect
 @Composable
 internal fun EffortRatingSheet(
     selectedRating: Int?,
+    scale: EffortRatingScale? = EffortRatingScale.FOSTER,
     enabled: Boolean = true,
     onDismiss: () -> Unit,
     onSelect: (Int?) -> Unit
@@ -770,7 +785,7 @@ internal fun EffortRatingSheet(
             verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("How hard was the whole run?", color = CompletionStrongInk,
                 fontSize = 22.sp, fontWeight = FontWeight.Medium)
-            EffortRatingChoices(selectedRating, enabled, onSelect = { onSelect(it) })
+            EffortRatingChoices(selectedRating, scale, enabled, onSelect = { onSelect(it) })
             if (selectedRating != null) {
                 TextButton(onClick = { onSelect(null) }, enabled = enabled,
                     modifier = Modifier.align(Alignment.CenterHorizontally).heightIn(min = 48.dp)) {

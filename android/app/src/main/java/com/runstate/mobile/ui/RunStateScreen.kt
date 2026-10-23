@@ -39,6 +39,7 @@ import com.runstate.mobile.data.local.ReflectionBranch
 import com.runstate.mobile.data.local.PostRunEffort
 import com.runstate.mobile.data.local.PreRunEnergy
 import com.runstate.mobile.data.local.RunIntention
+import com.runstate.mobile.data.local.EffortRatingScale
 import com.runstate.mobile.location.GpsSignalStatus
 import com.runstate.mobile.location.GpsMapEvidence
 import com.runstate.mobile.ui.theme.RunStateTheme
@@ -151,6 +152,7 @@ internal fun RunStateScreen(
     routeLabel: String? = null,
     onRunContextChanged: (RunIntention?, String?) -> Unit = { _, _ -> },
     selectedEffortRating: Int? = null,
+    effortRatingScale: EffortRatingScale? = EffortRatingScale.FOSTER,
     onSelectEffortRating: (Int?) -> Unit = {}
 ) {
     val state = model.state
@@ -207,6 +209,7 @@ internal fun RunStateScreen(
             noteSaving = noteSaving,
             noteError = noteError,
             selectedEffortRating = selectedEffortRating,
+            effortRatingScale = effortRatingScale,
             onSelectEffortRating = onSelectEffortRating
         )
         return

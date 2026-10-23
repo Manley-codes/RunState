@@ -318,7 +318,7 @@ class RunnerStateInsightTest {
             currentRun(4).copy(postRunEffortRating = 1, postRunEffortQuestionVersion = null))
         val comparison = requireNotNull(runnerEnergyFoundationFor(rows).easyComparison)
         assertEquals(listOf(2, 9), comparison.effortRatings)
-        assertEquals("Reported Effort: 2/10 on 1 run; 9/10 on 1 run. 2 of 4 runs answered.", comparison.effortDescription)
+        assertEquals("Reported Effort (Session effort · 0–10): 2/10 on 1 run; 9/10 on 1 run. 2 of 3 runs answered.", comparison.effortDescription)
         assertFalse(comparison.effortDescription.contains("improv", ignoreCase = true))
     }
 
@@ -327,6 +327,36 @@ class RunnerStateInsightTest {
         val cleared = currentRun(1).copy(postRunEffortRating = null, effort = PostRunEffort.SMOOTH)
         assertEquals("Not recorded", historyEffortLabel(cleared))
         assertEquals("Smooth", historyEffortLabel(run(2).copy(effort = PostRunEffort.SMOOTH)))
+    }
+
+    @Test
+    fun `effort comparisons keep original new and unknown scales separate including zero`() {
+        val current = currentRun(1).copy(postRunEffortRating = 0)
+        val old = currentRun(2).copy(postRunEffortQuestionVersion = 1)
+        val unknown = currentRun(3).copy(postRunEffortQuestionVersion = null)
+        val comparison = requireNotNull(easyRunComparisonFor(listOf(current, old, unknown, currentRun(4))))
+        assertEquals(listOf(current, currentRun(4)), comparison.runs)
+        assertEquals(listOf(0, 4), comparison.effortRatings)
+        assertEquals(listOf(old), requireNotNull(easyRunComparisonFor(listOf(old, current))).runs)
+        assertNull(easyRunComparisonFor(listOf(unknown, current)))
+        assertEquals("0 / 10 · Rest", historyEffortLabel(current))
+        assertEquals("4 / 10 · Moderate · earlier scale", historyEffortLabel(old))
+        assertEquals("4 / 10 · scale unknown", historyEffortLabel(unknown))
+    }
+
+    @Test
+    fun `intention feedback states reports without judging mismatch or prescribing pace`() {
+        val easy = currentRun(1).copy(postRunEffortRating = 7)
+        assertEquals("Planned: Keep it easy. Reported: 7/10 — Very hard.", intentionEffortDescription(easy))
+        assertEquals("Planned: Hard effort. Reported: 2/10 — Easy.", intentionEffortDescription(
+            easy.copy(runIntention = RunIntention.HARD_EFFORT, postRunEffortRating = 2)))
+        assertEquals("Planned: Steady. Reported: 6/10.", intentionEffortDescription(
+            easy.copy(runIntention = RunIntention.STEADY, postRunEffortRating = 6)))
+        assertEquals("Planned: Keep it easy. Reported: 7/10 — Hard (earlier scale).",
+            intentionEffortDescription(easy.copy(postRunEffortQuestionVersion = 1)))
+        assertNull(intentionEffortDescription(easy.copy(runIntention = null)))
+        assertNull(intentionEffortDescription(easy.copy(postRunEffortRating = null)))
+        assertNull(intentionEffortDescription(easy.copy(postRunEffortQuestionVersion = null)))
     }
 
     @Test
@@ -342,7 +372,7 @@ class RunnerStateInsightTest {
 
     private fun currentRun(number: Int): RunHistoryItem = run(number).copy(
         energyQuestionVersion = 2, postRunEnergyQuestionVersion = 2,
-        postRunEffortQuestionVersion = 1, postRunEffortRating = 4,
+        postRunEffortQuestionVersion = 2, postRunEffortRating = 4,
         runIntention = RunIntention.KEEP_EASY, routeLabel = "Park Loop",
         telemetryCoverage = TelemetryCoverage.COMPLETE,
         distanceMeters = 5_000.0, activeDurationMillis = 1_800_000L,

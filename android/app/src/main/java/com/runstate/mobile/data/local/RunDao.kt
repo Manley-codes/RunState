@@ -205,25 +205,37 @@ abstract class RunDao {
         effort: PostRunEffort?
     ): Int
 
-    /** Save a new 1–10 answer without translating or erasing the old categorical Effort. */
-    suspend fun recordEffortRating(runId: String, rating: Int?, now: Long): Boolean {
-        require(rating == null || rating in 1..10) { "Effort must be between 1 and 10, or unanswered." }
+    /** Edits retain the original numeric scale; neither old words nor unknown scales are converted. */
+    @Transaction
+    open suspend fun recordEffortRating(runId: String, rating: Int?, now: Long): Boolean {
+        require(rating == null || rating in 0..10) { "Effort must be between 0 and 10, or unanswered." }
+        val run = findById(runId)?.takeIf { it.state == StoredRunState.COMPLETED } ?: return false
+        val scale = effortScaleForEditing(run.postRunEffortQuestionVersion, run.postRunEffortRating,
+            run.firstPostRunEffortRating, run.postRunEffortRecordedAtEpochMillis,
+            run.postRunEffortUpdatedAtEpochMillis)
+        if (rating != null) {
+            if (scale == null) return false // Unknown wording cannot support a new numeric answer.
+            require(rating in scale.ratings) { "Effort must use this run's original scale." }
+        }
+        if (rating == null && run.postRunEffortRating == null) return true
         return updateEffortRatingIfCompleted(runId, StoredRunState.COMPLETED, rating, now,
-            RunEntity.CURRENT_EFFORT_QUESTION_VERSION) == 1
+            run.postRunEffortQuestionVersion ?: scale?.version) == 1
     }
 
     @Query("""
         UPDATE runs SET post_run_effort_rating = :rating,
-            first_post_run_effort_rating = COALESCE(first_post_run_effort_rating, :rating),
+            first_post_run_effort_rating = COALESCE(first_post_run_effort_rating, post_run_effort_rating, :rating),
             post_run_effort_recorded_at_epoch_millis = CASE
-                WHEN post_run_effort_recorded_at_epoch_millis IS NULL AND :rating IS NOT NULL THEN :now
+                WHEN post_run_effort_recorded_at_epoch_millis IS NULL AND :rating IS NOT NULL
+                    AND post_run_effort_rating IS NULL AND first_post_run_effort_rating IS NULL
+                    AND post_run_effort_updated_at_epoch_millis IS NULL THEN :now
                 ELSE post_run_effort_recorded_at_epoch_millis END,
             post_run_effort_updated_at_epoch_millis = :now,
             post_run_effort_question_version = :questionVersion
         WHERE run_id = :runId AND state = :completedState
     """)
     protected abstract suspend fun updateEffortRatingIfCompleted(
-        runId: String, completedState: StoredRunState, rating: Int?, now: Long, questionVersion: Int
+        runId: String, completedState: StoredRunState, rating: Int?, now: Long, questionVersion: Int?
     ): Int
 
     /**

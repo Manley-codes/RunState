@@ -135,7 +135,7 @@ class RunStateDatabaseTest {
         assertEquals(6, cleared.firstPostRunEffortRating)
         assertEquals(FINISHED_AT + 1_000, cleared.postRunEffortRecordedAtEpochMillis)
         assertEquals(FINISHED_AT + 3_000, cleared.postRunEffortUpdatedAtEpochMillis)
-        assertEquals(1, cleared.postRunEffortQuestionVersion)
+        assertEquals(2, cleared.postRunEffortQuestionVersion)
         assertTrue(database.runDao().recordEffortRating(runningRun.runId, 2, FINISHED_AT + 4_000))
         val restored = requireNotNull(database.runDao().findById(runningRun.runId))
         assertEquals(2, restored.postRunEffortRating)
@@ -163,6 +163,56 @@ class RunStateDatabaseTest {
         assertNull(completed.preRunEnergyRecordedAtEpochMillis)
         assertNull(completed.postRunEffortRating)
         assertNull(completed.postRunEnergyRecordedAtEpochMillis)
+    }
+
+    @Test
+    fun zeroEffortIsDurableAndRemainsFirstAnswerAfterClearAndReopen() = runBlocking {
+        val runs = database.runDao()
+        runs.insert(runningRun)
+        runs.pauseRun(runningRun.runId, FINISHED_AT)
+        runs.completeRun(runningRun.runId, FINISHED_AT, FINAL_METRICS)
+        assertTrue(runs.recordEffortRating(runningRun.runId, 0, FINISHED_AT + 1))
+        assertTrue(runs.recordEffortRating(runningRun.runId, null, FINISHED_AT + 2))
+        database.close()
+        database = openDatabase()
+        assertTrue(database.runDao().recordEffortRating(runningRun.runId, 10, FINISHED_AT + 3))
+        val saved = requireNotNull(database.runDao().findById(runningRun.runId))
+        assertEquals(0, saved.firstPostRunEffortRating)
+        assertEquals(10, saved.postRunEffortRating)
+        assertEquals(2, saved.postRunEffortQuestionVersion)
+        assertEquals(FINISHED_AT + 1, saved.postRunEffortRecordedAtEpochMillis)
+    }
+
+    @Test
+    fun originalAndUnknownNumericScalesSurviveEditsWithoutNewMeaningOrAnswerTime() = runBlocking {
+        val old = runningRun.copy(state = StoredRunState.COMPLETED,
+            finishEpochMillis = FINISHED_AT, lastCheckpointEpochMillis = FINISHED_AT,
+            postRunEffortRating = 5, postRunEffortQuestionVersion = 1)
+        val unknown = old.copy(runId = UUID.randomUUID().toString(), postRunEffortQuestionVersion = null)
+        val runs = database.runDao()
+        runs.insert(old)
+        runs.insert(unknown)
+        assertTrue(runs.recordEffortRating(old.runId, null, FINISHED_AT + 1))
+        assertTrue(runs.recordEffortRating(old.runId, 7, FINISHED_AT + 2))
+        assertThrows(IllegalArgumentException::class.java) {
+            runBlocking { runs.recordEffortRating(old.runId, 0, FINISHED_AT + 3) }
+        }
+        assertFalse(runs.recordEffortRating(unknown.runId, 7, FINISHED_AT + 1))
+        assertEquals(unknown, runs.findById(unknown.runId))
+        assertTrue(runs.recordEffortRating(unknown.runId, null, FINISHED_AT + 2))
+        database.close()
+        database = openDatabase()
+        val saved = requireNotNull(database.runDao().findById(old.runId))
+        assertEquals(1, saved.postRunEffortQuestionVersion)
+        assertEquals(5, saved.firstPostRunEffortRating)
+        assertEquals(7, saved.postRunEffortRating)
+        assertNull(saved.postRunEffortRecordedAtEpochMillis)
+        assertFalse(database.runDao().recordEffortRating(unknown.runId, 7, FINISHED_AT + 4))
+        val cleared = requireNotNull(database.runDao().findById(unknown.runId))
+        assertNull(cleared.postRunEffortQuestionVersion)
+        assertNull(cleared.postRunEffortRating)
+        assertNull(cleared.postRunEffortRecordedAtEpochMillis)
+        assertEquals(5, cleared.firstPostRunEffortRating)
     }
 
     @Test
