@@ -111,6 +111,61 @@ class RunStateDatabaseTest {
     }
 
     @Test
+    fun numericEffortPreservesLegacyAnswerAndOriginalTimingAcrossEditsClearAndReopen() = runBlocking {
+        val runs = database.runDao()
+        runs.insert(runningRun)
+        assertFalse(runs.recordEffortRating(runningRun.runId, 6, PAUSED_AT))
+        runs.pauseRun(runningRun.runId, PAUSED_AT)
+        assertFalse(runs.recordEffortRating(runningRun.runId, 6, PAUSED_AT))
+        runs.completeRun(runningRun.runId, FINISHED_AT, FINAL_METRICS)
+        runs.setPostRunEffort(runningRun.runId, PostRunEffort.HEAVY)
+        val original = requireNotNull(runs.findById(runningRun.runId))
+        assertThrows(IllegalArgumentException::class.java) {
+            runBlocking { runs.recordEffortRating(runningRun.runId, 11, FINISHED_AT + 1) }
+        }
+        assertEquals(original, runs.findById(runningRun.runId))
+        assertTrue(runs.recordEffortRating(runningRun.runId, 6, FINISHED_AT + 1_000))
+        assertTrue(runs.recordEffortRating(runningRun.runId, 4, FINISHED_AT + 2_000))
+        assertTrue(runs.recordEffortRating(runningRun.runId, null, FINISHED_AT + 3_000))
+        database.close()
+        database = openDatabase()
+        val cleared = requireNotNull(database.runDao().findById(runningRun.runId))
+        assertEquals(PostRunEffort.HEAVY, cleared.postRunEffort)
+        assertNull(cleared.postRunEffortRating)
+        assertEquals(6, cleared.firstPostRunEffortRating)
+        assertEquals(FINISHED_AT + 1_000, cleared.postRunEffortRecordedAtEpochMillis)
+        assertEquals(FINISHED_AT + 3_000, cleared.postRunEffortUpdatedAtEpochMillis)
+        assertEquals(1, cleared.postRunEffortQuestionVersion)
+        assertTrue(database.runDao().recordEffortRating(runningRun.runId, 2, FINISHED_AT + 4_000))
+        val restored = requireNotNull(database.runDao().findById(runningRun.runId))
+        assertEquals(2, restored.postRunEffortRating)
+        assertEquals(6, restored.firstPostRunEffortRating)
+        assertEquals(cleared.postRunEffortRecordedAtEpochMillis, restored.postRunEffortRecordedAtEpochMillis)
+        assertFalse(database.runDao().recordEffortRating(UUID.randomUUID().toString(), 4, FINISHED_AT))
+    }
+
+    @Test
+    fun intentionAndRouteAreDurableAcrossLifecycleWithoutInventingMissingEnergy() = runBlocking {
+        val initial = runningRun.copy(runIntention = RunIntention.KEEP_EASY, routeLabel = "Park loop",
+            energyQuestionVersion = RunEntity.CURRENT_ENERGY_QUESTION_VERSION)
+        database.runDao().insert(initial)
+        database.runDao().pauseRun(initial.runId, PAUSED_AT)
+        database.runDao().resumeRun(initial.runId, RESUMED_AT)
+        database.runDao().pauseRun(initial.runId, FINISHED_AT)
+        database.runDao().completeRun(initial.runId, FINISHED_AT, FINAL_METRICS)
+        database.close()
+        database = openDatabase()
+        val completed = requireNotNull(database.runDao().findById(initial.runId))
+        assertEquals(RunIntention.KEEP_EASY, completed.runIntention)
+        assertEquals("Park loop", completed.routeLabel)
+        assertEquals(2, completed.energyQuestionVersion)
+        assertNull(completed.preRunEnergy)
+        assertNull(completed.preRunEnergyRecordedAtEpochMillis)
+        assertNull(completed.postRunEffortRating)
+        assertNull(completed.postRunEnergyRecordedAtEpochMillis)
+    }
+
+    @Test
     fun savedPhysicalPairsSelectionAndArchiveUndoSurviveReopenWithoutMergingModels() = runBlocking {
         val first = ShoePairEntity(UUID.randomUUID().toString(), "Brooks", "Ghost", "Blue pair", OFFICIAL_START)
         val second = first.copy(shoePairId = UUID.randomUUID().toString(), nickname = "Race pair")

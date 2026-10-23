@@ -171,6 +171,23 @@ open class FakeRunDao : RunDao() {
         return 1
     }
 
+    override suspend fun updateEffortRatingIfCompleted(
+        runId: String, completedState: StoredRunState, rating: Int?, now: Long, questionVersion: Int
+    ): Int {
+        val index = inserted.indexOfFirst { it.runId == runId && it.state == completedState }
+        if (index < 0) return 0
+        val old = inserted[index]
+        inserted[index] = old.copy(
+            postRunEffortRating = rating,
+            firstPostRunEffortRating = old.firstPostRunEffortRating ?: rating,
+            postRunEffortRecordedAtEpochMillis = old.postRunEffortRecordedAtEpochMillis
+                ?: now.takeIf { rating != null },
+            postRunEffortUpdatedAtEpochMillis = now,
+            postRunEffortQuestionVersion = questionVersion
+        )
+        return 1
+    }
+
     /**
      * Mirrors the real discovery query: filter to the two supplied states, then order
      * by official start with the UUID breaking ties.

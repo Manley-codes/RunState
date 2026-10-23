@@ -51,6 +51,8 @@ import com.runstate.mobile.reflection.countdownCueText
 import com.runstate.mobile.data.local.ReflectionBranch
 import com.runstate.mobile.data.local.PreRunEnergy
 import com.runstate.mobile.data.local.PostRunEffort
+import com.runstate.mobile.data.local.RunEntity
+import com.runstate.mobile.data.local.RunIntention
 import com.runstate.mobile.data.local.RunTrackingMode
 import com.runstate.mobile.data.local.RunStateDatabase
 import com.runstate.mobile.data.local.ShoePairEntity
@@ -308,7 +310,8 @@ internal fun RunJourneyRoot(
     onRetrySplits: suspend (String) -> Unit = {},
     gpsPreviewSourceOverride: ForegroundGpsPreviewSource? = null,
     gpsLocationReady: (Context) -> Boolean = ::preciseGpsLocationReady,
-    startGpsRun: (Context, PreRunEnergy?, Boolean, Boolean, Boolean) -> Unit = RunTrackingService::startNew,
+    startGpsRun: (Context, PreRunEnergy?, Boolean, Boolean, Boolean,
+        RunIntention?, String?, Long?) -> Unit = RunTrackingService::startNew,
     countdownSpeakerFactory: ((Context) -> ReflectionSpeaker)? = null,
     spotifyConnectionLabel: String? = null,
     spotifyConnectEnabled: Boolean = false,
@@ -381,6 +384,11 @@ internal fun RunJourneyRoot(
     var energyError by remember { mutableStateOf<Pair<String, String>?>(null) }
     // This is still a draft choice until the official start writes it on the run row.
     var preRunEnergy by rememberSaveable { mutableStateOf<PreRunEnergy?>(null) }
+    var preRunEnergyRecordedAt by rememberSaveable { mutableStateOf<Long?>(null) }
+    var runIntention by rememberSaveable {
+        mutableStateOf<RunIntention?>(null)
+    }
+    var routeLabel by rememberSaveable { mutableStateOf<String?>(null) }
     // GPS is the normal path. An explicit Sample demo is a temporary draft, never a saved default.
     val gpsModeSaver = remember(runSettingsSessionId) {
         Saver<Boolean, Any>(
@@ -811,6 +819,21 @@ internal fun RunJourneyRoot(
         }
     }
 
+    fun saveEffortRating(runId: String, rating: Int?) {
+        if (effortSavingRunId != null) return
+        effortSavingRunId = runId
+        effortError = null
+        scope.launch {
+            try {
+                if (!database.runDao().recordEffortRating(runId, rating, System.currentTimeMillis())) {
+                    effortError = runId to "Effort couldn't save. Try again."
+                }
+            } catch (cancelled: CancellationException) { throw cancelled }
+            catch (_: Exception) { effortError = runId to "Effort couldn't save. Try again." }
+            finally { effortSavingRunId = null }
+        }
+    }
+
     fun saveLocalNote(runId: String, note: String?) {
         if (noteSavingRunId != null) return
         noteSavingRunId = runId
@@ -835,7 +858,11 @@ internal fun RunJourneyRoot(
         scope.launch {
             try {
                 if (owner != null) owner.saveEnergy(runId, branch)
-                else database.reflectionDao().recordEnergy(runId, branch, System.currentTimeMillis())
+                else if (branch == ReflectionBranch.NO_SELECTION) {
+                    database.reflectionDao().recordNotSure(runId, System.currentTimeMillis(),
+                        questionVersion = RunEntity.CURRENT_ENERGY_QUESTION_VERSION)
+                } else database.reflectionDao().recordEnergy(runId, branch, System.currentTimeMillis(),
+                    questionVersion = RunEntity.CURRENT_ENERGY_QUESTION_VERSION)
             } catch (cancelled: CancellationException) { throw cancelled }
             catch (_: Exception) { energyError = runId to "Energy couldn't save. Try again." }
             finally { energySavingRunId = null }
@@ -1071,7 +1098,8 @@ internal fun RunJourneyRoot(
                         gpsStartDispatched = true
                         gpsStartRequested = false
                         startGpsRun(context, preRunEnergy, observeMusicForRun,
-                            shareMusicForRun, shareMusicForRun && runPreferences?.findSongSnippets == true)
+                            shareMusicForRun, shareMusicForRun && runPreferences?.findSongSnippets == true,
+                            runIntention, routeLabel, preRunEnergyRecordedAt)
                     } catch (_: RuntimeException) {
                         gpsStartDispatched = false
                         gpsPreviewRestart++ // Retry even if dispatch failed within one frame.
@@ -1089,7 +1117,10 @@ internal fun RunJourneyRoot(
                             preRunEnergy,
                             musicObservationRequested = observeMusicForRun,
                             musicReflectionSharingAllowed = shareMusicForRun,
-                            songSnippetLookupAllowed = shareMusicForRun && runPreferences?.findSongSnippets == true
+                            songSnippetLookupAllowed = shareMusicForRun && runPreferences?.findSongSnippets == true,
+                            runIntention = runIntention,
+                            routeLabel = routeLabel,
+                            preRunEnergyRecordedAtEpochMillis = preRunEnergyRecordedAt
                         )
                     }
                 }
@@ -1295,6 +1326,7 @@ internal fun RunJourneyRoot(
             onBack = { historyVisible = false },
             onRetryReflection = ::retryReflection,
             onSelectEffort = ::saveEffort,
+            onSelectEffortRating = ::saveEffortRating,
             effortSavingRunId = effortSavingRunId,
             effortError = effortError,
             onSelectEnergy = ::saveHistoryEnergy,
@@ -1331,6 +1363,9 @@ internal fun RunJourneyRoot(
                 }
                 recapRunId = null
                 preRunEnergy = null
+                preRunEnergyRecordedAt = null
+                runIntention = null
+                routeLabel = null
                 gpsMessage = null
                 gpsSelected = true
                 refresh()
@@ -1449,7 +1484,8 @@ internal fun RunJourneyRoot(
                             preRunEnergy,
                             observeMusicForRun,
                             shareMusicForRun,
-                            shareMusicForRun && runPreferences?.findSongSnippets == true
+                            shareMusicForRun && runPreferences?.findSongSnippets == true,
+                            runIntention, routeLabel, preRunEnergyRecordedAt
                         )
                     } catch (_: RuntimeException) {
                         gpsMessage = "Android could not restart GPS. Cancel and try again."
@@ -1464,7 +1500,10 @@ internal fun RunJourneyRoot(
                             preRunEnergy,
                             musicObservationRequested = observeMusicForRun,
                             musicReflectionSharingAllowed = shareMusicForRun,
-                            songSnippetLookupAllowed = shareMusicForRun && runPreferences?.findSongSnippets == true
+                            songSnippetLookupAllowed = shareMusicForRun && runPreferences?.findSongSnippets == true,
+                            runIntention = runIntention,
+                            routeLabel = routeLabel,
+                            preRunEnergyRecordedAtEpochMillis = preRunEnergyRecordedAt
                         )
                     }
                 }
@@ -1485,9 +1524,12 @@ internal fun RunJourneyRoot(
             stopCompletionAudio?.invoke()
             runGuarded {
 
-                // Only Energy is a per-run draft; music choices are saved preferences.
+                // Check-ins and intention belong to one run; music choices are saved preferences.
                 coordinator.prepareAnotherRun()
                 preRunEnergy = null
+                preRunEnergyRecordedAt = null
+                runIntention = null
+                routeLabel = null
                 gpsMessage = null
                 gpsSelected = true
                 refresh()
@@ -1499,7 +1541,16 @@ internal fun RunJourneyRoot(
         },
         selectedEnergy = selectedEnergy,
         selectedPreRunEnergy = preRunEnergy,
-        onSelectPreRunEnergy = { preRunEnergy = it },
+        onSelectPreRunEnergy = {
+            preRunEnergy = it
+            preRunEnergyRecordedAt = if (it == null) null else System.currentTimeMillis()
+        },
+        selectedRunIntention = runIntention,
+        routeLabel = routeLabel,
+        onRunContextChanged = { intention, label ->
+            runIntention = intention
+            routeLabel = label?.trim()?.takeIf { it.isNotEmpty() }
+        },
         gpsSelected = gpsSelected,
         gpsMessage = gpsMessage,
         musicSelected = musicSelected,
@@ -1561,6 +1612,8 @@ internal fun RunJourneyRoot(
         },
         selectedEffort = completedRun?.postRunEffort,
         onSelectEffort = { effort -> completedRunId?.let { saveEffort(it, effort) } },
+        selectedEffortRating = completedRun?.postRunEffortRating,
+        onSelectEffortRating = { rating -> completedRunId?.let { saveEffortRating(it, rating) } },
         effortEnabled = completedRunId != null,
         effortSaving = effortSavingRunId == completedRunId,
         effortError = effortError?.takeIf { it.first == completedRunId }?.second,
@@ -1817,6 +1870,9 @@ internal fun RunJourneyRoot(
                     awaitDurable(onSuccess = {
                         shortRunDecisionId = null
                         preRunEnergy = null
+                        preRunEnergyRecordedAt = null
+                        runIntention = null
+                        routeLabel = null
                         gpsMessage = null
                         gpsSelected = true
                     }) { coordinator.requestDiscard(decisionRunId) }

@@ -38,6 +38,7 @@ import androidx.lifecycle.repeatOnLifecycle
 import com.runstate.mobile.data.local.ReflectionBranch
 import com.runstate.mobile.data.local.PostRunEffort
 import com.runstate.mobile.data.local.PreRunEnergy
+import com.runstate.mobile.data.local.RunIntention
 import com.runstate.mobile.location.GpsSignalStatus
 import com.runstate.mobile.location.GpsMapEvidence
 import com.runstate.mobile.ui.theme.RunStateTheme
@@ -145,7 +146,12 @@ internal fun RunStateScreen(
     noteSaving: Boolean = false,
     noteError: String? = null,
     selectedShoe: ShoePairDisplay? = null,
-    onOpenShoes: () -> Unit = {}
+    onOpenShoes: () -> Unit = {},
+    selectedRunIntention: RunIntention? = null,
+    routeLabel: String? = null,
+    onRunContextChanged: (RunIntention?, String?) -> Unit = { _, _ -> },
+    selectedEffortRating: Int? = null,
+    onSelectEffortRating: (Int?) -> Unit = {}
 ) {
     val state = model.state
 
@@ -199,7 +205,9 @@ internal fun RunStateScreen(
             localNote = localNote,
             onSaveLocalNote = onSaveLocalNote,
             noteSaving = noteSaving,
-            noteError = noteError
+            noteError = noteError,
+            selectedEffortRating = selectedEffortRating,
+            onSelectEffortRating = onSelectEffortRating
         )
         return
     }
@@ -295,6 +303,9 @@ internal fun RunStateScreen(
             onOpenSpotify = onOpenSpotify,
             selectedShoe = selectedShoe,
             onOpenShoes = onOpenShoes,
+            selectedRunIntention = selectedRunIntention,
+            routeLabel = routeLabel,
+            onRunContextChanged = onRunContextChanged,
             onOpenRunSettings = onOpenRunSettings,
             gpsReady = gpsReady,
             gpsStatusText = gpsStatusText,

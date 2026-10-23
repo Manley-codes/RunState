@@ -3,6 +3,9 @@ package com.runstate.mobile.ui
 import com.runstate.mobile.data.local.MetricSource
 import com.runstate.mobile.data.local.PreRunEnergy
 import com.runstate.mobile.data.local.ReflectionBranch
+import com.runstate.mobile.data.local.RunIntention
+import com.runstate.mobile.data.local.TelemetryCoverage
+import com.runstate.mobile.data.local.PostRunEffort
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -182,6 +185,170 @@ class RunnerStateInsightTest {
         assertEquals("You finished Spent in 3 of 3 runs you logged with High starting Energy.",
             insight.description)
     }
+
+    @Test
+    fun `empty current foundation explains collecting without inventing a pattern`() {
+        val empty = runnerEnergyFoundationFor(emptyList())
+        assertTrue(empty.runs.isEmpty())
+        assertNull(empty.categoryInsight)
+        assertNull(empty.easyComparison)
+        assertEquals(0, empty.pairedRuns.size)
+        assertTrue(empty.coverageDescription.startsWith("No runs with the current questions"))
+        val legacy = runnerEnergyFoundationFor((1..3).map { run(it) })
+        assertEquals(3, legacy.earlierQuestionRunCount)
+        assertTrue(legacy.runs.isEmpty())
+        assertEquals(3, requireNotNull(legacy.earlierInsight).matchingRunCount)
+    }
+
+    @Test
+    fun `a first current run is inspectable without waiting for three answers`() {
+        val saved = currentRun(1)
+        val foundation = runnerEnergyFoundationFor(listOf(saved))
+        assertEquals(listOf(saved), foundation.runs)
+        assertEquals(1, foundation.pairedRuns.size)
+        assertEquals(1, foundation.numericEffortCount)
+        assertNull(foundation.categoryInsight)
+        assertFalse(requireNotNull(foundation.easyComparison).hasEnoughRuns)
+    }
+
+    @Test
+    fun `legacy future and mismatched question versions never support current counts`() {
+        val current = currentRun(1)
+        val mismatched = currentRun(2).copy(postRunEnergyQuestionVersion = null)
+        val editedLegacy = run(3).copy(postRunEnergyQuestionVersion = 2)
+        val future = currentRun(4).copy(energyQuestionVersion = 3, postRunEnergyQuestionVersion = 3)
+        val foundation = runnerEnergyFoundationFor(listOf(current, mismatched, editedLegacy, future, run(5)))
+        assertEquals(5, foundation.recentGpsRunCount)
+        assertEquals(2, foundation.runs.size)
+        assertEquals(listOf(current), foundation.pairedRuns)
+        assertNull(foundation.categoryInsight)
+        assertNull(foundation.earlierInsight)
+    }
+
+    @Test
+    fun `unknown and unanswered current reports remain in coverage and source rows`() {
+        val rows = listOf(currentRun(1), currentRun(2).copy(preRunEnergy = null),
+            currentRun(3).copy(energy = ReflectionBranch.NO_SELECTION),
+            currentRun(4).copy(energy = null, postRunEffortRating = null))
+        val foundation = runnerEnergyFoundationFor(rows)
+        assertEquals(4, foundation.runs.size)
+        assertEquals(1, foundation.pairedRuns.size)
+        assertEquals(3, foundation.numericEffortCount)
+        assertNull(foundation.categoryInsight)
+        assertTrue(foundation.coverageDescription.startsWith("1 of 4"))
+    }
+
+    @Test
+    fun `version separation occurs after recent run cap and cannot resurrect older evidence`() {
+        val recentLegacy = (1..18).map { run(it) }
+        val foundation = runnerEnergyFoundationFor(recentLegacy + (19..21).map { currentRun(it) })
+        assertEquals(20, foundation.recentGpsRunCount)
+        assertEquals(2, foundation.runs.size)
+        assertNull(foundation.categoryInsight)
+    }
+
+    @Test
+    fun `samples duplicate identities and unfinalized feedback cannot enter new evidence`() {
+        val genuine = currentRun(1)
+        val duplicate = genuine.copy(runId = genuine.runId.uppercase(Locale.US))
+        val rows = listOf(genuine, duplicate, currentRun(2).copy(isTestData = true),
+            currentRun(3).copy(metricSource = MetricSource.FIXTURE),
+            currentRun(4).copy(insightEligible = false), currentRun(5))
+        val foundation = runnerEnergyFoundationFor(rows)
+        assertEquals(listOf(currentRun(5)), foundation.runs)
+        assertEquals(1, requireNotNull(foundation.easyComparison).runs.size)
+    }
+
+    @Test
+    fun `new counts recompute from corrected answers without altering stored text`() {
+        val rows = (1..3).map { currentRun(it) }
+        val original = runnerEnergyFoundationFor(rows)
+        assertEquals(3, requireNotNull(original.categoryInsight).feelingGoodRuns)
+        val corrected = rows.mapIndexed { index, row -> if (index == 0) row.copy(energy = ReflectionBranch.SPENT) else row }
+        val revised = runnerEnergyFoundationFor(corrected)
+        assertEquals(2, requireNotNull(revised.categoryInsight).feelingGoodRuns)
+        assertEquals(1, revised.categoryInsight.spentRuns)
+        assertEquals(rows.map { it.reflectionText }, revised.runs.map { it.reflectionText })
+    }
+
+    @Test
+    fun `easy grouping uses intention complete metrics and normalized route rather than best outcome`() {
+        val anchor = currentRun(1).copy(routeLabel = "  Park  Loop ")
+        val matching = currentRun(2).copy(routeLabel = "PARK LOOP", energy = ReflectionBranch.SPENT)
+        val missingAnswers = currentRun(3).copy(preRunEnergy = null, energy = null, postRunEffortRating = null)
+        val excluded = listOf(currentRun(4).copy(runIntention = RunIntention.HARD_EFFORT),
+            currentRun(5).copy(runIntention = null), currentRun(6).copy(routeLabel = "Other loop"),
+            currentRun(7).copy(telemetryCoverage = TelemetryCoverage.PARTIAL),
+            currentRun(8).copy(routeLabel = null), currentRun(9).copy(activeDurationMillis = null))
+        val comparison = requireNotNull(runnerEnergyFoundationFor(listOf(anchor, matching, missingAnswers) + excluded).easyComparison)
+        assertEquals(listOf(anchor, matching, missingAnswers), comparison.runs)
+        assertTrue(comparison.hasEnoughRuns)
+        assertEquals(2, comparison.pairedCount)
+        assertEquals(2, comparison.effortRatings.size)
+    }
+
+    @Test
+    fun `both distance and active time must meet inclusive twenty percent rule`() {
+        val rows = listOf(currentRun(1),
+            currentRun(2).copy(distanceMeters = 6_000.0, activeDurationMillis = 2_160_000L),
+            currentRun(3).copy(distanceMeters = 4_000.0, activeDurationMillis = 1_440_000L),
+            currentRun(4).copy(distanceMeters = 6_001.0),
+            currentRun(5).copy(activeDurationMillis = 2_160_001L),
+            currentRun(6).copy(distanceMeters = Double.NaN),
+            currentRun(7).copy(distanceMeters = 0.0),
+            currentRun(8).copy(activeDurationMillis = 0L))
+        val comparison = requireNotNull(runnerEnergyFoundationFor(rows).easyComparison)
+        assertEquals(rows.take(3), comparison.runs)
+    }
+
+    @Test
+    fun `latest eligible anchor never changes route to find a larger or happier group`() {
+        val newest = currentRun(1).copy(routeLabel = "New loop", energy = ReflectionBranch.SPENT)
+        val comparison = requireNotNull(runnerEnergyFoundationFor(listOf(newest) + (2..8).map { currentRun(it) }).easyComparison)
+        assertEquals(newest.runId, comparison.anchor.runId)
+        assertEquals(listOf(newest), comparison.runs)
+        assertFalse(comparison.hasEnoughRuns)
+    }
+
+    @Test
+    fun `effort distribution keeps the high reports and ignores legacy conversions`() {
+        val rows = listOf(currentRun(1).copy(postRunEffortRating = 2),
+            currentRun(2).copy(postRunEffortRating = 9),
+            currentRun(3).copy(postRunEffortRating = null, effort = PostRunEffort.SMOOTH),
+            currentRun(4).copy(postRunEffortRating = 1, postRunEffortQuestionVersion = null))
+        val comparison = requireNotNull(runnerEnergyFoundationFor(rows).easyComparison)
+        assertEquals(listOf(2, 9), comparison.effortRatings)
+        assertEquals("Reported Effort: 2/10 on 1 run; 9/10 on 1 run. 2 of 4 runs answered.", comparison.effortDescription)
+        assertFalse(comparison.effortDescription.contains("improv", ignoreCase = true))
+    }
+
+    @Test
+    fun `cleared numeric effort does not resurface the old categorical answer`() {
+        val cleared = currentRun(1).copy(postRunEffortRating = null, effort = PostRunEffort.SMOOTH)
+        assertEquals("Not recorded", historyEffortLabel(cleared))
+        assertEquals("Smooth", historyEffortLabel(run(2).copy(effort = PostRunEffort.SMOOTH)))
+    }
+
+    @Test
+    fun `provenance distinguishes immediate edited and unknown original answer times`() {
+        val row = currentRun(1).copy(finishEpochMillis = 10_000L, postRunEnergyRecordedAtEpochMillis = 20_000L,
+            postRunEnergyUpdatedAtEpochMillis = 20_000L)
+        assertEquals("Answered within a minute of finishing", energyAnswerTimingDescription(row))
+        assertEquals("Answered within a minute of finishing · edited later",
+            energyAnswerTimingDescription(row.copy(postRunEnergyUpdatedAtEpochMillis = 100_000L)))
+        assertEquals("Original answer time unknown · edited later", energyAnswerTimingDescription(
+            row.copy(postRunEnergyRecordedAtEpochMillis = null, postRunEnergyUpdatedAtEpochMillis = 100_000L)))
+    }
+
+    private fun currentRun(number: Int): RunHistoryItem = run(number).copy(
+        energyQuestionVersion = 2, postRunEnergyQuestionVersion = 2,
+        postRunEffortQuestionVersion = 1, postRunEffortRating = 4,
+        runIntention = RunIntention.KEEP_EASY, routeLabel = "Park Loop",
+        telemetryCoverage = TelemetryCoverage.COMPLETE,
+        distanceMeters = 5_000.0, activeDurationMillis = 1_800_000L,
+        officialStartEpochMillis = 1_700_000_000_000L - number * 86_400_000L,
+        startTimezoneId = "America/Chicago"
+    )
 
     private fun run(
         number: Int,

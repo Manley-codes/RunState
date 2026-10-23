@@ -402,3 +402,20 @@ val MIGRATION_18_19 = object : Migration(18, 19) {
         connection.execSQL("CREATE INDEX IF NOT EXISTS `index_runs_shoe_pair_id` ON `runs` (`shoe_pair_id`)")
     }
 }
+
+/** Every new answer/provenance field is unknown on existing runs; no old answer is relabeled. */
+val MIGRATION_19_20 = object : Migration(19, 20) {
+    override fun migrate(connection: SQLiteConnection) {
+        listOf("run_intention", "route_label", "first_post_run_energy").forEach { column ->
+            connection.execSQL("ALTER TABLE `runs` ADD COLUMN `$column` TEXT")
+        }
+        listOf("pre_run_energy_recorded_at_epoch_millis", "energy_question_version",
+            "post_run_effort_rating", "post_run_effort_recorded_at_epoch_millis",
+            "post_run_effort_updated_at_epoch_millis", "post_run_effort_question_version",
+            "first_post_run_effort_rating", "post_run_energy_recorded_at_epoch_millis",
+            "post_run_energy_updated_at_epoch_millis", "post_run_energy_question_version",
+            "first_post_run_energy_question_version").forEach { column ->
+            connection.execSQL("ALTER TABLE `runs` ADD COLUMN `$column` INTEGER")
+        }
+    }
+}

@@ -88,6 +88,7 @@ import com.runstate.mobile.data.local.TelemetryCoverage
 import com.runstate.mobile.data.local.PreRunEnergy
 import com.runstate.mobile.data.local.MetricSource
 import com.runstate.mobile.data.local.RunSplitStatus
+import com.runstate.mobile.data.local.RunIntention
 import com.runstate.mobile.R
 import com.runstate.mobile.RunStateApplication
 import com.runstate.mobile.reflection.ReflectionSpeechGateway
@@ -1247,7 +1248,26 @@ internal data class RunHistoryItem(
     val insightEligible: Boolean = true,
     val splitStatus: RunSplitStatus? = null,
     val postRunNote: String? = null,
-    val shoeLabel: String? = null
+    val shoeLabel: String? = null,
+    val officialStartEpochMillis: Long? = null,
+    val finishEpochMillis: Long? = null,
+    val startTimezoneId: String? = null,
+    val activeDurationMillis: Long? = null,
+    val distanceMeters: Double? = null,
+    val runIntention: RunIntention? = null,
+    val routeLabel: String? = null,
+    val energyQuestionVersion: Int? = null,
+    val preRunEnergyRecordedAtEpochMillis: Long? = null,
+    val postRunEffortRating: Int? = null,
+    val postRunEffortQuestionVersion: Int? = null,
+    val postRunEffortRecordedAtEpochMillis: Long? = null,
+    val postRunEffortUpdatedAtEpochMillis: Long? = null,
+    val firstPostRunEffortRating: Int? = null,
+    val postRunEnergyRecordedAtEpochMillis: Long? = null,
+    val postRunEnergyUpdatedAtEpochMillis: Long? = null,
+    val postRunEnergyQuestionVersion: Int? = null,
+    val firstPostRunEnergy: ReflectionBranch? = null,
+    val firstPostRunEnergyQuestionVersion: Int? = null
 )
 
 internal sealed interface HistoryRouteDisplay {
@@ -1282,7 +1302,8 @@ internal fun RunHistoryScreen(
     routeLoader: (suspend (String) -> GpsRoutePreviewData)? = null,
     speechLifecycle: Lifecycle = LocalLifecycleOwner.current.lifecycle,
     splitLoader: (suspend (String) -> HistorySplitDisplay)? = null,
-    onRetrySplits: suspend (String) -> Unit = {}
+    onRetrySplits: suspend (String) -> Unit = {},
+    onSelectEffortRating: (String, Int?) -> Unit = { _, _ -> }
 ) {
     val listState = rememberLazyListState()
     // A newly saved run is inserted above the old first row. LazyColumn's stable row keys
@@ -1301,6 +1322,7 @@ internal fun RunHistoryScreen(
     var expandedRunId by rememberSaveable { mutableStateOf<String?>(null) }
     var editingEffortRunId by rememberSaveable { mutableStateOf<String?>(null) }
     var editingEnergyRunId by rememberSaveable { mutableStateOf<String?>(null) }
+    var energyEvidenceOpen by rememberSaveable { mutableStateOf(false) }
     var filter by rememberSaveable { mutableStateOf(HistoryFilter.ALL) }
     var speaker by remember { mutableStateOf<ReflectionSpeaker?>(null) }
     var route by remember { mutableStateOf<Pair<String, HistoryRouteDisplay>?>(null) }
@@ -1400,6 +1422,9 @@ internal fun RunHistoryScreen(
         ?: visibleItems.firstOrNull()
     val stateInsight = remember(items, isLoading, error) {
         if (isLoading || error != null) null else runnerStateInsightFor(items)
+    }
+    val energyFoundation = remember(items, isLoading, error) {
+        if (isLoading || error != null) null else runnerEnergyFoundationFor(items)
     }
 
     BoxWithConstraints(
@@ -1529,7 +1554,11 @@ internal fun RunHistoryScreen(
                         }
                     }
             ) {
-                if (filter != HistoryFilter.SAMPLES && stateInsight != null) {
+                if (filter != HistoryFilter.SAMPLES && energyFoundation != null) {
+                    item(key = "runner-state-insight") {
+                        RunnerEnergyFoundationPanel(energyFoundation, onInspect = { energyEvidenceOpen = true })
+                    }
+                } else if (filter != HistoryFilter.SAMPLES && stateInsight != null) {
                     item(key = "runner-state-insight") { RunnerStateInsightPanel(stateInsight) }
                 }
                 if (isLoading) {
@@ -1612,7 +1641,17 @@ internal fun RunHistoryScreen(
             }
         }
         val editingItem = items.firstOrNull { it.runId == editingEffortRunId }
-        if (editingItem != null) {
+        if (editingItem != null && (editingItem.energyQuestionVersion == 2 || editingItem.postRunEffortQuestionVersion == 1)) {
+            EffortRatingSheet(
+                selectedRating = editingItem.postRunEffortRating,
+                enabled = effortSavingRunId != editingItem.runId,
+                onDismiss = { editingEffortRunId = null },
+                onSelect = { rating ->
+                    editingEffortRunId = null
+                    onSelectEffortRating(editingItem.runId, rating)
+                }
+            )
+        } else if (editingItem != null) {
             EffortChoiceSheet(
                 selectedEffort = editingItem.effort,
                 enabled = effortSavingRunId != editingItem.runId,
@@ -1623,10 +1662,14 @@ internal fun RunHistoryScreen(
                 }
             )
         }
+        if (energyEvidenceOpen && energyFoundation != null && filter != HistoryFilter.SAMPLES) {
+            RunnerEnergyEvidenceSheet(energyFoundation, onDismiss = { energyEvidenceOpen = false })
+        }
         val editingEnergyItem = items.firstOrNull { it.runId == editingEnergyRunId }
         if (editingEnergyItem?.reflectionStatus != null) {
             HistoryEnergyChoiceSheet(
                 selectedEnergy = editingEnergyItem.energy,
+                clarifiedQuestion = true,
                 enabled = energySavingRunId != editingEnergyItem.runId,
                 onDismiss = { editingEnergyRunId = null },
                 onSelect = { energy ->
@@ -1971,7 +2014,12 @@ private fun HistoryRow(
                         .testTag(RUN_HISTORY_EFFORT_TAG_PREFIX + item.runId)
                 ) {
                     Text(
-                        text = item.effort?.let { "EFFORT · ${it.displayLabel().uppercase()}" } ?: "EFFORT +",
+                        text = when {
+                            item.postRunEffortQuestionVersion == 1 -> item.postRunEffortRating
+                                ?.let { "EFFORT · $it / 10" } ?: "EFFORT +"
+                            item.effort != null -> "EFFORT · ${item.effort.displayLabel().uppercase()}"
+                            else -> "EFFORT +"
+                        },
                         fontSize = 11.sp,
                         fontWeight = FontWeight.SemiBold,
                         letterSpacing = 1.1.sp
@@ -2097,7 +2145,8 @@ private fun HistoryEnergyChoiceSheet(
     selectedEnergy: ReflectionBranch?,
     enabled: Boolean,
     onDismiss: () -> Unit,
-    onSelect: (ReflectionBranch) -> Unit
+    onSelect: (ReflectionBranch) -> Unit,
+    clarifiedQuestion: Boolean = false
 ) {
     val choices = listOf(
         ReflectionBranch.SPENT to "Spent",
@@ -2115,7 +2164,7 @@ private fun HistoryEnergyChoiceSheet(
             verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             Text(
-                text = "How did you feel after this run?",
+                text = if (clarifiedQuestion) "Physical energy after this run" else "How did you feel after this run?",
                 color = CompletionStrongInk,
                 fontSize = 22.sp,
                 fontWeight = FontWeight.Medium,
@@ -2134,9 +2183,20 @@ private fun HistoryEnergyChoiceSheet(
                         .semantics { selected = branch == selectedEnergy }
                 ) {
                     Text(
-                        text = label,
+                        text = if (!clarifiedQuestion) label else label + " · " + when (branch) {
+                            ReflectionBranch.SPENT -> "Low energy"
+                            ReflectionBranch.FEELING_GOOD -> "Steady energy"
+                            ReflectionBranch.POWERED_UP -> "High energy"
+                            ReflectionBranch.NO_SELECTION -> "Not sure"
+                        },
                         fontWeight = if (branch == selectedEnergy) FontWeight.Bold else FontWeight.Normal
                     )
+                }
+            }
+            if (clarifiedQuestion) {
+                TextButton(onClick = { onSelect(ReflectionBranch.NO_SELECTION) }, enabled = enabled,
+                    modifier = Modifier.heightIn(min = 48.dp).testTag(RUN_HISTORY_ENERGY_CHOICE_TAG_PREFIX + "NO_SELECTION")) {
+                    Text("Not sure", color = CompletionMutedInk)
                 }
             }
         }

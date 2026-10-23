@@ -20,6 +20,27 @@ import kotlin.math.min
 
 class RunSplitCalculatorTest {
     @Test
+    fun `feedback saved before split derivation cannot change or invalidate GPS splits`() {
+        val original = fixture(distance = 2_500.0, duration = 1_001_000L)
+        val answerTime = original.run.finishEpochMillis!! + 5_000L
+        val answered = original.copy(run = original.run.copy(
+            postRunNote = "A useful easy outing",
+            postRunEffortRating = 3,
+            firstPostRunEffortRating = 3,
+            postRunEffortRecordedAtEpochMillis = answerTime,
+            postRunEffortUpdatedAtEpochMillis = answerTime,
+            postRunEffortQuestionVersion = 1,
+            postRunEnergyRecordedAtEpochMillis = answerTime,
+            postRunEnergyUpdatedAtEpochMillis = answerTime,
+            postRunEnergyQuestionVersion = 2,
+            firstPostRunEnergy = com.runstate.mobile.data.local.ReflectionBranch.FEELING_GOOD,
+            firstPostRunEnergyQuestionVersion = 2
+        ))
+        assertNotNull(original.calculate())
+        assertEquals(original.calculate(), answered.calculate())
+    }
+
+    @Test
     fun `kilometer boundaries are interpolated inside accepted segments and retain final partial`() {
         val fixture = fixture(distance = 2_500.0, duration = 1_001_000L)
         val splits = checkNotNull(fixture.calculate())

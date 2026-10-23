@@ -46,20 +46,24 @@ abstract class ReflectionDao {
         runId: String,
         branch: ReflectionBranch,
         now: Long,
-        selectionHeld: Boolean = false
+        selectionHeld: Boolean = false,
+        questionVersion: Int? = null
     ): RunReflectionEntity {
         require(branch != ReflectionBranch.NO_SELECTION) { "Energy must name an Energy branch." }
-        return recordExplicitAnswer(runId, branch, now, selectionHeld)
+        return recordExplicitAnswer(runId, branch, now, selectionHeld, questionVersion)
     }
 
     /** A deliberate unknown is distinct from an automatic timeout, without inventing Energy. */
     @Transaction
-    open suspend fun recordNotSure(runId: String, now: Long, selectionHeld: Boolean = false): RunReflectionEntity =
-        recordExplicitAnswer(runId, ReflectionBranch.NO_SELECTION, now, selectionHeld)
+    open suspend fun recordNotSure(
+        runId: String, now: Long, selectionHeld: Boolean = false, questionVersion: Int? = null
+    ): RunReflectionEntity =
+        recordExplicitAnswer(runId, ReflectionBranch.NO_SELECTION, now, selectionHeld, questionVersion)
 
     private suspend fun recordExplicitAnswer(
-        runId: String, branch: ReflectionBranch, now: Long, selectionHeld: Boolean
+        runId: String, branch: ReflectionBranch, now: Long, selectionHeld: Boolean, questionVersion: Int?
     ): RunReflectionEntity {
+        require(questionVersion == null || questionVersion > 0)
         val stored = required(runId)
         val selected = stored.selectedBranch ?: when {
             // Save Activity is already durable even if its coordinator callback has not run.
@@ -71,9 +75,31 @@ abstract class ReflectionDao {
             else -> ReflectionBranch.NO_SELECTION
         }
         val updated = stored.copy(postRunEnergy = branch, selectedBranch = selected)
+        check(recordEnergyProvenance(runId, StoredRunState.COMPLETED, stored.postRunEnergy,
+            branch, now, questionVersion) == 1) { "Energy requires a completed saved run." }
         update(updated)
         return updated
     }
+
+    /** Old original answers retain unknown wording/time instead of becoming version-2 evidence. */
+    @Query("""
+        UPDATE runs SET
+            first_post_run_energy = CASE WHEN first_post_run_energy IS NULL
+                THEN COALESCE(:previousAnswer, :answer) ELSE first_post_run_energy END,
+            first_post_run_energy_question_version = CASE WHEN first_post_run_energy IS NULL
+                THEN CASE WHEN :previousAnswer IS NULL THEN :questionVersion ELSE NULL END
+                ELSE first_post_run_energy_question_version END,
+            post_run_energy_recorded_at_epoch_millis = CASE
+                WHEN first_post_run_energy IS NULL AND :previousAnswer IS NULL THEN :now
+                ELSE post_run_energy_recorded_at_epoch_millis END,
+            post_run_energy_updated_at_epoch_millis = :now,
+            post_run_energy_question_version = :questionVersion
+        WHERE run_id = :runId AND state = :completedState
+    """)
+    protected abstract suspend fun recordEnergyProvenance(
+        runId: String, completedState: StoredRunState, previousAnswer: ReflectionBranch?,
+        answer: ReflectionBranch, now: Long, questionVersion: Int?
+    ): Int
 
     @Transaction
     open suspend fun selectNoSelectionIfDue(runId: String, now: Long): RunReflectionEntity {

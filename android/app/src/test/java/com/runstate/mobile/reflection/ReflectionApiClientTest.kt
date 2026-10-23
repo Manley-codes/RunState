@@ -495,6 +495,22 @@ class ReflectionApiClientTest {
         assertEquals("MODERATE", evidence.preRunEnergy)
     }
 
+    @Test fun physicalEnergyCheckInKeepsReflectionContextWithoutUploadingLocalAnalysisFields() {
+        val run = completedRun().copy(preRunEnergy = PreRunEnergy.LOW,
+            energyQuestionVersion = RunEntity.CURRENT_ENERGY_QUESTION_VERSION,
+            preRunEnergyRecordedAtEpochMillis = START - 20_000,
+            runIntention = RunIntention.KEEP_EASY, routeLabel = "My familiar loop",
+            postRunEffortRating = 4, postRunEffortQuestionVersion = 1)
+        val request = reflectionRequestFromSavedRun(REQUEST_ID, run, completedTransitions())
+        val json = GsonBuilder().create().toJsonTree(request.evidence).asJsonObject
+        assertEquals("LOW", json.get("preRunEnergy").asString)
+        assertFalse(json.has("routeLabel"))
+        assertFalse(json.has("runIntention"))
+        assertFalse(json.has("postRunEffortRating"))
+        assertFalse(json.has("preRunEnergyRecordedAtEpochMillis"))
+        assertFalse(json.toString().contains("My familiar loop"))
+    }
+
     @Test fun savedWeatherMustBelongToTheOfficialStartRatherThanAnotherTimeInTheHour() {
         val weather = weatherSnapshot()
         val request = reflectionRequestFromSavedRun(

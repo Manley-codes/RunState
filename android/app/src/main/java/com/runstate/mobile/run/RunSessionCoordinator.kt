@@ -13,6 +13,7 @@ import com.runstate.mobile.location.GpsMapEvidence
 import com.runstate.mobile.location.GpsSignalStatus
 import com.runstate.mobile.location.gpsMapEvidenceFor
 import com.runstate.mobile.data.local.PreRunEnergy
+import com.runstate.mobile.data.local.RunIntention
 import com.runstate.mobile.data.local.RunTransitionEntity
 import com.runstate.mobile.data.local.RunTrackingMode
 import com.runstate.mobile.data.local.StoredRunState
@@ -1052,7 +1053,10 @@ internal class RunSessionCoordinator(
         trackingMode: RunTrackingMode = RunTrackingMode.FIXTURE,
         musicObservationRequested: Boolean = false,
         musicReflectionSharingAllowed: Boolean = false,
-        songSnippetLookupAllowed: Boolean = false
+        songSnippetLookupAllowed: Boolean = false,
+        runIntention: RunIntention? = null,
+        routeLabel: String? = null,
+        preRunEnergyRecordedAtEpochMillis: Long? = null
     ): Deferred<ActiveRunSession> = coordinatorLock.withLock {
         require(!musicReflectionSharingAllowed || musicObservationRequested) {
             "Music reflection sharing requires this run's music observation opt-in."
@@ -1106,7 +1110,10 @@ internal class RunSessionCoordinator(
             songSnippetLookupAllowed,
             // Resolve only on first preparation. Save retries retain the original physical pair,
             // even if its current selection changes before the same run is successfully inserted.
-            shoePairId = shoeDao?.selectedActivePairId()
+            shoePairId = shoeDao?.selectedActivePairId(),
+            runIntention = runIntention,
+            routeLabel = routeLabel,
+            preRunEnergyRecordedAtEpochMillis = preRunEnergyRecordedAtEpochMillis
         )
             .also { preparedRun = it }
 

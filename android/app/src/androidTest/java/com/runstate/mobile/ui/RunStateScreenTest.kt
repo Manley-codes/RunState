@@ -85,6 +85,7 @@ import com.runstate.mobile.run.RunAdmission
 import com.runstate.mobile.data.local.ReflectionBranch
 import com.runstate.mobile.data.local.PostRunEffort
 import com.runstate.mobile.data.local.PreRunEnergy
+import com.runstate.mobile.data.local.RunIntention
 import com.runstate.mobile.data.local.MetricSource
 import com.runstate.mobile.data.local.RunSplitStatus
 import com.runstate.mobile.data.local.TelemetryCoverage
@@ -470,12 +471,15 @@ class RunStateScreenTest {
         val toRun = composeTestRule.onNodeWithText("TO RUN").fetchSemanticsNode().boundsInRoot
         assertEquals("GPS must share READY's right edge", ready.right, gps.right, 1f)
         assertEquals("The entire run-status group must share one right edge", toRun.right, gps.right, 1f)
+        // Different font sizes have slightly different text-box padding. Keep the accepted
+        // optical row alignment within 2dp while retaining exact right-edge assertions.
+        val opticalRowTolerance = 2f * densityValue
         assertEquals("RUN and READY must begin on the same row",
-            composeTestRule.onNodeWithText("RUN").fetchSemanticsNode().boundsInRoot.top, ready.top, 1f)
+            composeTestRule.onNodeWithText("RUN").fetchSemanticsNode().boundsInRoot.top, ready.top, opticalRowTolerance)
         assertEquals("STATE and TO RUN must begin on the same row",
-            composeTestRule.onNodeWithText("STATE").fetchSemanticsNode().boundsInRoot.top, toRun.top, 1f)
+            composeTestRule.onNodeWithText("STATE").fetchSemanticsNode().boundsInRoot.top, toRun.top, opticalRowTolerance)
         assertEquals("AGENT and GPS must begin on the same row",
-            composeTestRule.onNodeWithText("AGENT  •  READY").fetchSemanticsNode().boundsInRoot.top, gps.top, 1f)
+            composeTestRule.onNodeWithText("AGENT  •  READY").fetchSemanticsNode().boundsInRoot.top, gps.top, opticalRowTolerance)
         val utilities = boundsBefore.getValue(START_UTILITY_ACTIONS_TAG)
         assertTrue("The utility stack must sit outside and below the Agent panel", utilities.top >= card.bottom)
         val utilityTags = listOf("startExpandMap", START_HISTORY_TAG, START_RUN_SETTINGS_TAG)
@@ -1228,7 +1232,7 @@ class RunStateScreenTest {
                         lifecycleOwner.lifecycle, completionSpeakerFactory = { silentSpeaker },
                         countdownSpeakerFactory = if (countdownVoice == null) null else ({ countdownVoice }),
                         musicAccessProvider = { false }, gpsPreviewSourceOverride = source,
-                        gpsLocationReady = { locationReady && source.currentAvailability == GpsPreviewAvailability.READY }, startGpsRun = { _, _, _, _, _ ->
+                        gpsLocationReady = { locationReady && source.currentAvailability == GpsPreviewAvailability.READY }, startGpsRun = { _, _, _, _, _, _, _, _ ->
                             listenersAtHandoff += source.activeListeners
                             rowsAtHandoff += rowCount()
                             serviceStarts++
@@ -2762,13 +2766,71 @@ class RunStateScreenTest {
     }
 
     @Test
+    fun optionalRunPlanSavesOnlyOnConfirmationAndDoesNotChooseEnergyOrStart() {
+        var intention by mutableStateOf<RunIntention?>(null)
+        var route by mutableStateOf<String?>(null)
+        var starts = 0
+        var answers = 0
+        composeTestRule.setContent {
+            StartRunScreen(null, { answers++ }, { starts++ }, true, {}, false,
+                modifier = Modifier.fillMaxSize().systemBarsPadding(),
+                selectedRunIntention = intention, routeLabel = route,
+                onRunContextChanged = { choice, label -> intention = choice; route = label })
+        }
+        composeTestRule.onNodeWithTag(START_RUN_PLAN_TAG).performClick()
+        composeTestRule.onNodeWithTag(START_RUN_INTENTION_TAG_PREFIX + "KEEP_EASY").performClick()
+        composeTestRule.onNodeWithTag(START_RUN_ROUTE_LABEL_TAG).performTextInput("  Park loop  ")
+        composeTestRule.runOnIdle { assertEquals(null, intention); assertEquals(null, route) }
+        composeTestRule.onNodeWithTag(START_RUN_PLAN_SAVE_TAG).performScrollTo().performClick()
+        composeTestRule.runOnIdle {
+            assertEquals(RunIntention.KEEP_EASY, intention)
+            assertEquals("Park loop", route)
+            assertEquals(0, starts); assertEquals(0, answers)
+        }
+        saveNativePreview(START_RUN_SCREEN_TAG, "energy-foundation-start.png")
+        composeTestRule.onNodeWithTag(START_RUN_PLAN_TAG).performClick()
+        composeTestRule.onNodeWithTag(START_RUN_INTENTION_TAG_PREFIX + "NONE").performClick()
+        composeTestRule.onNodeWithTag(START_RUN_ROUTE_LABEL_TAG).performTextReplacement("")
+        composeTestRule.onNodeWithTag(START_RUN_PLAN_SAVE_TAG).performScrollTo().performClick()
+        composeTestRule.onNodeWithTag(START_RUN_BUTTON_TAG).performClick()
+        composeTestRule.runOnIdle {
+            assertEquals(null, intention); assertEquals(null, route)
+            assertEquals(1, starts); assertEquals(0, answers)
+        }
+    }
+
+    @Test
+    fun notSureEnergyStillOffersIndependentNumericEffort() {
+        var selectedEnergy by mutableStateOf<ReflectionBranch?>(null)
+        var rating by mutableStateOf<Int?>(null)
+        composeTestRule.setContent {
+            RunCompleteScreen(fixtureMetrics(), RunCompleteReflectionDisplay.Ready("Exact accepted reply."),
+                {}, {}, true, selectedEnergy = selectedEnergy, energyEnabled = true,
+                onSelectEnergy = { selectedEnergy = it }, effortEnabled = true,
+                selectedEffortRating = rating, onSelectEffortRating = { rating = it })
+        }
+        composeTestRule.onNodeWithText("Not sure").performScrollTo().performClick()
+        composeTestRule.onNodeWithTag(RUN_COMPLETE_EFFORT_RATING_TAG_PREFIX + 4).performScrollTo()
+            .assertIsDisplayed()
+        saveNativePreview(RUN_COMPLETE_SCREEN_TAG, "energy-foundation-effort.png")
+        composeTestRule.onNodeWithTag(RUN_COMPLETE_EFFORT_RATING_TAG_PREFIX + 4).performClick()
+        composeTestRule.runOnIdle {
+            assertEquals(ReflectionBranch.NO_SELECTION, selectedEnergy)
+            assertEquals(4, rating)
+        }
+        composeTestRule.onNodeWithTag(RUN_COMPLETE_EFFORT_TAG).assertDoesNotExist()
+        composeTestRule.onNodeWithTag(RUN_COMPLETE_REFLECTION_TEXT_TAG).performScrollTo()
+            .assertTextEquals("Exact accepted reply.")
+    }
+
+    @Test
     fun completionEffortFollowsEnergyAndDoesNotHoldTheStoredReflection() {
         val exact = "Exact saved reflection."
-        val choices = mutableListOf<PostRunEffort?>()
+        val choices = mutableListOf<Int?>()
         val sheetStates = mutableListOf<Boolean>()
         var energySelections = 0
         composeTestRule.setContent {
-            var selected by remember { mutableStateOf<PostRunEffort?>(null) }
+            var selected by remember { mutableStateOf<Int?>(null) }
             RunCompleteScreen(
                 metrics = fixtureMetrics(),
                 reflection = RunCompleteReflectionDisplay.Ready(exact),
@@ -2778,8 +2840,8 @@ class RunStateScreenTest {
                 selectedEnergy = null,
                 onSelectEnergy = { energySelections++ },
                 energyEnabled = true,
-                selectedEffort = selected,
-                onSelectEffort = { choice ->
+                selectedEffortRating = selected,
+                onSelectEffortRating = { choice ->
                     choices += choice
                     selected = choice
                 },
@@ -2793,13 +2855,13 @@ class RunStateScreenTest {
         composeTestRule.mainClock.advanceTimeBy(2000L)
         composeTestRule.onNodeWithTag(RUN_COMPLETE_REFLECTION_TEXT_TAG)
             .performScrollTo().assertTextEquals(exact)
-        composeTestRule.onNodeWithTag(RUN_COMPLETE_EFFORT_CHOICE_TAG_PREFIX + "HEAVY")
+        composeTestRule.onNodeWithTag(RUN_COMPLETE_EFFORT_RATING_TAG_PREFIX + 7)
             .performScrollTo().performClick()
 
         composeTestRule.onNodeWithTag(RUN_COMPLETE_EFFORT_TAG).assertDoesNotExist()
         composeTestRule.onNodeWithTag(RUN_COMPLETE_REFLECTION_TEXT_TAG)
             .performScrollTo().assertTextEquals(exact)
-        assertEquals(listOf(PostRunEffort.HEAVY), choices)
+        assertEquals(listOf(7), choices)
         assertEquals(1, energySelections)
         assertEquals(false, sheetStates.last())
         assertFalse(sheetStates.any { it })
@@ -2814,14 +2876,14 @@ class RunStateScreenTest {
                 onRetryReflection = {},
                 onStartAnother = {},
                 actionsEnabled = true,
-                selectedEffort = PostRunEffort.SMOOTH,
+                selectedEffortRating = 2,
                 effortEnabled = true,
                 effortSaving = true
             )
         }
 
         composeTestRule.onNodeWithTag(RUN_COMPLETE_EFFORT_TAG).performScrollTo().assertIsDisplayed()
-        composeTestRule.onNodeWithTag(RUN_COMPLETE_EFFORT_CHOICE_TAG_PREFIX + "SMOOTH")
+        composeTestRule.onNodeWithTag(RUN_COMPLETE_EFFORT_RATING_TAG_PREFIX + 2)
             .assertDoesNotExist()
         composeTestRule.onNodeWithText("Saving Effort…").assertExists()
     }
@@ -2834,7 +2896,7 @@ class RunStateScreenTest {
         composeTestRule.setContent {
             RunCompleteScreen(fixtureMetrics(), RunCompleteReflectionDisplay.Ready("Exact final reflection."),
                 {}, {}, true, energyEnabled = true, effortEnabled = true,
-                onSelectEffort = { effortSelections++ }, onSaveActivity = { saved++ },
+                onSelectEffortRating = { effortSelections++ }, onSaveActivity = { saved++ },
                 onEffortSheetOpenChange = { holds += it })
         }
         composeTestRule.onNodeWithText("SPENT").performScrollTo().performClick()
@@ -2949,7 +3011,8 @@ class RunStateScreenTest {
                 onRetryReflection = { throw AssertionError("Insight must not generate a reflection") },
                 speakerFactory = { throw AssertionError("Insight must not start speech") })
         }
-        composeTestRule.onNodeWithTag(RUNNER_STATE_INSIGHT_TAG).assertDoesNotExist()
+        composeTestRule.onNodeWithTag(RUNNER_STATE_INSIGHT_TAG).assertExists()
+        composeTestRule.onNodeWithText("After starting Low").assertDoesNotExist()
         composeTestRule.runOnIdle { rows = rows + energyInsightHistoryRun(3) }
         composeTestRule.onNodeWithTag(RUNNER_STATE_INSIGHT_TAG).assertExists()
 
@@ -2985,7 +3048,38 @@ class RunStateScreenTest {
         composeTestRule.runOnIdle {
             rows = rows.mapIndexed { index, row -> if (index == 0) row.copy(preRunEnergy = null) else row }
         }
-        composeTestRule.onNodeWithTag(RUNNER_STATE_INSIGHT_TAG).assertDoesNotExist()
+        composeTestRule.onNodeWithTag(RUNNER_STATE_INSIGHT_TAG).assertExists()
+        composeTestRule.onNodeWithText("After starting Low").assertDoesNotExist()
+    }
+
+    @Test
+    fun energyEvidenceShowsComparableRunsAndTheirSavedContextWithoutAudioOrWriting() {
+        val start = Instant.parse("2026-10-22T12:00:00Z").toEpochMilli()
+        val rows = (1..3).map { number ->
+            val began = start - number * 86_400_000L
+            energyInsightHistoryRun(number).copy(energyQuestionVersion = 2,
+                postRunEnergyQuestionVersion = 2, postRunEffortQuestionVersion = 1,
+                postRunEffortRating = number + 2, runIntention = RunIntention.KEEP_EASY,
+                routeLabel = "Park loop", distanceMeters = 5_000.0,
+                activeDurationMillis = 1_800_000, telemetryCoverage = TelemetryCoverage.COMPLETE,
+                officialStartEpochMillis = began, finishEpochMillis = began + 1_800_000,
+                startTimezoneId = "America/Chicago", preRunEnergyRecordedAtEpochMillis = began - 10_000,
+                postRunEnergyRecordedAtEpochMillis = began + 1_820_000,
+                postRunEnergyUpdatedAtEpochMillis = began + 1_820_000,
+                shoeLabel = "Everyday pair", weatherSummary = "Weather near start · 70°F")
+        }
+        composeTestRule.setContent {
+            RunHistoryScreen(rows, {}, { throw AssertionError("No reflection request") },
+                speakerFactory = { throw AssertionError("No audio from analysis") })
+        }
+        composeTestRule.onNodeWithTag("runnerEnergyInspect").performScrollTo().performClick()
+        composeTestRule.onNodeWithTag(RUNNER_ENERGY_EVIDENCE_TAG).assertIsDisplayed()
+        composeTestRule.onNodeWithTag("runnerEnergyEasyRuns").performClick()
+        composeTestRule.onNodeWithText("3 similar-length runs · early observations").assertExists()
+        composeTestRule.onNodeWithTag("runnerEnergyEvidenceRun:" + rows.first().runId)
+            .performScrollTo().assertIsDisplayed()
+        composeTestRule.onNodeWithText("Effort · 3 / 10").assertExists()
+        saveNativePreview(RUNNER_ENERGY_EVIDENCE_TAG, "energy-foundation-evidence.png")
     }
 
     @Test

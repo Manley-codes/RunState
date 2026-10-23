@@ -9,6 +9,7 @@ import com.runstate.mobile.data.local.PreRunEnergy
 import com.runstate.mobile.data.local.ReflectionBranch
 import com.runstate.mobile.data.local.ReflectionStatus
 import com.runstate.mobile.data.local.RunEntity
+import com.runstate.mobile.data.local.RunIntention
 import com.runstate.mobile.data.local.RunMusicObservationEntity
 import com.runstate.mobile.data.local.RunReflectionEntity
 import com.runstate.mobile.data.local.RunTransitionEntity
@@ -57,6 +58,58 @@ class RunMetricsDisplayTest {
         assertNull(old.preRunEnergy)
         assertNull(old.metricSource)
         assertNull(old.energy)
+    }
+
+    @Test
+    fun `history keeps raw question provenance and context when an answer was edited`() {
+        val finished = historyStart + 600_000L
+        val firstAnswer = finished + 20_000L
+        val laterEdit = finished + 600_000L
+        val run = historyRun(finished, 2_000.0, TelemetryCoverage.COMPLETE, true).copy(
+            trackingMode = RunTrackingMode.GPS, metricSource = MetricSource.GPS,
+            preRunEnergy = PreRunEnergy.LOW, energyQuestionVersion = 2,
+            preRunEnergyRecordedAtEpochMillis = historyStart - 8_000L,
+            runIntention = RunIntention.KEEP_EASY, routeLabel = "Park Loop",
+            postRunEffort = PostRunEffort.HEAVY, postRunEffortRating = null,
+            postRunEffortQuestionVersion = 1, firstPostRunEffortRating = 7,
+            postRunEffortRecordedAtEpochMillis = firstAnswer,
+            postRunEffortUpdatedAtEpochMillis = laterEdit,
+            firstPostRunEnergy = ReflectionBranch.NO_SELECTION, firstPostRunEnergyQuestionVersion = 2,
+            postRunEnergyQuestionVersion = 2, postRunEnergyRecordedAtEpochMillis = firstAnswer,
+            postRunEnergyUpdatedAtEpochMillis = laterEdit)
+        val reflection = musicSnapshotReflection("{}").copy(postRunEnergy = ReflectionBranch.FEELING_GOOD)
+        val item = historyItemFor(run, emptyList(), reflection)
+        assertEquals(historyStart, item.officialStartEpochMillis)
+        assertEquals("America/Chicago", item.startTimezoneId)
+        assertEquals(finished, item.finishEpochMillis)
+        assertEquals(2_000.0, item.distanceMeters!!, 0.0)
+        assertEquals(RunIntention.KEEP_EASY, item.runIntention)
+        assertEquals("Park Loop", item.routeLabel)
+        assertEquals(2, item.energyQuestionVersion)
+        assertEquals(historyStart - 8_000L, item.preRunEnergyRecordedAtEpochMillis)
+        assertEquals(ReflectionBranch.NO_SELECTION, item.firstPostRunEnergy)
+        assertEquals(ReflectionBranch.FEELING_GOOD, item.energy)
+        assertEquals(2, item.firstPostRunEnergyQuestionVersion)
+        assertEquals(2, item.postRunEnergyQuestionVersion)
+        assertEquals(firstAnswer, item.postRunEnergyRecordedAtEpochMillis)
+        assertEquals(laterEdit, item.postRunEnergyUpdatedAtEpochMillis)
+        assertEquals(PostRunEffort.HEAVY, item.effort)
+        assertNull(item.postRunEffortRating)
+        assertEquals(7, item.firstPostRunEffortRating)
+        assertEquals(firstAnswer, item.postRunEffortRecordedAtEpochMillis)
+        assertEquals(laterEdit, item.postRunEffortUpdatedAtEpochMillis)
+        assertEquals("Not recorded", historyEffortLabel(item))
+    }
+
+    @Test
+    fun `unsaved completed activity never becomes energy insight evidence`() {
+        val run = historyRun(historyStart + 600_000L, 2_000.0, TelemetryCoverage.COMPLETE, true)
+            .copy(trackingMode = RunTrackingMode.GPS, metricSource = MetricSource.GPS,
+                preRunEnergy = PreRunEnergy.LOW, energyQuestionVersion = 2, activityFinalized = false)
+        val item = historyItemFor(run, emptyList(), musicSnapshotReflection("{}")
+            .copy(postRunEnergy = ReflectionBranch.FEELING_GOOD))
+        assertFalse(item.insightEligible)
+        assertTrue(runnerEnergyFoundationFor(listOf(item)).runs.isEmpty())
     }
 
     @Test

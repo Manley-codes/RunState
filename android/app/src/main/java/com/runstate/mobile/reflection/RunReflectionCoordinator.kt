@@ -56,8 +56,10 @@ internal class RoomReflectionStore(
     override suspend fun all() = dao.all()
     override suspend fun ensure(record: RunReflectionEntity) = dao.ensurePending(record)
     override suspend fun energy(runId: String, branch: ReflectionBranch, now: Long, selectionHeld: Boolean) =
-        if (branch == ReflectionBranch.NO_SELECTION) dao.recordNotSure(runId, now, selectionHeld)
-        else dao.recordEnergy(runId, branch, now, selectionHeld)
+        if (branch == ReflectionBranch.NO_SELECTION) dao.recordNotSure(runId, now, selectionHeld,
+            questionVersion = RunEntity.CURRENT_ENERGY_QUESTION_VERSION)
+        else dao.recordEnergy(runId, branch, now, selectionHeld,
+            questionVersion = RunEntity.CURRENT_ENERGY_QUESTION_VERSION)
     override suspend fun defaultSelection(runId: String, now: Long) = dao.selectNoSelectionIfDue(runId, now)
     override suspend fun waitForEnergyWithoutDeadline(runId: String) = dao.waitForEnergyWithoutDeadline(runId)
     override suspend fun selectForSavedActivity(runId: String) = dao.selectForSavedActivity(runId)

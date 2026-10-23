@@ -89,7 +89,18 @@ internal object RunSplitCalculator {
             metricSource = null,
             telemetryCoverage = null,
             displayDistanceUnit = null,
-            postRunEffort = null
+            postRunEffort = null,
+            postRunNote = null,
+            postRunEffortRating = null,
+            firstPostRunEffortRating = null,
+            postRunEffortRecordedAtEpochMillis = null,
+            postRunEffortUpdatedAtEpochMillis = null,
+            postRunEffortQuestionVersion = null,
+            postRunEnergyRecordedAtEpochMillis = null,
+            postRunEnergyUpdatedAtEpochMillis = null,
+            postRunEnergyQuestionVersion = null,
+            firstPostRunEnergy = null,
+            firstPostRunEnergyQuestionVersion = null
         )
         if (GpsCoverageEvaluator.assess(
                 atFinalPause, transitions, points, finalPause.occurredAtEpochMillis,

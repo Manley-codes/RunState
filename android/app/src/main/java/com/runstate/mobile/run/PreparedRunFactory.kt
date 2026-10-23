@@ -2,6 +2,7 @@ package com.runstate.mobile.run
 
 import com.runstate.mobile.data.local.RunEntity
 import com.runstate.mobile.data.local.PreRunEnergy
+import com.runstate.mobile.data.local.RunIntention
 import com.runstate.mobile.data.local.RunTrackingMode
 import com.runstate.mobile.data.local.StoredRunState
 import java.time.Clock
@@ -56,7 +57,10 @@ internal class PreparedRunFactory(
         musicObservationRequested: Boolean = false,
         musicReflectionSharingAllowed: Boolean = false,
         songSnippetLookupAllowed: Boolean = false,
-        shoePairId: String? = null
+        shoePairId: String? = null,
+        runIntention: RunIntention? = null,
+        routeLabel: String? = null,
+        preRunEnergyRecordedAtEpochMillis: Long? = null
     ): RunEntity {
         require(!musicReflectionSharingAllowed || musicObservationRequested) {
             "Music reflection sharing requires this run's music observation opt-in."
@@ -88,7 +92,11 @@ internal class PreparedRunFactory(
             songSnippetLookupAllowed = songSnippetLookupAllowed,
             startElapsedRealtimeMillis = reading.timingMark?.elapsedRealtimeMillis,
             timingSessionId = reading.timingMark?.sessionId,
-            shoePairId = shoePairId
+            shoePairId = shoePairId,
+            runIntention = runIntention,
+            routeLabel = routeLabel?.trim()?.takeIf { it.isNotEmpty() },
+            preRunEnergyRecordedAtEpochMillis = preRunEnergyRecordedAtEpochMillis,
+            energyQuestionVersion = RunEntity.CURRENT_ENERGY_QUESTION_VERSION
         )
     }
 

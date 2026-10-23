@@ -71,6 +71,49 @@ class ReflectionDaoTest {
     }
 
     @Test
+    fun currentEnergyAnswersRetainFirstAnswerAndTimeWhileEditsKeepTheFrozenReflection() = runBlocking {
+        val dao = createPending()
+        val firstAt = pending.selectionDeadlineEpochMillis - 2L
+        val latestAt = firstAt + 100_000L
+        dao.recordEnergy(completed.runId, ReflectionBranch.SPENT, firstAt, questionVersion = 2)
+        dao.saveCandidates(completed.runId, pending.requestId, "{}", true)
+        assertTrue(dao.finalizeReady(completed.runId, pending.requestId, ReflectionBranch.SPENT,
+            "Exact original reflection.", firstAt + 1))
+        dao.recordNotSure(completed.runId, latestAt, questionVersion = 2)
+        database.close()
+        database = buildRunStateDatabase(context, DATABASE_NAME)
+        val run = requireNotNull(database.runDao().findById(completed.runId))
+        val reflection = requireNotNull(database.reflectionDao().findByRunId(completed.runId))
+        assertEquals(ReflectionBranch.SPENT, run.firstPostRunEnergy)
+        assertEquals(2, run.firstPostRunEnergyQuestionVersion)
+        assertEquals(firstAt, run.postRunEnergyRecordedAtEpochMillis)
+        assertEquals(latestAt, run.postRunEnergyUpdatedAtEpochMillis)
+        assertEquals(2, run.postRunEnergyQuestionVersion)
+        assertEquals(ReflectionBranch.NO_SELECTION, reflection.postRunEnergy)
+        assertEquals(ReflectionBranch.SPENT, reflection.selectedBranch)
+        assertEquals("Exact original reflection.", reflection.text)
+    }
+
+    @Test
+    fun legacyEnergyEditPreservesOriginalRawAnswerWithUnknownAgeAndQuestion() = runBlocking {
+        val dao = createPending()
+        // Simulate an answer stored before assessment provenance existed.
+        database.openHelper.writableDatabase.execSQL(
+            "UPDATE run_reflections SET post_run_energy='FEELING_GOOD',selected_branch='FEELING_GOOD' WHERE run_id=?",
+            arrayOf(completed.runId))
+        val now = pending.selectionDeadlineEpochMillis + 86_400_000L
+        dao.recordEnergy(completed.runId, ReflectionBranch.POWERED_UP, now, questionVersion = 2)
+        dao.recordEnergy(completed.runId, ReflectionBranch.SPENT, now + 1_000L, questionVersion = 2)
+        val run = requireNotNull(database.runDao().findById(completed.runId))
+        assertEquals(ReflectionBranch.FEELING_GOOD, run.firstPostRunEnergy)
+        assertNull(run.firstPostRunEnergyQuestionVersion)
+        assertNull(run.postRunEnergyRecordedAtEpochMillis)
+        assertEquals(now + 1_000L, run.postRunEnergyUpdatedAtEpochMillis)
+        assertEquals(2, run.postRunEnergyQuestionVersion)
+        assertNull(run.energyQuestionVersion)
+    }
+
+    @Test
     fun explicitNotSureUsesSupportedRoomPathAndReopensDistinctFromTimeout() = runBlocking {
         val dao = createPending()
         val selected = RoomReflectionStore(dao).energy(completed.runId, ReflectionBranch.NO_SELECTION,
@@ -325,7 +368,14 @@ class ReflectionDaoTest {
             assertEquals(exactText, saved.text)
             assertEquals(ReflectionBranch.FEELING_GOOD, saved.selectedBranch)
             assertNull(saved.candidatesJson)
-            assertEquals(originalRun, database.runDao().findById(runId))
+            val answeredRun = requireNotNull(database.runDao().findById(runId))
+            assertEquals(originalRun, answeredRun.copy(
+                postRunEnergyRecordedAtEpochMillis = null,
+                postRunEnergyUpdatedAtEpochMillis = null,
+                postRunEnergyQuestionVersion = null,
+                firstPostRunEnergy = null,
+                firstPostRunEnergyQuestionVersion = null
+            ))
             assertEquals(originalObservations, music.observationsFor(runId))
             firstJob.cancelAndJoin()
             database.close()

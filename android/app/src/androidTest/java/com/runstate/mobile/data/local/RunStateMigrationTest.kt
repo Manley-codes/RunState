@@ -60,6 +60,73 @@ class RunStateMigrationTest {
     private val context = InstrumentationRegistry.getInstrumentation().targetContext
 
     @Test
+    fun versionNineteenAddsUnknownEnergyProvenanceWithoutRelabelingOrLosingHistory() {
+        val name = "runstate-v19-energy-foundation-test.db"
+        val old = helper.createDatabase(name, 19)
+        val finish = OFFICIAL_START + 1_920_000L
+        old.insertVersionTwoRun(state = "COMPLETED", lastCheckpointEpochMillis = finish,
+            finishEpochMillis = finish)
+        val activeId = "03689ffc-65d9-4907-ae77-7a17b3ad77a6"
+        old.insertVersionTwoRun(runId = activeId, state = "RUNNING",
+            lastCheckpointEpochMillis = OFFICIAL_START, finishEpochMillis = null)
+        val shoeId = "4ca0ea04-a703-40a1-a014-47f08a67c127"
+        old.execSQL("INSERT INTO shoe_pairs (shoe_pair_id,brand,model,nickname,created_at_epoch_millis,archived) " +
+            "VALUES (?,'Brooks','Ghost','Blue pair',?,0)", arrayOf<Any>(shoeId, OFFICIAL_START))
+        old.execSQL("INSERT INTO shoe_selection (selection_id,shoe_pair_id,revision) VALUES (1,?,4)", arrayOf(shoeId))
+        old.execSQL("UPDATE runs SET shoe_pair_id=?,pre_run_energy='LOW',tracking_mode='GPS'," +
+            "transition_history_complete=1", arrayOf(shoeId))
+        old.execSQL("UPDATE runs SET post_run_effort='HEAVY',post_run_note='Preserve this exact note'," +
+            "activity_finalized=0 WHERE run_id=?", arrayOf(RUN_ID))
+        old.execSQL("""
+            INSERT INTO run_reflections (run_id,request_id,evidence_json,selection_deadline_epoch_millis,
+                status,selected_branch,post_run_energy,text,finalized_at_epoch_millis,is_test_data,selection_window_started)
+            VALUES (?,?,'{"original":"evidence"}',?,'READY','FEELING_GOOD','FEELING_GOOD',
+                'Keep this exact reflection.',?,0,1)
+        """.trimIndent(), arrayOf<Any>(RUN_ID, "8c405ab0-4a80-4be9-9bfb-19f2517ec2ba", finish, finish))
+        val tables = listOf("runs", "run_transitions", "run_location_points", "run_music_observations",
+            "run_reflections", "run_weather", "run_split_snapshots", "run_splits", "run_song_preparations",
+            "shoe_pairs", "shoe_selection")
+        val columns = tables.associateWith { table ->
+            old.query("SELECT * FROM `$table` LIMIT 0").use { it.columnNames.toList() }
+        }
+        fun rows(db: SupportSQLiteDatabase, table: String): List<List<String?>> {
+            val original = columns.getValue(table)
+            return db.query("SELECT ${original.joinToString(",") { "`$it`" }} FROM `$table` ORDER BY 1,2")
+                .use { cursor -> buildList {
+                    while (cursor.moveToNext()) add(original.indices.map { index ->
+                        if (cursor.isNull(index)) null else cursor.getString(index)
+                    })
+                } }
+        }
+        val before = tables.associateWith { rows(old, it) }
+        old.close()
+        helper.runMigrationsAndValidate(name, 20, true, MIGRATION_19_20).use { migrated ->
+            tables.forEach { table -> assertEquals(table, before.getValue(table), rows(migrated, table)) }
+            migrated.query("SELECT * FROM runs").use { cursor ->
+                val addedColumns = cursor.columnNames.filter { it !in columns.getValue("runs") }
+                assertEquals(14, addedColumns.size)
+                assertEquals(2, cursor.count)
+                while (cursor.moveToNext()) addedColumns.forEach { column ->
+                    assertTrue("Old $column must remain unknown", cursor.isNull(cursor.getColumnIndexOrThrow(column)))
+                }
+            }
+            migrated.query("PRAGMA foreign_key_check").use { assertEquals(0, it.count) }
+        }
+        val reopened = openDatabaseThroughFactory(name)
+        runBlocking {
+            val run = requireNotNull(reopened.runDao().findById(RUN_ID))
+            assertEquals(PreRunEnergy.LOW, run.preRunEnergy)
+            assertEquals(PostRunEffort.HEAVY, run.postRunEffort)
+            assertNull(run.energyQuestionVersion)
+            assertNull(run.postRunEffortRating)
+            assertNull(run.postRunEnergyRecordedAtEpochMillis)
+            assertEquals("Keep this exact reflection.", reopened.reflectionDao().findByRunId(RUN_ID)?.text)
+            assertEquals(shoeId, reopened.shoeDao().selectedActivePairId())
+        }
+        reopened.close()
+    }
+
+    @Test
     fun versionEighteenAddsEmptyShoesAndPreservesEveryExistingFieldWithoutAssigningOldMileage() {
         val name = "runstate-v18-shoes-test.db"
         val old = helper.createDatabase(name, 18)

@@ -71,6 +71,13 @@ enum class PostRunEffort {
     EMPTY_TANK
 }
 
+/** The runner's optional intention, not a plan inferred from the resulting pace. */
+enum class RunIntention {
+    KEEP_EASY,
+    STEADY,
+    HARD_EFFORT
+}
+
 /**
  * Metric values that become durable in the same write that completes a run.
  *
@@ -253,13 +260,85 @@ data class RunEntity(
 
     /** Physical pair chosen at official start. Older runs remain unassigned forever. */
     @ColumnInfo(name = "shoe_pair_id")
-    val shoePairId: String? = null
+    val shoePairId: String? = null,
+
+    @ColumnInfo(name = "run_intention")
+    val runIntention: RunIntention? = null,
+
+    /** Runner-supplied label only. Equal labels are not proof of identical GPS routes. */
+    @ColumnInfo(name = "route_label")
+    val routeLabel: String? = null,
+
+    @ColumnInfo(name = "pre_run_energy_recorded_at_epoch_millis")
+    val preRunEnergyRecordedAtEpochMillis: Long? = null,
+
+    /** Version of the physical-energy question shown before this run; legacy rows stay null. */
+    @ColumnInfo(name = "energy_question_version")
+    val energyQuestionVersion: Int? = null,
+
+    /** A separate numeric answer; legacy categorical Effort is never converted or overwritten. */
+    @ColumnInfo(name = "post_run_effort_rating")
+    val postRunEffortRating: Int? = null,
+
+    @ColumnInfo(name = "post_run_effort_recorded_at_epoch_millis")
+    val postRunEffortRecordedAtEpochMillis: Long? = null,
+
+    @ColumnInfo(name = "post_run_effort_updated_at_epoch_millis")
+    val postRunEffortUpdatedAtEpochMillis: Long? = null,
+
+    @ColumnInfo(name = "post_run_effort_question_version")
+    val postRunEffortQuestionVersion: Int? = null,
+
+    @ColumnInfo(name = "first_post_run_effort_rating")
+    val firstPostRunEffortRating: Int? = null,
+
+    /** First Energy answer time, never invented for an existing legacy answer. */
+    @ColumnInfo(name = "post_run_energy_recorded_at_epoch_millis")
+    val postRunEnergyRecordedAtEpochMillis: Long? = null,
+
+    @ColumnInfo(name = "post_run_energy_updated_at_epoch_millis")
+    val postRunEnergyUpdatedAtEpochMillis: Long? = null,
+
+    @ColumnInfo(name = "post_run_energy_question_version")
+    val postRunEnergyQuestionVersion: Int? = null,
+
+    /** Original raw answer survives later corrections, including a legacy answer of unknown age. */
+    @ColumnInfo(name = "first_post_run_energy")
+    val firstPostRunEnergy: ReflectionBranch? = null,
+
+    @ColumnInfo(name = "first_post_run_energy_question_version")
+    val firstPostRunEnergyQuestionVersion: Int? = null
 ) {
     companion object {
         const val POST_RUN_NOTE_MAX_LENGTH = 280
+        const val ROUTE_LABEL_MAX_LENGTH = 80
+        const val CURRENT_ENERGY_QUESTION_VERSION = 2
+        const val CURRENT_EFFORT_QUESTION_VERSION = 1
     }
 
     init {
+
+        require(routeLabel == null || (routeLabel.isNotBlank() && routeLabel == routeLabel.trim() &&
+            routeLabel.length <= ROUTE_LABEL_MAX_LENGTH)) {
+            "A route label must contain 1–80 trimmed characters."
+        }
+        require(preRunEnergyRecordedAtEpochMillis == null || preRunEnergy != null) {
+            "A pre-run Energy timestamp requires an actual answer."
+        }
+        require(listOf(energyQuestionVersion, postRunEnergyQuestionVersion,
+            firstPostRunEnergyQuestionVersion, postRunEffortQuestionVersion).all { it == null || it > 0 }) {
+            "Question versions must be positive when known."
+        }
+        require(listOf(postRunEffortRating, firstPostRunEffortRating).all { it == null || it in 1..10 }) {
+            "Numeric Effort must be between 1 and 10 when answered."
+        }
+        require(state == StoredRunState.COMPLETED || listOf(postRunEffortRating,
+            firstPostRunEffortRating, postRunEffortRecordedAtEpochMillis,
+            postRunEffortUpdatedAtEpochMillis, postRunEffortQuestionVersion,
+            postRunEnergyRecordedAtEpochMillis, postRunEnergyUpdatedAtEpochMillis,
+            postRunEnergyQuestionVersion, firstPostRunEnergy, firstPostRunEnergyQuestionVersion).all { it == null }) {
+            "Post-run feedback provenance belongs only to a completed run."
+        }
 
         require(shoePairId == null || isCanonicalUuidText(shoePairId)) {
             "A run's shoe pair id must be canonical lowercase UUID text, or absent."

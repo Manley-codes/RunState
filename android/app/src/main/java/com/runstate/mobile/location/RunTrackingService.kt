@@ -25,6 +25,7 @@ import androidx.core.location.LocationCompat
 import com.runstate.mobile.MainActivity
 import com.runstate.mobile.RunStateApplication
 import com.runstate.mobile.data.local.PreRunEnergy
+import com.runstate.mobile.data.local.RunIntention
 import com.runstate.mobile.data.local.RunLocationObservation
 import com.runstate.mobile.data.local.RunTrackingMode
 import com.runstate.mobile.data.local.StoredRunState
@@ -233,6 +234,14 @@ internal class RunTrackingService : Service() {
                         intent?.getBooleanExtra(EXTRA_MUSIC_REFLECTION_SHARING_ALLOWED, false) == true
                     val songSnippetLookupAllowed = musicReflectionSharingAllowed &&
                         intent?.getBooleanExtra(EXTRA_SONG_SNIPPET_LOOKUP_ALLOWED, false) == true
+                    val runIntention = intent?.getStringExtra(EXTRA_RUN_INTENTION)?.let { name ->
+                        RunIntention.entries.firstOrNull { it.name == name }
+                            ?: error("Unknown run intention.")
+                    }
+                    val routeLabel = intent?.getStringExtra(EXTRA_ROUTE_LABEL)
+                    val preRunEnergyRecordedAt = intent?.takeIf {
+                        it.hasExtra(EXTRA_PRE_RUN_ENERGY_RECORDED_AT)
+                    }?.getLongExtra(EXTRA_PRE_RUN_ENERGY_RECORDED_AT, 0L)
                     val snapshot = app.runSessionCoordinator.initialize()
                     check(snapshot.initializationStatus ==
                         com.runstate.mobile.run.InitializationStatus.Completed) {
@@ -251,7 +260,10 @@ internal class RunTrackingService : Service() {
                         RunTrackingMode.GPS,
                         musicObservationRequested,
                         musicReflectionSharingAllowed,
-                        songSnippetLookupAllowed
+                        songSnippetLookupAllowed,
+                        runIntention = runIntention,
+                        routeLabel = routeLabel,
+                        preRunEnergyRecordedAtEpochMillis = preRunEnergyRecordedAt
                     ).await().runId
                 } else {
                     val idToResume = requireNotNull(existingId)
@@ -850,6 +862,9 @@ internal class RunTrackingService : Service() {
         private const val ACTION_START_NEW = "com.runstate.mobile.action.START_GPS_RUN"
         private const val ACTION_RESUME_EXISTING = "com.runstate.mobile.action.RESUME_GPS_RUN"
         private const val EXTRA_PRE_RUN_ENERGY = "pre_run_energy"
+        private const val EXTRA_RUN_INTENTION = "run_intention"
+        private const val EXTRA_ROUTE_LABEL = "route_label"
+        private const val EXTRA_PRE_RUN_ENERGY_RECORDED_AT = "pre_run_energy_recorded_at"
         private const val EXTRA_MUSIC_OBSERVATION_REQUESTED = "music_observation_requested"
         private const val EXTRA_MUSIC_REFLECTION_SHARING_ALLOWED = "music_reflection_sharing_allowed"
         private const val EXTRA_SONG_SNIPPET_LOOKUP_ALLOWED = "song_snippet_lookup_allowed"
@@ -866,7 +881,10 @@ internal class RunTrackingService : Service() {
             preRunEnergy: PreRunEnergy?,
             musicObservationRequested: Boolean = false,
             musicReflectionSharingAllowed: Boolean = false,
-            songSnippetLookupAllowed: Boolean = false
+            songSnippetLookupAllowed: Boolean = false,
+            runIntention: RunIntention? = null,
+            routeLabel: String? = null,
+            preRunEnergyRecordedAtEpochMillis: Long? = null
         ) {
             require(!musicReflectionSharingAllowed || musicObservationRequested) {
                 "Music reflection sharing requires this run's music observation opt-in."
@@ -874,9 +892,12 @@ internal class RunTrackingService : Service() {
             val intent = Intent(context, RunTrackingService::class.java)
                 .setAction(ACTION_START_NEW)
                 .putExtra(EXTRA_PRE_RUN_ENERGY, preRunEnergy?.name)
+                .putExtra(EXTRA_RUN_INTENTION, runIntention?.name)
+                .putExtra(EXTRA_ROUTE_LABEL, routeLabel)
                 .putExtra(EXTRA_MUSIC_OBSERVATION_REQUESTED, musicObservationRequested)
                 .putExtra(EXTRA_MUSIC_REFLECTION_SHARING_ALLOWED, musicReflectionSharingAllowed)
                 .putExtra(EXTRA_SONG_SNIPPET_LOOKUP_ALLOWED, songSnippetLookupAllowed && musicReflectionSharingAllowed)
+            preRunEnergyRecordedAtEpochMillis?.let { intent.putExtra(EXTRA_PRE_RUN_ENERGY_RECORDED_AT, it) }
             ContextCompat.startForegroundService(context, intent)
         }
 

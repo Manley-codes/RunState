@@ -68,6 +68,8 @@ import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.testTag
 import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.SpanStyle
@@ -104,6 +106,7 @@ internal const val RUN_COMPLETE_ENERGY_INTAKE_TAG = "runCompleteEnergyIntake"
 internal const val RUN_COMPLETE_EFFORT_TAG = "runCompleteEffort"
 internal const val RUN_COMPLETE_EFFORT_SHEET_TAG = "runCompleteEffortSheet"
 internal const val RUN_COMPLETE_EFFORT_CHOICE_TAG_PREFIX = "runCompleteEffortChoice:"
+internal const val RUN_COMPLETE_EFFORT_RATING_TAG_PREFIX = "runCompleteEffortRating:"
 internal const val RUN_COMPLETE_HISTORY_TAG = "runCompleteHistory"
 internal const val RUN_COMPLETE_AUDIO_STOP_TAG = "runCompleteAudioStop"
 internal const val RUN_COMPLETE_SAVE_ACTIVITY_TAG = "runCompleteSaveActivity"
@@ -194,7 +197,9 @@ internal fun RunCompleteScreen(
     localNote: String? = null,
     onSaveLocalNote: ((String?) -> Unit)? = null,
     noteSaving: Boolean = false,
-    noteError: String? = null
+    noteError: String? = null,
+    selectedEffortRating: Int? = null,
+    onSelectEffortRating: (Int?) -> Unit = {}
 ) {
     val distance = splitMetric(metrics?.distance ?: "—")
     val pace = splitMetric(metrics?.averagePace ?: "—")
@@ -261,7 +266,7 @@ internal fun RunCompleteScreen(
     LaunchedEffect(intake, effortFollowupPending, effortEnabled) {
         if (intake == null && effortFollowupPending && effortEnabled) {
             effortFollowupPending = false
-            effortFollowupOpen = selectedEffort == null
+            effortFollowupOpen = selectedEffortRating == null
         }
     }
     LaunchedEffect(effortError) {
@@ -343,7 +348,7 @@ internal fun RunCompleteScreen(
                             intake = null
                             energySubmitted = true
                             energyChoicesOpen = false
-                            effortFollowupPending = effortEnabled && selectedEffort == null
+                            effortFollowupPending = effortEnabled && selectedEffortRating == null
                             animationsEnabled = ValueAnimator.areAnimatorsEnabled()
                             val root = rootBounds
                             val ring = ringBounds
@@ -376,6 +381,7 @@ internal fun RunCompleteScreen(
                         onClick = {
                             energySubmitted = true
                             energyChoicesOpen = false
+                            effortFollowupPending = effortEnabled && selectedEffortRating == null
                             onSelectEnergy(ReflectionBranch.NO_SELECTION)
                         },
                         enabled = actionsEnabled,
@@ -385,10 +391,10 @@ internal fun RunCompleteScreen(
                 }
                 if (effortEnabled && !initialPresentationHeld &&
                     (effortFollowupOpen || effortSaving)) {
-                    InlineEffortChoices(effortSaving, effortError, actionsEnabled,
+                    InlineEffortRatingChoices(selectedEffortRating, effortSaving, effortError, actionsEnabled,
                         onSelect = { effort ->
                             effortFollowupOpen = false
-                            onSelectEffort(effort)
+                            onSelectEffortRating(effort)
                         },
                         onSkip = { effortFollowupOpen = false })
                 }
@@ -543,8 +549,10 @@ internal fun RunActivityRecapScreen(
                 Text(item.metrics?.sourceLabel ?: "Metrics unavailable", color = CompletionMutedInk,
                     fontSize = 12.sp)
                 CompletionEnergySummary(item.preRunEnergy, item.energy, true, false, false, false, {})
-                item.effort?.let { Text("Effort · ${it.displayLabel()}", color = CompletionStrongInk,
-                    fontSize = 14.sp) }
+                if (item.postRunEffortQuestionVersion == 1 || item.effort != null) {
+                    Text("Effort · ${historyEffortLabel(item)}", color = CompletionStrongInk,
+                        fontSize = 14.sp)
+                }
                 if (!localNote.isNullOrBlank()) {
                     Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
                         Text("YOUR NOTE", color = CompletionMutedInk, fontSize = 10.sp,
@@ -684,32 +692,20 @@ private fun EnergySummaryFact(
 
 /** A compact, skippable follow-up after Energy; reflection rendering proceeds independently. */
 @Composable
-private fun InlineEffortChoices(
+private fun InlineEffortRatingChoices(
+    selectedRating: Int?,
     saving: Boolean,
     error: String?,
     enabled: Boolean,
-    onSelect: (PostRunEffort) -> Unit,
+    onSelect: (Int) -> Unit,
     onSkip: () -> Unit
 ) {
     Column(modifier = Modifier.fillMaxWidth().padding(top = 12.dp).testTag(RUN_COMPLETE_EFFORT_TAG),
         verticalArrangement = Arrangement.spacedBy(5.dp)) {
-        Text("How hard was that?", color = CompletionStrongInk, fontSize = 16.sp,
+        Text("How hard was the whole run?", color = CompletionStrongInk, fontSize = 16.sp,
             fontWeight = FontWeight.Medium)
-        Text("Optional · how much effort the run took", color = CompletionMutedInk,
-            fontSize = 12.sp, lineHeight = 18.sp)
         if (!saving) {
-            PostRunEffort.entries.chunked(2).forEach { pair ->
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    pair.forEach { effort ->
-                        OutlinedButton(onClick = { onSelect(effort) }, enabled = enabled,
-                            colors = ButtonDefaults.outlinedButtonColors(contentColor = CompletionStrongInk),
-                            modifier = Modifier.weight(1f).heightIn(min = 48.dp)
-                                .testTag(RUN_COMPLETE_EFFORT_CHOICE_TAG_PREFIX + effort.name)) {
-                            Text(effort.displayLabel(), fontSize = 13.sp)
-                        }
-                    }
-                }
-            }
+            EffortRatingChoices(selectedRating, enabled, onSelect)
             TextButton(onClick = onSkip, enabled = enabled, modifier = Modifier.heightIn(min = 48.dp)) {
                 Text("Skip", color = CompletionMutedInk)
             }
@@ -719,6 +715,72 @@ private fun InlineEffortChoices(
         }
         if (error != null) {
             Text(error, color = CompletionStrongInk, fontSize = 12.sp, lineHeight = 18.sp)
+        }
+    }
+}
+
+/** One whole-run scale, shared with History; legacy words are never converted into numbers. */
+@Composable
+private fun EffortRatingChoices(selectedRating: Int?, enabled: Boolean, onSelect: (Int) -> Unit) {
+    Text("1–3 Easy · 4–6 Moderate\n7–8 Hard · 9–10 Very hard",
+        color = CompletionMutedInk, fontSize = 12.sp, lineHeight = 19.sp,
+        modifier = Modifier.padding(top = 3.dp, bottom = 4.dp))
+    Column(Modifier.fillMaxWidth().selectableGroup(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        (1..10).chunked(5).forEach { row ->
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                row.forEach { rating ->
+                    OutlinedButton(
+                        onClick = { onSelect(rating) },
+                        enabled = enabled,
+                        contentPadding = PaddingValues(horizontal = 0.dp, vertical = 8.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            contentColor = CompletionStrongInk,
+                            containerColor = if (rating == selectedRating) Color(0xFFE5EAD7) else Color.Transparent
+                        ),
+                        modifier = Modifier.weight(1f).heightIn(min = 48.dp)
+                            .testTag(RUN_COMPLETE_EFFORT_RATING_TAG_PREFIX + rating)
+                            .semantics { selected = rating == selectedRating }
+                    ) {
+                        Text(rating.toString(), fontSize = 16.sp,
+                            fontWeight = if (rating == selectedRating) FontWeight.Bold else FontWeight.Medium)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+internal fun EffortRatingSheet(
+    selectedRating: Int?,
+    enabled: Boolean = true,
+    onDismiss: () -> Unit,
+    onSelect: (Int?) -> Unit
+) {
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        containerColor = CompletionSurfaceTop,
+        modifier = Modifier.testTag(RUN_COMPLETE_EFFORT_SHEET_TAG)
+    ) {
+        Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState())
+            .padding(start = 24.dp, end = 24.dp, bottom = 24.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("How hard was the whole run?", color = CompletionStrongInk,
+                fontSize = 22.sp, fontWeight = FontWeight.Medium)
+            EffortRatingChoices(selectedRating, enabled, onSelect = { onSelect(it) })
+            if (selectedRating != null) {
+                TextButton(onClick = { onSelect(null) }, enabled = enabled,
+                    modifier = Modifier.align(Alignment.CenterHorizontally).heightIn(min = 48.dp)) {
+                    Text("Clear Effort", color = CompletionMutedInk)
+                }
+            }
+            TextButton(onClick = onDismiss, enabled = enabled,
+                modifier = Modifier.align(Alignment.CenterHorizontally).heightIn(min = 48.dp)) {
+                Text("Not now", color = CompletionMutedInk)
+            }
         }
     }
 }
@@ -914,6 +976,8 @@ private fun EnergyChoices(
         Text("POST RUN ENERGY", color = CompletionMutedInk, fontSize = 9.sp,
             fontWeight = FontWeight.SemiBold, letterSpacing = 1.7.sp,
             modifier = Modifier.padding(bottom = 12.dp))
+        Text("Physical energy right now · Optional", color = CompletionStrongInk,
+            fontSize = 13.sp, lineHeight = 19.sp, modifier = Modifier.padding(bottom = 10.dp))
         Column(
             modifier = Modifier.fillMaxWidth().selectableGroup(),
             verticalArrangement = Arrangement.spacedBy(10.dp)
@@ -931,17 +995,15 @@ private fun EnergyChoices(
                 )
             }
         }
-        Text(
-            text = if (reflectionFinal) {
-                "You can update Energy. Your reflection stays the same."
-            } else {
-                "Optional · How you feel now"
-            },
-            color = CompletionMutedInk,
-            fontSize = 12.sp,
-            lineHeight = 18.sp,
-            modifier = Modifier.padding(top = 10.dp, bottom = 2.dp)
-        )
+        if (reflectionFinal) {
+            Text(
+                text = "You can update Energy. Your reflection stays the same.",
+                color = CompletionMutedInk,
+                fontSize = 12.sp,
+                lineHeight = 18.sp,
+                modifier = Modifier.padding(top = 10.dp, bottom = 2.dp)
+            )
+        }
     }
 }
 
@@ -988,6 +1050,21 @@ private fun EnergyChoice(
             letterSpacing = 0.1.sp,
             textAlign = androidx.compose.ui.text.style.TextAlign.Center
         )
+        if (branch != ReflectionBranch.NO_SELECTION) {
+            Text(
+                text = when (branch) {
+                    ReflectionBranch.SPENT -> "Low energy"
+                    ReflectionBranch.FEELING_GOOD -> "Steady energy"
+                    ReflectionBranch.POWERED_UP -> "High energy"
+                    ReflectionBranch.NO_SELECTION -> ""
+                },
+                color = ink.copy(alpha = 0.8f * labelAlpha),
+                fontSize = 10.sp,
+                lineHeight = 15.sp,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                modifier = Modifier.padding(top = 5.dp)
+            )
+        }
     }
 }
 

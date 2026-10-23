@@ -4,6 +4,7 @@ import com.runstate.mobile.data.local.RunEntity
 import com.runstate.mobile.data.local.ShoePairEntity
 import com.runstate.mobile.data.local.FakeRunDao
 import com.runstate.mobile.data.local.PreRunEnergy
+import com.runstate.mobile.data.local.RunIntention
 import com.runstate.mobile.data.local.StoredRunState
 import com.runstate.mobile.data.local.RunTrackingMode
 import java.time.Clock
@@ -24,6 +25,30 @@ import org.junit.Test
  * value merely looks like a UUID or is roughly the current time.
  */
 class PreparedRunFactoryTest {
+
+    @Test
+    fun `new starts retain optional intention route and genuine answer time without inventing answers`() {
+        val factory = PreparedRunFactory(
+            clock = Clock.fixed(Instant.ofEpochMilli(OFFICIAL_START), ZoneOffset.UTC),
+            zoneIdSupplier = { ZoneOffset.UTC }, uuidSupplier = { UUID.fromString(RUN_ID) }
+        )
+        val unanswered = factory.create(routeLabel = "  ")
+        assertEquals(null, unanswered.preRunEnergy)
+        assertEquals(null, unanswered.preRunEnergyRecordedAtEpochMillis)
+        assertEquals(null, unanswered.runIntention)
+        assertEquals(null, unanswered.routeLabel)
+        assertEquals(2, unanswered.energyQuestionVersion)
+        val selected = factory.create(PreRunEnergy.LOW, RunTrackingMode.GPS,
+            runIntention = RunIntention.KEEP_EASY, routeLabel = "  Park loop  ",
+            preRunEnergyRecordedAtEpochMillis = OFFICIAL_START - 30_000L)
+        assertEquals(RunIntention.KEEP_EASY, selected.runIntention)
+        assertEquals("Park loop", selected.routeLabel)
+        assertEquals(OFFICIAL_START - 30_000L, selected.preRunEnergyRecordedAtEpochMillis)
+        assertThrows(IllegalArgumentException::class.java) { factory.create(routeLabel = "x".repeat(81)) }
+        assertThrows(IllegalArgumentException::class.java) {
+            factory.create(preRunEnergyRecordedAtEpochMillis = OFFICIAL_START - 1)
+        }
+    }
 
     @Test
     fun `physical shoe selection is optional and frozen into the official row`() {
@@ -130,7 +155,8 @@ class PreparedRunFactoryTest {
                 lastCheckpointEpochMillis = OFFICIAL_START,
                 finishEpochMillis = null,
                 transitionHistoryComplete = true,
-                trackingMode = RunTrackingMode.FIXTURE
+                trackingMode = RunTrackingMode.FIXTURE,
+                energyQuestionVersion = RunEntity.CURRENT_ENERGY_QUESTION_VERSION
             ),
             row
         )

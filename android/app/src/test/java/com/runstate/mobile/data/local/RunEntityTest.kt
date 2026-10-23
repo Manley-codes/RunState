@@ -18,6 +18,25 @@ class RunEntityTest {
     private val canonicalUuid = "0f6a2c1e-9d43-4b7a-9c21-7b5e8a4d1f30"
 
     @Test
+    fun `energy foundation leaves old reports unknown and validates independent new answers`() {
+        val old = runWith(state = StoredRunState.COMPLETED, postRunEffort = PostRunEffort.HEAVY)
+        assertNull(old.energyQuestionVersion)
+        assertNull(old.postRunEffortRating)
+        assertNull(old.postRunEffortRecordedAtEpochMillis)
+        assertNull(old.postRunEnergyRecordedAtEpochMillis)
+        assertNull(old.firstPostRunEnergy)
+        assertEquals(PostRunEffort.HEAVY, old.postRunEffort)
+        listOf(0, 11).forEach { invalid ->
+            assertThrows(IllegalArgumentException::class.java) { old.copy(postRunEffortRating = invalid) }
+        }
+        assertThrows(IllegalArgumentException::class.java) { runWith().copy(postRunEffortRating = 5) }
+        assertThrows(IllegalArgumentException::class.java) { old.copy(routeLabel = " loop ") }
+        assertThrows(IllegalArgumentException::class.java) { old.copy(energyQuestionVersion = 0) }
+        assertEquals(1, old.copy(postRunEffortRating = 1).postRunEffortRating)
+        assertEquals(10, old.copy(postRunEffortRating = 10).postRunEffortRating)
+    }
+
+    @Test
     fun `older rows remain finalized and note validation preserves optional completed only semantics`() {
         val active = runWith()
         assertEquals(true, active.activityFinalized)

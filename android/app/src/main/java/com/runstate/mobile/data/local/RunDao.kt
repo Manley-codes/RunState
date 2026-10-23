@@ -205,6 +205,27 @@ abstract class RunDao {
         effort: PostRunEffort?
     ): Int
 
+    /** Save a new 1–10 answer without translating or erasing the old categorical Effort. */
+    suspend fun recordEffortRating(runId: String, rating: Int?, now: Long): Boolean {
+        require(rating == null || rating in 1..10) { "Effort must be between 1 and 10, or unanswered." }
+        return updateEffortRatingIfCompleted(runId, StoredRunState.COMPLETED, rating, now,
+            RunEntity.CURRENT_EFFORT_QUESTION_VERSION) == 1
+    }
+
+    @Query("""
+        UPDATE runs SET post_run_effort_rating = :rating,
+            first_post_run_effort_rating = COALESCE(first_post_run_effort_rating, :rating),
+            post_run_effort_recorded_at_epoch_millis = CASE
+                WHEN post_run_effort_recorded_at_epoch_millis IS NULL AND :rating IS NOT NULL THEN :now
+                ELSE post_run_effort_recorded_at_epoch_millis END,
+            post_run_effort_updated_at_epoch_millis = :now,
+            post_run_effort_question_version = :questionVersion
+        WHERE run_id = :runId AND state = :completedState
+    """)
+    protected abstract suspend fun updateEffortRatingIfCompleted(
+        runId: String, completedState: StoredRunState, rating: Int?, now: Long, questionVersion: Int
+    ): Int
+
     /**
      * Every stored run that has not ended, oldest start first.
      *

@@ -137,7 +137,8 @@ class RunSessionCoordinatorTest {
         startTimezoneId = START_ZONE,
         lastCheckpointEpochMillis = officialStart,
         transitionHistoryComplete = true,
-        trackingMode = RunTrackingMode.FIXTURE
+        trackingMode = RunTrackingMode.FIXTURE,
+        energyQuestionVersion = RunEntity.CURRENT_ENERGY_QUESTION_VERSION
     )
 
     /**
@@ -1087,7 +1088,10 @@ class RunSessionCoordinatorTest {
             fixture.coordinator.requestStart(
                 PreRunEnergy.HIGH,
                 musicObservationRequested = true,
-                musicReflectionSharingAllowed = true
+                musicReflectionSharingAllowed = true,
+                runIntention = com.runstate.mobile.data.local.RunIntention.KEEP_EASY,
+                routeLabel = " Park loop ",
+                preRunEnergyRecordedAtEpochMillis = OFFICIAL_START - 10_000L
             )
         }
         assertTrue(failureOf(failed) is IllegalStateException)
@@ -1101,7 +1105,10 @@ class RunSessionCoordinatorTest {
             fixture.coordinator.requestStart(
                 PreRunEnergy.LOW,
                 musicObservationRequested = false,
-                musicReflectionSharingAllowed = false
+                musicReflectionSharingAllowed = false,
+                runIntention = com.runstate.mobile.data.local.RunIntention.HARD_EFFORT,
+                routeLabel = "Different route",
+                preRunEnergyRecordedAtEpochMillis = SECOND_START - 1L
             )
         }
         val session = runBlocking { retry.await() }
@@ -1114,7 +1121,10 @@ class RunSessionCoordinatorTest {
                 preparedRun().copy(
                     preRunEnergy = PreRunEnergy.HIGH,
                     musicObservationRequested = true,
-                    musicReflectionSharingAllowed = true
+                    musicReflectionSharingAllowed = true,
+                    runIntention = com.runstate.mobile.data.local.RunIntention.KEEP_EASY,
+                    routeLabel = "Park loop",
+                    preRunEnergyRecordedAtEpochMillis = OFFICIAL_START - 10_000L
                 )
             ),
             fixture.dao.inserted

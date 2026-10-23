@@ -241,11 +241,12 @@ internal fun historyItemFor(
     )
 
     // A version-1 completed row may have no finish. Its time cannot be reconstructed.
-    val metrics = if (run.finishEpochMillis == null) {
+    val storedMetrics = if (run.finishEpochMillis == null) {
         null
     } else {
-        completedHistoryMetrics(run, transitions)?.let(::runMetricsDisplayFor)
+        completedHistoryMetrics(run, transitions)
     }
+    val metrics = storedMetrics?.let(::runMetricsDisplayFor)
 
     return RunHistoryItem(
         runId = run.runId,
@@ -274,7 +275,8 @@ internal fun historyItemFor(
         metricSource = run.metricSource,
         // PENDING defaults to a conservative voice flag, not proof that a real GPS run is fake.
         // A saved Energy check-in must not wait for the reflection provider to answer.
-        insightEligible = reflection?.takeIf { it.status == ReflectionStatus.READY }?.isTestData != true,
+        insightEligible = run.activityFinalized &&
+            reflection?.takeIf { it.status == ReflectionStatus.READY }?.isTestData != true,
         musicObservationRequested = run.musicObservationRequested,
         musicObservationCount = musicObservations.size,
         lastObservedMedia = musicObservations.maxByOrNull { it.sequenceNumber }?.let { last ->
@@ -283,7 +285,26 @@ internal fun historyItemFor(
             if (label.isBlank()) source else "$label · $source"
         },
         reflectionMusicSummary = reflectionMusicSummaryFor(run, reflection),
-        telemetryCoverage = run.telemetryCoverage
+        telemetryCoverage = run.telemetryCoverage,
+        officialStartEpochMillis = run.officialStartEpochMillis,
+        finishEpochMillis = run.finishEpochMillis,
+        startTimezoneId = run.startTimezoneId,
+        activeDurationMillis = storedMetrics?.activeMillis,
+        distanceMeters = run.finalDistanceMeters,
+        runIntention = run.runIntention,
+        routeLabel = run.routeLabel,
+        energyQuestionVersion = run.energyQuestionVersion,
+        preRunEnergyRecordedAtEpochMillis = run.preRunEnergyRecordedAtEpochMillis,
+        postRunEffortRating = run.postRunEffortRating,
+        postRunEffortQuestionVersion = run.postRunEffortQuestionVersion,
+        postRunEffortRecordedAtEpochMillis = run.postRunEffortRecordedAtEpochMillis,
+        postRunEffortUpdatedAtEpochMillis = run.postRunEffortUpdatedAtEpochMillis,
+        firstPostRunEffortRating = run.firstPostRunEffortRating,
+        postRunEnergyRecordedAtEpochMillis = run.postRunEnergyRecordedAtEpochMillis,
+        postRunEnergyUpdatedAtEpochMillis = run.postRunEnergyUpdatedAtEpochMillis,
+        postRunEnergyQuestionVersion = run.postRunEnergyQuestionVersion,
+        firstPostRunEnergy = run.firstPostRunEnergy,
+        firstPostRunEnergyQuestionVersion = run.firstPostRunEnergyQuestionVersion
     )
 }
 
