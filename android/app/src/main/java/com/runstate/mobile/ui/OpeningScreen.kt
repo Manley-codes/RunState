@@ -13,10 +13,12 @@ import android.provider.Settings
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
@@ -47,10 +49,12 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
@@ -84,6 +88,7 @@ import kotlinx.coroutines.withTimeoutOrNull
 
 private const val OPENING_VISIBLE_MILLIS = 4_800L
 internal const val OPENING_SCREEN_TAG = "openingScreen"
+internal const val OPENING_FIRST_FRAME_TAG = "openingFirstFrame"
 private const val OPENING_GAP_DP = 6f
 private val OpeningFont = FontFamily(Font(R.font.barlow_condensed_medium, FontWeight.Medium))
 private val OpeningArrival = CubicBezierEasing(.19f, 1f, .22f, 1f)
@@ -125,7 +130,8 @@ internal fun OpeningScreen(
     onFinished: () -> Unit,
     lifecycle: Lifecycle,
     modifier: Modifier = Modifier,
-    motionEnabledOverride: Boolean? = null
+    motionEnabledOverride: Boolean? = null,
+    photoLoader: suspend (AssetManager) -> Map<String, ImageBitmap> = ::loadOpeningPhotos
 ) {
     val context = LocalContext.current
     val assets = context.assets
@@ -134,16 +140,12 @@ internal fun OpeningScreen(
     var visibleNanos by rememberSaveable { mutableLongStateOf(0L) }
     val systemMotionEnabled = rememberOpeningMotionEnabled(context)
     val motionEnabled = motionEnabledOverride ?: systemMotionEnabled
-    val images by produceState<Map<String, ImageBitmap>?>(null, assets) {
+    val images by produceState<Map<String, ImageBitmap>?>(null, assets, photoLoader) {
         // Decoding happens away from Compose's first frame. Bundled photos never need a
         // connection; a damaged/missing asset cannot prevent leaving this screen.
+        value = null
         value = withTimeoutOrNull(1_500L) {
-            withContext(Dispatchers.IO) {
-                OpeningRows.flatten().mapNotNull { photo ->
-                    ensureActive()
-                    decodeOpeningPhoto(assets, photo.id)?.let { photo.id to it }
-                }.toMap()
-            }
+            photoLoader(assets)
         } ?: emptyMap()
     }
     val finish = {
@@ -210,47 +212,62 @@ internal fun OpeningScreen(
         // The wordmark is artwork; keep it inside narrow windows and large-font devices.
         // The full-screen accessible action provides the readable app name independently.
         val wordmarkScale = min(1f, maxWidth.value / 390f)
-        Canvas(Modifier.fillMaxSize().clearAndSetSemantics {
-            // Readiness is exposed only as a test tag; decorative photos are not announced.
-            semanticTestTag = when {
-                allPhotosDecoded -> "openingPhotosReady"
-                photosReady -> "openingPhotosUnavailable"
-                else -> "openingPhotosLoading"
+        if (images.isNullOrEmpty()) {
+            // This bundled still is a native capture of the approved photo wall, including
+            // its shading. It draws synchronously so decoding cannot expose a blank frame.
+            Box(Modifier.fillMaxSize().testTag(
+                if (photosReady) "openingPhotosUnavailable" else "openingPhotosLoading"
+            )) {
+                Image(
+                    painter = painterResource(R.drawable.opening_first_frame),
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize().testTag(OPENING_FIRST_FRAME_TAG)
+                )
             }
-        }) {
-            val gap = OPENING_GAP_DP.dp.toPx()
-            val overhang = 36.dp.toPx()
-            val rowHeight = (size.height + overhang * 2 - gap * 5) / 6
-            val seconds = if (motionEnabled) elapsedSeconds else 0f
-            OpeningRows.forEachIndexed { index, photos ->
-                val width = photos.sumOf { (it.widthDp + OPENING_GAP_DP).toDouble() }.toFloat().dp.toPx()
-                val travel = (OpeningSpeeds[index].dp.toPx() * (seconds + OpeningPhases[index])) % width
-                val offset = if (index % 2 == 0) -travel else travel - width
-                val top = -overhang + index * (rowHeight + gap)
-                clipRect(0f, max(0f, top), size.width, min(size.height, top + rowHeight)) {
-                    // More than two copies are only needed in an unusually wide window.
-                    repeat(ceil(size.width / width).toInt() + 2) { copy ->
-                        var left = -20.dp.toPx() + offset + copy * width
-                        photos.forEach { photo ->
-                            val tileWidth = photo.widthDp.dp.toPx()
-                            if (left + tileWidth > 0 && left < size.width) {
-                                images?.get(photo.id)?.let { bitmap ->
-                                    drawOpeningPhoto(bitmap, left, top, tileWidth, rowHeight,
-                                        photo.verticalPosition, photoFilter)
+        } else {
+            Canvas(Modifier.fillMaxSize().clearAndSetSemantics {
+                // Readiness is exposed only as a test tag; decorative photos are not announced.
+                semanticTestTag = when {
+                    allPhotosDecoded -> "openingPhotosReady"
+                    photosReady -> "openingPhotosUnavailable"
+                    else -> "openingPhotosLoading"
+                }
+            }) {
+                val gap = OPENING_GAP_DP.dp.toPx()
+                val overhang = 36.dp.toPx()
+                val rowHeight = (size.height + overhang * 2 - gap * 5) / 6
+                val seconds = if (motionEnabled) elapsedSeconds else 0f
+                OpeningRows.forEachIndexed { index, photos ->
+                    val width = photos.sumOf { (it.widthDp + OPENING_GAP_DP).toDouble() }.toFloat().dp.toPx()
+                    val travel = (OpeningSpeeds[index].dp.toPx() * (seconds + OpeningPhases[index])) % width
+                    val offset = if (index % 2 == 0) -travel else travel - width
+                    val top = -overhang + index * (rowHeight + gap)
+                    clipRect(0f, max(0f, top), size.width, min(size.height, top + rowHeight)) {
+                        // More than two copies are only needed in an unusually wide window.
+                        repeat(ceil(size.width / width).toInt() + 2) { copy ->
+                            var left = -20.dp.toPx() + offset + copy * width
+                            photos.forEach { photo ->
+                                val tileWidth = photo.widthDp.dp.toPx()
+                                if (left + tileWidth > 0 && left < size.width) {
+                                    images?.get(photo.id)?.let { bitmap ->
+                                        drawOpeningPhoto(bitmap, left, top, tileWidth, rowHeight,
+                                            photo.verticalPosition, photoFilter)
+                                    }
                                 }
+                                left += tileWidth + gap
                             }
-                            left += tileWidth + gap
                         }
                     }
                 }
+                val shade = Color(0xFF0A130F)
+                drawRect(Brush.verticalGradient(
+                    0f to shade.copy(alpha = .48f), .16f to shade.copy(alpha = .09f),
+                    .29f to shade.copy(alpha = .14f), .49f to shade.copy(alpha = .65f),
+                    .56f to shade.copy(alpha = .51f), .73f to shade.copy(alpha = .12f),
+                    1f to shade.copy(alpha = .48f)
+                ))
             }
-            val shade = Color(0xFF0A130F)
-            drawRect(Brush.verticalGradient(
-                0f to shade.copy(alpha = .48f), .16f to shade.copy(alpha = .09f),
-                .29f to shade.copy(alpha = .14f), .49f to shade.copy(alpha = .65f),
-                .56f to shade.copy(alpha = .51f), .73f to shade.copy(alpha = .12f),
-                1f to shade.copy(alpha = .48f)
-            ))
         }
         Text(
             text = buildAnnotatedString {
@@ -318,6 +335,15 @@ private fun DrawScope.drawOpeningPhoto(
         filterQuality = FilterQuality.Medium
     )
 }
+
+/** The loader seam lets first-frame tests hold decoding without changing visible timing. */
+internal suspend fun loadOpeningPhotos(assets: AssetManager): Map<String, ImageBitmap> =
+    withContext(Dispatchers.IO) {
+        OpeningRows.flatten().mapNotNull { photo ->
+            ensureActive()
+            decodeOpeningPhoto(assets, photo.id)?.let { photo.id to it }
+        }.toMap()
+    }
 
 private fun decodeOpeningPhoto(assets: AssetManager, id: String): ImageBitmap? = try {
     val path = "opening/$id.webp"

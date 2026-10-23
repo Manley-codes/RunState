@@ -23,8 +23,12 @@ import androidx.lifecycle.LifecycleRegistry
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import java.io.File
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -37,6 +41,86 @@ class OpeningScreenTest {
     private class ScreenLifecycle : LifecycleOwner {
         val registry = LifecycleRegistry(this)
         override val lifecycle: Lifecycle get() = registry
+    }
+
+    @Test
+    fun firstFrameShowsCollageBeforePhotosDecodeAndKeepsTheFullOpeningTime() {
+        compose.mainClock.autoAdvance = false
+        val owner = ScreenLifecycle()
+        val releasePhotos = CompletableDeferred<Unit>()
+        val photos = runBlocking {
+            loadOpeningPhotos(InstrumentationRegistry.getInstrumentation().targetContext.assets)
+        }
+        var finished = 0
+        compose.runOnUiThread { owner.registry.currentState = Lifecycle.State.RESUMED }
+        compose.setContent {
+            OpeningScreen({ finished++ }, owner.lifecycle, motionEnabledOverride = true,
+                photoLoader = { releasePhotos.await(); photos })
+        }
+        compose.onNodeWithTag(OPENING_FIRST_FRAME_TAG, useUnmergedTree = true).assertIsDisplayed()
+        compose.onNodeWithTag("openingPhotosReady", useUnmergedTree = true).assertDoesNotExist()
+        assertPhotographicFirstFrame()
+        saveScreen("opening-loading-first-frame.png")
+        compose.mainClock.advanceTimeBy(500)
+        compose.runOnUiThread { assertEquals(0, finished); releasePhotos.complete(Unit) }
+        waitForBundledPhotos()
+        compose.onNodeWithTag(OPENING_FIRST_FRAME_TAG, useUnmergedTree = true).assertDoesNotExist()
+        compose.mainClock.advanceTimeBy(4_500)
+        compose.runOnUiThread { assertEquals(0, finished) }
+        compose.mainClock.advanceTimeBy(400)
+        compose.runOnUiThread { assertEquals(1, finished) }
+    }
+
+    @Test
+    fun compactLoadingFrameStillShowsPhotosAndCanBeSkipped() {
+        compose.mainClock.autoAdvance = false
+        val owner = ScreenLifecycle()
+        var finished = 0
+        compose.runOnUiThread { owner.registry.currentState = Lifecycle.State.CREATED }
+        compose.setContent {
+            Box(Modifier.size(320.dp, 180.dp)) {
+                OpeningScreen({ finished++ }, owner.lifecycle, motionEnabledOverride = true,
+                    photoLoader = { awaitCancellation() })
+            }
+        }
+        compose.onNodeWithTag(OPENING_FIRST_FRAME_TAG, useUnmergedTree = true).assertIsDisplayed()
+        assertPhotographicFirstFrame()
+        saveScreen("opening-loading-compact.png")
+        compose.onNodeWithTag(OPENING_SCREEN_TAG).performClick()
+        compose.runOnUiThread { assertEquals(1, finished) }
+    }
+
+    @Test
+    fun unavailableMovingPhotosKeepTheCollageUntilTheScreenCanExit() {
+        compose.mainClock.autoAdvance = false
+        val owner = ScreenLifecycle()
+        var finished = 0
+        compose.runOnUiThread { owner.registry.currentState = Lifecycle.State.CREATED }
+        compose.setContent {
+            OpeningScreen({ finished++ }, owner.lifecycle, photoLoader = { emptyMap() })
+        }
+        compose.waitUntil(5_000) {
+            compose.mainClock.advanceTimeByFrame()
+            compose.onAllNodesWithTag("openingPhotosUnavailable", useUnmergedTree = true)
+                .fetchSemanticsNodes().isNotEmpty()
+        }
+        compose.onNodeWithTag(OPENING_FIRST_FRAME_TAG, useUnmergedTree = true).assertIsDisplayed()
+        assertPhotographicFirstFrame()
+        compose.runOnUiThread { assertEquals(0, finished); owner.registry.currentState = Lifecycle.State.RESUMED }
+        compose.mainClock.advanceTimeByFrame()
+        compose.runOnUiThread { assertEquals(1, finished) }
+    }
+
+    private fun assertPhotographicFirstFrame() {
+        val pixels = compose.onNodeWithTag(OPENING_FIRST_FRAME_TAG, useUnmergedTree = true)
+            .captureToImage().toPixelMap()
+        val colors = mutableSetOf<ULong>()
+        for (y in pixels.height / 10 until pixels.height * 8 / 10 step 13) {
+            for (x in pixels.width / 10 until pixels.width * 9 / 10 step 13) {
+                colors += pixels[x, y].value
+            }
+        }
+        assertTrue("The loading frame must show photographs, not a flat dark placeholder", colors.size > 100)
     }
 
     @Test

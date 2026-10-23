@@ -4,6 +4,7 @@
   "preparedOn": "2026-10-22",
   "processing": "Original aspect ratio retained; orientation normalized; resized to a maximum 900-pixel dimension and encoded as WebP quality 86. No generative image edits were applied during packaging.",
   "runtime": "Photographs are bundled for offline display; opening-screen rendering does not request photos from the providers.",
+  "firstFrame": "res/drawable-nodpi/opening_first_frame.webp is a 720x1604 still rendered by the existing native photo-wall GraphicsLayer at time zero, WebP quality 88. It uses only the already credited photographs and approved layout/shading, without wordmark, skip text or system bars. It covers photo decoding; the live wall replaces it. Regenerate from the native wall if its arrangement changes. No generated photographs or new photo sources.",
   "photos": [
     {
       "id": "blue-shoes",
