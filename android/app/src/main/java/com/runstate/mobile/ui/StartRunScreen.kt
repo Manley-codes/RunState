@@ -935,7 +935,7 @@ private fun EnergyTile(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
-        Canvas(Modifier.size(18.dp)) {
+        Canvas(Modifier.size(18.dp).offset(y = 4.dp)) {
             when (energy) {
                 PreRunEnergy.LOW -> {
                     drawCircle(accent, radius = size.minDimension * 0.42f)
