@@ -7,6 +7,18 @@ metadata:
 
 # Running-app landscape & considerations
 
+## October 23, 2026 — RPE article review and approved refinement
+
+Manley asked for a review of Thomas Watson's [Marathon Handbook RPE article](https://marathonhandbook.com/rate-of-perceived-exertion/), then approved the bounded changes below. The live article was updated October22,2026 (with Katelyn Tocci credited for the update). Useful points are rating the whole session, distinguishing intended from experienced effort, and providing consistent scale anchors. They do not establish that a runner's Energy answers measure exertion or that RunState already improves training outcomes.
+
+The implementation uses the Foster modified CR10 descriptions reproduced in Table1 of [Haddad et al., 2017](https://www.frontiersin.org/journals/neuroscience/articles/10.3389/fnins.2017.00612/full): 0 Rest; 1 Very, very easy; 2 Easy; 3 Moderate; 4 Somewhat hard; 5 Hard; 7 Very hard; 10 Maximal. Six, eight and nine remain selectable intermediate numbers, without invented anchors. This is a different scale from RunState's initial custom 1–10 question. New answers get Effort version2; old version1 answers keep their earlier meaning and comparison cohort. An unknown historical scale is kept or cleared rather than converted.
+
+The [original Foster study](https://pubmed.ncbi.nlm.nih.gov/11708692/) describes a whole-session rating, a 30-minute post-session collection protocol and duration multiplied by rating. That protocol is not evidence that every immediate answer is invalid. [Fanchini et al., 2015](https://pubmed.ncbi.nlm.nih.gov/25365454/) tested collection timing in soccer under specific conditions; it does not prove timing is irrelevant for every run. RunState therefore retains immediate optional check-in and existing answer timestamps, without adding a 30-minute wait or a session-load calculation. Familiarization and repeated real-use testing are still needed; adopting the wording alone does not validate our app's measurement or coaching benefit.
+
+Source correction: the Marathon Handbook citation using DOI `10.3389/fphys.2017.00612` points to unrelated heart-valve genetics; the relevant session-RPE review uses `10.3389/fnins.2017.00612`. Do not carry forward the mismatched citation.
+
+Approved product application: ask **How hard was the whole run?**, then show neutral context such as **Planned: Keep it easy. Reported: 7/10 — Very hard.** in existing History/check-in details. No automatic failure label, extra dashboard, new Energy question, training prescription or reflection-writer rule is introduced. Implementation/phone verification lives in `project_current_state.md`; earlier research sections below are dated baselines, not the latest implementation status.
+
 ## October 22, 2026 — Energy foundation review
 
 **Status: research and proposed validation plan; no new Energy implementation.** Manley wants a

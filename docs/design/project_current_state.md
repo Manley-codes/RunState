@@ -25,19 +25,123 @@ functionality and the remaining UI. Do not expand the feature list or add screen
 strictly necessary; any small optional additions need an explicit decision. This supersedes
 earlier queue suggestions to broaden the product before the event.
 
-Commit/push the current Energy foundation checkpoint first, using the existing branch.
-Then address the brief black frame before the opening collage: the launch should show an
-opening-compatible visual from the first displayed frame, without an intermediate black screen.
-The delay has been reported, not yet diagnosed or fixed; do not claim literally zero OS startup time.
+Manley committed/pushed the Energy foundation as `f6a7f21` and documentation as `db870e9`
+on `claude/run-voice`; the clean checkpoint and matching remote-tracking tip were verified.
+The opening's dark photo-loading frame has now been replaced as documented below; user visual
+review remains. Do not claim literally zero OS startup time.
 Countdown and Live Run are the only two screens identified as needing substantial remaining
 design work. Preserve accepted Start/Completion/opening layouts, voices and musical timing while
 checking their functionality. Energy stays a working foundation for real use, not a new feature
-expansion project before AfroTech. No new implementation or deployment is part of this checkpoint.
+expansion project before AfroTech. No backend deployment is needed for this opening fix.
 
 Account timing recommendation: plan sign-up after AfroTech, before cloud backup/sync or private
 online profiles require user ownership and access control. Separate local histories on individual
 phones do not by themselves require accounts. Keep the current demo free of a mandatory sign-up;
 revisit earlier only for a concrete requirement, not as a prerequisite for finishing existing UI.
+
+## October 23 RPE refinement and personal History cleanup
+
+Follow-up Start polish: Manley asked to lower the moon, bars and sun within the pre-run Energy
+squares. Each symbol now draws 4dp lower, with tile sizes, labels and selection mechanics
+unchanged. Debug/test builds and two existing silent Moto layout/selection and compact large-text
+checks passed (10.883s); native screenshot inspected and update installed in place. All three
+retained runs, related data and four preference hashes still match the cleanup receipt. No new
+source/test files or Git actions. Manley plans to begin real-use Energy/Effort testing today.
+
+**Effort: Ready to test — installed on Moto; user comprehension and repeated-use review remain.**
+Manley approved the refinements after the Marathon Handbook article review. New whole-run Effort
+answers now use the Foster 0–10 descriptions under question version2. The question is **How hard
+was the whole run?** Zero is Rest, not an unanswered value; missing remains null. The numbered
+intermediate choices 6, 8 and 9 remain available without invented verbal anchors. Earlier custom
+1–10 answers retain version1, their original meanings and their original editor. Unknown numeric
+scales can be kept or cleared, not converted. First answers and original timestamps survive edits
+and clears. Known scales are separated in similar-run comparisons. Existing categorical answers
+are unchanged. Room stays at version20 with no new schema or migration.
+
+Existing History/check-in details now juxtapose intended and experienced effort, for example
+**Planned: Keep it easy. Reported: 7/10 — Very hard.** This does not grade a run or prescribe a
+training response. Energy questions, frozen reflections, writer, voices, music and immediate
+completion timing are unchanged. No 30-minute delay, training-load score, new dashboard or new
+network fields were added. Research and source correction: `research_app_landscape.md` §October23.
+
+Validation: debug and release each passed 765 unit checks, with no failures or skips; debug,
+release and test APK builds succeeded. Seven focused silent Moto cases passed in 9.423s, covering
+durable zero/clear/reopen, original/unknown-scale edits, answer provenance, new/earlier/unknown
+editors, and intended-versus-reported evidence without audio or writes to personal History.
+Normal Effort, evidence and the actual cleaned History screenshots were inspected. A separate
+run of the new-sheet test with the phone's actual font scale at 1.6 passed in 2.99s; the enlarged
+sheet showed the complete scale and dismissal, and the original 1.0 setting was restored.
+An attempted test-only local-density override did not reach the sheet's separate dialog window;
+its identical capture was not accepted as large-text evidence, and that misleading test was
+removed. No production repair was needed. Independent code review found no actionable issue.
+
+**Personal History cleanup: Complete for agreed scope.** A current full backup was taken and
+verified before changing data. Of 46 completed/finalized records, 43 explicit samples or short
+tests were removed, including a 2.19-mile record explicitly marked Sample. One approximately
+27-minute, 0.039-mile record was the documented October14 GPS walk/test, not a genuine run.
+No unresolved near-mile candidate needed a decision. The three retained GPS runs are:
+
+| Local date | Distance | Coverage |
+| --- | --- | --- |
+| October 16, 2026 | 1.61 mi | Partial; preserved without inventing missing metrics |
+| October 18, 2026 | 2.00 mi | Complete |
+| October 20, 2026 | 1.25 mi | Complete |
+
+Every retained field and related row matches the pre-cleanup snapshot: three reflections,
+3,205 location points, 1,247 music observations, eleven song preparations, two split snapshots,
+five splits, three transitions and two weather records. Shoe pair/selection data and all four
+preference files are unchanged. Room20 integrity is OK with no foreign-key violations. History
+visually shows three activities. The accepted creative examples remain in
+`music_reflection_accepted_baseline.md`; they were not lost through personal History cleanup.
+
+The app was updated in place, never uninstalled. The temporary test package and temporary phone
+cleanup copies were removed, then RunState was reopened. Necessary private backup/verification
+files are in ignored `docs/local/rpe-cleanup-2026-10-23/`: `before.tar` is the recovery copy;
+`cleanup-manifest.json` identifies exact removed/retained IDs; `after.tar` and verification receipts
+record the final state. These contain private app data and must stay out of Git. No new source or
+test files were needed for this refinement; the previously created opening still is a separate
+pending change. No stage, commit, push, merge, provider or deployment action occurred. This is a
+good commit checkpoint; routine Git remains Manley's task. Countdown exploration stays paused.
+
+## October 22 Opening loading frame — Ready to test; installed on Moto
+
+The existing OpeningScreen decoded all33 photographs off-thread before displaying any of them.
+Until that completed it showed only its dark background (and the wordmark had not yet entered).
+A synchronous bundled still of the approved native collage now covers that loading interval.
+The moving wall replaces it when ready; the original4.8-second visible-photo timer, motion,
+wordmark accents, low-hierarchy skip and lifecycle/recovery gates are unchanged. Empty/failed
+decoding also retains the still until the existing exit path can run. No network is involved.
+
+One new source resource is necessary: `android/app/src/main/res/drawable-nodpi/opening_first_frame.webp`
+(720x1604,169,950bytes). It was rendered by the native photo-wall GraphicsLayer at time zero,
+without text or system bars, using only the existing33 credited photographs. The existing source
+manifest records its provenance and that it must be regenerated if the wall arrangement changes.
+No generated photographs, new photo sources, theme change or startup-library dependency was added.
+
+Debug/release/test APK builds passed. Twenty silent Moto checks passed in39.386s: nine component
+checks (including three new first-frame/loading regressions) and eleven existing root journey cases.
+They cover withheld/failed decoding, photographic pixels, the full duration after readiness,
+compact layouts, motion/reduced motion, skip/background, repeated launcher entry and restoration/
+recovery bypasses. An initial test-only unresolved import was removed before device execution;
+review also shortened the blocked-loader fixture below its production timeout and predecoded its
+photos, avoiding a test that would contradict that timeout. No device failures were hidden/retried.
+Loading/compact images and normal cold-launch/reopen screenshots were inspected. Android reported
+a cold Activity launch of1,955ms and successful existing-task reopen; these are diagnostic startup
+times, not exact black-frame measurements or proof of instantaneous launch. The prior baseline
+capture reported WARM, so no before/after speed improvement is claimed. Android's own startup
+window is separate from this app-level loading fix. Manley's normal-launch visual check remains.
+
+Phone data preservation: all46 completed runs and every current field across11 business tables,
+plus android_metadata and four preference files, match the before snapshot. Room20 integrity is
+OK with zero foreign-key violations. Only the temporary test package was uninstalled; the main
+app was updated in place and returned to Start. Private backup/receipts remain under the ignored
+`docs/local/opening-launch-2026-10-22/`; temporary extraction copies and preview server/tab were
+closed. No stage/commit/push/merge, backend/provider setting or playback change occurred.
+
+Git lesson: the prior commit block paused in Git's pager while displaying line-ending warnings.
+`q` exits that viewer and allows the script to continue; it neither undoes changes nor creates a
+commit. The LF-to-CRLF notices concern Windows line endings, not lost code. Future supplied blocks
+should invoke `git --no-pager` to avoid this interruption. Both Energy commits and the push succeeded.
 
 ## October 22 Energy foundation implementation — Ready to test; installed on Moto
 

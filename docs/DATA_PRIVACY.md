@@ -13,6 +13,15 @@ console statement that RunState has no server does **not** apply to the Android 
 
 ## Local Energy learning foundation — October 22, 2026
 
+**October 23 Effort refinement:** new numeric answers use the Foster 0–10 session-effort
+descriptions, recorded as Effort question version2. Earlier custom 1–10 answers retain version1
+and their original labels, including during edits; unknown historical scales are not silently
+converted. Clearing an answer retains its first-answer/timing provenance. Similar-run Effort
+comparisons keep different scales separate. The existing History/check-in detail can show the
+runner's planned intention beside their reported effort, without grading success or prescribing
+training. This is still descriptive feedback, not a validated training-load score. It adds no
+outbound fields or network requests, and immediate check-in/reflection timing is unchanged.
+
 **Status: Ready to test — installed on Moto; software/device checks passed, user review remains.** Optional intention and runner-named route labels,
 physical-energy question versions/answer times, and a separate numeric whole-run Effort answer
 are stored on the phone. First Energy/Effort answers and latest edit times distinguish original
