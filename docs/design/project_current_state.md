@@ -39,6 +39,46 @@ online profiles require user ownership and access control. Separate local histor
 phones do not by themselves require accounts. Keep the current demo free of a mandatory sign-up;
 revisit earlier only for a concrete requirement, not as a prerequisite for finishing existing UI.
 
+## October 23 Frosted Drift countdown — native implementation
+
+**Ready to test — installed on Moto ZT422G8FT4.** Manley approved the browser's Frosted
+Drift design for his next real run and explicitly requested direct implementation: remove the
+completion GO and the button's Let's go state, then make the transition to Active smooth.
+
+The native screen retains the icy pale background, seven floating glass orbs, smaller orb sizes,
+balanced placement and the clearer trail orb. No fruit or rejected black visualizer treatment.
+Anton supplies the condensed countdown numerals; they pulse each second, more strongly for
+3/2/1. Start now stays a round play control, with Cancel below. Neither zero nor GO/Let's go
+appears. During the existing StartingRun write, controls are disabled and the numeral clears;
+the Cancel slot retains its height so nothing jumps. Once the coordinator confirms Active,
+the countdown fades over the actual live screen for 240 ms. This animation does not delay GPS,
+start recording itself, or claim success before the existing coordinator does. Cancellation,
+background handling, ten-second timing and spoken cues remain authoritative and unchanged.
+Decorative motion stops when the screen is not resumed or system animations are disabled.
+
+Implementation: new `CountdownScreen.kt`, eight bundled WebP resources and the Anton font;
+existing `RunStateScreen.kt` owns the overlay handoff. Existing third-party notices were
+preserved byte for byte and appended with asset provenance and the full font license. Browser
+preview also removes the completion wording and uses the same short fade. No voice, provider,
+storage, backend, music, Energy or live-screen redesign changes were made.
+
+Validation: debug and test APK builds passed; both 765-test unit suites passed. Sixteen unique
+silent Moto component/lifecycle/root cases passed, including Start now, Cancel/back, no start
+while backgrounded, exactly one start, the delayed StartingRun state, fade to live metrics and
+optional map entry. A final repeated screenshot case used the production safe-inset convention;
+the native screenshot was inspected. Initial build's Compose overload resolution and the
+test's shared RUNSTATE-heading assumption were corrected before the passing checks. The first
+component screenshot omitted system insets; its fixture was corrected and rerun. Browser
+runtime integrity, type checking and production build also passed.
+
+Fresh private backups and receipts are in ignored `docs/local/countdown-2026-10-23/`.
+After installation and checks, all 13 database tables matched every original field, including
+the three real runs and shoe records; all four preference files matched byte for byte. Room20
+integrity is clean with zero foreign-key violations. No personal run was created and no real
+audio was played for these checks. MainActivity was reopened for Manley's run. No commits,
+pushes or deployments were performed. This is a commit checkpoint after the visual review;
+outdoor readability and the feel of the animated transition still need Manley's real-run feedback.
+
 ## October 23 RPE refinement and personal History cleanup
 
 Follow-up Start polish: Manley asked to lower the moon, bars and sun within the pre-run Energy
