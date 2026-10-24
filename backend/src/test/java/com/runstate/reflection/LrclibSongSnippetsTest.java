@@ -78,6 +78,38 @@ class LrclibSongSnippetsTest {
         assertTrue(value.matches(candidate())); assertFalse(value.toString().contains("horizon"));
     }
 
+    @Test void equallyStrongTitleHookGetsRoomToLandInsteadOfAlwaysChoosingShortestFragment() {
+        // Synthetic wording, with the field report's 2.91-second opening window.
+        String lrc = "[00:11.840]Bright horizon is ahead\n[00:14.750]Keep moving through this moment\n"
+                + "[00:18.000]Another line begins here\n[00:21.000]Next part of the verse\n"
+                + "[00:40.000]Bright horizon is ahead\n[00:42.910]Keep moving through this moment\n"
+                + "[00:46.160]Another line begins here\n[00:49.160]Next part of the verse";
+        var value = LrclibSongSnippets.derive(candidate(), material(), bytes(response(lrc)), true).orElseThrow();
+        assertEquals(SongSnippetSelectionMethod.TITLE_HOOK, value.selectionMethod());
+        assertEquals(11_840, value.startPositionMillis());
+        assertEquals(6_160, value.durationMillis());
+        assertEquals("lrclib_v2_42_11840_18000", value.cueId());
+    }
+
+    @Test void aShortSourceMarkedGapStillWinsWithoutManufacturedPadding() {
+        String lrc = "[00:11.840]Bright horizon is ahead\n[00:14.750]\n[00:16.000]A new verse begins\n"
+                + "[00:40.000]Bright horizon is ahead\n[00:43.000]Keep moving through this moment\n"
+                + "[00:46.000]Another line begins here\n[00:49.000]Next part of the verse";
+        var value = LrclibSongSnippets.derive(candidate(), material(), bytes(response(lrc)), true).orElseThrow();
+        assertEquals(11_840, value.startPositionMillis());
+        assertEquals(2_910, value.durationMillis());
+        assertEquals("lrclib_v2_42_11840_14750", value.cueId());
+    }
+
+    @Test void anOnlyAvailableShortHookRemainsUsableInsteadOfBecomingAnOpeningFallback() {
+        String lrc = "[00:11.840]Bright horizon is ahead\n[00:14.750]A long following verse\n"
+                + "[00:40.000]Bright horizon is ahead\n[00:42.910]Another long following verse\n[01:10.000]";
+        var value = LrclibSongSnippets.derive(candidate(), null, bytes(response(lrc)), true).orElseThrow();
+        assertEquals(SongSnippetSelectionMethod.TITLE_HOOK, value.selectionMethod());
+        assertEquals(11_840, value.startPositionMillis());
+        assertEquals(2_910, value.durationMillis());
+    }
+
     @Test void repeatedNonTitlePhraseIsEligibleButAnUnrepeatedVerseIsNot() {
         JsonObject repeated = response(LRC.replace("Bright horizon is ahead", "A new morning has arrived"));
         var value = LrclibSongSnippets.derive(candidate(), material(), bytes(repeated)).orElseThrow();
@@ -95,6 +127,43 @@ class LrclibSongSnippetsTest {
                 List.of(), null, List.of(), null);
         var value = LrclibSongSnippets.derive(candidate(), source, bytes(response(lrc))).orElseThrow();
         assertEquals(10_000, value.startPositionMillis());
+    }
+
+    @Test void selectedWindowCarriesOnlyItsMatchedThemeLabelsWithoutSourceWords() {
+        var source = new MusixmatchSongAnalysis.SongMaterial("Bright Horizon", "Fixture Artist", "1", List.of(),
+                List.of(new MusixmatchSongAnalysis.ThemeMaterial("possibility",
+                                List.of("Bright horizon is ahead", "Bright horizon is ahead today")),
+                        new MusixmatchSongAnalysis.ThemeMaterial("distance", List.of("An unrelated opening line")),
+                        new MusixmatchSongAnalysis.ThemeMaterial("care", List.of("Keep this moment close"))),
+                List.of(), null, List.of(), null);
+        var match = LrclibSongSnippets.deriveMatch(candidate(), source, bytes(response(LRC)), true).orElseThrow();
+        assertEquals(10_250, match.snippet().startPositionMillis());
+        assertEquals(6_750, match.snippet().durationMillis());
+        assertEquals(List.of(new AnthropicReflectionProvider.SnippetThemeLink(0, "possibility"),
+                new AnthropicReflectionProvider.SnippetThemeLink(2, "care")), match.themeLinks());
+        String retained = new com.google.gson.Gson().toJson(match);
+        assertFalse(retained.contains("is ahead"));
+        assertFalse(retained.contains("Keep this moment"));
+        assertFalse(retained.contains("unrelated"));
+        assertFalse(match.toString().contains("possibility"));
+        assertFalse(match.themeLinks().toString().contains("care"));
+    }
+
+    @Test void shortUnrelatedWordsDoNotCreateThemeLinksAndContextUsesOneTimingRequest() {
+        var source = new MusixmatchSongAnalysis.SongMaterial("Bright Horizon", "Fixture Artist", "1", List.of(),
+                List.of(new MusixmatchSongAnalysis.ThemeMaterial("coincidence", List.of("Bright horizon"))),
+                List.of(), null, List.of(), null);
+        AtomicInteger requests = new AtomicInteger();
+        var lookup = new LrclibSongSnippets(request -> {
+            requests.incrementAndGet();
+            return new LrclibSongSnippets.Response(200, bytes(response(LRC)));
+        });
+        var match = lookup.lookupMatch(candidate(), source, Duration.ofSeconds(5), true).orElseThrow();
+        assertEquals(1, requests.get());
+        assertTrue(match.themeLinks().isEmpty());
+        assertEquals(SongSnippetSelectionMethod.TITLE_HOOK, match.snippet().selectionMethod());
+        var wrong = response(LRC); wrong.addProperty("artistName", "Another artist");
+        assertTrue(LrclibSongSnippets.deriveMatch(candidate(), source, bytes(wrong), true).isEmpty());
     }
 
     @Test void exactRecordingChecksRejectOtherAlbumsVersionsArtistsAndDurationMismatches() {

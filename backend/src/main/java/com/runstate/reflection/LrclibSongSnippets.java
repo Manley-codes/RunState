@@ -2,6 +2,8 @@ package com.runstate.reflection;
 
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import com.runstate.reflection.AnthropicReflectionProvider.SongSnippetMatch;
+import com.runstate.reflection.AnthropicReflectionProvider.SnippetThemeLink;
 import com.runstate.reflection.ReflectionContract.SongCandidate;
 import com.runstate.reflection.ReflectionContract.SongSnippet;
 import com.runstate.reflection.ReflectionContract.SongSnippetSelectionMethod;
@@ -54,6 +56,12 @@ final class LrclibSongSnippets implements AnthropicReflectionProvider.SongSnippe
 
     public Optional<SongSnippet> lookup(SongCandidate candidate, MusixmatchSongAnalysis.SongMaterial material,
                                  Duration remaining, boolean allowLineWindow) {
+        return lookupMatch(candidate, material, remaining, allowLineWindow).map(SongSnippetMatch::snippet);
+    }
+
+    @Override
+    public Optional<SongSnippetMatch> lookupMatch(SongCandidate candidate, MusixmatchSongAnalysis.SongMaterial material,
+                                 Duration remaining, boolean allowLineWindow) {
         if (candidate.recording() == null || Thread.currentThread().isInterrupted()
                 || remaining.isZero() || remaining.isNegative()) return Optional.empty();
         Duration timeout = remaining.compareTo(MAX_TIMEOUT) < 0 ? remaining : MAX_TIMEOUT;
@@ -64,7 +72,7 @@ final class LrclibSongSnippets implements AnthropicReflectionProvider.SongSnippe
         try {
             Response response = transport.send(new Request(URI.create("https://lrclib.net/api/get?" + query), timeout));
             if (response.status() != 200 || response.body().length > MAX_RESPONSE_BYTES) return Optional.empty();
-            return derive(candidate, material, response.body(), allowLineWindow);
+            return deriveMatch(candidate, material, response.body(), allowLineWindow);
         } catch (InterruptedException interrupted) {
             Thread.currentThread().interrupt();
             return Optional.empty();
@@ -80,6 +88,11 @@ final class LrclibSongSnippets implements AnthropicReflectionProvider.SongSnippe
     }
 
     static Optional<SongSnippet> derive(SongCandidate candidate, MusixmatchSongAnalysis.SongMaterial material,
+                                        byte[] body, boolean allowLineWindow) {
+        return deriveMatch(candidate, material, body, allowLineWindow).map(SongSnippetMatch::snippet);
+    }
+
+    static Optional<SongSnippetMatch> deriveMatch(SongCandidate candidate, MusixmatchSongAnalysis.SongMaterial material,
                                         byte[] body, boolean allowLineWindow) {
         try {
             if (body.length > MAX_RESPONSE_BYTES || candidate.recording() == null) return Optional.empty();
@@ -105,9 +118,15 @@ final class LrclibSongSnippets implements AnthropicReflectionProvider.SongSnippe
             var counts = new HashMap<String, Integer>();
             lines.stream().filter(line -> !line.words().isEmpty()).forEach(line -> counts.merge(line.words(), 1, Integer::sum));
             String titleWords = words(candidate.musicContext().trackTitle());
-            List<String> supporting = material == null ? List.of() : material.themes().stream()
-                    .flatMap(theme -> theme.quotes().stream()).map(LrclibSongSnippets::words)
-                    .filter(value -> value.split(" ").length >= 3).toList();
+            List<SupportingPhrase> supporting = new ArrayList<>();
+            if (material != null) for (int index = 0; index < material.themes().size(); index++) {
+                var theme = material.themes().get(index);
+                for (String quote : theme.quotes()) {
+                    String normalized = words(quote);
+                    if (normalized.split(" ").length >= 3)
+                        supporting.add(new SupportingPhrase(new SnippetThemeLink(index, theme.theme()), normalized));
+                }
+            }
             Window best = null;
             for (int index = 0; index < lines.size() - 1; index++) {
                 Line first = lines.get(index);
@@ -125,34 +144,47 @@ final class LrclibSongSnippets implements AnthropicReflectionProvider.SongSnippe
                     if (lines.get(next).millis() > observedMillis - 2_000) break;
                     if (duration < 2_000) continue;
                     String phrase = String.join(" ", lines.subList(index, next).stream().map(Line::words).toList());
-                    boolean supported = supporting.stream().anyMatch(quote -> containsWords(phrase, quote)
-                            || (phrase.split(" ").length >= 3 && containsWords(quote, phrase)));
+                    List<SnippetThemeLink> links = supporting.stream().filter(quote -> containsWords(phrase, quote.words())
+                            || (phrase.split(" ").length >= 3 && containsWords(quote.words(), phrase)))
+                            .map(SupportingPhrase::link).distinct().toList();
+                    boolean supported = !links.isEmpty();
                     int score = (titleHook ? 1_000 : repeatedHook ? 500 : 0) + Math.min(repeated, 6) * 10
                             + (supported ? 30 : 0) + (lines.get(next).words().isEmpty() ? 8 : 0);
+                    // Equal-strength hooks need enough room to land. Prefer a modest multi-line
+                    // window over an isolated two-second fragment when there is no known gap.
+                    // A real gap (even a shorter one) and analysis support still outrank length;
+                    // do not add invented padding or force every hook to be at least four seconds.
+                    if ((titleHook || repeatedHook) && duration >= 4_000 && duration <= 8_000) score += 4;
                     // A nonrepeating verse is still usable audio. Prefer an actual gap and a
                     // short, substantial line window; never label it a chorus or strong hook.
                     if (!titleHook && !repeatedHook) score += (duration >= 4_000 ? 4 : 0)
                             + (lines.get(next).words().isEmpty() ? 50 : 0);
                     Window candidateWindow = new Window(first.millis(), duration, score,
                             titleHook ? SongSnippetSelectionMethod.TITLE_HOOK : repeatedHook
-                                    ? SongSnippetSelectionMethod.REPEATED_HOOK : SongSnippetSelectionMethod.TIMED_LINE_WINDOW);
+                                    ? SongSnippetSelectionMethod.REPEATED_HOOK : SongSnippetSelectionMethod.TIMED_LINE_WINDOW,
+                            links);
                     if (best == null || candidateWindow.score() > best.score()) best = candidateWindow;
-                    // Prefer the shortest complete line-window unless the following window has actual stronger evidence.
+                    // Keep a short source-marked gap; otherwise examine the next real line boundary.
                     if (lines.get(next).words().isEmpty()) break;
                 }
             }
             if (best == null) return Optional.empty();
             int version = allowLineWindow ? 2 : 1;
-            return Optional.of(new SongSnippet("lrclib_v" + version + "_" + id + "_" + best.start() + "_"
+            return Optional.of(new SongSnippetMatch(new SongSnippet("lrclib_v" + version + "_" + id + "_" + best.start() + "_"
                     + (best.start() + best.duration()), "LRCLIB", id, candidate.musicContext().trackTitle(),
-                    candidate.musicContext().artistName(), album, observedMillis, best.start(), best.duration(), best.method(), version));
+                    candidate.musicContext().artistName(), album, observedMillis, best.start(), best.duration(), best.method(), version),
+                    best.themeLinks()));
         } catch (RuntimeException invalid) { return Optional.empty(); }
     }
 
     private record Line(long millis, String words) {
         @Override public String toString() { return "TimedLine[content=redacted]"; }
     }
-    private record Window(long start, long duration, int score, SongSnippetSelectionMethod method) { }
+    private record SupportingPhrase(SnippetThemeLink link, String words) {
+        @Override public String toString() { return "SupportingPhrase[content=redacted]"; }
+    }
+    private record Window(long start, long duration, int score, SongSnippetSelectionMethod method,
+                          List<SnippetThemeLink> themeLinks) { }
 
     private static List<Line> timedLines(String lrc, long trackMillis) {
         if (lrc == null || lrc.length() > MAX_RESPONSE_BYTES) return List.of();

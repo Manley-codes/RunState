@@ -164,6 +164,90 @@ class AnthropicReflectionProviderTest {
     }
 
     @Test
+    void realTimingContextReachesWriterForHooksAndNonRepeatingLinesWithoutExtraCallsOrRawSource() throws Exception {
+        for (boolean titleHook : List.of(true, false)) {
+            var requests = new AtomicInteger();
+            var inputs = new ArrayList<JsonObject>();
+            String quote = "A fresh start for this fictional morning has arrived today";
+            String sourceOnly = "Private timing words not available from the analysis provider";
+            String lrc = titleHook
+                    ? "[00:01]An unrelated opening line\n[00:10]New Dawn " + quote
+                            + "\n[00:14]" + sourceOnly + "\n[00:17]\n[00:30]New Dawn " + quote + "\n[00:34]\n"
+                    : "[00:01]An unrelated opening line\n[00:05]" + quote
+                            + "\n[00:10]" + sourceOnly + "\n[00:14]";
+            JsonObject timing = new JsonObject();
+            timing.addProperty("id", 42); timing.addProperty("trackName", "New Dawn");
+            timing.addProperty("artistName", "Fixture Artist"); timing.addProperty("albumName", "Fixture Album");
+            timing.addProperty("duration", 180); timing.addProperty("instrumental", false);
+            timing.addProperty("syncedLyrics", lrc); timing.addProperty("plainLyrics", "Private full source lyrics");
+            var lookup = new LrclibSongSnippets(request -> {
+                requests.incrementAndGet();
+                return new LrclibSongSnippets.Response(200, timing.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            });
+            var provider = new AnthropicReflectionProvider(testConfiguration(), request -> {
+                JsonObject input = evidenceFrom(request); inputs.add(input.deepCopy());
+                assertFalse(input.toString().contains(sourceOnly));
+                assertFalse(input.toString().contains("Private full source lyrics"));
+                return songResponse(input.has("run_facts") ? writerBranches() : studyNotes());
+            }, (title, artist) -> Optional.of(songMaterial(title, artist)), lookup);
+            var result = provider.generateForDelivery(knownEvidence(), null, List.of(recordedSong("2", "New Dawn")), true, true);
+            assertEquals(1, requests.get()); assertEquals(2, inputs.size());
+            assertFalse(inputs.get(0).has("passage_landing"));
+            JsonObject target = inputs.get(1).getAsJsonObject("passage_landing");
+            assertEquals(List.of("new beginnings"), target.getAsJsonArray("theme_links").asList().stream()
+                    .map(JsonElement::getAsString).toList());
+            assertEquals("MUSIXMATCH_THEME_INTERPRETATIONS_LINKED_BY_LOCAL_SOURCE_TEXT_OVERLAP_NOT_VERIFIED_PASSAGE_MEANING_OR_RUN_EVIDENCE",
+                    target.get("theme_links_provenance").getAsString());
+            assertFalse(target.toString().contains(quote));
+            assertEquals(studyNotes(), inputs.get(1).get("liner_notes"));
+            assertEquals("auto", inputs.get(1).get("creative_approach").getAsString());
+            assertEquals(titleHook, target.has("title_idea"));
+            if (titleHook) {
+                assertEquals(studyNotes().get("title_idea"), target.get("title_idea"));
+                assertEquals("SONG_STUDY_MODEL_INTERPRETATION_OF_RECURRING_TITLE_NOT_VERIFIED_PASSAGE_MEANING_OR_RUN_EVIDENCE",
+                        target.get("title_idea_provenance").getAsString());
+                assertEquals(ReflectionContract.SongSnippetSelectionMethod.TITLE_HOOK, result.songSnippet().selectionMethod());
+            } else {
+                assertEquals("TIMED_SOURCE_LINE_WINDOW_NOT_AUDITIONED_OR_RUN_EVIDENCE", target.get("provenance").getAsString());
+                assertEquals(ReflectionContract.SongSnippetSelectionMethod.TIMED_LINE_WINDOW, result.songSnippet().selectionMethod());
+            }
+            String publicResult = new com.google.gson.Gson().toJson(result);
+            assertFalse(publicResult.contains(sourceOnly)); assertFalse(publicResult.contains(quote));
+            assertFalse(publicResult.contains("themeLinks")); assertFalse(publicResult.contains("theme_links"));
+            assertEquals(result.songSnippet().cueId(), result.songCueId());
+        }
+    }
+
+    @Test
+    void timingAdapterCannotInjectThemesNotAtTheSameIndexInMatchedMaterial() throws Exception {
+        var inputs = new ArrayList<JsonObject>();
+        var song = recordedSong("2", "New Dawn");
+        var lookup = new AnthropicReflectionProvider.SongSnippetLookup() {
+            @Override public Optional<ReflectionContract.SongSnippet> lookup(ReflectionContract.SongCandidate candidate,
+                    MusixmatchSongAnalysis.SongMaterial material, Duration remaining) {
+                fail("Provider must request match context once."); return Optional.empty();
+            }
+            @Override public Optional<AnthropicReflectionProvider.SongSnippetMatch> lookupMatch(
+                    ReflectionContract.SongCandidate candidate, MusixmatchSongAnalysis.SongMaterial material,
+                    Duration remaining, boolean allowLineWindow) {
+                return Optional.of(new AnthropicReflectionProvider.SongSnippetMatch(snippet(candidate), List.of(
+                        new AnthropicReflectionProvider.SnippetThemeLink(0, "unrelated injected label"),
+                        new AnthropicReflectionProvider.SnippetThemeLink(1, "new beginnings"))));
+            }
+        };
+        var provider = new AnthropicReflectionProvider(testConfiguration(), request -> {
+            JsonObject input = evidenceFrom(request); inputs.add(input.deepCopy());
+            return songResponse(input.has("run_facts") ? writerBranches() : studyNotes());
+        }, (title, artist) -> Optional.of(songMaterial(title, artist)), lookup);
+        var result = provider.generateForDelivery(knownEvidence(), null, List.of(song), true, true);
+        assertEquals(2, inputs.size());
+        JsonObject target = inputs.get(1).getAsJsonObject("passage_landing");
+        assertEquals(5, target.size()); assertFalse(target.has("theme_links"));
+        assertFalse(inputs.toString().contains("unrelated injected label"));
+        assertTrue(result.songSnippet() != null);
+    }
+
+    @Test
     void optionalTimingNeverRunsWithoutConsentOrRecordingAndRejectsWrongRecordingResult() throws Exception {
         for (String mode : List.of("off", "no_recording", "wrong_recording", "unavailable", "exception")) {
             AtomicInteger lookups = new AtomicInteger();

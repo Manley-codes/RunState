@@ -115,6 +115,31 @@ public final class AnthropicReflectionProvider implements ReflectionProvider {
                 MusixmatchSongAnalysis.SongMaterial material, Duration remaining, boolean allowLineWindow) {
             return lookup(candidate, material, remaining);
         }
+        default Optional<SongSnippetMatch> lookupMatch(ReflectionContract.SongCandidate candidate,
+                MusixmatchSongAnalysis.SongMaterial material, Duration remaining, boolean allowLineWindow) {
+            return lookup(candidate, material, remaining, allowLineWindow)
+                    .map(snippet -> new SongSnippetMatch(snippet, List.of()));
+        }
+    }
+
+    /** Only source-theme references survive local timing matching; no timed lyric text leaves the lookup. */
+    record SnippetThemeLink(int themeIndex, String theme) {
+        SnippetThemeLink {
+            if (themeIndex < 0 || themeIndex >= 8 || theme == null || theme.isBlank() || theme.length() > 120
+                    || theme.codePoints().anyMatch(Character::isISOControl))
+                throw new IllegalArgumentException("Invalid snippet theme reference.");
+        }
+        @Override public String toString() { return "SnippetThemeLink[interpretation=redacted]"; }
+    }
+
+    record SongSnippetMatch(ReflectionContract.SongSnippet snippet, List<SnippetThemeLink> themeLinks) {
+        SongSnippetMatch {
+            Objects.requireNonNull(snippet, "snippet");
+            themeLinks = List.copyOf(themeLinks);
+            if (themeLinks.size() > 8 || themeLinks.stream().map(SnippetThemeLink::themeIndex).distinct().count()
+                    != themeLinks.size()) throw new IllegalArgumentException("Invalid snippet theme references.");
+        }
+        @Override public String toString() { return "SongSnippetMatch[context=redacted]"; }
     }
 
     /** Builds the production adapter from backend-only environment configuration. */
@@ -243,7 +268,7 @@ public final class AnthropicReflectionProvider implements ReflectionProvider {
             GeneratedReflections ordinary = ordinaryReflection(evidenceWithMusic(evidence, observed.musicContext()), started);
             // Playback readiness is not evidence that the writer understood this song.
             return new GeneratedReflections(ordinary.candidates(), null, observed.candidateId(),
-                    SongSelectionMethod.OBSERVED_FALLBACK, snippet);
+                    SongSelectionMethod.OBSERVED_FALLBACK, snippet == null ? null : snippet.snippet());
         }
         SelectionMaterial selected = available.get(0);
         SongSelectionMethod method = SongSelectionMethod.AVAILABLE_FALLBACK;
@@ -311,7 +336,7 @@ public final class AnthropicReflectionProvider implements ReflectionProvider {
         }
         MusicContext music = selected.candidate().musicContext();
         CompletedRunEvidence selectedEvidence = evidenceWithMusic(evidence, music);
-        ReflectionContract.SongSnippet snippet = null;
+        SongSnippetMatch snippet = null;
         if (allowSongSnippetLookup && selected.candidate().recording() != null && music.songCue() == null) {
             snippet = lookupSnippet(selected.candidate(), selected.material(), started, allowSongSnippetFallbacks);
         }
@@ -320,7 +345,7 @@ public final class AnthropicReflectionProvider implements ReflectionProvider {
         }
         GeneratedReflections generated = writeMatchedSong(selectedEvidence, selected.material(), selected.studied(), started, snippet);
         return new GeneratedReflections(generated.candidates(), generated.songCueId(),
-                selected.candidate().candidateId(), method, snippet);
+                selected.candidate().candidateId(), method, snippet == null ? null : snippet.snippet());
     }
 
     private static CompletedRunEvidence evidenceWithMusic(CompletedRunEvidence evidence, MusicContext music) {
@@ -329,7 +354,7 @@ public final class AnthropicReflectionProvider implements ReflectionProvider {
                 evidence.preRunEnergy(), music, evidence.weatherContext());
     }
 
-    private ReflectionContract.SongSnippet lookupSnippet(ReflectionContract.SongCandidate candidate,
+    private SongSnippetMatch lookupSnippet(ReflectionContract.SongCandidate candidate,
             MusixmatchSongAnalysis.SongMaterial material, long started, boolean allowFallbacks)
             throws ReflectionProviderException {
         if (candidate.recording() == null || candidate.recording().durationMillis() < 4_000) return null;
@@ -338,24 +363,28 @@ public final class AnthropicReflectionProvider implements ReflectionProvider {
                 Duration remaining = remainingSongTimeout(started);
                 Duration timeout = remaining.compareTo(LrclibSongSnippets.MAX_TIMEOUT) > 0
                         ? LrclibSongSnippets.MAX_TIMEOUT : remaining;
-                var found = songSnippetLookup.lookup(candidate, material, timeout, allowFallbacks);
-                if (found != null && found.isPresent() && found.get().matches(candidate)) {
-                    var value = found.get();
-                    if (!allowFallbacks) return value.version() == 1 ? value : null;
-                    return new ReflectionContract.SongSnippet("lrclib_v2_" + value.sourceId() + "_"
+                var found = songSnippetLookup.lookupMatch(candidate, material, timeout, allowFallbacks);
+                if (found != null && found.isPresent() && found.get().snippet().matches(candidate)) {
+                    var value = found.get().snippet();
+                    // A timing adapter cannot introduce labels that are absent from this exact source.
+                    List<SnippetThemeLink> links = material == null ? List.of() : found.get().themeLinks().stream()
+                            .filter(link -> link.themeIndex() < material.themes().size()
+                                    && material.themes().get(link.themeIndex()).theme().equals(link.theme())).toList();
+                    if (!allowFallbacks) return value.version() == 1 ? new SongSnippetMatch(value, links) : null;
+                    return new SongSnippetMatch(new ReflectionContract.SongSnippet("lrclib_v2_" + value.sourceId() + "_"
                             + value.startPositionMillis() + "_" + (value.startPositionMillis() + value.durationMillis()),
                             value.source(), value.sourceId(), value.trackTitle(), value.artistName(), value.albumName(),
-                            value.trackDurationMillis(), value.startPositionMillis(), value.durationMillis(), value.selectionMethod(), 2);
+                            value.trackDurationMillis(), value.startPositionMillis(), value.durationMillis(), value.selectionMethod(), 2), links);
                 }
             } catch (RuntimeException unavailable) { /* Optional source failure does not remove actual-song playback. */ }
         }
         if (Thread.currentThread().isInterrupted()) throw new ReflectionProviderException(FailureType.TRANSPORT, "Snippet lookup interrupted.");
         if (!allowFallbacks) return null;
         long duration = Math.min(8_000, candidate.recording().durationMillis() - 2_000);
-        return new ReflectionContract.SongSnippet("recording_v2_opening_0_" + duration, "RUNSTATE_RECORDING", "opening",
+        return new SongSnippetMatch(new ReflectionContract.SongSnippet("recording_v2_opening_0_" + duration, "RUNSTATE_RECORDING", "opening",
                 candidate.musicContext().trackTitle(), candidate.musicContext().artistName(), candidate.recording().albumName(),
                 candidate.recording().durationMillis(), 0, duration,
-                ReflectionContract.SongSnippetSelectionMethod.RECORDING_OPENING_FALLBACK, 2);
+                ReflectionContract.SongSnippetSelectionMethod.RECORDING_OPENING_FALLBACK, 2), List.of());
     }
 
     private List<SelectionMaterial> selectionMaterial(List<ReflectionContract.SongCandidate> candidates, long started)
@@ -512,7 +541,8 @@ public final class AnthropicReflectionProvider implements ReflectionProvider {
 
     private GeneratedReflections writeMatchedSong(CompletedRunEvidence evidence,
             MusixmatchSongAnalysis.SongMaterial material, SongReflectionTrial.StudiedSong studied, long started,
-            ReflectionContract.SongSnippet snippet) throws ReflectionProviderException {
+            SongSnippetMatch snippetMatch) throws ReflectionProviderException {
+        ReflectionContract.SongSnippet snippet = snippetMatch == null ? null : snippetMatch.snippet();
         SongReflectionTrial.PassageLanding landing = acceptedLanding(evidence.musicContext());
         if (landing == null && snippet != null && snippet.selectionMethod()
                 != ReflectionContract.SongSnippetSelectionMethod.RECORDING_OPENING_FALLBACK) {
@@ -525,7 +555,9 @@ public final class AnthropicReflectionProvider implements ReflectionProvider {
                     "Let this short musical response finish the thought naturally. Use the matched song context and this run's facts; do not announce playback, quote lyrics, or claim the timing was auditioned.",
                     snippet.selectionMethod() == ReflectionContract.SongSnippetSelectionMethod.TIMED_LINE_WINDOW
                             ? "TIMED_SOURCE_LINE_WINDOW_NOT_AUDITIONED_OR_RUN_EVIDENCE"
-                            : "TIMED_SOURCE_DERIVED_HOOK_NOT_AUDITIONED_OR_RUN_EVIDENCE");
+                            : "TIMED_SOURCE_DERIVED_HOOK_NOT_AUDITIONED_OR_RUN_EVIDENCE",
+                    snippetMatch.themeLinks().stream().map(SnippetThemeLink::theme).distinct().toList(),
+                    snippet.selectionMethod() == ReflectionContract.SongSnippetSelectionMethod.TITLE_HOOK);
         }
         SongReflectionTrial engine = songEngine(evidence, started);
         SongReflectionTrial.TrialResult result = studied == null ? engine.generate(evidence, material, landing)

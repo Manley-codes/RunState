@@ -110,6 +110,16 @@ final class SongReflectionTrial {
             target.addProperty("musical_moment", landing.musicalMoment());
             target.addProperty("intended_effect", landing.intendedEffect());
             target.addProperty("provenance", landing.provenance());
+            if (!landing.matchedThemes().isEmpty()) {
+                target.add("theme_links", strings(landing.matchedThemes()));
+                target.addProperty("theme_links_provenance",
+                        "MUSIXMATCH_THEME_INTERPRETATIONS_LINKED_BY_LOCAL_SOURCE_TEXT_OVERLAP_NOT_VERIFIED_PASSAGE_MEANING_OR_RUN_EVIDENCE");
+            }
+            if (landing.titleHook() && !notes.get("title_idea").getAsString().isBlank()) {
+                target.addProperty("title_idea", notes.get("title_idea").getAsString());
+                target.addProperty("title_idea_provenance",
+                        "SONG_STUDY_MODEL_INTERPRETATION_OF_RECURRING_TITLE_NOT_VERIFIED_PASSAGE_MEANING_OR_RUN_EVIDENCE");
+            }
             writerInput.add("passage_landing", target);
         }
         JsonObject branches = exchange.exchange(writerInput,
@@ -133,6 +143,8 @@ final class SongReflectionTrial {
                 || !same(landing.artistName(), material.artistName()))) {
             throw invalid("The passage landing requires exact matched song material.");
         }
+        if (landing != null && !material.themes().stream().map(MusixmatchSongAnalysis.ThemeMaterial::theme).toList()
+                .containsAll(landing.matchedThemes())) throw invalid("The passage themes require matched song material.");
     }
 
     /** Bounded memory-only source/validated notes; never stores run facts or generated run replies. */
@@ -147,10 +159,13 @@ final class SongReflectionTrial {
 
     /** An editorial listening target, never a lyric source, timestamp or claim about the runner. */
     record PassageLanding(String trackTitle, String artistName, String musicalMoment, String intendedEffect,
-                          String provenance) {
+                          String provenance, List<String> matchedThemes, boolean titleHook) {
         PassageLanding(String trackTitle, String artistName, String musicalMoment, String intendedEffect) {
             this(trackTitle, artistName, musicalMoment, intendedEffect,
                     "EDITORIAL_AUDITION_DESCRIPTION_NOT_LYRICS_TIMING_OR_RUN_EVIDENCE");
+        }
+        PassageLanding(String trackTitle, String artistName, String musicalMoment, String intendedEffect, String provenance) {
+            this(trackTitle, artistName, musicalMoment, intendedEffect, provenance, List.of(), false);
         }
         PassageLanding {
             if (!validLandingText(trackTitle, 200) || !validLandingText(artistName, 200)
@@ -158,9 +173,14 @@ final class SongReflectionTrial {
                 throw new IllegalArgumentException("Invalid bounded passage landing.");
             }
             if (!Set.of("EDITORIAL_AUDITION_DESCRIPTION_NOT_LYRICS_TIMING_OR_RUN_EVIDENCE",
+                    "TIMED_SOURCE_LINE_WINDOW_NOT_AUDITIONED_OR_RUN_EVIDENCE",
                     "TIMED_SOURCE_DERIVED_HOOK_NOT_AUDITIONED_OR_RUN_EVIDENCE").contains(provenance)) {
                 throw new IllegalArgumentException("Unknown passage landing provenance.");
             }
+            matchedThemes = List.copyOf(matchedThemes);
+            if (matchedThemes.size() > 8 || matchedThemes.stream().anyMatch(theme -> !validLandingText(theme, 120))
+                    || matchedThemes.stream().distinct().count() != matchedThemes.size())
+                throw new IllegalArgumentException("Invalid bounded passage themes.");
         }
 
         @Override

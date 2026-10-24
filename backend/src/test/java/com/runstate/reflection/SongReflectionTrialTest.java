@@ -150,6 +150,23 @@ class SongReflectionTrialTest {
     }
 
     @Test
+    void passageThemeMustBelongToTheStudiedMaterialBeforeColdOrPreparedWriterCalls() throws Exception {
+        AtomicInteger calls = new AtomicInteger();
+        var trial = new SongReflectionTrial(fake(calls, UnaryOperator.identity(), UnaryOperator.identity()));
+        var landing = new SongReflectionTrial.PassageLanding("A Fictional Morning", "Fixture Artist",
+                "A timed phrase.", "A warm close.", "TIMED_SOURCE_LINE_WINDOW_NOT_AUDITIONED_OR_RUN_EVIDENCE",
+                List.of("theme from a different song"), false);
+        assertThrows(ReflectionProviderException.class,
+                () -> trial.generate(evidence(PreRunEnergy.MODERATE), material(), landing));
+        assertEquals(0, calls.get());
+        var studied = trial.study(material());
+        assertEquals(1, calls.get());
+        assertThrows(ReflectionProviderException.class, () -> trial.write(evidence(PreRunEnergy.MODERATE), studied,
+                landing, SongReflectionTrial.CreativeApproach.AUTO));
+        assertEquals(1, calls.get());
+    }
+
+    @Test
     void invalidPassageFieldsAreRejectedBeforeAnyPaidCall() throws Exception {
         AtomicInteger calls = new AtomicInteger();
         var trial = new SongReflectionTrial(fake(calls, UnaryOperator.identity(), UnaryOperator.identity()));
