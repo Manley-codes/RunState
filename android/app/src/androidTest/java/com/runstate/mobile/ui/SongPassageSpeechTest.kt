@@ -1,7 +1,19 @@
 package com.runstate.mobile.ui
 
 import androidx.activity.ComponentActivity
+import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.Scaffold
+import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.MutableState
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.snapshots.Snapshot
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.runstate.mobile.music.SongPassageRequest
 import com.runstate.mobile.music.SongPassageSession
@@ -24,10 +36,19 @@ import com.google.gson.Gson
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.coroutines.android.asCoroutineDispatcher
 import java.util.UUID
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicReference
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Assert.assertFalse
@@ -44,6 +65,216 @@ class SongPassageSpeechTest {
     val composeTestRule = createAndroidComposeRule<ComponentActivity>()
 
     private val passage = SongPassageRequest("Selected title", "Selected artist", 5_000L)
+
+    /** Visible, real-time listening check: production countdown UI/owner, no run/Room writes or Spotify transport. */
+    @Test fun realRunVoiceCountdownAndPacedMileAudition() {
+        assumeTrue(InstrumentationRegistry.getArguments().getString("runstateRunVoiceCheck") == "true")
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val lines = com.runstate.mobile.reflection.COUNTDOWN_VOICE_LINES
+        val mile = "One mile completed. Your average pace is ten minutes per mile."
+        // This is a real-time listening check; Compose's virtual clock must not drive the cues.
+        val audioDispatcher = android.os.Handler(android.os.Looper.getMainLooper())
+            .asCoroutineDispatcher("Run voice audition")
+        // Fetch everything before speaking. This audition must never silently use the phone voice.
+        val (cache, mileAudio) = runBlocking {
+            withTimeout(75_000L) {
+                // ComponentActivity does not initialize the app's saved connection. Read it
+                // directly without changing settings, and keep prefetch off Compose's clock.
+                val config = requireNotNull(AndroidReflectionConnectionStore(context).load()) {
+                    "A saved hosted connection is required; no audition audio started."
+                }
+                val gateway = com.runstate.mobile.reflection.ReflectionSpeechHttpClient.hosted(
+                    config, com.runstate.mobile.reflection.SpeechVoice.RUN)
+                val prepared = com.runstate.mobile.reflection.RunVoiceCueCache(this, gateway, lines)
+                var nextAttempt = 0L
+                while (!prepared.hasAll(lines)) {
+                    val now = android.os.SystemClock.elapsedRealtime()
+                    if (now >= nextAttempt) {
+                        prepared.prefetch()
+                        nextAttempt = now + 5_000L
+                    }
+                    delay(100L)
+                }
+                prepared to gateway.synthesize(mile)
+            }
+        }
+        assertTrue("Custom run voice was unavailable; no audition audio started.",
+            mileAudio != null && mileAudio.isNotEmpty() &&
+                mileAudio.size <= com.runstate.mobile.reflection.MAX_REFLECTION_AUDIO_BYTES)
+        val finished = CountDownLatch(1)
+        val failure = AtomicReference<Throwable?>(null)
+        val playbackFailed = AtomicBoolean(false)
+        val scope = CoroutineScope(SupervisorJob() + audioDispatcher)
+        var speaker: AndroidReflectionSpeaker? = null
+        val completedCloudAudio = mutableSetOf<ByteArray>()
+        var startedCloudLines = 0
+        val owner = com.runstate.mobile.run.RunCountdownOwner()
+        val token = owner.reserve()
+        val renderedDigits = linkedSetOf<Int>()
+        try {
+            val displayed = renderRealtimeCountdown(owner, token, renderedDigits)
+            composeTestRule.runOnUiThread {
+                val android = AndroidReflectionSpeechPlatform(context)
+                val witnessed = object : ReflectionSpeechPlatform by android {
+                    override fun preparedRunVoiceAudio(text: String): ByteArray? =
+                        if (text == mile) mileAudio else cache.audioFor(text)
+                    override fun runVoiceGateway(): com.runstate.mobile.reflection.ReflectionSpeechGateway? = null
+                    override fun speak(utteranceId: String, text: String, rate: Float): Boolean {
+                        playbackFailed.set(true)
+                        return false
+                    }
+                    override fun speakReceipt(utteranceId: String, text: String, rate: Float) =
+                        speak(utteranceId, text, rate)
+                    override fun playRunVoiceAudio(id: String, audio: ByteArray,
+                        onDone: (String) -> Unit, onUnavailable: (String) -> Unit, onError: (String) -> Unit): Boolean {
+                        startedCloudLines++
+                        return android.playRunVoiceAudio(id, audio,
+                            { completedCloudAudio += audio; onDone(it) },
+                            { playbackFailed.set(true); onUnavailable(it) },
+                            { playbackFailed.set(true); onError(it) })
+                    }
+                    override fun playMileAnnouncementAudio(id: String, audio: ByteArray,
+                        onDone: (String) -> Unit, onUnavailable: (String) -> Unit, onError: (String) -> Unit): Boolean {
+                        startedCloudLines++
+                        return android.playMileAnnouncementAudio(id, audio,
+                            { completedCloudAudio += audio; onDone(it) },
+                            { playbackFailed.set(true); onUnavailable(it) },
+                            { playbackFailed.set(true); onError(it) })
+                    }
+                }
+                val voice = AndroidReflectionSpeaker(context, witnessed).also { speaker = it }
+                scope.launch {
+                    try {
+                        suspend fun cue(text: String) {
+                            val done = CompletableDeferred<Unit>()
+                            voice.speakTimedCue(text, true) { done.complete(Unit) }
+                            withTimeout(7_000L) { done.await() }
+                            check(!playbackFailed.get()) { "The custom run voice could not play this check." }
+                        }
+                        var oneFinished: CompletableDeferred<Unit>? = null
+                        var simulatedStarts = 0
+                        val started = owner.execute(token,
+                            intro = { cue(com.runstate.mobile.reflection.COUNTDOWN_INTRO_TEXT) },
+                            cue = { step ->
+                                if (step == 10) return@execute // Included in the uninterrupted opening.
+                                val text = com.runstate.mobile.reflection.countdownCueText(step)
+                                if (step == 1) {
+                                    val done = CompletableDeferred<Unit>().also { oneFinished = it }
+                                    voice.speakTimedCue(text, true) { done.complete(Unit) }
+                                } else voice.speakTimedCue(text, true)
+                            }, start = { simulatedStarts++ })
+                        check(started) { "The visible countdown check was cancelled." }
+                        // Same post-deadline ordering as production; the start above is only a counter.
+                        oneFinished?.let { withTimeoutOrNull(2_000L) { it.await() } }
+                        cue(com.runstate.mobile.reflection.COUNTDOWN_FINISH_TEXT)
+                        delay(300L)
+                        val mileFinished = CompletableDeferred<Unit>()
+                        voice.speakMileAnnouncement(mile) { mileFinished.complete(Unit) }
+                        withTimeout(30_000L) { mileFinished.await() }
+                        val completionRequired = listOf(
+                            cache.audioFor(com.runstate.mobile.reflection.COUNTDOWN_INTRO_TEXT),
+                            cache.audioFor(com.runstate.mobile.reflection.countdownCueText(1)),
+                            cache.audioFor(com.runstate.mobile.reflection.COUNTDOWN_FINISH_TEXT), mileAudio)
+                        check(simulatedStarts == 1 && !playbackFailed.get() && startedCloudLines == 6 &&
+                            completionRequired.all { it in completedCloudAudio }) {
+                            "The audition did not complete every custom-voice line."
+                        }
+                    } catch (problem: Throwable) {
+                        failure.set(problem)
+                    } finally { finished.countDown() }
+                }
+            }
+            awaitRealtimeCountdown(finished, owner, displayed)
+            assertTrue("The run-voice listening check timed out.", finished.count == 0L)
+            failure.get()?.let { throw AssertionError("The run-voice listening check did not finish cleanly.", it) }
+            composeTestRule.runOnUiThread {
+                assertEquals("The visible countdown did not render every number.",
+                    (10 downTo 1).toList(), renderedDigits.toList())
+            }
+        } finally {
+            composeTestRule.runOnUiThread { scope.cancel(); speaker?.close() }
+            composeTestRule.mainClock.autoAdvance = true
+        }
+    }
+
+    @Test fun visibleCountdownAuditionFollowsRealtimeOwnerWithoutAudio() {
+        assumeTrue(InstrumentationRegistry.getArguments().getString("runstateVisibleCountdownCheck") == "true")
+        val dispatcher = android.os.Handler(android.os.Looper.getMainLooper()).asCoroutineDispatcher()
+        val scope = CoroutineScope(SupervisorJob() + dispatcher)
+        val owner = com.runstate.mobile.run.RunCountdownOwner()
+        val token = owner.reserve()
+        val rendered = linkedSetOf<Int>()
+        val finished = CountDownLatch(1)
+        var starts = 0
+        try {
+            val displayed = renderRealtimeCountdown(owner, token, rendered)
+            scope.launch {
+                try { owner.execute(token, intro = { delay(1_000L) }, cue = {}, start = { starts++ }) }
+                finally { finished.countDown() }
+            }
+            awaitRealtimeCountdown(finished, owner, displayed)
+            composeTestRule.runOnUiThread {
+                assertEquals(1, starts)
+                assertEquals((10 downTo 1).toList(), rendered.toList())
+            }
+        } finally {
+            scope.cancel()
+            composeTestRule.mainClock.autoAdvance = true
+        }
+    }
+
+    private fun renderRealtimeCountdown(
+        owner: com.runstate.mobile.run.RunCountdownOwner,
+        token: Long,
+        rendered: MutableSet<Int>
+    ): MutableState<com.runstate.mobile.run.RunCountdownState> {
+        val displayed = mutableStateOf(owner.state.value)
+        composeTestRule.mainClock.autoAdvance = false
+        composeTestRule.runOnUiThread { composeTestRule.activity.enableEdgeToEdge() }
+        composeTestRule.setContent {
+            val countdown = displayed.value
+            SideEffect { countdown.digit?.let { rendered += it } }
+            com.runstate.mobile.ui.theme.RunStateTheme {
+                Scaffold(modifier = Modifier.fillMaxSize()) { padding ->
+                    CountdownScreen(
+                        digit = countdown.digit,
+                        actionsEnabled = countdown.canControl,
+                        onStartNow = { owner.startNow(token) },
+                        onCancel = { owner.cancel(token) },
+                        transitioning = !countdown.active,
+                        modifier = Modifier.padding(padding)
+                    )
+                }
+            }
+        }
+        composeTestRule.mainClock.advanceTimeByFrame()
+        composeTestRule.onNodeWithTag(COUNTDOWN_SCREEN_TAG).assertIsDisplayed()
+        composeTestRule.onNodeWithTag(COUNTDOWN_DIGIT_TAG).assertTextEquals("10").assertIsDisplayed()
+        return displayed
+    }
+
+    private fun awaitRealtimeCountdown(
+        finished: CountDownLatch,
+        owner: com.runstate.mobile.run.RunCountdownOwner,
+        displayed: MutableState<com.runstate.mobile.run.RunCountdownState>
+    ) {
+        val beganAt = android.os.SystemClock.elapsedRealtime()
+        val beganFrame = composeTestRule.mainClock.currentTime
+        while (finished.count > 0 && android.os.SystemClock.elapsedRealtime() - beganAt < 65_000L) {
+            // The audition's audio/owner use a real Handler, outside the virtual Compose clock.
+            // Bridge its current state and flush snapshots before advancing/drawing real-time frames.
+            composeTestRule.runOnUiThread {
+                displayed.value = owner.state.value
+                Snapshot.sendApplyNotifications()
+            }
+            val elapsed = android.os.SystemClock.elapsedRealtime() - beganAt
+            val remaining = elapsed - (composeTestRule.mainClock.currentTime - beganFrame)
+            if (remaining >= 16L) composeTestRule.mainClock.advanceTimeBy(remaining)
+            composeTestRule.waitForIdle()
+            Thread.sleep(8L)
+        }
+        assertTrue("The visible countdown check timed out.", finished.count == 0L)
+    }
 
     @Test fun replacementPassageWaitsForCancelledTransportCleanupWithoutTouchingSpotify() {
         val cleanupStarted = CountDownLatch(1)
@@ -315,13 +546,15 @@ class SongPassageSpeechTest {
                 platform.ready(true)
                 speaker.speakCompletionFacts("Your saved run facts.") { }
                 assertEquals(0.864f, platform.spoken.last().rate, 0.0001f)
+                speaker.speakMileAnnouncement("One mile completed.") { }
+                assertEquals(0.864f, platform.spoken.last().rate, 0.0001f)
                 speaker.speakReceipt("Choose your Energy when you are ready.") { }
                 assertEquals(0.96f, platform.spoken.last().rate, 0.0001f)
                 speaker.speakTimedCue("Three", useRunVoice = false)
                 assertEquals(0.96f, platform.spoken.last().rate, 0.0001f)
                 speaker.speak("Your exact saved reflection.")
                 assertEquals(0.94f, platform.spoken.last().rate, 0.0001f)
-                assertEquals(listOf("Your saved run facts.", "Choose your Energy when you are ready.",
+                assertEquals(listOf("Your saved run facts.", "One mile completed.", "Choose your Energy when you are ready.",
                     "Three", "Your exact saved reflection."), platform.spoken.map { it.text })
             } finally { speaker.close() }
         }
@@ -348,16 +581,175 @@ class SongPassageSpeechTest {
                     routes += "run-voice"
                     return true
                 }
+                override fun playMileAnnouncementAudio(
+                    utteranceId: String, audio: ByteArray,
+                    onDone: (String) -> Unit, onUnavailable: (String) -> Unit, onError: (String) -> Unit
+                ): Boolean {
+                    routes += "mile-announcement"
+                    return true
+                }
             }
             val speaker = AndroidReflectionSpeaker(composeTestRule.activity, witnessed,
                 scheduleTimeout = { _, _ -> }, cancelTimeout = { })
             try {
                 speaker.speakCompletionFacts("Your saved run facts.") { }
                 speaker.speakReceipt("Choose your Energy when you are ready.") { }
-                speaker.speakReceipt("One mile completed.") { }
+                speaker.speakMileAnnouncement("One mile completed.") { }
                 speaker.speakTimedCue("Three", useRunVoice = true)
-                assertEquals(listOf("completion-facts", "run-voice", "run-voice", "run-voice"), routes)
+                assertEquals(listOf("completion-facts", "run-voice", "mile-announcement", "run-voice"), routes)
                 assertTrue("Prepared run audio must not also speak through the phone engine.", platform.spoken.isEmpty())
+            } finally { speaker.close() }
+        }
+    }
+
+    @Test fun timedCueWaitsForActualCompletionAndIgnoresStaleCallbacks() {
+        composeTestRule.runOnUiThread {
+            for (cloud in listOf(false, true)) {
+                val platform = ControlledPlatform()
+                var cloudId: String? = null
+                var cloudDone: ((String) -> Unit)? = null
+                var fetches = 0
+                val witnessed = object : ReflectionSpeechPlatform by platform {
+                    override fun preparedRunVoiceAudio(text: String): ByteArray? =
+                        if (cloud) byteArrayOf(1) else null
+                    override fun runVoiceGateway() = com.runstate.mobile.reflection.ReflectionSpeechGateway {
+                        fetches++
+                        byteArrayOf(1)
+                    }
+                    override fun playRunVoiceAudio(utteranceId: String, audio: ByteArray,
+                        onDone: (String) -> Unit, onUnavailable: (String) -> Unit, onError: (String) -> Unit): Boolean {
+                        cloudId = utteranceId
+                        cloudDone = onDone
+                        return true
+                    }
+                }
+                val speaker = AndroidReflectionSpeaker(composeTestRule.activity, witnessed,
+                    scheduleTimeout = { _, _ -> }, cancelTimeout = {})
+                var introFinished = 0
+                var tenFinished = 0
+                try {
+                    platform.ready(true)
+                    // Missing prepared audio must fall back locally without fetching against the clock.
+                    speaker.speakTimedCue("Starting in.", useRunVoice = true) { introFinished++ }
+                    assertEquals(0, introFinished)
+                    assertEquals(0, fetches)
+                    val introId = if (cloud) requireNotNull(cloudId) else platform.spoken.last().id
+                    val finishIntro = if (cloud) requireNotNull(cloudDone) else platform.voiceDone
+                    finishIntro(introId)
+                    assertEquals(1, introFinished)
+                    speaker.speakTimedCue("Ten.", useRunVoice = cloud) { tenFinished++ }
+                    finishIntro(introId)
+                    platform.voiceFailed(introId)
+                    assertEquals(1, introFinished)
+                    assertEquals(0, tenFinished)
+                    speaker.stop()
+                    speaker.stop()
+                    assertEquals("Stopping an owner releases its waiter exactly once.", 1, tenFinished)
+                } finally { speaker.close() }
+            }
+        }
+    }
+
+    @Test fun timedCueFailureOrTimeoutCompletesOnceWithoutNetworkOrMusic() {
+        composeTestRule.runOnUiThread {
+            for (failure in listOf("engine failed", "engine timeout", "voice failed", "voice timeout", "focus denied")) {
+                val platform = ControlledPlatform()
+                val deadlines = mutableListOf<Runnable>()
+                val speaker = speaker(platform, deadlines)
+                var completed = 0
+                try {
+                    if (failure != "engine timeout") platform.ready(failure != "engine failed")
+                    platform.focusGranted = failure != "focus denied"
+                    speaker.speakTimedCue("Starting in.", useRunVoice = false) { completed++ }
+                    when (failure) {
+                        "engine timeout", "voice timeout" -> deadlines.last().run()
+                        "voice failed" -> platform.voiceFailed(platform.spoken.single().id)
+                    }
+                    speaker.stop()
+                    deadlines.forEach { it.run() }
+                    assertEquals(failure, 1, completed)
+                    assertTrue(platform.passages.isEmpty())
+                    assertEquals(0, platform.connectionPreparations)
+                } finally { speaker.close() }
+            }
+        }
+    }
+
+    @Test fun delayedMileVoiceFallsBackOnceAtAcceptedPaceAndReportsOnlyDeliveryMetadata() {
+        composeTestRule.runOnUiThread {
+            val platform = ControlledPlatform()
+            val deadlines = mutableListOf<Runnable>()
+            val delays = mutableListOf<Long>()
+            val diagnostics = mutableListOf<SpeechDeliveryDiagnostic>()
+            var cloudCalls = 0
+            var cloudPlays = 0
+            var completed = 0
+            val pendingAudio = CompletableDeferred<ByteArray?>()
+            val witnessed = object : ReflectionSpeechPlatform by platform {
+                override fun runVoiceGateway() = com.runstate.mobile.reflection.ReflectionSpeechGateway {
+                    cloudCalls++
+                    pendingAudio.await()
+                }
+                override fun playMileAnnouncementAudio(utteranceId: String, audio: ByteArray,
+                    onDone: (String) -> Unit, onUnavailable: (String) -> Unit, onError: (String) -> Unit): Boolean {
+                    cloudPlays++
+                    return true
+                }
+            }
+            val speaker = AndroidReflectionSpeaker(composeTestRule.activity, witnessed,
+                scheduleTimeout = { task, delay -> deadlines += task; delays += delay }, cancelTimeout = {},
+                deliveryDiagnostic = diagnostics::add)
+            try {
+                platform.ready(true)
+                speaker.speakMileAnnouncement("One mile. Your pace is ten minutes per mile.") { completed++ }
+                assertEquals(1, cloudCalls)
+                assertEquals(5_000L, delays.single())
+                assertTrue(platform.spoken.isEmpty())
+                val timedOut = deadlines.single()
+                timedOut.run()
+                pendingAudio.complete(byteArrayOf(1))
+                timedOut.run()
+                assertEquals(0, cloudPlays)
+                assertEquals(1, platform.spoken.size)
+                assertEquals(0.864f, platform.spoken.single().rate, 0.0001f)
+                platform.voiceDone(platform.spoken.single().id)
+                assertEquals(1, completed)
+                assertEquals(SpeechDeliverySource.PHONE, diagnostics.last().source)
+                assertTrue(diagnostics.all { it.kind == SpeechDeliveryKind.MILE_ANNOUNCEMENT && it.elapsedMillis >= 0 })
+                assertEquals(SpeechDeliveryStage.FINISHED, diagnostics.last().stage)
+            } finally { speaker.close() }
+        }
+    }
+
+    @Test fun cloudMilePlaybackHasTheSamePaceAsFactsAndCannotDoubleSpeakAfterAudibleFailure() {
+        composeTestRule.runOnUiThread {
+            val platform = ControlledPlatform()
+            val diagnostics = mutableListOf<SpeechDeliveryDiagnostic>()
+            var cloudId: String? = null
+            var failCloud: ((String) -> Unit)? = null
+            var completed = 0
+            val witnessed = object : ReflectionSpeechPlatform by platform {
+                override fun runVoiceGateway() = com.runstate.mobile.reflection.ReflectionSpeechGateway { byteArrayOf(1) }
+                override fun playMileAnnouncementAudio(utteranceId: String, audio: ByteArray,
+                    onDone: (String) -> Unit, onUnavailable: (String) -> Unit, onError: (String) -> Unit): Boolean {
+                    cloudId = utteranceId
+                    failCloud = onError
+                    return true
+                }
+            }
+            val speaker = AndroidReflectionSpeaker(composeTestRule.activity, witnessed,
+                scheduleTimeout = { _, _ -> }, cancelTimeout = {}, deliveryDiagnostic = diagnostics::add)
+            try {
+                platform.ready(true)
+                speaker.speakMileAnnouncement("Two miles completed.") { completed++ }
+                val queued = diagnostics.last()
+                assertEquals(SpeechDeliveryStage.CLOUD_QUEUED, queued.stage)
+                assertEquals(SpeechDeliverySource.CLOUD, queued.source)
+                assertEquals(0.90f, queued.rate, 0.0001f)
+                requireNotNull(failCloud)(requireNotNull(cloudId))
+                requireNotNull(failCloud)(requireNotNull(cloudId))
+                assertEquals(1, completed)
+                assertTrue("An audible cloud failure must not repeat the announcement in another voice.", platform.spoken.isEmpty())
             } finally { speaker.close() }
         }
     }

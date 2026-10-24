@@ -27,6 +27,7 @@ import com.runstate.mobile.reflection.RunReflectionCoordinator
 import com.runstate.mobile.reflection.reflectionBridgeEnabledForBuild
 import com.runstate.mobile.run.PreparedRunFactory
 import com.runstate.mobile.run.RunSessionCoordinator
+import com.runstate.mobile.run.RunCountdownOwner
 import com.runstate.mobile.run.RunSplitCalculator
 import com.runstate.mobile.data.local.RunSplitStatus
 import com.runstate.mobile.settings.AndroidRunPreferencesStore
@@ -125,6 +126,9 @@ class RunStateApplication : Application() {
 
     /** Temporary demo drafts may survive rotation, but never inherit another process's mode. */
     internal val runSettingsSessionId: String = UUID.randomUUID().toString()
+
+    /** Only a visible Start tap reserves this; the foreground service owns its execution. */
+    internal val runCountdown = RunCountdownOwner()
 
     private val mutableTrackingServiceState = MutableStateFlow<RunTrackingServiceState>(
         RunTrackingServiceState.Idle

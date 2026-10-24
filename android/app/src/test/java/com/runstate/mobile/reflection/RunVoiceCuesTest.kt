@@ -9,7 +9,7 @@ class RunVoiceCuesTest {
     private val scope = CoroutineScope(Dispatchers.Unconfined)
 
     @Test fun preparedLinesMatchTheSpokenCountdownStepsAndTheEnergyQuestion() {
-        assertEquals(listOf("Starting in ten.", "Three.", "Two.", "One."), COUNTDOWN_VOICE_LINES)
+        assertEquals(listOf("Starting in ten.", "Three.", "Two.", "One.", "Let’s go, runner."), COUNTDOWN_VOICE_LINES)
         assertEquals(COUNTDOWN_VOICE_LINES + "How’s your energy now?", RUN_VOICE_PREPARED_LINES)
         assertEquals(ENERGY_QUESTION_TEXT, RUN_VOICE_PREPARED_LINES.last())
         assertTrue(RUN_VOICE_PREPARED_LINES.all { it.length <= SpeechVoice.RUN.maxTextLength })
@@ -24,7 +24,7 @@ class RunVoiceCuesTest {
         })
 
         cache.prefetch()
-        assertEquals(listOf("Starting in ten.", "Three.", "Two."), requested)
+        assertEquals(listOf(COUNTDOWN_INTRO_TEXT, "Three.", "Two."), requested)
         assertFalse(cache.hasAll(COUNTDOWN_VOICE_LINES))
         assertArrayEquals("Three.".toByteArray(), cache.audioFor("Three."))
         assertNull(cache.audioFor("Two."))
@@ -32,7 +32,7 @@ class RunVoiceCuesTest {
         failOn = null
         requested.clear()
         cache.prefetch()
-        assertEquals(listOf("Two.", "One.", ENERGY_QUESTION_TEXT), requested)
+        assertEquals(listOf("Two.", "One.", COUNTDOWN_FINISH_TEXT, ENERGY_QUESTION_TEXT), requested)
         assertTrue(cache.hasAll(RUN_VOICE_PREPARED_LINES))
 
         requested.clear()
@@ -45,7 +45,7 @@ class RunVoiceCuesTest {
             { throw IllegalStateException("private transport detail") })) {
             val cache = RunVoiceCueCache(scope, ReflectionSpeechGateway { result() })
             cache.prefetch()
-            assertNull(cache.audioFor("Starting in ten."))
+            assertNull(cache.audioFor(COUNTDOWN_INTRO_TEXT))
             assertFalse(cache.hasAll(COUNTDOWN_VOICE_LINES))
         }
     }

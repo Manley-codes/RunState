@@ -82,6 +82,8 @@ import com.runstate.mobile.run.PreparedRunFactory
 import com.runstate.mobile.run.RunActionKind
 import com.runstate.mobile.run.RunSessionCoordinator
 import com.runstate.mobile.run.RunAdmission
+import com.runstate.mobile.run.RunCountdownOwner
+import com.runstate.mobile.data.local.RunTrackingMode
 import com.runstate.mobile.data.local.ReflectionBranch
 import com.runstate.mobile.data.local.PostRunEffort
 import com.runstate.mobile.data.local.PreRunEnergy
@@ -115,6 +117,9 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.async
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -1191,14 +1196,119 @@ class RunStateScreenTest {
         }
     }
 
+    @Test fun gpsRootManagedCountdownShowsTenWhileTheIntroductionFinishes() {
+        val introduction = kotlinx.coroutines.CompletableDeferred<Unit>()
+        GpsStartRootHarness(managedCountdown = true, managedIntroduction = { introduction.await() }).use { root ->
+            root.tapStart()
+            root.awaitManagedDigit(10, counting = false)
+            composeTestRule.mainClock.advanceTimeBy(2_000L)
+            composeTestRule.onNodeWithTag(COUNTDOWN_DIGIT_TAG).assertTextEquals("10").assertIsDisplayed()
+            assertEquals(0, root.durableStarts)
+            assertEquals(0, root.rowCount())
+            composeTestRule.runOnUiThread { introduction.complete(Unit) }
+            awaitGpsRoot { root.managedOwner?.state?.value?.phase ==
+                com.runstate.mobile.run.RunCountdownPhase.COUNTING }
+            root.awaitManagedDigit(10)
+            root.tickManaged(1)
+            root.awaitManagedDigit(9)
+            composeTestRule.onNodeWithText(CANCEL).performClick()
+            awaitGpsRoot { root.admission() == RunAdmission.ReadyForCountdown }
+            assertEquals(0, root.rowCount())
+        }
+    }
+
+    @Test fun gpsRootManagedCountdownKeepsCountingInBackgroundAndStartsExactlyOnce() {
+        GpsStartRootHarness(managedCountdown = true).use { root ->
+            root.tapStart()
+            root.awaitManagedDigit(10)
+            root.tickManaged(2)
+            root.awaitManagedDigit(8)
+            moveTo(root.lifecycleOwner, Lifecycle.State.CREATED)
+            root.tickManaged(8)
+            root.awaitManagedRun()
+            moveTo(root.lifecycleOwner, Lifecycle.State.RESUMED)
+            awaitGpsRoot { composeTestRule.onAllNodesWithText(PAUSE).fetchSemanticsNodes().isNotEmpty() }
+            assertEquals(1, root.serviceStarts)
+            assertEquals(1, root.durableStarts)
+            assertEquals(1, root.rowCount())
+        }
+    }
+
+    @Test fun gpsRootManagedCountdownRecreationKeepsTheSameRemainingTimeAndOwner() {
+        GpsStartRootHarness(managedCountdown = true).use { root ->
+            root.tapStart()
+            root.awaitManagedDigit(10)
+            root.tickManaged(4)
+            root.awaitManagedDigit(6)
+            val owner = requireNotNull(root.managedOwner)
+            val token = owner.state.value.token
+            root.restoreComposition(expectWarmup = false)
+            root.awaitManagedDigit(6)
+            assertEquals(token, owner.state.value.token)
+            assertEquals(1, root.serviceStarts)
+            root.tickManaged(6)
+            root.awaitManagedRun()
+            assertFalse(owner.startNow(token))
+            assertEquals(1, root.durableStarts)
+        }
+    }
+
+    @Test fun gpsRootManagedCancelRetiresOnlyItsCountdownAndAllowsAFreshStart() {
+        GpsStartRootHarness(managedCountdown = true).use { root ->
+            root.tapStart()
+            root.awaitManagedDigit(10)
+            val owner = requireNotNull(root.managedOwner)
+            val cancelledToken = owner.state.value.token
+            composeTestRule.onNodeWithText(CANCEL).assertIsEnabled().performClick()
+            awaitGpsRoot { root.admission() == RunAdmission.ReadyForCountdown && !owner.state.value.active }
+            assertEquals(0, root.rowCount())
+            assertEquals(0, root.durableStarts)
+            awaitGpsRoot { composeTestRule.onAllNodesWithTag(START_RUN_BUTTON_TAG).fetchSemanticsNodes().isNotEmpty() }
+            root.tapStart()
+            root.awaitManagedDigit(10)
+            composeTestRule.runOnUiThread {
+                assertFalse(owner.cancel(cancelledToken))
+                assertFalse(owner.startNow(cancelledToken))
+            }
+            root.tickManaged(10)
+            root.awaitManagedRun()
+            assertEquals(2, root.serviceStarts)
+            assertEquals(1, root.durableStarts)
+        }
+    }
+
+    @Test fun gpsRootManagedStartNowAndTimerCannotCreateTwoRuns() {
+        GpsStartRootHarness(managedCountdown = true).use { root ->
+            root.tapStart()
+            root.awaitManagedDigit(10)
+            root.tickManaged(7)
+            root.awaitManagedDigit(3)
+            val owner = requireNotNull(root.managedOwner)
+            val token = owner.state.value.token
+            composeTestRule.onNodeWithTag(COUNTDOWN_START_NOW_TAG).performClick()
+            composeTestRule.runOnUiThread { assertFalse(owner.startNow(token)) }
+            root.awaitManagedRun()
+            root.tickManaged(10)
+            assertEquals(1, root.serviceStarts)
+            assertEquals(1, root.durableStarts)
+            assertEquals(1, root.rowCount())
+        }
+    }
+
     /** Synthetic fixes and isolated Room exercise the real root without requesting device GPS. */
     private inner class GpsStartRootHarness(
         val source: ControlledGpsStartSource = ControlledGpsStartSource(),
-        private val countdownVoice: ReflectionSpeaker? = null
+        private val countdownVoice: ReflectionSpeaker? = null,
+        managedCountdown: Boolean = false,
+        private val managedIntroduction: suspend () -> Unit = {}
     ) : AutoCloseable {
         private val database = Room.inMemoryDatabaseBuilder(
             ApplicationProvider.getApplicationContext(), RunStateDatabase::class.java).build()
         private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+        private val countdownScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+        private val countdownTicks = Channel<Unit>(Channel.UNLIMITED)
+        val managedOwner = if (managedCountdown) RunCountdownOwner(waitMillis = { countdownTicks.receive() }) else null
+        private val trackingState = MutableStateFlow<RunTrackingServiceState>(RunTrackingServiceState.Idle)
         private val coordinator = RunSessionCoordinator(database.runDao(), PreparedRunFactory(
             Clock.fixed(Instant.ofEpochMilli(1_756_000_000_000), ZoneOffset.UTC),
             { ZoneOffset.UTC }, UUID::randomUUID), applicationScope, database.locationDao())
@@ -1210,6 +1320,8 @@ class RunStateScreenTest {
         var locationReady = true
         var serviceFailuresRemaining = 0
         var serviceStarts = 0
+            private set
+        var durableStarts = 0
             private set
         val listenersAtHandoff = mutableListOf<Int>()
         val rowsAtHandoff = mutableListOf<Int>()
@@ -1228,7 +1340,7 @@ class RunStateScreenTest {
                         onDispose { compositionDisposals++ }
                     }
                     RunJourneyRoot(coordinator, null, database,
-                        remember { MutableStateFlow<RunTrackingServiceState>(RunTrackingServiceState.Idle) },
+                        trackingState,
                         lifecycleOwner.lifecycle, completionSpeakerFactory = { silentSpeaker },
                         countdownSpeakerFactory = if (countdownVoice == null) null else ({ countdownVoice }),
                         musicAccessProvider = { false }, gpsPreviewSourceOverride = source,
@@ -1239,6 +1351,25 @@ class RunStateScreenTest {
                             if (serviceFailuresRemaining > 0) {
                                 serviceFailuresRemaining--
                                 throw IllegalStateException("Synthetic service launch failure")
+                            }
+                        }, runCountdown = managedOwner,
+                        dispatchGpsCountdown = { _, token, energy, observe, share, snippets, intention, route, energyTime ->
+                            val owner = requireNotNull(managedOwner)
+                            serviceStarts++
+                            trackingState.value = RunTrackingServiceState.Countdown
+                            countdownScope.launch {
+                                val started = owner.execute(token, intro = managedIntroduction, cue = {}) {
+                                    trackingState.value = RunTrackingServiceState.Starting
+                                    val session = coordinator.requestStart(energy, RunTrackingMode.GPS,
+                                        observe, share, snippets, intention, route, energyTime).await()
+                                    durableStarts++
+                                    trackingState.value = RunTrackingServiceState.Tracking(session.runId)
+                                }
+                                if (!started) {
+                                    coordinator.cancelCountdown()
+                                    owner.retire(token)
+                                    trackingState.value = RunTrackingServiceState.Idle
+                                }
                             }
                         })
                 }
@@ -1277,7 +1408,38 @@ class RunStateScreenTest {
             assertEquals(0, rowCount())
         }
 
-        fun admission() = runBlocking { coordinator.journeySnapshot().admission }
+        fun awaitManagedDigit(digit: Int, counting: Boolean = true) {
+            awaitGpsRoot { managedOwner?.state?.value?.digit == digit &&
+                (!counting || managedOwner.state.value.phase == com.runstate.mobile.run.RunCountdownPhase.COUNTING) &&
+                composeTestRule.onAllNodesWithTag(COUNTDOWN_DIGIT_TAG).fetchSemanticsNodes().isNotEmpty() }
+            composeTestRule.onNodeWithTag(COUNTDOWN_DIGIT_TAG).assertTextEquals(digit.toString())
+        }
+
+        fun tickManaged(count: Int) {
+            repeat(count) {
+                val before = managedOwner?.state?.value
+                composeTestRule.runOnUiThread { countdownTicks.trySend(Unit) }
+                if (before?.active == true) awaitGpsRoot { managedOwner?.state?.value != before }
+            }
+        }
+
+        fun awaitManagedRun() {
+            awaitGpsRoot { durableStarts == 1 && admission() is RunAdmission.RunInProgress &&
+                managedOwner?.state?.value?.active == false }
+            assertEquals(1, rowCount())
+        }
+
+        fun admission(): RunAdmission {
+            // A live GPS metrics read can hold the coordinator mutex while Room suspends.
+            // Do not block this test thread: it must keep driving the Compose dispatcher
+            // so that UI-owned read can resume and release the mutex.
+            val result = applicationScope.async { coordinator.journeySnapshot().admission }
+            composeTestRule.waitUntil(5_000) {
+                composeTestRule.mainClock.advanceTimeByFrame()
+                result.isCompleted
+            }
+            return runBlocking { result.await() }
+        }
         fun rowCount() = runBlocking { database.runDao().countRuns() }
         fun restoreComposition(expectWarmup: Boolean) {
             val entriesBefore = compositionEntries
@@ -1320,6 +1482,8 @@ class RunStateScreenTest {
             composeTestRule.runOnUiThread { shown = false }
             composeTestRule.mainClock.advanceTimeByFrame()
             composeTestRule.waitForIdle()
+            countdownScope.cancel()
+            countdownTicks.close()
             applicationScope.cancel()
             database.close()
             composeTestRule.mainClock.autoAdvance = true
@@ -1747,6 +1911,7 @@ class RunStateScreenTest {
     @Test
     fun countdownAwaitingLifecycleDoesNotOfferAnEnabledStartNow() {
         val actions = renderScreen(RunUiModel(RunUiState.Countdown), countdownDigit = null)
+        composeTestRule.onNodeWithTag(COUNTDOWN_DIGIT_TAG).assertTextEquals("10").assertIsDisplayed()
         composeTestRule.onNodeWithTag(COUNTDOWN_START_NOW_TAG).assertIsNotEnabled().performClick()
         assertNoCountdownCompletionWords()
         assertEquals(0, actions.total)
@@ -1756,6 +1921,19 @@ class RunStateScreenTest {
         listOf("0", "GO", "Let's go", "LET'S GO", "Let’s go").forEach { label ->
             composeTestRule.onNodeWithText(label).assertDoesNotExist()
         }
+    }
+
+    @Test
+    fun countdownClearedFinalDigitDoesNotFlashTenBeforeTheScreenExits() {
+        var digit by mutableStateOf<Int?>(null)
+        composeTestRule.setContent { CountdownScreen(digit, true, {}, {}) }
+        composeTestRule.onNodeWithTag(COUNTDOWN_DIGIT_TAG).assertTextEquals("10")
+        composeTestRule.runOnIdle { digit = 10 }
+        composeTestRule.onNodeWithTag(COUNTDOWN_DIGIT_TAG).assertTextEquals("10")
+        composeTestRule.runOnIdle { digit = 1 }
+        composeTestRule.onNodeWithTag(COUNTDOWN_DIGIT_TAG).assertTextEquals("1")
+        composeTestRule.runOnIdle { digit = null }
+        composeTestRule.onNodeWithTag(COUNTDOWN_DIGIT_TAG).assertDoesNotExist()
     }
 
     /** The visual handoff cannot claim a live run until the owner confirms its start. */
@@ -2460,6 +2638,51 @@ class RunStateScreenTest {
         composeTestRule.onNodeWithText("Not sure").assertExists()
         composeTestRule.onNodeWithTag(RUN_COMPLETE_REFLECTION_TEXT_TAG).performScrollTo()
             .assertTextEquals("Exact restored reply.")
+    }
+
+    @Test fun preparedReflectionSpeaksWhileInlineEffortRemainsUnanswered() {
+        composeTestRule.mainClock.autoAdvance = false
+        val runId = "reflection-without-effort-answer"
+        val exact = "The selected song's reflection can begin while Effort is still optional."
+        var energy by mutableStateOf<ReflectionBranch?>(null)
+        var held by mutableStateOf(false)
+        var ready by mutableStateOf(false)
+        var spokenId by mutableStateOf<String?>(null)
+        val speech = mutableListOf<String>()
+        val sheetHolds = mutableListOf<Boolean>()
+        var effortWrites = 0
+        val speaker = object : ReflectionSpeaker {
+            override fun speak(text: String) { speech += text }
+            override fun stop() = Unit
+            override fun close() = Unit
+        }
+        composeTestRule.setContent {
+            RunCompleteSpeechEffect(runId, runId, spokenId,
+                if (ready) RunReflectionState.Ready(runId, exact) else RunReflectionState.Preparing(runId),
+                completionVisible = energy != null && !held,
+                speakerFactory = { speaker }, onSpoken = { spokenId = it })
+            RunCompleteScreen(fixtureMetrics(),
+                if (ready) RunCompleteReflectionDisplay.Ready(exact) else RunCompleteReflectionDisplay.Preparing,
+                {}, {}, true, selectedEnergy = energy, energyEnabled = true,
+                onSelectEnergy = { energy = it }, onReflectionPresentationHoldChange = { held = it },
+                effortEnabled = true, selectedEffortRating = null,
+                onSelectEffortRating = { effortWrites++ }, onEffortSheetOpenChange = { sheetHolds += it })
+        }
+        composeTestRule.mainClock.advanceTimeByFrame()
+        composeTestRule.onNodeWithText("FEELING GOOD").performClick()
+        composeTestRule.mainClock.advanceTimeBy(1_900L)
+        composeTestRule.onNodeWithTag(RUN_COMPLETE_EFFORT_TAG).assertExists()
+        assertTrue(speech.isEmpty())
+        // Simulate the provider becoming ready without touching a rating or Skip.
+        composeTestRule.runOnIdle { ready = true }
+        composeTestRule.mainClock.advanceTimeByFrame()
+        composeTestRule.runOnIdle {
+            assertEquals(listOf(exact), speech)
+            assertEquals(runId, spokenId)
+            assertEquals(0, effortWrites)
+            assertTrue("The inline choices must never hold song/reflection selection.", sheetHolds.none { it })
+        }
+        composeTestRule.onNodeWithTag(RUN_COMPLETE_EFFORT_TAG).assertExists()
     }
 
     @Test
@@ -5494,7 +5717,7 @@ class RunStateScreenTest {
 
     /** Hosts the countdown over [owner]'s lifecycle and shows its digit under a tag. */
     private fun renderCountdown(owner: TestLifecycle, startNow: () -> Boolean = { false },
-        active: () -> Boolean = { true }): CountdownRecord {
+        active: () -> Boolean = { true }, introduction: suspend () -> Unit = {}): CountdownRecord {
         val record = CountdownRecord()
 
         composeTestRule.setContent {
@@ -5503,7 +5726,8 @@ class RunStateScreenTest {
                 lifecycle = owner.lifecycle,
                 onFinished = { record.finishes++ },
                 startNowRequested = startNow(),
-                onCountdownCue = { record.cues += it }
+                onCountdownCue = { record.cues += it },
+                onIntroduction = introduction
             )
 
             LaunchedEffect(digit) {
@@ -5552,6 +5776,29 @@ class RunStateScreenTest {
 
         moveTo(owner, Lifecycle.State.STARTED)
         composeTestRule.waitUntil(METRIC_TICK_MILLIS) { ticks[0] > stoppedAt }
+    }
+
+    @Test
+    fun countdownIntroductionHoldsTenBeforeAnyTimedStepOrSpokenCount() {
+        composeTestRule.mainClock.autoAdvance = false
+        val owner = TestLifecycle()
+        moveTo(owner, Lifecycle.State.RESUMED)
+        val introduction = kotlinx.coroutines.CompletableDeferred<Unit>()
+        val record = renderCountdown(owner, introduction = { introduction.await() })
+        composeTestRule.mainClock.advanceTimeByFrame()
+        composeTestRule.onNodeWithTag(DIGIT_TAG).assertTextEquals("10")
+        composeTestRule.mainClock.advanceTimeBy(2_000L)
+        composeTestRule.onNodeWithTag(DIGIT_TAG).assertTextEquals("10")
+        assertTrue(record.cues.isEmpty())
+        assertEquals(0, record.finishes)
+        composeTestRule.runOnUiThread { introduction.complete(Unit) }
+        composeTestRule.mainClock.advanceTimeByFrame()
+        composeTestRule.onNodeWithTag(DIGIT_TAG).assertTextEquals("10")
+        assertEquals(listOf(10), record.cues)
+        composeTestRule.mainClock.advanceTimeBy(COUNTDOWN_STEP_MILLIS)
+        composeTestRule.mainClock.advanceTimeByFrame()
+        composeTestRule.onNodeWithTag(DIGIT_TAG).assertTextEquals("9")
+        assertEquals(0, record.finishes)
     }
 
     /** Every preparation second remains visible; only the opening and final three speak. */

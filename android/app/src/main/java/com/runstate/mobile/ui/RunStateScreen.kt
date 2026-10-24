@@ -509,12 +509,14 @@ internal fun rememberLifecycleCountdown(
     lifecycle: Lifecycle,
     onFinished: () -> Unit,
     startNowRequested: Boolean = false,
-    onCountdownCue: (Int?) -> Unit = {}
+    onCountdownCue: (Int?) -> Unit = {},
+    onIntroduction: suspend () -> Unit = {}
 ): Int? {
     var digit by remember { mutableStateOf<Int?>(null) }
     var finished by remember(active, lifecycle) { mutableStateOf(false) }
     val currentOnFinished by rememberUpdatedState(onFinished)
     val currentOnCue by rememberUpdatedState(onCountdownCue)
+    val currentIntroduction by rememberUpdatedState(onIntroduction)
 
     // Both ways to finish share the same main-thread flag. A tap during the final second
     // cannot ask the run owner to start again when the timer's delay returns.
@@ -539,6 +541,9 @@ internal fun rememberLifecycleCountdown(
             if (finished) return@repeatOnLifecycle
 
             try {
+                // Hold the opening number through the spoken introduction; timing starts after it.
+                digit = COUNTDOWN_SECONDS
+                kotlinx.coroutines.withTimeoutOrNull(5_000L) { currentIntroduction() }
                 for (step in COUNTDOWN_SECONDS downTo 1) {
                     if (finished) return@repeatOnLifecycle
                     digit = step

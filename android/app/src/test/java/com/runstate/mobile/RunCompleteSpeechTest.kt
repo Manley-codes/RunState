@@ -197,6 +197,23 @@ class RunCompleteSpeechTest {
         assertEquals(1, fixture.releases)
     }
 
+    @Test fun sameCanonicalRecordingCanResumeAcrossSubsecondTransportRoundingOnly() {
+        val fixture = CompletionAudioFixture()
+        val canonical = "spotify:track:0123456789ABCDEFGHIJKL"
+        fixture.current = fixture.current!!.copy(mediaId = canonical, durationMillis = 180_845L)
+        assertTrue(fixture.session.begin())
+        val paused = fixture.current!!.copy(playback = PassagePlayback.PAUSED, durationMillis = 180_000L)
+        fixture.current = paused
+        val admitted = paused.copy(sessionKey = "sdk", durationMillis = 180_845L)
+        assertTrue(fixture.session.resumePausedOriginal(admitted))
+        assertFalse(fixture.session.resumePausedOriginal(admitted.copy(durationMillis = 181_000L)))
+        assertFalse(fixture.session.resumePausedOriginal(
+            admitted.copy(mediaId = "spotify:track:ABCDEFGHIJKL0123456789")))
+        fixture.current = paused.copy(positionMillis = paused.positionMillis + 2_001L)
+        assertFalse(fixture.session.resumePausedOriginal(admitted))
+        fixture.session.finish()
+    }
+
     @Test fun silentPreparationRequiresThisUnspokenNewCompletion() {
         val preparation = ReflectionVoicePreparation(runId, otherRunId, "Exact selected text")
         assertEquals(preparation, eligibleCompletionVoicePreparation(runId, runId, null, preparation))

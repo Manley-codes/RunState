@@ -33,9 +33,14 @@ import com.runstate.mobile.run.InitializationStatus
 import com.runstate.mobile.run.RunAdmission
 import com.runstate.mobile.run.RunJourneySnapshot
 import com.runstate.mobile.run.RunMilestoneAnnouncements
+import com.runstate.mobile.reflection.COUNTDOWN_INTRO_TEXT
+import com.runstate.mobile.reflection.COUNTDOWN_FINISH_TEXT
+import com.runstate.mobile.reflection.COUNTDOWN_VOICE_LINES
+import com.runstate.mobile.reflection.countdownCueText
 import com.runstate.mobile.ui.AndroidReflectionSpeaker
 import com.runstate.mobile.ui.ReflectionSpeaker
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -45,12 +50,16 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.takeWhile
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlin.coroutines.resume
 
 /** Process-local service progress. A stored run row remains the source of truth. */
 internal sealed interface RunTrackingServiceState {
     data object Idle : RunTrackingServiceState
+    data object Countdown : RunTrackingServiceState
     data object Starting : RunTrackingServiceState
     data class Tracking(
         val runId: String,
@@ -141,8 +150,9 @@ internal class RunCpuWakeLease(
 }
 
 /**
- * Holds the one GPS run in a location foreground service. The Activity starts this only after
- * its visible countdown; the service alone requests the official GPS start. It follows Room's
+ * Holds the explicitly requested countdown and GPS run in a location foreground service. The
+ * visible Start tap launches it; the service alone requests the official start after countdown.
+ * Switching apps never restarts that countdown. It follows Room's
  * durable state for pause/resume/completion instead of trusting a screen callback. A killed
  * process is not restarted in the background: the next visible Activity must explicitly resume
  * the recovered run, with a fresh GPS anchor and partial coverage.
@@ -178,18 +188,38 @@ internal class RunTrackingService : Service() {
     private var announcementSpeaker: ReflectionSpeaker? = null
     /** An old cancelled monitor must not stop speech belonging to a replacement run. */
     private var announcementGeneration = 0L
+    private var countdownToken: Long? = null
+    private var countdownSpeaker: ReflectionSpeaker? = null
+    private var countdownWakeLease: RunCpuWakeLease? = null
+    private var finishCueJob: Job? = null
 
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        val action = intent?.action
+        if (action == ACTION_CANCEL_COUNTDOWN) {
+            app.runCountdown.cancel(intent.getLongExtra(EXTRA_COUNTDOWN_TOKEN, -1L))
+            if (work?.isActive != true) {
+                finishedNormally = true
+                stopSelf(startId)
+            }
+            return START_NOT_STICKY
+        }
         if (work?.isActive == true) {
             retryCommandAfterRetiredOwner(intent, flags, startId)
             return START_NOT_STICKY
         }
 
-        val action = intent?.action
         val existingId = intent?.getStringExtra(EXTRA_RUN_ID)
-        if (action != ACTION_START_NEW && action != ACTION_RESUME_EXISTING) {
+        val token = if (action == ACTION_COUNTDOWN) intent.getLongExtra(EXTRA_COUNTDOWN_TOKEN, -1L) else null
+        if (token != null && !app.runCountdown.owns(token)) {
+            // A cancelled or process-death-redelivered request cannot authorize a run.
+            finishedNormally = true
+            stopSelf(startId)
+            return START_NOT_STICKY
+        }
+        countdownToken = token
+        if (action != ACTION_START_NEW && action != ACTION_COUNTDOWN && action != ACTION_RESUME_EXISTING) {
             failAndStop("The GPS run request was incomplete.")
             return START_NOT_STICKY
         }
@@ -210,7 +240,7 @@ internal class RunTrackingService : Service() {
         signalMonitor.reset(SystemClock.elapsedRealtime())
 
         try {
-            promoteToForeground("Preparing GPS run")
+            promoteToForeground(if (token != null) "Getting ready to run" else "Preparing GPS run")
         } catch (security: SecurityException) {
             failAndStop("Android did not allow GPS tracking. Check precise location access.")
             return START_NOT_STICKY
@@ -219,10 +249,10 @@ internal class RunTrackingService : Service() {
             return START_NOT_STICKY
         }
 
-        app.publishTrackingServiceState(RunTrackingServiceState.Starting)
+        app.publishTrackingServiceState(if (token == null) RunTrackingServiceState.Starting else RunTrackingServiceState.Countdown)
         work = scope.launch {
             try {
-                val id = if (action == ACTION_START_NEW) {
+                val id = if (action == ACTION_START_NEW || action == ACTION_COUNTDOWN) {
                     val energyName = intent?.getStringExtra(EXTRA_PRE_RUN_ENERGY)
                     val energy = energyName?.let { name ->
                         PreRunEnergy.entries.firstOrNull { it.name == name }
@@ -255,16 +285,72 @@ internal class RunTrackingService : Service() {
                     stopGps()
                     runId = null
                     observationLock.withLock { policy = GpsDistancePolicy() }
-                    app.runSessionCoordinator.requestStart(
-                        energy,
-                        RunTrackingMode.GPS,
-                        musicObservationRequested,
-                        musicReflectionSharingAllowed,
-                        songSnippetLookupAllowed,
-                        runIntention = runIntention,
-                        routeLabel = routeLabel,
-                        preRunEnergyRecordedAtEpochMillis = preRunEnergyRecordedAt
-                    ).await().runId
+                    suspend fun commitStart(): String {
+                        check(hasFineLocation() && locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
+                            "Precise location or GPS was turned off before the run started."
+                        }
+                        app.publishTrackingServiceState(RunTrackingServiceState.Starting)
+                        return app.runSessionCoordinator.requestStart(
+                            energy, RunTrackingMode.GPS, musicObservationRequested,
+                            musicReflectionSharingAllowed, songSnippetLookupAllowed,
+                            runIntention = runIntention, routeLabel = routeLabel,
+                            preRunEnergyRecordedAtEpochMillis = preRunEnergyRecordedAt
+                        ).await().runId
+                    }
+                    if (token == null) commitStart() else {
+                        // No location point or run row exists during this preparation. A short
+                        // wake lease keeps the ten-second clock honest when the screen locks.
+                        countdownWakeLease = RunCpuWakeLease(::newTimedCpuWakeLock, 30_000L).also { it.start() }
+                        val voice = try {
+                            AndroidReflectionSpeaker(this@RunTrackingService).also { countdownSpeaker = it }
+                        } catch (_: RuntimeException) { null }
+                        val useRunVoice = app.runVoiceCues.hasAll(COUNTDOWN_VOICE_LINES)
+                        var startedId: String? = null
+                        var oneFinished: CompletableDeferred<Unit>? = null
+                        var startedEarly = false
+                        val started = try {
+                            app.runCountdown.execute(token,
+                                intro = { if (voice != null) awaitCountdownCue(voice, COUNTDOWN_INTRO_TEXT, useRunVoice) },
+                                cue = { step ->
+                                    updateNotification("Starting in $step")
+                                    val finished = if (step == 1) CompletableDeferred<Unit>().also { oneFinished = it } else null
+                                    try {
+                                        if (voice == null) finished?.complete(Unit)
+                                        // Ten already finished as part of the joined opening line.
+                                        else if (step != 10) voice.speakTimedCue(countdownCueText(step), useRunVoice) { finished?.complete(Unit) }
+                                    } catch (_: RuntimeException) { finished?.complete(Unit) }
+                                },
+                                start = {
+                                    startedEarly = app.runCountdown.state.value.startedEarly
+                                    if (startedEarly) try { voice?.stop() } catch (_: RuntimeException) { }
+                                    startedId = commitStart()
+                                })
+                        } finally {
+                            countdownWakeLease?.stop()
+                            countdownWakeLease = null
+                        }
+                        if (!started) {
+                            stopCountdownVoice()
+                            app.runSessionCoordinator.cancelCountdown()
+                            app.runCountdown.retire(token)
+                            finishedNormally = true
+                            app.publishTrackingServiceState(RunTrackingServiceState.Idle)
+                            stopSelf(startId)
+                            return@launch
+                        }
+                        // The official run is already durable. This line must not hold GPS
+                        // registration or be killed just because the countdown screen faded out.
+                        finishCueJob = if (voice == null) null else scope.launch {
+                            try {
+                                // "One" can finish slightly after its visual second. Recording is
+                                // already started; only the optional final line waits for its tail.
+                                if (!startedEarly) withTimeoutOrNull(2_000L) { oneFinished?.await() }
+                                withTimeoutOrNull(5_000L) { awaitCountdownCue(voice, COUNTDOWN_FINISH_TEXT, useRunVoice) }
+                            }
+                            finally { if (countdownSpeaker === voice) stopCountdownVoice() }
+                        }
+                        requireNotNull(startedId)
+                    }
                 } else {
                     val idToResume = requireNotNull(existingId)
                     val stored = requireNotNull(app.database.runDao().findById(idToResume)) {
@@ -316,7 +402,7 @@ internal class RunTrackingService : Service() {
                 app.runSessionCoordinator.awaitReservedWork()
                 val snapshot = app.runSessionCoordinator.journeySnapshot()
                 val admission = snapshot.admission
-                val isNextCountdown = nextIntent.action == ACTION_START_NEW &&
+                val isNextCountdown = nextIntent.action in setOf(ACTION_START_NEW, ACTION_COUNTDOWN) &&
                     admission == RunAdmission.CountdownInProgress
                 val isDifferentResume = nextIntent.action == ACTION_RESUME_EXISTING &&
                     admission is RunAdmission.RunInProgress && admission.session.runId != previousId &&
@@ -362,6 +448,10 @@ internal class RunTrackingService : Service() {
     private fun reconcileStoredState(id: String, state: StoredRunState) {
         if (state == storedState) return
         storedState = state
+        if (state != StoredRunState.RUNNING) {
+            finishCueJob?.cancel()
+            stopCountdownVoice()
+        }
         when (state) {
             StoredRunState.RUNNING -> {
                 if (!hasFineLocation()) {
@@ -448,13 +538,13 @@ internal class RunTrackingService : Service() {
                             // Claims are already consumed; unavailable focus/voice is skipped, not queued.
                             stopAnnouncement()
                             val timeout = scope.launch {
-                                delay(20_000L)
+                                delay(45_000L)
                                 if (generation == announcementGeneration && announcementSpeaker === speaker) {
                                     speaker.stop()
                                 }
                             }
                             announcementTimeout = timeout
-                            speaker.speakReceipt(text) {
+                            speaker.speakMileAnnouncement(text) {
                                 timeout.cancel()
                                 if (announcementTimeout === timeout) announcementTimeout = null
                             }
@@ -472,6 +562,25 @@ internal class RunTrackingService : Service() {
         announcementTimeout?.cancel()
         announcementTimeout = null
         try { announcementSpeaker?.stop() } catch (_: RuntimeException) { }
+    }
+
+    private suspend fun awaitCountdownCue(voice: ReflectionSpeaker, text: String, useRunVoice: Boolean) {
+        suspendCancellableCoroutine<Unit> { continuation ->
+            continuation.invokeOnCancellation { try { voice.stop() } catch (_: RuntimeException) { } }
+            try {
+                voice.speakTimedCue(text, useRunVoice) {
+                    if (continuation.isActive) continuation.resume(Unit)
+                }
+            } catch (_: RuntimeException) {
+                if (continuation.isActive) continuation.resume(Unit)
+            }
+        }
+    }
+
+    private fun stopCountdownVoice() {
+        val voice = countdownSpeaker
+        countdownSpeaker = null
+        try { voice?.close() } catch (_: RuntimeException) { }
     }
 
     @SuppressLint("MissingPermission") // Checked before the service starts and again above.
@@ -824,18 +933,31 @@ internal class RunTrackingService : Service() {
             Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
-        return Notification.Builder(this, CHANNEL_ID)
+        val builder = Notification.Builder(this, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_menu_mylocation)
-            .setContentTitle("RunState active run")
+            .setContentTitle(if (app.runCountdown.state.value.canControl) "RunState countdown" else "RunState active run")
             .setContentText(message)
             .setContentIntent(openApp)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
-            .build()
+        val countdown = app.runCountdown.state.value
+        if (countdown.canControl) {
+            val cancel = PendingIntent.getService(this, 3208,
+                Intent(this, RunTrackingService::class.java).setAction(ACTION_CANCEL_COUNTDOWN)
+                    .putExtra(EXTRA_COUNTDOWN_TOKEN, countdown.token),
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+            builder.addAction(Notification.Action.Builder(null, "Cancel", cancel).build())
+        }
+        return builder.build()
     }
 
     private fun failAndStop(reason: String) {
         failed = true
+        countdownToken?.let(app.runCountdown::retire)
+        finishCueJob?.cancel()
+        stopCountdownVoice()
+        countdownWakeLease?.stop()
+        countdownWakeLease = null
         stopAnnouncement()
         announcementMonitor?.cancel()
         stopGps()
@@ -844,6 +966,11 @@ internal class RunTrackingService : Service() {
     }
 
     override fun onDestroy() {
+        countdownToken?.let(app.runCountdown::retire)
+        finishCueJob?.cancel()
+        stopCountdownVoice()
+        countdownWakeLease?.stop()
+        countdownWakeLease = null
         stopAnnouncement()
         announcementMonitor?.cancel()
         try { announcementSpeaker?.close() } catch (_: RuntimeException) { }
@@ -860,6 +987,9 @@ internal class RunTrackingService : Service() {
 
     companion object {
         private const val ACTION_START_NEW = "com.runstate.mobile.action.START_GPS_RUN"
+        private const val ACTION_COUNTDOWN = "com.runstate.mobile.action.COUNTDOWN_GPS_RUN"
+        private const val ACTION_CANCEL_COUNTDOWN = "com.runstate.mobile.action.CANCEL_GPS_COUNTDOWN"
+        private const val EXTRA_COUNTDOWN_TOKEN = "countdown_token"
         private const val ACTION_RESUME_EXISTING = "com.runstate.mobile.action.RESUME_GPS_RUN"
         private const val EXTRA_PRE_RUN_ENERGY = "pre_run_energy"
         private const val EXTRA_RUN_INTENTION = "run_intention"
@@ -875,7 +1005,7 @@ internal class RunTrackingService : Service() {
         private const val WAKE_TIMEOUT_MS = 120_000L
         private const val WAKE_RENEW_MS = 60_000L
 
-        /** Call only after a visible Activity's countdown finishes and permissions are ready. */
+        /** Legacy immediate-start seam; the normal app uses [startCountdown] from visible Start. */
         fun startNew(
             context: Context,
             preRunEnergy: PreRunEnergy?,
@@ -886,11 +1016,39 @@ internal class RunTrackingService : Service() {
             routeLabel: String? = null,
             preRunEnergyRecordedAtEpochMillis: Long? = null
         ) {
+            dispatchNew(context, null, preRunEnergy, musicObservationRequested,
+                musicReflectionSharingAllowed, songSnippetLookupAllowed, runIntention,
+                routeLabel, preRunEnergyRecordedAtEpochMillis)
+        }
+
+        /** The explicit visible Start tap must dispatch before the Activity goes into background. */
+        fun startCountdown(
+            context: Context,
+            token: Long,
+            preRunEnergy: PreRunEnergy?,
+            musicObservationRequested: Boolean,
+            musicReflectionSharingAllowed: Boolean,
+            songSnippetLookupAllowed: Boolean,
+            runIntention: RunIntention?,
+            routeLabel: String?,
+            preRunEnergyRecordedAtEpochMillis: Long?
+        ) {
+            dispatchNew(context, token, preRunEnergy, musicObservationRequested,
+                musicReflectionSharingAllowed, songSnippetLookupAllowed, runIntention,
+                routeLabel, preRunEnergyRecordedAtEpochMillis)
+        }
+
+        private fun dispatchNew(
+            context: Context, token: Long?, preRunEnergy: PreRunEnergy?,
+            musicObservationRequested: Boolean, musicReflectionSharingAllowed: Boolean,
+            songSnippetLookupAllowed: Boolean, runIntention: RunIntention?, routeLabel: String?,
+            preRunEnergyRecordedAtEpochMillis: Long?
+        ) {
             require(!musicReflectionSharingAllowed || musicObservationRequested) {
                 "Music reflection sharing requires this run's music observation opt-in."
             }
             val intent = Intent(context, RunTrackingService::class.java)
-                .setAction(ACTION_START_NEW)
+                .setAction(if (token == null) ACTION_START_NEW else ACTION_COUNTDOWN)
                 .putExtra(EXTRA_PRE_RUN_ENERGY, preRunEnergy?.name)
                 .putExtra(EXTRA_RUN_INTENTION, runIntention?.name)
                 .putExtra(EXTRA_ROUTE_LABEL, routeLabel)
@@ -898,6 +1056,7 @@ internal class RunTrackingService : Service() {
                 .putExtra(EXTRA_MUSIC_REFLECTION_SHARING_ALLOWED, musicReflectionSharingAllowed)
                 .putExtra(EXTRA_SONG_SNIPPET_LOOKUP_ALLOWED, songSnippetLookupAllowed && musicReflectionSharingAllowed)
             preRunEnergyRecordedAtEpochMillis?.let { intent.putExtra(EXTRA_PRE_RUN_ENERGY_RECORDED_AT, it) }
+            token?.let { intent.putExtra(EXTRA_COUNTDOWN_TOKEN, it) }
             ContextCompat.startForegroundService(context, intent)
         }
 

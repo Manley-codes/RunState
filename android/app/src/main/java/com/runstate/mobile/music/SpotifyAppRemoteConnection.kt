@@ -334,9 +334,8 @@ internal class SpotifyAppRemoteConnection private constructor(context: Context) 
             val uri = canonicalSpotifyTrackUri(observed.mediaId) ?: return null
             val identity = metadata[uri] ?: return null
             val duration = admittedDurations[uri] ?: return null
-            if (observed.sessionKey != nativeSessionKey || duration !in 1_000..86_400_000L ||
-                observed.durationMillis !in 1_000..86_400_000L ||
-                abs(observed.durationMillis - duration) > 1L) return null
+            if (observed.sessionKey != nativeSessionKey ||
+                !sameSpotifyRecordingDuration(duration, observed.durationMillis, uri)) return null
             return observed.copy(sessionKey = epoch, title = identity.first, artist = identity.second,
                 canPlay = false, canSeek = false, canPrepareTrack = false, canPlayTrack = false).also {
                 selected = it; selectedAt = SystemClock.elapsedRealtime()
@@ -481,8 +480,7 @@ internal fun mayPauseNativeSpotifyCleanup(expected: SongPassageSnapshot, actual:
     expected.sourcePackage == "com.spotify.music" && actual.sourcePackage == "com.spotify.music" &&
     canonicalSpotifyTrackUri(expected.mediaId) != null && expected.mediaId == actual.mediaId &&
     expected.title == actual.title && expected.artist == actual.artist &&
-    expected.durationMillis in 1_000..86_400_000L && actual.durationMillis in 1_000..86_400_000L &&
-    abs(expected.durationMillis - actual.durationMillis) <= 1L &&
+    sameSpotifyRecordingDuration(expected.durationMillis, actual.durationMillis, expected.mediaId) &&
     expected.playback == PassagePlayback.PLAYING && actual.playback == PassagePlayback.PLAYING &&
     expected.positionMillis in 0..expected.durationMillis && actual.positionMillis in 0..actual.durationMillis &&
     elapsedMillis in 0..3_000L && abs(actual.positionMillis - expected.positionMillis - elapsedMillis) <= 1_500L

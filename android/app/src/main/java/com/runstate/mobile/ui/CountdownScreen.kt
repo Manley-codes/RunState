@@ -36,6 +36,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -115,12 +116,28 @@ internal fun CountdownScreen(
     transitioning: Boolean = false
 ) {
     val motionEnabled = rememberCountdownMotionEnabled()
-    val visibleDigit = digit?.takeIf { it > 0 && !transitioning }
-    val canStart = actionsEnabled && visibleDigit != null
+    // Show the opening number on the first frame, before the owner/intro can publish a tick.
+    // Displaying it is not permission to start: controls still follow the real owner digit.
+    var receivedOwnerDigit by remember { mutableStateOf(digit != null) }
+    SideEffect { if (digit != null) receivedOwnerDigit = true }
+    val visibleDigit = when {
+        transitioning -> null
+        digit != null -> digit.takeIf { it > 0 }
+        !receivedOwnerDigit -> COUNTDOWN_SECONDS
+        else -> null // A cleared final/cancelled digit must not flash the opening ten again.
+    }
+    val canStart = actionsEnabled && digit != null && digit > 0 && !transitioning
     val canCancel = actionsEnabled && !transitioning
     val pulse = remember { Animatable(1f) }
+    val openingPulse = if (visibleDigit == COUNTDOWN_SECONDS && motionEnabled) {
+        rememberInfiniteTransition(label = "countdownOpeningPulse").animateFloat(
+            initialValue = 0f, targetValue = 1f,
+            animationSpec = infiniteRepeatable(tween(1_000, easing = LinearEasing), RepeatMode.Reverse),
+            label = "countdownOpeningProgress"
+        )
+    } else null
     LaunchedEffect(visibleDigit, motionEnabled) {
-        if (visibleDigit == null || !motionEnabled) {
+        if (visibleDigit == null || visibleDigit == COUNTDOWN_SECONDS || !motionEnabled) {
             pulse.snapTo(1f)
         } else {
             pulse.snapTo(0f)
@@ -174,7 +191,7 @@ internal fun CountdownScreen(
                 modifier = Modifier.align(Alignment.Center)
                     .offset(y = maxHeight * -.069f)
                     .graphicsLayer {
-                        val progress = pulse.value
+                        val progress = openingPulse?.value ?: pulse.value
                         scaleX = if (!motionEnabled) .87f else pulseValue(
                             progress,
                             if (finalCounts) .59f else .64f,

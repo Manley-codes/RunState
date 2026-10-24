@@ -9,16 +9,20 @@ import kotlinx.coroutines.launch
 /** The neutral question after the saved facts. One exact string, so its prepared audio matches. */
 internal const val ENERGY_QUESTION_TEXT = "How’s your energy now?"
 
-/** Countdown lines. Only 10, 3, 2 and 1 are spoken; words keep the server voice natural. */
+internal const val COUNTDOWN_INTRO_TEXT = "Starting in ten."
+internal const val COUNTDOWN_FINISH_TEXT = "Let’s go, runner."
+
+/** Ten is part of the joined intro; the final encouragement follows one and the real start. */
 internal fun countdownCueText(step: Int): String = when (step) {
-    10 -> "Starting in ten."
+    10 -> "Ten."
     3 -> "Three."
     2 -> "Two."
     1 -> "One."
     else -> "$step."
 }
 
-internal val COUNTDOWN_VOICE_LINES: List<String> = listOf(10, 3, 2, 1).map(::countdownCueText)
+internal val COUNTDOWN_VOICE_LINES: List<String> =
+    listOf(COUNTDOWN_INTRO_TEXT) + listOf(3, 2, 1).map(::countdownCueText) + COUNTDOWN_FINISH_TEXT
 
 /** Fixed run-voice lines prepared ahead of time: the countdown first, then the energy question. */
 internal val RUN_VOICE_PREPARED_LINES: List<String> = COUNTDOWN_VOICE_LINES + ENERGY_QUESTION_TEXT

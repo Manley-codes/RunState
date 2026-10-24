@@ -45,6 +45,8 @@ import com.runstate.mobile.reflection.RunReflectionCoordinator
 import com.runstate.mobile.reflection.RunReflectionState
 import com.runstate.mobile.reflection.ReflectionVoicePreparation
 import com.runstate.mobile.reflection.COUNTDOWN_VOICE_LINES
+import com.runstate.mobile.reflection.COUNTDOWN_INTRO_TEXT
+import com.runstate.mobile.reflection.COUNTDOWN_FINISH_TEXT
 import com.runstate.mobile.reflection.ENERGY_QUESTION_TEXT
 import com.runstate.mobile.reflection.RUN_VOICE_PREPARED_LINES
 import com.runstate.mobile.reflection.countdownCueText
@@ -62,6 +64,7 @@ import com.runstate.mobile.data.local.ShoeArchiveUndo
 import com.runstate.mobile.run.RunActionKind
 import com.runstate.mobile.run.RunAdmission
 import com.runstate.mobile.run.RunSessionCoordinator
+import com.runstate.mobile.run.RunCountdownOwner
 import com.runstate.mobile.location.RunTrackingService
 import com.runstate.mobile.location.RunTrackingServiceState
 import com.runstate.mobile.location.GpsSignalStatus
@@ -109,6 +112,7 @@ import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.catch
@@ -116,6 +120,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import java.util.Locale
 import java.util.UUID
+import kotlin.coroutines.resume
 
 /**
  * The app's one screen, wired to the process-scoped coordinator.
@@ -219,6 +224,7 @@ class MainActivity : ComponentActivity() {
                         nativeMapsEnabled = true,
                         onRetrySplits = runStateApplication::retryRunSplits,
                         countdownSpeakerFactory = { AndroidReflectionSpeaker(it) },
+                        runCountdown = runStateApplication.runCountdown,
                         spotifyConnectionLabel = when {
                             !spotify.configured -> "Spotify setup not finished"
                             spotify.status == SpotifyRemoteConnectionStatus.CONNECTING -> "Connecting to Spotify…"
@@ -250,8 +256,7 @@ class MainActivity : ComponentActivity() {
                         },
                         onDisconnectSpotify = spotifyConnection::disconnect,
 
-                        // The Activity's own lifecycle gates the countdown, so nothing counts
-                        // down — and no run is started — while the app is in the background.
+                        // The service owns the accepted GPS countdown across app switching.
                         lifecycle = lifecycle,
                         openingRequestId = openingRequestId,
                         modifier = Modifier.padding(innerPadding)
@@ -319,7 +324,10 @@ internal fun RunJourneyRoot(
     spotifyDisconnectEnabled: Boolean = false,
     onConnectSpotify: () -> Unit = {},
     onDisconnectSpotify: () -> Unit = {},
-    openingRequestId: Int = 0
+    openingRequestId: Int = 0,
+    runCountdown: RunCountdownOwner? = null,
+    dispatchGpsCountdown: (Context, Long, PreRunEnergy?, Boolean, Boolean, Boolean,
+        RunIntention?, String?, Long?) -> Unit = RunTrackingService::startCountdown
 ) {
 
     val reflectionRequestsAvailable = reflectionConnection is ReflectionConnectionState.Hosted ||
@@ -559,6 +567,7 @@ internal fun RunJourneyRoot(
         activeCoordinator.voicePreparation.collectAsState().value
     }
     val trackingState by trackingFlow.collectAsState()
+    val ownedCountdown = runCountdown?.state?.collectAsState()?.value
     val activeMapAvailable = !historyVisible && activeTrackingMode == RunTrackingMode.GPS &&
         (model.state == RunUiState.ActiveRunning || model.state == RunUiState.ActivePaused)
     val mapVisible = mapRunId != null && (mapRunId == activeRunId && activeMapAvailable ||
@@ -575,6 +584,7 @@ internal fun RunJourneyRoot(
         }
     }
     val previewEnabled = gpsSelected && !gpsStartDispatched && activeRunId == null &&
+        ownedCountdown?.active != true &&
         !historyVisible && recapRunId == null && !runSettingsVisible && !shoesVisible && !connectionDialogVisible &&
         (model.state == RunUiState.ReadyToStart || model.state == RunUiState.Countdown)
     // Warm GPS while Start is visible, independent of map tiles. Retain this same listener
@@ -604,6 +614,7 @@ internal fun RunJourneyRoot(
         mutableStateOf(lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED))
     }
     var countdownSpeaker by remember { mutableStateOf<ReflectionSpeaker?>(null) }
+    var sampleStartSpeaker by remember { mutableStateOf<ReflectionSpeaker?>(null) }
     // Chosen once per countdown from fully prepared lines, so one countdown never mixes voices.
     var countdownRunVoice by remember { mutableStateOf<Boolean?>(null) }
     val runVoiceCues = remember(context) { (context.applicationContext as? RunStateApplication)?.runVoiceCues }
@@ -613,10 +624,18 @@ internal fun RunJourneyRoot(
         countdownRunVoice = null
         try { owned?.close() } catch (_: RuntimeException) { }
     }
-    DisposableEffect(context) { onDispose { stopCountdownVoice() } }
-    LaunchedEffect(voiceForeground) { if (!voiceForeground) stopCountdownVoice() }
+    fun stopSampleStartVoice() {
+        val voice = sampleStartSpeaker
+        sampleStartSpeaker = null
+        try { voice?.close() } catch (_: RuntimeException) { }
+    }
+    DisposableEffect(context) { onDispose { stopCountdownVoice(); stopSampleStartVoice() } }
+    LaunchedEffect(voiceForeground) {
+        if (!voiceForeground) { stopCountdownVoice(); stopSampleStartVoice() }
+    }
     fun speakCountdownCue(step: Int?) {
         if (step == null || !voiceForeground) { stopCountdownVoice(); return }
+        if (step == 10) return // Already spoken in the uninterrupted opening line.
         val factory = countdownSpeakerFactory ?: return
         try {
             val voice = countdownSpeaker ?: factory(context).also { countdownSpeaker = it }
@@ -625,6 +644,34 @@ internal fun RunJourneyRoot(
             voice.stop()
             voice.speakTimedCue(countdownCueText(step), useRunVoice)
         } catch (_: RuntimeException) { stopCountdownVoice() }
+    }
+    suspend fun speakCountdownIntroduction() {
+        if (!voiceForeground) return
+        val factory = countdownSpeakerFactory ?: return
+        val voice = try { countdownSpeaker ?: factory(context).also { countdownSpeaker = it } }
+            catch (_: RuntimeException) { return }
+        val useRunVoice = (runVoiceCues?.hasAll(COUNTDOWN_VOICE_LINES) == true).also { countdownRunVoice = it }
+        suspendCancellableCoroutine<Unit> { continuation ->
+            continuation.invokeOnCancellation { try { voice.stop() } catch (_: RuntimeException) { } }
+            try {
+                voice.speakTimedCue(COUNTDOWN_INTRO_TEXT, useRunVoice) {
+                    if (continuation.isActive) continuation.resume(Unit)
+                }
+            } catch (_: RuntimeException) {
+                if (continuation.isActive) continuation.resume(Unit)
+            }
+        }
+    }
+    fun speakSampleStarted() {
+        if (!voiceForeground) return
+        val factory = countdownSpeakerFactory ?: return
+        try {
+            stopSampleStartVoice()
+            val voice = factory(context).also { sampleStartSpeaker = it }
+            voice.speakTimedCue(COUNTDOWN_FINISH_TEXT, runVoiceCues?.hasAll(COUNTDOWN_VOICE_LINES) == true) {
+                if (sampleStartSpeaker === voice) stopSampleStartVoice()
+            }
+        } catch (_: RuntimeException) { stopSampleStartVoice() }
     }
     // Prepare the fixed run-voice lines while Start is on screen. Retry briefly while a sleeping
     // server wakes, but never keep polling in the background or for an unsupported server.
@@ -879,6 +926,10 @@ internal fun RunJourneyRoot(
         metrics = coordinator.runMetrics()?.let(::runMetricsDisplayFor)
     }
 
+    LaunchedEffect(ownedCountdown) {
+        if (ownedCountdown != null) refresh()
+    }
+
     // Keyed on the coordinator, so this runs once per composition of this screen and
     // re-runs only if it were ever given a different one. Cancellation when the Activity
     // goes away propagates normally; nothing here is made uncancellable.
@@ -895,7 +946,13 @@ internal fun RunJourneyRoot(
     // read; the service state itself never stands in for the durable run row.
     LaunchedEffect(trackingState) {
         when (val service = trackingState) {
-            RunTrackingServiceState.Idle,
+            RunTrackingServiceState.Idle -> {
+                if (runCountdown != null && runCountdown.state.value.active.not()) {
+                    gpsStartDispatched = false
+                    refresh()
+                }
+            }
+            RunTrackingServiceState.Countdown,
             RunTrackingServiceState.Starting -> Unit
 
             is RunTrackingServiceState.Tracking,
@@ -1003,11 +1060,11 @@ internal fun RunJourneyRoot(
         refresh()
     }
 
-    // Cancel an unsaved GPS start on backgrounding. Returning or recreating the Activity asks
-    // for a new tap instead of starting a run the runner did not see begin.
+    // An undispatched tap cannot gain background permission later. Once a foreground service
+    // owns the countdown, switching apps or recreating this screen leaves that owner alone.
     DisposableEffect(lifecycle, coordinator, previewController) {
         val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_PAUSE && gpsStartRequested) {
+            if (event == Lifecycle.Event.ON_PAUSE && gpsStartRequested && runCountdown?.state?.value?.active != true) {
                 gpsStartRequested = false
                 // The RESUMED preview lifecycle independently releases its listener here.
             }
@@ -1017,6 +1074,7 @@ internal fun RunJourneyRoot(
     }
     LaunchedEffect(model.state, gpsStartRequested, gpsStartDispatched, gpsSelected, actionInFlight, trackingState) {
         if (gpsSelected && !gpsStartRequested && !gpsStartDispatched &&
+            runCountdown?.state?.value?.active != true &&
             trackingState != RunTrackingServiceState.Starting &&
             model.state == RunUiState.Countdown && !actionInFlight) {
             runGuarded {
@@ -1049,6 +1107,27 @@ internal fun RunJourneyRoot(
                     if (!gpsStartRequested || gpsStartAttempt != attempt ||
                         !lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) {
                         coordinator.cancelCountdown()
+                    } else if (runCountdown != null) {
+                        // Admission can suspend; recheck visibility immediately before Android's
+                        // location foreground-service launch. Nothing resumes this dispatch later.
+                        val token = runCountdown.reserve()
+                        try {
+                            val observe = musicSelected && musicAccessProvider(context)
+                            val share = observe && reflectionRequestsAvailable && musicReflectionSharingSelected
+                            previewController.stopBeforeRun()
+                            dispatchGpsCountdown(context, token, preRunEnergy, observe, share,
+                                share && runPreferences?.findSongSnippets == true,
+                                runIntention, routeLabel, preRunEnergyRecordedAt)
+                            gpsStartDispatched = true
+                            gpsStartRequested = false
+                        } catch (_: RuntimeException) {
+                            runCountdown.retire(token)
+                            gpsStartRequested = false
+                            gpsStartDispatched = false
+                            gpsPreviewRestart++
+                            gpsMessage = "Android could not start the countdown. Try again while the app is open."
+                            coordinator.cancelCountdown()
+                        }
                     }
                     refresh()
                 } else if (gpsStartRequested && !preciseLocationReady()) {
@@ -1062,12 +1141,14 @@ internal fun RunJourneyRoot(
         }
     }
 
-    val countdownDigit = rememberLifecycleCountdown(
+    val localCountdownDigit = rememberLifecycleCountdown(
         active = model.state == RunUiState.Countdown &&
+            (!gpsSelected || runCountdown == null) &&
             (!gpsSelected || gpsStartRequested && !gpsStartDispatched),
         lifecycle = lifecycle,
         startNowRequested = startNowRequested,
         onCountdownCue = ::speakCountdownCue,
+        onIntroduction = ::speakCountdownIntroduction,
         onFinished = {
 
             // The countdown only reaches here while the Activity is STARTED. If a Cancel is
@@ -1113,7 +1194,7 @@ internal fun RunJourneyRoot(
                 }
             } else {
                 runGuarded {
-                    awaitDurable {
+                    awaitDurable(onSuccess = ::speakSampleStarted) {
                         coordinator.requestStart(
                             preRunEnergy,
                             musicObservationRequested = observeMusicForRun,
@@ -1128,6 +1209,7 @@ internal fun RunJourneyRoot(
             }
         }
     )
+    val countdownDigit = if (gpsSelected && runCountdown != null) ownedCountdown?.digit else localCountdownDigit
 
     suspend fun performAction(kind: RunActionKind) {
             if (kind == RunActionKind.COMPLETE) {
@@ -1452,10 +1534,14 @@ internal fun RunJourneyRoot(
         onCancelCountdown = {
             startNowRequested = false
             gpsStartRequested = false
-            runGuarded {
-                coordinator.cancelCountdown()
-                gpsSelected = true
-                refresh()
+            if (gpsSelected && runCountdown?.state?.value?.active == true) {
+                runCountdown.cancel() // Service stops its cue and retires admission before publishing Idle.
+            } else {
+                runGuarded {
+                    coordinator.cancelCountdown()
+                    gpsSelected = true
+                    refresh()
+                }
             }
         },
         onRetryInitialization = {
@@ -1648,7 +1734,8 @@ internal fun RunJourneyRoot(
             ?.let { "${it.trackTitle} · ${it.artistName}" },
         onStopReflectionAudio = { stopCompletionAudio?.invoke() },
         showHistory = true,
-        actionsEnabled = !actionInFlight && !reflectionConnectionSaving && !gpsStartDispatched &&
+        actionsEnabled = !actionInFlight && !reflectionConnectionSaving &&
+            (if (ownedCountdown?.active == true) ownedCountdown.canControl else !gpsStartDispatched) &&
             !(model.state == RunUiState.ReadyToStart && (shoeLoading || shoeWritePending)) &&
             !(gpsStartRequested && model.state == RunUiState.ReadyToStart),
         modifier = modifier,
@@ -1676,7 +1763,12 @@ internal fun RunJourneyRoot(
         setupLoading = runPreferences == null && runPreferencesError == null,
         reflectionSetupRequired = reflectionConnection == ReflectionConnectionState.NotConfigured ||
             reflectionConnection == ReflectionConnectionState.Unavailable,
-        onStartNow = { if (model.state == RunUiState.Countdown && !actionInFlight) startNowRequested = true },
+        onStartNow = {
+            if (model.state == RunUiState.Countdown && !actionInFlight) {
+                if (gpsSelected && runCountdown != null) runCountdown.startNow()
+                else startNowRequested = true
+            }
+        },
         onSaveActivity = {
             completedRunId?.let { id ->
                 runGuarded {
