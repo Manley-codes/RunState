@@ -39,6 +39,38 @@ online profiles require user ownership and access control. Separate local histor
 phones do not by themselves require accounts. Keep the current demo free of a mandatory sign-up;
 revisit earlier only for a concrete requirement, not as a prerequisite for finishing existing UI.
 
+## October 24 opening collage entry variation — Complete for agreed scope; installed and checked
+
+Manley approved advancing the opening wall farther along its existing animation each time it
+appears. No photo is shuffled or moved to another row. `OpeningScreen.kt` now allocates one
+saved virtual-time offset per eligible entrance, advancing eight seconds from the previous
+entrance. A private `opening_appearance` preference contains only the visual entrance counter;
+it survives closing the app. `rememberSaveable` keeps the current entrance's phase through
+recomposition/restoration. The existing keyed launcher/recovery gates remain unchanged.
+
+The offset affects only row translation. All 33 photos, exact order/crops/widths, alternating
+directions, speeds, wordmark treatment/arrival, small skip hint and 4.8-second visible duration
+are preserved. Reduced motion remains stationary at the new entry position. The existing
+bundled loading still remains the same briefly while photos decode, preserving the blank-frame
+fix; no additional loading delay, network dependency, image processing or assets were added.
+
+Debug/release/instrumentation APK builds passed. All 20 existing component/root device checks
+passed in 44.941 seconds, covering loading/failure, duration, skip, motion/background pause,
+reduced motion, compact/large text, repeated launcher entry, restoration and active/pending-run
+bypasses. Three actual Moto launcher entries advanced the counter 14→15→16→17, once per entrance
+and not on redraw. Two followed force-stop and one returned to the existing task; Android
+classified the force-stop starts as WARM, so these are not cold-start timing measurements.
+All three screenshots were inspected and show distinct visible parts of the same ordered wall.
+
+The app was updated in place on Moto `ZT422G8FT4`, with no run or audio started. Four saved
+completed runs, every value across 12 database tables, and all four original preference files
+match the before-update snapshot; Room integrity and foreign-key checks passed. Only the new
+visual counter preference was added. The temporary test package was removed and the app left
+at Start. Private backup/screenshots/receipts were necessarily created under ignored
+`docs/local/opening-phase-2026-10-24/`. No new source/test/image files, commits, pushes or backend
+changes. Working branch is `master`; suggested commit: `fix(android): vary opening collage starting position`.
+Manley can review the visual result when back; no listening test is needed.
+
 ## October 24 joined countdown opening — Complete for agreed scope; installed and accepted
 
 Manley still found the separate "Starting in." and "Ten." unnatural and the opening 10 too

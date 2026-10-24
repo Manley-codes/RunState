@@ -119,6 +119,16 @@ private val OpeningRows = listOf(
 )
 private val OpeningSpeeds = floatArrayOf(51.75f, 56.0625f, 53.1875f, 57.5f, 52.46875f, 56.0625f)
 private val OpeningPhases = floatArrayOf(5f, 2f, 2f, 2f, 3f, 3f)
+private const val OPENING_START_STEP_SECONDS = 8.0
+
+private fun nextOpeningStartSeconds(context: Context): Double {
+    // Presentation only: a cold launch must not reset the wall to its original photos.
+    val preferences = context.applicationContext.getSharedPreferences("opening_appearance", Context.MODE_PRIVATE)
+    val previous = preferences.getLong("entrance", 0L).coerceAtLeast(0L)
+    val entrance = if (previous < 1_000_000L) previous + 1L else 1L
+    preferences.edit().putLong("entrance", entrance).apply()
+    return entrance * OPENING_START_STEP_SECONDS
+}
 
 /**
  * A brief, offline opening. The journey owner decides whether entry is eligible; this
@@ -138,6 +148,8 @@ internal fun OpeningScreen(
     val currentOnFinished by rememberUpdatedState(onFinished)
     var finished by rememberSaveable { mutableStateOf(false) }
     var visibleNanos by rememberSaveable { mutableLongStateOf(0L) }
+    // Allocate once per eligible opening; rotation and recomposition keep this same phase.
+    val startingSeconds = rememberSaveable { nextOpeningStartSeconds(context) }
     val systemMotionEnabled = rememberOpeningMotionEnabled(context)
     val motionEnabled = motionEnabledOverride ?: systemMotionEnabled
     val images by produceState<Map<String, ImageBitmap>?>(null, assets, photoLoader) {
@@ -240,7 +252,8 @@ internal fun OpeningScreen(
                 val seconds = if (motionEnabled) elapsedSeconds else 0f
                 OpeningRows.forEachIndexed { index, photos ->
                     val width = photos.sumOf { (it.widthDp + OPENING_GAP_DP).toDouble() }.toFloat().dp.toPx()
-                    val travel = (OpeningSpeeds[index].dp.toPx() * (seconds + OpeningPhases[index])) % width
+                    val travel = ((OpeningSpeeds[index].dp.toPx() *
+                        (startingSeconds + seconds + OpeningPhases[index])) % width).toFloat()
                     val offset = if (index % 2 == 0) -travel else travel - width
                     val top = -overhang + index * (rowHeight + gap)
                     clipRect(0f, max(0f, top), size.width, min(size.height, top + rowHeight)) {
