@@ -11,6 +11,24 @@ metadata, to Anthropic. See [the current Android checkpoint](design/project_curr
 and [backend documentation](../backend/README.md) for those implemented boundaries. The older
 console statement that RunState has no server does **not** apply to the Android app.
 
+## October 23 delivery diagnostics and passage context
+
+The installed debug build logs bounded voice/snippet delivery metadata (stage, source, rate,
+reason and elapsed/position timing) locally. These events contain no speech text, song title,
+artist, run identifier, location or credentials. Countdown ownership remains process-local;
+no new database fields, background-location permission or data-sharing consent was added.
+Snippet endpoint diagnostics also retain bounded entrance/ending errors and confirmed-playing
+elapsed time, including a separate error after PAUSED confirmation. They contain timing deltas,
+not absolute track positions or song identifiers.
+
+The tested local backend can pass already matched Musixmatch theme labels into the writer's
+description of the selected snippet, based on local overlap with the chosen timed window.
+The timing-source body remains transient; raw LRCLIB lyrics are not sent to the writer or
+saved by this change. A title hook can also reuse the validated song-study title interpretation.
+These links are interpretation-only, not evidence about the runner. This adds no source/model
+requests or public response fields. Backend deployment remains pending. Manley accepted the
+controlled reflection/snippet pairing for now, with musical-ending refinement explicitly deferred.
+
 ## Local Energy learning foundation — October 22, 2026
 
 **October 23 Effort refinement:** new numeric answers use the Foster 0–10 session-effort

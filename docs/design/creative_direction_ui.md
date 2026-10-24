@@ -548,3 +548,71 @@ Start with these three existing lines. None is selected or approved by this reco
    idea, preserving the existing source fragment rather than inventing a revised tagline.
 3. **“the best run is not always the fastest”** — a concrete running principle that invites
    conversation about Energy, effort and context without implying a medical or training promise.
+
+## October 23 — trailer and logo plan, saved for later
+
+**Status: Planned, deferred.** Manley asked to preserve the presentation recommendation below,
+not start production. Finish the active run screen and required existing-functionality work
+first. He also explicitly wants a RunState logo and a custom Android launcher icon: the image
+people tap on their phone should replace the generic Android graphic. No logo, icon, tagline or
+final trailer script has been selected. Keep the accepted opening design and other screens.
+
+Suggested order when this work resumes: finish/review Active Run UI; approve the logo and launcher
+icon; capture the finished app; storyboard and produce the trailer. Settle the final branding
+before final title/end cards and phone-launch recordings to avoid rework. This is documentation
+only, not approval to generate assets, change the app, purchase anything or publish a video now.
+
+### Purpose and format
+
+Create a roughly 55-second trailer built around the working app for AfroTech conversations with
+employers, leaders and other attendees, also usable afterward on a portfolio or professional
+profile. Use it to earn interest, then offer the real phone demo and a clear explanation of
+Manley's engineering/product decisions. Preserve the roadmap's short explanation, approximately
+90-second demonstration and optional three-minute technical explanation as supporting material.
+
+The central story: RunState connects recorded performance, the runner's experience and their
+music into a meaningful finish. Follow one coherent run instead of listing unrelated features.
+Favor real app recordings; device mockups, crops and transitions can frame them, but generated
+visuals must not invent interface behavior. Let the actual reflection excerpt land rather than
+cutting rapidly through the feature that makes the experience distinct.
+
+| Approximate time | Material | Purpose |
+| --- | --- | --- |
+| 0–5 seconds | Accepted opening collage and RunState identity | Establish running culture and visual character. |
+| 5–13 seconds | Runner preparing, optional Energy selection, countdown | Establish a personal starting point. |
+| 13–23 seconds | Finished Active Run UI and real recorded metrics | Demonstrate functioning software. |
+| 23–45 seconds | Completion and a strong excerpt from an actual generated reflection | Show the signature experience with enough time to understand it. |
+| 45–55 seconds | Saved activity in History, then creator name and project link | Show durable value and enable follow-up. |
+
+Timing is a proposed editing guide, not a locked script. Choose a dependable example after the
+remaining UI and real-run review. Use actual app voice audio for the demonstrated reflection;
+do not replace it with an advertising line and imply the app generated that result. Make any
+controlled example or excerpt understandable as such. Energy Insights is a foundation for
+noticing personal patterns, not proven fitness improvement or a universal readiness measure.
+Avoid promises of perfect song matching or instantaneous generation in every circumstance.
+
+### Production and presentation decisions
+
+- Keep the established clean layouts, colorful running imagery, restrained motion and distinctive
+  voices. Avoid effects that obscure what the product does.
+- Make the story understandable with sound off using readable captions. Keep an offline video
+  copy on the demo phone as a dependable backup.
+- End with Manley Johnson, Creator of RunState, and an actual project/professional-profile link
+  or QR code when chosen. Prefer an evergreen invitation such as Explore the project / Connect
+  with Manley. Do not imply an app-store release that has not happened.
+- The screenshot's ElevenLabs workflow is a starting point: confirm audience/message and footage,
+  approve a short storyboard, assemble real screens, add voice/music/captions, review accuracy and
+  mix/export. Its Studio supports imported video, speech, timeline alignment and captions:
+  https://elevenlabs.io/docs/help-center/product/studio/studio/how-can-i-create-a-voiceover-for-my-video-using-studio
+- Decide video music before editing. Spotify playback access is not permission to bake its
+  recordings into a trailer; its developer policy prohibits synchronization with video. Use
+  music cleared for the video, and do not present replacement background music as evidence that
+  RunState selected that track. Source checked October 23: https://developer.spotify.com/policy
+- For the employer conversation, prepare the real development story: music data alone initially
+  failed to improve the writing; listening feedback led to revisions of song study/writing and
+  real phone audio handoffs. Explain actual responsibilities and tools accurately. Refer to
+  `music_reflection_development_story.md` rather than inventing a success story.
+
+The logo/icon is a separate pending design choice. It should remain recognizable at small phone
+icon sizes and fit the established RunState identity. Review visual options with Manley before
+installing a replacement; no specific symbol, color scheme or use of the existing ring is assumed.

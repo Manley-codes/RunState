@@ -7,6 +7,28 @@ metadata:
 
 Every successfully saved run gets a contextual response. No exceptions.
 
+## October 23 field follow-up — installed delivery fixes; local writer context
+
+Normal GPS countdown now belongs to the foreground tracking service across app switches,
+with a completed introduction before ten and a spoken Let's go, runner after the official start.
+Mile announcements share the accepted slower facts delivery (0.90 cloud /0.864 local); facts,
+reflection voice, 480 ms entry envelope and 150 ms intentional song handoff remain unchanged.
+Effort remains optional and does not delay reflection delivery.
+
+October23 late controlled listening: after a replay, Manley accepted the countdown sequence and
+slower mile delivery with "Both sounded right." Keep this timing and pace. Two custom-voice
+auditions passed without run writes; a separate brief actual-service/Home/return check preserved
+the countdown before cancellation. Full outdoor continuity and snippet behavior still need review.
+
+The local backend improves automatic passage context without changing the accepted prompts or
+models: source-matched theme labels from the chosen timed window and, for a title hook, the
+validated title interpretation accompany the landing. No raw timing-source lyrics enter this
+extra context. It preserves creative approaches and curated examples; stronger subjective
+connection still needs listening after deployment. Automatic equal-strength hook windows prefer
+4–8 seconds where supported, rather than always the shortest fragment. Playback now waits for
+a fresh position report before treating PLAYING as confirmation. Full evidence and limits are
+in `project_current_state.md` §October23 evening fixes.
+
 ## Completion rhythm follow-up — October 21, 2026
 
 **Complete for agreed scope — installed; controlled phone facts pace and shorter handoff accepted.**

@@ -5,6 +5,15 @@ metadata:
   type: feedback
 ---
 
+**Current collaboration direction — reaffirmed October 23, 2026:**
+- Manley explicitly asked Codex to implement countdown continuity and announcement delivery,
+  then continue with the snippet and reflection fixes without stopping for routine approvals.
+  The October11 direct-implementation authorization remains current. Do not revive the older
+  Claude-default or brainstorming-only restrictions from copied instructions.
+- Keep useful project guidance rather than deleting it wholesale. The local ignored `AGENTS.md`
+  now reflects this direction, preserves user-owned Git and data protection, and identifies
+  legacy console architecture separately. No routine permission loops for already authorized work.
+
 **Current collaboration direction — October 11, 2026 (supersedes earlier handoff and step-approval rules):**
 - Manley explicitly authorized Codex to implement the RunState code directly and continue through
   the technical work without stopping for routine approvals or CLI handoffs. Ask for his help only
@@ -33,23 +42,22 @@ metadata:
   direction remains open.
 
 **Working style:**
-- Treat this as a learning project with Claude as a strong technical collaborator, not an equal contributor or a follower
+- Treat this as a learning project with the active assistant as a strong technical collaborator
 - Push back when something is wrong, premature, or when a better approach exists — present it clearly and let the user decide
 - Agree genuinely when something is actually good
 - Honest feedback is explicitly valued over agreement
-- Ask more questions to stay aligned — don't assume
+- Ask focused questions when needed; use the authorized scope and current direction for routine decisions
 
 **On complexity:**
 - Complexity alone is never a reason to avoid something
 - Only push back if: it's harmful to the app, causes real issues, is costly right now, or strongly restricts the learning experience
-- The user has no deadline — this is a personal project with no rush
+- Current delivery target is the AfroTech demo; follow the latest scoped roadmap rather than the older no-deadline note
 - Willing to go back and refactor if something better comes along — not afraid of change
 
 **On implementing:**
-- Never implement a full plan alone without user approval at each step
-- Present options with recommendations, then ask for agreement before proceeding
-- Small code steps only — state the exact bounded section, receive approval, implement it, explain the significant changes, and stop before the next section
-- Claude Code is the default code implementer. The user does not need to type the code; Codex or another assistant implements only when explicitly requested for that task
+- Implement authorized work in bounded, tested increments and continue through the requested follow-ups
+- Present options when a meaningful unresolved decision needs the user's judgment, not for routine code edits
+- Codex can implement directly; no Claude handoff or per-step approval is required for authorized work
 - The user handles routine Git work and already knows `pwd`, entering the project folder, `git status`, `git add`, `git commit -m`, and `git push`; do not reteach those commands
 - For an unfamiliar but career-useful Git operation, show the exact command and explain how it works before the user runs it. Keep complicated or uncommon recovery operations assistant-guided
 - Do not stage, commit, push, merge, or perform other routine Git mutations unless the user explicitly asks

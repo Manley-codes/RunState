@@ -39,6 +39,362 @@ online profiles require user ownership and access control. Separate local histor
 phones do not by themselves require accounts. Keep the current demo free of a mandatory sign-up;
 revisit earlier only for a concrete requirement, not as a prerequisite for finishing existing UI.
 
+## October 24 joined countdown opening — Complete for agreed scope; installed and accepted
+
+Manley still found the separate "Starting in." and "Ten." unnatural and the opening 10 too
+long. The measured player handoff was only 8–10 ms; the intro recording itself lasted roughly
+2.29–2.38 seconds. The fixed prepared opening is now one utterance, **"Starting in ten."**,
+so the voice can speak through it without completing and opening a second recording. Both GPS
+and local/sample paths suppress the separate Ten cue; the cache no longer requires that clip.
+The clock still emits its step-10 callback for timing and notification state.
+
+The first-frame 10 and gentle pulse remain. The full ten-second timed period starts after the
+joined phrase completes (or the existing bounded failure timeout); 10 therefore remains visible
+through the phrase and its first timed second. This is not a claim of zero dwell or word-level
+synchronization. Cancel, Start now, background ownership, Three/Two/One and "Let's go, runner."
+are unchanged. No backend or voice-speed change, new source files, Git actions or deployment.
+
+Both 788-unit suites and debug/test APK builds passed. Updated on the Moto in place; all 11
+focused silent phone checks passed in 35.421 seconds, including no duplicate Ten, intro gating,
+background ownership, cancellation, Start now and stale speech callbacks. All four saved runs,
+12 business tables and four preference files are unchanged; integrity/FK checks are clean.
+The user-authorized joined-opening audition then passed on the Moto in 34.342 seconds, using
+the custom run voice for the opening, final counts, encouragement and sample mile announcement.
+It simulated the countdown start in memory only, without saving a run or controlling Spotify.
+Manley could not judge synchronization from that audio-only audition and requested the visible
+screen. The existing opt-in test now shows the actual CountdownScreen, driven by the same
+RunCountdownOwner used for its audio. A first visual attempt caught a test-only screen-refresh
+failure (10 stayed displayed); this was not accepted. The corrected fixture bridges the real
+owner state into Compose, flushes snapshots and draws frames against elapsed real time, without
+moving the speech/timer onto Compose's virtual clock. A silent progression check passed in
+13.895 seconds, then the visible custom-voice audition passed in 31.534 seconds and verified
+all digits 10 through 1 were composed. Only the test APK changed for this visual correction.
+No actual run, history write or Spotify transport was started. Manley's visible-audition verdict
+was **"Both felt right"** for voice/number alignment and the amount of time 10 stayed visible.
+Keep this timing; no further opening tuning is requested. Saved data still matches the earlier
+fingerprints: four runs, all 12 business tables and four preference files; integrity/FKs clean.
+This is acceptance of the controlled countdown presentation and speech, not a new real-run result.
+Ready for the user-owned grouped commit/push checkpoint; nothing staged, committed or pushed.
+
+## October 23 countdown entry adjustment — superseded speech opening above
+
+Before committing, Manley requested10already visible when Start opens the countdown, held while
+"Starting in" completes, then the actual count begins. The earlier blank intro was intentional
+but felt delayed. Reservation and introduction now publish10immediately. The presentation also
+shows10on its first frame before an owner digit arrives, and gently pulses it with the floating
+orbs during the hold. The real timer/cues remain gated by intro completion; no early run recording.
+The fallback applies only to initial entry, so clearing One/Cancel cannot flash10again. Start now,
+Cancel, background continuity, reduced-motion behavior and the existing240ms exit remain.
+
+No speculative voice lead before Start admission or new network request was added. Cached speech
+starts through the existing service; cold voice/player setup can still vary. The ten-second timer
+still begins after the intro completes or its existing bounded failure timeout, without an extra
+intentional delay. The accepted spoken words and final "Let's go, runner" remain unchanged.
+
+Both788-unit suites passed; the final presentation-only exit correction rebuilt debug/test APKs.
+All9focused silent Moto cases passed in30.474s: held10during intro in both paths, first-frame10,
+no terminal10flash, full timed countdown, background continuation, exactly-once Start now,
+cancel/fresh start and visual handoff. Installed in place; four saved runs/all12business tables/
+fourpreferences match the backup, integrity/FKs clean. No new source files for this adjustment;
+private receipts are `visible-ten-silent-phone-checks.txt`/`visible-ten-data-check.json` in the
+existing ignored field-review folder. No real run or listening audition was started by these
+checks. User visual/audible review remains; no Git/deployment action performed.
+
+## October 23 evening fixes — Ready to test; Android installed, backend local
+
+Manley explicitly authorized Codex to implement the countdown/announcement fixes and continue
+through the snippet/reflection follow-ups without routine step approvals. The stale local
+`AGENTS.md` was updated rather than deleted; useful data, learning and user-owned Git guidance
+remains. The tracked collaboration record contains the same current direction.
+
+### Installed Android behavior
+
+- Normal GPS Start now launches the existing location foreground service while the Activity is
+  visible. A process-only countdown owner survives switching apps or locking the screen; the
+  Activity observes its current digit instead of restarting a screen-owned timer. No run row or
+  distance is recorded until the countdown finishes or Start now wins. Cancel, repeated commands,
+  restoration and old callbacks cannot create a second run or cancel a newer countdown. There
+  is a Cancel notification action. Process death does not restart an abandoned countdown.
+- The initial version separated **Starting in.** from **Ten.** The October 24 revision above
+  joins them and displays 10 immediately. After the official start, **Let's go, runner.**
+  is spoken. Normal completion lets One finish for up to two extra seconds without delaying GPS;
+  Start now interrupts the remaining countdown. No on-screen GO/Let's go was restored. Existing
+  sample/demo countdowns retain their screen-lifecycle contract; background continuity is the
+  normal GPS service path.
+- Mile announcements now use the accepted completion-facts pace: 0.90 cloud playback / 0.864
+  phone fallback. The same voices remain; countdown and reflection rates are unchanged. The
+  service's overall announcement ceiling is 45 seconds so the slower delivery is not cut at 20.
+- Spotify playback confirmation now ignores position reports that predate our Play command.
+  A controlled reproduction using the field clip's 2.910-second window showed how a stale
+  near-end report could stop newly begun audio after 10 ms. The fix preserves the requested
+  endpoint, rather than adding another full clip after a delayed confirmation. Exact canonical
+  Spotify recordings tolerate subsecond duration representation differences across native/SDK
+  reports, consistently through playback/cleanup/resume. Unknown identities keep the 1 ms
+  allowance; recording identity, user interruptions and trajectory checks remain.
+- Debug speech/snippet events now record only stage/source/rate/reason/timing information, not
+  spoken text, song identity, location or credentials. This supplies evidence if an actual run
+  still produces an interruption. The historical field cause remains unconfirmed.
+- Effort is still optional. A silent screen regression specifically proves a prepared reflection
+  speaks while inline Effort is open and unanswered; no artificial effort gate was removed.
+
+### Backend follow-up — tested locally, not yet deployed
+
+- Automatic hook selection gives a small preference to a 4–8-second window when hook strength
+  is otherwise equal. A real source-marked gap or stronger analysis match still wins. Strong
+  short clips and the five curated passages remain allowed; no guessed musical padding.
+- The existing single timing lookup now carries the selected window's matching Musixmatch
+  theme references into the writer's passage description. Title hooks can use the validated
+  song study's title interpretation. This gives AUTO a more specific creative target while
+  preserving persona, direct and blended choices, accepted prompts/models and curated landings.
+  Theme overlap is an interpretation, not proof of exact phrase meaning or a fact about a runner.
+  No extra model/source calls, public API fields, stored lyrics or raw LRCLIB lyrics sent to AI.
+- Fixed a separate mismatch that rejected valid nonrepeating timed-line landing provenance.
+  This could fail a reflection request for that fallback; it did not explain the field title-hook
+  case. Existing saved reflections remain unchanged.
+
+### Verification and remaining work
+
+Final debug/release unit suites: **784/784 each**. Debug app and test APKs built and installed
+in place on Moto `ZT422G8FT4`. **13/13 silent phone checks passed**, including background
+countdown ownership, restoration, cancel/fresh start, exactly-once Start now, intro callbacks,
+both voice sources/pacing, unchanged visual handoff, and unanswered Effort. These use isolated
+in-memory run data/fake audio/service boundaries; they are not an outdoor or audible acceptance.
+The initial new unit fixture had a non-void JUnit method and the first managed UI fixture blocked
+its own Compose test clock; both test-only defects were corrected before the successful runs.
+Backend full offline suite: **212/212**; local HTTP test sockets required the normal toolchain
+permission, with no live provider requests.
+
+Private before/after backups and receipts are in `docs/local/field-review-2026-10-23/`.
+All four saved runs, all 13 database-table row hashes and all four preference hashes match.
+Room20 integrity and foreign keys are clean. Necessary new files are `RunCountdownOwner.kt`
+and its unit test; other source changes use existing files. No commits, pushes, merges or deploys.
+Backend changes need Manley's commit/push and deployment before new automatic reflections receive
+the richer context. The controlled listening acceptance below supersedes the earlier deferred check.
+
+### October 23 late listening — countdown timing and mile pace accepted
+
+Manley listened and requested one replay, then confirmed **"Both sounded right"** for the
+Starting in → countdown → Let's go, runner sequence and the slower one-mile announcement.
+Preserve this delivery. The two full custom-voice auditions passed in36.006s and32.815s,
+including preparation. Each used the production countdown owner and speech platform with seven
+cloud lines, an in-memory start callback and a fictional one-mile statement; no actual run was
+started/saved by those auditions and no Spotify transport was tested. The mile cloud playback
+rate was0.90. The first attempt timed out before audio because the blank test Activity had not
+initialized the saved connection; the test now reads that connection directly and prepares its
+fixed lines outside Compose's clock. No production workaround or setting change was needed.
+
+A separate shortened normal-app check started the real foreground service from Start, went Home,
+and returned to the countdown before cancelling. The service remained foreground while away;
+the actual cloud intro completed before Ten was requested. It did not test a full countdown
+finishing in Spotify, a locked-screen start or an outdoor run. Those remain field checks.
+
+After listening, all four saved runs and every row in the12 inspected tables (excluding Room's
+identity table and SQLite internals), plus all four preference files, matched the pre-listening
+snapshot; database integrity and foreign keys were clean. Private listening receipts remain in
+the existing field-review folder. The October24 10AM reminder was paused after acceptance.
+This is **Complete for agreed scope — controlled countdown wording/timing and announcement pace**;
+broader real-run continuity, snippet playback and the undeployed writer changes remain Ready to test.
+No commits, pushes, merges or deployments were performed.
+
+### October 23 late reflection/snippet audition — accepted for now; ending refinement deferred
+
+Manley requested listening to the reflection/snippet improvements. The updated backend was run
+locally using the existing private IDE configuration, without deploying or changing phone settings.
+The normal production AUTO path generated a fictional4.2-mile/40-minute evening run with Moderate
+pre-run Energy and HALL OF FAME / EST Gee (BIGGER THAN THE DEVIL, observed duration142703ms).
+The single candidate isolates this song; this is not a new multi-song ranking check.
+
+The first request succeeded with an eight-second opening fallback and no matched landing cue;
+it does not establish the new hook-linked improvement. Subsequent bounded source/compiled parser
+checks found matching source38915396 with valid timings. No source or parser bug was reproduced;
+the initial lookup failure's exact cause remains unknown. One deliberate new request then succeeded
+in18.643s with ANTHROPIC output and the paired TITLE_HOOK cue
+`lrclib_v2_38915396_11840_18090` (11.840–18.090seconds,6.250seconds). The updated normal writer
+acknowledged the matching automatically selected landing; no reflection text or hook was hand-edited.
+
+The retry's exact Feeling Good reflection was played on the Moto without editing:
+
+> Walked in moderate, walking out feeling good, forty minutes on a Friday evening. No need to raise your voice about it. State it flat, like a fact, and let them put the plaque up.
+
+The existing supplied-text phone audition passed in **32.065 seconds**: full custom run-facts
+voice, custom reflection voice, then the returned **11.840–18.090-second** hook. The passage
+finished and original PLAYING music resumed. The check observed **198 PAUSED samples and zero
+PLAYING samples during the completion hold**. Facts audio lasted **9,666 ms**; facts completion
+to reflection platform handoff was **5 ms**. Reflection completion to intended song handoff was
+**151 ms**, to the Play command **544 ms**, and to confirmed PLAYING **660 ms**. These are platform
+measurements, not exact audible onset. Restored position error was **-56 ms**. Manley's judgment
+of the reflection, musical connection and ending remains pending.
+
+For listening tests only, Manley requested a clearly separate ending because resuming the same
+song made the snippet boundary confusing. Use an already-PAUSED Spotify baseline and omit the
+playing-baseline test option; the existing controller then restores PAUSED without any production
+change. The first paused-ending replay passed in35.388s, with both custom voices and the same
+6.250-second hook,226paused/zero playing hold samples, and PAUSED restored at zero position error.
+Manley said **"I believe it worked pretty well, but let me hear it again."** This is encouraging
+feedback, not final acceptance. The requested exact-text/timing replay also passed in34.590s,
+with222paused/zero playing hold samples, the hook completed and PAUSED restored at zero position
+error (`updated-hall-of-fame-paused-ending-replay.txt`). Manley then confirmed the reflection and
+snippet connected, but the snippet still cut off a statement. He found the reflection slightly
+corny and explicitly deferred that concern. Preserve its wording/style for this fix; the target
+is an ending after a complete punchline, statement or signature musical moment. The functioning
+app's normal resume behavior remains unchanged; no no-resume product setting was introduced.
+Receipt: `updated-hall-of-fame-paused-ending-listening.txt`.
+
+After the first original-playing audition, all four saved runs, every row in12 inspected tables
+(excluding Room identity/SQLite internals), and all four preference files matched the prior
+snapshot; database integrity and foreign keys were clean. See `hall-of-fame-listening-data-check.json`.
+
+Receipt: `updated-hall-of-fame-phone-listening.txt`; exact generated input:
+`updated-hall-of-fame-retry-response.json`. All request/result/final-text receipts are in the
+existing ignored `docs/local/field-review-2026-10-23/` folder. This used **two production generation
+requests**, with one deliberate supported retry after the unexplained initial timing-source
+fallback; it was not an automatic generation retry. Raw source lyrics, song studies and credentials
+were not saved. The local backend was stopped and loopback port 8787 had no listener afterward.
+
+This check supplied already-generated text and source-selected timing to the real phone audio
+path, using hosted speech. It does not establish outdoor behavior, cross-track switching, normal
+fresh-generation latency or acceptance of the snippet ending. Normal hosted runs still need the backend changes
+committed/pushed/deployed by Manley's workflow. No Git or deployment action occurred.
+
+Suggested user-owned commit groups after listening, or now as a software-verified checkpoint:
+1. Android delivery and its tests: `fix(android): preserve countdown and stabilize run audio delivery`
+2. Backend selection/context and tests: `fix(backend): connect selected song hooks to reflection context`
+3. Existing project/privacy/design notes: `docs: record field fixes and current collaboration workflow`
+The ignored AGENTS, local roadmap and private phone backups are not part of routine Git staging.
+
+### October 23 snippet ending follow-up — installed; accepted for now with known cutoff
+
+Manley's latest criterion is a complete punchline, statement or signature sound at the end,
+not merely a short clip that starts on a hook. The reflection connection worked in the paused
+replay; its slightly corny wording is deliberately outside this fix.
+
+Review found a separate demonstrable player bug: an entrance up to1.5seconds early was accepted,
+but the original clip-duration timer could stop before the requested absolute ending. The local
+controller now follows that endpoint with a bounded position-report allowance, retaining the
+existing10-second playing budget. A maximum-length early entrance gets one paused correction;
+an endpoint still unreached at the deadline is an interruption, not a false FINISHED result.
+Numeric diagnostics retain the entrance error, elapsed confirmed playback, endpoint error before
+Pause and endpoint error at confirmed PAUSED through restoration. These distinguish early stops
+from Pause latency; they are player reports, not sample-accurate audio measurements.
+
+The current LRCLIB source38915396 has line starts but no word sync. Its sampled detailed line
+endpoints equal the next line starts, and punctuation already favors the heard18.090second end.
+Neither supplies an independently measured vocal finish or drum tail. Therefore no guessed tail,
+new endpoint or reflection rewrite was added. The next controlled replay keeps the original
+11.840–18.090selection and exact generated text to test the player correction first. This does
+not yet establish automatic complete musical endings for this song or the wider catalog.
+
+Final endpoint-fix validation passed788unit checks in each Android variant; debug/test APKs
+built and installed in place on the Moto. Review also caught a corrective-seek race: a still-old
+PAUSED report could immediately fail a maximum-length clip. The corrected await waits for a
+position that fits the budget; its regression simulates a300ms response delay. A separate existing
+case now measures240ms pause-command delay independently of the reached endpoint. The requested
+same-pairing listening result is recorded below. No new reflection generation,
+backend edit, Git or deployment change is part of this follow-up.
+
+The exact-text6.250-second replay passed in36.187s (`updated-hall-of-fame-endpoint-fix-listening.txt`).
+Entrance error was0ms; the Pause command followed the selected endpoint by14ms, and confirmed
+PAUSED position was252ms beyond it. Confirmed-playing elapsed time was6,160ms; confirmation
+arrives after actual playback starts. Both custom voices completed,225paused/zero playing hold
+samples were observed, and original PAUSED playback/position were restored. Facts-to-reflection
+platform handoff was4ms; reflection-to-song intended handoff/Play/confirmed PLAYING were
+152/661/878ms. These remain player/platform measurements, not exact audible boundaries.
+
+Manley reported **"It's still cut off, but it's good enough. I don't want to spend too much
+time on this. We can move forward for now."** Stop endpoint experimentation and further auditions
+unless reopened. Keep this installed version and its accepted pairing; defer complete-statement/
+signature-sound endpoint refinement. The early-seek bug is fixed, but this replay reached its
+selected endpoint and still sounded cut off, so the musical-end selection problem remains.
+Do not describe automatic punchline endings as complete or perfect. Normal app music-resume
+behavior is unchanged; paused endings are only the listening-test setup.
+
+After installation/audition, allfour saved runs, every row in12business tables and allfour
+preference files matched `before-ending-update.tar`; integrity/FKs were clean
+(`endpoint-fix-data-check.json`). The comparison explicitly uses production `runstate.db`,
+excluding retained migration-test databases. No further code edits are needed for this checkpoint.
+Next: user-owned commit/push checkpoint and the undeployed backend update, then remaining Active
+Run UI work under the existing AfroTech scope. No Git/deployment action has been performed.
+
+## October 23 evening real-run feedback — original review before fixes
+
+**Field evidence, not fixes completed.** Manley reports the Frosted Drift countdown looked very
+good outdoors at night and most of the run went smoothly. New issues/requests below take
+precedence over the older controlled-test acceptance for these specific real-run scenarios.
+The appearance is accepted for this nighttime use; background countdown and audio behavior need
+work. No code, phone settings, provider calls, playback or Git actions were changed during this
+review. The fresh phone backup/inspection is private and ignored under
+`docs/local/field-review-2026-10-23/`; the database contains four completed runs and integrity is OK.
+Both current-process and tagged audio log buffers were empty, limiting retrospective diagnosis.
+
+### Confirmed user report and stored evidence
+
+- Switching to Spotify during countdown stopped it. User wants a brief app switch to preserve
+  the countdown and its run-start sequence. Current `MainActivity` ON_PAUSE cancels GPS admission,
+  `rememberLifecycleCountdown` runs only while STARTED, and countdown speech stops below RESUMED.
+  This is deliberate old behavior, not caused by the new visual screen. Supporting the new
+  behavior needs a background-capable owner started from the visible Start tap, not just removal
+  of lifecycle checks. Proposed owner: the existing foreground tracking service, with exactly-once
+  start, Cancel/Start now races, lifecycle restoration and startup failures explicitly tested.
+- The first/third mile announcements sounded fast; the second was paced correctly. No odd/even
+  logic exists. The accepted October21 slowing affected completion facts only. Milestones still
+  use regular `speakReceipt` (normal cloud playback / 0.96 local fallback), whereas completion
+  facts use 0.90 cloud playback / 0.864 fallback. Every mile can independently fall back after a
+  five-second fetch; actual source switching/cadence is a hypothesis, not recovered evidence.
+  Proposed bounded fix: paced milestone delivery consistent across both sources, without slowing
+  countdown/reflection. Review the service's 20-second overall timeout before slowing long lines.
+- Countdown numbers begin while the voice is still saying the introduction. Current step10
+  simultaneously displays ten and dispatches nonawaited "Starting in ten.". Requested sequence:
+  finish "Starting in...", then show/speak ten and count down. After one, say **"Let's go,
+  runner."**. This is a spoken cue; the requested removal of on-screen GO/Let's go remains.
+  Start now should skip remaining counts, start once and play the final cue once. Its audio
+  owner must survive the transition. Missing/failed intro audio must not hang countdown.
+- User suspected reflection waited for Effort. Stored run: Easy intention (`KEEP_EASY`), Moderate
+  pre-run Energy, Feeling Good post-run Energy and Foster Effort3; about3.03miles. Current inline
+  Effort deliberately does not hold reflection, and saving RPE writes only the run rating.
+  Energy was saved6.151s after Finish, Effort17.028s, reflection finalized20.805s (3.777s after
+  Effort). This does not show an Effort prerequisite. Writing/facts/voice timing cannot be fully
+  separated without the missing audio events. Keep Effort optional and verify delivery with it
+  unanswered; do not remove an imagined gate or claim generation time from finalization alone.
+- User heard a split-second song snippet before it stopped. Stored winner: **HALL OF FAME by
+  EST Gee**, `CONTEXT_MATCH`, LRCLIB title hook11.840–14.750seconds, only2.910seconds planned.
+  Automatic scoring permits windows from2seconds and chooses the shortest equally scored
+  candidate without a musical ending extension. This is a confirmed contributor to overly short
+  clips, not proof of the split-second interruption's cause. Player absolute endpoint timing,
+  observed state/position/recording changes and lifecycle/focus cancellation need a controlled
+  diagnostic reproduction. The production passage observer currently defaults to no-op. Add
+  bounded stage/reason/rate timing evidence without song text, credentials or location; preserve
+  playback ownership protections rather than removing checks speculatively.
+- Recent reflections feel too vague and weakly connected to the selected song/persona. This
+  run's nonnull cue, song-study version1 and CONTEXT_MATCH show the richer song-study/writer path
+  ran; ordinary fallback would have OBSERVED_FALLBACK/no paired cue. Both prompts still match
+  the accepted baseline. The reply largely recaps day/time/weather and Energy, with general
+  rhetorical attitude. A possible title connection in its final image is an inference, not proof
+  of a strong song/persona connection. User criticism is supported by the actual output.
+
+### Writing/clip connection gap and follow-up scope
+
+The accepted Lovely Day/Stronger/Good as Hell auditions had explicit creative approaches and
+carefully described musical landings. Automatic production uses AUTO and passes a generic hook
+description, not the meaning of the precise chosen moment. Title hooks get strong priority; the
+selector does not evaluate the clip against the finished reflection. Writer lead/fit/anchor
+diagnostics are discarded, so weak/run-only output can still be paired. Improve that connection
+with richer permitted, non-lyric song/landing context and small diagnostic evidence, not broad
+new creative tone restrictions. Easy-run intention and current RPE are not current writer inputs;
+do not claim those influenced this reply. Study content is not stored on the phone, so its exact
+intent cannot be reconstructed from the saved reply alone.
+
+Separate code-review finding to preserve: `AnthropicReflectionProvider.writeMatchedSong` can
+construct `TIMED_SOURCE_LINE_WINDOW_NOT_AUDITIONED_OR_RUN_EVIDENCE`, while
+`SongReflectionTrial.PassageLanding` does not accept that value. Verify/fix this in the later
+bounded backend slice. It did not cause this run's issue, whose selection was TITLE_HOOK.
+
+Recommended sequence, pending the next bounded implementation approval: (1) countdown continuity,
+intro/final-cue sequencing and consistent mile delivery; (2) diagnose the exact snippet interruption
+and improve automatic phrase length without changing approved curated snippets; (3) strengthen the
+automatic reflection-to-song connection while retaining creative freedom. Existing-functionality
+repairs remain within AfroTech scope. Active Run visual refinement is still pending; trailer/logo
+production remains deferred. No new simulated reflection audition or provider cost was incurred.
+
 ## October 23 Frosted Drift countdown — native implementation
 
 **Ready to test — installed on Moto ZT422G8FT4.** Manley approved the browser's Frosted
