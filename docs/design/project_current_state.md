@@ -39,6 +39,63 @@ online profiles require user ownership and access control. Separate local histor
 phones do not by themselves require accounts. Keep the current demo free of a mandatory sign-up;
 revisit earlier only for a concrete requirement, not as a prerequisite for finishing existing UI.
 
+## October 24 Tall frame native countdown and Active Run — Ready to test; installed on Moto
+
+Manley approved replacing Frosted Drift with the selected Tall frame countdown and its
+continuous assembly into Active Run. The native screen now shares one composition across
+Countdown, StartingRun, Running and Paused. It follows the existing run/countdown owner;
+the animation does not delay recording, speak, or create a run. Preserve the accepted joined
+“Starting in ten.” introduction, immediate held ten, service-owned background continuity,
+final spoken counts and “Let's go, runner.” No audio/provider implementation was changed.
+
+The selected inward numeral landing, synchronized six energy motifs, brief beat-end absence,
+tile assembly, segmented-ring turn and 76-bar ambient visualizer are ported into Compose.
+Night keeps charcoal, sparse specks and steel tones with purple Pause. Day keeps the clear
+sky-white field, faint leaves, transparent panels, softly blended sage/lavender/gold ring and
+yellow Pause. Existing fonts and music artwork are reused. The ring and countdown energy
+motifs remain decorative, not measurements or real audio visualization. Reduced motion and
+background/paused suspension are supported. A quick pause settles the entrance before freezing.
+
+Per the final layout request, Average pace now occupies a prominent full-width panel, with
+This mile beside Music below. Calories are omitted entirely. Music uses the existing Open
+Spotify action; the proposed in-ring player/skip controls remain deferred, not implemented.
+Distance, active time and whole-run average pace keep their existing sources. This mile now
+has a real incremental GPS calculation: current unfinished mile average pace on the monotonic
+active-time timeline, with interpolated mile boundaries and paused time excluded. It waits
+for at least 25 meters and 10 active seconds in the current mile. Incomplete/recovered coverage,
+sample data and unavailable timing show an em dash, never preview numbers. The historical
+completed-split derivation, stored run schema and existing saved records are unchanged.
+
+Existing Settings now offers Auto/Day/Night, stored in the same preference file without
+changing consent choices. Auto resolves Day at 07:00–18:59 local time and Night otherwise;
+appearance is held through the session and restoration rather than switching mid-run.
+Recovery waits for saved preferences before latching. Native system-bar contrast follows it.
+Pause/resume, safe hold-to-stop, GPS warnings/restart, map and action-failure recovery remain.
+Short/large-text layouts scroll; recording warnings and hold-to-stop remain outside the artwork.
+
+Two necessary tracked files were added: `ui/RunAssemblyScreen.kt` and its isolated Android
+test `ui/RunAssemblyScreenTest.kt`. All other source/tests use existing files. Private backups,
+receipts and screen captures are under ignored `docs/local/assembly-2026-10-25/`. Before the
+in-place Moto update, all four saved runs were completed and no run was active. Both 802-test
+JVM suites and debug/release/test APK builds passed. All 28 focused silent Moto checks passed
+in 60.675 seconds: native Day/Night rendering, real-value display, settings callbacks/pending
+saves, compact 2x text, early pause, pause/resume/hold-to-stop, map, pending/error controls,
+intro/cue timing, final-digit clearing, cancellation, Start now race, background countdown and
+owner restoration. Two final layout checks passed again after widening the Resume caption
+to keep it on one line at 2x text. Test scrolling initially stalled against its frozen animation
+clock; the isolated test harness was corrected without changing production scrolling behavior.
+Five native captures were inspected. No new listening audition or real-world run was performed.
+
+The final debug app is installed in place on Moto `ZT422G8FT4`. All four saved runs and every
+value in the 12 database tables match the private pre-update snapshot; integrity is OK and
+there are zero foreign-key violations. All five preference files matched after installation
+and tests. The final ordinary launcher entry changed only the existing opening appearance
+counter as expected; all run/consent preferences remained unchanged. The temporary test package
+was removed and the real app left at Start. No commit, push, backend deployment or provider
+generation. This is a good user-owned commit checkpoint on `master`. Native user/real-run
+acceptance and the overall AfroTech completion checkpoint remain open; do not trigger the final
+GitHub-refresh reminder from this build alone.
+
 ## October 24 opening collage entry variation — Complete for agreed scope; installed and checked
 
 Manley approved advancing the opening wall farther along its existing animation each time it
