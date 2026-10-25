@@ -21,6 +21,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.Role
@@ -28,6 +29,8 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertTextEquals
+import androidx.compose.ui.test.isDisplayed
+import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
@@ -2170,8 +2173,7 @@ class RunStateScreenTest {
     fun runningShowsTheValuesAndFixtureDisclosure() {
         renderScreen(model = RunUiModel(RunUiState.ActiveRunning), metrics = fixtureMetrics())
         assertFixtureMetricsDisplayed()
-        composeTestRule.onNodeWithText("Active time and distance are paused.")
-            .assertDoesNotExist()
+        composeTestRule.onNodeWithTag(HOLD_TO_STOP_TAG).assertDoesNotExist()
     }
 
     /** Paused discloses and renders fixture metrics. */
@@ -2179,8 +2181,7 @@ class RunStateScreenTest {
     fun pausedShowsTheValuesAndFixtureDisclosure() {
         renderScreen(model = RunUiModel(RunUiState.ActivePaused), metrics = fixtureMetrics())
         assertFixtureMetricsDisplayed()
-        composeTestRule.onNodeWithText("Active time and distance are paused.")
-            .performScrollTo().assertIsDisplayed()
+        composeTestRule.onNodeWithText("Stop").performScrollTo().assertIsDisplayed()
     }
 
     @Test
@@ -4901,38 +4902,46 @@ class RunStateScreenTest {
 
     @Test
     fun activeLargeTextKeepsWholeTimerAndPauseResumeFinishControlsReachable() {
+        composeTestRule.mainClock.autoAdvance = false
         var paused by mutableStateOf(false)
         composeTestRule.setContent {
             val density = LocalDensity.current
             CompositionLocalProvider(LocalDensity provides Density(density.density, 1.5f)) {
                 ActiveRunScreen(paused, fixtureMetrics().copy(active = "10:59:59"), false, true,
-                    {}, {}, {}, modifier = Modifier.size(360.dp, 480.dp))
+                    { paused = true }, { paused = false }, {}, modifier = Modifier.size(360.dp, 480.dp))
             }
         }
+        composeTestRule.mainClock.advanceTimeBy(1_600)
         composeTestRule.onNodeWithText(PAUSE).assertIsDisplayed()
-        composeTestRule.onNodeWithTag(ACTIVE_RUN_ACTIVE_TAG).performScrollTo()
+        composeTestRule.onNodeWithTag(ACTIVE_RUN_ACTIVE_TAG)
             .assertTextEquals("10:59:59").assertIsDisplayed()
         val layouts = mutableListOf<TextLayoutResult>()
         composeTestRule.onNodeWithTag(ACTIVE_RUN_ACTIVE_TAG)
             .performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
         assertFalse(layouts.single().hasVisualOverflow)
-        composeTestRule.runOnIdle { paused = true }
-        composeTestRule.onNodeWithText(RESUME).assertIsDisplayed()
-        composeTestRule.onNodeWithTag(HOLD_TO_STOP_TAG).assertIsDisplayed()
-        composeTestRule.onNodeWithText("Active time and distance are paused.")
-            .performScrollTo().assertIsDisplayed()
-        composeTestRule.onNodeWithTag(ACTIVE_RUN_METRICS_TAG).performScrollTo().assertIsDisplayed()
+        composeTestRule.onNodeWithContentDescription("Pause run").assertIsDisplayed().performClick()
+        composeTestRule.mainClock.advanceTimeBy(450)
+        composeTestRule.onNodeWithContentDescription("Resume run").assertExists().assertIsDisplayed()
+        composeTestRule.onNodeWithTag(HOLD_TO_STOP_TAG).scrollPausedAssemblyWithClock().assertIsDisplayed()
+        composeTestRule.onNodeWithText("Stop").scrollPausedAssemblyWithClock().assertIsDisplayed()
+        composeTestRule.onNodeWithTag(ACTIVE_RUN_METRICS_TAG).scrollPausedAssemblyWithClock().assertIsDisplayed()
+        composeTestRule.onNodeWithContentDescription("Resume run").scrollPausedAssemblyWithClock().performClick()
+        composeTestRule.mainClock.advanceTimeBy(450)
+        composeTestRule.onNodeWithText(PAUSE).assertIsDisplayed()
+        composeTestRule.onNodeWithTag(HOLD_TO_STOP_TAG).assertDoesNotExist()
     }
 
     @Test
     fun activeHierarchyKeepsExactMetricValuesAtLargeTextSizes() {
+        composeTestRule.mainClock.autoAdvance = false
         var paused by mutableStateOf(false)
         var fontScale by mutableStateOf(1.5f)
         val metrics = fixtureMetrics().copy(
             distance = "1234.56 km",
             elapsed = "100:59:59",
             averagePace = "123:59 /km",
-            active = "100:59:59"
+            active = "100:59:59",
+            currentMilePace = "123:45 /mi"
         )
         composeTestRule.setContent {
             val density = LocalDensity.current
@@ -4942,10 +4951,11 @@ class RunStateScreenTest {
                     modifier = Modifier.size(360.dp, 480.dp))
             }
         }
+        composeTestRule.mainClock.advanceTimeBy(1_600)
 
         fun assertWholeValue(tag: String, value: String) {
             val node = composeTestRule.onNodeWithTag(tag)
-            node.performScrollTo().assertTextEquals(value).assertIsDisplayed()
+            node.scrollPausedAssemblyWithClock().assertTextEquals(value).assertIsDisplayed()
             val layouts = mutableListOf<TextLayoutResult>()
             node.performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
             assertFalse(layouts.single().hasVisualOverflow)
@@ -4953,23 +4963,38 @@ class RunStateScreenTest {
 
         for (scale in listOf(1.5f, 2f)) {
             composeTestRule.runOnIdle { fontScale = scale }
-            composeTestRule.onNodeWithText(PAUSE).assertIsDisplayed()
-            assertWholeValue(ACTIVE_RUN_DISTANCE_TAG, metrics.distance)
-            assertEquals(1, composeTestRule.onAllNodesWithText(metrics.distance).fetchSemanticsNodes().size)
+            composeTestRule.mainClock.advanceTimeByFrame()
+            composeTestRule.onNodeWithContentDescription("Pause run").assertIsDisplayed().performClick()
+            composeTestRule.mainClock.advanceTimeBy(450)
+            composeTestRule.onNodeWithContentDescription("Resume run").assertExists().assertIsDisplayed()
+            assertWholeValue(ACTIVE_RUN_DISTANCE_TAG, metrics.distance.substringBefore(' '))
+            assertEquals(1, composeTestRule.onAllNodesWithText("1234.56").fetchSemanticsNodes().size)
             val distance = composeTestRule.onNodeWithTag(ACTIVE_RUN_DISTANCE_TAG).fetchSemanticsNode()
             val circle = composeTestRule.onNodeWithTag(ACTIVE_RUN_CIRCLE_TAG).fetchSemanticsNode()
-            assertTrue(distance.positionInRoot.y + distance.size.height <= circle.positionInRoot.y)
+            assertTrue(distance.boundsInRoot.top >= circle.boundsInRoot.top)
+            assertTrue(distance.boundsInRoot.bottom <= circle.boundsInRoot.bottom)
+            composeTestRule.onNodeWithText("km").scrollPausedAssemblyWithClock().assertIsDisplayed()
             composeTestRule.onNodeWithTag(ACTIVE_RUN_ELAPSED_TAG).assertDoesNotExist()
             assertWholeValue(ACTIVE_RUN_PACE_TAG, metrics.averagePace)
             assertWholeValue(ACTIVE_RUN_ACTIVE_TAG, metrics.active)
-            composeTestRule.onNodeWithText(metrics.sourceLabel).performScrollTo().assertIsDisplayed()
+            assertWholeValue(ACTIVE_RUN_SPLIT_TAG, metrics.currentMilePace)
+            composeTestRule.onNodeWithTag(HOLD_TO_STOP_TAG).scrollPausedAssemblyWithClock().assertIsDisplayed()
+            composeTestRule.onNodeWithText("Stop").scrollPausedAssemblyWithClock().assertIsDisplayed()
+            composeTestRule.onNodeWithContentDescription("Resume run").scrollPausedAssemblyWithClock().performClick()
+            composeTestRule.mainClock.advanceTimeBy(450)
+            composeTestRule.onNodeWithTag(HOLD_TO_STOP_TAG).assertDoesNotExist()
+        }
+    }
 
-            composeTestRule.onNodeWithText(PAUSE).performClick()
-            composeTestRule.onNodeWithText(RESUME).assertIsDisplayed()
-            composeTestRule.onNodeWithTag(HOLD_TO_STOP_TAG).assertIsDisplayed()
-            composeTestRule.onNodeWithText("Active time and distance are paused.")
-                .performScrollTo().assertIsDisplayed()
-            composeTestRule.onNodeWithText(RESUME).performClick()
+    /** Only use once the sample is paused: the active visualizer deliberately never idles. */
+    private fun SemanticsNodeInteraction.scrollPausedAssemblyWithClock(): SemanticsNodeInteraction {
+        if (isDisplayed()) return this
+        val previous = composeTestRule.mainClock.autoAdvance
+        try {
+            composeTestRule.mainClock.autoAdvance = true
+            return performScrollTo()
+        } finally {
+            composeTestRule.mainClock.autoAdvance = previous
         }
     }
 
@@ -6011,7 +6036,8 @@ class RunStateScreenTest {
         val completions = intArrayOf(0)
         composeTestRule.mainClock.autoAdvance = false
         composeTestRule.setContent {
-            HoldToStopButton(onHoldComplete = { completions[0]++ }, enabled = enabled)
+            HoldToStopButton(onHoldComplete = { completions[0]++ }, enabled = enabled,
+                modifier = Modifier.size(60.dp), circleColors = holdCircleColors)
         }
         return completions
     }
@@ -6019,6 +6045,9 @@ class RunStateScreenTest {
     private fun holdProgress(): Float =
         composeTestRule.onNodeWithTag(HOLD_TO_STOP_PROGRESS_TAG)
             .fetchSemanticsNode().config[SemanticsProperties.ProgressBarRangeInfo].current
+
+    private val holdCircleColors = HoldToStopCircleColors(
+        face = Color(0xFFDCE7CF), icon = Color(0xFF253A2C), progress = Color(0xFF253A2C))
 
     /** Proves releasing early fills part-way, then resets and reports nothing. */
     @Test
@@ -6055,6 +6084,52 @@ class RunStateScreenTest {
 
         assertEquals(0, completions[0])
         assertEquals(0f, holdProgress())
+    }
+
+    @Test
+    fun disablingTheStopCircleMidHoldCancelsAndRequiresAFreshHold() {
+        composeTestRule.mainClock.autoAdvance = false
+        var enabled by mutableStateOf(true)
+        var completions = 0
+        composeTestRule.setContent {
+            HoldToStopButton(onHoldComplete = { completions++ }, enabled = enabled,
+                modifier = Modifier.size(60.dp), circleColors = holdCircleColors)
+        }
+        val hold = composeTestRule.onNodeWithTag(HOLD_TO_STOP_TAG)
+        hold.performTouchInput { down(center) }
+        composeTestRule.mainClock.advanceTimeBy(HOLD_TO_STOP_MILLIS / 2L)
+        assertTrue(holdProgress() > 0f)
+
+        composeTestRule.runOnIdle { enabled = false }
+        composeTestRule.mainClock.advanceTimeBy(HOLD_TO_STOP_MILLIS * 2L)
+        hold.performTouchInput { up() }
+        hold.assertIsNotEnabled()
+        assertEquals(0, completions)
+        assertEquals(0f, holdProgress())
+
+        composeTestRule.runOnIdle { enabled = true }
+        composeTestRule.mainClock.advanceTimeByFrame()
+        hold.assertIsEnabled().performTouchInput { down(center) }
+        composeTestRule.mainClock.advanceTimeBy(HOLD_TO_STOP_MILLIS + 200L)
+        hold.performTouchInput { up() }
+        assertEquals(1, completions)
+    }
+
+    @Test
+    fun stopCircleProvidesAnIntentionalAccessibleFinishOnlyWhileEnabled() {
+        var enabled by mutableStateOf(true)
+        var completions = 0
+        composeTestRule.setContent {
+            HoldToStopButton(onHoldComplete = { completions++ }, enabled = enabled,
+                modifier = Modifier.size(60.dp), circleColors = holdCircleColors)
+        }
+        val hold = composeTestRule.onNodeWithContentDescription("Hold to finish run")
+        hold.assertIsEnabled().performSemanticsAction(SemanticsActions.OnLongClick) { it() }
+        assertEquals(1, completions)
+        composeTestRule.runOnIdle { enabled = false }
+        hold.assertIsNotEnabled()
+        assertFalse(hold.fetchSemanticsNode().config.contains(SemanticsActions.OnLongClick))
+        assertEquals(1, completions)
     }
 
     /** Proves a full hold reports exactly once, however long the finger stays down. */

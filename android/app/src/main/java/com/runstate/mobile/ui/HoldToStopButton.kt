@@ -3,10 +3,13 @@ package com.runstate.mobile.ui
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
@@ -23,10 +26,20 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.ProgressBarRangeInfo
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.disabled
+import androidx.compose.ui.semantics.onLongClick
+import androidx.compose.ui.semantics.progressBarRangeInfo
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.tooling.preview.Preview
@@ -42,6 +55,9 @@ internal const val HOLD_TO_STOP_PROGRESS_TAG = "holdToStopProgress"
 
 /** How long the press has to last. Ending a run should never be one stray touch. */
 internal const val HOLD_TO_STOP_MILLIS = 1_500
+
+/** The accepted circle uses a solid face and a progress ring only during the hold. */
+internal data class HoldToStopCircleColors(val face: Color, val icon: Color, val progress: Color)
 
 /**
  * A control that reports a stop only after one continuous 1.5-second press.
@@ -73,7 +89,8 @@ internal fun HoldToStopButton(
     onHoldComplete: () -> Unit,
     enabled: Boolean,
     modifier: Modifier = Modifier,
-    label: String = "Hold to stop"
+    label: String = "Hold to stop",
+    circleColors: HoldToStopCircleColors? = null
 ) {
     val progress = remember { Animatable(0f) }
     val scope = rememberCoroutineScope()
@@ -100,36 +117,70 @@ internal fun HoldToStopButton(
                     )
                 }
 
-                // Non-null only when the press ended, one way or another, before the hold did.
-                val endedEarly = withTimeoutOrNull(HOLD_TO_STOP_MILLIS.toLong()) {
-                    waitForUpOrCancellation()
-                    true
+                try {
+                    // Non-null only when the press ended before the hold did.
+                    val endedEarly = withTimeoutOrNull(HOLD_TO_STOP_MILLIS.toLong()) {
+                        waitForUpOrCancellation()
+                        true
+                    }
+                    if (endedEarly == null) {
+                        currentOnHoldComplete()
+                        waitForUpOrCancellation()
+                    }
+                } finally {
+                    // Also clean up if this control is disabled or removed mid-gesture.
+                    fill.cancel()
+                    scope.launch { progress.snapTo(0f) }
                 }
-
-                if (endedEarly == null) {
-                    currentOnHoldComplete()
-                    waitForUpOrCancellation()
-                }
-
-                fill.cancel()
-                scope.launch { progress.snapTo(0f) }
             }
         }
     } else {
         Modifier
     }
 
-    OutlinedCard(
-        modifier = modifier
-            .padding(top = 24.dp)
-            .widthIn(min = 200.dp)
-            .alpha(if (enabled) 1f else 0.38f)
-            .testTag(HOLD_TO_STOP_TAG)
-            .semantics {
-                role = Role.Button
-                if (!enabled) disabled()
+    val control = Modifier
+        .alpha(if (enabled) 1f else 0.38f)
+        .testTag(HOLD_TO_STOP_TAG)
+        .semantics {
+            role = Role.Button
+            contentDescription = "Hold to finish run"
+            if (!enabled) disabled() else {
+                // TalkBack exposes this intentional long-press action without requiring
+                // the runner to reproduce a timed raw pointer gesture.
+                onLongClick(label = "Finish run") {
+                    currentOnHoldComplete()
+                    true
+                }
             }
-            .then(gesture)
+        }
+        .then(gesture)
+
+    if (circleColors != null) {
+        Box(modifier.then(control)) {
+            Canvas(Modifier.fillMaxSize().testTag(HOLD_TO_STOP_PROGRESS_TAG).semantics {
+                progressBarRangeInfo = ProgressBarRangeInfo(progress.value, 0f..1f)
+            }) {
+                val diameter = size.minDimension
+                drawCircle(color = circleColors.face, radius = diameter / 2f)
+                val stopSide = diameter * 12f / 44f
+                drawRoundRect(color = circleColors.icon,
+                    topLeft = Offset((size.width - stopSide) / 2f, (size.height - stopSide) / 2f),
+                    size = Size(stopSide, stopSide), cornerRadius = CornerRadius(stopSide / 6f))
+                if (progress.value > 0f) {
+                    val ringDiameter = diameter * 42f / 44f
+                    drawArc(color = circleColors.progress, startAngle = -90f,
+                        sweepAngle = 360f * progress.value, useCenter = false,
+                        topLeft = Offset((size.width - ringDiameter) / 2f, (size.height - ringDiameter) / 2f),
+                        size = Size(ringDiameter, ringDiameter),
+                        style = Stroke(width = diameter * 1.7f / 44f, cap = StrokeCap.Round))
+                }
+            }
+        }
+        return
+    }
+
+    OutlinedCard(
+        modifier = modifier.padding(top = 24.dp).widthIn(min = 200.dp).then(control)
     ) {
         Column(
             modifier = Modifier.padding(16.dp),

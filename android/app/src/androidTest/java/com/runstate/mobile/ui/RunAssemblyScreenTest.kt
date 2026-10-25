@@ -130,6 +130,17 @@ class RunAssemblyScreenTest {
             compose.onNodeWithText("Calories", ignoreCase = true).assertDoesNotExist()
             compose.onNodeWithText(metrics.elapsed).assertDoesNotExist()
             save(ACTIVE_RUN_SCREEN_TAG, "assembly-${if (isDay) "day" else "night"}-active.png")
+            compose.onNodeWithTag(HOLD_TO_STOP_TAG).assertDoesNotExist()
+            compose.runOnIdle { state = RunUiState.ActivePaused }
+            compose.mainClock.advanceTimeBy(450)
+            compose.onNodeWithTag(HOLD_TO_STOP_TAG).assertIsDisplayed().assertIsEnabled()
+            val screen = compose.onNodeWithTag(ACTIVE_RUN_SCREEN_TAG).fetchSemanticsNode().boundsInRoot
+            val pace = compose.onNodeWithTag(ACTIVE_RUN_METRICS_TAG).fetchSemanticsNode().boundsInRoot
+            val stop = compose.onNodeWithTag(HOLD_TO_STOP_TAG).fetchSemanticsNode().boundsInRoot
+            assertEquals(screen.center.x, pace.center.x, 1f)
+            assertEquals(screen.center.x, stop.center.x, 1f)
+            assertTrue("Pace must leave generous space on each side", pace.width < screen.width * .65f)
+            save(ACTIVE_RUN_SCREEN_TAG, "assembly-${if (isDay) "day" else "night"}-paused.png")
         }
     }
 
@@ -193,8 +204,8 @@ class RunAssemblyScreenTest {
         compose.mainClock.advanceTimeByFrame()
         assertEquals(1, actions.resumes)
         compose.onNodeWithContentDescription("Pause run").scrollWithClock().performClick()
-        compose.mainClock.advanceTimeByFrame()
-        val hold = compose.onNodeWithTag(HOLD_TO_STOP_TAG).assertIsDisplayed()
+        compose.mainClock.advanceTimeBy(450)
+        val hold = compose.onNodeWithTag(HOLD_TO_STOP_TAG).scrollWithClock().assertIsDisplayed()
         hold.performTouchInput { down(center) }
         compose.mainClock.advanceTimeBy(HOLD_TO_STOP_MILLIS / 2L)
         hold.performTouchInput { up() }
@@ -225,20 +236,22 @@ class RunAssemblyScreenTest {
     }
 
     @Test
-    fun finishEntryPausesFirstAndAFullHoldIsStillRequiredToEndTheRun() {
+    fun stopOnlyAppearsAfterPauseAndAFullHoldIsStillRequiredToEndTheRun() {
         compose.mainClock.autoAdvance = false
         val actions = Actions()
         var state by mutableStateOf(RunUiState.ActiveRunning)
         compose.setContent { Fixture(state, actions = actions,
             onPause = { actions.pauses++; state = RunUiState.ActivePaused }) }
         compose.mainClock.advanceTimeBy(1_600)
-        compose.onNodeWithTag(ACTIVE_RUN_FINISH_TAG).scrollWithClock().assertIsDisplayed().performClick()
-        compose.mainClock.advanceTimeByFrame()
+        compose.onNodeWithTag(ACTIVE_RUN_FINISH_TAG).assertDoesNotExist()
+        compose.onNodeWithTag(HOLD_TO_STOP_TAG).assertDoesNotExist()
+        compose.onNodeWithContentDescription("Pause run").performClick()
+        compose.mainClock.advanceTimeBy(450)
         assertEquals(1, actions.pauses)
         assertEquals(0, actions.stops)
-        compose.onNodeWithTag(ACTIVE_RUN_FINISH_TAG).assertDoesNotExist()
-        compose.onNodeWithText("Hold to finish run").assertIsDisplayed()
-        val hold = compose.onNodeWithTag(HOLD_TO_STOP_TAG).assertIsDisplayed()
+        compose.onNodeWithText("Stop").scrollWithClock().assertIsDisplayed()
+        compose.onNodeWithText("Hold to finish run").assertDoesNotExist()
+        val hold = compose.onNodeWithTag(HOLD_TO_STOP_TAG).scrollWithClock().assertIsDisplayed()
         hold.performTouchInput { down(center) }
         compose.mainClock.advanceTimeBy(HOLD_TO_STOP_MILLIS / 2L)
         hold.performTouchInput { up() }
@@ -265,7 +278,7 @@ class RunAssemblyScreenTest {
         compose.mainClock.advanceTimeBy(400)
         // A notification or coordinator update can pause before the visual entrance finishes.
         compose.runOnIdle { state = RunUiState.ActivePaused }
-        compose.mainClock.advanceTimeByFrame()
+        compose.mainClock.advanceTimeBy(450)
 
         assertMetric(ACTIVE_RUN_ACTIVE_TAG, metrics.active)
         compose.onNodeWithContentDescription("Resume run").scrollWithClock().assertIsDisplayed()
@@ -277,7 +290,7 @@ class RunAssemblyScreenTest {
             .assertTextEquals(metrics.averagePace).assertIsDisplayed()
         compose.onNodeWithTag(ACTIVE_RUN_SPLIT_TAG).scrollWithClock()
             .assertTextEquals(metrics.currentMilePace).assertIsDisplayed()
-        compose.onNodeWithTag(HOLD_TO_STOP_TAG).assertIsDisplayed().assertIsEnabled()
+        compose.onNodeWithTag(HOLD_TO_STOP_TAG).scrollWithClock().assertIsDisplayed().assertIsEnabled()
         assertEquals(0, actions.stops)
     }
 
@@ -310,9 +323,8 @@ class RunAssemblyScreenTest {
         }
         compose.mainClock.advanceTimeBy(1_600)
         compose.onNodeWithContentDescription("Pause run").assertIsDisplayed().performClick()
-        compose.mainClock.advanceTimeByFrame()
-        // Paused content has less room because the safe stop footer remains visible. Check
-        // complete readings in this stricter viewport without an active decorative frame loop.
+        compose.mainClock.advanceTimeBy(450)
+        // A short viewport may scroll, but the complete readings and Stop remain reachable.
         for ((tag, text) in listOf(ACTIVE_RUN_DISTANCE_TAG to longValues.distance.substringBefore(' '),
             ACTIVE_RUN_ACTIVE_TAG to longValues.active, ACTIVE_RUN_PACE_TAG to longValues.averagePace,
             ACTIVE_RUN_SPLIT_TAG to longValues.currentMilePace)) {
@@ -332,7 +344,10 @@ class RunAssemblyScreenTest {
         }
         assertEquals(1, resumeLayout.single().lineCount)
         assertFalse("Resume label must fit at double text size", resumeLayout.single().hasVisualOverflow)
-        compose.onNodeWithTag(HOLD_TO_STOP_TAG).assertIsDisplayed()
+        compose.onNodeWithTag(HOLD_TO_STOP_TAG).scrollWithClock().assertIsDisplayed()
+        val stopLabel = compose.onNodeWithText("Stop").scrollWithClock().assertIsDisplayed().fetchSemanticsNode().boundsInRoot
+        val screen = compose.onNodeWithTag(ACTIVE_RUN_SCREEN_TAG).fetchSemanticsNode().boundsInRoot
+        assertTrue("The full Stop label must fit above the screen edge", stopLabel.bottom <= screen.bottom)
         save(ACTIVE_RUN_SCREEN_TAG, "assembly-large-text-paused.png")
     }
 

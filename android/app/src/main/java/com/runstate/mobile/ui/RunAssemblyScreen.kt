@@ -7,6 +7,8 @@ import android.os.Looper
 import android.provider.Settings
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -112,6 +114,12 @@ private data class AssemblyColors(val day: Boolean) {
     val musicInk = if (day) Color(0xFF325E56) else Color(0xFF191D1E)
     val accent = if (day) Color(0xFF239B78) else Color(0xFF795BFA)
     val pause = if (day) Color(0xFFEAC956) else Color(0xFF7353EF)
+    val resume = if (day) Color(0xFFF5E4A5) else pause
+    val stop = HoldToStopCircleColors(
+        face = if (day) Color(0xFFE8EEDC) else Color(0xFFDCE7CF),
+        icon = if (day) Color(0xFF526C3B) else Color(0xFF253A2C),
+        progress = if (day) Color(0xFF688642) else Color(0xFF253A2C)
+    )
     val gps = if (day) Color(0xFF397B6B) else muted
     val map = if (day) Color(0xFF297795) else muted
     val cancel = if (day) Color(0xFF695C83) else Color(0xFF9DA1AE)
@@ -180,6 +188,8 @@ internal fun RunAssemblyScreen(
     val colors = remember(day) { AssemblyColors(day) }
     val motion = rememberAssemblyMotion()
     val reduced = !motion.systemEnabled
+    val pauseAmount by animateFloatAsState(if (paused) 1f else 0f,
+        animationSpec = tween(if (reduced) 0 else 380, easing = AssemblyEase), label = "pause layout")
     val beat = remember { mutableFloatStateOf(.3f) }
     val clock = remember { mutableFloatStateOf(if (active) 1.19f else 0f) }
     val lastDigit = remember { mutableIntStateOf(countdownDigit ?: COUNTDOWN_SECONDS) }
@@ -242,20 +252,26 @@ internal fun RunAssemblyScreen(
 
     BoxWithConstraints(modifier.fillMaxSize().background(colors.canvas)
         .testTag(if (active) ACTIVE_RUN_SCREEN_TAG else COUNTDOWN_SCREEN_TAG)) {
-    // Notices and the paused footer reduce the scroll viewport, not the artwork's anchor.
+    // Recording notices reduce the scroll viewport without moving the artwork's anchor.
     val surfaceHeight = maxHeight.value
     Column(Modifier.fillMaxSize()) {
         BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
             val unit = maxWidth.value / 393f
             val extra = max(0f, LocalDensity.current.fontScale - 1.25f) * 70f
+            val musicArtSize = if (LocalDensity.current.fontScale > 1.3f) 36f else 52f
             val shift = extra * .7f
-            val heroY = 214f + shift
-            val paceY = 546f + shift
-            val stackedPace = LocalDensity.current.fontScale > 1.3f || maxWidth.value < 340f
-            val paceH = if (active && !stackedPace) 84f else 104f + extra
+            val heroY = 214f + shift - 7f * pauseAmount
+            val heroScale = 1f - .06f * pauseAmount
+            val paceY = 546f + shift - 14f * pauseAmount
+            val paceH = 104f + extra - 28f * pauseAmount
             val bottomY = paceY + paceH + 12f
-            val bottomH = 92f + extra
-            val designHeight = bottomY + bottomH + if (active) 76f else 20f
+            val bottomH = 92f + extra - 16f * pauseAmount
+            val stopY = bottomY + bottomH + 12f
+            // Reserve the same overall height in both states: the facts compact toward the
+            // circle rather than shifting the header when the Stop control appears.
+            val stopLabelExtra = max(0f, LocalDensity.current.fontScale - 1f) * 14f
+            val designHeight = if (active) 794f + shift + extra * 2 + stopLabelExtra
+                else 774f + shift + extra * 2
             val contentHeight = max(surfaceHeight, designHeight * unit)
             val topInset = max(0f, (contentHeight - designHeight * unit) / 2f)
             val scroll = rememberScrollState()
@@ -265,7 +281,7 @@ internal fun RunAssemblyScreen(
                     Box(Modifier.fillMaxWidth().height((designHeight * unit).dp).offset(y = topInset.dp)) {
                         AssemblyGeometry(
                             active, counting, visibleDigit ?: lastDigit.intValue, colors, beat, clock, reduced,
-                            heroY, paceY, paceH, bottomY, bottomH,
+                            heroY, heroScale, paceY, paceH, bottomY, bottomH,
                             Modifier.fillMaxSize()
                         )
                         AssemblyHeader(colors, if (starting) "Starting" else if (counting) "Ready to run"
@@ -317,7 +333,7 @@ internal fun RunAssemblyScreen(
                                 .reveal(clock, .765f, reduced), contentAlignment = Alignment.TopCenter) {
                                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                     Box(Modifier.size((67 * unit).dp).clip(CircleShape)
-                                        .background(colors.pause)
+                                        .background(if (paused) colors.resume else colors.pause)
                                         .clickable(enabled = actionsEnabled, role = Role.Button,
                                             onClick = if (paused) onResume else onPause)
                                         .semantics { contentDescription = if (paused) "Resume run" else "Pause run" },
@@ -353,11 +369,15 @@ internal fun RunAssemblyScreen(
                                     onPrevious = onPreviousTrack, onNext = onNextTrack,
                                     onTogglePlayback = onToggleMusicPlayback,
                                     modifier = Modifier.offset(x = (42 * unit).dp, y = (heroY * unit).dp)
-                                        .size((309 * unit).dp).reveal(clock, .3f, reduced)
+                                        .size((309 * unit).dp).graphicsLayer {
+                                            scaleX = heroScale; scaleY = heroScale
+                                        }.reveal(clock, .3f, reduced)
                                 )
                             } else Column(Modifier.offset(x = (62 * unit).dp, y = ((heroY + 40) * unit).dp)
                                 .size((269 * unit).dp, (229 * unit).dp)
-                                .testTag(ACTIVE_RUN_CIRCLE_TAG).reveal(clock, .3f, reduced),
+                                .testTag(ACTIVE_RUN_CIRCLE_TAG).graphicsLayer {
+                                    scaleX = heroScale; scaleY = heroScale
+                                }.reveal(clock, .3f, reduced),
                                 horizontalAlignment = Alignment.CenterHorizontally,
                                 verticalArrangement = Arrangement.Center) {
                                 val distance = metrics?.distance ?: "—"
@@ -371,24 +391,18 @@ internal fun RunAssemblyScreen(
                                     letterSpacing = (3.3f * unit).sp,
                                     modifier = Modifier.padding(top = (18 * unit).dp))
                             }
-                            Row(Modifier.offset(x = (22 * unit).dp, y = (paceY * unit).dp)
-                                .size((349 * unit).dp, (paceH * unit).dp)
-                                .padding(horizontal = (21 * unit).dp)
+                            Column(Modifier.offset(x = (84.5f * unit).dp, y = (paceY * unit).dp)
+                                .size((224 * unit).dp, (paceH * unit).dp)
+                                .padding(horizontal = (16 * unit).dp)
                                 .reveal(clock, .38f, reduced).testTag(ACTIVE_RUN_METRICS_TAG),
-                                verticalAlignment = Alignment.CenterVertically) {
-                                if (stackedPace) Column(Modifier.weight(1f)) {
-                                    Text("Average pace", color = colors.label, fontSize = (15 * unit).sp,
-                                        fontWeight = FontWeight.Medium)
-                                    Spacer(Modifier.height(3.dp))
-                                    AssemblyFittedReading(metrics?.averagePace ?: "—", colors.ink, 49f * unit,
-                                        CompletionNumberFont, Modifier.fillMaxWidth(), readingTag = ACTIVE_RUN_PACE_TAG)
-                                } else {
-                                    Text("Average pace", color = colors.label, fontSize = (15 * unit).sp,
-                                        fontWeight = FontWeight.Medium, modifier = Modifier.width((110 * unit).dp))
-                                    Spacer(Modifier.width((12 * unit).dp))
-                                    AssemblyFittedReading(metrics?.averagePace ?: "—", colors.ink, 49f * unit,
-                                        CompletionNumberFont, Modifier.weight(1f), readingTag = ACTIVE_RUN_PACE_TAG)
-                                }
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.Center) {
+                                Text("Average pace", color = colors.label, fontSize = (15 * unit).sp,
+                                    fontWeight = FontWeight.Medium, textAlign = TextAlign.Center)
+                                Spacer(Modifier.height(3.dp))
+                                AssemblyFittedReading(metrics?.averagePace ?: "—", colors.ink,
+                                    mix(49f, 43f, pauseAmount) * unit, CompletionNumberFont,
+                                    Modifier.fillMaxWidth(), centered = true, readingTag = ACTIVE_RUN_PACE_TAG)
                             }
                             Column(Modifier.offset(x = (43 * unit).dp, y = (bottomY * unit).dp)
                                 .size((153 * unit).dp, (bottomH * unit).dp)
@@ -398,34 +412,35 @@ internal fun RunAssemblyScreen(
                                 Text("This mile", color = colors.label, fontSize = (12 * unit).sp,
                                     modifier = Modifier.padding(top = 7.dp))
                             }
-                            Row(Modifier.offset(x = (196 * unit).dp, y = (bottomY * unit).dp)
-                                .size((175 * unit).dp, (bottomH * unit).dp)
+                            Row(Modifier.offset(x = (196.5f * unit).dp, y = (bottomY * unit).dp)
+                                .size((174.5f * unit).dp, (bottomH * unit).dp)
                                 .clip(RoundedCornerShape(topEnd = 10.dp, bottomEnd = 10.dp))
                                 .reveal(clock, .435f, reduced)
                                 .testTag(ACTIVE_RUN_MUSIC_TAG)
                                 .clickable(role = Role.Button, onClick = { musicOpen = !musicOpen })
-                                .semantics { contentDescription = if (musicOpen) "Show distance" else "Open music player" }
-                                .padding(horizontal = (13 * unit).dp),
+                                .semantics { contentDescription = if (musicOpen) "Close music player" else "Open Spotify Music" }
+                                .padding(horizontal = (16 * unit).dp),
                                 verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy((9 * unit).dp)) {
+                                horizontalArrangement = Arrangement.spacedBy((10 * unit).dp)) {
                                 Image(painterResource(R.drawable.start_music_orb), contentDescription = null,
-                                    contentScale = ContentScale.Crop,
-                                    modifier = Modifier.size((53 * unit).dp).clip(CircleShape))
-                                Column(Modifier.weight(1f)) {
-                                    Text("Music", color = colors.musicInk, fontSize = (14 * unit).sp,
-                                        fontWeight = FontWeight.Medium)
-                                    Text("Spotify", color = colors.musicInk.copy(alpha = .72f),
-                                        fontSize = (10 * unit).sp, modifier = Modifier.padding(top = 5.dp))
-                                }
+                                    contentScale = ContentScale.Fit,
+                                    modifier = Modifier.requiredSize((musicArtSize * unit).dp).clip(CircleShape))
+                                Text("Spotify\nMusic", color = colors.musicInk,
+                                    fontSize = (14 * unit).sp, lineHeight = (18 * unit).sp,
+                                    fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f))
                             }
-                            if (!paused) {
-                                TextButton(onClick = onPause, enabled = actionsEnabled,
-                                    modifier = Modifier.align(Alignment.TopCenter)
-                                        .offset(y = ((bottomY + bottomH + 22f) * unit).dp)
-                                        .heightIn(min = 48.dp).testTag(ACTIVE_RUN_FINISH_TAG)
-                                        .reveal(clock, .765f, reduced)) {
-                                    Text("Finish run", color = colors.ink, fontSize = 13.sp,
-                                        fontWeight = FontWeight.Medium)
+                            if (paused) {
+                                Column(Modifier.align(Alignment.TopCenter)
+                                    .offset(y = (stopY * unit).dp)
+                                    .graphicsLayer { alpha = fraction((pauseAmount - .45f) / .55f) }
+                                    .testTag(ACTIVE_RUN_FINISH_TAG),
+                                    horizontalAlignment = Alignment.CenterHorizontally) {
+                                    HoldToStopButton(onHoldComplete = onStop,
+                                        enabled = actionsEnabled && motion.foreground && pauseAmount >= .99f,
+                                        modifier = Modifier.size((60 * unit).dp), circleColors = colors.stop)
+                                    Text("Stop", color = colors.ink, fontSize = (11 * unit).sp,
+                                        lineHeight = (14 * unit).sp,
+                                        modifier = Modifier.padding(top = (6 * unit).dp))
                                 }
                             }
                         }
@@ -439,14 +454,6 @@ internal fun RunAssemblyScreen(
             AssemblyNotices(colors, metrics, actionFailed, isGpsRun,
                 gpsServicePresent, gpsSignalStatus, gpsMessage, paused, actionsEnabled,
                 onResumeGpsTracking)
-        }
-        if (paused) {
-            Column(Modifier.fillMaxWidth().background(colors.canvas).padding(horizontal = 22.dp, vertical = 8.dp)) {
-                Text("Active time and distance are paused.", color = colors.muted,
-                    fontSize = 12.sp, modifier = Modifier.padding(bottom = 5.dp))
-                HoldToStopButton(onHoldComplete = onStop, enabled = actionsEnabled,
-                    modifier = Modifier.fillMaxWidth(), label = "Hold to finish run")
-            }
         }
     }
     }
@@ -571,7 +578,7 @@ private fun AssemblyNotices(colors: AssemblyColors, metrics: RunMetricsDisplay?,
 
 @Composable
 private fun AssemblyGeometry(active: Boolean, counting: Boolean, digit: Int, colors: AssemblyColors,
-    beat: State<Float>, clock: State<Float>, reduced: Boolean, heroY: Float, paceY: Float,
+    beat: State<Float>, clock: State<Float>, reduced: Boolean, heroY: Float, heroScale: Float, paceY: Float,
     paceH: Float, bottomY: Float, bottomH: Float, modifier: Modifier) {
     Canvas(modifier) {
         val u = size.width / 393f
@@ -589,9 +596,9 @@ private fun AssemblyGeometry(active: Boolean, counting: Boolean, digit: Int, col
             }
             // Two source squares become the two halves of one unbroken average-pace panel.
             val finals = listOf(AssemblyBox(116f,103f,252f,89f),
-                AssemblyBox(22f,paceY,174.5f,paceH), AssemblyBox(22f,bottomY,174f,bottomH),
-                AssemblyBox(25f,103f,78f,89f), AssemblyBox(196f,bottomY,175f,bottomH),
-                AssemblyBox(196.5f,paceY,174.5f,paceH))
+                AssemblyBox(84.5f,paceY,112f,paceH), AssemblyBox(22f,bottomY,174.5f,bottomH),
+                AssemblyBox(25f,103f,78f,89f), AssemblyBox(196.5f,bottomY,174.5f,bottomH),
+                AssemblyBox(196.5f,paceY,112f,paceH))
             val orders = listOf(4,0,2,5,1,3)
             repeat(6) { index ->
                 val start = mixBox(source(index, max(0,step-1)), source(index,step), gridTravel)
@@ -606,20 +613,20 @@ private fun AssemblyGeometry(active: Boolean, counting: Boolean, digit: Int, col
             if (active) {
                 val pp=progress(time,.12f,.45f,reduced)
                 val bp=progress(time,.23f,.45f,reduced)
-                drawRoundRect(colors.panel.copy(alpha=if(colors.day)0f else pp),Offset(22f,paceY),
-                    Size(349f,paceH),CornerRadius(10f))
+                drawRoundRect(colors.panel.copy(alpha=if(colors.day)0f else pp),Offset(84.5f,paceY),
+                    Size(224f,paceH),CornerRadius(10f))
                 drawRoundRect(colors.panel.copy(alpha=if(colors.day)0f else bp),Offset(22f,bottomY),
                     Size(349f,bottomH),CornerRadius(10f))
                 val musicPath=Path().apply {
-                    moveTo(196f,bottomY);lineTo(361f,bottomY);quadraticTo(371f,bottomY,371f,bottomY+10)
+                    moveTo(196.5f,bottomY);lineTo(361f,bottomY);quadraticTo(371f,bottomY,371f,bottomY+10)
                     lineTo(371f,bottomY+bottomH-10);quadraticTo(371f,bottomY+bottomH,361f,bottomY+bottomH)
-                    lineTo(196f,bottomY+bottomH);close()
+                    lineTo(196.5f,bottomY+bottomH);close()
                 }
                 drawPath(musicPath,colors.musicPanel.copy(alpha=if(colors.day)0f else bp))
                 if(colors.day) {
-                    drawRoundRect(colors.grid.copy(alpha=.3f*pp),Offset(22f,paceY),Size(349f,paceH),CornerRadius(10f),style=Stroke(1f))
+                    drawRoundRect(colors.grid.copy(alpha=.3f*pp),Offset(84.5f,paceY),Size(224f,paceH),CornerRadius(10f),style=Stroke(1f))
                     drawRoundRect(colors.grid.copy(alpha=.3f*bp),Offset(22f,bottomY),Size(349f,bottomH),CornerRadius(10f),style=Stroke(1f))
-                    drawLine(colors.grid.copy(alpha=.3f*bp),Offset(196f,bottomY),Offset(196f,bottomY+bottomH),1f)
+                    drawLine(colors.grid.copy(alpha=.3f*bp),Offset(196.5f,bottomY),Offset(196.5f,bottomY+bottomH),1f)
                 }
                 drawLine(colors.line.copy(alpha=progress(time,.71f,.19f,reduced)),Offset(116f,108f),Offset(116f,180f),1f)
             }
@@ -628,8 +635,10 @@ private fun AssemblyGeometry(active: Boolean, counting: Boolean, digit: Int, col
             val frameTone=if(reduced).6f else fraction(.28f+(1-AssemblyEase.transform(fraction(b/.32f)))*.6f+articulation(b,reduced)*.12f)
             val frameAlpha=(if(colors.day)mix(.4f,.52f,frameTone) else mix(.32f,.46f,frameTone))*(1-frame)
             drawRoundRect(colors.grid.copy(alpha=frameAlpha),Offset(frameBox.x,frameBox.y),Size(frameBox.w,frameBox.h),CornerRadius(mix(1f,155f,frame)),style=Stroke(1f))
-            if(active) drawAssemblyRing(Offset(196.5f,heroY+154.5f),time,reduced,colors)
-            drawLine(colors.line.copy(alpha=if(active).6f else .2f),Offset(22f,bottomY+bottomH+18f),Offset(371f,bottomY+bottomH+18f),1f)
+            if(active) {
+                val ringCenter = Offset(196.5f,heroY+154.5f)
+                scale(heroScale, heroScale, ringCenter) { drawAssemblyRing(ringCenter,time,reduced,colors) }
+            } else drawLine(colors.line.copy(alpha=.2f),Offset(22f,bottomY+bottomH+18f),Offset(371f,bottomY+bottomH+18f),1f)
         }
     }
 }

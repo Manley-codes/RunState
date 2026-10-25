@@ -8,6 +8,25 @@ status: v0.4 — August 13 working proof recorded; execution remains open and is
 
 # RunState — Creative Direction (v0.4)
 
+## October 25 — selected Stop circle for native
+
+**Ready to test; installed on Moto.** Manley selects the browser **Stop circle** treatment for the
+phone, not the Bottom pair or panel alternatives. Center Average pace in a 224-design-unit panel;
+the paused layout compacts the metrics and places a sage circular Stop beneath This mile / Spotify
+Music. Retain the protected 1.5-second hold, with no helper copy and no idle border in Day or Night.
+Coordinate its sage face with the music pause control and use a green stop glyph. Preserve Night's
+purple Resume and solid white play glyph. Show hold progress only during the intentional press.
+
+Keep the music illustration at a fixed 52-unit inset size, reducing to 36 for larger text, and
+keep the Spotify / Music tile label stable when the in-circle player opens. Both player artwork
+choices stay in Settings. Native countdown layout and accepted voice timing are unchanged.
+This supersedes the earlier pace/finish presentation below. Four existing code/test files changed;
+no new source/assets. Final builds, 812 JVM tests per variant and 24 silent Moto checks passed.
+Day/Night active/paused and short 2x-text captures were inspected; Stop label clearance is verified.
+Nine completed runs/all 12 tables/five preference files match the final preservation receipt.
+User phone review and real use remain; this is not overall AfroTech completion. Detailed evidence
+and test-only corrections are recorded in `project_current_state.md`.
+
 ## October 25 — temporary native music-player comparison
 
 **Ready to test; installed on Moto.** Manley approves implementing both slim in-circle studies on

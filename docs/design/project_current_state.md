@@ -39,7 +39,40 @@ online profiles require user ownership and access control. Separate local histor
 phones do not by themselves require accounts. Keep the current demo free of a mandatory sign-up;
 revisit earlier only for a concrete requirement, not as a prerequisite for finishing existing UI.
 
+## October 25 selected Stop circle — Ready to test; installed on Moto
+
+Manley explicitly authorizes the selected **Stop circle** browser design for native integration.
+The Bottom pair and panel alternatives are not selected. This checkpoint supersedes the earlier
+Average pace/Finish run presentation below; the two temporary music-player layouts remain available.
+**Status: Ready to test — installed on Moto ZT422G8FT4.** Final software and silent fixture
+checks passed; Manley's phone design review and real use remain. Not overall AfroTech completion.
+
+Average pace becomes a centered 224-design-unit panel. While paused, the metric area compacts
+and a separate circular Stop control sits below This mile / Spotify Music, using the existing
+continuous 1.5-second hold. No helper copy or idle border in either Day or Night. The Stop face
+uses sage coordinated with the music pause control and a green square glyph; Night Resume stays
+purple with its unchanged solid white play glyph. The hold progress appears only during holding.
+The music illustration keeps a fixed 52-unit inset size (36 at larger font scale), and the
+stable **Spotify / Music** label identifies the tile when the circular player is open or closed.
+
+Native countdown layout, controls, voice timing, Spotify transport and both Settings → Player
+artwork choices are preserved. Four existing files changed: `RunAssemblyScreen.kt`,
+`HoldToStopButton.kt`, `RunAssemblyScreenTest.kt` and `RunStateScreenTest.kt`; no new source/assets.
+Final-source debug/release each passed 812 JVM tests; debug/release/instrumentation APKs built.
+All 24 selected silent Moto checks passed: 22 in the first batch, then two legacy large-font
+checks corrected for the frozen Compose clock/actual button semantics and rerun successfully.
+No production changes followed the full build. Day/Night active/paused captures were inspected
+at normal size and a short viewport with 2x text; Stop label clearance was checked.
+The in-place update preserved all nine completed runs, every field in all 12 business tables
+and all five preference files against the fresh baseline; final hashes match, integrity OK/FK0.
+Private `stop-circle-*` backups/logs/captures remain in ignored `docs/local/assembly-2026-10-25/`.
+The test package was removed and actual MainActivity reopened. No GPS run, voices or music
+started; no Git commit/push, deployment or data wipe. User review/real-use validation remains.
+
 ## October 25 temporary native dual music player — Ready to test; installed on Moto
+
+The pace/finish layout in this earlier installed checkpoint is superseded by the selected Stop
+circle work above; its music-player mechanics, choices and historical validation remain relevant.
 
 Manley explicitly authorizes both accepted browser music layouts in the Android app for temporary
 comparison before choosing one. This supersedes the earlier browser-only restriction for this
