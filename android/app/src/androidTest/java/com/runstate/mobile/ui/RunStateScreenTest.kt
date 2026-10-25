@@ -146,8 +146,8 @@ class RunStateScreenTest {
         const val READY = "TO RUN"
         const val COUNTDOWN = "RUNSTATE"
         const val START_FAILED = "RunState couldn't save the start of your run."
-        const val RUNNING = "You have a run in progress"
-        const val PAUSED = "PAUSED"
+        const val RUNNING = "Running"
+        const val PAUSED = "Paused"
         const val SAVED = "RUN SAVED"
         const val FAILED = "RunState couldn't get ready."
 
@@ -1202,7 +1202,7 @@ class RunStateScreenTest {
             root.tapStart()
             root.awaitManagedDigit(10, counting = false)
             composeTestRule.mainClock.advanceTimeBy(2_000L)
-            composeTestRule.onNodeWithTag(COUNTDOWN_DIGIT_TAG).assertTextEquals("10").assertIsDisplayed()
+            composeTestRule.onNodeWithTag(COUNTDOWN_DIGIT_TAG, useUnmergedTree = true).assertTextEquals("10").assertIsDisplayed()
             assertEquals(0, root.durableStarts)
             assertEquals(0, root.rowCount())
             composeTestRule.runOnUiThread { introduction.complete(Unit) }
@@ -1411,8 +1411,8 @@ class RunStateScreenTest {
         fun awaitManagedDigit(digit: Int, counting: Boolean = true) {
             awaitGpsRoot { managedOwner?.state?.value?.digit == digit &&
                 (!counting || managedOwner.state.value.phase == com.runstate.mobile.run.RunCountdownPhase.COUNTING) &&
-                composeTestRule.onAllNodesWithTag(COUNTDOWN_DIGIT_TAG).fetchSemanticsNodes().isNotEmpty() }
-            composeTestRule.onNodeWithTag(COUNTDOWN_DIGIT_TAG).assertTextEquals(digit.toString())
+                composeTestRule.onAllNodesWithTag(COUNTDOWN_DIGIT_TAG, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
+            composeTestRule.onNodeWithTag(COUNTDOWN_DIGIT_TAG, useUnmergedTree = true).assertTextEquals(digit.toString())
         }
 
         fun tickManaged(count: Int) {
@@ -1911,7 +1911,7 @@ class RunStateScreenTest {
     @Test
     fun countdownAwaitingLifecycleDoesNotOfferAnEnabledStartNow() {
         val actions = renderScreen(RunUiModel(RunUiState.Countdown), countdownDigit = null)
-        composeTestRule.onNodeWithTag(COUNTDOWN_DIGIT_TAG).assertTextEquals("10").assertIsDisplayed()
+        composeTestRule.onNodeWithTag(COUNTDOWN_DIGIT_TAG, useUnmergedTree = true).assertTextEquals("10").assertIsDisplayed()
         composeTestRule.onNodeWithTag(COUNTDOWN_START_NOW_TAG).assertIsNotEnabled().performClick()
         assertNoCountdownCompletionWords()
         assertEquals(0, actions.total)
@@ -1927,13 +1927,13 @@ class RunStateScreenTest {
     fun countdownClearedFinalDigitDoesNotFlashTenBeforeTheScreenExits() {
         var digit by mutableStateOf<Int?>(null)
         composeTestRule.setContent { CountdownScreen(digit, true, {}, {}) }
-        composeTestRule.onNodeWithTag(COUNTDOWN_DIGIT_TAG).assertTextEquals("10")
+        composeTestRule.onNodeWithTag(COUNTDOWN_DIGIT_TAG, useUnmergedTree = true).assertTextEquals("10")
         composeTestRule.runOnIdle { digit = 10 }
-        composeTestRule.onNodeWithTag(COUNTDOWN_DIGIT_TAG).assertTextEquals("10")
+        composeTestRule.onNodeWithTag(COUNTDOWN_DIGIT_TAG, useUnmergedTree = true).assertTextEquals("10")
         composeTestRule.runOnIdle { digit = 1 }
-        composeTestRule.onNodeWithTag(COUNTDOWN_DIGIT_TAG).assertTextEquals("1")
+        composeTestRule.onNodeWithTag(COUNTDOWN_DIGIT_TAG, useUnmergedTree = true).assertTextEquals("1")
         composeTestRule.runOnIdle { digit = null }
-        composeTestRule.onNodeWithTag(COUNTDOWN_DIGIT_TAG).assertDoesNotExist()
+        composeTestRule.onNodeWithTag(COUNTDOWN_DIGIT_TAG, useUnmergedTree = true).assertDoesNotExist()
     }
 
     /** The visual handoff cannot claim a live run until the owner confirms its start. */
@@ -1966,7 +1966,7 @@ class RunStateScreenTest {
         composeTestRule.mainClock.advanceTimeByFrame()
         composeTestRule.onNodeWithTag(COUNTDOWN_START_NOW_TAG).assertIsNotEnabled().performClick()
         composeTestRule.onNodeWithText(CANCEL).assertDoesNotExist()
-        composeTestRule.onNodeWithText(PAUSE).assertDoesNotExist()
+        composeTestRule.onNodeWithContentDescription("Pause run").assertDoesNotExist()
         composeTestRule.onNodeWithTag(ACTIVE_RUN_DISTANCE_TAG).assertDoesNotExist()
         assertNoCountdownCompletionWords()
         assertEquals(0, actions.total)
@@ -1974,12 +1974,13 @@ class RunStateScreenTest {
         composeTestRule.runOnIdle { state = RunUiState.ActiveRunning }
         composeTestRule.mainClock.advanceTimeByFrame()
         assertNoCountdownCompletionWords()
-        composeTestRule.mainClock.advanceTimeBy(400L)
+        composeTestRule.mainClock.advanceTimeBy(1_600L)
         composeTestRule.mainClock.advanceTimeByFrame()
         composeTestRule.onNodeWithTag(COUNTDOWN_SCREEN_TAG).assertDoesNotExist()
         composeTestRule.onNodeWithTag(COUNTDOWN_START_NOW_TAG).assertDoesNotExist()
-        composeTestRule.onNodeWithText(PAUSE).assertIsDisplayed().assertIsEnabled()
-        composeTestRule.onNodeWithTag(ACTIVE_RUN_DISTANCE_TAG).assertTextEquals("0.11 mi")
+        composeTestRule.onNodeWithContentDescription("Pause run").assertIsDisplayed().assertIsEnabled()
+        composeTestRule.onNodeWithTag(ACTIVE_RUN_DISTANCE_TAG).assertTextEquals("0.11")
+        composeTestRule.onNodeWithContentDescription("Distance, 0.11 mi").assertExists()
         composeTestRule.onNodeWithTag(ACTIVE_RUN_ACTIVE_TAG).assertTextEquals("00:01:00")
         composeTestRule.onNodeWithTag(ACTIVE_RUN_PACE_TAG).assertTextEquals("8:56 /mi")
         assertNoCountdownCompletionWords()
@@ -2076,10 +2077,12 @@ class RunStateScreenTest {
     /** Proves a pending pause keeps showing Running, with Pause disabled. */
     @Test
     fun pendingPauseDisablesPause() {
+        composeTestRule.mainClock.autoAdvance = false
         val actions = renderScreen(RunUiModel(RunUiState.ActiveRunning, actionInProgress = true))
 
+        composeTestRule.mainClock.advanceTimeBy(1_600L)
         composeTestRule.onNodeWithText(RUNNING).assertIsDisplayed()
-        composeTestRule.onNodeWithText(PAUSE).assertIsNotEnabled().performClick()
+        composeTestRule.onNodeWithContentDescription("Pause run").assertIsNotEnabled().performClick()
 
         assertEquals(0, actions.total)
     }
@@ -2091,7 +2094,7 @@ class RunStateScreenTest {
         val actions = renderScreen(RunUiModel(RunUiState.ActivePaused, actionInProgress = true))
 
         composeTestRule.onNodeWithText(PAUSED).assertIsDisplayed()
-        composeTestRule.onNodeWithText(RESUME).assertIsNotEnabled().performClick()
+        composeTestRule.onNodeWithContentDescription("Resume run").assertIsNotEnabled().performClick()
         composeTestRule.onNodeWithTag(HOLD_TO_STOP_TAG).assertIsNotEnabled()
 
         // Act: a full hold on the disabled control.
@@ -2113,7 +2116,7 @@ class RunStateScreenTest {
         composeTestRule.onNodeWithTag(HOLD_TO_STOP_TAG).assertIsEnabled()
 
         // Act
-        composeTestRule.onNodeWithText(RESUME).assertIsEnabled().performClick()
+        composeTestRule.onNodeWithContentDescription("Resume run").assertIsEnabled().performClick()
 
         // Assert
         assertEquals(1, actions.resumes)

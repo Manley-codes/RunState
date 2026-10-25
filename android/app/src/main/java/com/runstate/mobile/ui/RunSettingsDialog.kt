@@ -1,14 +1,20 @@
 package com.runstate.mobile.ui
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
@@ -19,12 +25,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.runstate.mobile.settings.RunAppearance
 
 internal const val SETTINGS_DIALOG_TAG = "runSettingsDialog"
 internal const val SETTINGS_LOCATION_TAG = "runSettingsLocation"
@@ -40,6 +48,9 @@ internal const val SETTINGS_SONG_SNIPPETS_TAG = "runSettingsSongSnippets"
 internal const val SETTINGS_SPOTIFY_CONNECT_TAG = "runSettingsSpotifyConnect"
 internal const val SETTINGS_SPOTIFY_DISCONNECT_TAG = "runSettingsSpotifyDisconnect"
 internal const val SETTINGS_DISTANCE_ANNOUNCEMENTS_TAG = "runSettingsDistanceAnnouncements"
+internal const val SETTINGS_APPEARANCE_TAG = "runSettingsAppearance"
+internal fun appearanceOptionTag(appearance: RunAppearance): String =
+    "runSettingsAppearance${appearance.name}"
 
 private val SettingsInk = Color(0xFF293326)
 private val SettingsCream = Color(0xFFF9FAF5)
@@ -77,7 +88,9 @@ internal fun RunSettingsDialog(
     spotifyConnectEnabled: Boolean = false,
     spotifyDisconnectEnabled: Boolean = false,
     onConnectSpotify: () -> Unit = {},
-    onDisconnectSpotify: () -> Unit = {}
+    onDisconnectSpotify: () -> Unit = {},
+    appearance: RunAppearance = RunAppearance.AUTO,
+    onSetAppearance: (RunAppearance) -> Unit = {}
 ) {
     val controlsEnabled = actionsEnabled && !settingsLoading
     val preferenceControlsEnabled = controlsEnabled && preferencesAvailable
@@ -116,6 +129,41 @@ internal fun RunSettingsDialog(
                     ) { Text("Retry preferences", color = SettingsInk) }
                 }
 
+                SettingsSectionTitle("RUN APPEARANCE")
+                Row(
+                    Modifier.fillMaxWidth().selectableGroup().testTag(SETTINGS_APPEARANCE_TAG),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    RunAppearance.entries.forEach { choice ->
+                        val selected = appearance == choice
+                        val label = when (choice) {
+                            RunAppearance.AUTO -> "Auto"
+                            RunAppearance.DAY -> "Day"
+                            RunAppearance.NIGHT -> "Night"
+                        }
+                        Surface(
+                            modifier = Modifier.weight(1f).heightIn(min = 48.dp)
+                                .selectable(selected = selected, enabled = preferenceControlsEnabled,
+                                    role = Role.RadioButton, onClick = { onSetAppearance(choice) })
+                                .testTag(appearanceOptionTag(choice))
+                                .semantics { contentDescription = "$label run appearance" },
+                            shape = RoundedCornerShape(12.dp),
+                            color = if (selected) SettingsInk else Color.Transparent,
+                            border = BorderStroke(1.dp, SettingsInk.copy(alpha = 0.2f))
+                        ) {
+                            androidx.compose.foundation.layout.Box(
+                                Modifier.padding(horizontal = 8.dp, vertical = 12.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(label, fontSize = 14.sp, fontWeight = FontWeight.SemiBold,
+                                    color = (if (selected) SettingsCream else SettingsInk)
+                                        .copy(alpha = if (preferenceControlsEnabled) 1f else 0.5f))
+                            }
+                        }
+                    }
+                }
+                SettingsDescription("Auto uses Day from 7 AM to 7 PM. Your run keeps its starting look.")
+                SettingsDivider()
                 SettingsSectionTitle("LOCATION")
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text(

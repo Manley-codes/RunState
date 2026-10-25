@@ -3,6 +3,20 @@ package com.runstate.mobile.settings
 import android.content.Context
 import android.content.SharedPreferences
 
+/** A presentation preference, resolved once at countdown entry and kept for that run. */
+internal enum class RunAppearance {
+    AUTO, DAY, NIGHT;
+
+    fun isDay(hour: Int): Boolean {
+        require(hour in 0..23) { "A local hour must be between 0 and 23." }
+        return when (this) {
+            AUTO -> hour in 7..18
+            DAY -> true
+            NIGHT -> false
+        }
+    }
+}
+
 /** Choices made by the runner, separate from Android permission grants and individual runs. */
 internal data class RunPreferences(
     val observeMusic: Boolean = false,
@@ -10,7 +24,8 @@ internal data class RunPreferences(
     val musicSetupComplete: Boolean = false,
     val captureWeather: Boolean = false,
     val findSongSnippets: Boolean = false,
-    val distanceAnnouncements: Boolean = true
+    val distanceAnnouncements: Boolean = true,
+    val appearance: RunAppearance = RunAppearance.AUTO
 ) {
     init {
         require(!shareMusicInReflection || observeMusic) {
@@ -31,7 +46,8 @@ internal interface RunPreferencesStore {
 /** Small storage boundary keeps defaults, validation and failure behavior testable without Android. */
 internal interface RunPreferenceValues {
     fun readBoolean(key: String): Boolean?
-    fun commit(values: Map<String, Boolean>): Boolean
+    fun readString(key: String): String?
+    fun commit(values: Map<String, Boolean>, strings: Map<String, String>): Boolean
 }
 
 internal class StoredRunPreferences(
@@ -48,7 +64,10 @@ internal class StoredRunPreferences(
             captureWeather = values.readBoolean(CAPTURE_WEATHER) ?: false,
             findSongSnippets = observeMusic && (values.readBoolean(SHARE_MUSIC_IN_REFLECTION) ?: false) &&
                 (values.readBoolean(FIND_SONG_SNIPPETS) ?: false),
-            distanceAnnouncements = values.readBoolean(DISTANCE_ANNOUNCEMENTS) ?: true
+            distanceAnnouncements = values.readBoolean(DISTANCE_ANNOUNCEMENTS) ?: true,
+            appearance = values.readString(RUN_APPEARANCE)?.let { stored ->
+                RunAppearance.entries.firstOrNull { it.name == stored }
+            } ?: RunAppearance.AUTO
         )
     }
 
@@ -60,7 +79,7 @@ internal class StoredRunPreferences(
             CAPTURE_WEATHER to preferences.captureWeather,
             FIND_SONG_SNIPPETS to preferences.findSongSnippets,
             DISTANCE_ANNOUNCEMENTS to preferences.distanceAnnouncements
-        )))
+        ), mapOf(RUN_APPEARANCE to preferences.appearance.name)))
     }
 
     private inline fun <T> storageOperation(operation: () -> T): T = try {
@@ -76,10 +95,11 @@ internal class StoredRunPreferences(
         const val CAPTURE_WEATHER = "capture_weather"
         const val FIND_SONG_SNIPPETS = "find_song_snippets"
         const val DISTANCE_ANNOUNCEMENTS = "distance_announcements"
+        const val RUN_APPEARANCE = "run_appearance"
     }
 }
 
-/** Contains nonsecret booleans only. Sample/demo mode intentionally has no persistent preference. */
+/** Contains nonsecret choices only. Sample/demo mode intentionally has no persistent preference. */
 internal class AndroidRunPreferencesStore(
     context: Context,
     /** Override only in isolated tests; production always uses the default file. */
@@ -95,9 +115,13 @@ private class AndroidRunPreferenceValues(
     override fun readBoolean(key: String): Boolean? =
         if (preferences.contains(key)) preferences.getBoolean(key, false) else null
 
-    override fun commit(values: Map<String, Boolean>): Boolean {
+    override fun readString(key: String): String? =
+        if (preferences.contains(key)) preferences.getString(key, null) else null
+
+    override fun commit(values: Map<String, Boolean>, strings: Map<String, String>): Boolean {
         val editor = preferences.edit()
         values.forEach { (key, value) -> editor.putBoolean(key, value) }
+        strings.forEach { (key, value) -> editor.putString(key, value) }
         return editor.commit()
     }
 }

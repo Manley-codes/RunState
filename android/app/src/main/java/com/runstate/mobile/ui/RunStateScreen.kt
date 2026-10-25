@@ -1,10 +1,6 @@
 package com.runstate.mobile.ui
 
 import androidx.activity.compose.BackHandler
-import androidx.compose.animation.EnterTransition
-import androidx.compose.animation.ExitTransition
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -37,7 +33,6 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.zIndex
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.repeatOnLifecycle
 import com.runstate.mobile.data.local.ReflectionBranch
@@ -158,7 +153,10 @@ internal fun RunStateScreen(
     onRunContextChanged: (RunIntention?, String?) -> Unit = { _, _ -> },
     selectedEffortRating: Int? = null,
     effortRatingScale: EffortRatingScale? = EffortRatingScale.FOSTER,
-    onSelectEffortRating: (Int?) -> Unit = {}
+    onSelectEffortRating: (Int?) -> Unit = {},
+    runAppearanceDay: Boolean = java.time.LocalTime.now().hour in 7 until 19,
+    countdownTickKey: Long = 0L,
+    countdownCadenceActive: Boolean = true
 ) {
     val state = model.state
 
@@ -239,22 +237,33 @@ internal fun RunStateScreen(
     Column(modifier.fillMaxSize()) {
     Box(Modifier.weight(1f).fillMaxWidth()) {
         val countdownVisible = state == RunUiState.Countdown || state == RunUiState.StartingRun
-        // The active run is already recording underneath this short visual exit. Keep the
-        // existing coordinator/timer authoritative; animation never starts or delays a run.
-        androidx.compose.animation.AnimatedVisibility(
-            visible = countdownVisible,
-            enter = EnterTransition.None,
-            exit = if (state == RunUiState.ActiveRunning || state == RunUiState.ActivePaused)
-                fadeOut(tween(240)) else ExitTransition.None,
-            modifier = Modifier.fillMaxSize().zIndex(2f)
-        ) {
-            CountdownScreen(
-                digit = if (state == RunUiState.Countdown) countdownDigit else null,
-                actionsEnabled = actionsEnabled && state == RunUiState.Countdown,
-                onStartNow = onStartNow,
+        // One composition lets the countdown geometry assemble into real readings. The
+        // coordinator starts recording first; this decoration never delays or starts a run.
+        val assemblyVisible = countdownVisible || state == RunUiState.ActiveRunning || state == RunUiState.ActivePaused
+        if (assemblyVisible && !showLiveMap) {
+            RunAssemblyScreen(
+                state = state,
+                countdownDigit = countdownDigit,
+                metrics = metrics,
+                day = runAppearanceDay,
+                actionsEnabled = if (countdownVisible) actionsEnabled && state == RunUiState.Countdown else runControlsEnabled,
+                actionFailed = model.actionFailed,
+                isGpsRun = if (countdownVisible) gpsSelected else isGpsRun,
+                gpsServicePresent = gpsServicePresent,
+                gpsSignalStatus = gpsSignalStatus,
+                gpsMessage = gpsMessage,
+                onPause = onPause,
+                onResume = onResume,
+                onStop = onStop,
                 onCancel = onCancelCountdown,
-                transitioning = state != RunUiState.Countdown
+                onStartNow = onStartNow,
+                onResumeGpsTracking = onResumeGpsTracking,
+                onOpenRunMap = onOpenRunMap,
+                onOpenSpotify = onOpenSpotify,
+                countdownTickKey = countdownTickKey,
+                countdownCadenceActive = countdownCadenceActive
             )
+            return@Box
         }
         if (showLiveMap) {
             RecordedRunMapBackground(
@@ -269,7 +278,6 @@ internal fun RunStateScreen(
                 onStatusChange = { mapAvailability = it }
             )
         }
-        if (countdownVisible) return@Box
         if (showLiveMap) {
             Column(Modifier.fillMaxSize().testTag(ACTIVE_RUN_MAP_DIALOG_TAG)) {
                 Column(Modifier.fillMaxWidth().onSizeChanged { mapHeaderHeight = it.height }) {
@@ -345,26 +353,6 @@ internal fun RunStateScreen(
         return@Box
     }
 
-    if (state == RunUiState.ActiveRunning || state == RunUiState.ActivePaused) {
-        ActiveRunScreen(
-            paused = state == RunUiState.ActivePaused,
-            metrics = metrics,
-            actionFailed = model.actionFailed,
-            actionsEnabled = runControlsEnabled,
-            onPause = onPause,
-            onResume = onResume,
-            onStop = onStop,
-            isGpsRun = isGpsRun,
-            gpsServicePresent = gpsServicePresent,
-            gpsSignalStatus = gpsSignalStatus,
-            gpsMessage = gpsMessage,
-            onResumeGpsTracking = onResumeGpsTracking,
-            onOpenRunMap = onOpenRunMap,
-            modifier = Modifier,
-            liveMapBackground = false
-        )
-        return@Box
-    }
 
     Column(
         modifier = Modifier

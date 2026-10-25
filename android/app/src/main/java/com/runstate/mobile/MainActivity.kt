@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -187,6 +188,14 @@ class MainActivity : ComponentActivity() {
                 val preferencesError by runStateApplication.runPreferencesError.collectAsState()
                 val reflectionCoordinator = runStateApplication.runReflectionCoordinator
                 val spotify by spotifyConnection.state.collectAsState()
+                var runSurfaceDay by remember { mutableStateOf<Boolean?>(null) }
+                val ordinaryDark = androidx.compose.foundation.isSystemInDarkTheme()
+                SideEffect {
+                    androidx.core.view.WindowCompat.getInsetsController(window, window.decorView).apply {
+                        isAppearanceLightStatusBars = runSurfaceDay ?: !ordinaryDark
+                        isAppearanceLightNavigationBars = runSurfaceDay ?: !ordinaryDark
+                    }
+                }
                 // Only an explicit Connect Spotify action may open account authorization.
                 // Foreground reconnection uses the grant already remembered by that action.
                 DisposableEffect(spotifyConnection, lifecycle) {
@@ -205,8 +214,13 @@ class MainActivity : ComponentActivity() {
                         spotifyConnection.onBackground()
                     }
                 }
-                Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
+                Scaffold(modifier = Modifier.fillMaxSize(), containerColor = when (runSurfaceDay) {
+                    true -> androidx.compose.ui.graphics.Color(0xFFF5FCFF)
+                    false -> androidx.compose.ui.graphics.Color(0xFF101113)
+                    null -> androidx.compose.material3.MaterialTheme.colorScheme.background
+                }) { innerPadding ->
                     RunJourneyRoot(
+                        onRunSurfaceChanged = { runSurfaceDay = it },
                         coordinator = coordinator,
                         reflectionCoordinator = reflectionCoordinator,
                         database = database,
@@ -327,7 +341,8 @@ internal fun RunJourneyRoot(
     openingRequestId: Int = 0,
     runCountdown: RunCountdownOwner? = null,
     dispatchGpsCountdown: (Context, Long, PreRunEnergy?, Boolean, Boolean, Boolean,
-        RunIntention?, String?, Long?) -> Unit = RunTrackingService::startCountdown
+        RunIntention?, String?, Long?) -> Unit = RunTrackingService::startCountdown,
+    onRunSurfaceChanged: (Boolean?) -> Unit = {}
 ) {
 
     val reflectionRequestsAvailable = reflectionConnection is ReflectionConnectionState.Hosted ||
@@ -336,6 +351,18 @@ internal fun RunJourneyRoot(
     // The last answer the coordinator gave, and nothing more. `remember` rather than
     // `rememberSaveable` for the reason above.
     var model by remember { mutableStateOf(RunUiModel(RunUiState.Initializing)) }
+    // Appearance is presentation state, not a second run owner. Hold Auto through a session,
+    // including recreation, and resolve it again only for a new countdown.
+    var latchedRunDay by rememberSaveable { mutableStateOf<Boolean?>(null) }
+    val inRunSurface = model.state in setOf(RunUiState.Countdown, RunUiState.StartingRun,
+        RunUiState.ActiveRunning, RunUiState.ActivePaused)
+    val resolvedRunDay = latchedRunDay ?: (runPreferences?.appearance
+        ?: com.runstate.mobile.settings.RunAppearance.AUTO).isDay(java.time.LocalTime.now().hour)
+    LaunchedEffect(model.state, resolvedRunDay, runPreferences?.appearance) {
+        if (inRunSurface && latchedRunDay == null && runPreferences != null) latchedRunDay = resolvedRunDay
+        if (model.state == RunUiState.ReadyToStart || model.state == RunUiState.Saved) latchedRunDay = null
+        onRunSurfaceChanged(if (inRunSurface) resolvedRunDay else null)
+    }
     var openingPending by rememberSaveable(openingRequestId) { mutableStateOf(openingRequestId > 0) }
     // Recovery always runs first. Returning to any live/pending run or recovery error
     // bypasses the entrance permanently for this launch, even after a later retry.
@@ -1141,13 +1168,19 @@ internal fun RunJourneyRoot(
         }
     }
 
+    var localCountdownCadenceActive by remember { mutableStateOf(false) }
+    var localCountdownTick by remember { mutableStateOf(0L) }
     val localCountdownDigit = rememberLifecycleCountdown(
         active = model.state == RunUiState.Countdown &&
             (!gpsSelected || runCountdown == null) &&
             (!gpsSelected || gpsStartRequested && !gpsStartDispatched),
         lifecycle = lifecycle,
         startNowRequested = startNowRequested,
-        onCountdownCue = ::speakCountdownCue,
+        onCountdownCue = { step ->
+            localCountdownCadenceActive = step != null
+            if (step != null) localCountdownTick++
+            speakCountdownCue(step)
+        },
         onIntroduction = ::speakCountdownIntroduction,
         onFinished = {
 
@@ -1210,6 +1243,12 @@ internal fun RunJourneyRoot(
         }
     )
     val countdownDigit = if (gpsSelected && runCountdown != null) ownedCountdown?.digit else localCountdownDigit
+    val countdownCadenceActive = if (gpsSelected && runCountdown != null)
+        ownedCountdown?.phase == com.runstate.mobile.run.RunCountdownPhase.COUNTING
+        else localCountdownCadenceActive
+    val countdownTickKey = if (gpsSelected && runCountdown != null)
+        (ownedCountdown?.token ?: 0L) * 1_000L + (ownedCountdown?.phase?.ordinal ?: 0) * 20L + (countdownDigit ?: 0)
+        else localCountdownTick * 20L + (countdownDigit ?: 0)
 
     suspend fun performAction(kind: RunActionKind) {
             if (kind == RunActionKind.COMPLETE) {
@@ -1502,6 +1541,9 @@ internal fun RunJourneyRoot(
         model = model,
         metrics = metrics,
         countdownDigit = countdownDigit,
+        countdownTickKey = countdownTickKey,
+        countdownCadenceActive = countdownCadenceActive,
+        runAppearanceDay = resolvedRunDay,
         onStart = {
             startNowRequested = false
             when {
@@ -1855,6 +1897,10 @@ internal fun RunJourneyRoot(
     if (runSettingsVisible && model.state == RunUiState.ReadyToStart && !historyVisible &&
         !connectionDialogVisible) {
         RunSettingsDialog(
+            appearance = runPreferences?.appearance ?: com.runstate.mobile.settings.RunAppearance.AUTO,
+            onSetAppearance = { appearance ->
+                runPreferences?.let { saved -> savePreferences(saved.copy(appearance = appearance)) }
+            },
             spotifyConnectionLabel = spotifyConnectionLabel,
             spotifyConnectEnabled = spotifyConnectEnabled,
             spotifyDisconnectEnabled = spotifyDisconnectEnabled,

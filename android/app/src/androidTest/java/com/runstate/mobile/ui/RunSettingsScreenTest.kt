@@ -17,6 +17,7 @@ import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.assertIsOn
+import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.isDialog
@@ -45,6 +46,7 @@ import com.runstate.mobile.location.RunTrackingServiceState
 import com.runstate.mobile.run.PreparedRunFactory
 import com.runstate.mobile.run.RunSessionCoordinator
 import com.runstate.mobile.settings.AndroidRunPreferencesStore
+import com.runstate.mobile.settings.RunAppearance
 import com.runstate.mobile.settings.RunPreferences
 import java.io.File
 import java.time.Clock
@@ -87,6 +89,56 @@ class RunSettingsScreenTest {
             fixture.database.close()
             check(fixture.preferencesName.startsWith("run-settings-ui-"))
             fixture.context.deleteSharedPreferences(fixture.preferencesName)
+        }
+    }
+
+    @Test
+    fun appearanceChoicesReportOnlyAppearanceAndWaitForTheSavedPreference() {
+        var appearance by mutableStateOf(RunAppearance.AUTO)
+        var saving by mutableStateOf(false)
+        var available by mutableStateOf(true)
+        val choices = mutableListOf<RunAppearance>()
+        var otherActions = 0
+        compose.setContent {
+            RunSettingsDialog(
+                gpsReady = true, gpsMessage = null,
+                musicObservationEnabled = false, musicAccessGranted = true,
+                musicReflectionSharingEnabled = false, musicReflectionSharingAvailable = true,
+                reflectionConnectionLabel = null, demoMode = false,
+                onDismiss = { otherActions++ }, onRequestLocationSetup = { otherActions++ },
+                onSetMusicObservation = { otherActions++ }, onRequestMusicAccess = { otherActions++ },
+                onSetMusicReflectionSharing = { otherActions++ }, onSetDemoMode = { otherActions++ },
+                onOpenReflectionSetup = { otherActions++ }, settingsLoading = saving,
+                preferencesAvailable = available, appearance = appearance,
+                onSetAppearance = { choices += it; saving = true }
+            )
+        }
+        compose.onNodeWithTag(appearanceOptionTag(RunAppearance.AUTO)).performScrollTo().assertIsSelected()
+        for (choice in listOf(RunAppearance.DAY, RunAppearance.NIGHT, RunAppearance.AUTO)) {
+            val previous = appearance
+            compose.onNodeWithTag(appearanceOptionTag(choice)).performScrollTo()
+                .assertIsDisplayed().assertIsEnabled().performClick()
+            // The owner controls the saved choice. A tap cannot claim persistence before it succeeds.
+            compose.onNodeWithTag(appearanceOptionTag(previous)).assertIsSelected()
+            RunAppearance.entries.forEach {
+                compose.onNodeWithTag(appearanceOptionTag(it)).assertIsNotEnabled()
+            }
+            val calls = choices.size
+            compose.onNodeWithTag(appearanceOptionTag(choice)).performTouchInput { click() }
+            compose.runOnIdle {
+                assertEquals(calls, choices.size)
+                appearance = choice
+                saving = false
+            }
+            compose.onNodeWithTag(appearanceOptionTag(choice)).assertIsSelected().assertIsEnabled()
+        }
+        compose.runOnIdle { available = false }
+        RunAppearance.entries.forEach {
+            compose.onNodeWithTag(appearanceOptionTag(it)).performScrollTo().assertIsNotEnabled()
+        }
+        compose.runOnIdle {
+            assertEquals(listOf(RunAppearance.DAY, RunAppearance.NIGHT, RunAppearance.AUTO), choices)
+            assertEquals(0, otherActions)
         }
     }
 

@@ -8,6 +8,57 @@ import org.junit.Test
 
 class RunPreferencesTest {
     @Test
+    fun appearanceDefaultsToAutoForExistingPreferencesWithoutWriting() {
+        val values = FakeValues(mutableMapOf("observe_music" to true))
+        assertEquals(RunAppearance.AUTO, StoredRunPreferences(values).load().appearance)
+        values.savedStrings["run_appearance"] = "unknown-old-mode"
+        assertEquals(RunAppearance.AUTO, StoredRunPreferences(values).load().appearance)
+        assertTrue(StoredRunPreferences(values).load().observeMusic)
+        assertEquals(0, values.commits)
+    }
+
+    @Test
+    fun appearanceSurvivesReopeningAndPreservesExistingConsentChoicesInOneCommit() {
+        val values = FakeValues()
+        val before = RunPreferences(observeMusic = true, shareMusicInReflection = true,
+            musicSetupComplete = true, captureWeather = true, findSongSnippets = true,
+            distanceAnnouncements = false)
+        StoredRunPreferences(values).save(before)
+        val booleansBefore = values.saved.toMap()
+        RunAppearance.entries.forEachIndexed { index, appearance ->
+            StoredRunPreferences(values).save(before.copy(appearance = appearance))
+            assertEquals(before.copy(appearance = appearance), StoredRunPreferences(values).load())
+            assertEquals(booleansBefore, values.saved)
+            assertEquals(index + 2, values.commits)
+        }
+    }
+
+    @Test
+    fun failedAppearanceSaveDoesNotPartiallyChangePreviouslySavedChoices() {
+        val values = FakeValues()
+        val store = StoredRunPreferences(values)
+        val before = RunPreferences(observeMusic = true, appearance = RunAppearance.NIGHT)
+        store.save(before)
+        values.acceptCommit = false
+        assertThrows(IllegalStateException::class.java) {
+            store.save(before.copy(observeMusic = false, appearance = RunAppearance.DAY))
+        }
+        assertEquals(before, StoredRunPreferences(values).load())
+        assertEquals(2, values.commits)
+    }
+
+    @Test
+    fun appearanceAutomaticHoursAndExplicitOverridesArePredictable() {
+        for (hour in 0..23) {
+            assertEquals(hour in 7..18, RunAppearance.AUTO.isDay(hour))
+            assertTrue(RunAppearance.DAY.isDay(hour))
+            assertFalse(RunAppearance.NIGHT.isDay(hour))
+        }
+        assertThrows(IllegalArgumentException::class.java) { RunAppearance.AUTO.isDay(-1) }
+        assertThrows(IllegalArgumentException::class.java) { RunAppearance.AUTO.isDay(24) }
+    }
+
+    @Test
     fun mileAnnouncementsCanBeTurnedOffWithoutChangingMusicConsent() {
         val values = FakeValues()
         assertTrue(StoredRunPreferences(values).load().distanceAnnouncements)
@@ -148,7 +199,8 @@ class RunPreferencesTest {
     }
 
     private class FakeValues(
-        val saved: MutableMap<String, Boolean> = mutableMapOf()
+        val saved: MutableMap<String, Boolean> = mutableMapOf(),
+        val savedStrings: MutableMap<String, String> = mutableMapOf()
     ) : RunPreferenceValues {
         var acceptCommit = true
         var readFailure: Exception? = null
@@ -160,10 +212,18 @@ class RunPreferencesTest {
             return saved[key]
         }
 
-        override fun commit(values: Map<String, Boolean>): Boolean {
+        override fun readString(key: String): String? {
+            readFailure?.let { throw it }
+            return savedStrings[key]
+        }
+
+        override fun commit(values: Map<String, Boolean>, strings: Map<String, String>): Boolean {
             commits += 1
             writeFailure?.let { throw it }
-            if (acceptCommit) saved.putAll(values)
+            if (acceptCommit) {
+                saved.putAll(values)
+                savedStrings.putAll(strings)
+            }
             return acceptCommit
         }
     }
