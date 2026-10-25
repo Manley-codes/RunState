@@ -16,6 +16,7 @@ import com.runstate.mobile.reflection.ReflectionGateway
 import com.runstate.mobile.reflection.ReflectionSpeechGateway
 import com.runstate.mobile.reflection.ReflectionSpeechHttpClient
 import com.runstate.mobile.reflection.RunVoiceCueCache
+import com.runstate.mobile.reflection.PreparedCountdownVoice
 import com.runstate.mobile.reflection.SpeechVoice
 import com.runstate.mobile.reflection.HostedSongStudyPreparationClient
 import com.runstate.mobile.reflection.reflectionDestinationFingerprint
@@ -32,6 +33,8 @@ import com.runstate.mobile.run.RunSplitCalculator
 import com.runstate.mobile.data.local.RunSplitStatus
 import com.runstate.mobile.settings.AndroidRunPreferencesStore
 import com.runstate.mobile.settings.RunPreferences
+import com.runstate.mobile.ui.AndroidReflectionSpeaker
+import com.runstate.mobile.ui.ReflectionSpeaker
 import com.runstate.mobile.weather.RunWeatherCapture
 import com.runstate.mobile.music.RunMusicNotificationListener
 import com.runstate.mobile.music.RoomSongPreparationStore
@@ -476,6 +479,14 @@ class RunStateApplication : Application() {
 
     /** Fixed run-voice lines prepared while Start is open, so the countdown lands on time. Memory only. */
     internal val runVoiceCues: RunVoiceCueCache by lazy { RunVoiceCueCache(applicationScope, runVoiceGateway) }
+
+    /**
+     * One phone voice kept awake and silently rehearsed while Start is visible, so the countdown's
+     * first word does not wait for the sleeping speech engine. The countdown takes it at the tap.
+     */
+    internal val preparedCountdownVoice: PreparedCountdownVoice<ReflectionSpeaker> by lazy {
+        PreparedCountdownVoice<ReflectionSpeaker> { AndroidReflectionSpeaker(this) }
+    }
 
     private var reflectionOwner: RunReflectionCoordinator? = null
 

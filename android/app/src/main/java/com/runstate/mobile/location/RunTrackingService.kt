@@ -301,8 +301,11 @@ internal class RunTrackingService : Service() {
                         // No location point or run row exists during this preparation. A short
                         // wake lease keeps the ten-second clock honest when the screen locks.
                         countdownWakeLease = RunCpuWakeLease(::newTimedCpuWakeLock, 30_000L).also { it.start() }
+                        // Start kept this voice awake and rehearsed, so the opening line skips the
+                        // speech engine's cold start. Without one, the countdown creates its own.
                         val voice = try {
-                            AndroidReflectionSpeaker(this@RunTrackingService).also { countdownSpeaker = it }
+                            (app.preparedCountdownVoice.take() ?: AndroidReflectionSpeaker(this@RunTrackingService))
+                                .also { countdownSpeaker = it }
                         } catch (_: RuntimeException) { null }
                         val useRunVoice = app.runVoiceCues.hasAll(COUNTDOWN_VOICE_LINES)
                         var startedId: String? = null

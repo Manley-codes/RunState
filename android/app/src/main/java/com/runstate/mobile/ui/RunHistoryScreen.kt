@@ -94,6 +94,7 @@ import com.runstate.mobile.R
 import com.runstate.mobile.RunStateApplication
 import com.runstate.mobile.reflection.ReflectionSpeechGateway
 import com.runstate.mobile.reflection.MAX_REFLECTION_AUDIO_BYTES
+import com.runstate.mobile.reflection.RehearsableVoice
 import com.runstate.mobile.music.AndroidSpotifyPassageSession
 import com.runstate.mobile.music.PassagePlayback
 import com.runstate.mobile.music.SongPassageRequest
@@ -114,6 +115,7 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 import java.util.UUID
+import java.io.File
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.NonCancellable
@@ -139,6 +141,10 @@ private const val RUN_VOICE_WAIT_MILLIS = 5_000L
 // Run-voice audio plays at the same level the phone voice uses for the saved facts.
 private const val RUN_VOICE_VOLUME = 0.8f
 private const val COMPLETION_FACTS_PLAYBACK_SPEED = 0.90f
+// The countdown voice's silent rehearsal: one fixed line synthesized into a private temporary file
+// that is deleted as soon as the engine stops, so the voice is already loaded at the Start tap.
+private const val WARM_UP_UTTERANCE_ID = "runstate-countdown-warm-up"
+private const val WARM_UP_FILE_NAME = "countdown-voice-warm-up.wav"
 internal const val REFLECTION_SONG_HANDOFF_MILLIS = 150L
 
 internal enum class SpeechDeliveryKind { RECEIPT, COMPLETION_FACTS, MILE_ANNOUNCEMENT, TIMED_CUE, REFLECTION }
@@ -280,7 +286,7 @@ internal class CompletionAudioSession(
 }
 
 /** Kept injectable so screen behavior can be checked without a device voice engine. */
-internal interface ReflectionSpeaker {
+internal interface ReflectionSpeaker : RehearsableVoice {
     fun attachCompletionAudio(session: CompletionAudioSession) = Unit
     /** Prepare one exact reflection silently; custom speakers can retain their existing behavior. */
     fun prepare(text: String) = Unit
@@ -320,8 +326,10 @@ internal interface ReflectionSpeaker {
         speakTimedCue(text, useRunVoice)
         onFinished()
     }
+    /** Silent loading ahead of a countdown; injected test speakers keep their existing behavior. */
+    override fun warmUp(text: String) = Unit
     fun stop()
-    fun close()
+    override fun close()
 }
 
 /** The Android boundary is separate so request ownership can be verified without playing audio. */
@@ -332,6 +340,8 @@ internal interface ReflectionSpeechPlatform {
     fun runVoiceGateway(): ReflectionSpeechGateway? = null
     /** Fixed run-voice lines prepared ahead of time, so timed lines never wait on the network. */
     fun preparedRunVoiceAudio(text: String): ByteArray? = null
+    /** Loads the phone voice for [text] silently: no playback, audio focus or speech callbacks. */
+    fun warmUpSpeech(text: String) = Unit
     fun prepareSongPassageConnection() = Unit
     fun initialize(onReady: (Boolean) -> Unit, onDone: (String) -> Unit, onError: (String) -> Unit)
     fun requestAudioFocus(utteranceId: String, onFocusLost: (String) -> Unit): Boolean
@@ -422,6 +432,8 @@ internal class AndroidReflectionSpeaker(
     private var speechTimeout: Runnable? = null
     private var closed = false
     private var completionSession: CompletionAudioSession? = null
+    /** A rehearsal requested before the engine was ready; real speech always takes precedence. */
+    private var pendingWarmUp: String? = null
 
     init {
         try {
@@ -430,9 +442,11 @@ internal class AndroidReflectionSpeaker(
                     if (!closed) {
                         initialized = ready
                         initializationFailed = !initialized
+                        val rehearsal = pendingWarmUp
+                        pendingWarmUp = null
                         if (request?.phase == SpeechPhase.WAITING_FOR_ENGINE) {
                             if (initialized) speakPending() else request?.id?.let(::finish)
-                        }
+                        } else if (initialized && rehearsal != null) rehearse(rehearsal)
                     }
                 } },
                 onDone = { id -> onMain { if (request?.cloudAudio != true) finishSpeech(id) } },
@@ -449,6 +463,17 @@ internal class AndroidReflectionSpeaker(
 
     override fun speak(text: String) {
         submit(text, rate = 0.94f, onFinished = null, canPlayInstrumental = null)
+    }
+
+    override fun warmUp(text: String) {
+        if (closed || initializationFailed || !validSpeechText(text)) return
+        if (initialized) rehearse(text) else pendingWarmUp = text
+    }
+
+    /** A line already in progress loads the same voice, so a rehearsal never competes with it. */
+    private fun rehearse(text: String) {
+        if (closed || request != null) return
+        try { platform.warmUpSpeech(text) } catch (_: RuntimeException) { }
     }
 
     override fun attachCompletionAudio(session: CompletionAudioSession) {
@@ -945,6 +970,7 @@ internal class AndroidReflectionSpeechPlatform(
     private var instrumental: InstrumentalPlayback? = null
     private var reflectionAudio: ReflectionAudio? = null
     private var closed = false
+    @Volatile private var warmUpRequestedAt = 0L
 
     override fun attachCompletionAudio(session: CompletionAudioSession) {
         if (completionAudio === session) return
@@ -960,17 +986,31 @@ internal class AndroidReflectionSpeechPlatform(
                 if (!closed) {
                     try {
                         val activeEngine = engine
+                        // The silent rehearsal reports only to its own cleanup, never to a speech owner.
                         val listener = object : UtteranceProgressListener() {
                             override fun onStart(utteranceId: String?) {
-                                if (utteranceId != null && utteranceId != localReceiptId) mainHandler.post {
+                                if (utteranceId != null && utteranceId != localReceiptId &&
+                                    utteranceId != WARM_UP_UTTERANCE_ID) mainHandler.post {
                                     completionAudio?.note(CompletionAudioSession.Event.REFLECTION_STARTED)
                                 }
                             }
-                            override fun onDone(utteranceId: String?) { utteranceId?.let(onDone) }
+                            override fun onDone(utteranceId: String?) {
+                                if (utteranceId == WARM_UP_UTTERANCE_ID) finishWarmUp("FINISHED")
+                                else utteranceId?.let(onDone)
+                            }
                             @Deprecated("Required by the Android speech listener")
-                            override fun onError(utteranceId: String?) { utteranceId?.let(onError) }
-                            override fun onError(utteranceId: String?, errorCode: Int) { utteranceId?.let(onError) }
-                            override fun onStop(utteranceId: String?, interrupted: Boolean) { utteranceId?.let(onError) }
+                            override fun onError(utteranceId: String?) {
+                                if (utteranceId == WARM_UP_UTTERANCE_ID) finishWarmUp("FAILED")
+                                else utteranceId?.let(onError)
+                            }
+                            override fun onError(utteranceId: String?, errorCode: Int) {
+                                if (utteranceId == WARM_UP_UTTERANCE_ID) finishWarmUp("FAILED")
+                                else utteranceId?.let(onError)
+                            }
+                            override fun onStop(utteranceId: String?, interrupted: Boolean) {
+                                if (utteranceId == WARM_UP_UTTERANCE_ID) finishWarmUp("STOPPED")
+                                else utteranceId?.let(onError)
+                            }
                         }
                         onReady(result == TextToSpeech.SUCCESS && activeEngine != null &&
                             activeEngine.setAudioAttributes(speechAttributes) == TextToSpeech.SUCCESS &&
@@ -1024,6 +1064,34 @@ internal class AndroidReflectionSpeechPlatform(
         val parameters = Bundle().apply { putFloat(TextToSpeech.Engine.KEY_PARAM_VOLUME, volume) }
         return activeEngine.setSpeechRate(rate) == TextToSpeech.SUCCESS &&
             activeEngine.speak(text, TextToSpeech.QUEUE_FLUSH, parameters, utteranceId) == TextToSpeech.SUCCESS
+    }
+
+    /**
+     * Synthesizing into a private file runs the same voice pipeline as speech, without playback or
+     * audio focus. The file holds only the fixed rehearsal line and is deleted when the engine stops.
+     */
+    override fun warmUpSpeech(text: String) {
+        val activeEngine = engine ?: return
+        if (closed) return
+        warmUpRequestedAt = SystemClock.elapsedRealtime()
+        logWarmUp("REQUESTED")
+        val accepted = try {
+            activeEngine.synthesizeToFile(text, Bundle(), warmUpFile(), WARM_UP_UTTERANCE_ID) == TextToSpeech.SUCCESS
+        } catch (_: RuntimeException) { false }
+        if (!accepted) finishWarmUp("FAILED")
+    }
+
+    private fun warmUpFile() = File(appContext.cacheDir, WARM_UP_FILE_NAME)
+
+    private fun finishWarmUp(stage: String) {
+        try { warmUpFile().delete() } catch (_: RuntimeException) { }
+        logWarmUp(stage)
+    }
+
+    /** Timing only, in debug builds: no text, run, song or provider detail. */
+    private fun logWarmUp(stage: String) {
+        if (com.runstate.mobile.BuildConfig.DEBUG) android.util.Log.d("RunStateVoiceDelivery",
+            "kind=WARM_UP stage=$stage elapsedMs=${(SystemClock.elapsedRealtime() - warmUpRequestedAt).coerceAtLeast(0)}")
     }
 
     override fun playReflectionAudio(
@@ -1302,6 +1370,8 @@ internal class AndroidReflectionSpeechPlatform(
         val owned = engine
         engine = null
         owned?.shutdown()
+        // A rehearsal cut short by shutdown never reports back, so its file is removed here.
+        try { warmUpFile().delete() } catch (_: RuntimeException) { }
     }
 }
 

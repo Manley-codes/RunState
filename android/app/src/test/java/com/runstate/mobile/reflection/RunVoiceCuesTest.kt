@@ -49,4 +49,50 @@ class RunVoiceCuesTest {
             assertFalse(cache.hasAll(COUNTDOWN_VOICE_LINES))
         }
     }
+
+    private class FakeVoice : RehearsableVoice {
+        val rehearsed = mutableListOf<String>()
+        var closed = false
+        override fun warmUp(text: String) { rehearsed += text }
+        override fun close() { closed = true }
+    }
+
+    @Test fun preparedVoiceRehearsesTheOpeningOnceAndBelongsToTheCountdownOnceTaken() {
+        val created = mutableListOf<FakeVoice>()
+        val prepared = PreparedCountdownVoice { FakeVoice().also { created += it } }
+
+        prepared.prepare()
+        prepared.prepare()
+        assertEquals(1, created.size)
+        assertEquals(listOf(COUNTDOWN_INTRO_TEXT), created.single().rehearsed)
+
+        assertSame(created.single(), prepared.take())
+        assertNull(prepared.take())
+        prepared.release()
+        assertFalse(created.single().closed) // The countdown closes the voice it took.
+
+        prepared.prepare()
+        assertEquals(2, created.size)
+        prepared.release()
+        assertTrue(created.last().closed)
+        assertNull(prepared.take())
+    }
+
+    @Test fun aMissingOrFailingVoiceNeverBlocksTheCountdown() {
+        val unavailable = PreparedCountdownVoice<FakeVoice> { throw IllegalStateException("no speech engine") }
+        unavailable.prepare()
+        assertNull(unavailable.take())
+        unavailable.release()
+
+        var closed = false
+        val rehearsalFails = PreparedCountdownVoice<RehearsableVoice> {
+            object : RehearsableVoice {
+                override fun warmUp(text: String) { throw IllegalStateException("engine busy") }
+                override fun close() { closed = true }
+            }
+        }
+        rehearsalFails.prepare()
+        assertNotNull(rehearsalFails.take())
+        assertFalse(closed)
+    }
 }

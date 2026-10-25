@@ -51,6 +51,7 @@ import com.runstate.mobile.reflection.COUNTDOWN_FINISH_TEXT
 import com.runstate.mobile.reflection.ENERGY_QUESTION_TEXT
 import com.runstate.mobile.reflection.RUN_VOICE_PREPARED_LINES
 import com.runstate.mobile.reflection.countdownCueText
+import com.runstate.mobile.reflection.PreparedCountdownVoice
 import com.runstate.mobile.data.local.ReflectionBranch
 import com.runstate.mobile.data.local.PreRunEnergy
 import com.runstate.mobile.data.local.PostRunEffort
@@ -238,6 +239,7 @@ class MainActivity : ComponentActivity() {
                         nativeMapsEnabled = true,
                         onRetrySplits = runStateApplication::retryRunSplits,
                         countdownSpeakerFactory = { AndroidReflectionSpeaker(it) },
+                        preparedCountdownVoice = runStateApplication.preparedCountdownVoice,
                         runCountdown = runStateApplication.runCountdown,
                         spotifyConnectionLabel = when {
                             !spotify.configured -> "Spotify setup not finished"
@@ -333,6 +335,7 @@ internal fun RunJourneyRoot(
     startGpsRun: (Context, PreRunEnergy?, Boolean, Boolean, Boolean,
         RunIntention?, String?, Long?) -> Unit = RunTrackingService::startNew,
     countdownSpeakerFactory: ((Context) -> ReflectionSpeaker)? = null,
+    preparedCountdownVoice: PreparedCountdownVoice<ReflectionSpeaker>? = null,
     spotifyConnectionLabel: String? = null,
     spotifyConnectEnabled: Boolean = false,
     spotifyDisconnectEnabled: Boolean = false,
@@ -665,7 +668,8 @@ internal fun RunJourneyRoot(
         if (step == 10) return // Already spoken in the uninterrupted opening line.
         val factory = countdownSpeakerFactory ?: return
         try {
-            val voice = countdownSpeaker ?: factory(context).also { countdownSpeaker = it }
+            val voice = countdownSpeaker
+                ?: (preparedCountdownVoice?.take() ?: factory(context)).also { countdownSpeaker = it }
             val useRunVoice = countdownRunVoice
                 ?: (runVoiceCues?.hasAll(COUNTDOWN_VOICE_LINES) == true).also { countdownRunVoice = it }
             voice.stop()
@@ -675,8 +679,10 @@ internal fun RunJourneyRoot(
     suspend fun speakCountdownIntroduction() {
         if (!voiceForeground) return
         val factory = countdownSpeakerFactory ?: return
-        val voice = try { countdownSpeaker ?: factory(context).also { countdownSpeaker = it } }
-            catch (_: RuntimeException) { return }
+        // Start kept a rehearsed voice awake, so this opening line skips the engine's cold start.
+        val voice = try {
+            countdownSpeaker ?: (preparedCountdownVoice?.take() ?: factory(context)).also { countdownSpeaker = it }
+        } catch (_: RuntimeException) { return }
         val useRunVoice = (runVoiceCues?.hasAll(COUNTDOWN_VOICE_LINES) == true).also { countdownRunVoice = it }
         suspendCancellableCoroutine<Unit> { continuation ->
             continuation.invokeOnCancellation { try { voice.stop() } catch (_: RuntimeException) { } }
@@ -712,6 +718,17 @@ internal fun RunJourneyRoot(
             delay(15_000L)
         }
     }
+    // Keep one rehearsed phone voice awake while Start is visible. The sleeping speech engine
+    // otherwise delayed "Starting in ten" by about 3.2 seconds after the tap (October 24 log).
+    // The countdown takes this voice at the tap, so it is kept, never closed, while counting.
+    val startVoiceVisible = voiceForeground && activeRunId == null && !historyVisible &&
+        recapRunId == null && model.state == RunUiState.ReadyToStart
+    val countdownTakingVoice = voiceForeground && model.state == RunUiState.Countdown
+    LaunchedEffect(startVoiceVisible, countdownTakingVoice, preparedCountdownVoice) {
+        val prepared = preparedCountdownVoice ?: return@LaunchedEffect
+        if (startVoiceVisible) prepared.prepare() else if (!countdownTakingVoice) prepared.release()
+    }
+    DisposableEffect(preparedCountdownVoice) { onDispose { preparedCountdownVoice?.release() } }
 
     var musicAccessGranted by remember(context) { mutableStateOf(musicAccessProvider(context)) }
 

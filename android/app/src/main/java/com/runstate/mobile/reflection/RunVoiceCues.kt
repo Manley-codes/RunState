@@ -59,3 +59,39 @@ internal class RunVoiceCueCache(
 
     fun hasAll(texts: List<String>): Boolean = texts.all { audio.containsKey(it) }
 }
+
+/** A voice that can load itself silently before its first line, and be released if never used. */
+internal interface RehearsableVoice {
+    /** Loads everything needed to speak [text] without making a sound. */
+    fun warmUp(text: String)
+    fun close()
+}
+
+/**
+ * Keeps one countdown voice awake while Start is visible. On the Moto, RunState's own work after
+ * the Start tap took about 0.1 seconds, but the sleeping phone speech engine needed about 3.2 more
+ * to wake and load its voice before "Starting in ten" (October 24 log). Preparing the voice early,
+ * with one silent rehearsal of that line, moves the wait off the tap. Main thread only.
+ * [take] hands the voice to the countdown, which then owns and closes it; [release] closes a voice
+ * nobody took.
+ */
+internal class PreparedCountdownVoice<V : RehearsableVoice>(private val create: () -> V) {
+    private var voice: V? = null
+
+    /** Safe to call repeatedly: at most one voice waits, and it rehearses the opening once. */
+    fun prepare() {
+        if (voice != null) return
+        val created = try { create() } catch (_: RuntimeException) { return }
+        voice = created
+        try { created.warmUp(COUNTDOWN_INTRO_TEXT) } catch (_: RuntimeException) { }
+    }
+
+    /** The caller owns the returned voice. The next [prepare] creates a fresh one. */
+    fun take(): V? = voice.also { voice = null }
+
+    fun release() {
+        val unused = voice ?: return
+        voice = null
+        try { unused.close() } catch (_: RuntimeException) { }
+    }
+}
