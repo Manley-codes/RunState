@@ -60,6 +60,22 @@ class RunMetricsTest {
     }
 
     @Test
+    fun `current mile requires complete GPS timing evidence and a positive finite pace`() {
+        val valid = gpsAt(1_800.0).copy(currentMilePaceSecondsPerMeter = 0.3)
+        listOf(Double.NaN, Double.POSITIVE_INFINITY, 0.0, -1.0).forEach { invalid ->
+            assertThrows(IllegalArgumentException::class.java) {
+                valid.copy(currentMilePaceSecondsPerMeter = invalid)
+            }
+        }
+        assertThrows(IllegalArgumentException::class.java) { valid.copy(coverage = TelemetryCoverage.PARTIAL) }
+        assertThrows(IllegalArgumentException::class.java) { valid.copy(source = MetricSource.FIXTURE) }
+        assertThrows(IllegalArgumentException::class.java) {
+            valid.copy(activeMillis = null, paceSecondsPerMeter = null)
+        }
+        assertNull(gpsAt(1_800.0).currentMilePaceSecondsPerMeter)
+    }
+
+    @Test
     fun `active duration cannot exceed elapsed duration`() {
         assertThrows(IllegalArgumentException::class.java) {
             completeMetrics(elapsedMillis = 1_000L, activeMillis = 1_001L)

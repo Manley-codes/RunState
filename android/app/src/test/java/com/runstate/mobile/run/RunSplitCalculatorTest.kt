@@ -10,6 +10,7 @@ import com.runstate.mobile.data.local.RunTransitionType
 import com.runstate.mobile.data.local.StoredRunState
 import com.runstate.mobile.data.local.TelemetryCoverage
 import com.runstate.mobile.location.GpsSampleStatus
+import com.runstate.mobile.location.GpsCoverageEvaluator
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -19,6 +20,130 @@ import org.junit.Test
 import kotlin.math.min
 
 class RunSplitCalculatorTest {
+    @Test
+    fun `live current mile begins at official start and advances with active time`() {
+        val calculator = LiveMilePaceCalculator()
+        val live = liveRun()
+        val points = route(0, 40_000, 0.0, 100.0)
+        assertEquals(0.4, livePace(calculator, live, emptyList(), points, 40_000)!!, 0.000001)
+        // Time between fixes belongs to this mile, and repeated ticks must not consume it twice.
+        assertEquals(0.41, livePace(calculator, live, emptyList(), points, 41_000)!!, 0.000001)
+        assertEquals(0.41, livePace(calculator, live, emptyList(), points, 41_000)!!, 0.000001)
+    }
+
+    @Test
+    fun `live mile crossing interpolates the new mile rather than reusing whole run pace`() {
+        val calculator = LiveMilePaceCalculator()
+        val first = route(0, 640_000, 0.0, 1_600.0)
+        assertEquals(0.4, livePace(calculator, liveRun(), emptyList(), first, 640_000)!!, 0.000001)
+        val points = (first + route(640_000, 700_000, 1_600.0, 180.0).drop(1))
+            .mapIndexed { index, point -> point.copy(sequenceNumber = index + 1) }
+        assertEquals(1.0 / 3.0,
+            livePace(calculator, liveRun(), emptyList(), points, 700_000)!!, 0.000001)
+    }
+
+    @Test
+    fun `live mile is unavailable at exact boundary and until enough new mile evidence`() {
+        val calculator = LiveMilePaceCalculator()
+        val exact = route(0, 640_000, 0.0, 1_609.344)
+        assertNull(livePace(calculator, liveRun(), emptyList(), exact, 640_000))
+        val next = (exact + route(640_000, 660_000, 1_609.344, 40.0).drop(1))
+            .mapIndexed { index, point -> point.copy(sequenceNumber = index + 1) }
+        assertNull(livePace(calculator, liveRun(), emptyList(), next.dropLast(1), 650_000))
+        assertEquals(0.5, livePace(calculator, liveRun(), emptyList(), next, 660_000)!!, 0.000001)
+        assertNull(livePace(LiveMilePaceCalculator(), liveRun(), emptyList(),
+            route(0, 5_000, 0.0, 30.0), 5_000))
+    }
+
+    @Test
+    fun `live mile excludes pause and keeps a paused reading frozen`() {
+        val fixture = pausedFixture(firstDistance = 1_000.0, secondDistance = 900.0)
+        val live = liveRun(StoredRunState.PAUSED, 810_000)
+        val calculator = LiveMilePaceCalculator()
+        val firstPoints = fixture.points.filter { offset(it) <= 500_000 }
+        assertEquals(0.5, livePace(calculator, liveRun(), emptyList(), firstPoints, 500_000)!!, 0.000001)
+        assertEquals(0.5, livePace(calculator, liveRun(StoredRunState.PAUSED, 500_000),
+            fixture.transitions.take(1), firstPoints, 560_000)!!, 0.000001)
+        val pace = livePace(calculator, live, fixture.transitions, fixture.points, 810_000)
+        // This mile was reached during the faster second interval, after a 60 second pause.
+        assertEquals(250.0 / 900.0, pace!!, 0.000001)
+        assertEquals(pace, livePace(calculator, live, fixture.transitions, fixture.points, 900_000))
+    }
+
+    @Test
+    fun `live mile includes stationary Running time without inventing distance`() {
+        val calculator = LiveMilePaceCalculator()
+        val points = route(0, 40_000, 0.0, 100.0)
+        assertEquals(0.4, livePace(calculator, liveRun(), emptyList(), points, 40_000)!!, 0.000001)
+        val stationary = points.last().copy(sequenceNumber = points.size + 1,
+            observationKey = "stationary", observedAtEpochMillis = EPOCH + 50_000,
+            elapsedRealtimeNanos = (MONO + 50_000) * 1_000_000,
+            acceptedForDistance = false, rejectionReason = GpsSampleStatus.IGNORED_WITHIN_ACCURACY.name,
+            segmentDistanceMeters = null, cumulativeDistanceMeters = null)
+        assertEquals(0.5, livePace(calculator, liveRun(), emptyList(), points + stationary, 50_000)!!,
+            0.000001)
+    }
+
+    @Test
+    fun `live mile uses monotonic source time despite allowed GPS clock bias`() {
+        val points = route(0, 40_000, 0.0, 100.0).map {
+            it.copy(observedAtEpochMillis = it.observedAtEpochMillis + 1_000)
+        }
+        assertEquals(0.4, livePace(LiveMilePaceCalculator(), liveRun(), emptyList(), points, 40_000)!!,
+            0.000001)
+    }
+
+    @Test
+    fun `live mile disappears with poor GPS staleness or recovered recording gap`() {
+        val calculator = LiveMilePaceCalculator()
+        val good = route(0, 100_000, 0.0, 250.0)
+        assertNotNull(livePace(calculator, liveRun(), emptyList(), good, 100_000))
+        assertNull(livePace(calculator, liveRun(), emptyList(), good, 106_000))
+        val rejected = good.mapIndexed { index, point ->
+            if (index == 5) point.copy(acceptedForDistance = false,
+                horizontalAccuracyMeters = 300f,
+                rejectionReason = GpsSampleStatus.REJECTED_INACCURATE.name,
+                segmentDistanceMeters = null, cumulativeDistanceMeters = null) else point
+        }
+        assertNull(livePace(calculator, liveRun(), emptyList(), rejected, 100_000))
+        assertNull(livePace(calculator, liveRun(), emptyList(), good, 100_000, recovered = true))
+        assertNull(calculator.calculate(liveRun(), emptyList(), good,
+            RunTimingMark(MONO + 100_000, OTHER_SESSION), TelemetryCoverage.COMPLETE))
+    }
+
+    @Test
+    fun `live mile never appears for fixtures completed rows or prior owner evidence`() {
+        val calculator = LiveMilePaceCalculator()
+        val points = route(0, 100_000, 0.0, 250.0)
+        assertNotNull(livePace(calculator, liveRun(), emptyList(), points, 100_000))
+        assertNull(calculator.calculate(liveRun().copy(trackingMode = RunTrackingMode.FIXTURE),
+            emptyList(), points, RunTimingMark(MONO + 100_000, SESSION), TelemetryCoverage.COMPLETE))
+        assertNull(calculator.calculate(completed(250.0, 100_000, DistanceUnit.MILES),
+            emptyList(), points, RunTimingMark(MONO + 100_000, SESSION), TelemetryCoverage.COMPLETE))
+        val nextRun = liveRun().copy(runId = OTHER_RUN)
+        val nextPoints = route(0, 5_000, 0.0, 10.0).map { it.copy(runId = OTHER_RUN) }
+        assertNull(livePace(calculator, nextRun, emptyList(), nextPoints, 5_000))
+    }
+
+    private fun liveRun(state: StoredRunState = StoredRunState.RUNNING, checkpoint: Long = 0) =
+        RunEntity(runId = RUN, state = state, officialStartEpochMillis = EPOCH,
+            startTimezoneId = "America/Chicago", lastCheckpointEpochMillis = EPOCH + checkpoint,
+            transitionHistoryComplete = true, trackingMode = RunTrackingMode.GPS,
+            startElapsedRealtimeMillis = MONO, timingSessionId = SESSION)
+
+    private fun livePace(
+        calculator: LiveMilePaceCalculator,
+        run: RunEntity,
+        transitions: List<RunTransitionEntity>,
+        points: List<RunLocationPointEntity>,
+        offset: Long,
+        recovered: Boolean = false
+    ): Double? {
+        val now = RunTimingMark(MONO + offset, SESSION)
+        val coverage = GpsCoverageEvaluator.assess(run, transitions, points, EPOCH + offset, now, recovered)
+        return calculator.calculate(run, transitions, points, now, coverage)
+    }
+
     @Test
     fun `feedback saved before split derivation cannot change or invalidate GPS splits`() {
         val original = fixture(distance = 2_500.0, duration = 1_001_000L)

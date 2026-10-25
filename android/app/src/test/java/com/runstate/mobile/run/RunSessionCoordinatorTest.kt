@@ -2394,6 +2394,7 @@ class RunSessionCoordinatorTest {
         assertEquals(10_000L, first.activeMillis)
         assertEquals(30.0, first.distanceMeters!!, 0.0)
         assertEquals(1.0 / 3.0, first.paceSecondsPerMeter!!, 0.0)
+        assertNull(first.currentMilePaceSecondsPerMeter) // A sample run never invents GPS split evidence.
         assertEquals(20_000L, second.elapsedMillis)
         assertEquals(20_000L, second.activeMillis)
         assertEquals(60.0, second.distanceMeters!!, 0.0)
@@ -2467,6 +2468,7 @@ class RunSessionCoordinatorTest {
         assertEquals(180.0, completed.distanceMeters!!, 0.0)
         assertEquals(MetricSource.FIXTURE, completed.source)
         assertEquals(TelemetryCoverage.COMPLETE, completed.coverage)
+        assertNull(completed.currentMilePaceSecondsPerMeter) // History retains its existing frozen derivation.
         assertEquals(DistanceUnit.MILES, completed.displayUnit)
     }
 

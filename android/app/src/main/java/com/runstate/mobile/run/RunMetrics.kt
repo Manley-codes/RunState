@@ -24,7 +24,9 @@ internal data class RunMetrics(
     val paceSecondsPerMeter: Double?,
     val displayUnit: DistanceUnit,
     val source: MetricSource?,
-    val coverage: TelemetryCoverage
+    val coverage: TelemetryCoverage,
+    /** Live average since the latest mile boundary, unavailable while evidence is insufficient. */
+    val currentMilePaceSecondsPerMeter: Double? = null
 ) {
     init {
         require(elapsedMillis >= 0L) {
@@ -45,6 +47,12 @@ internal data class RunMetrics(
         }
         require(paceSecondsPerMeter == null || (activeMillis != null && distanceMeters != null)) {
             "Average pace requires both active duration and distance."
+        }
+        require(currentMilePaceSecondsPerMeter == null ||
+            (currentMilePaceSecondsPerMeter.isFinite() && currentMilePaceSecondsPerMeter > 0.0 &&
+                activeMillis != null && distanceMeters != null && source == MetricSource.GPS &&
+                coverage == TelemetryCoverage.COMPLETE)) {
+            "Current-mile pace requires complete GPS evidence and a finite, positive pace."
         }
 
         when (coverage) {

@@ -293,6 +293,9 @@ internal class RunSessionCoordinator(
     /** Append-only GPS evidence for this owned run; discarded with the metric owner. */
     private val metricGpsPoints = mutableListOf<RunLocationPointEntity>()
 
+    /** Incremental mile-boundary tracking; no full route derivation on each display tick. */
+    private var liveMilePace = LiveMilePaceCalculator()
+
     /** Last live answer, used only to stop wall-clock correction making the display retreat. */
     private var lastPublishedMetrics: RunMetrics? = null
 
@@ -641,7 +644,10 @@ internal class RunSessionCoordinator(
                         ),
                     displayUnit = DistanceUnit.MILES,
                     source = if (isGps) MetricSource.GPS else MetricSource.FIXTURE,
-                    coverage = coverage
+                    coverage = coverage,
+                    currentMilePaceSecondsPerMeter = if (isGps && activeMillis != null) {
+                        liveMilePace.calculate(run, transitions, metricGpsPoints, now.timingMark, coverage)
+                    } else null
                 )
             }
 
@@ -1422,6 +1428,7 @@ internal class RunSessionCoordinator(
         metricRun = null
         metricTransitions = null
         metricGpsPoints.clear()
+        liveMilePace = LiveMilePaceCalculator()
         lastPublishedMetrics = null
         recoveredGpsGap = false
     }

@@ -762,6 +762,18 @@ class RunMetricsDisplayTest {
     )
 
     @Test
+    fun `live current mile is formatted separately and unavailable remains a dash`() {
+        val gps = RunMetrics(600_000, 600_000, 1_800.0, 0.4, DistanceUnit.MILES,
+            MetricSource.GPS, TelemetryCoverage.COMPLETE, currentMilePaceSecondsPerMeter = 480.0 / 1_609.344)
+        assertEquals("8:00 /mi", runMetricsDisplayFor(gps).currentMilePace)
+        assertEquals("10:44 /mi", runMetricsDisplayFor(gps).averagePace)
+        assertEquals("8:00 /mi", runMetricsDisplayFor(gps.copy(displayUnit = DistanceUnit.KILOMETERS))
+            .currentMilePace)
+        assertEquals("—", runMetricsDisplayFor(gps.copy(currentMilePaceSecondsPerMeter = null))
+            .currentMilePace)
+    }
+
+    @Test
     fun `mile metrics use stable duration distance and pace text`() {
         val display = runMetricsDisplayFor(
             RunMetrics(

@@ -45,7 +45,8 @@ internal data class RunMetricsDisplay(
     val distance: String,
     val averagePace: String,
     val sourceLabel: String,
-    val gpsDistanceAvailable: Boolean = false
+    val gpsDistanceAvailable: Boolean = false,
+    val currentMilePace: String = "—"
 )
 
 /** A factual confirmation from the completed row, never a generated interpretation. */
@@ -133,6 +134,11 @@ internal fun runMetricsDisplayFor(metrics: RunMetrics): RunMetricsDisplay {
         active = metrics.activeMillis?.let(::formatDuration) ?: "—",
         distance = distance,
         averagePace = averagePace,
+        // The interval remains one mile even if the overall distance display uses kilometers.
+        currentMilePace = metrics.currentMilePaceSecondsPerMeter?.let { pace ->
+            val seconds = (pace * 1_609.344).roundToLong()
+            String.format(Locale.US, "%d:%02d /mi", seconds / 60L, seconds % 60L)
+        } ?: "—",
         gpsDistanceAvailable = metrics.source == MetricSource.GPS && metrics.distanceMeters != null,
         sourceLabel = when (metrics.source) {
             MetricSource.FIXTURE -> "Fixture metrics"

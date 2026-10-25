@@ -241,3 +241,137 @@ internal object RunSplitCalculator {
         val activeEnd: Long
     )
 }
+
+/**
+ * A live, unfinished mile, kept separate from completed/frozen split derivation above.
+ *
+ * The coordinator first certifies the whole GPS stream using its existing coverage policy.
+ * Only newly appended usable fixes are consumed here. A crossing is interpolated between
+ * those fixes on the monotonic Running timeline; paused time never enters its duration.
+ * The first 25 meters / 10 seconds of each mile are deliberately left blank: a tiny remainder
+ * just after a boundary is not yet a useful average. This is not a current-speed estimate.
+ */
+internal class LiveMilePaceCalculator {
+    private var ownerId: String? = null
+    private var consumedPoints = 0
+    private var previous: LiveKnot? = null
+    private var distance = 0.0
+    private var mileStartDistance = 0.0
+    private var mileStartActiveMillis = 0.0
+
+    fun calculate(
+        run: RunEntity,
+        transitions: List<RunTransitionEntity>,
+        points: List<RunLocationPointEntity>,
+        now: RunTimingMark?,
+        coverage: TelemetryCoverage
+    ): Double? {
+        if (run.state == StoredRunState.COMPLETED || run.trackingMode != RunTrackingMode.GPS ||
+            run.transitionHistoryComplete != true || coverage != TelemetryCoverage.COMPLETE ||
+            now == null || now.sessionId != run.timingSessionId
+        ) return null
+        if (ownerId != run.runId || points.size < consumedPoints) reset(run.runId)
+        return try {
+            derive(run, transitions, points, now)
+        } catch (_: IllegalArgumentException) {
+            reset(run.runId)
+            null
+        } catch (_: IllegalStateException) {
+            reset(run.runId)
+            null
+        } catch (_: ArithmeticException) {
+            reset(run.runId)
+            null
+        }
+    }
+
+    private fun derive(
+        run: RunEntity,
+        transitions: List<RunTransitionEntity>,
+        points: List<RunLocationPointEntity>,
+        now: RunTimingMark
+    ): Double? {
+        val intervals = mutableListOf<LiveInterval>()
+        var intervalStart: Long? = checkNotNull(run.startElapsedRealtimeMillis)
+        var activeTotal = 0L
+        fun closeInterval(end: Long) {
+            val start = checkNotNull(intervalStart)
+            check(end >= start)
+            intervals.add(LiveInterval(start, end, activeTotal))
+            activeTotal = Math.addExact(activeTotal, Math.subtractExact(end, start))
+            intervalStart = null
+        }
+        transitions.forEach { transition ->
+            check(transition.runId == run.runId && transition.timingSessionId == now.sessionId)
+            val mono = checkNotNull(transition.elapsedRealtimeMillis)
+            check(mono <= now.elapsedRealtimeMillis)
+            when (transition.transitionType) {
+                RunTransitionType.PAUSE -> closeInterval(mono)
+                RunTransitionType.RESUME -> {
+                    check(intervalStart == null)
+                    intervalStart = mono
+                }
+            }
+        }
+        if (run.state == StoredRunState.RUNNING) closeInterval(now.elapsedRealtimeMillis)
+        else check(intervalStart == null)
+
+        for (index in consumedPoints until points.size) {
+            val point = points[index]
+            check(point.runId == run.runId && point.sequenceNumber == index + 1)
+            if (!point.acceptedForDistance &&
+                point.rejectionReason != GpsSampleStatus.IGNORED_WITHIN_ACCURACY.name
+            ) continue
+            val mono = checkNotNull(point.elapsedRealtimeNanos) / 1_000_000L
+            val intervalIndex = intervals.indexOfFirst { mono in it.start..it.end }
+            check(intervalIndex >= 0)
+            val interval = intervals[intervalIndex]
+            val active = Math.addExact(interval.activeStart, Math.subtractExact(mono, interval.start))
+            if (point.acceptedForDistance) {
+                val nextDistance = checkNotNull(point.cumulativeDistanceMeters)
+                check(nextDistance.isFinite() && nextDistance >= distance)
+                distance = nextDistance
+            }
+            val current = LiveKnot(intervalIndex, mono, active, distance)
+            val before = previous
+            if (before != null && before.intervalIndex == intervalIndex &&
+                current.distance > before.distance
+            ) {
+                check(current.mono > before.mono)
+                var boundary = mileStartDistance + METERS_PER_MILE
+                while (boundary <= distance || abs(boundary - distance) <= 0.000001) {
+                    val fraction = ((boundary - before.distance) /
+                        (current.distance - before.distance)).coerceIn(0.0, 1.0)
+                    mileStartActiveMillis = before.active.toDouble() +
+                        (current.active - before.active).toDouble() * fraction
+                    mileStartDistance = boundary
+                    boundary += METERS_PER_MILE
+                }
+            }
+            previous = current
+        }
+        consumedPoints = points.size
+        val currentDistance = distance - mileStartDistance
+        val currentDuration = activeTotal.toDouble() - mileStartActiveMillis
+        if (currentDistance < MIN_DISTANCE_METERS || currentDuration < MIN_DURATION_MILLIS) return null
+        return (currentDuration / 1_000.0 / currentDistance).takeIf { it.isFinite() && it > 0.0 }
+    }
+
+    private fun reset(runId: String) {
+        ownerId = runId
+        consumedPoints = 0
+        previous = null
+        distance = 0.0
+        mileStartDistance = 0.0
+        mileStartActiveMillis = 0.0
+    }
+
+    private data class LiveInterval(val start: Long, val end: Long, val activeStart: Long)
+    private data class LiveKnot(val intervalIndex: Int, val mono: Long, val active: Long, val distance: Double)
+
+    private companion object {
+        const val METERS_PER_MILE = 1_609.344
+        const val MIN_DISTANCE_METERS = 25.0
+        const val MIN_DURATION_MILLIS = 10_000.0
+    }
+}
