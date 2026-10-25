@@ -39,6 +39,57 @@ online profiles require user ownership and access control. Separate local histor
 phones do not by themselves require accounts. Keep the current demo free of a mandatory sign-up;
 revisit earlier only for a concrete requirement, not as a prerequisite for finishing existing UI.
 
+## October 24 countdown voice warm-up — Complete for agreed scope; installed, measured and accepted
+
+Manley noticed about two seconds of looking at a still 10 before the countdown voice began.
+ElevenLabs requests were failing on the account side, so every countdown used the phone's own
+voice. A private logcat capture (`docs/local/countdown-lag-log.txt`, measured from the countdown
+service start) showed RunState's own work took 0.08 s before the voice request. The rest was the
+phone's speech engine: Motorola's freezer had frozen it, so it was unfrozen, loaded its voice to
+connect (the request waited 1.90 s), loaded it again to speak, and the first word played at
+3.27 s. "Starting in ten" ended and the count began moving at 4.57 s. The screen drew no new
+frame during that hold (4.58 s gap), so the wait looked like a freeze. For comparison, the
+October 23 cloud-clip logs suggest the accepted ElevenLabs countdown starts moving roughly
+2.5–3 s after the tap; that is an estimate, not a new measurement.
+
+The fix keeps one phone voice awake and rehearsed while Start is visible and hands it to the
+countdown at the tap. `PreparedCountdownVoice` and its `RehearsableVoice` contract live in
+`reflection/RunVoiceCues.kt`. `ReflectionSpeaker` now extends that contract with a no-op default,
+so injected test speakers are unchanged. `AndroidReflectionSpeaker.warmUp` waits until the engine
+is ready and never competes with a real line. The platform rehearses "Starting in ten." with
+`TextToSpeech.synthesizeToFile` into the private cache file `countdown-voice-warm-up.wav`, deleted
+when the engine finishes or stops and on close; rehearsal callbacks never reach a speech owner.
+Debug builds log `kind=WARM_UP` timing only. `RunStateApplication` owns the single
+`preparedCountdownVoice`. `MainActivity` prepares it while Start is visible (foreground, no
+active run, History and recap closed), keeps it during Countdown for the handoff, and releases it
+otherwise and on disposal; the sample countdown also adopts it. `RunTrackingService` takes it at
+the GPS countdown start and otherwise creates its own speaker exactly as before.
+
+Unchanged: the spoken words, intro gating and ten-second count, Three/Two/One, "Let's go,
+runner.", Start now, Cancel, background ownership, the ElevenLabs cache and path, and the
+backend. No new files. Changed: `RunHistoryScreen.kt`, `RunVoiceCues.kt`,
+`RunStateApplication.kt`, `MainActivity.kt`, `RunTrackingService.kt` and `RunVoiceCuesTest.kt`,
+which gains two cases: one prepared voice rehearses the opening once and belongs to the countdown
+once taken, and a missing or failing voice never blocks the countdown. The debug unit-test run
+passed all 804 tests with no failures, errors or skips, including both new cases. The update was
+installed in place on Moto `ZT422G8FT4`; its `WARM_UP` log lines confirm the new build was
+running.
+
+After the fix (`docs/local/countdown-lag-after.txt`, same reference point), the request waited
+20 ms for the voice (was 1.90 s), the first word played at 0.72 s (was 3.27 s) and the count
+began moving at 2.22 s (was 4.57 s). Getting ready on Start took about 10.5 s on the first launch
+after installation, because the engine process started from scratch, and about 2.6 s when
+re-preparing after Cancel. A tap before the warm-up finishes waits only for the remainder, never
+longer than before. Start stayed smooth while re-preparing (largest frame gap 55 ms). The first
+launch had two short stutters (0.22 s and 0.42 s) while Spotify and other launch work were also
+starting; their cause was not isolated. Manley's verdict: "it worked well." He committed and
+pushed the code as `c7a7e6e` (`fix(android): warm the phone voice on Start so the countdown
+speaks right away`); GitHub's master was verified at that commit.
+
+Remaining limits: Three/Two/One were not measured because the check was cancelled during 4, and
+no real run has used the fix yet. The ElevenLabs countdown path is unchanged and stays
+unavailable until the account issue is resolved.
+
 ## October 24 Tall frame native countdown and Active Run — Ready to test; installed on Moto
 
 Manley approved replacing Frosted Drift with the selected Tall frame countdown and its

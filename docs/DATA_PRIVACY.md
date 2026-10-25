@@ -183,8 +183,14 @@ and its request path are unchanged.
   within about five seconds, or preparation fails before playback begins, the phone's own voice
   speaks the same line. An error after playback begins stops that attempt rather than repeating
   the line in another voice.
-- **Storage:** neither the phone nor the backend writes generated audio to storage. Provider-side
-  retention follows the ElevenLabs account settings, as for the reflection voice.
+- **Storage:** neither the phone nor the backend writes generated run-voice audio to storage.
+  Provider-side retention follows the ElevenLabs account settings, as for the reflection voice.
+  **October 24 exception, phone voice only:** while Start is visible, the phone's own speech
+  engine silently rehearses the fixed line "Starting in ten." into a temporary file in RunState's
+  private cache (`countdown-voice-warm-up.wav`). The file is deleted as soon as the engine
+  finishes or stops, or when that voice is closed. It holds only that fixed line, with no run,
+  location, Energy, music, reflection or provider data. RunState sends it nowhere; it goes only to
+  the phone's own speech engine, like every phone-voice line.
 - **Cost:** every spoken line uses ElevenLabs credits, roughly a few hundred characters per run.
 
 ## Protected activities and optional notes — October 18, 2026
