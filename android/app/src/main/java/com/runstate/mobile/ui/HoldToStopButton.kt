@@ -72,7 +72,8 @@ internal const val HOLD_TO_STOP_MILLIS = 1_500
 internal fun HoldToStopButton(
     onHoldComplete: () -> Unit,
     enabled: Boolean,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    label: String = "Hold to stop"
 ) {
     val progress = remember { Animatable(0f) }
     val scope = rememberCoroutineScope()
@@ -134,7 +135,7 @@ internal fun HoldToStopButton(
             modifier = Modifier.padding(16.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Text(text = "Hold to stop", style = MaterialTheme.typography.labelLarge)
+            Text(text = label, style = MaterialTheme.typography.labelLarge)
 
             LinearProgressIndicator(
                 progress = { progress.value },

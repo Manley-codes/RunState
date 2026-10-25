@@ -1421,4 +1421,96 @@ class SpotifySongPassageTest {
         val long = spotifyAuthorizationErrorCategory("x".repeat(200))
         assertTrue(long.matches(Regex("[A-Za-z][A-Za-z0-9_]{0,79}")))
     }
+
+    @Test fun livePlayerAdvancesOnlyConnectedPlayingObservationsAndNeverPastTheSong() {
+        val state = SpotifyLivePlayerState(connected = true, durationMillis = 100_000,
+            positionMillis = 20_000, positionReceivedAtElapsedRealtime = 1_000,
+            paused = false, playbackSpeed = 1f)
+        assertEquals(22_500L, state.positionAt(3_500))
+        assertEquals(20_000L, state.copy(paused = true).positionAt(3_500))
+        assertEquals(20_000L, state.copy(connected = false).positionAt(3_500))
+        assertEquals(100_000L, state.positionAt(Long.MAX_VALUE))
+        assertEquals(20_000L, state.positionAt(500))
+        assertEquals(25_000L, state.copy(playbackSpeed = 2f).positionAt(3_500))
+    }
+
+    @Test fun livePlayerHandlesMissingPositionDurationAndInvalidPlaybackSpeed() {
+        val state = SpotifyLivePlayerState(connected = true, durationMillis = 100_000,
+            positionMillis = -1, positionReceivedAtElapsedRealtime = 1_000,
+            paused = false, playbackSpeed = 1f)
+        assertEquals(0L, SpotifyLivePlayerState().positionAt(4_000))
+        assertEquals(0L, state.copy(durationMillis = -1).positionAt(4_000))
+        assertEquals(0L, state.positionAt(4_000))
+        val positioned = state.copy(positionMillis = 20_000)
+        assertEquals(20_000L, positioned.copy(playbackSpeed = Float.NaN).positionAt(4_000))
+        assertEquals(20_000L, positioned.copy(playbackSpeed = Float.POSITIVE_INFINITY).positionAt(4_000))
+        assertEquals(20_000L, positioned.copy(playbackSpeed = -1f).positionAt(4_000))
+        assertEquals(100_000L, state.copy(positionMillis = Long.MAX_VALUE).positionAt(4_000))
+    }
+
+    @Test fun manualMusicCommandsRespectRestrictionsAndBothKindsOfAudioOwnership() {
+        val gate = SpotifyManualCommandGate()
+        assertNull(gate.begin(allowed = false, passageOwned = false))
+        assertNull(gate.begin(allowed = true, passageOwned = true))
+        val voice = Any()
+        assertTrue(gate.acquireAudio(voice))
+        assertNull(gate.begin(allowed = true, passageOwned = false))
+        assertFalse(gate.busy)
+        gate.releaseAudio(voice)
+        val token = requireNotNull(gate.begin(allowed = true, passageOwned = false))
+        assertTrue(gate.busy)
+        assertTrue(gate.owns(token))
+        assertNull("A rapid second tap cannot overlap the first SDK command.", gate.begin(true, false))
+        assertTrue(gate.finish(token))
+        assertFalse(gate.busy)
+    }
+
+    @Test fun duplicateManualCallbacksCannotUnlockLaterCommandsOrSpeechBlock() {
+        val gate = SpotifyManualCommandGate()
+        val oldToken = requireNotNull(gate.begin(true, false))
+        assertTrue(gate.finish(oldToken))
+        val newToken = requireNotNull(gate.begin(true, false))
+        assertFalse(gate.finish(oldToken))
+        assertTrue(gate.busy)
+        assertTrue(gate.finish(newToken))
+        assertTrue(gate.acquireAudio(Any()))
+        assertNull("Finishing an earlier tap must not revoke announcement ownership.", gate.begin(true, false))
+    }
+
+    @Test fun audioOwnersCannotReleaseEachOthersManualControlBlock() {
+        val gate = SpotifyManualCommandGate()
+        val voice = Any()
+        val passage = Any()
+        assertTrue(gate.acquireAudio(voice))
+        assertTrue(gate.acquireAudio(voice))
+        assertTrue(gate.acquireAudio(passage))
+        assertNull(gate.begin(true, false))
+        gate.releaseAudio(voice)
+        assertNull("A finishing voice cannot enable controls during passage cleanup.", gate.begin(true, false))
+        gate.releaseAudio(Any())
+        assertTrue(gate.blocked)
+        gate.releaseAudio(passage)
+        assertFalse(gate.blocked)
+        val token = requireNotNull(gate.begin(true, false))
+        assertFalse("Focus must not be acquired over a pending Spotify command.", gate.acquireAudio(voice))
+        gate.finish(token)
+        assertTrue(gate.acquireAudio(voice))
+        assertNull(gate.begin(true, false))
+    }
+
+    @Test fun disconnectedTimedOutCommandCannotDisableCoreVoiceOrUnlockANewerTap() {
+        val gate = SpotifyManualCommandGate()
+        val expired = requireNotNull(gate.begin(true, false))
+        assertFalse(gate.acquireAudio(Any()))
+        gate.invalidateConnection()
+        val voice = Any()
+        assertTrue("Disconnect after the bounded timeout restores core voice availability.", gate.acquireAudio(voice))
+        assertFalse(gate.finish(expired))
+        gate.invalidateConnection()
+        assertTrue("Disconnect must not revoke an existing voice owner's protection.", gate.blocked)
+        gate.releaseAudio(voice)
+        val current = requireNotNull(gate.begin(true, false))
+        assertFalse("A late result from the old remote cannot unlock a new tap.", gate.finish(expired))
+        assertTrue(gate.owns(current))
+    }
 }

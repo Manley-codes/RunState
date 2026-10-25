@@ -39,6 +39,203 @@ online profiles require user ownership and access control. Separate local histor
 phones do not by themselves require accounts. Keep the current demo free of a mandatory sign-up;
 revisit earlier only for a concrete requirement, not as a prerequisite for finishing existing UI.
 
+## October 25 temporary native dual music player — Ready to test; installed on Moto
+
+Manley explicitly authorizes both accepted browser music layouts in the Android app for temporary
+comparison before choosing one. This supersedes the earlier browser-only restriction for this
+music-player scope; the native countdown and its accepted voice timing remain unchanged.
+**Status: Ready to test — installed on Moto ZT422G8FT4.** Native layout and controlled behavior
+checks passed; real Spotify playback/field use and Manley's final layout choice remain. This is
+not confirmation that AfroTech essentials are complete.
+
+Existing Settings gains **Player artwork: Headphones (default) / Album cover**, remembered locally.
+Tapping Music opens the chosen treatment inside the existing visualizer; close/back returns to
+distance. Both keep the larger inset skip targets, short read-only wavy progress, title/artist,
+Spotify attribution/link and pale play/pause pod. Music pause/skip is independent of run pause.
+The ring remains decorative, not audio analysis. No native sample tracks or downloaded sample covers.
+
+The pinned App Remote SDK supplies actual track metadata, position, restrictions and bitmap art.
+Missing artwork/connection states remain honest; stale images and callbacks cannot update a newer
+track or connection. Manual commands serialize through acknowledgement and a refreshed player state.
+Per-owner native audio gates cover announcements, shared completion speech, instrumentals and
+snippet restoration, including its native fallback. A pending manual command may gracefully deny
+one simultaneous focus request. At five seconds, a stalled command disconnects and clears the
+remote state/gate so core voice cannot remain disabled indefinitely; no automatic command replay.
+Disconnect invalidates RunState state, but does not prove Spotify retracts an already-sent command.
+
+Requested follow-up is included locally: Average pace uses an 84dp base height in its normal
+horizontal layout, retaining larger-text room; **Finish run** pauses first, then **Hold to finish
+run** uses the existing 1.5-second protected completion flow. User design review remains.
+Three necessary files: `music/SpotifyLivePlayerState.kt`, `ui/ActiveRunMusicPlayer.kt` and
+`res/drawable/spotify_icon_white.xml` (under the Android app's existing source/resource roots).
+
+Validation: debug/release each passed 812 JVM tests; debug, release and instrumentation APKs
+built. All 26 selected silent Moto checks passed, covering both player presentations, independent
+music/run actions, missing artwork/connection, large text, Settings, pause/hold completion and
+speech cleanup. Four Day/Night music captures plus compact pace/finish layout were inspected;
+album captures use bundled headphones artwork as an explicit fixture, not a real Spotify fetch.
+Actual Settings → Music → Player artwork was inspected without changing the saved choice.
+In-place install preserved eight completed runs, every field in all 12 business tables and all
+five existing preference files (private preinstall/after logical receipts, integrity OK/FK0).
+Private backups/logs/captures are under ignored `docs/local/assembly-2026-10-25/`; temporary test
+package removed, main app reopened and left at the artwork selector. No run, voice or Spotify
+playback was started. No Git or backend/deployment mutations. Initial build overlapped a final
+test/source edit; the settled-source rebuild and all final checks passed.
+
+Temporary implementation is not Spotify approval: circular cropping/controls over supplied art
+conflict with the published guidance, and headphones-only omission remains unresolved for
+production. Keep the source-backed findings below. No backend, Git or deployment action is implied.
+
+## October 25 in-circle music player — Earlier browser experiments
+
+The records below describe the browser checkpoints preceding the native authorization above.
+
+**Latest small refinement:** Manley likes both versions and prioritizes easier song switching.
+Both browser variants now have26px previous/next icons (was16),52px tap targets (was44),
+and a62px progress line (was104). The centered control row narrows to170px, bringing both
+arrows inward and clear of the equalizer; rowtop205 avoids the artist and pause controls.
+Build/runtime checks and browser switching/visual checks passed; two existing comparison
+captures refreshed. No new files or phone implementation. Native choice remains pending.
+
+**Latest follow-up — Android system-card reference, browser only:** Manley prefers the original
+RunState music image, then supplied his Android system media card showing No Role Modelz by
+J. Cole. He confirmed its background is album artwork and explicitly requested both new visual
+studies while the permissions question remains open: **circular full album background** and
+**original Start headphones artwork**. Both use a slimmer system-card-inspired arrangement:
+small official Spotify icon, track title and artist, pale rounded-square play/pause at the right,
+and previous / read-only wavy progress / next along the bottom. No separate square cover thumbnail.
+The existing visualizer, metrics and independent run controls remain the surrounding design.
+
+The initial public-artwork sample is No Role Modelz / J. Cole. Two necessary local preview assets
+were added: `j-cole-forest-hills-drive.jpg` and `spotify-icon-white.svg`. These are silent browser
+studies at `http://127.0.0.1:5192/`, not a connected Spotify session or native implementation.
+Build and browser QA passed for this silent study: both layouts in Day/Night, matching track
+switching/links, independent run/music pause, flat paused wave, preview freeze and close/Escape
+focus return. No console warnings/errors. Four slim comparison captures saved in the preview.
+No phone, backend or Git action is part of this change. Earlier Album colors and intact-cover headphones comparisons
+remain documented below; they are not the current pair requested by Manley.
+
+Research distinction: [Android's system player](https://developer.android.com/media/implement/surfaces/mobile)
+reads media-session artwork and metadata, and its [SystemUI layout](https://android.googlesource.com/platform/frameworks/base/+/303c96cb1da15ef994a39e5faba2b70da99806e7/packages/SystemUI/res/layout/media_session_view.xml)
+explicitly crops/clips the artwork behind its controls. That explains the rendering mechanism;
+it does not establish permission for RunState to reproduce it using Spotify's developer tools.
+No published app exemption or specific Google/Android agreement was found. Spotify's
+[design guidance](https://developer.spotify.com/documentation/design) still prohibits circular
+cropping and controls over supplied album art. Its limited-space omission allowance does not
+clearly reconcile with [Policy II.5](https://developer.spotify.com/policy), requiring relevant
+cover and metadata for streaming apps; [Terms II.14](https://developer.spotify.com/terms)
+include controlling a background Spotify app. Therefore the cropped-cover study conflicts with
+the public artwork guidance, and the headphones-only study's omission remains unresolved for
+production. Neither study is Spotify-approved. Terms IX.1 recognizes separately executed written
+agreements, but no such permission is recorded for this project. Preserve the visual exploration without
+presenting Android's system behavior as a loophole or approving either treatment for shipping.
+
+**Earlier guideline-alternative comparison:** Manley prefers the integrated circular image, but explicitly requested
+current Spotify rules/legitimate alternatives before further work. Browser Music layout now
+offers **Album colors** (intact square cover on a coordinated round color surface) and
+**RunState headphones** (his existing Start artwork leads, with a separate intact cover beside
+the song details). Both retain the ring/metrics, independent sample controls, official full
+logo and track links. Covers have 4px corners, no crops/filters/overlays; the read-only progress
+bar has no seek thumb. Transport moved inward to leave keyboard-focus clearance. Previous
+circular-cover concept is preserved in the full-art captures, no longer an active choice.
+
+Research checked October25 against [Design](https://developer.spotify.com/documentation/design),
+[Policy](https://developer.spotify.com/policy) and [Terms](https://developer.spotify.com/terms):
+- Circular cropping and controls over supplied artwork are explicitly disallowed; background
+  color extraction is expressly supported. No published crop exemption was found.
+- Design guidance permits omitting art in limited space, but Policy II.5 requires relevant
+  cover/metadata during streaming, and Terms II.14 includes remote playback control. Retain
+  the real cover rather than claim the omission exception settles this use case.
+- Treating RunState's own illustration as interface decoration, not replacement album art,
+  is our interpretation. Neither comparison is officially approved by Spotify.
+- Terms IX.1 recognizes a separately executed written agreement; no automatic waiver found.
+- Keep the ambient ring independent of music/audio. Native controls must honor account
+  restrictions and link into Spotify; this prototype is silent and not a whole-app policy audit.
+
+Only existing prototype source/docs changed; no new source/assets/native work. Four new local
+comparison captures cover both layouts/themes. TypeScript/Vite and all28 runtime checks pass.
+Day/Night, both track identities/links and independent pause behavior verified in browser.
+Await Manley's design feedback; no phone, Git or deployment action.
+
+Manley paused countdown refinements to try a recognizable Spotify Now Playing view inside
+the Active Run visualizer. At `http://127.0.0.1:5192/`, tapping Music replaces the distance
+reading with intact square album art, Spotify attribution, title/artist, progress and
+previous/play-pause/next. The small close control, Escape or the Music tile restores distance.
+Day/Night retain the accepted ring, run timer, run pause and metric positions. This is a
+silent sample interaction, not embedded Spotify UI or a connected account. HALL OF FAME and
+CALL SPITTA use public Spotify artwork and sample playback state; no audio is fetched.
+
+Browser checks confirmed both covers/titles, previous/next, independent run/music pause,
+stable progress during preview pause, retained song position on close/reopen, Escape/focus
+return and both themes. No browser warnings/errors; TypeScript/Vite and all 28 protected
+runtime file checks passed. Existing preview files were edited; four necessary media assets
+(two covers and official black/white Spotify logos) and two review captures were saved locally.
+Native code, phone, backend and Git were not changed by this experiment.
+
+At that earlier checkpoint, integration was deferred: the pinned App Remote SDK had previous/next
+and image APIs, but native Music only opened Spotify. The requested dedicated observable state,
+account restrictions and coordination with exclusive audio are now being implemented above;
+the former requirement to wait for native authorization has been satisfied for this temporary pair.
+
+## October 25 design work returned to the browser — Current workflow
+
+Manley explicitly moved these countdown design adjustments into the existing browser phone at
+`http://127.0.0.1:5192/`, and wants further design work there until he chooses what to implement.
+The native centering and flat-dial experiments below have been removed from the phone and the two
+native source/test files restored to committed `920ddcf`. Claude's voice warm-up remains intact.
+Debug/test builds and four silent presentation checks passed; the in-place Moto restoration
+preserved all eight completed runs, all 12 table hashes and five preference files. Private
+receipts are `browser-only-rollback-*` in `../local/assembly-2026-10-25/`.
+
+The browser now reflects native Active Run's full-width larger Average pace panel and bottom
+This mile/Music pairing, with calories removed. External Current app / Design draft controls
+compare the installed baseline with the centered countdown and flat themed Start now dial.
+Day/Night, Replay and Pause/Resume controls remain; earlier variants are retained in a collapsed
+section. The draft dial's twelve marks use the same elapsed clock as the symbols. These are
+silent sample readings and visual music/map references, not a live phone emulator. No new
+native design implementation or deployment is approved by editing the browser.
+
+## October 25 flat countdown Start now control — Moved to browser; native experiment reverted
+
+Manley requested removing the Starting-in line and adding a flat version of Start's circular
+dial below the centered countdown. The 88-unit dial reuses its twelve marks, hollow play shape
+and small center accent, without shadows, shading or a bevel. Day uses gold/teal/sage; Night
+uses charcoal/steel with a restrained lavender accent. Its marks contract, turn and change tone
+on the existing countdown beat; the face, play symbol and label stay steady. Reduced motion
+uses settled marks, and the joined introduction holds the same settled beat as the other art.
+
+The explicit dial/label now owns Start now; the numeral and side squares are decorative.
+The old tap-the-number hint is removed, and Cancel sits below the dial. The actual enabled
+gate and callback are preserved. During StartingRun, the dial is disabled and reads
+Starting…; it disappears on Active Run. The spoken introduction, timing, warmed voice,
+run ownership and final Active Run layout are unchanged.
+
+Debug app/test builds passed, as did six existing silent Moto checks covering Day/Night,
+physical numeral-versus-button taps, cancellation, unadmitted/StartingRun disabled states,
+early pause and the Start-now root callback. Both themed captures were inspected. The in-place
+update preserved all eight completed runs, all 12 database tables and all five preference
+files through the checks. Private receipts/captures use `flat-start-*` under
+`../local/assembly-2026-10-25/`. Existing source/test files only; no new tracked files,
+audio audition, real run, Git actions or backend changes. User visual acceptance remains.
+
+## October 25 countdown vertical placement — Moved to browser; native experiment reverted
+
+Manley requested lowering the countdown section toward the screen center. The number, Tall
+frame, six energy-symbol squares, matching Start-now hit area and Starting-in label now share
+an origin 80 design units below the previous position, scaled to screen width. Day and Night
+both use it. Header, Cancel, hint and final Active Run positions stay in place; assembly begins
+from the lowered shapes so there is no positional snap on handoff. Speech, cadence and run
+ownership are unchanged, including Claude's accepted voice warm-up below.
+
+Debug app/test builds and four existing silent presentation checks passed on Moto
+`ZT422G8FT4`: Day/Night captures and live facts, initial ten/Start-now/Cancel, StartingRun, and
+early pause during assembly. Both countdown screenshots were inspected. The app was updated
+in place; all eight completed runs, all values across 12 database tables and all five preference
+files matched before/after the checks. Private snapshots and captures use the
+`centered-countdown-*` / `centered-assembly-*` names in `../local/assembly-2026-10-25/`.
+No new source/test/assets, no audio audition or real run, and no Git or backend actions.
+User visual acceptance remains; this is a small user-owned commit checkpoint.
+
 ## October 24 countdown voice warm-up — Complete for agreed scope; installed, measured and accepted
 
 Manley noticed about two seconds of looking at a still 10 before the countdown voice began.

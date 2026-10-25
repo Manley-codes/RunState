@@ -8,7 +8,83 @@ status: v0.4 — August 13 working proof recorded; execution remains open and is
 
 # RunState — Creative Direction (v0.4)
 
+## October 25 — temporary native music-player comparison
+
+**Ready to test; installed on Moto.** Manley approves implementing both slim in-circle studies on
+the phone temporarily, then choosing between them in existing Settings → **Player artwork**:
+**Headphones** (default, original RunState art) or **Album cover** (actual Spotify artwork).
+Preserve the accepted ring, Day/Night harmony, larger inward skip controls, shorter wavy progress,
+small Spotify attribution and compact title/artist/pause layout. Opening/closing the player swaps
+with distance; song controls do not pause the run. Use real SDK observations, never sample songs.
+
+This approval supersedes the earlier browser-only music restriction, not the deferred countdown
+experiments. Native countdown placement, controls and accepted spoken timing stay intact.
+The requested follow-up locally reduces the normal Average pace box to an 84dp base height and
+adds an explicit Finish run entry leading to pause and the existing hold-to-finish action.
+Final builds, 812 JVM checks per variant and 26 silent phone checks passed; both layouts in both
+themes and the actual Settings selector were inspected. Native Spotify playback in real use and
+Manley's phone review still remain; browser acceptance is not field verification. Details are in
+`project_current_state.md` §October 25 temporary native dual music player.
+
+Both artwork treatments remain temporary experiments with unresolved Spotify production approval.
+Android's system card does not establish a cropping/overlay exemption for RunState. Preserve the
+earlier research below and distinguish design acceptance from provider permission.
+
 ## October 24 — three live countdown assembly studies
+
+The following music and browser-only notes preserve earlier checkpoints; the limited native
+authorization above is the current decision for the two music-player layouts.
+
+**October 25 music-player exploration — browser only, not accepted yet:** countdown refinement
+is paused. Manley wants to first try Spotify's recognizable Now Playing anatomy adapted inside
+the existing visualizer: album cover, song details and previous/play-pause/next, with lower-priority
+items omitted to fit. Try this fuller version before simplifying. Music opens it in place of
+distance; a small close control or Music restores the metric. The ring and other metrics retain
+their accepted appearance. Current preview uses public sample artwork and silent simulated
+controls; it is not Spotify embedded or connected. Native implementation remains deferred.
+
+**Latest music follow-up — Android system-card study:** Manley prefers his Start headphones
+artwork, then references the slimmer Android media card playing No Role Modelz / J. Cole. He
+explicitly requests both a circular full-album-background version and a version led by the
+original RunState headphones art, even while the artwork-permission question is investigated.
+Use the same restrained layout in both: small official Spotify icon, song title and artist,
+pale rounded-square play/pause pod at the right, and previous / slim wavy progress / next below.
+Remove the separate square album thumbnail. The wave is a read-only sample progress treatment,
+not an audio-reactive signal; preserve the accepted surrounding ring and run metrics. These are
+silent browser-only studies at 5192, not native changes or a connected Spotify player.
+
+Android's system rendering is verified, but no public Spotify exemption or special agreement
+allowing RunState's circular cover treatment was found. The cover study conflicts with published
+crop/overlay guidance; the headphones-only artwork omission remains unresolved for production.
+Do not label either Spotify-approved. Detailed sources and limits are in project_current_state.md.
+New local preview assets are the public J. Cole cover and official white Spotify icon. Build
+and browser QA passed for both themes/layouts and the silent controls; four slim comparison
+captures retained. No final design selection or native implementation approval.
+
+Control refinement: Manley likes both studies and wants changing songs easier to reach.
+The shared previous/next icons are now26px with52px tap areas. Shortening the wavy progress
+line to62px brings the buttons inward, away from the equalizer, while keeping the slim layout.
+Browser checks/build passed; no native implementation authorized by this refinement.
+
+Earlier follow-up: first pass felt insufficiently natural, particularly skip controls near the ring.
+Manley liked the subsequent circular-art version, then requested verified Spotify rules and
+allowed alternatives. Earlier browser comparison: **Album colors** uses a complete square
+cover inside a coordinated color circle; **RunState headphones** makes his Start music art
+dominant, with a separate square cover/song row. Controls stay inset and do not overlap covers.
+Both preserve the accepted ring and surrounding metrics. The former circular-cover treatment
+survives in full-art screenshots only. No new candidate accepted for native yet. Policy findings
+and remaining interpretation/approval limits are in project_current_state.md's music section.
+
+**October 25 workflow update — browser first until chosen:** Manley explicitly asks to remove
+the latest native countdown experiments and continue in the browser phone until he decides.
+The phone was restored to the committed layout while retaining Claude's voice improvements.
+The browser's Active Run destination is now updated to the native full-width Average pace
+panel and This mile/Music bottom row, without calories. Current app / Design draft compares
+the restored countdown baseline with the recent 80-unit centering and flat themed Start now
+dial. Its twelve internal marks share the countdown beat; the outer dial/label stay steady.
+Replay, Pause/Resume and Day/Night remain outside the phone. Prior variants stay available under
+Earlier countdown studies. These browser edits do not authorize another native installation;
+wait for Manley's design choice. Browser files remain at the existing 5192 preview path below.
 
 **Native integration approved and installed; user review pending:** Manley explicitly requests replacing the
 phone countdown with Tall frame and bringing the assembly into Active Run. This supersedes
@@ -18,7 +94,7 @@ mile's average pace and must use real data. Retain the accepted Night look and s
 palette. Auto/Day/Night belongs in existing Settings. In-ring Spotify controls remain deferred;
 Music currently opens Spotify. Native verification (28 silent device checks, five inspected
 captures and preserved saved data) is recorded in `project_current_state.md`. The accepted
-browser remains available for comparison; it still contains the older sample calorie layout.
+browser remains available for comparison; its outdated calorie layout was synchronized October 25.
 The following notes preserve the exploration chronology rather than the current build status.
 
 **Latest decision — Tall frame selected:** Manley explicitly loves the refined magnetic motion

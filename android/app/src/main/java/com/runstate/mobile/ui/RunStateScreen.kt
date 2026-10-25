@@ -42,6 +42,8 @@ import com.runstate.mobile.data.local.RunIntention
 import com.runstate.mobile.data.local.EffortRatingScale
 import com.runstate.mobile.location.GpsSignalStatus
 import com.runstate.mobile.location.GpsMapEvidence
+import com.runstate.mobile.music.SpotifyLivePlayerState
+import com.runstate.mobile.settings.RunMusicPlayerLayout
 import com.runstate.mobile.ui.theme.RunStateTheme
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
@@ -156,7 +158,14 @@ internal fun RunStateScreen(
     onSelectEffortRating: (Int?) -> Unit = {},
     runAppearanceDay: Boolean = java.time.LocalTime.now().hour in 7 until 19,
     countdownTickKey: Long = 0L,
-    countdownCadenceActive: Boolean = true
+    countdownCadenceActive: Boolean = true,
+    musicPlayer: SpotifyLivePlayerState = SpotifyLivePlayerState(),
+    musicPlayerLayout: RunMusicPlayerLayout = RunMusicPlayerLayout.HEADPHONES,
+    onPreviousTrack: () -> Unit = {},
+    onNextTrack: () -> Unit = {},
+    onToggleMusicPlayback: () -> Unit = {},
+    onConnectMusic: () -> Unit = {},
+    onOpenMusicTrack: (String?) -> Unit = {}
 ) {
     val state = model.state
 
@@ -261,7 +270,14 @@ internal fun RunStateScreen(
                 onOpenRunMap = onOpenRunMap,
                 onOpenSpotify = onOpenSpotify,
                 countdownTickKey = countdownTickKey,
-                countdownCadenceActive = countdownCadenceActive
+                countdownCadenceActive = countdownCadenceActive,
+                musicPlayer = musicPlayer,
+                musicPlayerLayout = musicPlayerLayout,
+                onPreviousTrack = onPreviousTrack,
+                onNextTrack = onNextTrack,
+                onToggleMusicPlayback = onToggleMusicPlayback,
+                onConnectMusic = onConnectMusic,
+                onOpenMusicTrack = onOpenMusicTrack
             )
             return@Box
         }

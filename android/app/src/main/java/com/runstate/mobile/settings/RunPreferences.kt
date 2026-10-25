@@ -17,6 +17,9 @@ internal enum class RunAppearance {
     }
 }
 
+/** Temporary, runner-selectable Active Run player treatments. Neither grants music consent. */
+internal enum class RunMusicPlayerLayout { HEADPHONES, ALBUM }
+
 /** Choices made by the runner, separate from Android permission grants and individual runs. */
 internal data class RunPreferences(
     val observeMusic: Boolean = false,
@@ -25,7 +28,8 @@ internal data class RunPreferences(
     val captureWeather: Boolean = false,
     val findSongSnippets: Boolean = false,
     val distanceAnnouncements: Boolean = true,
-    val appearance: RunAppearance = RunAppearance.AUTO
+    val appearance: RunAppearance = RunAppearance.AUTO,
+    val musicPlayerLayout: RunMusicPlayerLayout = RunMusicPlayerLayout.HEADPHONES
 ) {
     init {
         require(!shareMusicInReflection || observeMusic) {
@@ -67,7 +71,10 @@ internal class StoredRunPreferences(
             distanceAnnouncements = values.readBoolean(DISTANCE_ANNOUNCEMENTS) ?: true,
             appearance = values.readString(RUN_APPEARANCE)?.let { stored ->
                 RunAppearance.entries.firstOrNull { it.name == stored }
-            } ?: RunAppearance.AUTO
+            } ?: RunAppearance.AUTO,
+            musicPlayerLayout = values.readString(MUSIC_PLAYER_LAYOUT)?.let { stored ->
+                RunMusicPlayerLayout.entries.firstOrNull { it.name == stored }
+            } ?: RunMusicPlayerLayout.HEADPHONES
         )
     }
 
@@ -79,7 +86,8 @@ internal class StoredRunPreferences(
             CAPTURE_WEATHER to preferences.captureWeather,
             FIND_SONG_SNIPPETS to preferences.findSongSnippets,
             DISTANCE_ANNOUNCEMENTS to preferences.distanceAnnouncements
-        ), mapOf(RUN_APPEARANCE to preferences.appearance.name)))
+        ), mapOf(RUN_APPEARANCE to preferences.appearance.name,
+            MUSIC_PLAYER_LAYOUT to preferences.musicPlayerLayout.name)))
     }
 
     private inline fun <T> storageOperation(operation: () -> T): T = try {
@@ -96,6 +104,7 @@ internal class StoredRunPreferences(
         const val FIND_SONG_SNIPPETS = "find_song_snippets"
         const val DISTANCE_ANNOUNCEMENTS = "distance_announcements"
         const val RUN_APPEARANCE = "run_appearance"
+        const val MUSIC_PLAYER_LAYOUT = "music_player_layout"
     }
 }
 

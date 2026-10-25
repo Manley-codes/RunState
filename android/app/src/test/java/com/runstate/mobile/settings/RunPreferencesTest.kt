@@ -8,6 +8,36 @@ import org.junit.Test
 
 class RunPreferencesTest {
     @Test
+    fun musicLayoutDefaultsWithoutEnablingObservationAndSurvivesReopening() {
+        val values = FakeValues()
+        val store = StoredRunPreferences(values)
+        assertEquals(RunMusicPlayerLayout.HEADPHONES, store.load().musicPlayerLayout)
+        assertEquals(0, values.commits)
+        values.savedStrings["music_player_layout"] = "retired-layout"
+        assertEquals(RunMusicPlayerLayout.HEADPHONES, store.load().musicPlayerLayout)
+        val before = RunPreferences(appearance = RunAppearance.NIGHT, distanceAnnouncements = false)
+        RunMusicPlayerLayout.entries.forEach { layout ->
+            store.save(before.copy(musicPlayerLayout = layout))
+            assertEquals(before.copy(musicPlayerLayout = layout), StoredRunPreferences(values).load())
+            assertFalse(store.load().observeMusic)
+            assertFalse(store.load().shareMusicInReflection)
+        }
+    }
+
+    @Test
+    fun failedMusicLayoutSaveRetainsPreviousLayoutAndConsent() {
+        val values = FakeValues()
+        val store = StoredRunPreferences(values)
+        val before = RunPreferences(observeMusic = true, musicPlayerLayout = RunMusicPlayerLayout.ALBUM)
+        store.save(before)
+        values.acceptCommit = false
+        assertThrows(IllegalStateException::class.java) {
+            store.save(before.copy(musicPlayerLayout = RunMusicPlayerLayout.HEADPHONES, observeMusic = false))
+        }
+        assertEquals(before, StoredRunPreferences(values).load())
+    }
+
+    @Test
     fun appearanceDefaultsToAutoForExistingPreferencesWithoutWriting() {
         val values = FakeValues(mutableMapOf("observe_music" to true))
         assertEquals(RunAppearance.AUTO, StoredRunPreferences(values).load().appearance)

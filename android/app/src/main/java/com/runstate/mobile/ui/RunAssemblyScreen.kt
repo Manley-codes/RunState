@@ -5,6 +5,7 @@ import android.database.ContentObserver
 import android.os.Handler
 import android.os.Looper
 import android.provider.Settings
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
@@ -20,6 +21,7 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.MotionDurationScale
@@ -61,6 +63,8 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.runstate.mobile.R
 import com.runstate.mobile.location.GpsSignalStatus
+import com.runstate.mobile.music.SpotifyLivePlayerState
+import com.runstate.mobile.settings.RunMusicPlayerLayout
 import kotlinx.coroutines.currentCoroutineContext
 import kotlin.math.PI
 import kotlin.math.cos
@@ -70,6 +74,7 @@ import kotlin.math.sin
 
 internal const val ACTIVE_RUN_SPLIT_TAG = "activeRunSplit"
 internal const val ACTIVE_RUN_MUSIC_TAG = "activeRunMusic"
+internal const val ACTIVE_RUN_FINISH_TAG = "activeRunFinish"
 
 private val AssemblyNumberFont = FontFamily(Font(R.font.anton_regular))
 private val AssemblyEase = CubicBezierEasing(.22f, .85f, .16f, 1f)
@@ -156,12 +161,22 @@ internal fun RunAssemblyScreen(
     onOpenSpotify: () -> Unit,
     modifier: Modifier = Modifier,
     countdownTickKey: Long = 0L,
-    countdownCadenceActive: Boolean = true
+    countdownCadenceActive: Boolean = true,
+    musicPlayer: SpotifyLivePlayerState = SpotifyLivePlayerState(),
+    musicPlayerLayout: RunMusicPlayerLayout = RunMusicPlayerLayout.HEADPHONES,
+    onPreviousTrack: () -> Unit = {},
+    onNextTrack: () -> Unit = {},
+    onToggleMusicPlayback: () -> Unit = {},
+    onConnectMusic: () -> Unit = {},
+    onOpenMusicTrack: (String?) -> Unit = {}
 ) {
     val counting = state == RunUiState.Countdown
     val starting = state == RunUiState.StartingRun
     val active = state == RunUiState.ActiveRunning || state == RunUiState.ActivePaused
     val paused = state == RunUiState.ActivePaused
+    var musicOpen by rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(active) { if (!active) musicOpen = false }
+    BackHandler(active && musicOpen) { musicOpen = false }
     val colors = remember(day) { AssemblyColors(day) }
     val motion = rememberAssemblyMotion()
     val reduced = !motion.systemEnabled
@@ -236,10 +251,11 @@ internal fun RunAssemblyScreen(
             val shift = extra * .7f
             val heroY = 214f + shift
             val paceY = 546f + shift
-            val paceH = 104f + extra
+            val stackedPace = LocalDensity.current.fontScale > 1.3f || maxWidth.value < 340f
+            val paceH = if (active && !stackedPace) 84f else 104f + extra
             val bottomY = paceY + paceH + 12f
             val bottomH = 92f + extra
-            val designHeight = bottomY + bottomH + 20f
+            val designHeight = bottomY + bottomH + if (active) 76f else 20f
             val contentHeight = max(surfaceHeight, designHeight * unit)
             val topInset = max(0f, (contentHeight - designHeight * unit) / 2f)
             val scroll = rememberScrollState()
@@ -328,7 +344,18 @@ internal fun RunAssemblyScreen(
                                     letterSpacing = (1.7f * unit).sp,
                                     modifier = Modifier.padding(start = (34 * unit).dp, top = 8.dp))
                             }
-                            Column(Modifier.offset(x = (62 * unit).dp, y = ((heroY + 40) * unit).dp)
+                            if (musicOpen) {
+                                ActiveRunMusicPlayer(
+                                    player = musicPlayer, layout = musicPlayerLayout,
+                                    reducedMotion = reduced, foreground = motion.foreground,
+                                    onClose = { musicOpen = false }, onOpenSpotify = onOpenSpotify,
+                                    onConnect = onConnectMusic, onOpenTrack = onOpenMusicTrack,
+                                    onPrevious = onPreviousTrack, onNext = onNextTrack,
+                                    onTogglePlayback = onToggleMusicPlayback,
+                                    modifier = Modifier.offset(x = (42 * unit).dp, y = (heroY * unit).dp)
+                                        .size((309 * unit).dp).reveal(clock, .3f, reduced)
+                                )
+                            } else Column(Modifier.offset(x = (62 * unit).dp, y = ((heroY + 40) * unit).dp)
                                 .size((269 * unit).dp, (229 * unit).dp)
                                 .testTag(ACTIVE_RUN_CIRCLE_TAG).reveal(clock, .3f, reduced),
                                 horizontalAlignment = Alignment.CenterHorizontally,
@@ -349,12 +376,18 @@ internal fun RunAssemblyScreen(
                                 .padding(horizontal = (21 * unit).dp)
                                 .reveal(clock, .38f, reduced).testTag(ACTIVE_RUN_METRICS_TAG),
                                 verticalAlignment = Alignment.CenterVertically) {
-                                Column(Modifier.weight(1f)) {
+                                if (stackedPace) Column(Modifier.weight(1f)) {
                                     Text("Average pace", color = colors.label, fontSize = (15 * unit).sp,
                                         fontWeight = FontWeight.Medium)
                                     Spacer(Modifier.height(3.dp))
                                     AssemblyFittedReading(metrics?.averagePace ?: "—", colors.ink, 49f * unit,
                                         CompletionNumberFont, Modifier.fillMaxWidth(), readingTag = ACTIVE_RUN_PACE_TAG)
+                                } else {
+                                    Text("Average pace", color = colors.label, fontSize = (15 * unit).sp,
+                                        fontWeight = FontWeight.Medium, modifier = Modifier.width((110 * unit).dp))
+                                    Spacer(Modifier.width((12 * unit).dp))
+                                    AssemblyFittedReading(metrics?.averagePace ?: "—", colors.ink, 49f * unit,
+                                        CompletionNumberFont, Modifier.weight(1f), readingTag = ACTIVE_RUN_PACE_TAG)
                                 }
                             }
                             Column(Modifier.offset(x = (43 * unit).dp, y = (bottomY * unit).dp)
@@ -370,8 +403,8 @@ internal fun RunAssemblyScreen(
                                 .clip(RoundedCornerShape(topEnd = 10.dp, bottomEnd = 10.dp))
                                 .reveal(clock, .435f, reduced)
                                 .testTag(ACTIVE_RUN_MUSIC_TAG)
-                                .clickable(role = Role.Button, onClick = onOpenSpotify)
-                                .semantics { contentDescription = "Open Spotify" }
+                                .clickable(role = Role.Button, onClick = { musicOpen = !musicOpen })
+                                .semantics { contentDescription = if (musicOpen) "Show distance" else "Open music player" }
                                 .padding(horizontal = (13 * unit).dp),
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy((9 * unit).dp)) {
@@ -383,6 +416,16 @@ internal fun RunAssemblyScreen(
                                         fontWeight = FontWeight.Medium)
                                     Text("Spotify", color = colors.musicInk.copy(alpha = .72f),
                                         fontSize = (10 * unit).sp, modifier = Modifier.padding(top = 5.dp))
+                                }
+                            }
+                            if (!paused) {
+                                TextButton(onClick = onPause, enabled = actionsEnabled,
+                                    modifier = Modifier.align(Alignment.TopCenter)
+                                        .offset(y = ((bottomY + bottomH + 22f) * unit).dp)
+                                        .heightIn(min = 48.dp).testTag(ACTIVE_RUN_FINISH_TAG)
+                                        .reveal(clock, .765f, reduced)) {
+                                    Text("Finish run", color = colors.ink, fontSize = 13.sp,
+                                        fontWeight = FontWeight.Medium)
                                 }
                             }
                         }
@@ -402,7 +445,7 @@ internal fun RunAssemblyScreen(
                 Text("Active time and distance are paused.", color = colors.muted,
                     fontSize = 12.sp, modifier = Modifier.padding(bottom = 5.dp))
                 HoldToStopButton(onHoldComplete = onStop, enabled = actionsEnabled,
-                    modifier = Modifier.fillMaxWidth())
+                    modifier = Modifier.fillMaxWidth(), label = "Hold to finish run")
             }
         }
     }

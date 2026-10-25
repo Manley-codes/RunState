@@ -884,9 +884,12 @@ internal fun completionAudioSessionFor(context: Context, onInterrupted: () -> Un
     val manager = appContext.getSystemService(AudioManager::class.java)
     val handler = Handler(Looper.getMainLooper())
     var ownedFocus: AudioFocusRequest? = null
+    val spotifyConnection = SpotifyAppRemoteConnection.get(appContext)
+    val musicControlsOwner = Any()
     return CompletionAudioSession(
         snapshot = { AndroidSpotifyPassageSession(appContext).snapshot() },
-        requestPause = { lost ->
+        requestPause = request@{ lost ->
+            if (!spotifyConnection.tryAcquireAudioOwnership(musicControlsOwner)) return@request false
             val focus = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT)
                 .setAudioAttributes(AudioAttributes.Builder()
                     .setUsage(AudioAttributes.USAGE_ASSISTANCE_NAVIGATION_GUIDANCE)
@@ -900,7 +903,11 @@ internal fun completionAudioSessionFor(context: Context, onInterrupted: () -> Un
         releasePause = {
             val focus = ownedFocus
             ownedFocus = null
-            if (focus != null) manager?.abandonAudioFocusRequest(focus)
+            try {
+                if (focus != null) manager?.abandonAudioFocusRequest(focus)
+            } finally {
+                spotifyConnection.releaseAudioOwnership(musicControlsOwner)
+            }
             Unit
         },
         onInterrupted = onInterrupted,
@@ -943,6 +950,8 @@ internal class AndroidReflectionSpeechPlatform(
     )
 
     private val appContext = context.applicationContext
+    private val spotifyConnection by lazy { SpotifyAppRemoteConnection.get(appContext) }
+    private val musicControlsOwner = Any()
     override fun reflectionSpeechGateway(): ReflectionSpeechGateway? =
         (appContext as? RunStateApplication)?.reflectionSpeechGateway
     override fun runVoiceGateway(): ReflectionSpeechGateway? =
@@ -1040,14 +1049,27 @@ internal class AndroidReflectionSpeechPlatform(
 
     private fun requestFocus(utteranceId: String, onFocusLost: (String) -> Unit, gain: Int): Boolean {
         completionAudio?.let { return it.acquireVoice(completionParticipant, utteranceId, onFocusLost) }
+        // A manual skip already sent to Spotify cannot be cancelled. Decline this focus
+        // request rather than race it; normal cues keep their accepted timing unchanged.
+        if (!spotifyConnection.tryAcquireAudioOwnership(musicControlsOwner)) return false
         // Every focus listener belongs to one utterance; a queued old LOSS cannot stop a new one.
-        val next = AudioFocusRequest.Builder(gain)
-            .setAudioAttributes(speechAttributes)
-            .setWillPauseWhenDucked(true)
-            .setOnAudioFocusChangeListener({ change -> if (change < 0) onFocusLost(utteranceId) }, mainHandler)
-            .build()
-        focusRequest = next
-        return audioManager?.requestAudioFocus(next) == AudioManager.AUDIOFOCUS_REQUEST_GRANTED
+        try {
+            val next = AudioFocusRequest.Builder(gain)
+                .setAudioAttributes(speechAttributes)
+                .setWillPauseWhenDucked(true)
+                .setOnAudioFocusChangeListener({ change -> if (change < 0) onFocusLost(utteranceId) }, mainHandler)
+                .build()
+            focusRequest = next
+            val granted = audioManager?.requestAudioFocus(next) == AudioManager.AUDIOFOCUS_REQUEST_GRANTED
+            if (!granted) {
+                focusRequest = null
+                spotifyConnection.releaseAudioOwnership(musicControlsOwner)
+            }
+            return granted
+        } catch (failure: RuntimeException) {
+            spotifyConnection.releaseAudioOwnership(musicControlsOwner)
+            throw failure
+        }
     }
 
     override fun speak(utteranceId: String, text: String, rate: Float): Boolean =
@@ -1246,7 +1268,8 @@ internal class AndroidReflectionSpeechPlatform(
                 .build()
             playback.focus = nextFocus
             val granted = completionAudio?.acquireVoice(completionParticipant, utteranceId, onFocusLost)
-                ?: (audioManager?.requestAudioFocus(nextFocus) == AudioManager.AUDIOFOCUS_REQUEST_GRANTED)
+                ?: (spotifyConnection.tryAcquireAudioOwnership(playback) &&
+                    audioManager?.requestAudioFocus(nextFocus) == AudioManager.AUDIOFOCUS_REQUEST_GRANTED)
             if (completionAudio != null) playback.focus = null
             if (!granted || instrumental !== playback || playback.released || closed) {
                 releaseInstrumental(playback)
@@ -1275,9 +1298,13 @@ internal class AndroidReflectionSpeechPlatform(
         // Music paused only for this reflection resumes after the snippet.
         passageId = utteranceId
         passageJob = passageScope.launch {
+            val controlsOwner = Any()
             try {
                 val result = spotifyPassageMutex.withLock {
                     coroutineContext.ensureActive()
+                    // This also covers the native fallback: failing the SDK lease must not
+                    // silently bypass a pending manual command through another transport.
+                    check(spotifyConnection.tryAcquireAudioOwnership(controlsOwner))
                     // One transport is held until cleanup finishes. A new retry cannot race a
                     // cancelled SDK load, and a live passage never changes transport midway.
                     val session = passageSessionFactory?.invoke()
@@ -1317,6 +1344,8 @@ internal class AndroidReflectionSpeechPlatform(
                     passageJob = null
                     onError(utteranceId)
                 }
+            } finally {
+                spotifyConnection.releaseAudioOwnership(controlsOwner)
             }
         }
         return true
@@ -1348,6 +1377,7 @@ internal class AndroidReflectionSpeechPlatform(
         if (focus != null) {
             try { audioManager?.abandonAudioFocusRequest(focus) } catch (_: RuntimeException) { }
         }
+        spotifyConnection.releaseAudioOwnership(playback)
     }
 
     override fun stop() {
@@ -1356,9 +1386,13 @@ internal class AndroidReflectionSpeechPlatform(
     }
     override fun releaseAudioFocus() {
         completionAudio?.let { it.releaseVoice(completionParticipant); return }
-        val owned = focusRequest ?: return
+        val owned = focusRequest
         focusRequest = null
-        audioManager?.abandonAudioFocusRequest(owned)
+        try {
+            if (owned != null) audioManager?.abandonAudioFocusRequest(owned)
+        } finally {
+            spotifyConnection.releaseAudioOwnership(musicControlsOwner)
+        }
     }
     override fun close() {
         closed = true

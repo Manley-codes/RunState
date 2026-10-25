@@ -3,6 +3,7 @@ package com.runstate.mobile.music
 import android.app.Activity
 import android.content.Context
 import android.content.Intent
+import android.graphics.Bitmap
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
@@ -16,6 +17,7 @@ import com.spotify.android.appremote.api.error.NotLoggedInException
 import com.spotify.android.appremote.api.error.UserNotAuthorizedException
 import com.spotify.protocol.client.Subscription
 import com.spotify.protocol.types.Capabilities
+import com.spotify.protocol.types.Image
 import com.spotify.protocol.types.PlayerState
 import com.spotify.sdk.android.auth.AuthorizationClient
 import com.spotify.sdk.android.auth.AuthorizationRequest
@@ -47,6 +49,8 @@ internal class SpotifyAppRemoteConnection private constructor(context: Context) 
         if (configured && !hasGrant()) SpotifyRemoteConnectionStatus.NEEDS_AUTH else SpotifyRemoteConnectionStatus.DISCONNECTED,
         configured))
     val state: StateFlow<SpotifyRemoteConnectionState> = mutableState.asStateFlow()
+    private val mutableLivePlayer = MutableStateFlow(SpotifyLivePlayerState())
+    val livePlayer: StateFlow<SpotifyLivePlayerState> = mutableLivePlayer.asStateFlow()
     /** A preflight diagnostic, not proof that Spotify will accept the next connection. */
     val hasRememberedAuthorization: Boolean get() = hasGrant()
     private var generation = 0L
@@ -55,6 +59,7 @@ internal class SpotifyAppRemoteConnection private constructor(context: Context) 
     private var capabilitySubscription: Subscription<Capabilities>? = null
     private var player: PlayerState? = null
     private var playerReceivedAt = 0L
+    private var playerRevision = 0L
     private var capabilitiesKnown = false
     private var onDemand = false
     private var background = false
@@ -62,6 +67,13 @@ internal class SpotifyAppRemoteConnection private constructor(context: Context) 
     private var refreshPending = false
     private var lastRefreshAt = 0L
     private val sessions = mutableSetOf<RemotePassageSession>()
+    private val manualCommands = SpotifyManualCommandGate()
+    private var manualMessage: String? = null
+    private var artworkKey: Pair<String?, String?>? = null
+    private var artworkRequest = 0L
+    private var artwork: Bitmap? = null
+
+    init { publishLivePlayer() }
 
     private fun hasGrant() = configured && preferences.getString("authorized_client", null) == BuildConfig.SPOTIFY_CLIENT_ID
     private fun onMain(action: () -> Unit) {
@@ -131,7 +143,7 @@ internal class SpotifyAppRemoteConnection private constructor(context: Context) 
     private fun disconnectIfIdle() {
         // Spotify authorization temporarily backgrounds this Activity. Let that explicit
         // attempt finish and remember its result before releasing the idle connection.
-        if (background && sessions.isEmpty() && !interactiveConnecting)
+        if (background && sessions.isEmpty() && !manualCommands.busy && !interactiveConnecting)
             clearConnection(SpotifyRemoteConnectionStatus.DISCONNECTED, mutableState.value.failureCategory)
     }
 
@@ -143,11 +155,21 @@ internal class SpotifyAppRemoteConnection private constructor(context: Context) 
         val old = remote
         remote = null
         player = null
+        playerRevision++
+        playerReceivedAt = 0L
+        artworkKey = null
+        artworkRequest++
+        artwork = null
+        manualMessage = null
         capabilitiesKnown = false
         onDemand = false
         refreshPending = false
         if (old != null) try { SpotifyAppRemote.disconnect(old) } catch (_: RuntimeException) { }
+        // Core voice must not remain blocked by an SDK command that never calls back.
+        // Invalidate only after disconnecting; stale results cannot unlock a future tap.
+        manualCommands.invalidateConnection()
         mutableState.value = SpotifyRemoteConnectionState(status, configured, failureCategory = failureCategory)
+        publishLivePlayer()
     }
 
     private fun connect(context: Context, interactive: Boolean) {
@@ -226,13 +248,168 @@ internal class SpotifyAppRemoteConnection private constructor(context: Context) 
     private fun acceptCapabilities(next: Capabilities) { capabilitiesKnown = true; onDemand = next.canPlayOnDemand; publishReady() }
     private fun acceptPlayer(next: PlayerState) {
         player = next
+        playerRevision++
         playerReceivedAt = SystemClock.elapsedRealtime()
         sessions.toList().forEach { it.observe(next) }
+        updateArtwork(next)
         publishReady()
     }
     private fun publishReady() {
         if (remote?.isConnected == true && player != null && capabilitiesKnown)
             mutableState.value = SpotifyRemoteConnectionState(SpotifyRemoteConnectionStatus.READY, configured, onDemand)
+        publishLivePlayer()
+    }
+
+    private fun publishLivePlayer() {
+        val ready = remote?.isConnected == true && state.value.status == SpotifyRemoteConnectionStatus.READY
+        val current = player.takeIf { ready }
+        val track = current?.track
+        val owned = sessions.isNotEmpty() || manualCommands.blocked
+        val controls = ready && track != null && !owned && !manualCommands.busy
+        val message = when {
+            !configured -> "Spotify is not configured."
+            state.value.status == SpotifyRemoteConnectionStatus.NEEDS_AUTH -> "Connect Spotify in Settings."
+            state.value.status == SpotifyRemoteConnectionStatus.CONNECTING -> "Connecting to Spotify…"
+            !ready -> "Open Spotify or reconnect in Settings."
+            track == null -> "Choose a song in Spotify."
+            owned -> "Music controls return after the announcement."
+            else -> manualMessage
+        }
+        mutableLivePlayer.value = SpotifyLivePlayerState(
+            connected = ready,
+            connecting = state.value.status == SpotifyRemoteConnectionStatus.CONNECTING,
+            canConnect = configured && !ready && state.value.status != SpotifyRemoteConnectionStatus.CONNECTING,
+            trackUri = track?.uri,
+            title = track?.name?.takeIf { it.isNotBlank() },
+            artist = track?.artists?.mapNotNull { it.name?.takeIf(String::isNotBlank) }
+                ?.joinToString(", ")?.takeIf(String::isNotBlank) ?: track?.artist?.name,
+            album = track?.album?.name,
+            artwork = artwork.takeIf { track != null },
+            durationMillis = track?.duration?.coerceAtLeast(0L) ?: 0L,
+            positionMillis = current?.playbackPosition ?: 0L,
+            positionReceivedAtElapsedRealtime = if (current != null) playerReceivedAt else 0L,
+            paused = current?.isPaused ?: true,
+            playbackSpeed = current?.playbackSpeed ?: 0f,
+            canSkipPrevious = controls && current?.playbackRestrictions?.canSkipPrev == true,
+            canSkipNext = controls && current?.playbackRestrictions?.canSkipNext == true,
+            // SDK 0.8.0 has no pause/resume restriction field; canPlayOnDemand applies to choosing a track.
+            canTogglePlayback = controls,
+            busy = manualCommands.busy || owned,
+            unavailableMessage = message
+        )
+    }
+
+    private fun updateArtwork(next: PlayerState) {
+        val track = next.track
+        val key = track?.uri to track?.imageUri?.raw
+        if (artworkKey == key) return
+        artworkKey = key
+        artwork = null
+        val request = ++artworkRequest
+        val connected = remote?.takeIf { it.isConnected } ?: return
+        val imageUri = track?.imageUri?.takeIf { !it.raw.isNullOrBlank() } ?: return
+        val attempt = generation
+        try {
+            connected.imagesApi.getImage(imageUri, Image.Dimension.MEDIUM)
+                .setResultCallback { image -> onMain {
+                    if (generation == attempt && remote === connected && artworkRequest == request && artworkKey == key) {
+                        artwork = image
+                        publishLivePlayer()
+                    }
+                } }.setErrorCallback { onMain {
+                    // Keep the honest empty-art fallback. Never reuse another song's picture.
+                    if (generation == attempt && artworkRequest == request) publishLivePlayer()
+                } }
+        } catch (_: RuntimeException) { /* Metadata/transport still work when artwork is unavailable. */ }
+    }
+
+    /** Synchronous native audio boundary; each owner releases only its own lease. */
+    fun tryAcquireAudioOwnership(owner: Any): Boolean {
+        check(Looper.myLooper() == main.looper)
+        return manualCommands.acquireAudio(owner).also { publishLivePlayer() }
+    }
+
+    fun releaseAudioOwnership(owner: Any) = onMain {
+        manualCommands.releaseAudio(owner)
+        publishLivePlayer()
+    }
+
+    /** Explicit user controls only; none of these runs when the player view merely opens. */
+    fun previous() = manualCommand(ManualAction.PREVIOUS)
+    fun next() = manualCommand(ManualAction.NEXT)
+    fun togglePlayback() = manualCommand(ManualAction.TOGGLE)
+
+    private enum class ManualAction { PREVIOUS, NEXT, TOGGLE }
+
+    private fun manualCommand(action: ManualAction) = onMain {
+        publishLivePlayer()
+        val current = livePlayer.value
+        val allowed = when (action) {
+            ManualAction.PREVIOUS -> current.canSkipPrevious
+            ManualAction.NEXT -> current.canSkipNext
+            ManualAction.TOGGLE -> current.canTogglePlayback
+        }
+        val connected = remote?.takeIf { it.isConnected } ?: return@onMain
+        val token = manualCommands.begin(allowed, sessions.isNotEmpty()) ?: return@onMain
+        val attempt = generation
+        manualMessage = null
+        publishLivePlayer()
+        fun stillOwned() = generation == attempt && remote === connected && manualCommands.owns(token)
+        fun settleObsolete(): Boolean {
+            if (stillOwned()) return false
+            // Settlement proves only this earlier tap is done. Never apply its metadata to
+            // a newer connection or clear a different command's gate.
+            if (manualCommands.finish(token)) {
+                publishLivePlayer()
+                disconnectIfIdle()
+            }
+            return true
+        }
+        fun failedCommand() {
+            if (settleObsolete()) return
+            manualCommands.finish(token)
+            manualMessage = "Spotify couldn't change playback. Try again."
+            publishLivePlayer()
+            disconnectIfIdle()
+        }
+        fun failedObservation(failure: Throwable) {
+            if (settleObsolete()) return
+            // The command was acknowledged, but its resulting state is unknown. Do not
+            // let the next toggle guess from the old paused flag.
+            manualCommands.finish(token)
+            failed(attempt, failure)
+        }
+        try {
+            val result = when (action) {
+                ManualAction.PREVIOUS -> connected.playerApi.skipPrevious()
+                ManualAction.NEXT -> connected.playerApi.skipNext()
+                ManualAction.TOGGLE -> if (current.paused) connected.playerApi.resume() else connected.playerApi.pause()
+            }
+            result.setResultCallback { onMain acknowledged@{
+                if (settleObsolete()) return@acknowledged
+                // Refresh after acknowledgement before another tap can decide pause versus resume.
+                val queriedRevision = playerRevision
+                try {
+                    connected.playerApi.playerState.setResultCallback { observed -> onMain {
+                        if (!settleObsolete()) {
+                            if (queriedRevision == playerRevision) acceptPlayer(observed)
+                            manualCommands.finish(token)
+                            manualMessage = null
+                            publishLivePlayer()
+                            disconnectIfIdle()
+                        }
+                    } }.setErrorCallback { failure -> onMain { failedObservation(failure) } }
+                } catch (failure: RuntimeException) { failedObservation(failure) }
+            } }.setErrorCallback { onMain { failedCommand() } }
+        } catch (_: RuntimeException) { failedCommand() }
+        main.postDelayed({
+            if (manualCommands.owns(token)) {
+                // Drop the remote and its cached player rather than leave core announcements
+                // disabled indefinitely. No command is replayed or automatically reconnected.
+                recordDebugFailure("PlaybackCommandTimeout")
+                clearConnection(SpotifyRemoteConnectionStatus.ERROR, "PlaybackCommandTimeout")
+            }
+        }, 5_000L)
     }
     private fun refreshPlayer(force: Boolean = false) {
         val connected = remote?.takeIf { it.isConnected } ?: return
@@ -240,6 +417,7 @@ internal class SpotifyAppRemoteConnection private constructor(context: Context) 
         if (refreshPending || !force && now - lastRefreshAt < 250L) return
         val attempt = generation
         val issued = now
+        val queriedRevision = playerRevision
         lastRefreshAt = now
         refreshPending = true
         try {
@@ -247,7 +425,7 @@ internal class SpotifyAppRemoteConnection private constructor(context: Context) 
                 if (generation == attempt && remote === connected && lastRefreshAt == issued) {
                     refreshPending = false
                     // A reply to an older query must not overwrite a newer subscription event.
-                    if (issued >= playerReceivedAt) acceptPlayer(next)
+                    if (queriedRevision == playerRevision) acceptPlayer(next)
                 }
             } }.setErrorCallback { failure -> onMain {
                 if (generation == attempt && lastRefreshAt == issued) { refreshPending = false; failed(attempt, failure) }
@@ -260,8 +438,8 @@ internal class SpotifyAppRemoteConnection private constructor(context: Context) 
     fun newPassageSession(): SongPassageSession? {
         check(Looper.myLooper() == main.looper)
         if (state.value.status != SpotifyRemoteConnectionStatus.READY || !onDemand || remote?.isConnected != true ||
-            sessions.isNotEmpty()) return null
-        return RemotePassageSession(generation, requireNotNull(remote)).also { sessions += it }
+            sessions.isNotEmpty() || manualCommands.busy) return null
+        return RemotePassageSession(generation, requireNotNull(remote)).also { sessions += it; publishLivePlayer() }
     }
 
     private inner class RemotePassageSession(private val epoch: Long, private val connected: SpotifyAppRemote) : SongPassageSession {
@@ -451,6 +629,7 @@ internal class SpotifyAppRemoteConnection private constructor(context: Context) 
             pending = null
             released = true
             sessions -= this@RemotePassageSession
+            publishLivePlayer()
             disconnectIfIdle()
         }
     }

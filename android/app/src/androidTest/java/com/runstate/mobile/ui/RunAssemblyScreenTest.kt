@@ -1,6 +1,7 @@
 package com.runstate.mobile.ui
 
 import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import androidx.activity.ComponentActivity
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.size
@@ -35,6 +36,9 @@ import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.runstate.mobile.location.GpsSignalStatus
+import com.runstate.mobile.R
+import com.runstate.mobile.music.SpotifyLivePlayerState
+import com.runstate.mobile.settings.RunMusicPlayerLayout
 import java.io.File
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -62,6 +66,11 @@ class RunAssemblyScreenTest {
         var startsNow = 0
         var maps = 0
         var music = 0
+        var previousSongs = 0
+        var nextSongs = 0
+        var musicToggles = 0
+        var musicConnections = 0
+        var linkedTrack: String? = null
     }
 
     @Composable
@@ -76,7 +85,9 @@ class RunAssemblyScreenTest {
         actions: Actions = Actions(),
         modifier: Modifier = Modifier.fillMaxSize().systemBarsPadding(),
         onPause: () -> Unit = { actions.pauses++ },
-        onResume: () -> Unit = { actions.resumes++ }
+        onResume: () -> Unit = { actions.resumes++ },
+        player: SpotifyLivePlayerState = SpotifyLivePlayerState(),
+        playerLayout: RunMusicPlayerLayout = RunMusicPlayerLayout.HEADPHONES
     ) {
         RunAssemblyScreen(
             state = state, countdownDigit = digit, metrics = values, day = day,
@@ -87,7 +98,12 @@ class RunAssemblyScreenTest {
             onStartNow = { actions.startsNow++ }, onResumeGpsTracking = {},
             onOpenRunMap = { actions.maps++ }, onOpenSpotify = { actions.music++ },
             modifier = modifier, countdownTickKey = digit?.toLong() ?: 0L,
-            countdownCadenceActive = digit != null
+            countdownCadenceActive = digit != null,
+            musicPlayer = player, musicPlayerLayout = playerLayout,
+            onPreviousTrack = { actions.previousSongs++ }, onNextTrack = { actions.nextSongs++ },
+            onToggleMusicPlayback = { actions.musicToggles++ },
+            onConnectMusic = { actions.musicConnections++ },
+            onOpenMusicTrack = { actions.linkedTrack = it }
         )
     }
 
@@ -164,10 +180,14 @@ class RunAssemblyScreenTest {
         compose.mainClock.advanceTimeBy(1_600)
         compose.onNodeWithTag(ACTIVE_RUN_MAP_BUTTON_TAG).performClick()
         compose.onNodeWithTag(ACTIVE_RUN_MUSIC_TAG).performClick()
+        compose.mainClock.advanceTimeByFrame()
+        compose.onNodeWithTag(ACTIVE_RUN_PLAYER_TAG).assertExists()
+        compose.onNodeWithTag(ACTIVE_RUN_DISTANCE_TAG).assertDoesNotExist()
+        compose.onNodeWithTag(ACTIVE_RUN_PLAYER_CLOSE_TAG).scrollWithClock().performClick()
         compose.onNodeWithContentDescription("Pause run").scrollWithClock().performClick()
         compose.mainClock.advanceTimeByFrame()
         assertEquals(1, actions.maps)
-        assertEquals(1, actions.music)
+        assertEquals(0, actions.music)
         assertEquals(1, actions.pauses)
         compose.onNodeWithContentDescription("Resume run").scrollWithClock().assertIsDisplayed().performClick()
         compose.mainClock.advanceTimeByFrame()
@@ -202,6 +222,33 @@ class RunAssemblyScreenTest {
         compose.onNodeWithContentDescription("Pause run").scrollWithClock().assertIsEnabled().performClick()
         assertEquals(1, actions.pauses)
         assertEquals(0, actions.stops)
+    }
+
+    @Test
+    fun finishEntryPausesFirstAndAFullHoldIsStillRequiredToEndTheRun() {
+        compose.mainClock.autoAdvance = false
+        val actions = Actions()
+        var state by mutableStateOf(RunUiState.ActiveRunning)
+        compose.setContent { Fixture(state, actions = actions,
+            onPause = { actions.pauses++; state = RunUiState.ActivePaused }) }
+        compose.mainClock.advanceTimeBy(1_600)
+        compose.onNodeWithTag(ACTIVE_RUN_FINISH_TAG).scrollWithClock().assertIsDisplayed().performClick()
+        compose.mainClock.advanceTimeByFrame()
+        assertEquals(1, actions.pauses)
+        assertEquals(0, actions.stops)
+        compose.onNodeWithTag(ACTIVE_RUN_FINISH_TAG).assertDoesNotExist()
+        compose.onNodeWithText("Hold to finish run").assertIsDisplayed()
+        val hold = compose.onNodeWithTag(HOLD_TO_STOP_TAG).assertIsDisplayed()
+        hold.performTouchInput { down(center) }
+        compose.mainClock.advanceTimeBy(HOLD_TO_STOP_MILLIS / 2L)
+        hold.performTouchInput { up() }
+        compose.mainClock.advanceTimeByFrame()
+        assertEquals(0, actions.stops)
+        hold.performTouchInput { down(center) }
+        compose.mainClock.advanceTimeBy(HOLD_TO_STOP_MILLIS + 200L)
+        hold.performTouchInput { up() }
+        compose.mainClock.advanceTimeByFrame()
+        assertEquals(1, actions.stops)
     }
 
     @Test
@@ -287,6 +334,133 @@ class RunAssemblyScreenTest {
         assertFalse("Resume label must fit at double text size", resumeLayout.single().hasVisualOverflow)
         compose.onNodeWithTag(HOLD_TO_STOP_TAG).assertIsDisplayed()
         save(ACTIVE_RUN_SCREEN_TAG, "assembly-large-text-paused.png")
+    }
+
+    @Test
+    fun musicControlsUseLiveMetadataAndNeverPauseOrStopTheRun() {
+        compose.mainClock.autoAdvance = false
+        val actions = Actions()
+        var player by mutableStateOf(SpotifyLivePlayerState(connected = true,
+            trackUri = "spotify:track:test", title = "Observed song", artist = "Observed artist",
+            durationMillis = 180_000, positionMillis = 60_000, paused = true,
+            canSkipPrevious = true, canSkipNext = true, canTogglePlayback = true))
+        compose.setContent { Fixture(player = player, actions = actions) }
+        compose.mainClock.advanceTimeBy(1_600)
+        compose.onNodeWithTag(ACTIVE_RUN_MUSIC_TAG).scrollWithClock().performClick()
+        compose.mainClock.advanceTimeByFrame()
+        compose.onNodeWithContentDescription("Observed song, Observed artist. Open in Spotify")
+            .scrollWithClock().assertIsDisplayed().performClick()
+        assertEquals("spotify:track:test", actions.linkedTrack)
+        compose.onNodeWithTag(ACTIVE_RUN_PLAYER_PREVIOUS_TAG).scrollWithClock().performClick()
+        compose.onNodeWithTag(ACTIVE_RUN_PLAYER_NEXT_TAG).performClick()
+        compose.onNodeWithTag(ACTIVE_RUN_PLAYER_PLAY_TAG).performClick()
+        assertEquals(1, actions.previousSongs)
+        assertEquals(1, actions.nextSongs)
+        assertEquals(1, actions.musicToggles)
+        assertEquals(0, actions.pauses)
+        assertEquals(0, actions.resumes)
+        assertEquals(0, actions.stops)
+        compose.runOnIdle { player = player.copy(title = "Next observed song", canSkipNext = false, busy = true) }
+        compose.mainClock.advanceTimeByFrame()
+        compose.onNodeWithTag(ACTIVE_RUN_PLAYER_NEXT_TAG).assertIsNotEnabled()
+        compose.onNodeWithTag(ACTIVE_RUN_PLAYER_PREVIOUS_TAG).assertIsNotEnabled()
+        compose.onNodeWithTag(ACTIVE_RUN_PLAYER_PLAY_TAG).assertIsNotEnabled()
+        compose.onNodeWithTag(ACTIVE_RUN_PLAYER_CLOSE_TAG).scrollWithClock().performClick()
+        compose.mainClock.advanceTimeByFrame()
+        compose.onNodeWithTag(ACTIVE_RUN_DISTANCE_TAG).scrollWithClock().assertTextEquals("3.24")
+    }
+
+    @Test
+    fun disconnectedPlayerDoesNotInventSongControlsOrConnectOnOpen() {
+        compose.mainClock.autoAdvance = false
+        val actions = Actions()
+        var player by mutableStateOf(SpotifyLivePlayerState())
+        compose.setContent { Fixture(actions = actions, player = player) }
+        compose.mainClock.advanceTimeBy(1_600)
+        compose.onNodeWithTag(ACTIVE_RUN_MUSIC_TAG).scrollWithClock().performClick()
+        compose.mainClock.advanceTimeByFrame()
+        compose.onNodeWithText("Spotify not connected").scrollWithClock().assertIsDisplayed()
+        compose.onNodeWithTag(ACTIVE_RUN_PLAYER_NEXT_TAG).assertDoesNotExist()
+        compose.onNodeWithTag(ACTIVE_RUN_PLAYER_PLAY_TAG).assertDoesNotExist()
+        assertEquals(0, actions.musicConnections)
+        compose.onNodeWithText("Connect Spotify").scrollWithClock().performClick()
+        compose.onNodeWithText("Open Spotify").performClick()
+        assertEquals(1, actions.musicConnections)
+        assertEquals(1, actions.music)
+        assertEquals(0, actions.pauses)
+        assertEquals(0, actions.stops)
+        compose.runOnIdle { player = player.copy(connecting = true, canConnect = false,
+            unavailableMessage = "Connecting to Spotify…") }
+        compose.mainClock.advanceTimeByFrame()
+        compose.onNodeWithText("Connecting to Spotify…").assertIsDisplayed()
+        compose.onNodeWithText("Connect Spotify").assertIsNotEnabled()
+        compose.runOnUiThread { compose.activity.onBackPressedDispatcher.onBackPressed() }
+        compose.mainClock.advanceTimeByFrame()
+        compose.onNodeWithTag(ACTIVE_RUN_PLAYER_TAG).assertDoesNotExist()
+        compose.onNodeWithTag(ACTIVE_RUN_DISTANCE_TAG).scrollWithClock().assertIsDisplayed()
+    }
+
+    @Test
+    fun musicLayoutUsesActualArtworkAndRecoversWhenThatArtworkIsMissing() {
+        compose.mainClock.autoAdvance = false
+        // Reuse bundled RunState art as an explicit test cover. No live Spotify playback,
+        // remote album download or stored run is involved in these presentation captures.
+        val bitmap = BitmapFactory.decodeResource(
+            InstrumentationRegistry.getInstrumentation().targetContext.resources, R.drawable.start_music_orb)
+        var layout by mutableStateOf(RunMusicPlayerLayout.ALBUM)
+        var day by mutableStateOf(false)
+        var player by mutableStateOf(SpotifyLivePlayerState(connected = true, title = "Observed song",
+            artist = "Observed artist", artwork = bitmap, durationMillis = 180_000, positionMillis = 60_000,
+            canSkipPrevious = true, canSkipNext = true, canTogglePlayback = true))
+        compose.setContent { Fixture(player = player, playerLayout = layout, day = day) }
+        compose.mainClock.advanceTimeBy(1_600)
+        compose.onNodeWithTag(ACTIVE_RUN_MUSIC_TAG).scrollWithClock().performClick()
+        compose.mainClock.advanceTimeByFrame()
+        compose.onNodeWithContentDescription("Current song album artwork").scrollWithClock().assertIsDisplayed()
+        for (isDay in listOf(false, true)) {
+            compose.runOnIdle { day = isDay; layout = RunMusicPlayerLayout.ALBUM }
+            compose.mainClock.advanceTimeByFrame()
+            save(ACTIVE_RUN_SCREEN_TAG, "assembly-music-album-${if (isDay) "day" else "night"}.png")
+            compose.runOnIdle { layout = RunMusicPlayerLayout.HEADPHONES }
+            compose.mainClock.advanceTimeByFrame()
+            save(ACTIVE_RUN_SCREEN_TAG, "assembly-music-headphones-${if (isDay) "day" else "night"}.png")
+        }
+        compose.runOnIdle { layout = RunMusicPlayerLayout.ALBUM; player = player.copy(artwork = null) }
+        compose.mainClock.advanceTimeByFrame()
+        compose.onNodeWithContentDescription("Album artwork unavailable").assertExists()
+        compose.runOnIdle { layout = RunMusicPlayerLayout.HEADPHONES }
+        compose.mainClock.advanceTimeByFrame()
+        compose.onNodeWithContentDescription("RunState headphones artwork").assertExists()
+        save(ACTIVE_RUN_SCREEN_TAG, "assembly-music-headphones.png")
+    }
+
+    @Test
+    fun largeTextMusicKeepsFullMetadataAndControlsAvailable() {
+        compose.mainClock.autoAdvance = false
+        val actions = Actions()
+        val title = "A long observed song title that should remain fully readable"
+        val artist = "The complete observed artist name"
+        compose.setContent {
+            val density = LocalDensity.current
+            CompositionLocalProvider(LocalDensity provides Density(density.density, 2f)) {
+                Fixture(player = SpotifyLivePlayerState(connected = true, title = title, artist = artist,
+                    canTogglePlayback = true, canSkipPrevious = true, canSkipNext = true), actions = actions)
+            }
+        }
+        compose.mainClock.advanceTimeBy(1_600)
+        compose.onNodeWithTag(ACTIVE_RUN_MUSIC_TAG).scrollWithClock().performClick()
+        compose.mainClock.advanceTimeByFrame()
+        compose.onNodeWithTag(ACTIVE_RUN_PLAYER_ACCESSIBLE_TAG).assertIsDisplayed()
+        compose.onNodeWithText(title).scrollWithClock().assertIsDisplayed()
+        val layouts = mutableListOf<TextLayoutResult>()
+        compose.onNodeWithText(title).performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
+        assertFalse(layouts.single().hasVisualOverflow)
+        compose.onNodeWithTag(ACTIVE_RUN_PLAYER_NEXT_TAG).scrollWithClock().assertIsDisplayed().performClick()
+        assertEquals(1, actions.nextSongs)
+        assertEquals(0, actions.pauses)
+        compose.onNodeWithText("Back to distance").performClick()
+        compose.mainClock.advanceTimeByFrame()
+        compose.onNodeWithTag(ACTIVE_RUN_PLAYER_ACCESSIBLE_TAG).assertDoesNotExist()
     }
 
     /** Scroll actions need frames even when the presentation's animation clock is frozen. */

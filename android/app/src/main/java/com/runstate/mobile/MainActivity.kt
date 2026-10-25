@@ -189,6 +189,7 @@ class MainActivity : ComponentActivity() {
                 val preferencesError by runStateApplication.runPreferencesError.collectAsState()
                 val reflectionCoordinator = runStateApplication.runReflectionCoordinator
                 val spotify by spotifyConnection.state.collectAsState()
+                val spotifyPlayer by spotifyConnection.livePlayer.collectAsState()
                 var runSurfaceDay by remember { mutableStateOf<Boolean?>(null) }
                 val ordinaryDark = androidx.compose.foundation.isSystemInDarkTheme()
                 SideEffect {
@@ -271,6 +272,10 @@ class MainActivity : ComponentActivity() {
                             }
                         },
                         onDisconnectSpotify = spotifyConnection::disconnect,
+                        musicPlayer = spotifyPlayer,
+                        onPreviousTrack = spotifyConnection::previous,
+                        onNextTrack = spotifyConnection::next,
+                        onToggleMusicPlayback = spotifyConnection::togglePlayback,
 
                         // The service owns the accepted GPS countdown across app switching.
                         lifecycle = lifecycle,
@@ -341,6 +346,10 @@ internal fun RunJourneyRoot(
     spotifyDisconnectEnabled: Boolean = false,
     onConnectSpotify: () -> Unit = {},
     onDisconnectSpotify: () -> Unit = {},
+    musicPlayer: com.runstate.mobile.music.SpotifyLivePlayerState = com.runstate.mobile.music.SpotifyLivePlayerState(),
+    onPreviousTrack: () -> Unit = {},
+    onNextTrack: () -> Unit = {},
+    onToggleMusicPlayback: () -> Unit = {},
     openingRequestId: Int = 0,
     runCountdown: RunCountdownOwner? = null,
     dispatchGpsCountdown: (Context, Long, PreRunEnergy?, Boolean, Boolean, Boolean,
@@ -1701,6 +1710,19 @@ internal fun RunJourneyRoot(
         gpsMessage = gpsMessage,
         musicSelected = musicSelected,
         musicAccessGranted = musicAccessGranted,
+        musicPlayer = musicPlayer,
+        musicPlayerLayout = runPreferences?.musicPlayerLayout
+            ?: com.runstate.mobile.settings.RunMusicPlayerLayout.HEADPHONES,
+        onPreviousTrack = onPreviousTrack,
+        onNextTrack = onNextTrack,
+        onToggleMusicPlayback = onToggleMusicPlayback,
+        onConnectMusic = onConnectSpotify,
+        onOpenMusicTrack = { uri ->
+            if (!openSpotifyTrack(context, uri)) {
+                Toast.makeText(context, "Spotify couldn't open. Check that it is installed on this phone.",
+                    Toast.LENGTH_LONG).show()
+            }
+        },
         onOpenSpotify = {
             if (!openSpotify(context)) {
                 Toast.makeText(context,
@@ -1914,6 +1936,11 @@ internal fun RunJourneyRoot(
     if (runSettingsVisible && model.state == RunUiState.ReadyToStart && !historyVisible &&
         !connectionDialogVisible) {
         RunSettingsDialog(
+            musicPlayerLayout = runPreferences?.musicPlayerLayout
+                ?: com.runstate.mobile.settings.RunMusicPlayerLayout.HEADPHONES,
+            onSetMusicPlayerLayout = { layout ->
+                runPreferences?.let { saved -> savePreferences(saved.copy(musicPlayerLayout = layout)) }
+            },
             appearance = runPreferences?.appearance ?: com.runstate.mobile.settings.RunAppearance.AUTO,
             onSetAppearance = { appearance ->
                 runPreferences?.let { saved -> savePreferences(saved.copy(appearance = appearance)) }
@@ -2268,6 +2295,22 @@ internal fun readyCompletionSpeechText(
 }
 
 private const val LOCAL_NETWORK_PERMISSION = "android.permission.ACCESS_LOCAL_NETWORK"
+
+/** A displayed track links back to Spotify without issuing a playback command. */
+private fun openSpotifyTrack(context: Context, trackUri: String?): Boolean {
+    if (trackUri == null || !Regex("spotify:track:[A-Za-z0-9]{22}").matches(trackUri)) {
+        return openSpotify(context)
+    }
+    return try {
+        context.startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(trackUri))
+            .setPackage("com.spotify.music").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        true
+    } catch (_: ActivityNotFoundException) {
+        openSpotify(context)
+    } catch (_: SecurityException) {
+        false
+    }
+}
 
 /** Opens Spotify only on a deliberate tap; no account access or playback command is sent. */
 private fun openSpotify(context: Context): Boolean = try {

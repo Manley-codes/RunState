@@ -33,6 +33,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.runstate.mobile.settings.RunAppearance
+import com.runstate.mobile.settings.RunMusicPlayerLayout
 
 internal const val SETTINGS_DIALOG_TAG = "runSettingsDialog"
 internal const val SETTINGS_LOCATION_TAG = "runSettingsLocation"
@@ -51,6 +52,8 @@ internal const val SETTINGS_DISTANCE_ANNOUNCEMENTS_TAG = "runSettingsDistanceAnn
 internal const val SETTINGS_APPEARANCE_TAG = "runSettingsAppearance"
 internal fun appearanceOptionTag(appearance: RunAppearance): String =
     "runSettingsAppearance${appearance.name}"
+internal fun musicPlayerOptionTag(layout: RunMusicPlayerLayout): String =
+    "runSettingsMusicPlayer${layout.name}"
 
 private val SettingsInk = Color(0xFF293326)
 private val SettingsCream = Color(0xFFF9FAF5)
@@ -90,7 +93,9 @@ internal fun RunSettingsDialog(
     onConnectSpotify: () -> Unit = {},
     onDisconnectSpotify: () -> Unit = {},
     appearance: RunAppearance = RunAppearance.AUTO,
-    onSetAppearance: (RunAppearance) -> Unit = {}
+    onSetAppearance: (RunAppearance) -> Unit = {},
+    musicPlayerLayout: RunMusicPlayerLayout = RunMusicPlayerLayout.HEADPHONES,
+    onSetMusicPlayerLayout: (RunMusicPlayerLayout) -> Unit = {}
 ) {
     val controlsEnabled = actionsEnabled && !settingsLoading
     val preferenceControlsEnabled = controlsEnabled && preferencesAvailable
@@ -197,6 +202,34 @@ internal fun RunSettingsDialog(
                 )
                 SettingsDivider()
                 SettingsSectionTitle("MUSIC")
+                Text("Player artwork", color = SettingsInk, fontSize = 14.sp,
+                    fontWeight = FontWeight.SemiBold)
+                Row(Modifier.fillMaxWidth().selectableGroup(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    RunMusicPlayerLayout.entries.forEach { choice ->
+                        val selected = musicPlayerLayout == choice
+                        val label = if (choice == RunMusicPlayerLayout.HEADPHONES) "Headphones" else "Album cover"
+                        Surface(
+                            modifier = Modifier.weight(1f).heightIn(min = 48.dp)
+                                .selectable(selected, enabled = preferenceControlsEnabled,
+                                    role = Role.RadioButton, onClick = { onSetMusicPlayerLayout(choice) })
+                                .testTag(musicPlayerOptionTag(choice))
+                                .semantics { contentDescription = "$label music player" },
+                            shape = RoundedCornerShape(12.dp),
+                            color = if (selected) SettingsInk else Color.Transparent,
+                            border = BorderStroke(1.dp, SettingsInk.copy(alpha = .2f))
+                        ) {
+                            androidx.compose.foundation.layout.Box(
+                                Modifier.padding(horizontal = 10.dp, vertical = 12.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(label, fontSize = 14.sp, fontWeight = FontWeight.SemiBold,
+                                    color = (if (selected) SettingsCream else SettingsInk)
+                                        .copy(alpha = if (preferenceControlsEnabled) 1f else .5f))
+                            }
+                        }
+                    }
+                }
                 SettingsPreference(
                     title = "Observe music",
                     description = "Save available song title, artist, album, recording details and observed playback time during your run. " +
@@ -258,7 +291,7 @@ internal fun RunSettingsDialog(
                         Text(spotifyConnectionLabel, color = SettingsInk, fontSize = 14.sp,
                             fontWeight = FontWeight.SemiBold,
                             modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
-                        SettingsDescription("Connect Spotify once so RunState can load the selected song, " +
+                        SettingsDescription("Connect Spotify for the controls inside your run, and so RunState can load the selected song, " +
                             "play its short ending and stop it automatically. Spotify Premium is needed " +
                             "to choose a specific song. Connecting does not turn music sharing on.")
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
