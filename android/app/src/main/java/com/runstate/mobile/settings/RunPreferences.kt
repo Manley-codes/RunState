@@ -5,6 +5,7 @@ import android.content.SharedPreferences
 
 /** A presentation preference, resolved once at countdown entry and kept for that run. */
 internal enum class RunAppearance {
+    // Keep persisted names stable while Settings presents Light and Dark.
     AUTO, DAY, NIGHT;
 
     fun isDay(hour: Int): Boolean {
@@ -28,7 +29,7 @@ internal data class RunPreferences(
     val captureWeather: Boolean = false,
     val findSongSnippets: Boolean = false,
     val distanceAnnouncements: Boolean = true,
-    val appearance: RunAppearance = RunAppearance.AUTO,
+    val appearance: RunAppearance = RunAppearance.NIGHT,
     val musicPlayerLayout: RunMusicPlayerLayout = RunMusicPlayerLayout.HEADPHONES
 ) {
     init {
@@ -71,7 +72,7 @@ internal class StoredRunPreferences(
             distanceAnnouncements = values.readBoolean(DISTANCE_ANNOUNCEMENTS) ?: true,
             appearance = values.readString(RUN_APPEARANCE)?.let { stored ->
                 RunAppearance.entries.firstOrNull { it.name == stored }
-            } ?: RunAppearance.AUTO,
+            } ?: RunAppearance.NIGHT,
             musicPlayerLayout = values.readString(MUSIC_PLAYER_LAYOUT)?.let { stored ->
                 RunMusicPlayerLayout.entries.firstOrNull { it.name == stored }
             } ?: RunMusicPlayerLayout.HEADPHONES

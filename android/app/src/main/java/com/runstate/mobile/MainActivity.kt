@@ -369,7 +369,7 @@ internal fun RunJourneyRoot(
     val inRunSurface = model.state in setOf(RunUiState.Countdown, RunUiState.StartingRun,
         RunUiState.ActiveRunning, RunUiState.ActivePaused)
     val resolvedRunDay = latchedRunDay ?: (runPreferences?.appearance
-        ?: com.runstate.mobile.settings.RunAppearance.AUTO).isDay(java.time.LocalTime.now().hour)
+        ?: com.runstate.mobile.settings.RunAppearance.NIGHT).isDay(java.time.LocalTime.now().hour)
     LaunchedEffect(model.state, resolvedRunDay, runPreferences?.appearance) {
         if (inRunSurface && latchedRunDay == null && runPreferences != null) latchedRunDay = resolvedRunDay
         if (model.state == RunUiState.ReadyToStart || model.state == RunUiState.Saved) latchedRunDay = null
@@ -1941,7 +1941,7 @@ internal fun RunJourneyRoot(
             onSetMusicPlayerLayout = { layout ->
                 runPreferences?.let { saved -> savePreferences(saved.copy(musicPlayerLayout = layout)) }
             },
-            appearance = runPreferences?.appearance ?: com.runstate.mobile.settings.RunAppearance.AUTO,
+            appearance = runPreferences?.appearance ?: com.runstate.mobile.settings.RunAppearance.NIGHT,
             onSetAppearance = { appearance ->
                 runPreferences?.let { saved -> savePreferences(saved.copy(appearance = appearance)) }
             },

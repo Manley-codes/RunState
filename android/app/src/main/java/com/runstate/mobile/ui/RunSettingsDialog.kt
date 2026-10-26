@@ -92,7 +92,7 @@ internal fun RunSettingsDialog(
     spotifyDisconnectEnabled: Boolean = false,
     onConnectSpotify: () -> Unit = {},
     onDisconnectSpotify: () -> Unit = {},
-    appearance: RunAppearance = RunAppearance.AUTO,
+    appearance: RunAppearance = RunAppearance.NIGHT,
     onSetAppearance: (RunAppearance) -> Unit = {},
     musicPlayerLayout: RunMusicPlayerLayout = RunMusicPlayerLayout.HEADPHONES,
     onSetMusicPlayerLayout: (RunMusicPlayerLayout) -> Unit = {}
@@ -139,12 +139,12 @@ internal fun RunSettingsDialog(
                     Modifier.fillMaxWidth().selectableGroup().testTag(SETTINGS_APPEARANCE_TAG),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    RunAppearance.entries.forEach { choice ->
+                    listOf(RunAppearance.NIGHT, RunAppearance.DAY, RunAppearance.AUTO).forEach { choice ->
                         val selected = appearance == choice
                         val label = when (choice) {
                             RunAppearance.AUTO -> "Auto"
-                            RunAppearance.DAY -> "Day"
-                            RunAppearance.NIGHT -> "Night"
+                            RunAppearance.DAY -> "Light"
+                            RunAppearance.NIGHT -> "Dark"
                         }
                         Surface(
                             modifier = Modifier.weight(1f).heightIn(min = 48.dp)
@@ -167,7 +167,7 @@ internal fun RunSettingsDialog(
                         }
                     }
                 }
-                SettingsDescription("Auto uses Day from 7 AM to 7 PM. Your run keeps its starting look.")
+                SettingsDescription("Auto uses Light from 7 AM to 7 PM. Your run keeps its starting look.")
                 SettingsDivider()
                 SettingsSectionTitle("LOCATION")
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {

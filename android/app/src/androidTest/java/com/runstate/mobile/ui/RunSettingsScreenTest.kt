@@ -94,7 +94,7 @@ class RunSettingsScreenTest {
 
     @Test
     fun appearanceChoicesReportOnlyAppearanceAndWaitForTheSavedPreference() {
-        var appearance by mutableStateOf(RunAppearance.AUTO)
+        var appearance by mutableStateOf(RunPreferences().appearance)
         var saving by mutableStateOf(false)
         var available by mutableStateOf(true)
         val choices = mutableListOf<RunAppearance>()
@@ -113,8 +113,12 @@ class RunSettingsScreenTest {
                 onSetAppearance = { choices += it; saving = true }
             )
         }
-        compose.onNodeWithTag(appearanceOptionTag(RunAppearance.AUTO)).performScrollTo().assertIsSelected()
-        for (choice in listOf(RunAppearance.DAY, RunAppearance.NIGHT, RunAppearance.AUTO)) {
+        compose.onNodeWithTag(appearanceOptionTag(RunAppearance.NIGHT)).performScrollTo().assertIsSelected()
+        compose.onNodeWithText("Dark").assertIsDisplayed()
+        compose.onNodeWithText("Light").assertIsDisplayed()
+        compose.onNodeWithText("Auto").assertIsDisplayed()
+        saveDialogPreview("run-appearance-dark-default.png")
+        for (choice in listOf(RunAppearance.DAY, RunAppearance.AUTO, RunAppearance.NIGHT)) {
             val previous = appearance
             compose.onNodeWithTag(appearanceOptionTag(choice)).performScrollTo()
                 .assertIsDisplayed().assertIsEnabled().performClick()
@@ -137,7 +141,7 @@ class RunSettingsScreenTest {
             compose.onNodeWithTag(appearanceOptionTag(it)).performScrollTo().assertIsNotEnabled()
         }
         compose.runOnIdle {
-            assertEquals(listOf(RunAppearance.DAY, RunAppearance.NIGHT, RunAppearance.AUTO), choices)
+            assertEquals(listOf(RunAppearance.DAY, RunAppearance.AUTO, RunAppearance.NIGHT), choices)
             assertEquals(0, otherActions)
         }
     }

@@ -156,7 +156,7 @@ internal fun RunStateScreen(
     selectedEffortRating: Int? = null,
     effortRatingScale: EffortRatingScale? = EffortRatingScale.FOSTER,
     onSelectEffortRating: (Int?) -> Unit = {},
-    runAppearanceDay: Boolean = java.time.LocalTime.now().hour in 7 until 19,
+    runAppearanceDay: Boolean = false,
     countdownTickKey: Long = 0L,
     countdownCadenceActive: Boolean = true,
     musicPlayer: SpotifyLivePlayerState = SpotifyLivePlayerState(),

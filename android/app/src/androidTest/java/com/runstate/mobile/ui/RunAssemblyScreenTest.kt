@@ -3,9 +3,12 @@ package com.runstate.mobile.ui
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import androidx.activity.ComponentActivity
+import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBarsPadding
+import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
@@ -15,12 +18,17 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.captureToImage
+import androidx.compose.ui.test.getUnclippedBoundsInRoot
+import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasScrollAction
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.isDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -39,6 +47,7 @@ import com.runstate.mobile.location.GpsSignalStatus
 import com.runstate.mobile.R
 import com.runstate.mobile.music.SpotifyLivePlayerState
 import com.runstate.mobile.settings.RunMusicPlayerLayout
+import com.runstate.mobile.ui.theme.RunStateTheme
 import java.io.File
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -107,6 +116,163 @@ class RunAssemblyScreenTest {
         )
     }
 
+    /** Match MainActivity's edge-to-edge Scaffold and RunStateScreen host, without services. */
+    @Composable
+    private fun WindowFixture(
+        state: RunUiState,
+        day: Boolean,
+        gps: Boolean = true,
+        signal: GpsSignalStatus = GpsSignalStatus.RECORDING,
+        values: RunMetricsDisplay = metrics,
+        service: Boolean = true,
+        failed: Boolean = false,
+        onPause: () -> Unit = {},
+        onResume: () -> Unit = {}
+    ) {
+        val density = LocalDensity.current
+        CompositionLocalProvider(LocalDensity provides Density(density.density, 1f)) {
+            RunStateTheme {
+                Scaffold(Modifier.fillMaxSize()) { innerPadding ->
+                    RunStateScreen(
+                        model = RunUiModel(state, actionFailed = failed), metrics = values,
+                        countdownDigit = if (state == RunUiState.Countdown) 10 else null,
+                        onStart = {}, onCancelCountdown = {}, onRetryInitialization = {},
+                        onRetryStart = {}, onPause = onPause, onResume = onResume,
+                        onStop = {}, onStartAnother = {},
+                        modifier = Modifier.padding(innerPadding),
+                        isGpsRun = gps, gpsSelected = gps, gpsServicePresent = service,
+                        gpsSignalStatus = signal, runAppearanceDay = day,
+                        countdownTickKey = 10L, countdownCadenceActive = state == RunUiState.Countdown
+                    )
+                }
+            }
+        }
+    }
+
+    @Test
+    fun realWindowInsetsAndNoticesKeepBothBottomPanelsAndPausedStopFullyVisible() {
+        compose.mainClock.autoAdvance = false
+        compose.runOnUiThread { compose.activity.enableEdgeToEdge() }
+        var day by mutableStateOf(false)
+        var state by mutableStateOf(RunUiState.ActiveRunning)
+        var gps by mutableStateOf(true)
+        var signal by mutableStateOf(GpsSignalStatus.RECORDING)
+        var values by mutableStateOf(metrics)
+        var service by mutableStateOf(true)
+        var failed by mutableStateOf(false)
+        compose.setContent {
+            WindowFixture(state, day, gps, signal, values, service, failed,
+                onPause = { state = RunUiState.ActivePaused },
+                onResume = { state = RunUiState.ActiveRunning })
+        }
+        for (isDay in listOf(false, true)) {
+            for (notice in listOf("maximum", "partial", "weak", "sample")) {
+                compose.runOnIdle {
+                    day = isDay
+                    state = RunUiState.ActiveRunning
+                    gps = notice != "sample"
+                    service = notice != "maximum"
+                    failed = notice == "maximum"
+                    signal = if (notice == "weak") GpsSignalStatus.WEAK else GpsSignalStatus.RECORDING
+                    values = when (notice) {
+                        "sample" -> metrics.copy(sourceLabel = "Sample metrics", gpsDistanceAvailable = false,
+                            currentMilePace = "—")
+                        "partial", "maximum" -> metrics.copy(sourceLabel = "GPS metrics · partial",
+                            averagePace = "—", currentMilePace = "—")
+                        else -> metrics
+                    }
+                }
+                compose.mainClock.advanceTimeBy(1_600)
+                val noticeText = when (notice) {
+                    "sample" -> "Sample run · simulated distance"
+                    "partial", "maximum" -> "Partial GPS coverage · pace unavailable"
+                    else -> "GPS signal is limited. Distance may be incomplete."
+                }
+                if (notice == "maximum") {
+                    // A capped notice area may scroll independently; it must not force the
+                    // main run controls below their own viewport.
+                    compose.onNodeWithText(noticeText).assertExists()
+                    compose.onNodeWithText(ACTION_FAILED_MESSAGE).assertIsDisplayed()
+                    compose.onNodeWithText("Restart GPS tracking").assertIsDisplayed()
+                } else {
+                    compose.onNodeWithText(noticeText).assertIsDisplayed()
+                }
+                assertViewportAtInitialScrollPosition()
+                assertWholeInsideViewport(ACTIVE_RUN_SPLIT_PANEL_TAG)
+                assertWholeInsideViewport(ACTIVE_RUN_MUSIC_TAG)
+                compose.onNodeWithTag(HOLD_TO_STOP_TAG).assertDoesNotExist()
+
+                // Operate the actual circle, not its separate caption. No scrolling is allowed
+                // in this normal-size host test: partial visibility is the regression itself.
+                compose.onNodeWithContentDescription("Pause run").assertIsDisplayed().performClick()
+                compose.mainClock.advanceTimeBy(450)
+                compose.onNodeWithContentDescription("Resume run").assertIsDisplayed()
+                assertViewportAtInitialScrollPosition()
+                assertWholeInsideViewport(ACTIVE_RUN_METRICS_TAG)
+                assertWholeInsideViewport(ACTIVE_RUN_SPLIT_PANEL_TAG)
+                assertWholeInsideViewport(ACTIVE_RUN_MUSIC_TAG)
+                assertWholeInsideViewport(ACTIVE_RUN_FINISH_TAG)
+                assertWholeInsideViewport(HOLD_TO_STOP_TAG)
+                compose.onNodeWithTag(HOLD_TO_STOP_TAG).assertIsEnabled()
+                if (notice == "sample") {
+                    save(ACTIVE_RUN_SCREEN_TAG, "viewport-${if (isDay) "day" else "night"}-paused.png")
+                }
+            }
+        }
+    }
+
+    @Test
+    fun countdownFrameIsCenteredInTheInsetWindowInBothAppearances() {
+        compose.mainClock.autoAdvance = false
+        compose.runOnUiThread { compose.activity.enableEdgeToEdge() }
+        var day by mutableStateOf(false)
+        compose.setContent { WindowFixture(RunUiState.Countdown, day) }
+        for (isDay in listOf(false, true)) {
+            compose.runOnIdle { day = isDay }
+            compose.mainClock.advanceTimeBy(350)
+            val viewport = compose.onNodeWithTag(RUN_ASSEMBLY_VIEWPORT_TAG).getUnclippedBoundsInRoot()
+            val frame = compose.onNodeWithTag(COUNTDOWN_FRAME_TAG).getUnclippedBoundsInRoot()
+            assertEquals("The tall countdown frame should sit at the usable screen center",
+                (viewport.top.value + viewport.bottom.value) / 2f,
+                (frame.top.value + frame.bottom.value) / 2f, 4f)
+            assertViewportAtInitialScrollPosition()
+            assertWholeInsideViewport(COUNTDOWN_FRAME_TAG)
+            assertWholeInsideViewport(COUNTDOWN_START_NOW_TAG)
+            assertWholeInsideViewport(compose.onNodeWithText("Cancel"), "Cancel")
+            val start = compose.onNodeWithTag(COUNTDOWN_START_NOW_TAG).getUnclippedBoundsInRoot()
+            val cancel = compose.onNodeWithText("Cancel").getUnclippedBoundsInRoot()
+            assertTrue("The separate Start now dial must sit below the countdown frame",
+                start.top.value > frame.bottom.value)
+            assertTrue("Cancel must sit below the complete Start now control",
+                cancel.top.value > start.bottom.value)
+            compose.onNodeWithText("Start now").assertIsDisplayed()
+            compose.onNodeWithTag(COUNTDOWN_DIGIT_TAG, useUnmergedTree = true)
+                .assertTextEquals("10").assertIsDisplayed()
+            compose.onNodeWithText("Starting in", ignoreCase = true).assertDoesNotExist()
+            compose.onNodeWithText("Tap the number to start now").assertDoesNotExist()
+            save(COUNTDOWN_SCREEN_TAG, "viewport-${if (isDay) "day" else "night"}-countdown.png")
+            save(COUNTDOWN_SCREEN_TAG, "start-now-${if (isDay) "day" else "night"}-countdown.png")
+        }
+    }
+
+    @Test
+    fun pausedWeakSignalDoesNotReserveAnEmptyNoticeFooter() {
+        compose.mainClock.autoAdvance = false
+        compose.runOnUiThread { compose.activity.enableEdgeToEdge() }
+        var signal by mutableStateOf(GpsSignalStatus.RECORDING)
+        compose.setContent { WindowFixture(RunUiState.ActivePaused, day = false, signal = signal) }
+        compose.mainClock.advanceTimeBy(1_600)
+        val healthy = compose.onNodeWithTag(RUN_ASSEMBLY_VIEWPORT_TAG).getUnclippedBoundsInRoot()
+        compose.runOnIdle { signal = GpsSignalStatus.WEAK }
+        compose.mainClock.advanceTimeByFrame()
+        val weak = compose.onNodeWithTag(RUN_ASSEMBLY_VIEWPORT_TAG).getUnclippedBoundsInRoot()
+        assertEquals("A suppressed paused signal warning must not consume screen height",
+            healthy.bottom.value - healthy.top.value, weak.bottom.value - weak.top.value, 1f)
+        compose.onNodeWithText("GPS signal is limited. Distance may be incomplete.").assertDoesNotExist()
+        assertViewportAtInitialScrollPosition()
+        assertWholeInsideViewport(ACTIVE_RUN_FINISH_TAG)
+    }
+
     @Test
     fun dayAndNightShowRealMetricValuesAndCaptureTheAcceptedLayout() {
         compose.mainClock.autoAdvance = false
@@ -149,13 +315,30 @@ class RunAssemblyScreenTest {
         compose.mainClock.autoAdvance = false
         val actions = Actions()
         var digit by mutableStateOf<Int?>(null)
-        compose.setContent { Fixture(RunUiState.Countdown, digit, actions = actions) }
+        var enabled by mutableStateOf(true)
+        compose.setContent { Fixture(RunUiState.Countdown, digit, enabled = enabled, actions = actions) }
         compose.mainClock.advanceTimeBy(350)
         compose.onNodeWithTag(COUNTDOWN_DIGIT_TAG, useUnmergedTree = true).assertTextEquals("10").assertIsDisplayed()
+        compose.onNodeWithText("Start now").assertIsDisplayed()
         compose.onNodeWithTag(COUNTDOWN_START_NOW_TAG).assertIsNotEnabled()
+            .performTouchInput { down(center); up() }
+        assertEquals(0, actions.startsNow)
         compose.runOnIdle { digit = 7 }
         compose.mainClock.advanceTimeBy(350)
         compose.onNodeWithTag(COUNTDOWN_DIGIT_TAG, useUnmergedTree = true).assertTextEquals("7")
+        val frame = compose.onNodeWithTag(COUNTDOWN_FRAME_TAG)
+        assertFalse("The countdown number/frame is decorative, not a second start control",
+            frame.fetchSemanticsNode().config.contains(SemanticsActions.OnClick))
+        frame.performTouchInput { down(center); up() }
+        compose.mainClock.advanceTimeByFrame()
+        assertEquals(0, actions.startsNow)
+        compose.runOnIdle { enabled = false }
+        compose.mainClock.advanceTimeByFrame()
+        compose.onNodeWithTag(COUNTDOWN_START_NOW_TAG).assertIsNotEnabled()
+            .performTouchInput { down(center); up() }
+        assertEquals(0, actions.startsNow)
+        compose.runOnIdle { enabled = true }
+        compose.mainClock.advanceTimeByFrame()
         compose.onNodeWithTag(COUNTDOWN_START_NOW_TAG).assertIsEnabled().performClick()
         compose.onNodeWithText("Cancel").performClick()
         assertEquals(1, actions.startsNow)
@@ -171,10 +354,43 @@ class RunAssemblyScreenTest {
         compose.mainClock.advanceTimeBy(400)
         compose.onNodeWithText("Starting your run", ignoreCase = true).assertIsDisplayed()
         compose.onNodeWithTag(ACTIVE_RUN_DISTANCE_TAG).assertDoesNotExist()
-        compose.onNodeWithTag(COUNTDOWN_START_NOW_TAG).assertIsNotEnabled()
+        compose.onNodeWithTag(COUNTDOWN_START_NOW_TAG).assertIsDisplayed().assertIsNotEnabled()
+            .performTouchInput { down(center); up() }
         compose.onNodeWithText("Cancel").assertDoesNotExist()
         compose.onNodeWithContentDescription("Pause run").assertDoesNotExist()
         assertEquals(0, actions.startsNow)
+        assertEquals(0, actions.stops)
+    }
+
+    @Test
+    fun shortLargeTextCountdownKeepsStartNowAndCancelReachable() {
+        compose.mainClock.autoAdvance = false
+        val actions = Actions()
+        compose.setContent {
+            val density = LocalDensity.current
+            CompositionLocalProvider(LocalDensity provides Density(density.density, 2f)) {
+                Fixture(RunUiState.Countdown, digit = 8, actions = actions,
+                    modifier = Modifier.size(360.dp, 480.dp))
+            }
+        }
+        compose.mainClock.advanceTimeBy(1_200)
+        compose.onNodeWithTag(COUNTDOWN_START_NOW_TAG).scrollWithClock()
+            .assertIsDisplayed().assertIsEnabled()
+        assertWholeInsideViewport(COUNTDOWN_START_NOW_TAG)
+        val layouts = mutableListOf<TextLayoutResult>()
+        compose.onNodeWithText("Start now", useUnmergedTree = true)
+            .performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
+        save(COUNTDOWN_SCREEN_TAG, "start-now-short-large-countdown.png")
+        val labelLayout = layouts.single()
+        assertFalse("The Start now label must retain its full text: size=${labelLayout.size}, " +
+            "lines=${labelLayout.lineCount}, widthOverflow=${labelLayout.didOverflowWidth}, " +
+            "heightOverflow=${labelLayout.didOverflowHeight}", labelLayout.hasVisualOverflow)
+        compose.onNodeWithTag(COUNTDOWN_START_NOW_TAG).performClick()
+        assertEquals(1, actions.startsNow)
+        compose.onNodeWithText("Cancel").scrollWithClock().assertIsDisplayed()
+        assertWholeInsideViewport(compose.onNodeWithText("Cancel"), "Cancel")
+        compose.onNodeWithText("Cancel").performClick()
+        assertEquals(1, actions.cancels)
         assertEquals(0, actions.stops)
     }
 
@@ -476,6 +692,32 @@ class RunAssemblyScreenTest {
         compose.onNodeWithText("Back to distance").performClick()
         compose.mainClock.advanceTimeByFrame()
         compose.onNodeWithTag(ACTIVE_RUN_PLAYER_ACCESSIBLE_TAG).assertDoesNotExist()
+    }
+
+    private fun assertWholeInsideViewport(tag: String) {
+        assertWholeInsideViewport(compose.onNodeWithTag(tag), tag)
+    }
+
+    private fun assertWholeInsideViewport(interaction: SemanticsNodeInteraction, description: String) {
+        val viewport = compose.onNodeWithTag(RUN_ASSEMBLY_VIEWPORT_TAG).getUnclippedBoundsInRoot()
+        val node = interaction.assertIsDisplayed().getUnclippedBoundsInRoot()
+        // Clipped semantics bounds could make a cut-off panel appear to pass. Compare the
+        // actual full layout rectangle against the viewport instead, with one dp for rounding.
+        assertTrue("$description must have a measurable full layout",
+            node.right.value > node.left.value && node.bottom.value > node.top.value)
+        assertTrue("$description extends above the viewport", node.top.value >= viewport.top.value - 1f)
+        assertTrue("$description extends below the viewport", node.bottom.value <= viewport.bottom.value + 1f)
+        assertTrue("$description extends left of the viewport", node.left.value >= viewport.left.value - 1f)
+        assertTrue("$description extends right of the viewport", node.right.value <= viewport.right.value + 1f)
+    }
+
+    private fun assertViewportAtInitialScrollPosition() {
+        val range = compose.onNode(
+            hasScrollAction() and hasAnyAncestor(hasTestTag(RUN_ASSEMBLY_VIEWPORT_TAG)),
+            useUnmergedTree = true
+        ).fetchSemanticsNode().config[SemanticsProperties.VerticalScrollAxisRange]
+        assertEquals("Normal-size content should be visible without scrolling", 0f, range.value(), .5f)
+        assertEquals("Normal-size content should fit the viewport", 0f, range.maxValue(), .5f)
     }
 
     /** Scroll actions need frames even when the presentation's animation clock is frozen. */

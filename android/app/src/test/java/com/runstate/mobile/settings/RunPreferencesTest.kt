@@ -38,11 +38,12 @@ class RunPreferencesTest {
     }
 
     @Test
-    fun appearanceDefaultsToAutoForExistingPreferencesWithoutWriting() {
+    fun appearanceDefaultsToDarkForExistingPreferencesWithoutWriting() {
         val values = FakeValues(mutableMapOf("observe_music" to true))
-        assertEquals(RunAppearance.AUTO, StoredRunPreferences(values).load().appearance)
+        assertEquals(RunAppearance.NIGHT, RunPreferences().appearance)
+        assertEquals(RunAppearance.NIGHT, StoredRunPreferences(values).load().appearance)
         values.savedStrings["run_appearance"] = "unknown-old-mode"
-        assertEquals(RunAppearance.AUTO, StoredRunPreferences(values).load().appearance)
+        assertEquals(RunAppearance.NIGHT, StoredRunPreferences(values).load().appearance)
         assertTrue(StoredRunPreferences(values).load().observeMusic)
         assertEquals(0, values.commits)
     }

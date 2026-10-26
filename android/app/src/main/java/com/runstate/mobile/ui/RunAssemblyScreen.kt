@@ -75,10 +75,15 @@ import kotlin.math.min
 import kotlin.math.sin
 
 internal const val ACTIVE_RUN_SPLIT_TAG = "activeRunSplit"
+internal const val ACTIVE_RUN_SPLIT_PANEL_TAG = "activeRunSplitPanel"
 internal const val ACTIVE_RUN_MUSIC_TAG = "activeRunMusic"
 internal const val ACTIVE_RUN_FINISH_TAG = "activeRunFinish"
+internal const val RUN_ASSEMBLY_VIEWPORT_TAG = "runAssemblyViewport"
+internal const val COUNTDOWN_FRAME_TAG = "countdownFrame"
 
 private val AssemblyNumberFont = FontFamily(Font(R.font.anton_regular))
+// Browser draft's centered Tall frame, with its 58-unit browser chrome removed.
+private const val AssemblyCountdownTop = 226f
 private val AssemblyEase = CubicBezierEasing(.22f, .85f, .16f, 1f)
 private val AssemblyPull = CubicBezierEasing(.48f, .04f, .85f, .6f)
 private val AssemblySettle = CubicBezierEasing(.18f, .75f, .28f, 1f)
@@ -247,18 +252,18 @@ internal fun RunAssemblyScreen(
         gpsSignalStatus == GpsSignalStatus.STALE -> "GPS unavailable"
         else -> "Finding GPS"
     }
-    val showNotice = active && (actionFailed || !isGpsRun || !gpsServicePresent ||
-        gpsSignalStatus != GpsSignalStatus.RECORDING || metrics?.sourceLabel?.contains("partial") == true)
+    val showNotice = active && (actionFailed || !isGpsRun ||
+        (isGpsRun && (!gpsServicePresent || (!paused && gpsSignalStatus != GpsSignalStatus.RECORDING))) ||
+        metrics?.sourceLabel?.contains("partial") == true)
 
-    BoxWithConstraints(modifier.fillMaxSize().background(colors.canvas)
+    Box(modifier.fillMaxSize().background(colors.canvas)
         .testTag(if (active) ACTIVE_RUN_SCREEN_TAG else COUNTDOWN_SCREEN_TAG)) {
-    // Recording notices reduce the scroll viewport without moving the artwork's anchor.
-    val surfaceHeight = maxHeight.value
     Column(Modifier.fillMaxSize()) {
-        BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
-            val unit = maxWidth.value / 393f
-            val extra = max(0f, LocalDensity.current.fontScale - 1.25f) * 70f
-            val musicArtSize = if (LocalDensity.current.fontScale > 1.3f) 36f else 52f
+        BoxWithConstraints(Modifier.weight(1f).fillMaxWidth().testTag(RUN_ASSEMBLY_VIEWPORT_TAG)) {
+            val fontScale = LocalDensity.current.fontScale
+            val widthUnit = maxWidth.value / 393f
+            val extra = max(0f, fontScale - 1.25f) * 70f
+            val musicArtSize = if (fontScale > 1.3f) 36f else 52f
             val shift = extra * .7f
             val heroY = 214f + shift - 7f * pauseAmount
             val heroScale = 1f - .06f * pauseAmount
@@ -269,16 +274,21 @@ internal fun RunAssemblyScreen(
             val stopY = bottomY + bottomH + 12f
             // Reserve the same overall height in both states: the facts compact toward the
             // circle rather than shifting the header when the Stop control appears.
-            val stopLabelExtra = max(0f, LocalDensity.current.fontScale - 1f) * 14f
+            val stopLabelExtra = max(0f, fontScale - 1f) * 14f
             val designHeight = if (active) 794f + shift + extra * 2 + stopLabelExtra
                 else 774f + shift + extra * 2
-            val contentHeight = max(surfaceHeight, designHeight * unit)
+            // Fit the real viewport after system insets AND notices. Keep short-window /
+            // accessibility scrolling instead of shrinking controls or enlarged text away.
+            val unit = if (fontScale > 1.3f) widthUnit else
+                min(widthUnit, maxHeight.value / designHeight).coerceAtLeast(min(widthUnit, .9f))
+            val contentHeight = max(maxHeight.value, designHeight * unit)
             val topInset = max(0f, (contentHeight - designHeight * unit) / 2f)
             val scroll = rememberScrollState()
             Column(Modifier.fillMaxSize().verticalScroll(scroll)) {
                 Box(Modifier.fillMaxWidth().height(contentHeight.dp)) {
                     AssemblyAtmosphere(day, Modifier.fillMaxSize())
-                    Box(Modifier.fillMaxWidth().height((designHeight * unit).dp).offset(y = topInset.dp)) {
+                    Box(Modifier.width((393f * unit).dp).height((designHeight * unit).dp)
+                        .align(Alignment.TopCenter).offset(y = topInset.dp)) {
                         AssemblyGeometry(
                             active, counting, visibleDigit ?: lastDigit.intValue, colors, beat, clock, reduced,
                             heroY, heroScale, paceY, paceH, bottomY, bottomH,
@@ -290,7 +300,7 @@ internal fun RunAssemblyScreen(
                         if (counting || starting) {
                             val numberSize = if ((visibleDigit ?: lastDigit.intValue) >= 10) 118f else 142f
                             val fixedNumeral = with(LocalDensity.current) { (numberSize * unit).dp.toSp() }
-                            Box(Modifier.offset(x = (42 * unit).dp, y = (153 * unit).dp)
+                            Box(Modifier.offset(x = (42 * unit).dp, y = ((AssemblyCountdownTop + 7f) * unit).dp)
                                 .size((309 * unit).dp),
                                 contentAlignment = Alignment.Center) {
                                 if (visibleDigit != null) Text(visibleDigit.toString(), color = colors.ink,
@@ -303,28 +313,24 @@ internal fun RunAssemblyScreen(
                                         alpha = if (starting) .55f else beatVisibility(beat.floatValue, reduced)
                                     })
                             }
-                            // Only the central Tall frame starts early; the six side symbols
-                            // are decorative and must not accidentally skip the countdown.
-                            Box(Modifier.offset(x = (141 * unit).dp, y = (146 * unit).dp)
+                            // The countdown artwork is decorative. Only the explicit dial
+                            // below it requests an early start through the existing run owner.
+                            Box(Modifier.offset(x = (141 * unit).dp, y = (AssemblyCountdownTop * unit).dp)
                                 .size((112 * unit).dp, (324 * unit).dp)
-                                .testTag(COUNTDOWN_START_NOW_TAG)
-                                .semantics { contentDescription = "Start now" }
-                                .clickable(enabled = counting && actionsEnabled && countdownDigit != null && countdownDigit > 0,
-                                    role = Role.Button, onClick = onStartNow))
-                            Text(if (starting) "STARTING YOUR RUN" else "STARTING IN",
-                                fontSize = (10 * unit).sp, letterSpacing = (3.1f * unit).sp,
-                                color = if (day) Color(0xFF326F7E) else Color(0xFF898C98),
-                                textAlign = TextAlign.Center,
-                                modifier = Modifier.fillMaxWidth().offset(y = (516 * unit).dp))
+                                .testTag(COUNTDOWN_FRAME_TAG))
+                            AssemblyStartNowDial(
+                                day = day, beat = beat, reduced = reduced, starting = starting,
+                                enabled = counting && actionsEnabled && countdownDigit != null && countdownDigit > 0,
+                                onClick = onStartNow, unit = unit,
+                                modifier = Modifier.align(Alignment.TopCenter)
+                                    .offset(y = ((AssemblyCountdownTop + 348f) * unit).dp)
+                            )
                             if (counting) {
                                 TextButton(onClick = onCancel, enabled = actionsEnabled,
                                     modifier = Modifier.align(Alignment.TopCenter)
-                                        .offset(y = (653 * unit).dp).heightIn(min = 48.dp)) {
+                                        .offset(y = ((704f + extra) * unit).dp).heightIn(min = 48.dp)) {
                                     Text("Cancel", color = colors.cancel, fontSize = 13.sp)
                                 }
-                                Text("Tap the number to start now", color = colors.cancel.copy(alpha = .8f),
-                                    fontSize = 11.sp, textAlign = TextAlign.Center,
-                                    modifier = Modifier.fillMaxWidth().offset(y = (706 * unit).dp))
                             }
                         }
                         if (active) {
@@ -406,6 +412,7 @@ internal fun RunAssemblyScreen(
                             }
                             Column(Modifier.offset(x = (43 * unit).dp, y = (bottomY * unit).dp)
                                 .size((153 * unit).dp, (bottomH * unit).dp)
+                                .testTag(ACTIVE_RUN_SPLIT_PANEL_TAG)
                                 .reveal(clock, .49f, reduced), verticalArrangement = Arrangement.Center) {
                                 AssemblyFittedReading(metrics?.currentMilePace ?: "—", colors.ink, 35f * unit,
                                     CompletionNumberFont, Modifier.fillMaxWidth(), readingTag = ACTIVE_RUN_SPLIT_TAG)
@@ -524,6 +531,74 @@ private fun AssemblyFittedReading(value: String, color: Color, maxSize: Float, f
 }
 
 @Composable
+private fun AssemblyStartNowDial(
+    day: Boolean,
+    beat: State<Float>,
+    reduced: Boolean,
+    starting: Boolean,
+    enabled: Boolean,
+    onClick: () -> Unit,
+    unit: Float,
+    modifier: Modifier = Modifier
+) {
+    val face = if (day) Color(0xFFE8CA66) else Color(0xFF262A31)
+    val ink = if (day) Color(0xFF345957) else Color(0xFFEFF2F6)
+    val accent = if (day) Color(0xFF6D8C7B) else Color(0xFFAB9FDE)
+    val edge = if (day) Color(0xFFBDAF62) else Color(0xFF6E757E)
+    val play = remember {
+        val radius = 40.48f
+        fun triangle(left: Float, right: Float, halfHeight: Float) = Path().apply {
+            moveTo(44f - radius * left, 44f - radius * halfHeight)
+            lineTo(44f + radius * right, 44f)
+            lineTo(44f - radius * left, 44f + radius * halfHeight)
+            close()
+        }
+        Path.combine(PathOperation.Difference, triangle(.23f, .42f, .36f), triangle(.12f, .24f, .20f))
+    }
+    Column(modifier.width((160f * unit).dp)
+        .testTag(COUNTDOWN_START_NOW_TAG)
+        .clip(RoundedCornerShape(24.dp))
+        .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
+        .semantics { contentDescription = "Start now" }
+        .graphicsLayer { alpha = if (enabled) 1f else .6f },
+        horizontalAlignment = Alignment.CenterHorizontally) {
+        Canvas(Modifier.size((88f * unit).dp)) {
+            // Share the number/tile cadence; this dial never owns a timer or starts a run itself.
+            val b = beat.value
+            val movement = articulation(b, reduced)
+            val landing = if (reduced) 0f else 1f - AssemblyEase.transform(fraction(b / .3f))
+            val visibility = beatVisibility(b, reduced)
+            scale(size.width / 88f, pivot = Offset.Zero) {
+                val center = Offset(44f, 44f)
+                val radius = 40.48f
+                drawCircle(face, radius, center)
+                drawCircle(edge, radius, center, style = Stroke(1f))
+                rotate(movement * 12f, center) {
+                    repeat(12) { index ->
+                        val major = index % 3 == 0
+                        val angle = index * PI / 6.0 - PI / 2.0
+                        val direction = Offset(cos(angle).toFloat(), sin(angle).toFloat())
+                        val outer = radius * ((if (major) .85f else .81f) + landing * .07f - movement * .035f)
+                        val inner = radius * (.66f - movement * .10f + landing * .07f)
+                        drawLine(ink.copy(alpha = if (major) .4f + .5f * visibility else .2f + .4f * visibility),
+                            center + direction * inner, center + direction * outer,
+                            strokeWidth = if (major) 1.7f else 1.1f, cap = StrokeCap.Round)
+                    }
+                }
+                drawPath(play, ink)
+                drawLine(accent, Offset(44f - radius * .05f, 44f), Offset(44f + radius * .12f, 44f),
+                    strokeWidth = radius * .10f)
+            }
+        }
+        Text(if (starting) "Starting your run" else "Start now",
+            color = if (day) Color(0xFF23687B) else Color(0xFFCFD3DC),
+            fontSize = (14f * unit).sp, fontWeight = FontWeight.SemiBold,
+            letterSpacing = (1.1f * unit).sp, textAlign = TextAlign.Center,
+            modifier = Modifier.fillMaxWidth().padding(top = (5f * unit).dp, bottom = (4f * unit).dp))
+    }
+}
+
+@Composable
 private fun AssemblyControlIcon(play: Boolean, color: Color, modifier: Modifier) {
     Canvas(modifier) {
         if (play) drawPath(Path().apply {
@@ -592,7 +667,7 @@ private fun AssemblyGeometry(active: Boolean, counting: Boolean, digit: Int, col
             fun source(index: Int, stepAt: Int): AssemblyBox {
                 val left = index < 3
                 val row = ((index % 3) + if (left) stepAt % 3 else 3 - stepAt % 3) % 3
-                return AssemblyBox(if (left) 22f else 265f, 146f + row * 112f, 106f, 100f)
+                return AssemblyBox(if (left) 22f else 265f, AssemblyCountdownTop + row * 112f, 106f, 100f)
             }
             // Two source squares become the two halves of one unbroken average-pace panel.
             val finals = listOf(AssemblyBox(116f,103f,252f,89f),
@@ -631,7 +706,7 @@ private fun AssemblyGeometry(active: Boolean, counting: Boolean, digit: Int, col
                 drawLine(colors.line.copy(alpha=progress(time,.71f,.19f,reduced)),Offset(116f,108f),Offset(116f,180f),1f)
             }
             val frame = if(active)progress(time,0f,.51f,reduced) else 0f
-            val frameBox=mixBox(AssemblyBox(141f,146f,112f,324f),AssemblyBox(42f,heroY,309f,309f),frame)
+            val frameBox=mixBox(AssemblyBox(141f,AssemblyCountdownTop,112f,324f),AssemblyBox(42f,heroY,309f,309f),frame)
             val frameTone=if(reduced).6f else fraction(.28f+(1-AssemblyEase.transform(fraction(b/.32f)))*.6f+articulation(b,reduced)*.12f)
             val frameAlpha=(if(colors.day)mix(.4f,.52f,frameTone) else mix(.32f,.46f,frameTone))*(1-frame)
             drawRoundRect(colors.grid.copy(alpha=frameAlpha),Offset(frameBox.x,frameBox.y),Size(frameBox.w,frameBox.h),CornerRadius(mix(1f,155f,frame)),style=Stroke(1f))
