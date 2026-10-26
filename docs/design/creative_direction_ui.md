@@ -8,6 +8,72 @@ status: v0.4 — August 13 working proof recorded; execution remains open and is
 
 # RunState — Creative Direction (v0.4)
 
+## October 25 — Dark as the primary running appearance
+
+Manley strongly prefers the Night countdown/Active Run composition and wants it to represent
+RunState at any time of day. This is now named **Dark** and is the default; the bright version
+is named **Light** and remains selectable in Run settings. **Auto** remains an explicit choice
+with the existing local 7 AM–7 PM Light window. Previously saved choices remain compatible.
+The decision changes default/labels, not the accepted colors, motion or other app screens.
+Installed on Moto with Dark selected; settings screenshot and focused silent UI check passed,
+both 812-test suites/builds passed, and all 20 completed runs and stored preferences survived
+unchanged. See `project_current_state.md` §October 25 Dark default for the bounded validation.
+
+## October 25 — standalone design method and case study
+
+At Manley's request, the October 24 research strategy has been expanded into a standalone Word
+document and matching PDF, outside the repository. The document centers his method of adapting
+underlying design ideas to new purposes, then traces the references, rejected concepts, flat
+foundation, Endel motion transfer, magnetic arrival correction, Tall frame selection, Day/Night
+refinement, music/finish comparisons and native fit corrections. It includes embedded checkpoint
+images, source links, a reusable worksheet and a future design brief.
+
+Current local copies: `C:/Users/Owner/.codex/visualizations/2026/10/03/01a103b6-bff0-72d1-8008-7b8b20f78035/runstate-design-method/RunState Design Method and Case Study.docx`
+and the same filename with `.pdf`. Manley will choose a File Explorer folder later; the files are
+self-contained and can be moved. Keep the full reusable document external; this is its project pointer.
+
+**Updated visual evidence:** Manley says he really likes the new Active Run screen and feels it
+raised the app's design level, especially compared with Start. This supports visual satisfaction
+with the direction. It does not close outdoor/real-playback validation, temporary artwork choices,
+production artwork permission or the overall AfroTech essentials checkpoint. No additional screen
+redesign is authorized by this documentation task. The October 24 method below remains a dated
+research-stage record, superseded by this retrospective for later outcomes.
+
+## October 25 — explicit native Start now dial
+
+**Ready to test; installed on Moto.** Manley requests the missing native Start now control,
+explicitly superseding its browser-only restriction. Use the browser's flat 88-unit dial at y574
+under the centered countdown: gold Day face, graphite Night face, outlined play and twelve marks
+sharing the countdown beat. The number/frame is decorative, not a hidden start button. Remove
+the visual STARTING IN and tap-number hints; put Cancel below. During a pending durable start,
+disable the dial and show Starting your run. No 3D treatment or voice/timing changes.
+
+Preserve the centered countdown and height-aware Active Run fit, along with the existing start
+callback/guards. Existing source/test files only, no new source/assets. Final 812 JVM tests per
+variant, three APKs and all 22 selected silent Moto checks passed. Day/Night and short 2x-text
+button captures were inspected, including the corrected large-text label measurement. All eleven
+runs (ten completed/one paused), 12 tables/five preference files match the fresh baseline;
+integrity OK/FK0. User visual review remains; no Git/deploy or overall AfroTech completion claim.
+
+## October 25 — native countdown centering and full-height fit
+
+**Ready to test; installed on Moto.** Manley approves the centered
+countdown placement natively: numeral, Tall frame and all six tiles move down together to the
+226-unit origin, matching the browser's central composition. This supersedes browser-only
+centering. The dial was still browser-only here; its later native authorization is above.
+Voice delivery and actions are unchanged.
+
+Active Run must fit the Moto's remaining space after system bars and actual notices, keeping
+This mile / Spotify Music and paused Stop visible together. Center the scaled canvas horizontally
+within the full atmosphere; remove empty paused weak-GPS footer space while retaining real
+notices. Keep a .9 readability floor and scrolling above 1.3 font scale or on short windows.
+Preserve both music-art choices and the selected Stop-circle styling. Debug/release each passed
+812 JVM tests, three APKs built and all 22 selected silent Moto checks passed. Four Day/Night
+countdown/paused captures confirm the full lower panel and Stop fit. All ten runs, including the
+paused sample, all 12 tables and five preference files are unchanged; integrity OK/FK0.
+Two existing source/test files changed, no new source/assets. User visual review and real use
+remain. Details are in `project_current_state.md`; no Git/deploy or AfroTech completion claim.
+
 ## October 25 — selected Stop circle for native
 
 **Ready to test; installed on Moto.** Manley selects the browser **Stop circle** treatment for the
@@ -461,7 +527,7 @@ be reused and improved on future screens or products. This records his approach,
 organized for clarity; it is not a claim that the approach has already produced a successful
 Active Run design.
 
-**Current evidence:** Manley finds the research helpful and is organizing the images and resources
+**Evidence at the original October 24 checkpoint:** Manley finds the research helpful and is organizing the images and resources
 to communicate what he likes. A final direction, designed screen and real-use outcome are still
 pending. Keep this method provisional until those results can be reviewed.
 

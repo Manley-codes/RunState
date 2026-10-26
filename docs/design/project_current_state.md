@@ -39,6 +39,161 @@ online profiles require user ownership and access control. Separate local histor
 phones do not by themselves require accounts. Keep the current demo free of a mandatory sign-up;
 revisit earlier only for a concrete requirement, not as a prerequisite for finishing existing UI.
 
+## October 25 Dark default — Light and Auto remain explicit alternatives
+
+**Complete for agreed scope; installed on Moto.** Manley chose the former Night appearance as
+the default countdown/Active Run design at any time of day. Run settings now shows Dark, Light,
+Auto in that order. Missing or invalid preferences and unloaded screen defaults resolve to Dark.
+Existing saved NIGHT/DAY/AUTO values are retained for compatibility; explicit Light or Auto
+choices are not overwritten. Auto still selects Light from 7 AM to 7 PM local time, and each
+run keeps the appearance it began with. This does not change other screens' themes or the
+accepted visualizer, music, countdown timing, or run controls.
+
+Both debug/release JVM suites passed (812 tests each), as did debug/release/test APK builds and
+one focused silent Moto settings check for labels, Dark default, all choices and save ownership.
+The captured settings screen was inspected. After Manley confirmed his active run was saved,
+the main app was updated in place. His existing NIGHT preference already matched the choice.
+All 20 completed runs, all 12 inspected database tables and five preference files matched the
+post-save baseline exactly after installation/testing; integrity OK, zero FK violations. The
+test-only package was removed and main RunState reopened. Private receipts use dark-default
+labels in `../local/assembly-2026-10-25/`. No new source/assets, audio check, Git mutation or
+backend/deployment action. This bounded settings change does not close remaining field checks
+or the overall AfroTech milestone.
+
+Pending user-owned commits at this checkpoint also include the previously installed countdown
+centering/viewport fit and native Start now dial, plus the recent design-method and restored
+voice verification notes. They have not been staged or committed by Codex.
+
+## October 25 subscription restored — Both original speech routes verified
+
+Manley renewed ElevenLabs and requested verification. The live Render health endpoint returned
+200 with both voice capabilities enabled; connected voice lookup still returned the original
+Black British female leader and 1st test voice IDs. A temporary opt-in silent Moto diagnostic
+used the phone's existing encrypted connection and production ReflectionSpeechHttpClient for
+exactly one short synthetic line per route. Both passed Android audio metadata validation:
+
+- RUN: "Starting in ten." returned 24,284 bytes, 1,489 ms audio, request 1,192 ms.
+- REFLECTION: "You showed up and kept moving." returned 27,628 bytes, 1,698 ms audio,
+  request 1,868 ms.
+
+No audio was played, reflection wording generated, Spotify transport invoked, run saved or
+production configuration changed. This verifies current paid synthesis delivery through the
+installed app's connection, not a new listening or full-run check. No subscription-recovery
+code fix/redeploy was necessary. Failed countdown prefetch is retryable; foreground Start
+prepares missing fixed cues, and a countdown uses the custom voice only when its full cue set
+is ready. Normal fallback still applies to future network/provider failures.
+
+All 19 completed runs, all 12 inspected database tables and five preference files matched
+before/after hashes; integrity OK, zero FK violations. The test-only APK was removed, temporary
+test source moved out of Android source into ignored local receipts, and main RunState reopened.
+Private receipts and the diagnostic source are in `../local/assembly-2026-10-25/` under
+subscription-restored labels. No app reinstall, Git or deployment action; the prior alternate
+voice audition remains deferred and was never integrated. This does not close AfroTech work.
+
+## October 25 independent voice auditions — Historical fallback period; alternatives deferred
+
+Manley requested metadata recovery for the two existing ElevenLabs voices and
+independent alternatives that could preserve their roles without another ElevenLabs
+subscription. Read-only connected voice lookups matched the backend's exact IDs:
+
+- `HEtSzb2EMPNWlQY8Ofqf`, **Black British female leader**, category generated,
+  saved description: "Enthusiastic 25-year-old black British woman with a slightly
+  masculine but attractive, smooth voice."
+- `DocoybWhaSQMUIs7gLNe`, **1st test voice**, category generated, saved description:
+  "A middle-aged African American male, friendly, confident, conversational, fun,
+  productive and motivational tone."
+
+Both are non-library voices. These saved descriptions may reflect original design
+intent; they do not establish recovery of the full original prompt or a portable
+voice model. No historical subscription-tier evidence or account-level saved voice
+settings was returned. Current backend uses eleven_multilingual_v2 for both, run
+voice speed0.9, no explicit reflection settings override.
+
+Two independent custom candidates were generated successfully through the official
+[Qwen demo](https://huggingface.co/spaces/Qwen/Qwen3-TTS), using only descriptive
+character prompts and fictional scripts: female12.617s and male11.177s, both24kHz
+mono16-bit WAV. No account/payment/retry or original ElevenLabs audio was used.
+Qwen documents reusing a newly designed synthetic reference with its Base model;
+that consistency workflow and production compute/hosting are not verified here.
+The quota-limited free demo is an audition tool, not a proposed live app dependency.
+
+Four independent Kokoro presets (Emma/Isabella/Michael/Fenrir) were also generated
+offline using an isolated CPU runtime under the private audition folder. Four main
+samples plus ten isolated countdown cues passed waveform/format/hash checks;
+full-precision model/voice bank matched published release digests. Main samples
+took6.5–7.7s each to synthesize. Emma's isolated One and Isabella's Three/Two/One
+exceed1s at these settings, so countdown timing needs further work before use.
+Preset selection does not recreate the original descriptions or guarantee identity.
+
+Manley listened: the man's voice was somewhat close but insufficient, and the woman's
+was nowhere near. He does not want to cycle through alternative voices; retain the
+current default fallback and the original ElevenLabs configuration for later return.
+Stop further audition/cloning work unless requested. No application,
+backend provider, phone, paid subscription, Git or deployment change was made.
+Necessary private files include exact metadata, two custom/four preset audition
+WAVs, isolated cue checks, reproducible scripts, model/runtime assets and manifests
+in `../local/voice-alternatives-2026-10-25/` (gitignored). These are not new production
+assets and do not mark AfroTech essentials complete.
+
+Follow-up source check confirms there is no durable archive of all previous spoken
+lines: `RunReflectionEntity` retains reflection text, `RunVoiceCueCache` holds byte
+arrays only in process memory, and reflection playback uses `MemoryAudioSource`.
+The phone-engine warm-up WAV is temporary and deleted. Two original male MP3 exports
+exist in Downloads (September23,23:26:18 and23:29:20, filenames contain1st test voice),
+and the metadata lookup returned original preview URLs for both voices. Those are
+limited original references, not an archive of the app's announcements or a portable
+speech engine. No phone recording archive or voice-model export is claimed.
+
+## October 25 native Start now dial — Ready to test; installed on Moto
+
+Manley explicitly requests the missing native Start now button, superseding the earlier
+browser-only dial restriction. A flat 88-design-unit dial sits below the centered countdown at
+y574: gold in Day, graphite in Night, with an outlined play icon and twelve marks synchronized
+to the existing countdown beat. Central countdown artwork is now decorative; only the explicit
+dial requests an early start. Remove the visual STARTING IN and tap-number hints, move Cancel
+below the dial, and show a disabled dial with Starting your run while the durable start is pending.
+
+The existing callback, start guards, durable admission and accepted voice timing are unchanged.
+Preserve the preceding countdown centering, height-aware viewport fit and Active Run design.
+**Status: Ready to test — installed on Moto ZT422G8FT4.** Final debug/release each passed 812 JVM
+tests and all three APKs built. All 22 selected silent Moto checks passed (17 RunAssembly and
+five root checks). Day/Night and short 2x-text button captures were inspected. The initial
+large-text check caught tight label measurement; allowing the label the available column width
+fixed it, and the final check passed. Only existing source/test files changed; no new source/assets.
+The in-place update preserved exact hashes for all 12 business tables and five preference files
+against `start-now-before`: eleven runs remain, ten completed and one paused; integrity OK/FK0.
+User changes between tasks explain the new count. Private `start-now-*` receipts remain in ignored
+`docs/local/assembly-2026-10-25/`. User visual review remains; no Git/deployment work or confirmation
+that all AfroTech essentials are finished.
+
+## October 25 native countdown centering and viewport fit — Ready to test; installed on Moto
+
+Manley authorizes lowering the native countdown to match the centered browser composition and
+fitting Active Run's lower This mile / Spotify Music / paused Stop controls on the Moto without
+routine scrolling. This supersedes browser-only countdown centering. The flat Start now dial was
+still browser-only at this checkpoint; the newer explicit authorization is recorded above.
+Voice timing, countdown actions and both music-art choices are unchanged.
+
+The numeral, Tall frame, six tiles, frame hit target and assembly source move down together to
+a 226-design-unit origin. Active Run now scales to the remaining height after system insets and
+the actual notice footer, with its canvas centered horizontally inside the full-screen atmosphere.
+Paused weak/stale GPS no longer reserves an empty footer; sample, missing-service, failure and
+partial-coverage notices remain. A .9 scale floor and width-based layout above 1.3 font scale
+preserve readability/accessibility scrolling on smaller windows or enlarged text.
+
+**Status: Ready to test — installed on Moto ZT422G8FT4.** Debug/release each passed 812 JVM tests
+and all three APKs built. All 22 selected silent Moto checks passed (16 RunAssembly and six
+RunStateScreen). Four Day/Night countdown/paused captures were inspected; the full lower panel
+and Stop fit. Only existing `RunAssemblyScreen.kt` and `RunAssemblyScreenTest.kt` changed;
+no new source/assets. Private `viewport-before`/`viewport-after` hashes match for all 12 business
+tables and five preference files: ten runs remain, nine completed and one paused sample;
+integrity OK/FK0. The paused sample was not resumed, finished or discarded. Only the test package
+was removed and MainActivity reopened. The actual restored Day screen (`viewport-native-after.png`)
+also shows the original sample paused at 00:00:11 / 0.02 mi, with the full header through This mile /
+Music and Stop above the Sample notice/navigation, without scrolling or taps. Private receipts
+remain in ignored `docs/local/assembly-2026-10-25/`. User visual review and real use remain;
+no Git/deployment work, and this is not confirmation that all AfroTech essentials are finished.
+
 ## October 25 selected Stop circle — Ready to test; installed on Moto
 
 Manley explicitly authorizes the selected **Stop circle** browser design for native integration.
@@ -210,7 +365,10 @@ and image APIs, but native Music only opened Spotify. The requested dedicated ob
 account restrictions and coordination with exclusive audio are now being implemented above;
 the former requirement to wait for native authorization has been satisfied for this temporary pair.
 
-## October 25 design work returned to the browser — Current workflow
+## October 25 design work returned to the browser — Earlier workflow
+
+The later native viewport and Start now checkpoints above supersede the centering and dial
+restrictions in this historical record. Preserve its evidence without treating it as current scope.
 
 Manley explicitly moved these countdown design adjustments into the existing browser phone at
 `http://127.0.0.1:5192/`, and wants further design work there until he chooses what to implement.
