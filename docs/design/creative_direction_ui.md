@@ -8,6 +8,42 @@ status: v0.4 — August 13 working proof recorded; execution remains open and is
 
 # RunState — Creative Direction (v0.4)
 
+## October 26 — discoverability and private testing, without permanent clutter
+
+**Locked user requirements; work remains sequential.** Manley wants real runner testing soon
+and ongoing product feedback beyond AfroTech, plus a separate short preview/trailer for
+non-runners and presentation audiences. Preserve the accepted screens while working on one
+bounded task at a time; no broader redesign follows from this decision.
+
+The current authorized change is **History → All runs / Longest / Fastest pace**. Move the
+**GPS / Samples** source controls to **Settings → Demo & testing → Recording sources**, away
+from the main History row. This changes navigation/filtering only: **never delete saved data**.
+The internal settings location is not approval to expose testing tools in a recipient build.
+
+History is now installed on Moto and ready for user review. The accepted screen styling remains;
+only selections, sorting and source navigation changed, with larger-text tab fitting corrected.
+Software/device checks and saved-data preservation are recorded in `project_current_state.md`.
+
+Before distributing the app to anyone, separately review access, secrets, privacy/data handling,
+provider permissions and limits, cost exposure, and safe installation/update/recovery. Recipients
+must receive an app with test/demo controls omitted or inaccessible. That review and its required
+fixes precede the private pilot; distribution readiness has not been established.
+
+New runners need a clear introduction to significant features: music opening inside the circular
+visualizer, how to finish after pausing, and the purpose of Energy/reflections. Manley proposes a
+comfortably sized, swipe-through welcome/what's-new panel on first launch, introducing key features
+with short demos on slides. It could stand alone or combine with brief contextual cues. Compare
+these options, including cues alone, when that task begins; **the format is not selected**.
+Wording, placement, dismissal and repeat/what's-new behavior remain open for the later design pass.
+Preserve the accepted layout and the preference against permanent helper copy or repeated
+hold-duration explanations; introducing essential actions must not crowd everyday use.
+
+**Planned order:** current History change → latest-journey field check → tester readiness and
+first-use guidance → small private runner pilot with ongoing feedback → separate preview/trailer.
+The trailer should show the actual accepted app clearly; it does not replace real-use validation.
+This is a saved direction and sequence, not completed security testing, rollout authorization or
+an overall AfroTech completion checkpoint. The local November roadmap holds delivery details.
+
 ## October 25 — Dark as the primary running appearance
 
 Manley strongly prefers the Night countdown/Active Run composition and wants it to represent

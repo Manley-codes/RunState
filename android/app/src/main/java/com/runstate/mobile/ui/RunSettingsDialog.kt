@@ -50,6 +50,7 @@ internal const val SETTINGS_SPOTIFY_CONNECT_TAG = "runSettingsSpotifyConnect"
 internal const val SETTINGS_SPOTIFY_DISCONNECT_TAG = "runSettingsSpotifyDisconnect"
 internal const val SETTINGS_DISTANCE_ANNOUNCEMENTS_TAG = "runSettingsDistanceAnnouncements"
 internal const val SETTINGS_APPEARANCE_TAG = "runSettingsAppearance"
+internal const val SETTINGS_RECORDING_SOURCES_TAG = "runSettingsRecordingSources"
 internal fun appearanceOptionTag(appearance: RunAppearance): String =
     "runSettingsAppearance${appearance.name}"
 internal fun musicPlayerOptionTag(layout: RunMusicPlayerLayout): String =
@@ -95,7 +96,8 @@ internal fun RunSettingsDialog(
     appearance: RunAppearance = RunAppearance.NIGHT,
     onSetAppearance: (RunAppearance) -> Unit = {},
     musicPlayerLayout: RunMusicPlayerLayout = RunMusicPlayerLayout.HEADPHONES,
-    onSetMusicPlayerLayout: (RunMusicPlayerLayout) -> Unit = {}
+    onSetMusicPlayerLayout: (RunMusicPlayerLayout) -> Unit = {},
+    onOpenRecordingSources: (() -> Unit)? = null
 ) {
     val controlsEnabled = actionsEnabled && !settingsLoading
     val preferenceControlsEnabled = controlsEnabled && preferencesAvailable
@@ -333,6 +335,13 @@ internal fun RunSettingsDialog(
 
                 SettingsDivider()
                 SettingsSectionTitle("DEMO & TESTING")
+                if (onOpenRecordingSources != null) {
+                    TextButton(
+                        onClick = onOpenRecordingSources,
+                        enabled = controlsEnabled,
+                        modifier = Modifier.heightIn(min = 48.dp).testTag(SETTINGS_RECORDING_SOURCES_TAG)
+                    ) { Text("Recording sources", color = SettingsInk) }
+                }
                 SettingsPreference(
                     title = "Sample demo",
                     description = "Temporary simulated distance, even while standing still. " +

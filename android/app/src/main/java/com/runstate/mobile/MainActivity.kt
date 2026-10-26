@@ -397,6 +397,7 @@ internal fun RunJourneyRoot(
 
     // Navigation survives rotation; every saved value still comes from Room.
     var historyVisible by rememberSaveable { mutableStateOf(false) }
+    var historyRecordingSources by rememberSaveable { mutableStateOf(false) }
     var recapRunId by rememberSaveable { mutableStateOf<String?>(null) }
     var recapItem by remember { mutableStateOf<RunHistoryItem?>(null) }
     var recapLoadError by remember { mutableStateOf<String?>(null) }
@@ -519,7 +520,12 @@ internal fun RunJourneyRoot(
     var connectionDialogVisible by remember { mutableStateOf(false) }
     var connectionSaving by remember { mutableStateOf(false) }
     var connectionError by remember { mutableStateOf<String?>(null) }
-    BackHandler(historyVisible) { historyVisible = false }
+    fun closeHistory() {
+        historyVisible = false
+        if (historyRecordingSources) runSettingsVisible = true
+        historyRecordingSources = false
+    }
+    BackHandler(historyVisible) { closeHistory() }
 
     val completedRuns by remember(database) { database.runDao().observeCompletedRuns() }
         .collectAsState(initial = null)
@@ -1471,7 +1477,8 @@ internal fun RunJourneyRoot(
     if (historyVisible) {
         RunHistoryScreen(
             items = historyItems,
-            onBack = { historyVisible = false },
+            onBack = ::closeHistory,
+            showRecordingSources = historyRecordingSources,
             onRetryReflection = ::retryReflection,
             onSelectEffort = ::saveEffort,
             onSelectEffortRating = ::saveEffortRating,
@@ -1526,7 +1533,10 @@ internal fun RunJourneyRoot(
         RunActivityRecapScreen(
             item = recapItem,
             localNote = completedRuns?.firstOrNull { it.runId == recapRunId }?.postRunNote,
-            onViewHistory = { historyVisible = true },
+            onViewHistory = {
+                historyRecordingSources = false
+                historyVisible = true
+            },
             onDone = { if (!actionInFlight) leaveRecap() },
             modifier = modifier,
             route = recapRoute,
@@ -1807,6 +1817,7 @@ internal fun RunJourneyRoot(
             stopCompletionAudio?.invoke()
             previewController.stopBeforeRun()
             mapRunId = null
+            historyRecordingSources = false
             historyVisible = true
         },
         reflectionAudioActive = completionAudioActive,
@@ -1936,6 +1947,11 @@ internal fun RunJourneyRoot(
     if (runSettingsVisible && model.state == RunUiState.ReadyToStart && !historyVisible &&
         !connectionDialogVisible) {
         RunSettingsDialog(
+            onOpenRecordingSources = {
+                runSettingsVisible = false
+                historyRecordingSources = true
+                historyVisible = true
+            },
             musicPlayerLayout = runPreferences?.musicPlayerLayout
                 ?: com.runstate.mobile.settings.RunMusicPlayerLayout.HEADPHONES,
             onSetMusicPlayerLayout = { layout ->

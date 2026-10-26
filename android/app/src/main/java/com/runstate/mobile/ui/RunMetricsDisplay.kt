@@ -310,7 +310,8 @@ internal fun historyItemFor(
         postRunEnergyUpdatedAtEpochMillis = run.postRunEnergyUpdatedAtEpochMillis,
         postRunEnergyQuestionVersion = run.postRunEnergyQuestionVersion,
         firstPostRunEnergy = run.firstPostRunEnergy,
-        firstPostRunEnergyQuestionVersion = run.firstPostRunEnergyQuestionVersion
+        firstPostRunEnergyQuestionVersion = run.firstPostRunEnergyQuestionVersion,
+        paceSecondsPerMeter = storedMetrics?.paceSecondsPerMeter
     )
 }
 

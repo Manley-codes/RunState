@@ -39,6 +39,48 @@ online profiles require user ownership and access control. Separate local histor
 phones do not by themselves require accounts. Keep the current demo free of a mandatory sign-up;
 revisit earlier only for a concrete requirement, not as a prerequisite for finishing existing UI.
 
+## October 26 — runner-focused History and separate recording sources
+
+**Ready to test; installed on Moto.** History's main row now offers **All runs / Longest /
+Fastest pace**. Normal views exclude known sample/fixture runs while retaining records with
+unknown legacy provenance. All runs is newest first. Longest sorts GPS runs by positive raw
+measured distance, including partial recordings with their existing coverage labels. Fastest pace
+sorts complete GPS runs with a trusted positive raw average pace; missing/partial readings cannot
+become speed records. Sorting is independent of display units and rounding, with stable ties.
+A test reflection does not turn a real GPS run into sample data. These views make no new PR claim.
+
+**Settings → Demo & testing → Recording sources** retains All records / GPS / Samples;
+Back returns to Settings. Normal History entry always opens the runner-focused views. Changing
+tabs stops speech and closes expanded/editing details; returning or rotating preserves the existing
+scroll behavior. Obsolete restored source selections fall back to All runs in normal History.
+No saved runs, feedback or check-ins are deleted or rewritten. Moving testing controls into
+Settings does not establish recipient-build isolation or readiness to distribute the app.
+
+Validation: debug/release JVM suites each passed **825 tests**; debug, release and instrumentation
+APKs built successfully. **16 unique silent Moto cases passed** across the initial batch and focused
+rechecks. The initial large-text case exposed a centered text measurement mismatch, corrected by
+giving labels the full tab width. Its next assertion exposed an old hardcoded list index that did
+not account for the preceding Energy panel; the test now scrolls to the actual last record, keeping
+its reachability, exact-text and editing assertions. Normal views, short 1.5x-text layouts and
+expanded feedback captures were inspected. Settings return navigation, raw-metric ordering, sample
+exclusion, trusted-pace empty states, speech cleanup, split/route loading and feedback editing passed.
+
+Private before/after backups confirm **all 23 completed runs, all 12 tables and five preference
+files unchanged**, integrity OK and zero foreign-key violations. The main app was updated in place;
+only the test package was removed afterward. Actual History shows six non-fixture/legacy records
+with the new row; all23 saved records remain accessible through Recording sources. The app was
+left at Start and the final comparison still matches all tables/preferences. Receipts and captures remain
+in ignored `../local/assembly-2026-10-25/history-selections-*` and `qa-history-short-large-*` files.
+Two necessary files were added: `RunHistorySelection.kt` and `RunHistorySelectionTest.kt`.
+No schema, backend, voice, Git or deployment changes were made. User visual/field review remains.
+
+Next work stays sequential: latest-journey field check, then tester security/privacy/provider/cost
+and installation review before a small private pilot. Feedback should continue beyond AfroTech;
+a separate preview/trailer serves non-runners and presentations. First-launch welcome/demo slides,
+contextual cues or a combination remain unselected and unimplemented; compare them when preparing
+first-use guidance. See the local November roadmap and creative-direction note. This checkpoint
+does not mark all AfroTech essentials complete or trigger the GitHub-presentation reminder.
+
 ## October 25 Dark default — Light and Auto remain explicit alternatives
 
 **Complete for agreed scope; installed on Moto.** Manley chose the former Night appearance as

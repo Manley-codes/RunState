@@ -2915,6 +2915,118 @@ class RunStateScreenTest {
         saveNativePreview(RUN_COMPLETE_SCREEN_TAG, "demo-completion-ready.png")
     }
 
+    /** These older History fixtures intentionally have unknown, rather than simulated, provenance. */
+    private fun historyMetrics() = fixtureMetrics().copy(sourceLabel = "")
+
+    @Test
+    fun normalHistoryHidesKnownSamplesAndKeepsUnknownRecords() {
+        val gps = energyInsightHistoryRun(1).copy(preRunEnergy = null, energy = null,
+            reflectionStatus = null, reflectionText = null)
+        val unknown = gps.copy(runId = "old-unknown", metrics = historyMetrics(),
+            isGpsRun = false, metricSource = null)
+        val sample = gps.copy(runId = "explicit-sample", metricSource = MetricSource.FIXTURE,
+            isGpsRun = false, metrics = fixtureMetrics())
+        val legacySample = sample.copy(runId = "legacy-sample", metricSource = null)
+        val original = listOf(sample, gps, legacySample, unknown)
+        composeTestRule.setContent {
+            RunHistoryScreen(original, {}, {}, modifier = Modifier.systemBarsPadding(),
+                speakerFactory = { throw AssertionError("Filtering records must not start speech") })
+        }
+        composeTestRule.onNodeWithText("All runs").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Longest").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Fastest pace").assertIsDisplayed()
+        composeTestRule.onNodeWithText("2 activities").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("runHistoryFilter:GPS").assertDoesNotExist()
+        composeTestRule.onNodeWithTag("runHistoryFilter:SAMPLES").assertDoesNotExist()
+        composeTestRule.onNodeWithTag(RUN_HISTORY_ROW_TAG_PREFIX + gps.runId).performScrollTo().assertIsDisplayed()
+        composeTestRule.onNodeWithTag(RUN_HISTORY_ROW_TAG_PREFIX + unknown.runId)
+            .performScrollTo().assertIsDisplayed()
+        composeTestRule.onNodeWithTag(RUN_HISTORY_ROW_TAG_PREFIX + sample.runId).assertDoesNotExist()
+        composeTestRule.onNodeWithTag(RUN_HISTORY_ROW_TAG_PREFIX + legacySample.runId).assertDoesNotExist()
+        composeTestRule.runOnIdle { assertEquals(4, original.size) }
+        composeTestRule.onNodeWithTag(RUN_HISTORY_LIST_TAG).performScrollToIndex(0)
+        saveNativePreview(RUN_HISTORY_SCREEN_TAG, "history-all-runs.png")
+    }
+
+    @Test
+    fun normalHistoryRanksRawMetricsAndClosesTheExactReplyWhenSwitchingViews() {
+        val exact = "  The exact saved reply.\nIt must not be regenerated for a ranking.  "
+        // The displayed values intentionally round to the same text. Ordering must use saved
+        // meters/seconds-per-meter, not parsing or sorting these localized presentation strings.
+        val first = energyInsightHistoryRun(1).copy(runId = "shorter-slower", preRunEnergy = null,
+            energy = null, metrics = historyMetrics().copy(sourceLabel = "GPS metrics",
+                distance = "6.2 mi", averagePace = "10:00/mi"),
+            distanceMeters = 9_999.0, paceSecondsPerMeter = .400,
+            telemetryCoverage = TelemetryCoverage.COMPLETE, reflectionText = exact,
+            officialStartEpochMillis = 3_000L)
+        val best = first.copy(runId = "longer-faster", distanceMeters = 10_000.0,
+            paceSecondsPerMeter = .399, reflectionText = "Another saved reply.",
+            officialStartEpochMillis = 2_000L)
+        val partial = first.copy(runId = "partial-pace", distanceMeters = 100.0,
+            paceSecondsPerMeter = .001, telemetryCoverage = TelemetryCoverage.PARTIAL,
+            reflectionStatus = null, reflectionText = null, officialStartEpochMillis = 1_000L)
+        val spoken = mutableListOf<String>()
+        var stops = 0
+        var retries = 0
+        composeTestRule.setContent {
+            RunHistoryScreen(listOf(first, best, partial), {}, { retries++ },
+                modifier = Modifier.systemBarsPadding(),
+                speakerFactory = { object : ReflectionSpeaker {
+                    override fun speak(text: String) { spoken += text }
+                    override fun stop() { stops++ }
+                    override fun close() = Unit
+                } })
+        }
+        composeTestRule.onNodeWithTag(RUN_HISTORY_ROW_TAG_PREFIX + first.runId).performScrollTo().performClick()
+        composeTestRule.onNodeWithTag(RUN_HISTORY_REFLECTION_TAG_PREFIX + first.runId)
+            .assertTextEquals(exact)
+        val beforeSwitch = stops
+        composeTestRule.onNodeWithTag("runHistoryFilter:LONGEST").performClick()
+        composeTestRule.onNodeWithTag(RUN_HISTORY_REFLECTION_TAG_PREFIX + first.runId).assertDoesNotExist()
+        composeTestRule.onNodeWithTag(RUN_HISTORY_LIST_TAG).performScrollToIndex(1)
+        val longest = composeTestRule.onNodeWithTag(RUN_HISTORY_ROW_TAG_PREFIX + best.runId)
+            .assertIsDisplayed().fetchSemanticsNode().boundsInRoot
+        val shorter = composeTestRule.onNodeWithTag(RUN_HISTORY_ROW_TAG_PREFIX + first.runId)
+            .assertIsDisplayed().fetchSemanticsNode().boundsInRoot
+        assertTrue("Longest uses unrounded saved distance", longest.top < shorter.top)
+        composeTestRule.runOnIdle {
+            assertTrue("Changing the view stops the opened reply", stops > beforeSwitch)
+            assertEquals(listOf(exact), spoken)
+            assertEquals(0, retries)
+        }
+        composeTestRule.onNodeWithTag("runHistoryFilter:FASTEST").performClick()
+        composeTestRule.onNodeWithText("2 activities").assertIsDisplayed()
+        composeTestRule.onNodeWithTag(RUN_HISTORY_ROW_TAG_PREFIX + partial.runId).assertDoesNotExist()
+        composeTestRule.onNodeWithTag(RUN_HISTORY_LIST_TAG).performScrollToIndex(1)
+        val fastest = composeTestRule.onNodeWithTag(RUN_HISTORY_ROW_TAG_PREFIX + best.runId)
+            .assertIsDisplayed().fetchSemanticsNode().boundsInRoot
+        val slower = composeTestRule.onNodeWithTag(RUN_HISTORY_ROW_TAG_PREFIX + first.runId)
+            .assertIsDisplayed().fetchSemanticsNode().boundsInRoot
+        assertTrue("Fastest uses unrounded trusted pace", fastest.top < slower.top)
+        saveNativePreview(RUN_HISTORY_SCREEN_TAG, "history-fastest-pace.png")
+        composeTestRule.onNodeWithTag("runHistoryFilter:ALL").performClick()
+        composeTestRule.onNodeWithTag(RUN_HISTORY_REFLECTION_TAG_PREFIX + first.runId).assertDoesNotExist()
+        composeTestRule.runOnIdle { assertEquals(listOf(exact), spoken); assertEquals(0, retries) }
+    }
+
+    @Test
+    fun fastestHistoryExplainsMissingTrustedPaceWithoutHidingTheSavedRun() {
+        val partial = energyInsightHistoryRun(1).copy(preRunEnergy = null, energy = null,
+            telemetryCoverage = TelemetryCoverage.PARTIAL, paceSecondsPerMeter = .4,
+            reflectionStatus = null, reflectionText = null)
+        composeTestRule.setContent {
+            RunHistoryScreen(listOf(partial), {}, {},
+                speakerFactory = { throw AssertionError("An empty ranking must not start speech") })
+        }
+        composeTestRule.onNodeWithTag("runHistoryFilter:FASTEST").performClick()
+        composeTestRule.onNodeWithText("No runs with complete GPS and a recorded average pace yet.")
+            .performScrollTo().assertIsDisplayed()
+        composeTestRule.onNodeWithText("0 activities").assertIsDisplayed()
+        composeTestRule.onNodeWithTag(RUN_HISTORY_ROW_TAG_PREFIX + partial.runId).assertDoesNotExist()
+        composeTestRule.onNodeWithTag("runHistoryFilter:ALL").performClick()
+        composeTestRule.onNodeWithTag(RUN_HISTORY_ROW_TAG_PREFIX + partial.runId).performScrollTo().assertIsDisplayed()
+    }
+
     @Test
     fun historyFiltersPreserveUnknownProvenanceAndStopTheOpenedReply() {
         val spoken = mutableListOf<String>()
@@ -2932,6 +3044,7 @@ class RunStateScreenTest {
         val legacy = gps.copy(runId = "unknown-demo", metrics = null, isGpsRun = false)
         composeTestRule.setContent {
             RunHistoryScreen(listOf(gps, sample, legacy), {}, {}, modifier = Modifier.systemBarsPadding(),
+                showRecordingSources = true,
                 speakerFactory = { object : ReflectionSpeaker {
                     override fun speak(text: String) { spoken += text }
                     override fun stop() { stops++ }
@@ -2997,6 +3110,23 @@ class RunStateScreenTest {
         val headingBounds = heading.assertIsDisplayed().fetchSemanticsNode().boundsInRoot
         assertTrue(heading.fetchSemanticsNode().config.contains(SemanticsProperties.Heading))
         saveNativePreview(RUN_HISTORY_SCREEN_TAG, "qa-history-short-large-top.png")
+        for ((tag, label) in listOf("ALL" to "All runs", "LONGEST" to "Longest", "FASTEST" to "Fastest pace")) {
+            val layouts = mutableListOf<TextLayoutResult>()
+            composeTestRule.onNodeWithText(label).assertIsDisplayed()
+                .performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
+            val layout = layouts.single()
+            val target = composeTestRule.onNodeWithTag("runHistoryFilter:$tag").fetchSemanticsNode().boundsInRoot
+            assertFalse("The enlarged History tab must not truncate $label: size=${layout.size}, " +
+                "paragraph=${layout.multiParagraph.width}x${layout.multiParagraph.height}, " +
+                "widthOverflow=${layout.didOverflowWidth}, heightOverflow=${layout.didOverflowHeight}, " +
+                "lineCount=${layout.lineCount}, exceededMaxLines=${layout.multiParagraph.didExceedMaxLines}, " +
+                "lastLineBottom=${layout.getLineBottom(layout.lineCount - 1)}, " +
+                "constraints=${layout.layoutInput.constraints}, density=${layout.layoutInput.density}, " +
+                "fontSize=${layout.layoutInput.style.fontSize}, lineHeight=${layout.layoutInput.style.lineHeight}, " +
+                "touchBounds=$target", layout.hasVisualOverflow)
+            val minimum = with(composeTestRule.density) { 48.dp.toPx() }
+            assertTrue("$label remains a usable touch target", target.height >= minimum && target.width >= minimum)
+        }
         for (text in listOf("YOUR SAVED RUNS", "12 activities")) {
             val layouts = mutableListOf<TextLayoutResult>()
             composeTestRule.onNodeWithText(text).assertIsDisplayed()
@@ -3010,7 +3140,10 @@ class RunStateScreenTest {
         composeTestRule.onNodeWithTag(RUN_HISTORY_LIST_TAG).performScrollToIndex(5)
             .performSemanticsAction(SemanticsActions.ScrollBy) { it(0f, 35f) }
         saveNativePreview(RUN_HISTORY_SCREEN_TAG, "qa-history-short-large-scrolled.png")
-        composeTestRule.onNodeWithTag(RUN_HISTORY_LIST_TAG).performScrollToIndex(rows.lastIndex)
+        // The list also contains the Energy insight. Find the saved row itself instead of
+        // treating its position in the run data as a LazyColumn item index.
+        composeTestRule.onNodeWithTag(RUN_HISTORY_LIST_TAG)
+            .performScrollToNode(hasTestTag(RUN_HISTORY_ROW_TAG_PREFIX + last.runId))
         composeTestRule.onNodeWithTag(RUN_HISTORY_ROW_TAG_PREFIX + last.runId)
             .assertIsDisplayed().performClick()
         val reflection = composeTestRule.onNodeWithTag(RUN_HISTORY_REFLECTION_TAG_PREFIX + last.runId)
@@ -3305,7 +3438,7 @@ class RunStateScreenTest {
             metricSource = MetricSource.FIXTURE, isTestData = true, metrics = fixtureMetrics())
         var rows by mutableStateOf(listOf(energyInsightHistoryRun(1), energyInsightHistoryRun(2), sample))
         composeTestRule.setContent {
-            RunHistoryScreen(rows, onBack = {},
+            RunHistoryScreen(rows, onBack = {}, showRecordingSources = true,
                 onRetryReflection = { throw AssertionError("Insight must not generate a reflection") },
                 speakerFactory = { throw AssertionError("Insight must not start speech") })
         }
@@ -3528,7 +3661,7 @@ class RunStateScreenTest {
             isTestData = true, metrics = fixtureMetrics(), splitStatus = RunSplitStatus.READY)
         val reads = mutableListOf<String>()
         composeTestRule.setContent {
-            RunHistoryScreen(listOf(gps, sample), onBack = {},
+            RunHistoryScreen(listOf(gps, sample), onBack = {}, showRecordingSources = true,
                 onRetryReflection = { throw AssertionError("Split view must not generate a reflection") },
                 speakerFactory = { throw AssertionError("These rows have no reflection to speak") },
                 splitLoader = { id ->
@@ -3564,7 +3697,7 @@ class RunStateScreenTest {
         val item = RunHistoryItem(
             runId = runId,
             dateLabel = "Oct 12, 2026 · 5:39 AM",
-            metrics = fixtureMetrics(),
+            metrics = historyMetrics(),
             reflectionStatus = "READY",
             reflectionText = exact,
             energyLabel = "Spent",
@@ -3593,11 +3726,11 @@ class RunStateScreenTest {
     @Test
     fun newRunAppearsAtHistoryTopWithoutJumpingOnFeedbackEdits() {
         val old = (0..11).map { index ->
-            RunHistoryItem("old-$index", "Older run $index", fixtureMetrics(), "READY",
-                "Saved reply $index", null, false)
+            RunHistoryItem("old-$index", "Older run $index", historyMetrics(), "READY",
+                "Saved reply $index", null, false, officialStartEpochMillis = 100_000L - index * 1_000L)
         }
-        val new = RunHistoryItem("new-run", "Newest run", fixtureMetrics(), "READY",
-            "Newest saved reply", null, false)
+        val new = RunHistoryItem("new-run", "Newest run", historyMetrics(), "READY",
+            "Newest saved reply", null, false, officialStartEpochMillis = 200_000L)
         var rows by mutableStateOf(old)
         var visible by mutableStateOf(true)
         var spoken = 0
@@ -3657,7 +3790,7 @@ class RunStateScreenTest {
                     RunHistoryItem(
                         runId = runId,
                         dateLabel = "Oct 12, 2026",
-                        metrics = fixtureMetrics(),
+                        metrics = historyMetrics(),
                         reflectionStatus = "READY",
                         reflectionText = exact,
                         energyLabel = null,
@@ -3713,7 +3846,7 @@ class RunStateScreenTest {
                     RunHistoryItem(
                         runId = runId,
                         dateLabel = "Oct 13, 2026",
-                        metrics = fixtureMetrics(),
+                        metrics = historyMetrics(),
                         reflectionStatus = "READY",
                         reflectionText = exact,
                         energyLabel = null,
@@ -3783,7 +3916,7 @@ class RunStateScreenTest {
         val item = RunHistoryItem(
             runId = runId,
             dateLabel = "Oct 13, 2026",
-            metrics = fixtureMetrics(),
+            metrics = historyMetrics(),
             reflectionStatus = "PENDING",
             reflectionText = null,
             energyLabel = "Powered Up",
@@ -3824,7 +3957,7 @@ class RunStateScreenTest {
                     RunHistoryItem(
                         runId = runId,
                         dateLabel = "Oct 13, 2026",
-                        metrics = fixtureMetrics(),
+                        metrics = historyMetrics(),
                         reflectionStatus = null,
                         reflectionText = null,
                         energyLabel = null,
@@ -5401,7 +5534,7 @@ class RunStateScreenTest {
         var energy by mutableStateOf<ReflectionBranch?>(null)
         composeTestRule.setContent {
             RunHistoryScreen(
-                items = listOf(RunHistoryItem(runId, "Oct 13, 2026", fixtureMetrics(),
+                items = listOf(RunHistoryItem(runId, "Oct 13, 2026", historyMetrics(),
                     "READY", "Exact saved reflection.", null, false,
                     isGpsRun = true, energy = energy)),
                 onBack = {}, onRetryReflection = {},
@@ -5430,7 +5563,7 @@ class RunStateScreenTest {
         var coverage by mutableStateOf<TelemetryCoverage?>(TelemetryCoverage.COMPLETE)
         composeTestRule.setContent {
             RunHistoryScreen(
-                items = listOf(RunHistoryItem(runId, "Oct 16, 2026", fixtureMetrics(),
+                items = listOf(RunHistoryItem(runId, "Oct 16, 2026", historyMetrics(),
                     "READY", "Exact saved reflection.", null, false,
                     isGpsRun = true, telemetryCoverage = coverage)),
                 onBack = {}, onRetryReflection = {},
@@ -5482,7 +5615,7 @@ class RunStateScreenTest {
             override fun close() = Unit
         }
         composeTestRule.setContent {
-            RunHistoryScreen(listOf(RunHistoryItem(runId, "Oct 13, 2026", fixtureMetrics(),
+            RunHistoryScreen(listOf(RunHistoryItem(runId, "Oct 13, 2026", historyMetrics(),
                 "READY", "Exact reflection.", null, false)), {}, {},
                 speakerFactory = { speaker }, speechLifecycle = owner.registry)
         }
@@ -5505,7 +5638,7 @@ class RunStateScreenTest {
         var closes = 0
         var backs = 0
         composeTestRule.setContent {
-            RunHistoryScreen(listOf(RunHistoryItem(runId, "Oct 13, 2026", fixtureMetrics(),
+            RunHistoryScreen(listOf(RunHistoryItem(runId, "Oct 13, 2026", historyMetrics(),
                 "READY", exact, null, false)), { backs++ }, {},
                 speakerFactory = {
                     creations++
@@ -5538,7 +5671,7 @@ class RunStateScreenTest {
         val spoken = mutableListOf<String>()
         var creations = 0
         composeTestRule.setContent {
-            RunHistoryScreen(listOf(RunHistoryItem(runId, "Oct 13, 2026", fixtureMetrics(),
+            RunHistoryScreen(listOf(RunHistoryItem(runId, "Oct 13, 2026", historyMetrics(),
                 "READY", exact, null, false)), {}, {},
                 speakerFactory = {
                     creations++
@@ -5570,7 +5703,7 @@ class RunStateScreenTest {
                     RunHistoryItem(
                         runId = runId,
                         dateLabel = "Oct 12, 2026",
-                        metrics = fixtureMetrics(),
+                        metrics = historyMetrics(),
                         reflectionStatus = null,
                         reflectionText = null,
                         energyLabel = null,
@@ -5603,7 +5736,7 @@ class RunStateScreenTest {
     fun historyWithoutMusicOptInExplainsMissingDetailsOnlyWhenExpanded() {
         val id = "music-not-enabled"
         composeTestRule.setContent {
-            RunHistoryScreen(listOf(RunHistoryItem(id, "Oct 15, 2026", fixtureMetrics(),
+            RunHistoryScreen(listOf(RunHistoryItem(id, "Oct 15, 2026", historyMetrics(),
                 null, null, null, false)), {}, {})
         }
         composeTestRule.onNodeWithText("Music wasn’t recorded for this run.").assertDoesNotExist()
@@ -5617,7 +5750,7 @@ class RunStateScreenTest {
     fun historyMusicWithoutObservationsRemainsUnknownInsideTheExpandedRecord() {
         val id = "no-observations"
         composeTestRule.setContent {
-            RunHistoryScreen(listOf(RunHistoryItem(id, "Oct 15, 2026", fixtureMetrics(),
+            RunHistoryScreen(listOf(RunHistoryItem(id, "Oct 15, 2026", historyMetrics(),
                 null, null, null, false, musicObservationRequested = true)), {}, {})
         }
         composeTestRule.onNodeWithText("OBSERVED MEDIA · PARTIAL").assertDoesNotExist()

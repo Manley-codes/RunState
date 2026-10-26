@@ -1454,7 +1454,9 @@ internal data class RunHistoryItem(
     val postRunEnergyUpdatedAtEpochMillis: Long? = null,
     val postRunEnergyQuestionVersion: Int? = null,
     val firstPostRunEnergy: ReflectionBranch? = null,
-    val firstPostRunEnergyQuestionVersion: Int? = null
+    val firstPostRunEnergyQuestionVersion: Int? = null,
+    /** Trusted saved pace before display-unit conversion or rounding. */
+    val paceSecondsPerMeter: Double? = null
 )
 
 internal sealed interface HistoryRouteDisplay {
@@ -1462,8 +1464,6 @@ internal sealed interface HistoryRouteDisplay {
     data class Ready(val data: GpsRoutePreviewData) : HistoryRouteDisplay
     data object Failed : HistoryRouteDisplay
 }
-
-private enum class HistoryFilter(val label: String) { ALL("All"), GPS("GPS"), SAMPLES("Samples") }
 
 private val HistoryDark = Color(0xFF263029)
 private val HistoryLightInk = Color(0xFFF4F5ED)
@@ -1490,13 +1490,26 @@ internal fun RunHistoryScreen(
     speechLifecycle: Lifecycle = LocalLifecycleOwner.current.lifecycle,
     splitLoader: (suspend (String) -> HistorySplitDisplay)? = null,
     onRetrySplits: suspend (String) -> Unit = {},
-    onSelectEffortRating: (String, Int?) -> Unit = { _, _ -> }
+    onSelectEffortRating: (String, Int?) -> Unit = { _, _ -> },
+    showRecordingSources: Boolean = false
 ) {
     val listState = rememberLazyListState()
+    val choices = if (showRecordingSources)
+        listOf(HistoryFilter.ALL, HistoryFilter.GPS, HistoryFilter.SAMPLES)
+    else listOf(HistoryFilter.ALL, HistoryFilter.LONGEST, HistoryFilter.FASTEST)
+    var selectedFilter by rememberSaveable(showRecordingSources) { mutableStateOf(HistoryFilter.ALL) }
+    // An older saved Activity may restore GPS/Samples into the new everyday History view.
+    val filter = selectedFilter.takeIf { it in choices } ?: HistoryFilter.ALL
+    val availableItems = remember(items, showRecordingSources) {
+        historyItemsFor(items, HistoryFilter.ALL, showRecordingSources)
+    }
+    val visibleItems = remember(items, filter, showRecordingSources) {
+        historyItemsFor(items, filter, showRecordingSources)
+    }
     // A newly saved run is inserted above the old first row. LazyColumn's stable row keys
     // otherwise preserve that old row as the scroll anchor and hide the new run above it.
     // The saved identity guard leaves initial loading, rotation, and same-run feedback alone.
-    val newestRunId = items.firstOrNull()?.runId
+    val newestRunId = availableItems.firstOrNull()?.runId
     var previousNewestRunId by rememberSaveable { mutableStateOf<String?>(null) }
     LaunchedEffect(newestRunId) {
         if (newestRunId != null) {
@@ -1510,7 +1523,6 @@ internal fun RunHistoryScreen(
     var editingEffortRunId by rememberSaveable { mutableStateOf<String?>(null) }
     var editingEnergyRunId by rememberSaveable { mutableStateOf<String?>(null) }
     var energyEvidenceOpen by rememberSaveable { mutableStateOf(false) }
-    var filter by rememberSaveable { mutableStateOf(HistoryFilter.ALL) }
     var speaker by remember { mutableStateOf<ReflectionSpeaker?>(null) }
     var route by remember { mutableStateOf<Pair<String, HistoryRouteDisplay>?>(null) }
     val currentRouteLoader by rememberUpdatedState(routeLoader)
@@ -1599,11 +1611,12 @@ internal fun RunHistoryScreen(
         }
     }
 
-    val visibleItems = when (filter) {
-        HistoryFilter.ALL -> items
-        HistoryFilter.GPS -> items.filter { it.isGpsRun }
-        // Unknown legacy provenance must not be relabelled as a sample run.
-        HistoryFilter.SAMPLES -> items.filter { it.metrics?.sourceLabel == "Fixture metrics" }
+    var previousFilter by rememberSaveable(showRecordingSources) { mutableStateOf(filter) }
+    LaunchedEffect(filter) {
+        if (previousFilter != filter) {
+            listState.scrollToItem(0)
+            previousFilter = filter
+        }
     }
     val summaryItem = visibleItems.firstOrNull { it.runId == expandedRunId }
         ?: visibleItems.firstOrNull()
@@ -1648,10 +1661,10 @@ internal fun RunHistoryScreen(
                     contentPadding = PaddingValues(horizontal = 0.dp, vertical = 12.dp),
                     modifier = Modifier.heightIn(min = 48.dp)
                 ) {
-                    Text("Back to run", fontSize = 12.sp)
+                    Text(if (showRecordingSources) "Back to settings" else "Back to run", fontSize = 12.sp)
                 }
                 Text(
-                    text = "LOG HISTORY",
+                    text = if (showRecordingSources) "RECORDING SOURCES" else "LOG HISTORY",
                     color = Color.White,
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Bold,
@@ -1664,7 +1677,7 @@ internal fun RunHistoryScreen(
                 HistoryMetricsPanel(summaryItem,
                     Modifier.padding(horizontal = 20.dp, vertical = 6.dp), compact = compactSummary)
             }
-            if (items.isNotEmpty()) {
+            if (availableItems.isNotEmpty()) {
                 Row(
                     modifier = Modifier.padding(horizontal = 20.dp, vertical = 6.dp)
                         .fillMaxWidth()
@@ -1673,9 +1686,9 @@ internal fun RunHistoryScreen(
                         .padding(3.dp),
                     horizontalArrangement = Arrangement.spacedBy(3.dp)
                 ) {
-                    HistoryFilter.entries.forEach { choice ->
+                    choices.forEach { choice ->
                         Box(
-                            modifier = Modifier.weight(1f).heightIn(min = 42.dp)
+                            modifier = Modifier.weight(1f).heightIn(min = 48.dp)
                                 .clip(RoundedCornerShape(22.dp))
                                 .background(if (filter == choice) Color.White.copy(alpha = 0.94f) else Color.Transparent)
                                 .selectable(
@@ -1685,14 +1698,19 @@ internal fun RunHistoryScreen(
                                         if (filter != choice) {
                                             stopSpeaker()
                                             expandedRunId = null
-                                            filter = choice
+                                            editingEffortRunId = null
+                                            editingEnergyRunId = null
+                                            energyEvidenceOpen = false
+                                            selectedFilter = choice
                                         }
                                     }
                                 )
                                 .testTag("runHistoryFilter:" + choice.name),
                             contentAlignment = Alignment.Center
                         ) {
-                            Text(choice.label, fontSize = 12.sp,
+                            Text(if (showRecordingSources && choice == HistoryFilter.ALL) "All records" else choice.label,
+                                fontSize = 12.sp, lineHeight = 16.sp, textAlign = TextAlign.Center,
+                                modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 8.dp),
                                 fontWeight = if (filter == choice) FontWeight.Bold else FontWeight.Medium,
                                 color = CompletionStrongInk)
                         }
@@ -1705,7 +1723,7 @@ internal fun RunHistoryScreen(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text("YOUR SAVED RUNS", color = HistoryDark, fontSize = 12.sp,
+                    Text(if (showRecordingSources) "SAVED RECORDS" else "YOUR SAVED RUNS", color = HistoryDark, fontSize = 12.sp,
                         lineHeight = 18.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.8.sp,
                         modifier = Modifier.weight(1f).padding(end = 12.dp).semantics { heading() })
                     Text("${visibleItems.size} ${if (visibleItems.size == 1) "activity" else "activities"}",
@@ -1758,7 +1776,7 @@ internal fun RunHistoryScreen(
                         HistoryMessage(error)
                     }
                 }
-                if (!isLoading && error == null && items.isEmpty()) {
+                if (!isLoading && error == null && availableItems.isEmpty()) {
                     item(key = "empty") {
                         Column(
                             modifier = Modifier
@@ -1783,9 +1801,15 @@ internal fun RunHistoryScreen(
                         }
                     }
                 }
-                if (!isLoading && error == null && items.isNotEmpty() && visibleItems.isEmpty()) {
+                if (!isLoading && error == null && availableItems.isNotEmpty() && visibleItems.isEmpty()) {
                     item(key = "empty-filter") {
-                        HistoryMessage("No ${if (filter == HistoryFilter.GPS) "GPS" else "sample"} runs saved yet.")
+                        HistoryMessage(when (filter) {
+                            HistoryFilter.GPS -> "No GPS runs saved yet."
+                            HistoryFilter.SAMPLES -> "No sample runs saved yet."
+                            HistoryFilter.LONGEST -> "No GPS runs with recorded distance yet."
+                            HistoryFilter.FASTEST -> "No runs with complete GPS and a recorded average pace yet."
+                            HistoryFilter.ALL -> "No runs saved yet."
+                        })
                     }
                 }
                 items(items = visibleItems, key = { it.runId }) { item ->

@@ -667,11 +667,35 @@ class RunMetricsDisplayTest {
                 metricSource = if (coverage == null) null else MetricSource.GPS,
                 trackingMode = RunTrackingMode.GPS
             )
-            val item = historyItemFor(run, emptyList(), null)
+            val item = historyItemFor(run, listOf(
+                RunTransitionEntity(historyRunId, 1, RunTransitionType.PAUSE, historyStart + 600_000L)
+            ), null)
 
             assertEquals(coverage, item.telemetryCoverage)
             assertEquals(true, item.isGpsRun)
+            if (coverage == TelemetryCoverage.COMPLETE) {
+                assertEquals(6.0, item.paceSecondsPerMeter!!, 0.0)
+            } else {
+                assertNull(item.paceSecondsPerMeter)
+            }
         }
+    }
+
+    @Test
+    fun `history ranking pace excludes pauses and is independent of displayed unit`() {
+        val run = historyRun(historyStart + 600_000L, 1_000.0, TelemetryCoverage.COMPLETE, true)
+            .copy(metricSource = MetricSource.GPS, trackingMode = RunTrackingMode.GPS)
+        val transitions = listOf(
+            RunTransitionEntity(historyRunId, 1, RunTransitionType.PAUSE, historyStart + 300_000L),
+            RunTransitionEntity(historyRunId, 2, RunTransitionType.RESUME, historyStart + 420_000L),
+            RunTransitionEntity(historyRunId, 3, RunTransitionType.PAUSE, historyStart + 600_000L)
+        )
+        val miles = historyItemFor(run.copy(displayDistanceUnit = DistanceUnit.MILES), transitions, null)
+        val kilometers = historyItemFor(run.copy(displayDistanceUnit = DistanceUnit.KILOMETERS), transitions, null)
+        assertEquals(0.48, miles.paceSecondsPerMeter!!, 0.0)
+        assertEquals(miles.paceSecondsPerMeter, kilometers.paceSecondsPerMeter)
+        assertEquals("8:00 /km", kilometers.metrics?.averagePace)
+        assertEquals("12:52 /mi", miles.metrics?.averagePace)
     }
 
     @Test

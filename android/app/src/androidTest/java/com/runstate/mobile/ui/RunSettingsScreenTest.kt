@@ -27,6 +27,7 @@ import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTouchInput
@@ -38,10 +39,12 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.runstate.mobile.ReflectionConnectionState
 import com.runstate.mobile.RunJourneyRoot
 import com.runstate.mobile.data.local.MetricSource
+import com.runstate.mobile.data.local.DistanceUnit
 import com.runstate.mobile.data.local.RunEntity
 import com.runstate.mobile.data.local.RunStateDatabase
 import com.runstate.mobile.data.local.RunTrackingMode
 import com.runstate.mobile.data.local.StoredRunState
+import com.runstate.mobile.data.local.TelemetryCoverage
 import com.runstate.mobile.location.RunTrackingServiceState
 import com.runstate.mobile.run.PreparedRunFactory
 import com.runstate.mobile.run.RunSessionCoordinator
@@ -494,6 +497,63 @@ class RunSettingsScreenTest {
         compose.onNodeWithTag(SETTINGS_MUSIC_SHARING_TAG).performScrollTo().assertIsOn()
         compose.onNodeWithTag(SETTINGS_SONG_SNIPPETS_TAG).performScrollTo().assertIsOn()
         assertEquals(0, runBlocking { fixture.database.runDao().countRuns() })
+    }
+
+    @Test
+    fun recordingSourcesReturnToSettingsAndNeverReplaceNormalRunHistory() {
+        val preferences = RunPreferences(musicSetupComplete = true)
+        val fixture = fixture(preferences)
+        val gps = RunEntity(runId = UUID.randomUUID().toString(), state = StoredRunState.COMPLETED,
+            officialStartEpochMillis = fixture.time - 600_000L, startTimezoneId = "America/Chicago",
+            lastCheckpointEpochMillis = fixture.time, finishEpochMillis = fixture.time,
+            finalDistanceMeters = 1609.344, metricSource = MetricSource.GPS,
+            telemetryCoverage = TelemetryCoverage.COMPLETE, displayDistanceUnit = DistanceUnit.MILES,
+            trackingMode = RunTrackingMode.GPS)
+        val sample = gps.copy(runId = UUID.randomUUID().toString(),
+            metricSource = MetricSource.FIXTURE, trackingMode = RunTrackingMode.FIXTURE,
+            officialStartEpochMillis = gps.officialStartEpochMillis - 1_000L)
+        runBlocking {
+            fixture.database.runDao().insert(gps)
+            fixture.database.runDao().insert(sample)
+        }
+        renderRoot(fixture)
+        waitForTag(START_RUN_SCREEN_TAG)
+        compose.onNodeWithTag(START_RUN_SETTINGS_TAG).performScrollTo().performClick()
+        waitForTag(SETTINGS_DIALOG_TAG)
+        compose.onNodeWithTag(SETTINGS_RECORDING_SOURCES_TAG).performScrollTo().assertIsEnabled().performClick()
+        waitForTag(RUN_HISTORY_SCREEN_TAG)
+        waitForTag(RUN_HISTORY_ROW_TAG_PREFIX + gps.runId)
+        compose.onNodeWithText("RECORDING SOURCES").assertIsDisplayed()
+        compose.onNodeWithText("All records").assertIsDisplayed()
+        compose.onNodeWithTag("runHistoryFilter:LONGEST").assertDoesNotExist()
+        compose.onNodeWithTag("runHistoryFilter:SAMPLES").performClick()
+        compose.onNodeWithTag(RUN_HISTORY_ROW_TAG_PREFIX + sample.runId).assertIsDisplayed()
+        compose.onNodeWithTag(RUN_HISTORY_ROW_TAG_PREFIX + gps.runId).assertDoesNotExist()
+        androidx.test.espresso.Espresso.pressBack()
+        waitForTag(SETTINGS_DIALOG_TAG)
+        compose.onNodeWithTag(RUN_HISTORY_SCREEN_TAG).assertDoesNotExist()
+        compose.onNodeWithTag(SETTINGS_DONE_TAG).performClick()
+        compose.waitUntil(5_000L) {
+            compose.onAllNodesWithTag(SETTINGS_DIALOG_TAG).fetchSemanticsNodes().isEmpty()
+        }
+        compose.onNodeWithContentDescription("Log History").performScrollTo().performClick()
+        waitForTag(RUN_HISTORY_SCREEN_TAG)
+        waitForTag(RUN_HISTORY_ROW_TAG_PREFIX + gps.runId)
+        compose.onNodeWithText("LOG HISTORY").assertIsDisplayed()
+        compose.onNodeWithText("All runs").assertIsDisplayed()
+        compose.onNodeWithTag("runHistoryFilter:ALL").assertIsSelected()
+        compose.onNodeWithTag("runHistoryFilter:LONGEST").assertIsDisplayed()
+        compose.onNodeWithTag("runHistoryFilter:FASTEST").assertIsDisplayed()
+        compose.onNodeWithTag("runHistoryFilter:SAMPLES").assertDoesNotExist()
+        compose.onNodeWithTag(RUN_HISTORY_ROW_TAG_PREFIX + sample.runId).assertDoesNotExist()
+        compose.onNodeWithText("Back to run").performClick()
+        waitForTag(START_RUN_SCREEN_TAG)
+        compose.onNodeWithTag(SETTINGS_DIALOG_TAG).assertDoesNotExist()
+        assertEquals(preferences, fixture.loadPreferences())
+        assertEquals(0, fixture.preferenceWrites)
+        assertEquals(2, runBlocking { fixture.database.runDao().countRuns() })
+        assertEquals(gps, runBlocking { fixture.database.runDao().findById(gps.runId) })
+        assertEquals(sample, runBlocking { fixture.database.runDao().findById(sample.runId) })
     }
 
     @Test
