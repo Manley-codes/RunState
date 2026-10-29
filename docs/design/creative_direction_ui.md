@@ -8,6 +8,225 @@ status: v0.4 — August 13 working proof recorded; execution remains open and is
 
 # RunState — Creative Direction (v0.4)
 
+**October 29 — public browser presentation accepted.** All seven connected screens are approved.
+Preserve the current designs. Desktop and mobile both use a phone bezel with dark surroundings;
+mobile retains the screen dropdown. Manley confirmed the published mobile treatment works.
+
+History uses a slim **Your Energy → View check-ins** row so saved runs remain prominent; its
+details open in the existing sheet. Bringing that refinement into Android and reviewing the
+check-in sections remain later tasks. The browser is a simulated presentation, not a native export.
+
+**October 27 — paused at Manley's request.** Preserve the current creative direction and
+saved preview assets. No further design, generation or app work until he asks to resume.
+See `project_current_state.md` → "October 27 pause and resume checkpoint" for the current
+review item, audio gap, parked finger repair and remaining showcase sequence.
+
+## October 26 — showcase creative foundation: runner, music and reflection
+
+**October 27 checkpoint: running/Skip Next visual ready for review; audio still needed.**
+`runstate-running-spotify-skip-test-v1.mp4` is9.70s1080×1920/30fps/H.264,silent. Full runner and
+phone glance→2.75mi→Lovely Day album→actual Next→Lizzo album/controls→smiling jog. All291frames
+decode and contact-sheet review passed; user acceptance remains. Authentic usable song files
+were not available: planned cues are first song0–4.4s, Lizzo4.4–9.7s. Music is authorized but
+unfinished; do not present this silent visual as the complete requested audio experience.
+Original opening v2 retained/finger work parked. Stop production after this checkpoint; remaining
+tasks are saved privately. No app-source changes or full-trailer/AfroTech completion claim.
+
+**Current overnight authorization:** expand the next scene to a full view of the selected woman
+running downtown → looking at her phone → distance first → Spotify selection → brief secondary
+song → Skip Next → Lizzo Good as Hell starts inside the circular album/control view. Music for
+this scene is authorized, superseding earlier silent-only scope. Lovely Day is a provisional
+assistant choice for the insignificant first track, not a user-locked song. Work autonomously
+through this bounded scene, then stop except for straightforward preparation needing no input.
+Retain opening v2 and keep finger repair parked. Full trailer, countdown/reflection voice work
+and app changes are not authorized by this step. Remaining work is ordered in the private README.
+
+**Latest: Dark Active reveal ready for user review; opening v2 retained/finger fix parked.**
+Manley explicitly said to leave the opening as it was, forget the finger tap for now and move
+forward. Current working opening remains `runstate-downtown-opening-test-v2.mp4`; no final v3.
+Completed `runstate-dark-active-music-test-v1.mp4` is a7s silent visual test: native distance for
+about2s, then Lizzo album/controls inside the circle for about5s, in the same downtown phone plate.
+Small editorial tap cue at1.8–2.15s and1.2% push; no animated free hand. Full decode and contact
+sheet review passed; user acceptance remains. No app/UI changes or new credits. Full trailer/
+song/reflection production stays deferred; preserve all earlier studies.
+
+**Selected character:** black-kit runner v2. Manley replied
+“Okay, this works.” Use `runner-dawn-black-rs-v2.png` as the current selected character and
+wardrobe: original face, very dark skin, average-height athletic build, slim waist/naturally
+fuller hips, defined legs, natural afro puff, sweat detail, phone and dawn track; black kit,
+shoes and accessories with restrained silver-white details and a small white **RS** top mark.
+Preserve the earlier base `runner-dawn-character-study-v1.png`. The RS clothing mark is still
+an experiment, not an accepted final identity. This standing portrait establishes appearance;
+the new downtown warm-up is a motion study, not a newly accepted character replacement.
+
+**Setting refinement:** Manley now prefers a public park dirt/cement trail or downtown streets,
+leaning downtown because it fits the style, music/headphones and surrounding activity. The track
+is the original still's reference setting, not a continuing location requirement. Suggested
+treatment: early-morning downtown on a broad pedestrian path/plaza with glass/stone buildings
+and subtle background city life, retaining the selected runner. Precise location remains open.
+He explicitly authorized the short opening test: natural energetic warm-up → close phone
+selection of high Energy, with real app capture for the interface. After approval review blocked
+the local runner upload, he explicitly approved sending it to ElevenLabs for one test at an
+initial $1.32 estimate. One silent6s Veo3.1Fast take completed; actual reported use was
+3635.6364 credits/$0.6610248. New downtown/phone stills are studies, not user-selected replacements.
+Completed `runstate-downtown-opening-test-v2.mp4` is7s1080×1920silent:4.5s warm-up plus2.5s
+actual Moto High-Energy selection composited into the generated phone plate with a small tap cue.
+Manley says the test looks really good, but the still hand does not visibly press the screen and
+he wants a different, as-yet-unspecified warm-up. He is open to deferring fixes; this is not final
+shot approval. Recommend fixing animated hand contact synchronized to the real UI before more
+phone shots, then revisiting warm-up later. He approved one finger-fix attempt: a4s1080portrait
+silent Veo3.1Fast take completed at2423.7576credits/$0.4406832. Natural finger motion missed the
+native High target; bounded local composites showed mask artifacts. He then explicitly parked
+the finger fix and retained the original opening v2. Keep raw/local studies for reference, but
+do not continue the fix or promote them to a final shot. Different warm-up remains deferred.
+Moto stays on Start with High selected in memory; no run was started/saved and selection does
+not write DB/preferences. No Undo was available. Original capture and private renderer are saved.
+Full trailer, song and voice generation stay deferred; selected v2 and original app stay intact.
+
+**Logo reminder reaffirmed:** create the final RunState logo and custom Android launcher icon,
+replacing the generic Android graphic. RS or a creative Run State wordmark can be explored;
+this clothing experiment does not settle the logo. No timed reminder was requested.
+
+Preferred opening remains warm-up (jumping/bouncing or stretching) → **high Energy**. Manley
+has now selected **Lizzo — Good as Hell**; Larry June is for later. He supplied the reflection
+again and explicitly authorized changing **only “low” to “high”** for this trailer. Preserve all
+other words and the original production baseline. The exact trailer adaptation is saved in
+the private reference README. Text was found in ElevenLabs; the original male spoken take has
+not been downloaded or verified. The former Energy/wording conflict is resolved by this narrow
+authorization, not by changing the app's accepted example.
+
+Continue defining the shared concept incrementally. The opening test is ready for Manley's
+visual feedback, not accepted as the final trailer opening. Full trailer/audio stays deferred. The
+complete brief is retained in `docs/local/app-preview-references-2026-10-26/README.md`.
+
+Proposed opening: the selected very dark-skinned African American woman outdoors in early morning,
+with distinctive headphones/running top/shorts/shoes (possibly On/Cloud). AI-generated footage
+should look convincingly human. Show actual phone use with finger taps and/or tap indicators.
+Energy → Start → a trailer-length3–2–1 → the existing female **“Let's go, runner”** → takeoff.
+This is a shortened presentation sequence, not a change to the installed countdown.
+
+Priority screen moment: accepted **Dark Active Run**, distance leading inside the circular
+visualizer, then a visible Spotify Music selection brings album art and controls into that
+circle with song playback. Include the moving-photo RunState opening somewhere and the
+Completion screen with an accepted music reflection in the **original male voice**. The
+reflection is the highest-priority audio; runner reaction conveys fulfillment/happiness,
+possibly a natural humorous beat, whether tired or energized. Keep both original app voices.
+
+**Explicit follow-up: the music snippet is essential.** Preserve the spoken reflection → chosen
+song passage pairing, in addition to the earlier in-run Spotify/music moment. Manley favors
+manually editing the excerpt into the eventual preview if needed and reports access to songs
+and reflection text. The missing-original-recording concern refers to spoken voice takes, not
+the songs. For Good as Hell, the desired passage now begins with the hair/nail grooming gestures
+and continues through the confident feeling-good refrain. Manually place/trim it later to end
+after the complete phrase; do not infer a recording version or timestamp from the older app
+test. Budget time for reflection, snippet and reaction. No extraction or playback requested now.
+
+Aim30–45seconds; absolute max60. Other screens are desired if they fit; plan selection/mile
+announcements are optional. Sequence may be remixed. Slogans, scene order, reaction and additional
+details remain open; the black-kit runner is selected. Preserve the rest of the concept and both original voices.
+No app implementation, full-video production or resumed runner-testing scope.
+
+## October 26 — presentation reset: app showcase before new design
+
+**Follow-up reference feedback:** Notion Calendar was very helpful; Headspace somewhat helpful,
+but Manley prefers a polished person/phone demonstration rather than its animated treatment.
+Show a person holding a phone, visible taps and the corresponding app result in clear views.
+Real or generated footage is acceptable to explore; no method selected. Keep each discussion
+small and incremental. The Spotify DJ recommendation was private for him and is withdrawn.
+Two closer filming references are Google/ManvsMachine **Circle to Search** and Microsoft's
+**Surface Duo 2** launch (device campaign, selected for filmed app interactions). Playback and
+sample frames checked; exact links/limits saved in the private reference README. No new build.
+
+Manley explicitly starts this presentation task over. The goal is now a public-facing preview
+that shows and describes RunState for people at AfroTech or elsewhere. First-use welcome slides
+are not the current deliverable. Do not continue the previous proposed music-slide revision,
+three-variant onboarding comparison, or narration work without new direction.
+
+Preserve two possible future references: static image2 **“Your music, within reach”** and the
+final/“sixth” preview screen **“Your run. Your rhythm”**, with Dark previously preferred. These
+are favorites to retain, not approval to use either in the new presentation. The original
+prototype remains intact. The static image and Light/Dark closing-screen captures are saved at
+`docs/local/app-preview-references-2026-10-26/`; its README identifies the original editable
+prototype and artwork. The static study's generated headphones and layout corrections remain
+relevant if reused: exact original art, controls over the image inside the circle.
+
+The initial research step was a small web-reference shortlist: excellent app trailers/product introductions,
+primarily popular apps across categories; running examples are optional. Explain what to watch
+for and provide direct watch links. Keep presentation style separate from app UI design and make
+the viewing order clear. It has now advanced to the concept and one-still authorization above;
+full preview/trailer construction remains deferred.
+
+Runner testing and distribution preparation are deferred, likely until after AfroTech. Retain
+the private tester-readiness findings for later; do not continue that work as the next automatic
+step. This reset supersedes the sequencing in the historical welcome feedback below.
+
+## October 26 — welcome feedback: strongest elements, not a whole version selected
+
+Manley found the chat presentation confusing: the three generated style images and three
+interactive welcome variants did not have an obvious relationship. His request to organize the
+work meant **explain the deliverables and review order in chat**, not redesign the browser's
+controls. No menu reorganization was implemented. Explain future comparisons with one clear
+purpose and direct image-to-preview correspondence; do not make him select from two ambiguous
+sets or imply that a generated style study is a faithful app capture.
+
+**Strongest positive:** the closing **“Your run. Your rhythm.”** screen, especially **After dark**.
+He definitely wants to retain this design. The light closing screen is also attractive, but the
+dark one is substantially stronger. This is the final screen after the five slides (also reached
+by Skip), not a sixth feature chapter. It uses the exact original headphones asset
+`/media/start-music.jpg`, copied from Android `start_music_orb.jpg`. Preserve this favorite as a
+reference; do not treat it as permission to change its design or install welcome onboarding.
+
+**Preferred static concept:** image2, the light music introduction, with corrections. Its generated
+headphones illustration is too different from the actual RunState art. Reuse the exact asset
+seen in “Your run. Your rhythm.” Playback controls belong **over the artwork inside the circle**;
+do not stack a smaller artwork image above separate previous/pause/next controls. This preference
+does not select every slide of Open air or settle the entire welcome palette.
+
+| Preview | Metrics / first slide | Music | Pause / finish | Energy | History | Closing screen |
+| --- | --- | --- | --- | --- | --- | --- |
+| After dark | Okay, not particularly strong | Pretty good | Mixed but salvageable; show the demo in a recognizable phone frame rather than a plain rectangular box | Cool | Okay | Strongest favorite; keep |
+| Open air | Weak; needs adjustments | Pretty cool | Not appealing | Works | Okay, not strong | Very good; dark preferred |
+| Learn by doing | Rejected | No positive selection | No positive selection | No positive selection | No positive selection | Only liked element |
+
+**No cream backgrounds.** This is a repeated, firm preference; the cream treatment in Learn by
+doing was a miss. Retire that visual direction from the next comparison. Its rejection does not
+by itself reject every possible hands-on teaching interaction. Voice and final welcome structure
+remain undecided; no complete variant is accepted. A useful next bounded comparison is one revised
+music-introduction slide with the actual art and overlay controls, keeping the favored dark closing
+screen available as the quality reference rather than generating another entire set.
+
+Browser access was explicitly authorized on October26 after the earlier denial. One screenshot
+of the existing closing screen was inspected; this was not a complete gesture/audio/layout QA.
+This checkpoint records feedback only. No prototype or Android source changes were made.
+
+## October 26 — welcome comparison studies authorized while away
+
+Manley explicitly authorized independent local welcome/slide-panel templates while running,
+then the tester-precaution work. He retains the final creative choice and expects to revise these
+studies; do not interpret temporary experimentation as a new accepted app design.
+
+Compare **Dark editorial** (accepted Active Run identity and a strong first impression),
+**Light and clear** (sky-white explanation around unchanged dark app examples), and
+**Guided practice** (try hidden actions in clearly fictional demonstrations). Five chapters cover
+metrics, music in the circle, pause/hold Stop/Save Activity, Energy versus Effort, and saved History.
+Keep Skip/Next/Back available. Silent use is complete; narration is optional and tap-started.
+Brief contextual cues remain a later alternative or supplement, not permanent screen clutter.
+
+A separate provisional African American female guide with the requested proper/sophisticated
+tone was designed in ElevenLabs. This is welcome narration only, not the previously rejected
+replacement-voice search. Original run/reflection voices are unchanged. Auditions, two full reads,
+script and three generated visual references are saved in the separate `runstate-welcome`
+prototype folder described in `project_current_state.md`. User voice/design selection remains.
+
+The images are generated composition studies; the interactive draft uses controlled app fixtures
+and original headphones art. No commercial song, private run history or live provider connection
+belongs in the demos. Browser permission was denied; source/build review does not replace pending
+interactive visual, motion, focus and listening review. Nothing was installed on the phone.
+
+Tester readiness findings are a separate preparation track, preserved in the private local report.
+Do not distribute the owner build or regard these welcome drafts as completion of the required
+access/cost, privacy/provider and signed-update work. Accepted main-app screens remain intact.
+
 ## October 26 — discoverability and private testing, without permanent clutter
 
 **Locked user requirements; work remains sequential.** Manley wants real runner testing soon

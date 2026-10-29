@@ -5,6 +5,211 @@ metadata:
   type: project
 ---
 
+## October 29 GitHub preview — published, confirmed and documented
+
+The connected seven-screen preview and compact History Energy row are live. Manley published
+the mobile phone frame as `60d0098ee081e3a4b2fca3b1c198c25c4d71c0cf`; Pages deployment
+`40832834729` succeeded, and he confirmed it works on his phone. The preview keeps its bezel
+and dark surroundings on mobile, with a dropdown for screen selection.
+
+Public README and preview documentation now describe the accepted version concisely and separate
+the simulated browser experience from native Android features. These writing updates are local
+until Manley commits/pushes them. No assistant Git commands, app changes or new deployment.
+
+Remaining: bring the compact History Energy row into Android when requested, then review the
+relevance and content of its check-in sections. Trailer/tester work remains paused; this is not
+an overall AfroTech completion checkpoint.
+
+### Earlier October 29 checkpoint — mobile browser frame ready locally
+
+Manley requested the mobile web preview use a phone frame like the laptop view, with black
+surroundings and the screen dropdown retained. The local mobile wrapper now has a bezel,
+rounded corners and a fixed 393/794 inner aspect ratio. Laptop layout and accepted screen styles
+are unchanged. Scope is CSS source plus regenerated public assets; no new source files or Android
+changes. TypeScript, production build and six packaging checks passed. Browser verification at
+393×852 shows the full frame without overflow. At360×640, the280px frame retains its proportions
+and the surrounding page scrolls vertically without horizontal overflow. Dropdown navigation,
+pause/Stop availability and circular music controls passed; normal desktop38px frame radius
+was confirmed after resetting the test viewport. These are browser-size checks, not a new test
+on the physical Moto.
+
+Public commit `c987643` remains on the prior mobile wrapper until Manley commits/pushes these
+local changes. **Manley handles all Git commands.** No Git or publication occurred for this
+adjustment. The native History Energy row and its content review remain later follow-ups;
+trailer/tester work stays paused and no overall AfroTech completion is declared.
+
+### Earlier October 29 checkpoint — publication verified; old landing report resolved
+
+Manley handled the Git commands. GitHub main is now `c9876436b8ac2515f477406d9adcac35e2c9f0b3`;
+Pages run19 (`40830887221`) completed successfully for that commit. Read-only connector checks
+and a fresh public browser view confirm the connected seven-screen preview is live at
+`https://manley-codes.github.io/runstate-preview/`. Both `start.html` and `complete.html` open
+the updated screens in the same preview; `#history` shows the compact Your Energy row.
+
+Manley's screenshot showed the former two-card landing. That is not the current public response;
+stale page/cache or a view from before deployment is possible, not proven. No new redesign or
+code change was needed. Main-app documentation remains local/uncommitted; no assistant Git
+commands or mutations were performed for this check. The phone Energy-row change, its content
+review, trailer and tester work remain deferred. No overall AfroTech completion claim.
+
+### Earlier October 29 checkpoint — corrected screens accepted; compact History Energy row
+
+Manley reviewed the corrected browser screens and said **“everything looks good.”** Start,
+Completion and History are now visually accepted alongside Opening, Countdown, Active Run and
+Music within reach. This supersedes the pending-review status in the earlier checkpoint below.
+
+The requested **browser-only** refinement is implemented locally: a 44dp **Your Energy →
+View check-ins** row, styled like Your Saved Runs, replaces the large check-in panel. Its original
+heading, description and coverage now appear inside the existing sheet; Similar easy runs remains.
+Browser open/close verification, TypeScript, production build and all six packaging checks passed.
+The small tweak awaits Manley's visual review. Content relevance/subsections and the corresponding
+phone change are later follow-ups, not part of this browser task.
+
+The working preview stays local at `http://127.0.0.1:5194/runstate-preview/`. Public GitHub Pages
+and Android remain unchanged. This acceptance concerns the browser presentation, not a claim of
+pixel identity, native export or live provider functionality. No Git mutation or publication;
+commits/pushes remain user-owned. Trailer/tester work stays paused; no overall AfroTech completion.
+
+### Earlier October 29 checkpoint — four accepted screens; three fidelity corrections ready locally
+
+Manley reviewed the browser adaptation and accepted **Opening, Countdown, Your run / Active
+Run, and Music within reach**. He explicitly clarified that the accepted music view is the
+circular player, **not Finish & reflect**. These four designs are to be preserved. He authorized
+correcting Start, Completion and History to match the native app, or choosing another method if
+that cannot be achieved. This supersedes the earlier stopped-draft checkpoint below.
+
+- The local clone remains `docs/local/github-preview-2026-10-29/`, review URL
+  `http://127.0.0.1:5194/runstate-preview/`. No public site or Android source was changed.
+- Start now uses native measured geometry (720px Moto content at density1.625 =443.08dp wide),
+  original map/headphones artwork, native utility/Energy/footer shapes, type and intake rhythm.
+- Completion follows the native metric/ring layout, original pale geometric atmosphere,
+  Energy tiles/intake, optional Effort, reflection brackets and single Save Activity action.
+  Saving opens its recap. History uses the original trail background, native summary/filter
+  proportions, dark expanded records and Check-ins sheet. All records are fictional examples.
+- Shared webpage heading/footer styles were scoped to the outer guide after browser review
+  found they leaked into native screen components. History artwork now uses a real image so
+  compiled stylesheet paths cannot hide it. Native Roboto and condensed fonts are bundled.
+- Browser checks passed for Start Energy/plan/shoe-sheet controls, post-run Energy intake, optional Effort, preserving a reflection when
+  editing Energy, Save Activity/recap/History handoff, History sorting and Check-ins. TypeScript,
+  production build and all six export/privacy/asset checks passed. Final History summary measured
+  153.34 browser pixels against the scaled native target153.4; this is one component measurement,
+  not a whole-screen pixel-identity claim.
+- Fidelity evidence uses native source plus existing actual Moto captures. No fresh device
+  capture was made; current Completion has source comparison but no new full-screen native
+  capture. Do not claim measured pixel identity or user acceptance of the three corrections.
+- Necessary new local preview files: `NativeAgentRing.tsx`, `HistoryScreen.tsx`,
+  `history-screen.css`, six Roboto font weights and their license. Generated Pages files are
+  prepared locally. No provider calls, private run data, Git mutation or deployment.
+
+Next: Manley's visual review of **Set your energy → Finish & reflect → Revisit a run**. If a
+screen still fails his fidelity requirement, use an agreed actual-native presentation method
+instead of further design approximation. Main README/docs updates remain local. Commit work is
+user-owned and the separate preview repository needs its own commit/push after acceptance.
+Trailer, onboarding and tester work remain paused; no overall AfroTech completion is declared.
+
+### Earlier October 29 checkpoint — superseded by the partial acceptance above
+
+Manley asked to refresh the interactive GitHub previews (not LinkedIn screenshots), approved
+local preparation, then clarified: new screens must be the exact current app screens; do not
+recreate them if the result will not be 100% the same. This supersedes the browser-adaptation
+approach used during this turn. No further reconstruction or publication is authorized.
+
+- Reviewed `Manley-codes/RunState` and the separate `Manley-codes/runstate-preview` repository.
+  Public Pages still contains the older Start/Completion/History studies. It was not updated.
+- A separate local clone at `docs/local/github-preview-2026-10-29/` contains an **unapproved
+  browser adaptation**, reusing accepted prototype material but reconstructing other native
+  screens. It is not an exact rendering of the installed Android app and must not be presented
+  or published as such. The draft is preserved, not the selected implementation.
+- TypeScript/build and six packaging checks passed. Browser DOM checks covered energy,
+  countdown assembly, silent music switching, pause/resume availability, Completion feedback,
+  optional Effort, saved example reflection and History sorting. Screenshot capture was initially
+  unavailable; one later Light paused rendering was seen. Hold-to-finish execution and a complete
+  visual/device-size comparison were not verified. These checks do not establish fidelity.
+- Main `README.md` and `docs/README.md` were revised locally to lead with Android, separate the
+  simulated browser demo from native behavior, and date console-era evaluation. They remain
+  uncommitted review drafts; prior documentation changes were preserved.
+- Original browser prototype source remains in the visualization workspace `runstate-assembly`.
+  Native Compose source and actual native captures also exist, including the October 26 Active
+  Run/music recordings and October 27 emulator capture. Web prototype files cannot be assumed
+  identical to later native adjustments. Android screens cannot simply be exported as interactive
+  HTML without an adaptation or a runtime that runs the actual Android app.
+
+Next: agree an exact-source delivery method. Native screenshots/recordings preserve the rendered
+design but are not fully interactive; actual interaction requires running the Android app. Do not
+silently substitute recordings for the requested interactive preview. No new media generation,
+phone action, Android changes, provider call, Git mutation or deployment occurred in this task.
+The main AfroTech milestone is not declared complete. Trailer/onboarding/tester work remains paused.
+
+**Same-turn clarification:** Manley is not categorically opposed to a browser adaptation. He
+wants to see what that means; his objection is to recreations that do not look like the accepted
+screens. The existing local draft is therefore available for comparison, with Dark Active Run
+shown first. Do not interpret this as rejection of all web implementations or approval to replace
+the design. Fidelity review is the next step; publication and further reconstruction remain pending.
+
+## October 27 emulator installation — narrow task during break
+
+Manley requested the current app in Android Studio's emulator, then clarified he wanted a
+hand-shaped pointer for his own clicks. This authorizes this setup only; the showcase and
+other app work remain paused.
+
+- Existing `Medium_Phone` AVD opened visibly at `emulator-5554` without wiping data.
+- Current `:app:assembleDebug` passed. Existing emulator app data was exported to a private
+  verified 58-entry archive before `adb install -r`. Launch succeeded; Android screenshot
+  shows the current Start screen. Installed APK SHA-256 matches the current build; crash
+  buffer was empty. No new run was started or saved and no app source changed.
+- All device commands explicitly targeted the emulator; connected Moto was untouched.
+  Emulator settings/history and Spotify setup remain separate from the physical phone.
+  This checks installation and launch, not full live GPS/Spotify/reflection functionality.
+- Computer use was initially used to inspect the emulator window; after Manley questioned
+  its necessity, installation and verification proceeded solely through Android tools.
+- No native hand-pointer setting was found. A private, display-only emulator-scoped hand
+  overlay was prepared, but Windows blocked its PowerShell launcher because script execution
+  is disabled. It is **not running**; the default pointer remains. No execution-policy or
+  Windows-wide cursor setting was changed. Hand-pointer request remains unfinished.
+- Private backup, screenshot, launch logs and inactive helper are under
+  `docs/local/emulator-current-2026-10-27/`. No new tracked source files, commits or pushes.
+
+## October 27 pause and resume checkpoint — Manley's break
+
+Manley requested: "Note and document the progress. I'm going to take a break from the app for a bit."
+Work is paused after documenting this checkpoint. This supersedes earlier permission to keep
+working autonomously while he was away. Do not resume app changes, preview production,
+paid generation or phone activity until he asks to continue.
+
+**Current review item:** private `docs/local/app-preview-references-2026-10-26/runstate-running-spotify-skip-test-v1.mp4`.
+The 9.70-second portrait visual draft shows the runner jogging downtown, then the phone's
+2.75-mile display, Spotify selection revealing Lovely Day, Next switching to Lizzo's
+Good as Hell inside the circular visualizer, and a return to the smiling runner. Decode and
+visual checks passed. It is silent and awaiting Manley's review; it is not an accepted or
+finished audiovisual scene. Lovely Day is a provisional first-song choice; Lizzo is selected.
+
+**Preserve:** accepted black-kit runner identity and original opening
+`runstate-downtown-opening-test-v2.mp4`. Finger-tap repair and alternate warm-up remain parked
+at Manley's request. Current preview work did not change production app source, start or save
+a real run, or change live music. Database/WAL and five preference files were verified
+unchanged; temporary capture/test materials were removed. Phone was left at the launcher.
+
+**Resume in this order, one bounded task at a time:**
+
+1. Review the running/Spotify-skip visual with Manley and locate usable authentic song files.
+   Saved cue points put the first song at 0–4.4 seconds and Lizzo at 4.4–9.7 seconds. Add audio
+   and review the complete scene; do not regenerate runner footage just to resume.
+2. Create the trailer-only 3–2–1 countdown with the original female voice and "Let's go, runner."
+   The app's ten-count behavior stays unchanged.
+3. Build the completion scene with the original male reflection, selected complete-phrase
+   music snippet and runner reaction. Exact adapted reflection text is saved in the private
+   README; original spoken take and exact snippet timing still need verification.
+4. Include the moving-photo RunState opening identity and assemble the 30–45-second showcase
+   (60 seconds maximum). Final ordering, slogans, logo and launcher icon remain decisions.
+
+Runner testing/distribution and welcome/onboarding remain deferred; their findings and favorite
+images are preserved. Neither the full trailer nor the overall AfroTech essentials are complete.
+The private showcase README and November roadmap retain the detailed receipts and task order.
+
+**Git handoff:** MEMORY, creative direction and this current-state document have uncommitted
+changes. No staging, commit or push was performed. Private media, README and roadmap are
+gitignored; committing the three tracked documents will not back up those local assets.
+
 ## Feature status language — adopted October 18, 2026
 
 Use one of these labels whenever reporting a feature, followed by its exact scope and the next
@@ -38,6 +243,165 @@ Account timing recommendation: plan sign-up after AfroTech, before cloud backup/
 online profiles require user ownership and access control. Separate local histories on individual
 phones do not by themselves require accounts. Keep the current demo free of a mandatory sign-up;
 revisit earlier only for a concrete requirement, not as a prerequisite for finishing existing UI.
+
+## October 26 presentation reset and preserved favorites
+
+**October 27: running/Skip Next visual ready for review; music remains unfinished.**
+`runstate-running-spotify-skip-test-v1.mp4`:9.70s,1080×1920,H.264/30fps,291frames,silent;
+full decode exited0 and final contact sheet was reviewed. Runner source0.75–2.75s→6.2s phone
+insert→runner source4.5–6s shows full running/phone glance,2.75mi, Lovely Day, actual Next to
+Lizzo album/controls, smiling jog. One new6s source cost3635.6364credits/$0.6610248. Native
+fixture checks preserved main DB/WAL+five prefs; temporary test/source/assets removed, phone on
+idle launcher. No app-source changes or new run. Actual usable song files are needed; planned
+cues first song0–4.4s/Lizzo4.4–9.7s are saved, no music/audio added. User acceptance remains;
+this is not the complete requested audiovisual scene. Retain opening v2/finger fix parked;
+production stops here pending input. Full trailer/reflection and AfroTech essentials stay open.
+
+**Current overnight task: running-to-music scene.** Manley authorized autonomous work on full
+view of the selected woman running downtown → phone glance → native distance → Spotify → brief
+secondary track → Skip Next → Lizzo Good as Hell begins inside the circular album/control view.
+Scene music is now authorized, superseding silent-only notes below; Lovely Day is only the
+assistant's provisional first-track choice. Finish this bounded scene then stop, apart from
+straightforward no-input preparation. Preserve original opening v2 and app text/voices; finger
+fix stays parked. Full trailer/reflection production and overall AfroTech completion stay open.
+
+**Latest: black-kit runner v2 accepted.** Manley: “Okay, this works.” The current selected
+character/wardrobe is `runner-dawn-black-rs-v2.png`: original face, very dark skin, athletic
+build, natural afro puff, sweat detail, phone and dawn track; black outfit/gear/shoes with
+restrained silver-white details and a small white RS top mark. Preserve the earlier base image.
+Its standing portrait establishes appearance; energetic warm-up remains a future shot.
+
+**Latest setting steering:** short opening-test concept approved; Manley prefers public park
+dirt/cement trail or downtown streets and leans downtown for the style, music/headphones and
+surrounding activity. Original track is now a reference, not the required location. Suggested
+dawn setting is a broad pedestrian path/plaza with glass/stone buildings and subtle city life;
+precise location remains open beyond the new study outputs; full trailer/audio stays deferred.
+
+**Latest: retain original opening v2; stop finger work and move forward.** Manley explicitly
+said “leave it how you had it originally…forget finger tap for now…move forward.” Current
+working opening is `runstate-downtown-opening-test-v2.mp4`; new raw/local finger studies are
+parked, not selected; no final v3.
+
+**Dark Active music test: Ready for user review.** `runstate-dark-active-music-test-v1.mp4` is
+7.00s,1080×1920,H.264/30fps,210frames,silent; full decode exited0 and contact sheet was reviewed.
+Actual current native UI uses an isolated demo fixture: distance for about2s, then Spotify Music
+selection reveals Lizzo Album/controls for about5s. Same clean downtown phone plate, editorial
+tap ring1.8–2.15s,1.2% push, no animated free hand. One fixture test passed; DB/WAL+five prefs
+unchanged, temporary test/source/asset/device copies removed, Spotify foreground restored.
+No app/UI changes, live playback, run start/save or new generation credits. User acceptance
+remains; no full trailer/song/reflection scope or overall AfroTech completion claim.
+
+**Opening-test feedback/history:** Manley says it
+looks really good but notes the finger does not visibly press the screen and wants a different
+warm-up (not yet specified). Timing of fixes is open. Recommendation is to fix animated hand
+contact synchronized to the real UI before further phone shots, defer warm-up revision, then
+show Dark Active distance→Spotify tap→album/controls. One later authorized4s1080portrait silent
+Veo3.1Fast finger take completed at2423.7576credits/$0.4406832. It missed the native High target;
+bounded local moving-hand composites had mask artifacts. Manley parked that work as above.
+Different warm-up remains deferred; preserve every source/study. No app/phone/Git actions for
+the finger attempt. Manley previously authorized the original test and approved the
+runner-image upload to ElevenLabs and one generation after automatic review blocked upload.
+Initial estimate$1.32; one silent6s1080×1920 Veo3.1Fast take completed at3635.6364 credits/
+$0.6610248. Local studies: `runner-downtown-opening-frame-v1.png`,
+`downtown-phone-insert-plate-v1.png`, `downtown-warmup-take-1.mp4` in the private reference folder.
+These do not replace his accepted black-kit v2 selection. Final private test is
+`runstate-downtown-opening-test-v2.mp4`,7s1080×1920silent:4.5s warm-up +2.5s actual Moto High-Energy
+selection composited into the generated phone plate with a small tap cue. Contact sheet and
+phone insert were visually reviewed; user acceptance remains. Native capture is
+`high-energy-selection-moto.mp4`; Moto is left on Start with High selected in memory only.
+No run started/saved; code confirms no DB/preferences write for this selection. No Undo available.
+Private artifacts/renderer only, no app-source/Git change or overall AfroTech completion claim.
+
+Final RunState logo and custom Android launcher icon remain pending, reaffirmed as a reminder
+by Manley. This clothing mark is a provisional idea, not an accepted app logo or app change.
+
+Lizzo **Good as Hell** is selected; Larry June **6am In Sausalito** is for later. Manley supplied
+the exact reflection again and authorized only **low→high** to match the warm-up/high-Energy
+opening, with all remaining words unchanged. This is a trailer-only adaptation; the original
+accepted app baseline stays intact. The text was found in ElevenLabs, but its original male
+spoken recording has not been downloaded/verified. The desired snippet spans the grooming
+gestures through the confident feeling-good refrain; manually trim a complete phrase ending
+later, without assuming a recording version/timestamp. Exact adapted text is in the private README.
+
+The rest of the concept is retained: visible phone actions; trailer-only three-count/original
+female run voice; Dark Active distance-to-Spotify-artwork interaction; opening collage;
+Completion/original male reflection→music snippet→fulfilled runner reaction. Target30–45seconds,
+max60; reflection voice first. Exact order/slogans/reaction and further details stay open;
+character and black wardrobe are selected above.
+
+**Current scope: public showcase concept, selected still and short opening-test concept, not onboarding.** Manley stopped the
+welcome/onboarding studies and requested an app preview for AfroTech or other audiences. The
+initial reference research has advanced to the bounded still above; no full video/audio assembly.
+Preserve static image2 **“Your music, within reach”** and the final **“Your run. Your rhythm”**
+preview screen as possible reuse; Dark was his strongest preference. Original prototype and
+assets remain intact. Copies/captures and reference links are retained in
+`docs/local/app-preview-references-2026-10-26/`.
+
+Private runner testing is deferred, likely until after AfroTech; the readiness report remains
+saved at `docs/local/tester-readiness-2026-10-26/TESTER-READINESS.md`. Do not implement its fixes
+or continue onboarding as automatic follow-up to this presentation task. This supersedes the
+earlier welcome-study/tester-review sequence below, not the existing app's functionality work.
+No app/prototype code, voice configuration, deployment, Git mutation or completion claim.
+
+## October 26 welcome studies and tester preparation
+
+**Latest feedback:** no full variant selected. Dark **“Your run. Your rhythm.”** closing screen
+is the strongest accepted visual element. Static image2's light music introduction is promising
+but needs exact original RunState headphones artwork and playback controls over the artwork.
+Learn by doing's cream direction is rejected; preserve useful individual elements rather than
+repeating three full variants. Detailed slide-by-slide feedback is in `creative_direction_ui.md`.
+The request for organization concerned chat explanations, not preview menus; no such UI edits
+occurred. Browser viewing was subsequently explicitly authorized and the existing closing screen
+observed, superseding the earlier access restriction for that preview. Full interaction/audio QA
+is still outstanding. This follow-up records feedback only; no app/prototype code changed.
+
+**Local comparison drafts; implementation and review remain separate.** Manley authorized
+autonomous welcome-panel studies while on his run, including optional ElevenLabs narration,
+then the private tester security/privacy/distribution review. He wants to compare templates and
+give his own creative direction afterward. This does not select or install onboarding.
+
+Three static studies are saved: Dark editorial, Light and clear, and Guided practice. A separate
+mobile browser prototype uses fictional readings and original RunState headphones artwork, with
+five chapters: metrics, music access, pause/finish, Energy versus Effort, and History. The accepted
+Dark Active Run remains the visual reference. Examples must not imply real tracking, account
+connections, saved runs, audio analysis, calorie estimation or cleared Spotify permission.
+
+ElevenLabs connected successfully. A new **RunState Welcome — Guide Study** voice was designed
+from the requested African American female, proper/sophisticated explanatory direction and saved
+separately. The original male reflection and female run voices/configuration were not changed.
+Two optional full narration takes were generated (approximately 53/54 seconds, 1,568 reported
+speech-generation credits total; initial voice-design cost not reported). A transcript matches
+the script. Narration never starts automatically; voice/delivery acceptance is still Manley's.
+
+Prototype location:
+`C:/Users/Owner/.codex/visualizations/2026/10/03/01a103b6-bff0-72d1-8008-7b8b20f78035/runstate-welcome/`.
+Its README preserves image briefs, media provenance, narration and limits. Browser approval
+rejected access to the existing local preview. No alternate browser or indirect workaround was
+used; visual, gesture, focus and listening checks remain pending. TypeScript, production build,
+packaging, all28 protected-runtime checks and independent source review passed; evidence is in
+the prototype's `QA.md`. A loopback-only preview is served at `http://127.0.0.1:5193/`, with three
+version choices and optional chapter audio. Do not call it integration-ready solely because
+a build succeeds.
+
+**Private tester review completed; readiness is not complete.** Source and primary guidance
+were reviewed in `docs/local/tester-readiness-2026-10-26/TESTER-READINESS.md`, with separate
+backend and Android/provider evidence reports and a welcome storyboard. The smallest preparation
+work is: isolate owner sample/diagnostic actions from recipient builds; replace shared paid-service
+access with individually revocable/expiring invitations and persistent allowances; plan for the
+256-entry process-local reflection cache; finish accurate privacy/provider scope; establish stable
+release signing/versioning and verify a fresh recipient install plus data-preserving update.
+
+Existing protections remain meaningful: backend-only provider keys, encrypted phone credential,
+optional sharing off, local history, bounded requests/concurrency and sanitized reviewed logs.
+Live hosting, provider budgets, key scopes, retention settings, Spotify dashboard and recipient
+account behavior were not inspected. Web API five-user rules must not be asserted as a verified
+Android App Remote cap. Experimental artwork and song/reflection behavior are not established as
+provider-approved. Scope/usage budget/distribution channel remain product decisions before rollout;
+full accounts/cloud sync are not automatically required.
+
+No phone actions, main-app source changes, saved-data operations, backend configuration/deployment,
+Git mutation or invitations occurred in this preparation. The user's real-run feedback remains
+the next field checkpoint. Overall AfroTech completion and the GitHub-refresh reminder remain open.
 
 ## October 26 — runner-focused History and separate recording sources
 

@@ -1,166 +1,161 @@
 # RunState
-[![Tests](https://github.com/Manley-codes/RunState/actions/workflows/ci.yml/badge.svg)](https://github.com/Manley-codes/RunState/actions/workflows/ci.yml)
 
-**RunState is a running app designed to understand a run beyond its numbers by interpreting the environment surrounding the experience.**
+[![Console and Android checks](https://github.com/Manley-codes/RunState/actions/workflows/ci.yml/badge.svg)](https://github.com/Manley-codes/RunState/actions/workflows/ci.yml)
 
-It combines run data with personal history, pre- and post-run energy, effort, weather, route context, running gear, and music to build a clearer picture of what made a run feel and perform the way it did. After each logged run, RunState can surface personal patterns, compare similar efforts, and generate a contextual AI response grounded in what actually happened—including the music that shaped the experience when relevant.
+**A native Android running app that connects the numbers of a run with how it felt.**
 
-Learning project and portfolio piece, with a Java console foundation and a native Android app.
+RunState brings together distance, active time, pace, optional energy and effort check-ins, and
+music-aware reflections. The goal is to help a runner take something meaningful from the run,
+beyond a set of statistics.
 
-**[Live design previews →](https://manley-codes.github.io/runstate-preview/)** — interactive browser prototypes of the mobile screens, separate from the installed Android app. Best on a phone.
+Built by **Manley Johnson**, a CS student at SNHU, as a learning project and portfolio piece.
+It began as a Java console application and now includes a Kotlin/Compose Android app and a
+separate Java reflection backend.
 
-**[Platforms and tools used →](docs/README.md#platforms-and-tools-used)** — what Android Studio,
-IntelliJ, the development assistants, databases and hosted services each contribute.
+**[Explore the interactive browser demo →](https://manley-codes.github.io/runstate-preview/)**
 
----
+Explore the current opening, Start, Countdown, Active Run, music, Completion and History
+screens in one connected preview. Desktop and mobile both show a framed phone; mobile uses a
+screen dropdown. The [preview repository](https://github.com/Manley-codes/runstate-preview)
+uses example runs, silent music controls and scripted reflections rather than live tracking or services.
 
-## What it does
+## The Android app
 
-The console version logs a completed run through an interactive menu. RunState stores it durably, checks
-for personal records, fetches the weather for that date and location, compares the run against
-similar past runs, and generates a short response about it.
+**Updated October 29, 2026.** The Android app is under active development. Implementation and
+verification details are in the [current project state](docs/design/project_current_state.md).
 
-| Area | Behavior |
+| Part of the run | Current implementation |
 |---|---|
-| **Logging** | Date, distance (mi/km), duration, route, plus optional pre- and post-run energy, effort cost, surface, company, shoes, and music state |
-| **Persistence** | MySQL via JDBC. History is durable and load-protected |
-| **Personal records** | Longest distance and fastest average pace, unit-normalized across miles and kilometers |
-| **Weather** | Automatic daily-mean temperature and conditions via Open-Meteo, fetched once at log time and stored with the run |
-| **Comparisons** | Up to 10 comparable runs (same route or similar distance, last 180 days), producing four explanatory signals with evidence counts and confidence tiers |
-| **RunStyle** | A local, deterministic strategy profile across three families and three maturity stages |
-| **Response** | A creative 2–3 sentence AI response grounded in the run’s actual data, including music context from what the runner listened to during the run. Depending on relevance, the song may be ignored, briefly referenced, or become the central theme of the response. Includes a local fallback when the API is unavailable.|
+| **Opening and Start** | Moving photo collage; optional pre-run energy, run intention, familiar route label and shoe selection |
+| **Countdown** | Integrated animated countdown, spoken cues and a Start now control |
+| **Active Run** | Distance inside a circular visualizer, active time, average pace and current-mile average pace; pause/resume and a protected Stop control |
+| **Appearance** | Dark is the default for Countdown and Active Run; Light and Auto remain settings choices |
+| **Music controls** | Spotify controls can appear inside the visualizer. Temporary Headphones and Album cover treatments remain available for comparison |
+| **Completion** | Saved run facts, optional post-run energy and effort, spoken receipt/reflection, and eligible opted-in music endings |
+| **Log History** | Locally saved runs and exact selected reflections, with All runs, Longest and Fastest pace views |
 
----
+The visualizer is a designed animation, not an analysis of the playing audio. Music and speech
+features have separate connection, consent and provider requirements. The circular album-art
+treatment is an experiment; production use still needs its provider-guidance review.
 
-## Console engineering notes
+The preview's compact **Your Energy** shortcut in History is a browser refinement; its Android
+update and a review of the check-in content are still planned.
 
-These are the decisions I would want to talk through in an interview.
+## What matters in the implementation
 
-**Save-first durability.** RunState does not calculate personal records, generate an AI response, or update RunStyle until the run has been successfully saved to MySQL. If saving fails, the app preserves the run information for recovery instead of acting as though the run was recorded successfully. Tests verify that later processing cannot accidentally happen before a successful save.
+- **Local-first records.** Room/SQLite stores runs, feedback and selected reflection text on the
+  phone. A failed online request does not erase a saved run; History can reopen the saved text
+  without generating it again.
+- **Separate responsibilities.** Kotlin/Compose handles the phone experience, recording and local
+  storage. A Java 17 backend handles online reflection and voice requests. Provider credentials
+  remain on the backend.
+- **Optional context.** Energy is not required to start a run. Music observation, sharing and
+  song lookup have explicit settings and run-scoped choices; connecting Spotify is not blanket
+  permission to share listening context.
+- **Bounded music integration.** Spotify App Remote is integrated for authorized playback
+  control. Run controls and music controls remain independent, with safeguards around voice and
+  snippet playback. RunState does not extract Spotify audio.
 
-**History protection.** If stored run history is incomplete or malformed, RunState identifies the specific problem and stops safely rather than continuing with unreliable data. This helps prevent damaged history from affecting personal records, comparisons, or RunStyle analysis.
+Current limits include wider outdoor GPS and audio reliability, complete musical endings across
+different recordings, the final music-player treatment, and preparation for external testers.
+The [music development story](docs/design/music_reflection_development_story.md) records
+tested reflection/song pairings and remaining gaps.
 
-**Designed for reliable testing.** The test suite can verify storage and post-run behavior without requiring a live database or API key. This keeps automated tests fast, repeatable, and suitable for GitHub Actions. 
+## Repository map
 
-**Association, never causation.** RunState can recognize relationships between things like surface, shoes, company, music, weather, and performance, but it does not claim that those factors caused a result. RunStyle is calculated locally from recorded running patterns rather than generated by the AI model.
+| Location | Purpose |
+|---|---|
+| [`android/`](android/) | Native Android app: Kotlin, Jetpack Compose, Room, Gradle |
+| [`backend/`](backend/) | Java 17 reflection/voice service, JDK HTTP server, Maven |
+| [`src/`](src/) | Original Java console application and its tests |
+| [`docs/`](docs/README.md) | Guided documentation, architecture, privacy, design decisions and dated checkpoints |
+| [Separate browser-demo repository](https://github.com/Manley-codes/runstate-preview) | Interactive, simulated presentation hosted on GitHub Pages |
 
-**Music context is modeled deliberately.** RunState distinguishes between a known song, music without an identified track, intentional silence, and unknown music state rather than treating them as the same thing. That state determines what the AI is allowed to say about music, helping responses use a song meaningfully when appropriate without inventing context that was never recorded. The offline fallback remains music neutral.
+## Build and check
 
-**Failures are handled based on their impact.** If weather data or the AI service is unavailable, RunState can continue with a fallback because the run itself is still safely recorded. If saving the run fails, however, the process stops because preserving the run is the higher priority.
+Open `android/` in Android Studio, install the SDK components requested by Gradle, and use JDK 17
+for the build. From the repository root in PowerShell:
 
----
-
-## Console test suite
-
-- 383 automated tests, 0 failures
-Runs automatically on every push to master through GitHub Actions
-Tests run without a live MySQL database or API key
-Covers storage, run analysis, personal records, RunStyle, AI-response behavior, and failure handling
+```powershell
+Push-Location android
+.\gradlew.bat :app:testDebugUnitTest :app:assembleDebug
+Pop-Location
 ```
+
+Online reflection and Spotify setup are separate from building the UI. See the
+[backend setup](backend/README.md) and [platform guide](docs/README.md#platforms-and-tools-used).
+Private provider keys do not belong in the APK or this repository.
+
+To run the backend's unit tests:
+
+```powershell
+mvn -f backend/pom.xml test
+```
+
+[GitHub Actions](https://github.com/Manley-codes/RunState/actions/workflows/ci.yml) runs the
+console tests and Android unit-test/build checks. Backend tests and physical-device checks have
+their own recorded results; the badge does not certify them or a production release.
+
+## Design and engineering record
+
+**[Start with the documentation guide →](docs/README.md)**
+
+- [Current Android/backend state](docs/design/project_current_state.md) — implementation and dated verification limits
+- [Creative direction](docs/design/creative_direction_ui.md) — accepted visual direction and superseded experiments
+- [Data and privacy](docs/DATA_PRIVACY.md) — local records, optional context and external services
+- [Music reflection development](docs/design/music_reflection_development_story.md) — iteration from early experiments to the current native flow
+
+<a id="console-history"></a>
+<details>
+<summary><strong>Original Java console application — engineering, setup and historical evaluation</strong></summary>
+
+The console app remains in `src/`. Its MySQL-backed analysis is a separate implementation;
+these capabilities should not be read as a list of everything available in the Android app.
+
+The console logs completed runs, checks longest-distance and fastest-pace records, attaches
+Open-Meteo weather, compares similar past runs, derives a deterministic RunStyle profile, and
+generates a short contextual response with a local fallback.
+
+### Engineering decisions
+
+- **Save first.** Personal records, response generation and RunStyle updates run only after a
+  successful MySQL save. Save failures preserve the input for recovery.
+- **Protect history.** Incomplete or malformed stored history is identified before it can affect
+  comparisons or records.
+- **Test without live services.** Storage seams and test fixtures allow ordinary unit tests to
+  run without a database or API key.
+- **Association, not causation.** Context can support a comparison without proving why performance
+  changed. RunStyle is computed locally rather than invented by a language model.
+- **Represent missing context honestly.** Known music, unidentified music, intentional silence
+  and unknown state are distinct. Offline responses remain music-neutral.
+
+```text
+App → RunConsole → RunStorage → MySQL
+          ├─────→ WeatherService → Open-Meteo
+          ├─────→ ComparisonService
+          ├─────→ RunStyleService
+          └─────→ RunAgent → Anthropic API
+```
+
+The [console run-flow diagram](docs/CURRENT_RUN_FLOW.md) and
+[original AI-agent design](docs/AI_AGENT.md) explain these boundaries and failure paths.
+
+### Console setup
+
+Use Java 17, Maven and MySQL with a dedicated RunState database user/schema. Configure
+`RUNSTATE_DB_PASSWORD`; `ANTHROPIC_API_KEY` is optional because the console has a local fallback.
+See the storage configuration in `src/` for the expected connection settings.
+
+```powershell
+mvn compile exec:java "-Dexec.mainClass=com.runstate.App"
 mvn test
 ```
 
----
+### Historical Music Intelligence V1
 
-## Console architecture
+The **August 18, 2026** evaluation of the original console Music Intelligence V1 implementation
+did not meet its predeclared manual quality bar. That result is preserved in the
+[evaluation record](docs/EVALUATION_RECORD.md). It is a dated evaluation of that implementation,
+not the status of all later Android music/reflection work.
 
-```
-App ──► RunConsole ──► RunStorage ──────► MySQL
-              │
-              ├──────► WeatherService ──► Open-Meteo
-              ├──────► ComparisonService
-              ├──────► RunStyleService
-              └──────► RunAgent ────────► Anthropic API
-```
-
-RunState separates major responsibilities instead of putting everything into one class. Storage handles saving and loading runs, the weather service retrieves conditions, the comparison system analyzes similar runs, RunStyle identifies personal running patterns, and the AI service builds responses from the results. This separation keeps each part easier to test, change, and reason about independently.
-
-A rendered diagram of the full current run flow, including failure paths, is in
-[docs/CURRENT_RUN_FLOW.md](docs/CURRENT_RUN_FLOW.md).
-
----
-
-## Getting started
-
-**Prerequisites**
-
-- Java 17
-- Maven
-- MySQL, with a dedicated RunState database user and schema
-- `RUNSTATE_DB_PASSWORD` — the database user's password
-- `ANTHROPIC_API_KEY` — optional; without it the app uses its local fallback response
-
-**Run**
-
-```
-mvn compile exec:java -Dexec.mainClass=com.runstate.App
-```
-
-**Test**
-
-```
-mvn test
-```
-
----
-
-## Documentation
-
-The design record is the most substantial part of this project. Decisions are written with an
-explicit status, the reasoning behind them, and what would reopen them.
-
-**[Start here → docs/README.md](docs/README.md)** — a guided reading path for anyone reviewing
-this repository.
-
-Highlights:
-
-- [Current run flow](docs/CURRENT_RUN_FLOW.md) — the verified as-is behavior, with a flowchart
-- [AI agent design](docs/AI_AGENT.md) — identity, prompt architecture, and constraints
-- [Data and privacy](docs/DATA_PRIVACY.md) — exactly what leaves the machine, and when
-
-
----
-
-## Current status
-
-The console application is built and working. Phases 1 through 5 — console app and energy system,
-MySQL persistence, RunStyle detection, the AI agent, and context expansion for music and weather —
-are complete.
-
-**Music Intelligence V1 is implemented but not accepted.** Music Intelligence V1 has been implemented and formally evaluated. It did not meet the quality bar defined before testing, so it has not been promoted as a finished feature. The evaluation process, results, and lessons learned are documented in
-**[docs/EVALUATION_RECORD.md](docs/EVALUATION_RECORD.md)**.
-
-The native Android app is implemented in `android/`: Start, run/pause/resume/finish, local saving,
-Energy/Effort, spoken receipt/reflection and Log History work through Room storage. GPS records
-partial measured evidence; continuous screen-off tracking and outdoor accuracy still need
-validation. Spotify observations stay local unless a separate per-run choice permits one eligible
-title/artist in reflection context. No music snippet is implemented.
-
-The separate Java 17 reflection backend uses the JDK HTTP server. Small live Anthropic checks
-reached the phone through the computer connection and exact selected text survived reopening.
-The Render Starter backend is now Live with Anthropic after explicit FAKE staging and 45 passing
-Linux tests. Manley entered the key privately on Render; it remains backend-only. Two new labelled
-Moto Sample runs received real reflections over HTTPS, and he heard saved facts followed by the
-latest reply. Exact text/metrics/online settings survived cold History reopen without a FAKE label,
-with local USB forwarding removed and local servers stopped. The hosted live phone gate is met.
-A no-selection wording issue and History scroll polish remain; broad writing quality, outdoor GPS
-continuity/accuracy and music duck/snippets are not yet verified. Tracking and saved History remain
-usable offline.
-See [the current Android checkpoint](docs/design/project_current_state.md) and
-[the platform map](docs/README.md#platforms-and-tools-used) for responsibilities and limits.
-The [deployment walkthrough](docs/README.md#deployment-how-the-parts-connect) explains what
-building, deploying and installing each mean in this project.
-
----
-
-## Technologies
-
-Android: Kotlin · Jetpack Compose · Room / SQLite · Gradle · Android Studio
-
-Java console/backend: Java 17 · Maven · MySQL / JDBC (console) · Gson · JDK HTTP server/client · JUnit 5 · IntelliJ IDEA
-
----
-
-## Author
-
-**Manley Johnson** — CS student, SNHU
+</details>

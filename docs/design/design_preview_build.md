@@ -1,150 +1,90 @@
 ---
 name: design-preview-build
-description: "The public hosted design preview - what is live, where, how to update it, and what putting it on a real phone taught us. Updated August 22 2026."
+description: "Current public RunState browser preview, source and update workflow. Updated October 29, 2026."
 metadata:
   type: project
-status: LIVE - a real public URL. Contents are early prototypes and are expected to be replaced.
+status: LIVE — accepted connected browser preview; mobile phone framing confirmed by Manley.
 ---
 
-# The public design preview
+# RunState interactive preview
 
-**What this is:** two RunState prototype entries hosted on the open web so someone with no context
-can open a link on their phone and see the work. Built August 16–22, 2026, as a public phone-review
-surface.
+[Open the preview](https://manley-codes.github.io/runstate-preview/) · [Preview repository](https://github.com/Manley-codes/runstate-preview) · [Android project](https://github.com/Manley-codes/RunState)
 
-**These are prototypes, not the app.** Everything on them uses example data. They will be replaced
-as the design continues, and that's expected — this file describes what's live now, not a target to
-preserve.
+The public preview presents seven accepted RunState screens as one connected experience.
+Both laptop and mobile views use a rounded phone frame against black surroundings. Desktop
+navigation sits beside the phone; mobile keeps the screen dropdown above it. Small screens
+can scroll the page while the app display retains its 393:794 proportions.
 
----
+The mobile framing update is published and confirmed working by Manley. The corresponding
+[Pages deployment](https://github.com/Manley-codes/runstate-preview/actions/runs/40832834729) succeeded.
 
-## What's live
+## What visitors can try
 
-**Repository:** `Manley-codes/runstate-preview` — public, separate from the main project repo.
-Hosted with GitHub Pages.
+| Screen | Interaction |
+| --- | --- |
+| Opening | Enter through the moving-photo RunState introduction. |
+| Set your energy | Choose pre-run energy and explore the example plan, shoes and music options. |
+| Countdown | Watch the countdown assemble into Active Run, or select Start now. |
+| Your run | View distance and pace; pause, resume or hold Stop to finish. |
+| Music within reach | Bring the player inside the distance visualizer and try its controls. |
+| Finish & reflect | Choose optional post-run Energy and Effort, read a reflection and save the example. |
+| Revisit a run | Sort All runs, Longest or Fastest pace and open a saved example. |
 
-| Page | URL | What it is |
-| --- | --- | --- |
-| Landing | `manley-codes.github.io/runstate-preview/` | Dark page, two cards, one line of framing. `index.html` |
-| Start a run | `.../start.html` | Start Run V7 |
-| Finish a run | `.../complete.html` | Run Complete through the stored Log History record |
+Dark is the default run appearance; Light is available through Appearance. History's compact
+**Your Energy → View check-ins** row opens the detailed sheet, including Similar easy runs.
+This compact row is a browser change; its Android counterpart and review of that content remain
+later tasks.
 
-The landing page now presents the pair as **Start a run** and **Finish a run**. The earlier
-standalone `log.html` remains hosted so previously shared links do not break, but the landing page
-no longer promotes it.
+## Browser preview and native app
 
-**How to update a screen:** upload a new file with the same name, replacing the old one. The URL
-never changes, so any link already shared keeps working.
+This is an interactive browser adaptation of the accepted design, not the Android runtime.
+Runs and routes are fictional, music controls are silent, and reflections are scripted examples.
+It makes no live GPS, Spotify, ElevenLabs or backend requests and asks for no account or device
+permissions. Example runs last for the page session; the appearance preference stays in the browser.
 
-**One thing that will bite again: GitHub paths are case-sensitive.** Uploading `Start.html` while
-the link points at `start.html` produces a 404 that looks like the hosting is broken. It isn't.
-Match the filename exactly, and delete the old file if the casing changed.
+The Android project contains the real tracking, saved-run storage and connected features.
+Changes to the web presentation do not automatically change the phone app.
 
----
+## Source and update workflow
 
-## The Start screen preview
+The preview is maintained in the separate `Manley-codes/runstate-preview` repository.
+The current local checkout is `docs/local/github-preview-2026-10-29/` within the main workspace.
 
-Start Run V7. A prep-only pass was run before hosting — no new design, just the things that make a
-cold viewer's thirty seconds work:
+- Edit `preview-src/src/`; original artwork and fonts are in `preview-src/public/media/`.
+- In a fresh checkout, run `npm ci` with Node.js 22.12+ before development.
+- Run the following from the preview repository root:
 
-- **Phone viewport treatment.** Below 700px the page drops the desktop stage and the phone mockup
-  fills the screen. No bezel, no reserved gutter for controls.
-- **The device's real safe-area inset is reserved, not the mock status bar's height.** This came
-  from Claude Design and corrected an assumption: the mock status bar scales down to about 33px,
-  which is *less* than a real one, so reserving the mock's height would put the header under the
-  notch.
-- **A line of guidance outside the device frame**, because this screen is a sequence and not
-  self-explanatory: *Choose an energy level, press Start — then tap Pause, and hold Stop to end.*
-  Without it, a viewer presses Start, watches a timer for ten seconds, finds nothing, and closes
-  the tab.
-- **The Reset Prototype chip stays.** It's honest about what this is and it lets a returning
-  visitor clear the shoe bag.
+```powershell
+npm run dev
+```
 
----
+The development preview opens at `http://127.0.0.1:5194/`. To prepare and check the Pages export:
 
-## The Run Complete and Log History preview — August 22
+```powershell
+npm run build
+npm test
+npm run preview -- --base /runstate-preview/
+```
 
-`complete.html` is one self-contained prototype with one phone shell. Run Complete and Log History
-are two views inside that shell rather than separate phone displays. It demonstrates save-first
-completion, optional Energy and Effort, immediate Energy absorption into the visualizer, reflection
-arrival, failure and retry paths, and opening the exact stored record in Log History.
+The production preview is then at `http://127.0.0.1:5194/runstate-preview/`; stop the development
+server first because both use port 5194. The build type-checks the source, creates `dist/`, and
+runs `scripts/export-pages.mjs` to prepare the repository-root HTML, assets, media and history
+entry used by GitHub Pages. Edit source files rather than generated exports.
 
-The public landing page's second card was changed from **Log history** to **Finish a run** and now
-links to this combined journey. The source and runnable export are also preserved in the main
-project under `prototypes/run-complete-log-history/`.
+**Manley handles all Git commands.** Building does not publish. After reviewing the result,
+he commits and pushes the preview repository's source and generated files together. Main-project
+documentation belongs to its separate repository.
 
-The public phone-review export keeps only a quiet **Reset prototype** action beneath the phone.
-Failure-injection and stored-run controls remain in the editable `.dc.html` source for QA and are
-not exposed in the public preview.
+## Stable links and design history
 
----
+Existing shared links remain valid: [start.html](https://manley-codes.github.io/runstate-preview/start.html)
+opens Start, [complete.html](https://manley-codes.github.io/runstate-preview/complete.html) opens
+Completion, and [log.html](https://manley-codes.github.io/runstate-preview/log.html) opens History
+within the same experience. Keep these lowercase filenames and aliases when exporting.
 
-## The earlier standalone Log screen preview
-
-Log History, with the **City dawn** background.
-
-Ten backgrounds were extracted from the export and compared as rendered screens rather than as
-thumbnails. **Rain sprint was the best-looking screen of the set** — and was not chosen, because it
-is a dark mode rather than a background, and it wouldn't sit next to the light Start screen. Worth
-remembering: it may be the better answer to a different question later.
-
-### The correctness pass that ran first — August 16
-
-Five fixes went in before this screen was hosted. All five landed.
-
-1. **Phone-viewing variant.** Same treatment as Start — the mockup fills the viewport instead of
-   being a small phone inside a phone, and the clarity control stops reserving a 344px gutter.
-2. **`READ FROM` chips removed** from the persistent expanded record. Provenance isn't discarded as
-   an idea — the intended later form is revealed on demand from the reply, which is a separate
-   future pass.
-3. **The reply card sizes to its content.** It previously animated to a fixed 470px on a container
-   with `overflow: hidden`. Current copy fits, so nothing was visibly clipping — but a clipped
-   reply is a reply whose ending exists and can't be seen, which is worse than a shorter reply.
-4. **Month headers computed from the data.** The grouping logic recognised only `JUL` and `JUN`;
-   any other month rendered with no header at all, silently. Totals are now calculated rather than
-   typed.
-5. **One source for each reply's text.** It existed twice — once for display, once for speech.
-   They matched, but they could drift, and a reply that reads differently from how it looks is a
-   hard bug to notice.
-
----
-
-## What a real phone taught us
-
-Three things surfaced only after this went on an actual device. That's the value of hosting it.
-
-**The voice is robotic on iPhone and correct in desktop Edge.** Same file, same code. This is
-structural, not a bug: browser speech synthesis can only use voices already installed on the device,
-and phones ship compact voices while keeping the better ones behind a manual download most people
-never make. It is not fixable by choosing different persona names. Full detail in
-`ui_phase_handoff.md` §3 and §5 — a production version needs the platform's own speech system or a
-hosted text-to-speech provider, which is a real architecture decision, not a settings tweak.
-
-**The Start screen was choppy on mobile** during the map-into-circle collapse, and long-pressing
-Stop selected text on the screen behind it. Both were handled. ⚠️ **The fix that actually worked
-was found in a Claude Design thread and is not written down anywhere** — including here. If the
-choppiness returns after a future export, that reasoning will have to be rediscovered.
-
-**Desktop was fine throughout.** Both screens ran smoothly there, including the voice. Testing on
-desktop alone would have caught none of this.
-
----
-
-## Where this sits for someone finding the project
-
-**The main repo is the front door, not the preview.** The preview is one link inside it. A visitor
-who lands on a bare preview sees two screens and no engineering; a visitor who lands on the repo
-sees the tests, the decisions and the design record, and can click through to see it move.
-
-The preview link is present near the top of the main repository's `README.md`.
-
-**Also stale:** `README.md` in the preview repo still describes the older single-screen setup, from
-before the Start screen and the landing page existed.
-
----
-
-## Related files
-
-- `design_start_run_v7.md` — what the Start screen actually does
-- `ui_phase_handoff.md` — the Log screen's decisions, §3 and §4
-- `creative_direction_ui.md` — the visual direction these are working within
+The August studies used a two-card landing and separate prototype exports; those layouts and
+the former full-screen mobile treatment are historical. The October refresh replaced them with
+the accepted connected preview. [Earlier source](https://github.com/Manley-codes/runstate-preview/tree/28a974a73c10a7cdec03acc21c6efd5e7eb1c6ba)
+and `prototypes/run-complete-log-history/` preserve that work.
+[Asset notes](https://github.com/Manley-codes/runstate-preview/blob/main/ASSETS.md) contain artwork,
+photo credits and font licenses.
