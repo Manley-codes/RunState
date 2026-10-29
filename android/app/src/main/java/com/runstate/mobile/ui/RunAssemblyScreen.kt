@@ -181,13 +181,16 @@ internal fun RunAssemblyScreen(
     onNextTrack: () -> Unit = {},
     onToggleMusicPlayback: () -> Unit = {},
     onConnectMusic: () -> Unit = {},
-    onOpenMusicTrack: (String?) -> Unit = {}
+    onOpenMusicTrack: (String?) -> Unit = {},
+    onMusicVisibilityChange: (Boolean) -> Unit = {}
 ) {
     val counting = state == RunUiState.Countdown
     val starting = state == RunUiState.StartingRun
     val active = state == RunUiState.ActiveRunning || state == RunUiState.ActivePaused
     val paused = state == RunUiState.ActivePaused
     var musicOpen by rememberSaveable { mutableStateOf(false) }
+    val currentMusicVisibilityChange by rememberUpdatedState(onMusicVisibilityChange)
+    LaunchedEffect(musicOpen) { currentMusicVisibilityChange(musicOpen) }
     LaunchedEffect(active) { if (!active) musicOpen = false }
     BackHandler(active && musicOpen) { musicOpen = false }
     val colors = remember(day) { AssemblyColors(day) }

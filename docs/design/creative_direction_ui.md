@@ -8,6 +8,19 @@ status: v0.4 — August 13 working proof recorded; execution remains open and is
 
 # RunState — Creative Direction (v0.4)
 
+**October 29 — native Music Reflection Demo installed and verified.** Preserve the accepted
+Active Run and Completion designs: Settings → **Music Reflection Demo** opens at 2.75mi/28 active
+minutes/30 elapsed/High Energy, then distance → circular Lizzo album/controls → Pause/Stop →
+interactive Completion Energy/Effort → original female facts/original male reflection → Spotify
+Good as Hell opening (0–10s). Keep the UI concise. High → Powered Up uses the exact approved
+trailer text; alternate Energy changes only its opening, not the overall voice or style. This is
+an isolated presentation with no saved run. Both 841-test JVM suites, all APK builds and nine
+distinct targeted device cases passed across corrected runs; original voice/Spotify ending
+playback and all 33 runs/12 table hashes/five preferences are preserved. Listening review of the
+opening passage's exact cutoff remains with Manley. This resumes only
+the expressly requested native demo, not the paused full trailer or tester work. Details and
+verification status: `project_current_state.md` → "October 29 Music Reflection Demo".
+
 **October 29 — public browser presentation accepted.** All seven connected screens are approved.
 Preserve the current designs. Desktop and mobile both use a phone bezel with dark surroundings;
 mobile retains the screen dropdown. Manley confirmed the published mobile treatment works.

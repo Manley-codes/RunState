@@ -1,6 +1,12 @@
 RunState bundled visual assets and map dependencies
 Reviewed October 16, 2026
 
+Music Reflection Demo artwork (added October 29, 2026): Lizzo, Good as Hell.
+Source recording: https://open.spotify.com/track/6KgBpzTuTRPebChN0VTyzV
+demo_lizzo_cover.jpg copies the user's selected trailer reference unchanged.
+Album artwork remains the property of its respective rights holders, not RunState artwork.
+Song audio is played through the user's Spotify app; no song recording is bundled.
+
 Material Design Icons: shoe-sneaker
 Source: https://github.com/Templarian/MaterialDesign
 Copyright Pictogrammers contributors. Apache License 2.0.

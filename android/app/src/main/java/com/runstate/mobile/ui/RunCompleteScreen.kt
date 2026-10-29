@@ -202,7 +202,8 @@ internal fun RunCompleteScreen(
     noteError: String? = null,
     selectedEffortRating: Int? = null,
     effortRatingScale: EffortRatingScale? = EffortRatingScale.FOSTER,
-    onSelectEffortRating: (Int?) -> Unit = {}
+    onSelectEffortRating: (Int?) -> Unit = {},
+    completionActionLabel: String? = null
 ) {
     val distance = splitMetric(metrics?.distance ?: "—")
     val pace = splitMetric(metrics?.averagePace ?: "—")
@@ -503,7 +504,8 @@ internal fun RunCompleteScreen(
                     .testTag(RUN_COMPLETE_SAVE_ACTIVITY_TAG)
             ) {
                 Text(
-                    text = if (activitySaving) "Saving activity…" else if (onSaveActivity != null) "Save Activity" else "Start another run",
+                    text = if (activitySaving) "Saving activity…" else completionActionLabel
+                        ?: if (onSaveActivity != null) "Save Activity" else "Start another run",
                     fontSize = 16.sp,
                     fontWeight = FontWeight.SemiBold,
                     letterSpacing = 0.2.sp

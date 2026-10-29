@@ -1,6 +1,7 @@
 package com.runstate.mobile.ui
 
 import android.content.Context
+import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.ui.Modifier
@@ -12,6 +13,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
@@ -25,12 +27,16 @@ import androidx.compose.ui.test.junit4.StateRestorationTester
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.printToString
 import androidx.compose.ui.unit.Density
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.room.Room
@@ -39,6 +45,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.runstate.mobile.ReflectionConnectionState
 import com.runstate.mobile.RunJourneyRoot
 import com.runstate.mobile.data.local.MetricSource
+import com.runstate.mobile.data.local.ReflectionBranch
 import com.runstate.mobile.data.local.DistanceUnit
 import com.runstate.mobile.data.local.RunEntity
 import com.runstate.mobile.data.local.RunStateDatabase
@@ -46,7 +53,10 @@ import com.runstate.mobile.data.local.RunTrackingMode
 import com.runstate.mobile.data.local.StoredRunState
 import com.runstate.mobile.data.local.TelemetryCoverage
 import com.runstate.mobile.location.RunTrackingServiceState
+import com.runstate.mobile.music.SpotifyLivePlayerState
 import com.runstate.mobile.run.PreparedRunFactory
+import com.runstate.mobile.run.RunActionKind
+import com.runstate.mobile.run.RunAdmission
 import com.runstate.mobile.run.RunSessionCoordinator
 import com.runstate.mobile.settings.AndroidRunPreferencesStore
 import com.runstate.mobile.settings.RunAppearance
@@ -64,6 +74,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -82,11 +93,15 @@ class RunSettingsScreenTest {
 
     @After
     fun closeIsolatedFixtures() {
-        compose.mainClock.autoAdvance = true
         if (fixtures.isNotEmpty()) {
-            compose.runOnIdle { fixtures.forEach { it.shown = false } }
+            // RunAssembly draws a continuous frame loop. Remove it before asking an
+            // automatically advancing Compose clock to become idle.
+            compose.mainClock.autoAdvance = false
+            compose.runOnUiThread { fixtures.forEach { it.shown = false } }
+            compose.mainClock.advanceTimeByFrame()
             compose.waitForIdle()
         }
+        compose.mainClock.autoAdvance = true
         fixtures.forEach { fixture ->
             fixture.scope.cancel()
             fixture.database.close()
@@ -557,6 +572,123 @@ class RunSettingsScreenTest {
     }
 
     @Test
+    fun musicReflectionDemoFinishesWithoutCreatingARunOrChangingSavedPreferences() {
+        compose.mainClock.autoAdvance = true
+        val choices = RunPreferences(musicSetupComplete = true, observeMusic = true,
+            shareMusicInReflection = true, appearance = RunAppearance.NIGHT)
+        val fixture = fixture(choices)
+        val saved = RunEntity(runId = UUID.randomUUID().toString(), state = StoredRunState.COMPLETED,
+            officialStartEpochMillis = fixture.time - 600_000L, startTimezoneId = "America/Chicago",
+            lastCheckpointEpochMillis = fixture.time, finishEpochMillis = fixture.time,
+            finalDistanceMeters = 1609.344, metricSource = MetricSource.GPS,
+            telemetryCoverage = TelemetryCoverage.COMPLETE, displayDistanceUnit = DistanceUnit.MILES,
+            trackingMode = RunTrackingMode.GPS)
+        demoWork { fixture.database.runDao().insert(saved) }
+        renderRoot(fixture)
+        openMusicReflectionDemo()
+        compose.onNodeWithTag(SETTINGS_DIALOG_TAG).assertDoesNotExist()
+        compose.onNodeWithTag(ACTIVE_RUN_MUSIC_TAG).performClick()
+        compose.mainClock.advanceTimeByFrame()
+        compose.onNodeWithContentDescription("Pause run").performClick()
+        compose.mainClock.advanceTimeBy(450L)
+        compose.onNodeWithTag(HOLD_TO_STOP_TAG)
+            .performSemanticsAction(SemanticsActions.OnLongClick) { it() }
+        compose.mainClock.advanceTimeBy(100L)
+        compose.onNodeWithTag(RUN_COMPLETE_SCREEN_TAG).assertIsDisplayed()
+        compose.onNodeWithText("Not sure").performScrollTo().performClick()
+        compose.mainClock.advanceTimeBy(100L)
+        compose.onNodeWithTag(RUN_COMPLETE_NOTE_TAG).assertDoesNotExist()
+        compose.onNodeWithText("Something else? Add a note").assertDoesNotExist()
+        compose.onNodeWithText("Save Activity").assertDoesNotExist()
+        compose.onNodeWithTag(RUN_COMPLETE_SAVE_ACTIVITY_TAG).performClick()
+        waitForDemoTag(START_RUN_SCREEN_TAG)
+        compose.runOnIdle {
+            assertEquals(1, fixture.demoAudioCreations)
+            assertEquals(1, fixture.demoAudio.starts)
+            assertEquals(1, fixture.demoAudio.finishes)
+            assertEquals(listOf(ReflectionBranch.NO_SELECTION), fixture.demoAudio.answers)
+            assertEquals(1, fixture.demoAudio.closes)
+        }
+        assertEquals(RunAdmission.ReadyForCountdown,
+            demoWork { fixture.coordinator.journeySnapshot().admission })
+        assertEquals(0, fixture.preparedRuns)
+        assertEquals(0, fixture.preferenceWrites)
+        assertEquals(choices, fixture.loadPreferences())
+        assertEquals(saved, demoWork { fixture.database.runDao().findById(saved.runId) })
+        assertEquals(1, demoWork { fixture.database.runDao().countRuns() })
+        assertTrue(demoWork { fixture.database.runDao().findActiveRuns().isEmpty() })
+    }
+
+    @Test
+    fun musicReflectionDemoDoesNotReopenWhenTheRootIsRecreated() {
+        compose.mainClock.autoAdvance = true
+        val fixture = fixture(RunPreferences(musicSetupComplete = true))
+        renderRoot(fixture)
+        openMusicReflectionDemo()
+        // StateRestorationTester toggles its content off/on through runOnIdle. With
+        // a frozen clock those changes can coalesce before a frame disposes remember.
+        // Model the Activity's actual composition removal/recreation explicitly.
+        Log.d("RunStateDemoTest", "recreation: remove root")
+        compose.runOnUiThread { fixture.shown = false }
+        compose.waitUntil(8_000L) {
+            compose.mainClock.advanceTimeByFrame()
+            compose.onAllNodesWithTag(MUSIC_REFLECTION_DEMO_SCREEN_TAG).fetchSemanticsNodes().isEmpty() &&
+                fixture.demoAudio.closes == 1
+        }
+        Log.d("RunStateDemoTest", "recreation: old controller closed, create root")
+        compose.runOnUiThread { fixture.shown = true }
+        waitForDemoTag(START_RUN_SCREEN_TAG)
+        compose.onNodeWithTag(MUSIC_REFLECTION_DEMO_SCREEN_TAG).assertDoesNotExist()
+        compose.runOnIdle {
+            assertEquals(1, fixture.demoAudioCreations)
+            assertEquals(1, fixture.demoAudio.closes)
+            assertEquals(0, fixture.demoAudio.starts)
+        }
+        assertEquals(0, fixture.preparedRuns)
+        assertEquals(0, fixture.preferenceWrites)
+        assertEquals(0, demoWork { fixture.database.runDao().countRuns() })
+    }
+
+    @Test
+    fun aRealPausedRunTakesOverTheDemoWithoutBeingResumedOrCompleted() {
+        compose.mainClock.autoAdvance = true
+        val fixture = fixture(RunPreferences(musicSetupComplete = true))
+        renderRoot(fixture)
+        openMusicReflectionDemo()
+        // This isolated in-memory coordinator models service recovery while the demo is open.
+        // No production service or phone database participates in the test.
+        Log.d("RunStateDemoTest", "takeover: prepare real paused fixture")
+        val paused = demoWork {
+            fixture.coordinator.beginCountdown()
+            fixture.coordinator.requestStart().await()
+            fixture.time += 5_000L
+            fixture.coordinator.requestAction(RunActionKind.PAUSE).await()
+            fixture.database.runDao().findActiveRuns().single()
+        }
+        Log.d("RunStateDemoTest", "takeover: publish paused fixture")
+        compose.runOnUiThread { fixture.tracking.value = RunTrackingServiceState.Paused(paused.runId) }
+        compose.waitUntil(8_000L) {
+            compose.mainClock.advanceTimeByFrame()
+            compose.onAllNodesWithTag(MUSIC_REFLECTION_DEMO_SCREEN_TAG).fetchSemanticsNodes().isEmpty() &&
+                compose.onAllNodesWithContentDescription("Resume run").fetchSemanticsNodes().isNotEmpty()
+        }
+        Log.d("RunStateDemoTest", "takeover: actual paused surface visible")
+        compose.onNodeWithContentDescription("Resume run").assertIsDisplayed()
+        compose.onNodeWithTag(START_RUN_SETTINGS_TAG).assertDoesNotExist()
+        compose.onNodeWithTag(SETTINGS_MUSIC_REFLECTION_DEMO_TAG).assertDoesNotExist()
+        compose.runOnIdle {
+            assertEquals(1, fixture.demoAudioCreations)
+            assertEquals(1, fixture.demoAudio.closes)
+            assertEquals(0, fixture.demoAudio.finishes)
+        }
+        assertEquals(paused, demoWork { fixture.database.runDao().findById(paused.runId) })
+        assertEquals(StoredRunState.PAUSED, paused.state)
+        assertEquals(1, fixture.preparedRuns)
+        assertEquals(1, demoWork { fixture.database.runDao().countRuns() })
+        assertEquals(0, fixture.preferenceWrites)
+    }
+
+    @Test
     fun sampleDraftSurvivesRotationButColdProcessRestorationDefaultsBackToGps() {
         val fixture = fixture(RunPreferences(musicSetupComplete = true))
         val restoration = renderRoot(fixture)
@@ -694,10 +826,51 @@ class RunSettingsScreenTest {
                         fixture.preferenceWrites++
                     },
                     runSettingsSessionId = fixture.sessionId,
-                    musicAccessProvider = { fixture.musicAccess }
+                    musicAccessProvider = { fixture.musicAccess },
+                    musicReflectionDemoAudioFactory = fixture.demoAudioFactory
                 )
             }
         }
+    }
+
+    private fun openMusicReflectionDemo() {
+        // Settings' scroll semantics wait for their animation. Keep that normal clock
+        // until the offscreen demo option is visible, then freeze before opening the
+        // continuously animated Active screen.
+        check(compose.mainClock.autoAdvance) { "Settings scrolling needs its advancing clock" }
+        Log.d("RunStateDemoTest", "entry: waiting for Start")
+        waitForTag(START_RUN_SCREEN_TAG)
+        Log.d("RunStateDemoTest", "entry: open Settings")
+        compose.onNodeWithTag(START_RUN_SETTINGS_TAG).performScrollTo().performClick()
+        waitForTag(SETTINGS_DIALOG_TAG)
+        Log.d("RunStateDemoTest", "entry: scroll to Music Reflection Demo")
+        compose.onNodeWithTag(SETTINGS_MUSIC_REFLECTION_DEMO_TAG).performScrollTo()
+            .assertIsEnabled()
+        Log.d("RunStateDemoTest", "entry: option visible, freeze before click")
+        compose.mainClock.autoAdvance = false
+        compose.onNodeWithTag(SETTINGS_MUSIC_REFLECTION_DEMO_TAG)
+            .performSemanticsAction(SemanticsActions.OnClick) { it() }
+        waitForDemoTag(MUSIC_REFLECTION_DEMO_SCREEN_TAG)
+        compose.mainClock.advanceTimeBy(1_800L)
+        Log.d("RunStateDemoTest", "entry: demo ready")
+    }
+
+    private fun waitForDemoTag(tag: String) {
+        try {
+            compose.waitUntil(8_000L) {
+                compose.mainClock.advanceTimeByFrame()
+                compose.onAllNodesWithTag(tag).fetchSemanticsNodes().isNotEmpty()
+            }
+        } catch (failure: Throwable) {
+            val tree = runCatching { compose.onRoot(useUnmergedTree = true).printToString(maxDepth = 8) }
+                .getOrElse { "Semantics unavailable: ${it.javaClass.simpleName}" }
+            Log.e("RunStateDemoTest", "Timed out waiting for $tag\n${tree.take(6_000)}")
+            throw failure
+        }
+    }
+
+    private fun <T> demoWork(block: suspend () -> T): T = runBlocking {
+        withTimeout(8_000L) { block() }
     }
 
     private fun chooseSampleDemo() {
@@ -796,6 +969,13 @@ class RunSettingsScreenTest {
         var sessionId by mutableStateOf("process-${UUID.randomUUID()}")
         var sessionAfterDisposal: String? = null
         var preferenceWrites = 0
+        var demoAudioCreations = 0
+        val demoAudio = SilentDemoAudio()
+        val demoAudioFactory: (Context) -> MusicReflectionDemoAudio = {
+            demoAudioCreations++
+            demoAudio
+        }
+        var preparedRuns = 0
         var time = 1_756_000_000_000L
         val database = Room.inMemoryDatabaseBuilder(context, RunStateDatabase::class.java).build()
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -805,7 +985,7 @@ class RunSettingsScreenTest {
             override fun instant(): Instant = Instant.ofEpochMilli(time)
         }
         val coordinator = RunSessionCoordinator(database.runDao(),
-            PreparedRunFactory(clock, { ZoneOffset.UTC }, { UUID.randomUUID() }), scope,
+            PreparedRunFactory(clock, { ZoneOffset.UTC }, { preparedRuns++; UUID.randomUUID() }), scope,
             database.locationDao())
         val tracking = MutableStateFlow<RunTrackingServiceState>(RunTrackingServiceState.Idle)
         val silentSpeaker = object : ReflectionSpeaker {
@@ -816,5 +996,33 @@ class RunSettingsScreenTest {
         fun loadPreferences(): RunPreferences = runBlocking {
             withContext(Dispatchers.IO) { store.load() }
         }
+    }
+
+    private class SilentDemoAudio : MusicReflectionDemoAudio {
+        override val player = MutableStateFlow(SpotifyLivePlayerState(
+            connected = true, title = "Good as Hell", artist = "Lizzo", paused = true,
+            canSkipPrevious = true, canSkipNext = true, canTogglePlayback = true))
+        override val state = MutableStateFlow(MusicReflectionDemoAudioState())
+        var starts = 0
+        var finishes = 0
+        var closes = 0
+        val answers = mutableListOf<ReflectionBranch>()
+        override fun prepare() = Unit
+        override fun startMusic() { starts++ }
+        override fun toggleMusic() = Unit
+        override fun restartMusic() = Unit
+        override fun finishRun() {
+            finishes++
+            state.value = MusicReflectionDemoAudioState(reflection = RunCompleteReflectionDisplay.Preparing)
+        }
+        override fun selectEnergy(branch: ReflectionBranch) {
+            answers += branch
+            state.value = MusicReflectionDemoAudioState(
+                reflection = RunCompleteReflectionDisplay.Ready("The exact demo reflection."))
+        }
+        override fun setPresentationHeld(held: Boolean) = Unit
+        override fun stop() = Unit
+        override fun retry() = Unit
+        override fun close() { closes++ }
     }
 }

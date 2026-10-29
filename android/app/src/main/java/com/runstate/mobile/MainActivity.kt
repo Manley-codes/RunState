@@ -81,6 +81,9 @@ import com.runstate.mobile.ui.RunMetricsDisplay
 import com.runstate.mobile.ui.RunMetricsTicker
 import com.runstate.mobile.ui.RunCompleteReflectionDisplay
 import com.runstate.mobile.ui.AndroidReflectionSpeaker
+import com.runstate.mobile.ui.AndroidMusicReflectionDemoAudio
+import com.runstate.mobile.ui.MusicReflectionDemoAudio
+import com.runstate.mobile.ui.MusicReflectionDemoScreen
 import com.runstate.mobile.ui.ReflectionSpeaker
 import com.runstate.mobile.ui.completionAudioSessionFor
 import com.runstate.mobile.ui.CompletionAudioSession
@@ -354,7 +357,8 @@ internal fun RunJourneyRoot(
     runCountdown: RunCountdownOwner? = null,
     dispatchGpsCountdown: (Context, Long, PreRunEnergy?, Boolean, Boolean, Boolean,
         RunIntention?, String?, Long?) -> Unit = RunTrackingService::startCountdown,
-    onRunSurfaceChanged: (Boolean?) -> Unit = {}
+    onRunSurfaceChanged: (Boolean?) -> Unit = {},
+    musicReflectionDemoAudioFactory: (Context) -> MusicReflectionDemoAudio = { AndroidMusicReflectionDemoAudio(it) }
 ) {
 
     val reflectionRequestsAvailable = reflectionConnection is ReflectionConnectionState.Hosted ||
@@ -363,6 +367,9 @@ internal fun RunJourneyRoot(
     // The last answer the coordinator gave, and nothing more. `remember` rather than
     // `rememberSaveable` for the reason above.
     var model by remember { mutableStateOf(RunUiModel(RunUiState.Initializing)) }
+    // A separate, foreground-only presentation. Recreation returns to the real journey;
+    // it never restores permission to restart demo music or save demonstration metrics.
+    var musicReflectionDemoVisible by remember { mutableStateOf(false) }
     // Appearance is presentation state, not a second run owner. Hold Auto through a session,
     // including recreation, and resolve it again only for a new countdown.
     var latchedRunDay by rememberSaveable { mutableStateOf<Boolean?>(null) }
@@ -370,10 +377,10 @@ internal fun RunJourneyRoot(
         RunUiState.ActiveRunning, RunUiState.ActivePaused)
     val resolvedRunDay = latchedRunDay ?: (runPreferences?.appearance
         ?: com.runstate.mobile.settings.RunAppearance.NIGHT).isDay(java.time.LocalTime.now().hour)
-    LaunchedEffect(model.state, resolvedRunDay, runPreferences?.appearance) {
+    LaunchedEffect(model.state, resolvedRunDay, runPreferences?.appearance, musicReflectionDemoVisible) {
         if (inRunSurface && latchedRunDay == null && runPreferences != null) latchedRunDay = resolvedRunDay
         if (model.state == RunUiState.ReadyToStart || model.state == RunUiState.Saved) latchedRunDay = null
-        onRunSurfaceChanged(if (inRunSurface) resolvedRunDay else null)
+        if (!musicReflectionDemoVisible) onRunSurfaceChanged(if (inRunSurface) resolvedRunDay else null)
     }
     var openingPending by rememberSaveable(openingRequestId) { mutableStateOf(openingRequestId > 0) }
     // Recovery always runs first. Returning to any live/pending run or recovery error
@@ -628,7 +635,7 @@ internal fun RunJourneyRoot(
             mapEvidence = coordinator.runMapEvidence(mapSignal)?.takeIf { it.runId == requestedId }
         }
     }
-    val previewEnabled = gpsSelected && !gpsStartDispatched && activeRunId == null &&
+    val previewEnabled = !musicReflectionDemoVisible && gpsSelected && !gpsStartDispatched && activeRunId == null &&
         ownedCountdown?.active != true &&
         !historyVisible && recapRunId == null && !runSettingsVisible && !shoesVisible && !connectionDialogVisible &&
         (model.state == RunUiState.ReadyToStart || model.state == RunUiState.Countdown)
@@ -723,7 +730,7 @@ internal fun RunJourneyRoot(
     }
     // Prepare the fixed run-voice lines while Start is on screen. Retry briefly while a sleeping
     // server wakes, but never keep polling in the background or for an unsupported server.
-    val prepareRunVoice = voiceForeground && activeRunId == null &&
+    val prepareRunVoice = !musicReflectionDemoVisible && voiceForeground && activeRunId == null &&
         (model.state == RunUiState.ReadyToStart || model.state == RunUiState.Countdown)
     LaunchedEffect(prepareRunVoice, runVoiceCues) {
         val cues = runVoiceCues ?: return@LaunchedEffect
@@ -736,7 +743,7 @@ internal fun RunJourneyRoot(
     // Keep one rehearsed phone voice awake while Start is visible. The sleeping speech engine
     // otherwise delayed "Starting in ten" by about 3.2 seconds after the tap (October 24 log).
     // The countdown takes this voice at the tap, so it is kept, never closed, while counting.
-    val startVoiceVisible = voiceForeground && activeRunId == null && !historyVisible &&
+    val startVoiceVisible = !musicReflectionDemoVisible && voiceForeground && activeRunId == null && !historyVisible &&
         recapRunId == null && model.state == RunUiState.ReadyToStart
     val countdownTakingVoice = voiceForeground && model.state == RunUiState.Countdown
     LaunchedEffect(startVoiceVisible, countdownTakingVoice, preparedCountdownVoice) {
@@ -1411,11 +1418,37 @@ internal fun RunJourneyRoot(
 
     // Keep recovery, GPS preparation and preference loading composed above the artwork.
     // Only presentation is held; saved runs and the recording service are untouched.
-    val openingBlockedByNavigation = historyVisible || recapRunId != null || runSettingsVisible || shoesVisible ||
+    val openingBlockedByNavigation = musicReflectionDemoVisible || historyVisible || recapRunId != null || runSettingsVisible || shoesVisible ||
         connectionDialogVisible || mapVisible || gpsStartRequested || actionInFlight
     LaunchedEffect(openingRequestId, openingBlockedByNavigation) {
         // Consume an ineligible launcher tap now; never defer it until the runner closes a sheet.
         if (openingBlockedByNavigation) openingPending = false
+    }
+    if (musicReflectionDemoVisible) {
+        val demoDay = remember { resolvedRunDay }
+        val demoAudio = remember(context, musicReflectionDemoAudioFactory) {
+            musicReflectionDemoAudioFactory(context)
+        }
+        val demoAudioState by demoAudio.state.collectAsState()
+        val demoSurfaceDay = if (demoAudioState.reflection != null) true else demoDay
+        LaunchedEffect(demoSurfaceDay) { onRunSurfaceChanged(demoSurfaceDay) }
+        DisposableEffect(demoAudio) {
+            onDispose { demoAudio.close() }
+        }
+        // Keep recovery above this branch. A newly observed real run always wins navigation.
+        LaunchedEffect(model.state, activeRunId, ownedCountdown?.active, trackingState) {
+            if (model.state != RunUiState.ReadyToStart || activeRunId != null ||
+                ownedCountdown?.active == true || trackingState != RunTrackingServiceState.Idle) {
+                musicReflectionDemoVisible = false
+            }
+        }
+        MusicReflectionDemoScreen(
+            audio = demoAudio,
+            day = demoDay,
+            onExit = { musicReflectionDemoVisible = false },
+            modifier = modifier
+        )
+        return
     }
     if (openingPending && model.state == RunUiState.ReadyToStart && !openingBlockedByNavigation) {
         key(openingRequestId) {
@@ -1947,6 +1980,21 @@ internal fun RunJourneyRoot(
     if (runSettingsVisible && model.state == RunUiState.ReadyToStart && !historyVisible &&
         !connectionDialogVisible) {
         RunSettingsDialog(
+            onOpenMusicReflectionDemo = {
+                if (model.state == RunUiState.ReadyToStart && activeRunId == null &&
+                    !actionInFlight && !settingsBusy && !gpsStartRequested && !gpsStartDispatched &&
+                    runCountdown?.state?.value?.active != true &&
+                    trackingFlow.value == RunTrackingServiceState.Idle) {
+                    previewController.stopBeforeRun()
+                    preparedCountdownVoice?.release()
+                    stopCountdownVoice()
+                    stopSampleStartVoice()
+                    openingPending = false
+                    mapRunId = null
+                    runSettingsVisible = false
+                    musicReflectionDemoVisible = true
+                }
+            },
             onOpenRecordingSources = {
                 runSettingsVisible = false
                 historyRecordingSources = true

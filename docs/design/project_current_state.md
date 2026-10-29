@@ -5,6 +5,63 @@ metadata:
   type: project
 ---
 
+## October 29 Music Reflection Demo — installed and verified on Moto
+
+Manley authorized **Music Reflection Demo** in native Run settings: an isolated, interactive
+presentation using the current Active Run and Completion screens. It opens at 2.75 miles,
+28 active minutes and 30 elapsed minutes, with High pre-run Energy. The distance display leads;
+Spotify Music reveals the circular Lizzo album/controls and plays the selected opening.
+Pause/Stop leads to the normal Completion design with interactive Energy and Effort choices.
+No run is created or saved, and demo feedback never enters Room, History or run statistics.
+
+The original female RUN voice reads the fixed facts; the original male REFLECTION voice reads
+the selected text, followed by the Good as Hell opening (0–10 seconds, exact Spotify URI
+`6KgBpzTuTRPebChN0VTyzV`, verified recording duration 159,735 ms). High → Powered Up preserves
+the exact approved trailer reflection. Alternate Energy choices adapt only its opening to the
+selected answer; Effort remains independent. Original voices are prepared through the existing
+backend and cached in memory for that demo; unavailable original speech produces a retry instead of an
+unannounced substitute voice. Spotify supplies music; no song recording is bundled. Leaving or
+stopping cancels owned audio, and transport cleanup precedes the completion facts.
+
+Verification: **841 JVM tests passed in each of debug and release**, and debug, release and
+Android-test APK builds passed. Nine distinct targeted Moto cases passed across the corrected
+runs: six screen/audio cases and three root-entry/isolation cases. Real playback logged the
+original female and male cloud voices followed by a finished 0–10s Spotify passage. Cold Spotify
+reconnection now gets its normal 20-second readiness window. Test-only scrolling/animation-clock
+and fixed-footer issues were corrected; recreation is verified by explicitly disposing and
+recreating the root, rather than coalescing StateRestorationTester updates on a frozen clock.
+
+The installed APK hash matches the debug build. All 33 completed runs, all 12 table fingerprints
+and all five existing preferences are unchanged; integrity is good with zero foreign-key errors.
+Temporary test preferences and the test package were removed, and the main app reopened.
+Receipts and captures are private in `docs/local/music-reflection-demo-2026-10-29/`.
+The exact musical phrase ending still merits Manley's listening review; verification proves
+the requested opening interval played, not a subjective edit-point judgement. Spotify and the
+configured voice service remain required; this is not an offline bundled-song demonstration.
+
+Necessary new files: four production UI files (`MusicReflectionDemoData`, `Screen`, `Audio`,
+`Transport`), `MusicReflectionDemoControllerTest` (16 cases), `MusicReflectionDemoScreenTest`
+(six cases including the explicit live audition), and `drawable-nodpi/demo_lizzo_cover.jpg`.
+The existing third-party notice records the artwork source. No Git mutations or deployment;
+Manley handles the pending commits. This bounded native demo does not complete the full trailer,
+tester preparation or overall AfroTech essentials.
+
+## October 29 LinkedIn — current native screens and concise wording
+
+Manley authorized replacing outdated project screenshots and updating relevant wording. Six
+native captures are published in his RunState Project: Opening, Start, Countdown, Dark Active,
+circular Spotify player and History. He explicitly confirmed deletion of the two old media
+attachments. The saved project gallery and Android-focused description were verified in the UI.
+About now reflects Kotlin/Compose/Room with a Java backend; the trainer Experience's old RunNet
+reference is corrected to RunState, with network notification off for that edit. Saved rich-text
+fields were re-opened and checked after correcting a duplicate-text insertion in the Experience draft.
+
+Remaining: a fresh native Completion/reflection screenshot; existing native captures are obsolete,
+so no substitute or old image was uploaded. Optional Light upload was rejected by automatic
+approval review as outside the request and omitted. Native History still shows the larger Energy
+panel; the compact row remains browser-only. Exact sources/captions are private in
+`docs/local/linkedin-refresh-2026-10-29/`. No app changes, Git commands or new post.
+
 ## October 29 GitHub preview — published, confirmed and documented
 
 The connected seven-screen preview and compact History Energy row are live. Manley published

@@ -165,7 +165,9 @@ internal fun RunStateScreen(
     onNextTrack: () -> Unit = {},
     onToggleMusicPlayback: () -> Unit = {},
     onConnectMusic: () -> Unit = {},
-    onOpenMusicTrack: (String?) -> Unit = {}
+    onOpenMusicTrack: (String?) -> Unit = {},
+    onMusicVisibilityChange: (Boolean) -> Unit = {},
+    completionActionLabel: String? = null
 ) {
     val state = model.state
 
@@ -222,7 +224,8 @@ internal fun RunStateScreen(
             noteError = noteError,
             selectedEffortRating = selectedEffortRating,
             effortRatingScale = effortRatingScale,
-            onSelectEffortRating = onSelectEffortRating
+            onSelectEffortRating = onSelectEffortRating,
+            completionActionLabel = completionActionLabel
         )
         return
     }
@@ -277,7 +280,8 @@ internal fun RunStateScreen(
                 onNextTrack = onNextTrack,
                 onToggleMusicPlayback = onToggleMusicPlayback,
                 onConnectMusic = onConnectMusic,
-                onOpenMusicTrack = onOpenMusicTrack
+                onOpenMusicTrack = onOpenMusicTrack,
+                onMusicVisibilityChange = onMusicVisibilityChange
             )
             return@Box
         }
