@@ -446,6 +446,110 @@ class RunStateScreenTest {
     }
 
     @Test
+    fun startEnergyChoicesEnterInSequenceWithoutMovingTheSurroundingLayout() {
+        composeTestRule.mainClock.autoAdvance = false
+        composeTestRule.setContent {
+            StartRunScreen(null, {}, {}, true, {}, false,
+                modifier = Modifier.fillMaxSize().systemBarsPadding())
+        }
+        composeTestRule.mainClock.advanceTimeByFrame()
+        val fixedTags = listOf(START_AGENT_CARD_TAG, START_ENERGY_CHOICES_TAG,
+            START_FOOTER_TAG, START_RUN_BUTTON_TAG)
+        val fixedBounds = fixedTags.associateWith {
+            composeTestRule.onNodeWithTag(it).fetchSemanticsNode().boundsInRoot
+        }
+        val tileTags = listOf(START_ENERGY_LOW_TAG, START_ENERGY_MODERATE_TAG, START_ENERGY_HIGH_TAG)
+        fun tileBounds() = tileTags.map {
+            composeTestRule.onNodeWithTag(it).assertIsDisplayed().fetchSemanticsNode().boundsInRoot
+        }
+        fun assertSurroundingsFixed() {
+            fixedTags.forEach {
+                assertEquals("Energy entrance must not move $it", fixedBounds.getValue(it),
+                    composeTestRule.onNodeWithTag(it).fetchSemanticsNode().boundsInRoot)
+            }
+        }
+
+        composeTestRule.mainClock.advanceTimeBy(100L)
+        saveNativePreview(START_RUN_SCREEN_TAG, "qa-energy-entry-early.png")
+        // Observe the actual transformed tiles once all three have entered the viewport.
+        composeTestRule.mainClock.advanceTimeBy(400L)
+        val entering = tileBounds()
+        assertSurroundingsFixed()
+        saveNativePreview(START_RUN_SCREEN_TAG, "qa-energy-entry-middle.png")
+        composeTestRule.mainClock.advanceTimeBy(200L)
+        val arriving = tileBounds()
+        assertSurroundingsFixed()
+        settleStartEnergyEntrance()
+        val settled = tileBounds()
+        val remainingTravel = entering.zip(settled).map { (early, final) -> early.left - final.left }
+        assertTrue("Low should lead Moderate, then High, into their resting places",
+            remainingTravel[0] < remainingTravel[1] && remainingTravel[1] < remainingTravel[2])
+        entering.indices.forEach { index ->
+            assertTrue("Each Energy choice must move left toward its resting place",
+                entering[index].left > arriving[index].left && arriving[index].left >= settled[index].left - 1f)
+            assertEquals("Settled Energy choices share a top edge", settled[0].top, settled[index].top, 1f)
+            assertEquals("Settled Energy choices retain equal widths", settled[0].width, settled[index].width, 1f)
+        }
+        assertSurroundingsFixed()
+        saveNativePreview(START_RUN_SCREEN_TAG, "qa-energy-entry-settled.png")
+        composeTestRule.mainClock.advanceTimeBy(300L)
+        assertEquals("The entrance must finish rather than loop", settled, tileBounds())
+        composeTestRule.onNodeWithTag(START_RUN_BUTTON_TAG).assertIsEnabled()
+    }
+
+    @Test
+    fun earlyEnergySelectionReachesStartImmediatelyAndDoesNotReplayOnResume() {
+        composeTestRule.mainClock.autoAdvance = false
+        val owner = TestLifecycle()
+        moveTo(owner, Lifecycle.State.RESUMED)
+        var selected by mutableStateOf<PreRunEnergy?>(null)
+        val choices = mutableListOf<PreRunEnergy?>()
+        var selectedAtStart: PreRunEnergy? = null
+        composeTestRule.setContent {
+            CompositionLocalProvider(LocalLifecycleOwner provides owner) {
+                StartRunScreen(selected, { selected = it; choices += it },
+                    { selectedAtStart = selected }, true, {}, false)
+            }
+        }
+        composeTestRule.mainClock.advanceTimeByFrame()
+        composeTestRule.mainClock.advanceTimeBy(400L)
+        composeTestRule.onNodeWithTag(START_ENERGY_LOW_TAG).assertIsDisplayed().performClick()
+        composeTestRule.onNodeWithTag(START_RUN_BUTTON_TAG).performClick()
+        composeTestRule.runOnIdle {
+            assertEquals(PreRunEnergy.LOW, selectedAtStart)
+            assertEquals(listOf(PreRunEnergy.LOW), choices)
+        }
+        // An early tap is accepted without flying a copy from an unsettled source position.
+        composeTestRule.onNodeWithTag(START_ENERGY_INTAKE_TAG).assertDoesNotExist()
+        moveTo(owner, Lifecycle.State.CREATED)
+        composeTestRule.mainClock.advanceTimeByFrame()
+        moveTo(owner, Lifecycle.State.RESUMED)
+        composeTestRule.mainClock.advanceTimeByFrame()
+        composeTestRule.onNodeWithTag(START_ENERGY_INTAKE_TAG).assertDoesNotExist()
+        assertEquals(PreRunEnergy.LOW, selected)
+
+        // A new owner-provided draft keeps this screen's completed entrance; no UI reset is added.
+        composeTestRule.runOnIdle { selected = null }
+        composeTestRule.mainClock.advanceTimeByFrame()
+        val tags = listOf(START_ENERGY_LOW_TAG, START_ENERGY_MODERATE_TAG, START_ENERGY_HIGH_TAG)
+        val bounds = tags.associateWith {
+            composeTestRule.onNodeWithTag(it).assertIsDisplayed().fetchSemanticsNode().boundsInRoot
+        }
+        composeTestRule.mainClock.advanceTimeBy(300L)
+        tags.forEach {
+            assertEquals("Resuming must not replay $it", bounds.getValue(it),
+                composeTestRule.onNodeWithTag(it).fetchSemanticsNode().boundsInRoot)
+        }
+        assertEquals(listOf(PreRunEnergy.LOW), choices)
+    }
+
+    private fun settleStartEnergyEntrance() {
+        composeTestRule.mainClock.advanceTimeBy(START_ENERGY_ENTRY_DURATION_MS.toLong())
+        composeTestRule.mainClock.advanceTimeByFrame()
+        composeTestRule.waitForIdle()
+    }
+
+    @Test
     fun startBlankAndEnergySwipesKeepNormalPhoneLayoutFixedAndSelectionPersists() {
         composeTestRule.mainClock.autoAdvance = false
         var selected by mutableStateOf<PreRunEnergy?>(null)
@@ -464,6 +568,7 @@ class RunStateScreenTest {
             }
         }
         composeTestRule.mainClock.advanceTimeByFrame()
+        settleStartEnergyEntrance()
         val fixedTags = listOf(START_AGENT_CARD_TAG, START_AGENT_VISUALIZER_TAG, START_UTILITY_ACTIONS_TAG,
             START_ENERGY_CHOICES_TAG, START_ENERGY_LOW_TAG, START_ENERGY_MODERATE_TAG,
             START_ENERGY_HIGH_TAG, START_FOOTER_TAG, START_RUN_BUTTON_TAG)
@@ -728,6 +833,7 @@ class RunStateScreenTest {
         composeTestRule.waitForIdle()
         composeTestRule.mainClock.advanceTimeByFrame()
         composeTestRule.waitForIdle()
+        settleStartEnergyEntrance()
         composeTestRule.onNodeWithTag(START_AGENT_VISUALIZER_TAG).assertIsDisplayed()
         composeTestRule.onNodeWithTag(START_ENERGY_HIGH_TAG).performClick()
         composeTestRule.runOnIdle {
@@ -783,6 +889,7 @@ class RunStateScreenTest {
         composeTestRule.waitForIdle()
         composeTestRule.mainClock.advanceTimeByFrame()
         composeTestRule.waitForIdle()
+        settleStartEnergyEntrance()
         composeTestRule.onNodeWithTag(START_ENERGY_HIGH_TAG).performClick()
         composeTestRule.mainClock.advanceTimeBy(700L)
         composeTestRule.onNodeWithTag(START_ENERGY_INTAKE_TAG).assertIsDisplayed()

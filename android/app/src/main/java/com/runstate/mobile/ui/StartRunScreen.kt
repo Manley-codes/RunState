@@ -166,6 +166,8 @@ private data class EnergyIntake(
 )
 
 private val StartEnergyLevels = listOf(PreRunEnergy.LOW, PreRunEnergy.MODERATE, PreRunEnergy.HIGH)
+internal const val START_ENERGY_ENTRY_DURATION_MS = 920
+private val EnergyEntryEase = CubicBezierEasing(0.22f, 1f, 0.36f, 1f)
 private val IntakeMarkEase = CubicBezierEasing(0.32f, 0.72f, 0.3f, 1f)
 private val IntakeMergeEase = CubicBezierEasing(0.4f, 0f, 0.2f, 1f)
 private val IntakeTravelEase = CubicBezierEasing(0.5f, 0.02f, 0.28f, 1f)
@@ -217,6 +219,11 @@ internal fun StartRunScreen(
     var intake by remember { mutableStateOf<EnergyIntake?>(null) }
     var runPlanOpen by rememberSaveable { mutableStateOf(false) }
     val intakeTime = remember { Animatable(0f) }
+    var energyEntryPlayed by rememberSaveable { mutableStateOf(false) }
+    val energyEntryTime = remember {
+        Animatable(if (energyEntryPlayed || selectedPreRunEnergy != null || !animationsEnabled)
+            START_ENERGY_ENTRY_DURATION_MS.toFloat() else 0f)
+    }
     DisposableEffect(lifecycle, view) {
         val observer = LifecycleEventObserver { _, event ->
             lifecycleStarted = lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)
@@ -225,6 +232,19 @@ internal fun StartRunScreen(
         }
         lifecycle.addObserver(observer)
         onDispose { lifecycle.removeObserver(observer) }
+    }
+    LaunchedEffect(lifecycleStarted, animationsEnabled, selectedPreRunEnergy, rootBounds,
+        LocalDensity.current) {
+        if (energyEntryTime.value >= START_ENERGY_ENTRY_DURATION_MS) return@LaunchedEffect
+        if (rootBounds == null) return@LaunchedEffect
+        // Returning from the background or restoring the screen must not replay the entrance.
+        if (energyEntryPlayed || selectedPreRunEnergy != null || !animationsEnabled) {
+            energyEntryTime.snapTo(START_ENERGY_ENTRY_DURATION_MS.toFloat())
+        } else if (lifecycleStarted) {
+            energyEntryPlayed = true
+            energyEntryTime.animateTo(START_ENERGY_ENTRY_DURATION_MS.toFloat(),
+                tween(START_ENERGY_ENTRY_DURATION_MS, easing = LinearEasing))
+        }
     }
     LaunchedEffect(intake, selectedPreRunEnergy, lifecycleStarted, animationsEnabled) {
         val current = intake ?: return@LaunchedEffect
@@ -250,6 +270,7 @@ internal fun StartRunScreen(
             }
     ) {
         val agentRingSize = if (maxWidth < 400.dp) 108.dp else 128.dp
+        val energyEntryDistancePx = with(LocalDensity.current) { maxWidth.toPx() }
         // A very short landscape window cannot keep both controls and upper details visible.
         // In that case use one continuous flow; regular phone heights retain the anchored layout.
         val fallbackHeight = 400.dp + 60.dp * (LocalDensity.current.fontScale - 1f).coerceAtLeast(0f)
@@ -353,7 +374,10 @@ internal fun StartRunScreen(
                             val root = rootBounds
                             val ring = ringBounds
                             val allTiles = StartEnergyLevels.associateWith { tileBounds[it] }
-                            if (lifecycleStarted && animationsEnabled && ringVisible && root != null &&
+                            // An early tap still answers immediately; never fly a copy from an
+                            // unsettled entrance position or hold up the runner's Start action.
+                            if (energyEntryTime.value >= START_ENERGY_ENTRY_DURATION_MS &&
+                                lifecycleStarted && animationsEnabled && ringVisible && root != null &&
                                 ring != null && allTiles.values.all { it != null && it.width > 0f && it.height > 0f }) {
                                 intake = EnergyIntake(
                                     energy,
@@ -367,6 +391,8 @@ internal fun StartRunScreen(
                     enabled = actionsEnabled,
                     intake = intake,
                     intakeTime = { intakeTime.value },
+                    entryTime = { energyEntryTime.value },
+                    entryDistancePx = energyEntryDistancePx,
                     onTileBounds = { energy, bounds ->
                         if (tileBounds[energy] != null && tileBounds[energy] != bounds) intake = null
                         tileBounds[energy] = bounds
@@ -833,6 +859,8 @@ private fun PreRunEnergyChoices(
     enabled: Boolean,
     intake: EnergyIntake?,
     intakeTime: () -> Float,
+    entryTime: () -> Float,
+    entryDistancePx: Float,
     onTileBounds: (PreRunEnergy, Rect) -> Unit
 ) {
     val tileHeight = 82.dp + 40.dp * (LocalDensity.current.fontScale - 1f).coerceAtLeast(0f)
@@ -869,7 +897,7 @@ private fun PreRunEnergyChoices(
                         .then(if (selected != null) Modifier.clearAndSetSemantics {} else Modifier),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    StartEnergyLevels.forEach { energy ->
+                    StartEnergyLevels.forEachIndexed { index, energy ->
                         EnergyTile(
                             energy = energy,
                             onClick = { onSelect(energy) },
@@ -878,6 +906,16 @@ private fun PreRunEnergyChoices(
                             modifier = Modifier.weight(1f)
                                 .onGloballyPositioned {
                                     onTileBounds(energy, it.boundsInRoot())
+                                }
+                                .graphicsLayer {
+                                    // One shared clock: Low, Moderate, High enter 120ms apart.
+                                    // Read the clock here so movement updates the layer, not the
+                                    // layout or tile contents on every frame.
+                                    val progress = ((entryTime() - index * 120f) / 680f).coerceIn(0f, 1f)
+                                    val settled = EnergyEntryEase.transform(progress)
+                                    translationX = entryDistancePx * (1f - settled)
+                                    rotationZ = 4f * (1f - settled)
+                                    alpha = (progress / 0.22f).coerceIn(0f, 1f)
                                 },
                             tag = if (selected == null) when (energy) {
                                 PreRunEnergy.LOW -> START_ENERGY_LOW_TAG

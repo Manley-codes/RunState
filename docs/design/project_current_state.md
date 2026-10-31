@@ -5,6 +5,39 @@ metadata:
   type: project
 ---
 
+## October 31 Energy entrance — installed and checked on Moto
+
+Manley requested only the movement of the Start screen's Energy choices from his supplied
+8.13-second recording, explicitly excluding the beam, colors and other styling. He clarified
+that the recording itself was choppy and the native movement should be smooth. This is a bounded
+Start-screen update, not a resumption of trailer/tester work or a broader redesign.
+
+Low, Moderate and High enter from the right, 120ms apart, each settling over 680ms with a slight
+initial tilt; the full entrance lasts 920ms. A shared animation clock is read inside graphics
+layers, avoiding per-frame layout or tile-content recomposition. The current Energy artwork,
+labels, colors, measured layout, footer, agent and subsequent selection intake are retained.
+Tapping early still saves Energy immediately and leaves Start usable; only that early tap's
+decorative intake is skipped rather than flying from an unsettled source position. Restoration,
+background return, changed viewport/density and system-disabled animations settle the entrance
+without looping it. Completion's Energy behavior is unchanged.
+
+Debug, release and final Android-test builds passed. Eight focused Moto checks passed, including
+sequence/alignment, early selection, existing intake/lifecycle behavior, normal phone layout,
+short large text and landscape. A temporary isolated fixture recorded real-vsync movement without
+run, voice or music connections, then was removed. Sequential native frames show the requested
+glide. Without screen recording, distinct frame-callback intervals were typically 16–18ms;
+isolated initial/recreation stalls remained in the profiling fixture, so this is not a guarantee
+of zero dropped frames on every device. Private footage and timing receipts are in
+`docs/local/energy-motion-2026-10-31/`.
+
+The debug APK was installed in place on Moto ZT422G8FT4 and its hash matches the build. All 33
+completed runs and all 12 logical table fingerprints are unchanged; integrity is OK with zero
+foreign-key violations. Four preferences are byte-identical; only the existing opening entrance
+counter changed (57 → 59) through app launches. Temporary test package/device captures were
+removed and the main app reopened. Two existing source/test files changed; no new permanent
+source/assets, schema, backend, Git mutation or deployment. Visual acceptance remains Manley's.
+Suggested user-owned commit: `feat: add smooth staggered entrance for Start energy choices`.
+
 ## October 29 Music Reflection Demo — installed and verified on Moto
 
 Manley authorized **Music Reflection Demo** in native Run settings: an isolated, interactive
