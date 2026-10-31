@@ -233,10 +233,12 @@ internal fun StartRunScreen(
         lifecycle.addObserver(observer)
         onDispose { lifecycle.removeObserver(observer) }
     }
-    LaunchedEffect(lifecycleStarted, animationsEnabled, selectedPreRunEnergy, rootBounds,
-        LocalDensity.current) {
+    val energyEntryLaidOut = rootBounds?.let { it.width > 0f && it.height > 0f } == true
+    // Scaffold/window insets can settle after the first Start frame. Wait for layout once,
+    // but do not cancel an entrance already in flight when its rectangle/density changes.
+    LaunchedEffect(lifecycleStarted, animationsEnabled, selectedPreRunEnergy, energyEntryLaidOut) {
         if (energyEntryTime.value >= START_ENERGY_ENTRY_DURATION_MS) return@LaunchedEffect
-        if (rootBounds == null) return@LaunchedEffect
+        if (!energyEntryLaidOut) return@LaunchedEffect
         // Returning from the background or restoring the screen must not replay the entrance.
         if (energyEntryPlayed || selectedPreRunEnergy != null || !animationsEnabled) {
             energyEntryTime.snapTo(START_ENERGY_ENTRY_DURATION_MS.toFloat())

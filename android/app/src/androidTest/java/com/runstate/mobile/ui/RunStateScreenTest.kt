@@ -7,6 +7,7 @@ import android.view.ViewGroup
 import androidx.activity.ComponentActivity
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.material3.Text
 import androidx.compose.runtime.CompositionLocalProvider
@@ -495,6 +496,41 @@ class RunStateScreenTest {
         composeTestRule.mainClock.advanceTimeBy(300L)
         assertEquals("The entrance must finish rather than loop", settled, tileBounds())
         composeTestRule.onNodeWithTag(START_RUN_BUTTON_TAG).assertIsEnabled()
+    }
+
+    @Test
+    fun startEnergyEntranceContinuesWhenInitialWindowInsetsSettle() {
+        composeTestRule.mainClock.autoAdvance = false
+        var topInset by mutableStateOf(0.dp)
+        composeTestRule.setContent {
+            StartRunScreen(null, {}, {}, true, {}, false,
+                modifier = Modifier.fillMaxSize().padding(top = topInset).systemBarsPadding())
+        }
+        composeTestRule.mainClock.advanceTimeByFrame()
+        composeTestRule.waitForIdle()
+        composeTestRule.mainClock.advanceTimeBy(100L)
+        // Real launcher/Scaffold insets can arrive after the first measured Start frame.
+        composeTestRule.runOnIdle { topInset = 12.dp }
+        composeTestRule.mainClock.advanceTimeByFrame()
+        composeTestRule.mainClock.advanceTimeBy(100L)
+        val afterInset = composeTestRule.onNodeWithTag(START_ENERGY_LOW_TAG)
+            .assertIsDisplayed().fetchSemanticsNode().boundsInRoot
+        composeTestRule.mainClock.advanceTimeBy(200L)
+        val continuing = composeTestRule.onNodeWithTag(START_ENERGY_LOW_TAG)
+            .assertIsDisplayed().fetchSemanticsNode().boundsInRoot
+        settleStartEnergyEntrance()
+        val settled = listOf(START_ENERGY_LOW_TAG, START_ENERGY_MODERATE_TAG, START_ENERGY_HIGH_TAG).map {
+            composeTestRule.onNodeWithTag(it).assertIsDisplayed().fetchSemanticsNode().boundsInRoot
+        }
+        assertTrue("A settling window inset must not consume the visible Energy entrance",
+            afterInset.left > settled[0].left + 4f)
+        assertTrue("The entrance must continue smoothly after the inset changes",
+            continuing.left < afterInset.left && continuing.left >= settled[0].left - 1f)
+        settled.forEach {
+            assertEquals("All three choices finish on the same row", settled[0].top, it.top, 1f)
+            assertEquals("All three choices keep their resting width", settled[0].width, it.width, 1f)
+        }
+        composeTestRule.onNodeWithTag(START_RUN_BUTTON_TAG).assertIsDisplayed().assertIsEnabled()
     }
 
     @Test

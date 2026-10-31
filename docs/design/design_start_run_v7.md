@@ -8,14 +8,17 @@ status: CURRENT NATIVE DECISIONS plus dated prototype history; verification live
 
 # Start Run — where this screen actually is
 
-**October 31 Energy entrance — installed and checked:** the existing three choices now glide in
+**October 31 Energy entrance — normal launch corrected:** the existing three choices now glide in
 from the right in Low → Moderate → High order, with 120ms stagger and a 680ms eased settle per
 tile. Only movement from Manley's recording is adapted; its choppiness, beam and styling are not
 copied. Shared graphics-layer transforms preserve the fixed layout and current artwork/colors.
 An early tap selects immediately, without waiting for entry or flying a stale-position copy;
 the usual selection intake remains after entry settles. Saved/restored selections do not replay
-the entrance, and reduced motion is respected. Eight focused Moto checks, real-frame capture
-and debug/release/test builds passed. User visual review remains; details in
+the entrance, and reduced motion is respected. Initial verification missed a window-inset change
+cancelling entry in the actual app; positive-layout readiness now allows the glide to finish.
+The failing-before/passing-after regression, all nine focused Moto checks, actual cold/warm
+launcher captures and debug/release/test builds pass. Initial commit `6eb2061` is user-owned and
+not pushed; the correction needs a follow-up commit. User visual review remains; details in
 `project_current_state.md` → "October 31 Energy entrance".
 
 **October 22 panel revision — Ready to test, installed on Moto:** Manley asked to restore the compact Run State card,

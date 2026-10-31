@@ -7,6 +7,23 @@ metadata:
 
 ## October 31 Energy entrance — installed and checked on Moto
 
+**Follow-up: normal launcher transition fixed.** Manley reported no visible difference after
+committing `6eb2061` (not pushed). The installed APK was correct. A normal launcher recording
+reproduced the missing entrance: initial window/inset geometry changes cancelled its effect,
+which then treated the started animation as already played and snapped to the end. The first
+isolated tests/captures missed this integration behavior. Startup now keys on positive layout
+readiness rather than the changing rectangle/density, so inset settling cannot cancel the glide.
+
+The new regression failed before the fix and passes afterward; all nine focused device checks
+and debug/release/Android-test builds pass. Actual cold and warm launcher recordings show the
+complete ordered entrance after the opening collage. The corrected debug APK is installed and
+hash-verified. All33 runs/all12 logical tables are unchanged; only the opening presentation
+counter advanced62→64, with the other four prefs identical. Temporary test package and phone
+capture files are removed. The initial commit remains intact; this follow-up needs a new
+user-owned commit: `fix: keep energy entrance visible after the opening screen`. No push performed.
+
+### Initial implementation and isolated verification
+
 Manley requested only the movement of the Start screen's Energy choices from his supplied
 8.13-second recording, explicitly excluding the beam, colors and other styling. He clarified
 that the recording itself was choppy and the native movement should be smooth. This is a bounded
@@ -18,8 +35,9 @@ layers, avoiding per-frame layout or tile-content recomposition. The current Ene
 labels, colors, measured layout, footer, agent and subsequent selection intake are retained.
 Tapping early still saves Energy immediately and leaves Start usable; only that early tap's
 decorative intake is skipped rather than flying from an unsettled source position. Restoration,
-background return, changed viewport/density and system-disabled animations settle the entrance
-without looping it. Completion's Energy behavior is unchanged.
+background return and system-disabled animations settle the entrance without looping it.
+Viewport/inset changes continue the existing clock after the follow-up fix above. Completion's
+Energy behavior is unchanged.
 
 Debug, release and final Android-test builds passed. Eight focused Moto checks passed, including
 sequence/alignment, early selection, existing intake/lifecycle behavior, normal phone layout,
