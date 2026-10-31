@@ -5,6 +5,23 @@ metadata:
   type: project
 ---
 
+## October 31 Start symbol polish — installed on Moto
+
+Manley requested a small refinement of the polygon inside Start, specifically shortening the
+orange line. He rejected the first floating/inset treatment and clarified that the strip must
+remain connected to the polygon's base while stopping well before its point. The final strip
+runs from -0.13r (slight overlap with the inner base at -0.12r) to +0.06r, uses a 4dp stroke
+instead of 5dp, and has flat caps. This supersedes the first -0.05r to +0.10r attempt.
+The white polygon, accent color, dial, size,
+glow, animation, labels and Start action are unchanged. This is two drawing-line changes in the
+existing StartRunScreen.kt; no new tests/source/assets for this small visual adjustment.
+
+Debug build passed, installed APK hash matches, and the actual native connected-accent crop was inspected.
+All33 completed runs/all12 logical tables/allfive preference files are unchanged; integrity OK,
+zero foreign-key violations. Private receipts: `docs/local/start-symbol-2026-10-31/`. User visual
+review remains. No assistant Git mutation/deployment. Suggested commit: `style: refine Start button accent`.
+The preceding Energy work is now committed as6eb2061/8140ffb; local origin/master matches8140ffb.
+
 ## October 31 Energy entrance — installed and checked on Moto
 
 **Follow-up: normal launcher transition fixed.** Manley reported no visible difference after

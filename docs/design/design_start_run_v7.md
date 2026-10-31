@@ -8,6 +8,12 @@ status: CURRENT NATIVE DECISIONS plus dated prototype history; verification live
 
 # Start Run — where this screen actually is
 
+**October 31 Start symbol polish — corrected and installed:** orange strip remains attached to
+the white polygon's base and stops well before its point, with4dp thickness and flat caps.
+Manley rejected the first floating/inset treatment; the base connection is intentional. All other
+button design/behavior is retained. Debug build and native crop review passed; all33 runs and
+preferences preserved. Visual acceptance remains Manley's; see the current-state checkpoint.
+
 **October 31 Energy entrance — normal launch corrected:** the existing three choices now glide in
 from the right in Low → Moderate → High order, with 120ms stagger and a 680ms eased settle per
 tile. Only movement from Manley's recording is adapted; its choppiness, beam and styling are not

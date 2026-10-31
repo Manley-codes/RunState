@@ -1359,8 +1359,8 @@ private fun StartDial(modifier: Modifier = Modifier, glow: () -> Float = { 0f })
         }
         drawPath(triangle, Color.White)
         drawLine(Color(0xFFF5BE37),
-            Offset(center.x - r * 0.05f, center.y),
-            Offset(center.x + r * 0.12f, center.y),
-            strokeWidth = 5.dp.toPx(), cap = StrokeCap.Square)
+            Offset(center.x - r * 0.13f, center.y),
+            Offset(center.x + r * 0.06f, center.y),
+            strokeWidth = 4.dp.toPx(), cap = StrokeCap.Butt)
     }
 }
