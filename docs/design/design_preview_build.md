@@ -8,6 +8,13 @@ status: LIVE — accepted connected browser preview; mobile phone framing confir
 
 # RunState interactive preview
 
+**November 1 local fix:** the opening retains a complete photo collage while all moving photos
+decode, then reveals them together. The original native still is embedded to avoid a separate
+loading-image request. Photos, motion and4.8-second exit remain unchanged; slow/failed loading and
+Skip are covered by `npm run test:opening` (after building). Build, six export checks and four
+browser checks pass. Source and generated files are ready locally; Manley still needs to commit
+and push this update. The public site has not been changed by Codex.
+
 [Open the preview](https://manley-codes.github.io/runstate-preview/) · [Preview repository](https://github.com/Manley-codes/runstate-preview) · [Android project](https://github.com/Manley-codes/RunState)
 
 The public preview presents seven accepted RunState screens as one connected experience.

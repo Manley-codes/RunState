@@ -168,14 +168,19 @@ internal fun OpeningScreen(
     }
     val currentFinish by rememberUpdatedState(finish)
     val photosReady = images != null
-    val allPhotosDecoded = images?.size == OpeningRows.sumOf { it.size }
+    // A nonempty but incomplete decode must never replace the complete photo backdrop.
+    val allPhotosDecoded = remember(images) {
+        images?.let { decoded ->
+            OpeningRows.all { row -> row.all { photo -> photo.id in decoded } }
+        } == true
+    }
 
     OpeningSystemBars()
     BackHandler(enabled = !finished, onBack = finish)
     LaunchedEffect(lifecycle, photosReady) {
         if (!photosReady) return@LaunchedEffect
         lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
-            if (images.isNullOrEmpty()) {
+            if (!allPhotosDecoded) {
                 currentFinish()
                 return@repeatOnLifecycle
             }
@@ -224,7 +229,7 @@ internal fun OpeningScreen(
         // The wordmark is artwork; keep it inside narrow windows and large-font devices.
         // The full-screen accessible action provides the readable app name independently.
         val wordmarkScale = min(1f, maxWidth.value / 390f)
-        if (images.isNullOrEmpty()) {
+        if (!allPhotosDecoded) {
             // This bundled still is a native capture of the approved photo wall, including
             // its shading. It draws synchronously so decoding cannot expose a blank frame.
             Box(Modifier.fillMaxSize().testTag(
@@ -366,7 +371,13 @@ private fun decodeOpeningPhoto(assets: AssetManager, id: String): ImageBitmap? =
     // The collage's small tiles do not need full source-resolution bitmap allocations.
     while (max(bounds.outWidth, bounds.outHeight) / sample > 640) sample *= 2
     val options = BitmapFactory.Options().apply { inSampleSize = sample }
-    assets.open(path).use { BitmapFactory.decodeStream(it, null, options)?.asImageBitmap() }
+    assets.open(path).use {
+        BitmapFactory.decodeStream(it, null, options)?.also { bitmap ->
+            // Queue texture preparation on the loader thread before publishing the wall,
+            // so its first moving frame does not have to upload every photo at once.
+            bitmap.prepareToDraw()
+        }?.asImageBitmap()
+    }
 } catch (_: IOException) {
     null
 }

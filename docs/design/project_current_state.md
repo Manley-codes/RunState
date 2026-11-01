@@ -5,6 +5,53 @@ metadata:
   type: project
 ---
 
+## November 1 opening photo readiness — installed on Moto; preview ready locally
+
+Manley reported intermittent gaps showing the green background while the opening photos join,
+especially at initial launch, in Android and the GitHub preview. Only this opening behavior is
+authorized; preserve the approved photographs, placement, colors, wordmark, speed and duration.
+
+Native diagnosis: row tiling covers the screen correctly at every entry phase. One normal-launch
+baseline recording did not reproduce the intermittent gap, but the loader had a concrete hole:
+a nonempty partial image map replaced the complete still, exposing empty tiles. The screen now
+requires every expected image ID before promoting the moving wall. Partial/failed loads retain
+the existing complete still and follow the existing exit behavior. Bundled bitmaps also call
+prepareToDraw on the loader thread before publication to reduce first-draw texture upload work.
+This is readiness hardening, not proof that every reported intermittent instance shared one cause.
+
+The new partial-decode regression failed against the old code and passes with the fix. Debug,
+release and Android-test builds passed; all21 OpeningScreen/OpeningJourney Moto cases passed,
+including the full4.8-second ready-photo duration, skip/Back, background pause, reduced motion,
+restoration and active/pending-run bypass. Two force-stop launcher recordings and one existing-task
+reopen show the complete wall and retained motion. Android reports WARM for the force-stop starts;
+do not call these measured cold-start benchmarks or promise zero frame drops. Native OS startup
+and the fixed-still-to-varied-photo arrangement transition remain as before.
+
+The APK is installed in place on Moto ZT422G8FT4 and its hash matches the build. All33 completed
+runs/all12 logical tables are unchanged, integrity OK, zero foreign-key violations. Four preference
+files are identical; only the normal opening entrance counter advances through launcher checks.
+The temporary test package was removed and the main app left at Start. Two existing native
+source/test files changed; no new native assets or changes to any other app screen.
+
+Web diagnosis: all66 displayed image elements previously loaded independently while the opening
+already moved. The same original native first-frame collage is now embedded with the preview,
+avoiding an additional cover download, and complete moving rows/shading appear together only
+after every image decodes. Initial scale/row transforms are ready before paint. Slow or failed
+photos retain the full collage; Skip and the original4.8-second page-visible exit still work.
+No new photographs or redesigned screens. TypeScript/build/export, six Pages checks and four
+headless browser checks passed; mobile withheld-photo/ready/failure screenshots were reviewed.
+The motion test explicitly requests no-preference because this Windows environment supplied
+reduced motion; reduced motion is tested separately. The embedded image produces a nonblocking
+Vite chunk-size advisory (about506KB raw/260KB gzip), trading size for reliable first imagery.
+
+Necessary new preview files: `preview-src/src/opening-first-frame.webp` (byte-identical copy of
+the already credited native still) and `scripts/verify-opening.mjs`. Existing README edits were
+preserved, not part of this fix. Preview source/generated Pages files are ready in
+`docs/local/github-preview-2026-10-29/`; they are not published until Manley's commit/push.
+Main is one commit ahead of its local origin reference from the prior Start-symbol commit.
+No assistant Git mutations, deployment, backend/voice/music work or broader AfroTech completion.
+Private backups, test logs and recordings: `docs/local/opening-readiness-2026-11-01/`.
+
 ## October 31 Start symbol polish — installed on Moto
 
 Manley requested a small refinement of the polygon inside Start, specifically shortening the

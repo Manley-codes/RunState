@@ -111,6 +111,35 @@ class OpeningScreenTest {
         compose.runOnUiThread { assertEquals(1, finished) }
     }
 
+    @Test
+    fun partiallyDecodedPhotosKeepTheCompleteStillAndExitWhenResumed() {
+        compose.mainClock.autoAdvance = false
+        val owner = ScreenLifecycle()
+        val completePhotos = runBlocking {
+            loadOpeningPhotos(InstrumentationRegistry.getInstrumentation().targetContext.assets)
+        }
+        assertEquals(33, completePhotos.size)
+        val partialPhotos = completePhotos - completePhotos.keys.first()
+        var finished = 0
+        compose.runOnUiThread { owner.registry.currentState = Lifecycle.State.CREATED }
+        compose.setContent {
+            OpeningScreen({ finished++ }, owner.lifecycle, motionEnabledOverride = true,
+                photoLoader = { partialPhotos })
+        }
+        compose.waitUntil(5_000) {
+            compose.mainClock.advanceTimeByFrame()
+            compose.onAllNodesWithTag("openingPhotosUnavailable", useUnmergedTree = true)
+                .fetchSemanticsNodes().isNotEmpty()
+        }
+        compose.onNodeWithTag("openingPhotosReady", useUnmergedTree = true).assertDoesNotExist()
+        // A single missing photo must not turn into a green tile after the still disappears.
+        compose.onNodeWithTag(OPENING_FIRST_FRAME_TAG, useUnmergedTree = true).assertIsDisplayed()
+        assertPhotographicFirstFrame()
+        compose.runOnUiThread { assertEquals(0, finished); owner.registry.currentState = Lifecycle.State.RESUMED }
+        compose.mainClock.advanceTimeByFrame()
+        compose.runOnUiThread { assertEquals(1, finished) }
+    }
+
     private fun assertPhotographicFirstFrame() {
         val pixels = compose.onNodeWithTag(OPENING_FIRST_FRAME_TAG, useUnmergedTree = true)
             .captureToImage().toPixelMap()
