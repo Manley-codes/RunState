@@ -79,6 +79,7 @@ class RunAssemblyScreenTest {
         var nextSongs = 0
         var musicToggles = 0
         var musicConnections = 0
+        val musicVisibilityChanges = mutableListOf<Boolean>()
         var linkedTrack: String? = null
     }
 
@@ -112,7 +113,8 @@ class RunAssemblyScreenTest {
             onPreviousTrack = { actions.previousSongs++ }, onNextTrack = { actions.nextSongs++ },
             onToggleMusicPlayback = { actions.musicToggles++ },
             onConnectMusic = { actions.musicConnections++ },
-            onOpenMusicTrack = { actions.linkedTrack = it }
+            onOpenMusicTrack = { actions.linkedTrack = it },
+            onMusicVisibilityChange = { actions.musicVisibilityChanges += it }
         )
     }
 
@@ -602,7 +604,7 @@ class RunAssemblyScreenTest {
     }
 
     @Test
-    fun disconnectedPlayerDoesNotInventSongControlsOrConnectOnOpen() {
+    fun disconnectedPlayerDoesNotInventSongControlsOrAuthorizeOnOpen() {
         compose.mainClock.autoAdvance = false
         val actions = Actions()
         var player by mutableStateOf(SpotifyLivePlayerState())
@@ -629,6 +631,50 @@ class RunAssemblyScreenTest {
         compose.mainClock.advanceTimeByFrame()
         compose.onNodeWithTag(ACTIVE_RUN_PLAYER_TAG).assertDoesNotExist()
         compose.onNodeWithTag(ACTIVE_RUN_DISTANCE_TAG).scrollWithClock().assertIsDisplayed()
+    }
+
+    @Test
+    fun musicVisibilityRequestsOneRefreshPerOpenWithoutAuthorizationOrPlayback() {
+        compose.mainClock.autoAdvance = false
+        val actions = Actions()
+        var player by mutableStateOf(SpotifyLivePlayerState())
+        compose.setContent { Fixture(actions = actions, player = player) }
+        compose.mainClock.advanceTimeBy(1_600)
+        assertEquals(listOf(false), actions.musicVisibilityChanges)
+
+        compose.onNodeWithTag(ACTIVE_RUN_MUSIC_TAG).scrollWithClock().performClick()
+        compose.mainClock.advanceTimeByFrame()
+        assertEquals(listOf(false, true), actions.musicVisibilityChanges)
+
+        // A connection result recomposes the open player without requesting another retry.
+        compose.runOnIdle {
+            player = player.copy(connecting = true, canConnect = false,
+                unavailableMessage = "Connecting to Spotify…")
+        }
+        compose.mainClock.advanceTimeByFrame()
+        assertEquals(listOf(false, true), actions.musicVisibilityChanges)
+
+        compose.onNodeWithTag(ACTIVE_RUN_PLAYER_CLOSE_TAG).scrollWithClock().performClick()
+        compose.mainClock.advanceTimeByFrame()
+        assertEquals(listOf(false, true, false), actions.musicVisibilityChanges)
+
+        compose.onNodeWithTag(ACTIVE_RUN_MUSIC_TAG).scrollWithClock().performClick()
+        compose.mainClock.advanceTimeByFrame()
+        assertEquals(listOf(false, true, false, true), actions.musicVisibilityChanges)
+        compose.runOnUiThread { compose.activity.onBackPressedDispatcher.onBackPressed() }
+        compose.mainClock.advanceTimeByFrame()
+        assertEquals(listOf(false, true, false, true, false), actions.musicVisibilityChanges)
+
+        assertEquals(0, actions.musicConnections)
+        assertEquals(0, actions.music)
+        assertEquals(0, actions.previousSongs)
+        assertEquals(0, actions.nextSongs)
+        assertEquals(0, actions.musicToggles)
+        assertEquals(0, actions.pauses)
+        assertEquals(0, actions.resumes)
+        assertEquals(0, actions.stops)
+        assertEquals(0, actions.startsNow)
+        assertEquals(0, actions.cancels)
     }
 
     @Test

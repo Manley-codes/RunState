@@ -253,21 +253,24 @@ class MainActivity : ComponentActivity() {
                             spotify.status == SpotifyRemoteConnectionStatus.NEEDS_AUTH -> when (spotify.failureCategory) {
                                 "AuthenticationFailedException" -> "Spotify could not verify RunState's connection setup."
                                 "UserNotAuthorizedException" -> "Spotify authorization wasn't completed."
-                                "NotLoggedInException" -> "Sign in to Spotify, then connect again."
                                 "AuthorizationCancelled" -> "Spotify approval was cancelled. Connect again when ready."
                                 null -> "Connect Spotify for automatic snippets"
                                 else -> "Spotify authorization wasn't completed. Try connecting again."
                             }
-                            spotify.status == SpotifyRemoteConnectionStatus.ERROR -> "Spotify connection unavailable. Try connecting again."
+                            spotify.status == SpotifyRemoteConnectionStatus.ERROR -> when (spotify.failureCategory) {
+                                "NotLoggedInException" -> "Sign in to Spotify, then return to RunState."
+                                else -> "Spotify connection unavailable. Try connecting again."
+                            }
                             else -> "Spotify not connected"
                         },
                         spotifyConnectEnabled = spotify.configured &&
                             spotify.status != SpotifyRemoteConnectionStatus.CONNECTING &&
                             spotify.status != SpotifyRemoteConnectionStatus.READY,
-                        spotifyDisconnectEnabled = spotify.status == SpotifyRemoteConnectionStatus.READY ||
+                        spotifyDisconnectEnabled = spotifyConnection.hasRememberedAuthorization ||
+                            spotify.status == SpotifyRemoteConnectionStatus.READY ||
                             spotify.status == SpotifyRemoteConnectionStatus.CONNECTING,
                         onConnectSpotify = {
-                            spotifyConnection.authorizationIntent(this@MainActivity)?.let { intent ->
+                            spotifyConnection.connectFromUserAction(this@MainActivity)?.let { intent ->
                                 try { spotifyAuthorization.launch(intent) }
                                 catch (_: ActivityNotFoundException) {
                                     spotifyConnection.onAuthorizationResult(RESULT_CANCELED, null)
@@ -275,6 +278,7 @@ class MainActivity : ComponentActivity() {
                             }
                         },
                         onDisconnectSpotify = spotifyConnection::disconnect,
+                        onOpenMusicPlayer = spotifyConnection::connectSilently,
                         musicPlayer = spotifyPlayer,
                         onPreviousTrack = spotifyConnection::previous,
                         onNextTrack = spotifyConnection::next,
@@ -349,6 +353,7 @@ internal fun RunJourneyRoot(
     spotifyDisconnectEnabled: Boolean = false,
     onConnectSpotify: () -> Unit = {},
     onDisconnectSpotify: () -> Unit = {},
+    onOpenMusicPlayer: () -> Unit = {},
     musicPlayer: com.runstate.mobile.music.SpotifyLivePlayerState = com.runstate.mobile.music.SpotifyLivePlayerState(),
     onPreviousTrack: () -> Unit = {},
     onNextTrack: () -> Unit = {},
@@ -1760,8 +1765,10 @@ internal fun RunJourneyRoot(
         onNextTrack = onNextTrack,
         onToggleMusicPlayback = onToggleMusicPlayback,
         onConnectMusic = onConnectSpotify,
-        onOpenMusicTrack = { uri ->
-            if (!openSpotifyTrack(context, uri)) {
+        onMusicVisibilityChange = { visible -> if (visible) onOpenMusicPlayer() },
+        onOpenMusicTrack = {
+            // A track deep link can restart the song; this tap only brings Spotify forward.
+            if (!openSpotify(context)) {
                 Toast.makeText(context, "Spotify couldn't open. Check that it is installed on this phone.",
                     Toast.LENGTH_LONG).show()
             }
@@ -2360,24 +2367,8 @@ internal fun readyCompletionSpeechText(
 
 private const val LOCAL_NETWORK_PERMISSION = "android.permission.ACCESS_LOCAL_NETWORK"
 
-/** A displayed track links back to Spotify without issuing a playback command. */
-private fun openSpotifyTrack(context: Context, trackUri: String?): Boolean {
-    if (trackUri == null || !Regex("spotify:track:[A-Za-z0-9]{22}").matches(trackUri)) {
-        return openSpotify(context)
-    }
-    return try {
-        context.startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(trackUri))
-            .setPackage("com.spotify.music").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-        true
-    } catch (_: ActivityNotFoundException) {
-        openSpotify(context)
-    } catch (_: SecurityException) {
-        false
-    }
-}
-
 /** Opens Spotify only on a deliberate tap; no account access or playback command is sent. */
-private fun openSpotify(context: Context): Boolean = try {
+internal fun openSpotify(context: Context): Boolean = try {
     context.startActivity(
         Intent(Intent.ACTION_MAIN)
             .addCategory(Intent.CATEGORY_LAUNCHER)

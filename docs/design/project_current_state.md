@@ -5,6 +5,120 @@ metadata:
   type: project
 ---
 
+## November 5 Spotify navigation follow-up — installed and verified on Moto
+
+Before committing, Manley reports tapping the Spotify symbol inside the music circle opens
+Spotify but restarts the song. The real Active Run callback sent ACTION_VIEW with spotify:track.
+It now uses the existing launcher-only openSpotify action, with no song URI or playback command.
+The badge, title/artist and larger-text Open Spotify path share this callback. The unused track
+deep-link helper is removed; launcher helper is internal for the private live check. Start,
+transport buttons and the separately owned Music Reflection Demo behavior are unchanged.
+
+Debug/release/test APK builds pass; independent source review and diff check pass. The temporary
+opt-in native probe passes all four actual navigation trips: badge/title while paused and
+playing. Paused position changes by0ms on both trips; playing position advances1,485ms and2,046ms
+over trips of1,896ms and1,803ms respectively, retaining the same song/play state without restart.
+No run callbacks fire. Original paused playback at11,277ms is restored and independently read
+back from Spotify's media session. This exercises the actual Active screen and production
+launcher helper; MainActivity callback forwarding is independently source-reviewed.
+
+Initial checks found54 completed runs plus one RUNNING record, so installation waited. Manley
+then confirmed ending the run; a fresh baseline verifies55 completed and no active run. In-place
+install and testing preserve every logical table hash (12), all55 runs and all five preference
+files; integrity passes without foreign-key violations. Private navigation-idle-before/after
+archives and moto-navigation-check.txt hold the receipts. Main APK SHA256 matches installation:
+31740afce7fec645792722d1b7278eedca3d574f6a74a5ad476e3ecaea346b64.
+
+Temporary probe source/APK remain private under `../local/spotify-recovery-2026-11-05/`; source
+removed from androidTest and test-only phone package removed after verification. Main app
+reopened, prior Spotify/GPS repairs retained. No new tracked source/test files for this follow-up.
+This fix and the preceding Spotify changes are ready for Manley's combined commit; no Git mutation.
+
+## November 5 Spotify repair — installed on Moto; live checks passed
+
+Manley reports the GPS changes committed and authorizes starting the Spotify order issue. The
+working tree was clean at entry. After the computer-side checkpoint, he explicitly authorized
+continuing through the full Spotify repair, installation and phone checks before he commits.
+The update is installed in place on Moto ZT422G8FT4, retaining the GPS repair. Stop after this
+bounded Spotify task; he still handles Git.
+
+### Connection behavior
+
+- MainActivity now forwards the existing music-circle visibility callback to silent connection
+  recovery only when opened. It refreshes a healthy connection or retries a failed one using
+  remembered authorization. Closing/recomposition does not issue another request. Opening does
+  not authorize an account, start/skip music or change listening-consent choices.
+- NotLoggedIn is a Spotify-session problem, distinct from UserNotAuthorized/AuthenticationFailed.
+  It retains remembered authorization and prompts sign-in/return; actual authorization failures
+  still require explicit approval. Connect with an existing grant retries directly instead of
+  reopening approval. Disconnect remains available with a remembered grant, including ERROR.
+- Foreground/open events share a pending connection. A retry cannot replace a dead remote while
+  a manual song command or owned passage is settling. No transport command is replayed.
+- Authorization completion respects actual foreground state. A pending-explicit-approval marker
+  survives process recreation; success/failure/Disconnect consumes or removes it. Duplicate/late
+  results after completion or Disconnect cannot revive consent or reset a ready connection.
+  Only that boolean and existing public-client permission are saved, never a code/token.
+- Official SDK lifecycle disconnects while idle in the background, generation guards, readiness
+  timeout, playback ownership, consent captured at Start, and independent listening observation
+  remain in place. No screen redesign, GPS change, SDK update or new dependency.
+
+### Evidence and limits
+
+An internal constructor now accepts the SDK's existing Connector interface and isolated
+preferences/client ID; production defaults still call the same official SDK. Two new test-only
+files (`SpotifyAppRemoteConnectionTest.kt` and SDK-package `TestSpotifyAppRemote.kt`) drive the
+actual owner with controlled SDK callbacks, no provider connection. The small helper accesses
+the pinned SDK's package-private constructor; it is not included in app builds.
+
+Corrected-harness baseline reproduced six failures in12 cases: lost permission after missing
+login, unnecessary approval, manual/passage replacement and two authorization-result races.
+Initial baseline failed only because test-package preferences were unwritable under the target
+process UID; that harness was corrected before claiming product regressions. Final13 owner
+cases plus3 real Compose player cases pass on fresh isolated emulator5556. Both857-test JVM
+suites and debug/release/test APK builds pass; diff check clean. Tests cover metadata readiness,
+silent opening, background/return, revocation, stale callbacks, owner recreation and no automatic
+playback. Full MainActivity forwarding also source-reviewed.
+
+At the computer-side checkpoint Moto was only enumerated. Existing Medium Phone emulator had a RUNNING
+record, so it was not updated or tested; its data was privately backed up and that launched
+instance closed. A separate fresh private AVD handled tests and was shut down afterwards.
+Artifacts and official documentation references: `../local/spotify-recovery-2026-11-05/`.
+
+### Authorized phone follow-up
+
+An idle-device backup confirmed 54 completed runs and no active run before the in-place update.
+The installed APK hash matches the tested build. Before this update, the phone already had no
+remembered Spotify grant and a previous UserNotAuthorizedException diagnostic. The normal
+Settings → Connect Spotify flow restored the connection; no sign-out or permission revocation
+was used to manufacture a failure. This does not establish what originally lost that grant.
+
+Real-provider checks pass for a Spotify-first cold RunState launch, foreground readiness,
+opening the actual Active Run music circle, title/artwork loading, switching to Spotify and
+returning, and closing/reopening the circle. Spotify fully stopped while paused also reconnects
+through App Remote. The existing song remains paused through these connection-only checks.
+The temporary Active screen uses inert metrics and no run coordinator, so it creates no run
+or history entries. Its test source and screenshots stay in the private verification folder.
+
+An additional explicitly enabled live control check passes using the actual circle buttons:
+Play/Pause, Next/Previous, changed song metadata and zero run-action callbacks. Previous returned
+to the original track; cleanup restored its paused 33,700 ms position through the existing
+owned transport. No fallback track load was needed. There are three distinct live test cases,
+with readiness repeated after a cold Spotify process, plus the normal MainActivity UI check.
+
+Final backup comparison: all 54 completed runs and all 12 logical table hashes unchanged;
+database integrity passes, no foreign-key violations. All five preference files remain; only
+spotify_remote_connection.xml changes by restoring authorized_client. Existing run choices,
+music-sharing preferences and appearance remain untouched. The temporary instrumentation
+package and generated phone captures were removed, private probe source removed from androidTest,
+and the regular test APK rebuilt successfully. Main app reopened; tested/installed main APK
+SHA256 is a7ab06a879f7dbb97b980c9d01d580d6e88afe1038e23f4b2c1c6145c651e211.
+
+These checks cover live connection order and the player, not a new outdoor run or the recording
+of listening intervals into a genuine run. Missing-login/revoked-permission failure cases remain
+controlled regression tests rather than deliberate changes to the user's Spotify account.
+No unrelated release/iPhone/community work, design edits or Git mutation. This bounded Spotify
+task is complete and ready for Manley's commit; a real run remains useful field confirmation.
+
 ## November 5 GPS repair — installed on Moto; bounded task complete
 
 Manley authorized fixing missing GPS metrics before tomorrow's run, plus a read-only Spotify

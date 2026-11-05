@@ -3,6 +3,7 @@ package com.runstate.mobile.music
 import android.app.Activity
 import android.content.Context
 import android.content.Intent
+import android.content.SharedPreferences
 import android.graphics.Bitmap
 import android.os.Handler
 import android.os.Looper
@@ -13,7 +14,6 @@ import com.spotify.android.appremote.api.ConnectionParams
 import com.spotify.android.appremote.api.Connector
 import com.spotify.android.appremote.api.SpotifyAppRemote
 import com.spotify.android.appremote.api.error.AuthenticationFailedException
-import com.spotify.android.appremote.api.error.NotLoggedInException
 import com.spotify.android.appremote.api.error.UserNotAuthorizedException
 import com.spotify.protocol.client.Subscription
 import com.spotify.protocol.types.Capabilities
@@ -40,11 +40,16 @@ internal data class SpotifyRemoteConnectionState(
 )
 
 /** Process-local SDK connection. The persisted flag is permission to reconnect, never an account token. */
-internal class SpotifyAppRemoteConnection private constructor(context: Context) {
+internal class SpotifyAppRemoteConnection internal constructor(
+    context: Context,
+    private val connector: Connector = SpotifySdkConnector,
+    private val preferences: SharedPreferences = context.applicationContext
+        .getSharedPreferences("spotify_remote_connection", Context.MODE_PRIVATE),
+    private val clientId: String = BuildConfig.SPOTIFY_CLIENT_ID
+) {
     private val appContext = context.applicationContext
     private val main = Handler(Looper.getMainLooper())
-    private val preferences = appContext.getSharedPreferences("spotify_remote_connection", Context.MODE_PRIVATE)
-    private val configured = BuildConfig.SPOTIFY_CLIENT_ID.matches(Regex("[A-Fa-f0-9]{32}"))
+    private val configured = clientId.matches(Regex("[A-Fa-f0-9]{32}"))
     private val mutableState = MutableStateFlow(SpotifyRemoteConnectionState(
         if (configured && !hasGrant()) SpotifyRemoteConnectionStatus.NEEDS_AUTH else SpotifyRemoteConnectionStatus.DISCONNECTED,
         configured))
@@ -62,7 +67,7 @@ internal class SpotifyAppRemoteConnection private constructor(context: Context) 
     private var playerRevision = 0L
     private var capabilitiesKnown = false
     private var onDemand = false
-    private var background = false
+    private var background = true
     private var interactiveConnecting = false
     private var refreshPending = false
     private var lastRefreshAt = 0L
@@ -75,7 +80,7 @@ internal class SpotifyAppRemoteConnection private constructor(context: Context) 
 
     init { publishLivePlayer() }
 
-    private fun hasGrant() = configured && preferences.getString("authorized_client", null) == BuildConfig.SPOTIFY_CLIENT_ID
+    private fun hasGrant() = configured && preferences.getString("authorized_client", null) == clientId
     private fun onMain(action: () -> Unit) {
         if (Looper.myLooper() == main.looper) action() else main.post(action)
     }
@@ -84,17 +89,26 @@ internal class SpotifyAppRemoteConnection private constructor(context: Context) 
      * Explicit Connect Spotify. On Android 14+ the App Remote kit's own approval screen is started
      * by Spotify from the background and blocked, so the connection hangs. Spotify's login library
      * opens the same approval from RunState while it is on screen; once approved, App Remote
-     * connects without any approval UI. Returns null when Spotify is not configured or unavailable.
+     * connects without any approval UI. A remembered grant retries that connection directly;
+     * only missing/revoked authorization opens approval. Null means no approval UI is needed.
      */
-    fun authorizationIntent(activity: Activity): Intent? {
+    fun connectFromUserAction(activity: Activity): Intent? {
         check(Looper.myLooper() == main.looper)
         if (!configured) return null
         background = false
+        if (interactiveConnecting || sessions.isNotEmpty() || manualCommands.busy) return null
+        if (hasGrant()) {
+            connect(appContext, interactive = false)
+            return null
+        }
         clearConnection(SpotifyRemoteConnectionStatus.CONNECTING)
         // Keep this attempt alive while Spotify's approval screen puts RunState in the background.
         interactiveConnecting = true
+        // Activity results survive process recreation. Keep only the fact that we requested
+        // approval, never the returned code/token, so a legitimate restored result can settle.
+        preferences.edit().putBoolean("authorization_pending", true).apply()
         return try {
-            val request = AuthorizationRequest.Builder(BuildConfig.SPOTIFY_CLIENT_ID,
+            val request = AuthorizationRequest.Builder(clientId,
                 AuthorizationResponse.Type.CODE, BuildConfig.SPOTIFY_REDIRECT_URI)
                 .setScopes(arrayOf("app-remote-control")).build()
             AuthorizationClient.createLoginActivityIntent(activity, request)
@@ -106,14 +120,17 @@ internal class SpotifyAppRemoteConnection private constructor(context: Context) 
 
     /** The returned code is never used or stored: App Remote relies on the Spotify app's own session. */
     fun onAuthorizationResult(resultCode: Int, data: Intent?) = onMain {
+        // Disconnect or another settled attempt must not be undone by an old Activity result.
+        if (!preferences.getBoolean("authorization_pending", false)) return@onMain
         val response = try { AuthorizationClient.getResponse(resultCode, data) } catch (_: RuntimeException) { null }
         val errorCode = response?.error
         when (response?.type) {
             AuthorizationResponse.Type.CODE, AuthorizationResponse.Type.TOKEN -> {
-                preferences.edit().putString("authorized_client", BuildConfig.SPOTIFY_CLIENT_ID).apply()
+                preferences.edit().remove("authorization_pending").putString("authorized_client", clientId).apply()
                 clearConnection(SpotifyRemoteConnectionStatus.DISCONNECTED)
-                background = false
-                connect(appContext, interactive = false)
+                // Activity results can arrive before ON_START. Remember consent now; let the
+                // real foreground event reconnect rather than claiming the Activity is visible.
+                if (!background) connect(appContext, interactive = false)
             }
             AuthorizationResponse.Type.CANCELLED -> authorizationFailed("AuthorizationCancelled")
             AuthorizationResponse.Type.ERROR -> authorizationFailed(spotifyAuthorizationErrorCategory(errorCode))
@@ -122,7 +139,7 @@ internal class SpotifyAppRemoteConnection private constructor(context: Context) 
     }
 
     private fun authorizationFailed(category: String) {
-        preferences.edit().remove("authorized_client").apply()
+        preferences.edit().remove("authorization_pending").remove("authorized_client").apply()
         recordDebugFailure(category)
         clearConnection(SpotifyRemoteConnectionStatus.NEEDS_AUTH, category)
     }
@@ -134,7 +151,7 @@ internal class SpotifyAppRemoteConnection private constructor(context: Context) 
 
     /** Explicit disconnect also removes automatic reconnection permission. */
     fun disconnect() = onMain {
-        preferences.edit().remove("authorized_client").apply()
+        preferences.edit().remove("authorization_pending").remove("authorized_client").apply()
         sessions.toList().forEach { it.cancelPendingTrackLoad() }
         background = true
         if (sessions.isEmpty()) clearConnection(SpotifyRemoteConnectionStatus.DISCONNECTED) else disconnectIfIdle()
@@ -164,7 +181,7 @@ internal class SpotifyAppRemoteConnection private constructor(context: Context) 
         capabilitiesKnown = false
         onDemand = false
         refreshPending = false
-        if (old != null) try { SpotifyAppRemote.disconnect(old) } catch (_: RuntimeException) { }
+        if (old != null) try { connector.disconnect(old) } catch (_: RuntimeException) { }
         // Core voice must not remain blocked by an SDK command that never calls back.
         // Invalidate only after disconnecting; stale results cannot unlock a future tap.
         manualCommands.invalidateConnection()
@@ -176,10 +193,13 @@ internal class SpotifyAppRemoteConnection private constructor(context: Context) 
         if (!configured || !interactive && !hasGrant()) return
         if (remote?.isConnected == true) { refreshPlayer(); return }
         if (mutableState.value.status == SpotifyRemoteConnectionStatus.CONNECTING) return
+        // A retry must not replace a transport while a tap or passage is still settling.
+        // Its existing completion/timeout releases ownership; the next explicit retry is safe.
+        if (sessions.isNotEmpty() || manualCommands.busy) return
         clearConnection(SpotifyRemoteConnectionStatus.CONNECTING)
         interactiveConnecting = interactive
         val attempt = generation
-        val params = ConnectionParams.Builder(BuildConfig.SPOTIFY_CLIENT_ID)
+        val params = ConnectionParams.Builder(clientId)
             .setRedirectUri(BuildConfig.SPOTIFY_REDIRECT_URI).showAuthView(interactive).build()
         val timeout = Runnable {
             if (generation == attempt && mutableState.value.status == SpotifyRemoteConnectionStatus.CONNECTING) {
@@ -195,13 +215,12 @@ internal class SpotifyAppRemoteConnection private constructor(context: Context) 
         }
         main.postDelayed(timeout, 20_000L)
         try {
-            SpotifyAppRemote.setDebugMode(false)
-            SpotifyAppRemote.connect(context, params, object : Connector.ConnectionListener {
+            connector.connect(context, params, object : Connector.ConnectionListener {
                 override fun onConnected(connected: SpotifyAppRemote) = onMain {
-                    if (generation != attempt) { SpotifyAppRemote.disconnect(connected); return@onMain }
+                    if (generation != attempt) { connector.disconnect(connected); return@onMain }
                     interactiveConnecting = false
                     remote = connected
-                    preferences.edit().putString("authorized_client", BuildConfig.SPOTIFY_CLIENT_ID).apply()
+                    preferences.edit().putString("authorized_client", clientId).apply()
                     try {
                         playerSubscription = connected.playerApi.subscribeToPlayerState().also { subscription ->
                             subscription.setEventCallback { next -> onMain {
@@ -229,7 +248,9 @@ internal class SpotifyAppRemoteConnection private constructor(context: Context) 
 
     private fun failed(attempt: Long, failure: Throwable) {
         if (generation != attempt) return
-        val auth = failure is UserNotAuthorizedException || failure is AuthenticationFailedException || failure is NotLoggedInException
+        // A missing Spotify login is not revoked app consent. Keep the remembered grant so
+        // returning after sign-in, or reopening the player, can retry without a new approval.
+        val auth = failure is UserNotAuthorizedException || failure is AuthenticationFailedException
         if (auth) preferences.edit().remove("authorized_client").apply()
         val category = spotifyRemoteFailureCategory(failure)
         recordDebugFailure(category)
@@ -270,6 +291,7 @@ internal class SpotifyAppRemoteConnection private constructor(context: Context) 
             !configured -> "Spotify is not configured."
             state.value.status == SpotifyRemoteConnectionStatus.NEEDS_AUTH -> "Connect Spotify in Settings."
             state.value.status == SpotifyRemoteConnectionStatus.CONNECTING -> "Connecting to Spotify…"
+            state.value.failureCategory == "NotLoggedInException" -> "Sign in to Spotify, then return to RunState."
             !ready -> "Open Spotify or reconnect in Settings."
             track == null -> "Choose a song in Spotify."
             owned -> "Music controls return after the announcement."
@@ -640,6 +662,16 @@ internal class SpotifyAppRemoteConnection private constructor(context: Context) 
             instance ?: SpotifyAppRemoteConnection(context).also { instance = it }
         }
     }
+}
+
+/** The official SDK remains the production connector; isolated tests supply only its interface. */
+private object SpotifySdkConnector : Connector {
+    override fun connect(context: Context, params: ConnectionParams, listener: Connector.ConnectionListener) {
+        SpotifyAppRemote.setDebugMode(false)
+        SpotifyAppRemote.connect(context, params, listener)
+    }
+
+    override fun disconnect(remote: SpotifyAppRemote) = SpotifyAppRemote.disconnect(remote)
 }
 
 internal enum class SpotifyLoadAction { WAIT, PAUSE_TARGET, RELEASE }
