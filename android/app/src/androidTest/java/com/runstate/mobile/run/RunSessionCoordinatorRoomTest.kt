@@ -11,12 +11,14 @@ import com.runstate.mobile.data.local.MusicPlaybackState
 import com.runstate.mobile.data.local.RunMusicObservation
 import com.runstate.mobile.data.local.RunLocationObservation
 import com.runstate.mobile.data.local.RunStateDatabase
+import com.runstate.mobile.data.local.RunSplitStatus
 import com.runstate.mobile.data.local.ShoePairEntity
 import com.runstate.mobile.data.local.RunTrackingMode
 import com.runstate.mobile.data.local.RunTransitionType
 import com.runstate.mobile.data.local.StoredRunState
 import com.runstate.mobile.data.local.TelemetryCoverage
 import com.runstate.mobile.location.GpsMapMarkerState
+import com.runstate.mobile.location.GpsSampleStatus
 import com.runstate.mobile.location.GpsSignalStatus
 import com.runstate.mobile.ui.RunUiModel
 import com.runstate.mobile.ui.RunUiState
@@ -427,6 +429,105 @@ class RunSessionCoordinatorRoomTest {
         val request = reflectionRequestFromSavedRun(UUID.randomUUID().toString(), saved, transitions)
         assertEquals(120_000L, request.evidence.activeDurationMillis)
         assertEquals("COMPLETE", request.evidence.metrics.coverage)
+    }
+
+    @Test
+    fun boundedGpsOutliersRecoverLivePaceAndPersistReliableHistoryAndSplits() = runBlocking {
+        val clock = SettableClock(OFFICIAL_START)
+        val owner = coordinator(clock) { RunTimingMark(clock.nowMillis - OFFICIAL_START, RUN_ID) }
+        owner.initialize()
+        owner.beginCountdown()
+        owner.requestStart(trackingMode = RunTrackingMode.GPS).await()
+
+        // Six seconds to acquire, then 3 m/s observations. Each rejected fix clears the
+        // distance anchor; its next fix must anchor without bridging the missing movement.
+        var needsAnchor = true
+        var measuredMeters = 0.0
+        for (offset in 6_000L..996_000L step 5_000L) {
+            clock.nowMillis = OFFICIAL_START + offset
+            val rejected = when (offset) {
+                406_000L -> GpsSampleStatus.REJECTED_INACCURATE
+                706_000L -> GpsSampleStatus.REJECTED_IMPLAUSIBLE_JUMP
+                else -> null
+            }
+            val observation = if (rejected != null) {
+                needsAnchor = true
+                gpsObservation("bounded-$offset", clock.nowMillis).copy(
+                    acceptedForDistance = false,
+                    rejectionReason = rejected.name,
+                    horizontalAccuracyMeters = if (rejected == GpsSampleStatus.REJECTED_INACCURATE) 40f else 5f
+                )
+            } else {
+                val segment = if (needsAnchor) null else 15.0
+                needsAnchor = false
+                measuredMeters += segment ?: 0.0
+                gpsObservation("bounded-$offset", clock.nowMillis, segment)
+            }
+            val storedPoint = database.locationDao().recordObservation(observation, RUN_ID)
+            if (rejected != null) {
+                assertFalse(storedPoint.acceptedForDistance)
+                assertNull(storedPoint.cumulativeDistanceMeters)
+                val interrupted = requireNotNull(owner.runMetrics())
+                assertEquals(TelemetryCoverage.PARTIAL, interrupted.coverage)
+                assertEquals(measuredMeters, interrupted.distanceMeters!!, 0.0)
+                assertNull(interrupted.paceSecondsPerMeter)
+                assertNull(interrupted.currentMilePaceSecondsPerMeter)
+            }
+            if (offset in setOf(401_000L, 411_000L, 701_000L, 711_000L)) {
+                val live = requireNotNull(owner.runMetrics())
+                assertEquals(TelemetryCoverage.COMPLETE, live.coverage)
+                assertEquals(measuredMeters, live.distanceMeters!!, 0.0)
+                assertTrue(requireNotNull(live.paceSecondsPerMeter) > 0.0)
+                assertTrue(requireNotNull(live.currentMilePaceSecondsPerMeter) > 0.0)
+                if (offset == 411_000L || offset == 711_000L) {
+                    assertNull(storedPoint.segmentDistanceMeters)
+                    assertEquals(measuredMeters, storedPoint.cumulativeDistanceMeters!!, 0.0)
+                }
+                assertEquals(live, owner.runMetrics()) // Reading again cannot add distance.
+            }
+        }
+        assertEquals(2_910.0, measuredMeters, 0.0)
+        clock.nowMillis = OFFICIAL_START + 1_000_000L
+        val finalLive = requireNotNull(owner.runMetrics())
+        assertEquals(TelemetryCoverage.COMPLETE, finalLive.coverage)
+        assertEquals(1_000.0 / 2_910.0, finalLive.paceSecondsPerMeter!!, 0.000001)
+        assertTrue(requireNotNull(finalLive.currentMilePaceSecondsPerMeter) > 0.0)
+        owner.requestAction(RunActionKind.PAUSE).await()
+        clock.nowMillis = OFFICIAL_START + 1_010_000L
+        owner.requestAction(RunActionKind.COMPLETE).await()
+        assertTrue(owner.finalizeActivity(RUN_ID))
+        val completedDisplay = runMetricsDisplayFor(requireNotNull(owner.runMetrics()))
+        val saved = requireNotNull(database.runDao().findById(RUN_ID))
+        val transitions = database.runDao().transitionsFor(RUN_ID)
+        val points = database.locationDao().pointsFor(RUN_ID)
+        assertEquals(2, points.count { !it.acceptedForDistance })
+        assertEquals(2_910.0, saved.finalDistanceMeters!!, 0.0)
+        assertEquals(TelemetryCoverage.COMPLETE, saved.telemetryCoverage)
+
+        // Exercise the same pure derivation and transactional publication as the app's
+        // split worker, using only this test database and no location service/provider.
+        assertEquals(RunSplitStatus.PENDING, database.splitDao().snapshotFor(RUN_ID)?.status)
+        val calculated = requireNotNull(RunSplitCalculator.calculate(saved, transitions, points))
+        assertTrue(database.splitDao().publishIfPending(RUN_ID, calculated))
+        val savedRows = database.splitDao().rowsFor(RUN_ID)
+        assertEquals(listOf(false, true), savedRows.map { it.isPartial })
+        assertEquals(1_609.344, savedRows.first().endDistanceMeters, 0.000001)
+        assertEquals(2_910.0, savedRows.last().endDistanceMeters, 0.0)
+        assertEquals(1_000_000L, savedRows.last().endActiveMillis)
+
+        database.close()
+        database = Room.databaseBuilder(context, RunStateDatabase::class.java, DATABASE_NAME).build()
+        val reopened = requireNotNull(database.runDao().findById(RUN_ID))
+        val history = historyItemFor(reopened, database.runDao().transitionsFor(RUN_ID), null)
+        assertEquals(saved, reopened)
+        assertTrue(reopened.activityFinalized)
+        assertEquals("00:16:40", history.metrics?.active)
+        assertEquals(completedDisplay.averagePace, history.metrics?.averagePace)
+        assertEquals(1_000.0 / 2_910.0, history.paceSecondsPerMeter!!, 0.000001)
+        assertEquals(RunSplitStatus.READY, database.splitDao().snapshotFor(RUN_ID)?.status)
+        assertEquals(RunSplitCalculator.DERIVATION_VERSION,
+            database.splitDao().snapshotFor(RUN_ID)?.derivationVersion)
+        assertEquals(savedRows, database.splitDao().rowsFor(RUN_ID))
     }
 
     @Test

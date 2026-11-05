@@ -1,5 +1,6 @@
 package com.runstate.mobile.run
 
+import com.runstate.mobile.data.local.RunEntity
 import com.runstate.mobile.data.local.RunTransitionEntity
 import com.runstate.mobile.data.local.RunTransitionType
 import com.runstate.mobile.data.local.StoredRunState
@@ -26,6 +27,8 @@ internal enum class TransitionHistoryCoverage {
  * moves backwards; a later presentation or foreground-service owner must keep that floor.
  */
 internal object RunTimeline {
+
+    private const val TIMING_AGREEMENT_TOLERANCE_MILLIS = 250L
 
     /**
      * Returns start-to-end elapsed time, including pauses.
@@ -207,6 +210,74 @@ internal object RunTimeline {
 
         return activeTotal
     }
+
+    /**
+     * Certifies a saved active duration independently of GPS distance coverage.
+     *
+     * A few rejected locations do not invalidate the timer. A recovered process or a clock
+     * correction can, so every lifecycle boundary must carry the original process's
+     * monotonic evidence and agree with wall time. No old timing marks are reconstructed,
+     * and this does not upgrade a run's frozen pace, splits, or GPS coverage.
+     */
+    fun completedActiveMillisWithTimingEvidence(
+        run: RunEntity,
+        transitions: List<RunTransitionEntity>
+    ): Long? {
+        if (run.state != StoredRunState.COMPLETED || run.transitionHistoryComplete != true) return null
+        val finish = run.finishEpochMillis ?: return null
+        if (run.lastCheckpointEpochMillis != finish || transitions.any { it.runId != run.runId }) return null
+        val startMonotonic = run.startElapsedRealtimeMillis ?: return null
+        val session = run.timingSessionId ?: return null
+
+        return try {
+            val wallActive = activeMillis(
+                officialStartEpochMillis = run.officialStartEpochMillis,
+                finishEpochMillis = finish,
+                currentState = StoredRunState.COMPLETED,
+                transitions = transitions,
+                nowEpochMillis = finish,
+                historyCoverage = TransitionHistoryCoverage.COMPLETE
+            ) ?: return null
+            val elapsed = elapsedMillis(
+                run.officialStartEpochMillis, finish, StoredRunState.COMPLETED, finish
+            ) ?: return null
+            if (wallActive > elapsed) return null
+
+            var previousMonotonic = startMonotonic
+            var previousEpoch = run.officialStartEpochMillis
+            var monotonicActive = 0L
+            transitions.forEach { transition ->
+                val monotonic = transition.elapsedRealtimeMillis ?: return null
+                if (transition.timingSessionId != session || monotonic < previousMonotonic) return null
+                val wallOffset = differenceExact(
+                    transition.occurredAtEpochMillis, run.officialStartEpochMillis, "wall timing offset"
+                )
+                val monotonicOffset = differenceExact(monotonic, startMonotonic, "monotonic timing offset")
+                val wallInterval = differenceExact(
+                    transition.occurredAtEpochMillis, previousEpoch, "wall lifecycle interval"
+                )
+                val monotonicInterval = differenceExact(monotonic, previousMonotonic, "monotonic lifecycle interval")
+                if (!timingsAgree(wallOffset, monotonicOffset) ||
+                    !timingsAgree(wallInterval, monotonicInterval)
+                ) return null
+
+                if (transition.transitionType == RunTransitionType.PAUSE) {
+                    monotonicActive = addExact(monotonicActive, monotonicInterval)
+                }
+                previousMonotonic = monotonic
+                previousEpoch = transition.occurredAtEpochMillis
+            }
+            wallActive.takeIf { timingsAgree(it, monotonicActive) }
+        } catch (_: IllegalArgumentException) {
+            null
+        } catch (_: IllegalStateException) {
+            null
+        }
+    }
+
+    // Both inputs are non-negative durations, so their difference cannot wrap Long.
+    private fun timingsAgree(first: Long, second: Long): Boolean =
+        kotlin.math.abs(first - second) <= TIMING_AGREEMENT_TOLERANCE_MILLIS
 
     /**
      * Returns average seconds per meter, or null when pace is not measurable.

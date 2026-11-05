@@ -21,6 +21,16 @@ import kotlin.math.min
 
 class RunSplitCalculatorTest {
     @Test
+    fun `live mile accepts a stored initial anchor before any measured distance`() {
+        val points = route(0, 40_000, 0.0, 100.0).mapIndexed { index, point ->
+            if (index == 0) point.copy(cumulativeDistanceMeters = null) else point
+        }
+        val calculator = LiveMilePaceCalculator()
+        assertEquals(0.4, livePace(calculator, liveRun(), emptyList(), points, 40_000)!!, 0.000001)
+        assertEquals(0.41, livePace(calculator, liveRun(), emptyList(), points, 41_000)!!, 0.000001)
+    }
+
+    @Test
     fun `live current mile begins at official start and advances with active time`() {
         val calculator = LiveMilePaceCalculator()
         val live = liveRun()
@@ -447,8 +457,10 @@ class RunSplitCalculatorTest {
 
     @Test
     fun `acquisition final edge and total edge omissions stay within coverage policy`() {
-        assertNull(fixture(distance = 1_500.0, duration = 600_000L, firstFix = 5_001L).calculate())
-        assertNull(fixture(distance = 1_500.0, duration = 600_000L, lastFix = 594_999L).calculate())
+        assertNotNull(fixture(distance = 1_500.0, duration = 600_000L, firstFix = 15_000L).calculate())
+        assertNull(fixture(distance = 1_500.0, duration = 600_000L, firstFix = 15_001L).calculate())
+        assertNotNull(fixture(distance = 1_500.0, duration = 600_000L, lastFix = 585_000L).calculate())
+        assertNull(fixture(distance = 1_500.0, duration = 600_000L, lastFix = 584_999L).calculate())
         assertNull(fixture(distance = 100.0, duration = 40_000L, firstFix = 1_001L, lastFix = 39_000L).calculate())
         assertNotNull(fixture().calculate())
     }

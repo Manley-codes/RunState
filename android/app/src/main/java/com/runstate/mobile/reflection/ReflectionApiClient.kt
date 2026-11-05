@@ -174,7 +174,8 @@ internal fun reflectionRequestFromSavedRun(
     }
 
     // A GPS service gap can leave a RUNNING row and complete transition history behind.
-    // Match History's conservative timing boundary instead of counting that gap as active.
+    // Keep reflection eligibility tied to the frozen coverage verdict. History can independently
+    // show a proven saved timer, but that does not retroactively expand reflection evidence.
     val activeTimingKnown = run.transitionHistoryComplete == true &&
         (run.metricSource != MetricSource.GPS || run.telemetryCoverage == TelemetryCoverage.COMPLETE)
     val activeDurationMillis = if (activeTimingKnown) {

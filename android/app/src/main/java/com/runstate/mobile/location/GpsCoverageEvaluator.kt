@@ -16,10 +16,11 @@ import kotlin.math.max
 /**
  * Certifies recording continuity, not GPS distance accuracy. Completed verdicts are immutable.
  *
- * The conservative first policy allows at most five seconds at either edge of each Running
- * interval, with all such edges together at most five percent of active time. Interior usable
- * fixes must stay within the distance policy's 15-second source-time limit. A stationary accurate
- * fix is usable coverage even though the distance policy deliberately adds no distance for it.
+ * Acquisition/tail edges and recovery from an inaccurate fix or implausible jump may each take
+ * at most 15 seconds. Their combined unmeasured time must not exceed five percent of active time.
+ * Recovery requires a fresh anchor with unchanged distance: rejected movement is never bridged.
+ * Interior usable fixes still obey the distance policy's 15-second source-time limit. Accurate
+ * stationary fixes count as coverage even though they deliberately add no distance.
  *
  * Lifecycle marks must share one process and agree with the wall timeline within 250 ms, both
  * at each boundary and for total active duration. GPS epoch time may have a stable offset from
@@ -30,13 +31,17 @@ import kotlin.math.max
  * to infer missing movement.
  */
 internal object GpsCoverageEvaluator {
-    internal const val MAX_EDGE_MILLIS = 5_000L
+    internal const val MAX_EDGE_MILLIS = 15_000L
     internal const val LIFECYCLE_CLOCK_TOLERANCE_MILLIS = 250L
     internal const val MAX_SOURCE_CLOCK_OFFSET_MILLIS = 2_000L
     internal const val SOURCE_CLOCK_TOLERANCE_MILLIS = 1_000L
 
     private val distanceConfig = GpsDistanceConfig()
     private val delayedReasons = setOf(GpsSampleStatus.REJECTED_OUT_OF_ORDER.name, "OUT_OF_ORDER")
+    private val recoverableReasons = setOf(
+        GpsSampleStatus.REJECTED_INACCURATE.name,
+        GpsSampleStatus.REJECTED_IMPLAUSIBLE_JUMP.name
+    )
     private val outsideRunningReasons = setOf(
         "NOT_RUNNING", "BEFORE_CHECKPOINT", GpsSampleStatus.REJECTED_NOT_RUNNING.name
     )
@@ -148,8 +153,9 @@ internal object GpsCoverageEvaluator {
         ) return false
 
         var intervalIndex = 0
-        var lastUsableMono: Long? = null
+        var lastEvidenceMono: Long? = null
         var distanceAnchorMono: Long? = null
+        var recoveryMillis = 0L
         var cumulative = 0.0
         var measuredSegmentSeen = false
         var sourceClockOffset: Long? = null
@@ -168,7 +174,7 @@ internal object GpsCoverageEvaluator {
             if (ignoredDelayed) {
                 // A newer monotonic point rejected only by epoch order is a clock anomaly,
                 // not evidence of harmless delayed delivery.
-                if (lastUsableMono == null || mono > lastUsableMono!!) return false
+                if (lastEvidenceMono == null || mono > lastEvidenceMono!!) return false
                 if (!sourceClocksAgree(point.observedAtEpochMillis, mono)) return false
                 return@forEach
             }
@@ -183,11 +189,12 @@ internal object GpsCoverageEvaluator {
                 if (!point.acceptedForDistance && point.rejectionReason in outsideRunningReasons) return@forEach
                 return false
             }
-            if (lastUsableMono?.let { mono <= it } == true) return false
+            if (lastEvidenceMono?.let { mono <= it } == true) return false
+            lastEvidenceMono = mono
             // An honestly inaccurate acquisition point before the first anchor is part
             // of the already allowed starting edge, not an interior recording gap. Its
             // source clock must still be valid and agree with the eventual anchor. No
-            // stale, invalid, mock/unknown or later in-run rejection gets this exception.
+            // stale, invalid or mock/unknown rejection gets this exception.
             if (intervalIndex == 0 && sourceClockOffset == null &&
                 !point.acceptedForDistance &&
                 point.rejectionReason == GpsSampleStatus.REJECTED_INACCURATE.name
@@ -207,6 +214,21 @@ internal object GpsCoverageEvaluator {
                 return@forEach
             }
             if (sourceClockOffset == null && initialInaccurateLastMono?.let { mono <= it } == true) return false
+            val recoverableRejection = !point.acceptedForDistance && point.rejectionReason in recoverableReasons
+            if (recoverableRejection) {
+                if (!sourceClocksAgree(point.observedAtEpochMillis, mono)) return false
+                val rawAccuracy = point.horizontalAccuracyMeters?.toDouble()
+                val accurate = rawAccuracy != null && rawAccuracy.isFinite() &&
+                    rawAccuracy > 0.0 && rawAccuracy <= distanceConfig.maxHorizontalAccuracyMeters
+                // Validate the rejection's meaning; malformed evidence is not a recovery case.
+                if (point.rejectionReason == GpsSampleStatus.REJECTED_INACCURATE.name && accurate) return false
+                if (point.rejectionReason == GpsSampleStatus.REJECTED_IMPLAUSIBLE_JUMP.name &&
+                    (!accurate || interval.firstFix == null)) return false
+                if (point.segmentDistanceMeters != null || point.cumulativeDistanceMeters != null) return false
+                interval.recoveryPending = true
+                distanceAnchorMono = null
+                return@forEach
+            }
             val accuracy = point.horizontalAccuracyMeters?.toDouble() ?: return false
             if (!accuracy.isFinite() || accuracy <= 0.0 || accuracy > distanceConfig.maxHorizontalAccuracyMeters) {
                 return false
@@ -219,8 +241,13 @@ internal object GpsCoverageEvaluator {
                 interval.firstFix = mono
             } else {
                 if (mono - checkNotNull(interval.lastFix) > distanceConfig.maxPointIntervalMillis) return false
-                // A fresh accepted anchor within one Running interval records an interruption.
-                if (point.acceptedForDistance && point.segmentDistanceMeters == null) return false
+                if (interval.recoveryPending) {
+                    if (!point.acceptedForDistance || point.segmentDistanceMeters != null) return false
+                    recoveryMillis = Math.addExact(recoveryMillis, mono - checkNotNull(interval.lastFix))
+                } else if (point.acceptedForDistance && point.segmentDistanceMeters == null) {
+                    // Unexplained restarts/service gaps are not brief rejected-fix recovery.
+                    return false
+                }
             }
             if (point.acceptedForDistance) {
                 val segment = point.segmentDistanceMeters
@@ -253,11 +280,12 @@ internal object GpsCoverageEvaluator {
             }
             if (!sourceClocksAgree(point.observedAtEpochMillis, mono)) return false
             interval.lastFix = mono
-            lastUsableMono = mono
+            interval.recoveryPending = false
         }
         if (!measuredSegmentSeen || cumulative <= 0.0) return false
         var uncoveredEdges = 0L
         intervals.forEach { interval ->
+            if (interval.recoveryPending) return false
             val first = interval.firstFix ?: return false
             val last = interval.lastFix ?: return false
             val initialEdge = first - interval.start
@@ -265,7 +293,7 @@ internal object GpsCoverageEvaluator {
             if (initialEdge !in 0L..MAX_EDGE_MILLIS || finalEdge !in 0L..MAX_EDGE_MILLIS) return false
             uncoveredEdges = Math.addExact(uncoveredEdges, Math.addExact(initialEdge, finalEdge))
         }
-        return uncoveredEdges.toDouble() <= monoActive.toDouble() * 0.05
+        return Math.addExact(uncoveredEdges, recoveryMillis).toDouble() <= monoActive.toDouble() * 0.05
     }
 
     private fun sameDistance(first: Double, second: Double): Boolean =
@@ -275,6 +303,7 @@ internal object GpsCoverageEvaluator {
         val start: Long,
         val end: Long,
         var firstFix: Long? = null,
-        var lastFix: Long? = null
+        var lastFix: Long? = null,
+        var recoveryPending: Boolean = false
     )
 }

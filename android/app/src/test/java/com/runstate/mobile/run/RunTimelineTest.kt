@@ -1,5 +1,6 @@
 package com.runstate.mobile.run
 
+import com.runstate.mobile.data.local.RunEntity
 import com.runstate.mobile.data.local.RunTransitionEntity
 import com.runstate.mobile.data.local.RunTransitionType
 import com.runstate.mobile.data.local.StoredRunState
@@ -15,6 +16,8 @@ class RunTimelineTest {
         const val RUN_ID = "0f6a2c1e-9d43-4b7a-9c21-7b5e8a4d1f30"
         const val OTHER_RUN_ID = "c4e1b8a2-7d35-4f61-8b0c-2a9e6d4f13b7"
         const val START = 1_756_000_000_000L
+        const val START_MONOTONIC = 20_000L
+        const val TIMING_SESSION = "56e8b1b3-6e35-4d02-a6f1-9bf018805132"
     }
 
     private fun transition(
@@ -43,6 +46,117 @@ class RunTimelineTest {
         nowEpochMillis = START + nowOffsetMillis,
         historyCoverage = coverage
     )
+
+    private fun timedCompletedRun(finishOffsetMillis: Long = 12_000L) = RunEntity(
+        runId = RUN_ID,
+        state = StoredRunState.COMPLETED,
+        officialStartEpochMillis = START,
+        startTimezoneId = "America/Chicago",
+        lastCheckpointEpochMillis = START + finishOffsetMillis,
+        finishEpochMillis = START + finishOffsetMillis,
+        transitionHistoryComplete = true,
+        startElapsedRealtimeMillis = START_MONOTONIC,
+        timingSessionId = TIMING_SESSION
+    )
+
+    private fun timedTransition(
+        sequence: Int,
+        type: RunTransitionType,
+        offsetMillis: Long,
+        wallAdjustmentMillis: Long = 0L
+    ) = transition(sequence, type, offsetMillis + wallAdjustmentMillis).copy(
+        elapsedRealtimeMillis = START_MONOTONIC + offsetMillis,
+        timingSessionId = TIMING_SESSION
+    )
+
+    @Test
+    fun `saved timing proof counts running intervals and excludes pauses through finish`() {
+        val transitions = listOf(
+            timedTransition(1, RunTransitionType.PAUSE, 4_000L),
+            timedTransition(2, RunTransitionType.RESUME, 7_000L),
+            timedTransition(3, RunTransitionType.PAUSE, 10_000L)
+        )
+
+        assertEquals(7_000L, RunTimeline.completedActiveMillisWithTimingEvidence(timedCompletedRun(), transitions))
+    }
+
+    @Test
+    fun `saved timing proof accepts small clock sampling differences`() {
+        val run = timedCompletedRun(1_926_644L)
+        val pause = timedTransition(1, RunTransitionType.PAUSE, 1_885_439L, wallAdjustmentMillis = 1L)
+
+        assertEquals(1_885_440L, RunTimeline.completedActiveMillisWithTimingEvidence(run, listOf(pause)))
+        assertEquals(1_250L, RunTimeline.completedActiveMillisWithTimingEvidence(
+            run, listOf(timedTransition(1, RunTransitionType.PAUSE, 1_000L, wallAdjustmentMillis = 250L))
+        ))
+        assertNull(RunTimeline.completedActiveMillisWithTimingEvidence(
+            run, listOf(timedTransition(1, RunTransitionType.PAUSE, 1_000L, wallAdjustmentMillis = 251L))
+        ))
+    }
+
+    @Test
+    fun `saved timing proof rejects a clock correction between individually close boundaries`() {
+        val transitions = listOf(
+            timedTransition(1, RunTransitionType.PAUSE, 1_000L, wallAdjustmentMillis = 200L),
+            timedTransition(2, RunTransitionType.RESUME, 2_000L, wallAdjustmentMillis = -200L),
+            timedTransition(3, RunTransitionType.PAUSE, 3_000L, wallAdjustmentMillis = -200L)
+        )
+
+        assertNull(RunTimeline.completedActiveMillisWithTimingEvidence(timedCompletedRun(), transitions))
+    }
+
+    @Test
+    fun `saved timing proof rejects cumulative active drift even when individual intervals agree`() {
+        val transitions = listOf(
+            timedTransition(1, RunTransitionType.PAUSE, 1_000L, wallAdjustmentMillis = 200L),
+            timedTransition(2, RunTransitionType.RESUME, 2_000L),
+            timedTransition(3, RunTransitionType.PAUSE, 3_000L, wallAdjustmentMillis = 200L)
+        )
+
+        assertNull(RunTimeline.completedActiveMillisWithTimingEvidence(timedCompletedRun(), transitions))
+    }
+
+    @Test
+    fun `saved timing proof does not infer missing marks or cross a recovered process`() {
+        val run = timedCompletedRun()
+        val pause = timedTransition(1, RunTransitionType.PAUSE, 10_000L)
+
+        assertNull(RunTimeline.completedActiveMillisWithTimingEvidence(
+            run.copy(startElapsedRealtimeMillis = null, timingSessionId = null), listOf(pause)
+        ))
+        assertNull(RunTimeline.completedActiveMillisWithTimingEvidence(
+            run, listOf(pause.copy(elapsedRealtimeMillis = null, timingSessionId = null))
+        ))
+        assertNull(RunTimeline.completedActiveMillisWithTimingEvidence(
+            run, listOf(pause.copy(timingSessionId = OTHER_RUN_ID))
+        ))
+    }
+
+    @Test
+    fun `saved timing proof requires complete matching lifecycle and final durable pause`() {
+        val run = timedCompletedRun()
+        val pause = timedTransition(1, RunTransitionType.PAUSE, 4_000L)
+        val resume = timedTransition(2, RunTransitionType.RESUME, 7_000L)
+
+        assertNull(RunTimeline.completedActiveMillisWithTimingEvidence(run.copy(transitionHistoryComplete = false), listOf(pause)))
+        assertNull(RunTimeline.completedActiveMillisWithTimingEvidence(run.copy(lastCheckpointEpochMillis = START), listOf(pause)))
+        assertNull(RunTimeline.completedActiveMillisWithTimingEvidence(run, emptyList()))
+        assertNull(RunTimeline.completedActiveMillisWithTimingEvidence(run, listOf(pause, resume)))
+        assertNull(RunTimeline.completedActiveMillisWithTimingEvidence(run, listOf(pause.copy(runId = OTHER_RUN_ID))))
+        assertNull(RunTimeline.completedActiveMillisWithTimingEvidence(run, listOf(pause.copy(sequenceNumber = 2))))
+        assertNull(RunTimeline.completedActiveMillisWithTimingEvidence(run, listOf(pause.copy(occurredAtEpochMillis = START + 13_000L))))
+    }
+
+    @Test
+    fun `saved timing proof rejects backwards monotonic time despite an ordered wall timeline`() {
+        val transitions = listOf(
+            timedTransition(1, RunTransitionType.PAUSE, 1_000L),
+            timedTransition(2, RunTransitionType.RESUME, 2_000L).copy(elapsedRealtimeMillis = START_MONOTONIC + 999L),
+            timedTransition(3, RunTransitionType.PAUSE, 3_000L)
+        )
+
+        assertNull(RunTimeline.completedActiveMillisWithTimingEvidence(timedCompletedRun(), transitions))
+    }
 
     @Test
     fun `elapsed running duration uses now`() {

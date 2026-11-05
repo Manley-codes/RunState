@@ -5,6 +5,19 @@ metadata:
   type: feedback
 ---
 
+**Git handoffs and command learning — clarified November 1, 2026:**
+- "I handle the Git commands" means Codex supplies the needed less-familiar commands and
+  Manley types/runs them himself; it does not mean withholding command guidance or executing
+  Git mutations for him.
+- He already knows folder navigation, `git add`, `git commit`, `git status` and `git push`.
+  Omit routine command blocks and basic explanations unless requested or necessary to clarify
+  a particular sequence. Identify the correct repository when more than one is involved.
+- For useful unfamiliar Git or other software-engineering commands, explicitly flag them as
+  worth practicing. Explain their purpose, relevant options and expected result in the current
+  task so he can understand and type them himself, rather than only copy/paste.
+- Teach commands when relevant, not as an unsolicited curriculum. Keep complex recovery
+  guided, preserve work, and continue to flag appropriate commit/push checkpoints.
+
 **Current collaboration direction — reaffirmed October 23, 2026:**
 - Manley explicitly asked Codex to implement countdown continuity and announcement delivery,
   then continue with the snippet and reflection fixes without stopping for routine approvals.

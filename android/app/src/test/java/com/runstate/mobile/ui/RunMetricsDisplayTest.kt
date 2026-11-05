@@ -756,6 +756,88 @@ class RunMetricsDisplayTest {
         assertEquals("—", item.metrics?.averagePace)
     }
 
+    @Test
+    fun `partial gps history and receipt retain proven active time without upgrading frozen pace`() {
+        val run = historyRun(
+            finish = historyStart + 1_926_644L,
+            distanceMeters = 4_988.35298970461,
+            coverage = TelemetryCoverage.PARTIAL,
+            historyComplete = true
+        ).copy(
+            metricSource = MetricSource.GPS,
+            trackingMode = RunTrackingMode.GPS,
+            startElapsedRealtimeMillis = 20_000L,
+            timingSessionId = historyRequestId
+        )
+        val transitions = listOf(RunTransitionEntity(
+            historyRunId, 1, RunTransitionType.PAUSE, historyStart + 1_885_440L,
+            elapsedRealtimeMillis = 20_000L + 1_885_439L,
+            timingSessionId = historyRequestId
+        ))
+        val item = historyItemFor(run, transitions, null)
+
+        assertEquals("00:32:06", item.metrics?.elapsed)
+        assertEquals("00:31:25", item.metrics?.active)
+        assertEquals("3.10 mi", item.metrics?.distance)
+        assertEquals("GPS metrics · partial", item.metrics?.sourceLabel)
+        assertEquals("—", item.metrics?.averagePace)
+        assertEquals("—", item.metrics?.currentMilePace)
+        assertEquals(TelemetryCoverage.PARTIAL, item.telemetryCoverage)
+        assertNull(item.paceSecondsPerMeter)
+        assertEquals(
+            "Run saved. Partial GPS distance, 3.1 miles. Active time, 31 minutes, 25 seconds.",
+            savedRunReceiptFor(run, transitions)
+        )
+    }
+
+    @Test
+    fun `unavailable gps distance does not hide independently proven active time`() {
+        val run = historyRun(historyStart + 600_000L, coverage = TelemetryCoverage.UNAVAILABLE,
+            historyComplete = true).copy(
+            metricSource = MetricSource.GPS,
+            startElapsedRealtimeMillis = 20_000L,
+            timingSessionId = historyRequestId
+        )
+        val transitions = listOf(RunTransitionEntity(
+            historyRunId, 1, RunTransitionType.PAUSE, historyStart + 300_000L,
+            elapsedRealtimeMillis = 320_000L, timingSessionId = historyRequestId
+        ))
+        val item = historyItemFor(run, transitions, null)
+
+        assertEquals("00:05:00", item.metrics?.active)
+        assertEquals("—", item.metrics?.distance)
+        assertEquals("—", item.metrics?.averagePace)
+        assertEquals("GPS distance unavailable", item.metrics?.sourceLabel)
+        assertEquals(TelemetryCoverage.UNAVAILABLE, item.telemetryCoverage)
+        assertEquals("Run saved. Active time, 5 minutes.", savedRunReceiptFor(run, transitions))
+    }
+
+    @Test
+    fun `partial gps history keeps recovered and clock anomalous active time unknown`() {
+        val run = historyRun(historyStart + 600_000L, 100.0, TelemetryCoverage.PARTIAL, true).copy(
+            metricSource = MetricSource.GPS,
+            startElapsedRealtimeMillis = 20_000L,
+            timingSessionId = historyRequestId
+        )
+        val pause = RunTransitionEntity(
+            historyRunId, 1, RunTransitionType.PAUSE, historyStart + 300_000L,
+            elapsedRealtimeMillis = 320_000L, timingSessionId = historyRequestId
+        )
+        val unprovenPauses = listOf(
+            pause.copy(timingSessionId = historyRunId),
+            pause.copy(elapsedRealtimeMillis = null, timingSessionId = null),
+            pause.copy(elapsedRealtimeMillis = 319_000L)
+        )
+        unprovenPauses.forEach { unprovenPause ->
+            val transitions = listOf(unprovenPause)
+            val item = historyItemFor(run, transitions, null)
+            assertEquals("00:10:00", item.metrics?.elapsed)
+            assertEquals("—", item.metrics?.active)
+            assertEquals("—", item.metrics?.averagePace)
+            assertFalse(savedRunReceiptFor(run, transitions).contains("Active time"))
+        }
+    }
+
     private fun historyRun(
         finish: Long?,
         distanceMeters: Double? = null,

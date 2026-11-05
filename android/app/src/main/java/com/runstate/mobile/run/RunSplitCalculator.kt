@@ -328,7 +328,10 @@ internal class LiveMilePaceCalculator {
             val interval = intervals[intervalIndex]
             val active = Math.addExact(interval.activeStart, Math.subtractExact(mono, interval.start))
             if (point.acceptedForDistance) {
-                val nextDistance = checkNotNull(point.cumulativeDistanceMeters)
+                // Room stores null on the first anchor until an actual segment is measured.
+                // That represents zero distance, not an invalid run. The monotonic check below
+                // still refuses a later missing total that would erase already recorded distance.
+                val nextDistance = point.cumulativeDistanceMeters ?: 0.0
                 check(nextDistance.isFinite() && nextDistance >= distance)
                 distance = nextDistance
             }

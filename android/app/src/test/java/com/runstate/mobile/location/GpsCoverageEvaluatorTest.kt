@@ -16,6 +16,79 @@ import org.junit.Test
 
 class GpsCoverageEvaluatorTest {
     @Test
+    fun `field shaped acquisition and four recovered outliers no longer erase whole run pace`() {
+        val points = recoveringRoute(6_102L..1_884_102L, mapOf(
+            306_102L to GpsSampleStatus.REJECTED_IMPLAUSIBLE_JUMP,
+            606_102L to GpsSampleStatus.REJECTED_INACCURATE,
+            906_102L to GpsSampleStatus.REJECTED_INACCURATE,
+            1_206_102L to GpsSampleStatus.REJECTED_IMPLAUSIBLE_JUMP
+        ))
+        assertEquals(TelemetryCoverage.COMPLETE, assess(
+            run = paused(1_885_439L), transitions = listOf(pause(1_885_439L)),
+            points = points, nowOffset = 1_926_644L
+        ))
+    }
+
+    @Test
+    fun `brief quality rejection requires a new unchanged distance anchor before recovery`() {
+        val points = recoveringRoute(1_000L..199_000L,
+            mapOf(100_000L to GpsSampleStatus.REJECTED_INACCURATE))
+        assertEquals(TelemetryCoverage.PARTIAL, assess(run = running(), transitions = emptyList(),
+            points = points.filter { offset(it) <= 100_000L }, nowOffset = 100_000L))
+        assertEquals(TelemetryCoverage.COMPLETE, assess(run = running(), transitions = emptyList(),
+            points = points.filter { offset(it) <= 101_000L }, nowOffset = 101_000L))
+        assertEquals(TelemetryCoverage.PARTIAL, assess(run = running(), transitions = emptyList(),
+            points = points.filter { offset(it) <= 101_000L }.map { if (offset(it) == 101_000L)
+                it.copy(cumulativeDistanceMeters = it.cumulativeDistanceMeters!! + 30.0) else it },
+            nowOffset = 101_000L))
+    }
+
+    @Test
+    fun `duplicate rejected fix does not poison recovery but newer out of order evidence does`() {
+        val points = recoveringRoute(1_000L..199_000L,
+            mapOf(100_000L to GpsSampleStatus.REJECTED_INACCURATE))
+        fun duplicate(offset: Long) = insertRejected(points, 100, offset,
+            GpsSampleStatus.REJECTED_OUT_OF_ORDER.name)
+        assertEquals(TelemetryCoverage.COMPLETE, assess(run = running(), transitions = emptyList(),
+            points = duplicate(100_000L), nowOffset = 200_000L))
+        assertEquals(TelemetryCoverage.PARTIAL, assess(run = running(), transitions = emptyList(),
+            points = duplicate(100_001L), nowOffset = 200_000L))
+    }
+
+    @Test
+    fun `brief recovery cannot conceal excessive or unbounded missing movement`() {
+        fun burst(end: Long) = recoveringRoute(1_000L..399_000L,
+            (100_000L..end step 1_000L).associateWith { GpsSampleStatus.REJECTED_INACCURATE })
+        fun coverage(points: List<RunLocationPointEntity>) = assess(
+            run = paused(400_000L), transitions = listOf(pause(400_000L)),
+            points = points, nowOffset = 410_000L)
+        assertEquals(TelemetryCoverage.COMPLETE, coverage(burst(113_000L)))
+        assertEquals(TelemetryCoverage.PARTIAL, coverage(burst(114_000L)))
+        val frequent = recoveringRoute(1_000L..399_000L,
+            (20_000L..380_000L step 20_000L).associateWith { GpsSampleStatus.REJECTED_INACCURATE })
+        assertEquals(TelemetryCoverage.PARTIAL, coverage(frequent))
+        val unclosed = recoveringRoute(1_000L..399_000L,
+            mapOf(399_000L to GpsSampleStatus.REJECTED_IMPLAUSIBLE_JUMP))
+        assertEquals(TelemetryCoverage.PARTIAL, coverage(unclosed))
+    }
+
+    @Test
+    fun `recovery never excuses invalid stale clock or unknown evidence`() {
+        val points = recoveringRoute(1_000L..199_000L,
+            mapOf(100_000L to GpsSampleStatus.REJECTED_INACCURATE))
+        listOf(GpsSampleStatus.REJECTED_STALE.name, GpsSampleStatus.REJECTED_INVALID.name,
+            "MOCK", "UNKNOWN_REASON").forEach { reason ->
+            assertEquals(reason, TelemetryCoverage.PARTIAL, assess(run = running(), transitions = emptyList(),
+                points = points.map { if (offset(it) == 100_000L) it.copy(rejectionReason = reason) else it },
+                nowOffset = 200_000L))
+        }
+        assertEquals(TelemetryCoverage.PARTIAL, assess(run = running(), transitions = emptyList(),
+            points = points.map { if (offset(it) == 100_000L)
+                it.copy(observedAtEpochMillis = it.observedAtEpochMillis + 2_001L) else it },
+            nowOffset = 200_000L))
+    }
+
+    @Test
     fun `continuous live and paused recordings certify the same coverage`() {
         val points = route(1_000L..59_000L)
         assertEquals(TelemetryCoverage.COMPLETE, assess(points = points))
@@ -94,17 +167,25 @@ class GpsCoverageEvaluatorTest {
     }
 
     @Test
-    fun `acquisition and final tail must each fit the five second boundary`() {
+    fun `acquisition and final tail must each fit fifteen seconds and the total budget`() {
         assertEquals(TelemetryCoverage.PARTIAL, assess(points = route(6_000L..59_000L)))
         assertEquals(TelemetryCoverage.PARTIAL, assess(points = route(1_000L..54_000L)))
-        val longPause = paused(200_000L)
+        val longPause = paused(500_000L)
         assertEquals(TelemetryCoverage.COMPLETE, assess(
-            run = longPause, transitions = listOf(pause(200_000L)),
-            points = route(5_000L..195_000L), nowOffset = 210_000L
+            run = longPause, transitions = listOf(pause(500_000L)),
+            points = route(15_000L..499_000L), nowOffset = 510_000L
         ))
         assertEquals(TelemetryCoverage.PARTIAL, assess(
-            run = longPause, transitions = listOf(pause(200_000L)),
-            points = route(6_000L..196_000L), nowOffset = 210_000L
+            run = longPause, transitions = listOf(pause(500_000L)),
+            points = route(15_001L..499_001L), nowOffset = 510_000L
+        ))
+        assertEquals(TelemetryCoverage.COMPLETE, assess(
+            run = longPause, transitions = listOf(pause(500_000L)),
+            points = route(1_000L..485_000L), nowOffset = 510_000L
+        ))
+        assertEquals(TelemetryCoverage.PARTIAL, assess(
+            run = longPause, transitions = listOf(pause(500_000L)),
+            points = route(999L..484_999L), nowOffset = 510_000L
         ))
     }
 
@@ -123,14 +204,14 @@ class GpsCoverageEvaluatorTest {
     }
 
     @Test
-    fun `inaccurate acquisition cannot extend the five second or total edge limits`() {
+    fun `inaccurate acquisition cannot extend the fifteen second or total edge limits`() {
         assertEquals(TelemetryCoverage.COMPLETE, assess(
-            run = paused(120_000L), transitions = listOf(pause(120_000L)),
-            points = prependInaccurate(route(5_000L..119_000L), 4_000L), nowOffset = 130_000L
+            run = paused(500_000L), transitions = listOf(pause(500_000L)),
+            points = prependInaccurate(route(15_000L..499_000L), 4_000L), nowOffset = 510_000L
         ))
         assertEquals(TelemetryCoverage.PARTIAL, assess(
-            run = paused(120_000L), transitions = listOf(pause(120_000L)),
-            points = prependInaccurate(route(5_001L..119_001L), 4_000L), nowOffset = 130_000L
+            run = paused(500_000L), transitions = listOf(pause(500_000L)),
+            points = prependInaccurate(route(15_001L..499_001L), 4_000L), nowOffset = 510_000L
         ))
         assertEquals(TelemetryCoverage.PARTIAL, assess(points =
             prependInaccurate(route(2_000L..58_000L), 1_000L)))
@@ -182,7 +263,7 @@ class GpsCoverageEvaluatorTest {
     }
 
     @Test
-    fun `initial edge exception never hides an interior or resumed inaccurate gap`() {
+    fun `recovery requires a fresh anchor and resumed acquisition counts against its edge`() {
         val interior = insertRejected(route(1_000L..59_000L), 2, 2_500L,
             GpsSampleStatus.REJECTED_INACCURATE.name).map {
             if (it.rejectionReason == GpsSampleStatus.REJECTED_INACCURATE.name)
@@ -194,7 +275,7 @@ class GpsCoverageEvaluatorTest {
             if (it.rejectionReason == GpsSampleStatus.REJECTED_INACCURATE.name)
                 it.copy(horizontalAccuracyMeters = 26f) else it
         }
-        assertEquals(TelemetryCoverage.PARTIAL, assess(
+        assertEquals(TelemetryCoverage.COMPLETE, assess(
             run = paused(150_000L), transitions = listOf(pause(), resume(90_000L, 2), pause(150_000L, 3)),
             points = resumed, nowOffset = 160_000L
         ))
@@ -453,6 +534,29 @@ class GpsCoverageEvaluatorTest {
         assertEquals(TelemetryCoverage.PARTIAL, assess(transitions = listOf(pause().copy(elapsedRealtimeMillis = MONO - 1L))))
         assertEquals(TelemetryCoverage.PARTIAL, assess(run = paused().copy(lastCheckpointEpochMillis = EPOCH + 59_000L)))
         assertEquals(TelemetryCoverage.PARTIAL, assess(nowOffset = 59_000L))
+    }
+
+    private fun recoveringRoute(
+        range: LongRange,
+        rejected: Map<Long, GpsSampleStatus>
+    ): List<RunLocationPointEntity> {
+        var cumulative = 0.0
+        var needsAnchor = true
+        return route(range).map { point ->
+            val reason = rejected[offset(point)]
+            if (reason != null) {
+                needsAnchor = true
+                point.copy(acceptedForDistance = false, rejectionReason = reason.name,
+                    horizontalAccuracyMeters = if (reason == GpsSampleStatus.REJECTED_INACCURATE) 40f else 0.5f,
+                    segmentDistanceMeters = null, cumulativeDistanceMeters = null)
+            } else {
+                val segment = if (needsAnchor) null else 2.0
+                needsAnchor = false
+                cumulative += segment ?: 0.0
+                point.copy(segmentDistanceMeters = segment,
+                    cumulativeDistanceMeters = cumulative.takeIf { it > 0.0 })
+            }
+        }
     }
 
     private fun assess(

@@ -5,6 +5,106 @@ metadata:
   type: project
 ---
 
+## November 5 GPS repair — installed on Moto; bounded task complete
+
+Manley authorized fixing missing GPS metrics before tomorrow's run, plus a read-only Spotify
+order review. He requires stopping after each major task; later work should favor tasks possible
+without his phone. Stop here. Do not automatically start Spotify changes, release work or redesign.
+
+- GPS acquisition/tail edges may now take up to15s. Brief inaccurate/jump rejection can recover
+  only through a fresh unchanged-distance anchor within15s. Combined edge/recovery time must
+  stay within5% of active time. Unresolved rejection, longer gaps, excessive repeated loss,
+  unexplained anchors, stale/invalid/unknown fixes and inconsistent process/clock evidence remain
+  untrusted. Harmless duplicate rejected fixes no longer permanently poison recovery. Distance
+  filters are unchanged; the5% allowance concerns continuity, not distance accuracy.
+- `LiveMilePaceCalculator` incorrectly required a non-null first-anchor cumulative distance,
+  although Room stores null until distance is measured. Initial null now means zero; decreasing
+  later totals still fail. Split interpolation and stored snapshot version remain unchanged.
+- History/receipt active time can now use independent same-process lifecycle proof despite
+  PARTIAL GPS: complete pause/resume history and wall/monotonic agreement at boundaries,
+  consecutive intervals and total within250ms. Missing/recovered/clock-inconsistent timing stays
+  unknown. Frozen historical coverage, distance, pace and splits are not rewritten. Reflection
+  eligibility still uses frozen coverage; its obsolete History comment was clarified only.
+
+Three new coverage regressions failed before the repair. Exact private replay of all1,874
+Nov4 points then exposed the first-anchor current-mile bug. After both fixes, equivalent new-run
+evidence produces average/current-mile pace and3 full-mile splits plus final partial, without
+adding distance. The original stored PARTIAL verdict stays PARTIAL; proven active time31:25.440
+can appear in History. This does not certify real route/distance accuracy.
+
+Both debug/release JVM suites pass857 tests each; debug/release/test APK builds pass. Eleven
+silent Moto checks pass, including persisted recovery/save/reopen, gap/clock safeguards and
+Dark/Light metric rendering. Native captures inspected; installed APK hash matches. Fresh
+snapshots preserve all54 completed runs/all12 table hashes and functional settings; only normal
+opening count98→99 changes. Main app updated in place, never uninstalled; isolated test package
+removed, app reopened, no actual run created. Tomorrow's outdoor run remains field verification.
+
+Existing source/test files only. Temporary coordinate-free replay source/results and private
+backups remain in `../local/afrotech-feedback-2026-11-05/`. No Git mutation/deployment. Manley
+handles the commit/push; this is a good commit checkpoint.
+
+### Spotify order review — no implementation
+
+Backgrounding releases an idle Spotify remote/player; foregrounding reconnects only with
+remembered authorization. Opening the Active Run music circle merely opens its view and does
+not retry a failed connection. `NotLoggedInException` clears remembered authorization, so
+signing into Spotify later does not itself restore silent reconnect permission. Separately,
+listening consent is captured at Start; opening the circle later does not enable reflection
+observation. An already permitted listener does handle a playback session that starts later.
+
+These paths fit Manley's concern, but do not reproduce a specific reported failure. Next
+candidate is an ordered connection test: Spotify first, RunState first, run first, switch/lock/
+return, failed connection then recovery. Preserve consent and connection ownership. No Spotify
+code/settings changed. Stop until Manley continues after this GPS checkpoint.
+
+## November 5 AfroTech feedback — release priority and real-run diagnosis
+
+Manley reports repeated requests to download RunState, frequent iPhone ownership, interest in
+running clubs/leaderboards, and positive design feedback, particularly Opening, Countdown and
+Active Run. He explicitly prioritizes getting the app into people's hands over continued
+cosmetic iteration, and raises iPhone access, community and Garmin integration as priorities.
+This supersedes the old indefinite tester-work deferral; it does not authorize publishing,
+spending, a platform rewrite or implementing all proposed features at once. Preserve the current
+phone demo during the remaining conference. The updated delivery sequence and ideas are in
+`../local/november_2026_demo_roadmap.md` under November 5.
+
+### Three-mile run: verified GPS, not demo
+
+A fresh database-only read from explicit Moto ZT422G8FT4 identifies the November 4, approximately
+08:03 America/Chicago run: 4,988.353m (3.0996mi), GPS tracking and metric source, PARTIAL coverage.
+There are 1,874 location observations: 791 accepted for distance, 1,079 normal within-accuracy
+ignores, and four rejected fixes (two inaccurate, two implausible jumps). The first usable fix
+arrives 6.102s after Start, beyond the current 5s coverage edge. There is no >15s observation gap.
+One Pause and the original timing session preserve 31:25.439 active duration; wall and monotonic
+calculations agree within1ms. Elapsed including pause is32:06.644. Splits are UNAVAILABLE.
+
+At the initial inspection, the GPS coverage policy was all-or-nothing: those conditions marked the
+run partial; live/saved pace and splits are withheld, and History also hides active duration.
+This explains the symptom without assuming that time was never recorded or that demo mode was
+selected. It does not certify exact distance or support inventing missing splits. Proposed next
+bounded repair: preserve valid timer information independently of GPS quality, and review
+brief-fix rejection/recovery and qualified pace behavior while retaining bad-point filtering.
+No metric-policy change or retrospective repair was made in that first review. The subsequently
+authorized repair and device verification are documented above.
+
+Snapshot integrity is OK, with54 completed runs and no active record. Private copy and diagnostic
+notes are under `../local/afrotech-feedback-2026-11-05/`; coordinates/credentials are not reproduced
+in this note. No force-stop, installation, app interaction, setting change, database mutation,
+provider call, Git mutation or deployment. Existing uncommitted MEMORY/collab_style edits remain.
+
+### Feedback boundaries
+
+- Move Energy into Countdown, possibly15s and monochrome tiles: exploratory. Recommended test
+  retains fixed labeled tap targets, clear selected state, Start now and optional no-answer;
+  do not silently assign Low or invent baseline Energy. Longer duration is not selected.
+- Community direction is raised in priority; exact club/leaderboard scope is unselected.
+  Organizer-assisted use of runner-selected event photos/videos is a separate later proposal.
+- Garmin contact may offer an existing integration; confirm completed-activity import versus
+  actual watch functionality and authorization before choosing implementation.
+- Read the `Afrotech feedback` chat (November4): one-page résumé, concrete project accomplishments,
+  evidence-based measurements and clearer RunState wording. Section ordering/combining advice
+  is uncertain; résumé construction remains a separate unstarted task.
+
 ## November 1 opening photo readiness — installed on Moto; preview ready locally
 
 Manley reported intermittent gaps showing the green background while the opening photos join,

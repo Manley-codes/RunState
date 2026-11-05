@@ -391,12 +391,12 @@ private fun completedHistoryMetrics(
                 TransitionHistoryCoverage.INCOMPLETE
             }
         )
-        // A GPS service can die while the run row remains RUNNING. History has no
-        // durable proof that the whole interval was observed, so a partial GPS record
-        // must not reconstruct an apparently precise active duration from wall time.
+        // Distance quality and timer evidence are independent. A partial GPS run can
+        // retain its active time when the saved lifecycle has same-process monotonic
+        // proof; recovered or older timelines without that proof remain unknown.
         val active = if (run.metricSource == MetricSource.GPS &&
             run.telemetryCoverage != TelemetryCoverage.COMPLETE
-        ) null else timelineActive
+        ) RunTimeline.completedActiveMillisWithTimingEvidence(run, transitions) else timelineActive
         RunMetrics(
             elapsedMillis = elapsed,
             activeMillis = active,
