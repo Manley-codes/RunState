@@ -544,20 +544,9 @@ public final class AnthropicReflectionProvider implements ReflectionProvider {
             SongSnippetMatch snippetMatch) throws ReflectionProviderException {
         ReflectionContract.SongSnippet snippet = snippetMatch == null ? null : snippetMatch.snippet();
         SongReflectionTrial.PassageLanding landing = acceptedLanding(evidence.musicContext());
-        if (landing == null && snippet != null && snippet.selectionMethod()
-                != ReflectionContract.SongSnippetSelectionMethod.RECORDING_OPENING_FALLBACK) {
-            landing = new SongReflectionTrial.PassageLanding(material.trackTitle(), material.artistName(),
-                    snippet.selectionMethod() == ReflectionContract.SongSnippetSelectionMethod.TITLE_HOOK
-                            ? "A brief recurring title hook with a source-timed line boundary."
-                            : snippet.selectionMethod() == ReflectionContract.SongSnippetSelectionMethod.REPEATED_HOOK
-                                    ? "A brief repeated vocal phrase with a source-timed line boundary."
-                                    : "A brief vocal line window with published timing; it is not a verified chorus or hook.",
-                    "Let this short musical response finish the thought naturally. Use the matched song context and this run's facts; do not announce playback, quote lyrics, or claim the timing was auditioned.",
-                    snippet.selectionMethod() == ReflectionContract.SongSnippetSelectionMethod.TIMED_LINE_WINDOW
-                            ? "TIMED_SOURCE_LINE_WINDOW_NOT_AUDITIONED_OR_RUN_EVIDENCE"
-                            : "TIMED_SOURCE_DERIVED_HOOK_NOT_AUDITIONED_OR_RUN_EVIDENCE",
-                    snippetMatch.themeLinks().stream().map(SnippetThemeLink::theme).distinct().toList(),
-                    snippet.selectionMethod() == ReflectionContract.SongSnippetSelectionMethod.TITLE_HOOK);
+        if (landing == null && snippet != null) {
+            landing = automaticLanding(material, snippet.selectionMethod(),
+                    snippetMatch.themeLinks().stream().map(SnippetThemeLink::theme).distinct().toList());
         }
         SongReflectionTrial engine = songEngine(evidence, started);
         SongReflectionTrial.TrialResult result = studied == null ? engine.generate(evidence, material, landing)
@@ -567,6 +556,27 @@ public final class AnthropicReflectionProvider implements ReflectionProvider {
         }
         return new GeneratedReflections(result.reflections(), landing == null ? null
                 : snippet != null ? snippet.cueId() : evidence.musicContext().songCue().cueId());
+    }
+
+    /**
+     * The production description of an automatically found passage. The trial harness reuses it so
+     * an experiment compares writing changes against exactly what real runs send today.
+     */
+    static SongReflectionTrial.PassageLanding automaticLanding(MusixmatchSongAnalysis.SongMaterial material,
+            ReflectionContract.SongSnippetSelectionMethod method, List<String> matchedThemes) {
+        if (method == ReflectionContract.SongSnippetSelectionMethod.RECORDING_OPENING_FALLBACK) return null;
+        return new SongReflectionTrial.PassageLanding(material.trackTitle(), material.artistName(),
+                method == ReflectionContract.SongSnippetSelectionMethod.TITLE_HOOK
+                        ? "A brief recurring title hook with a source-timed line boundary."
+                        : method == ReflectionContract.SongSnippetSelectionMethod.REPEATED_HOOK
+                                ? "A brief repeated vocal phrase with a source-timed line boundary."
+                                : "A brief vocal line window with published timing; it is not a verified chorus or hook.",
+                "Let this short musical response finish the thought naturally. Use the matched song context and this run's facts; do not announce playback, quote lyrics, or claim the timing was auditioned.",
+                method == ReflectionContract.SongSnippetSelectionMethod.TIMED_LINE_WINDOW
+                        ? "TIMED_SOURCE_LINE_WINDOW_NOT_AUDITIONED_OR_RUN_EVIDENCE"
+                        : "TIMED_SOURCE_DERIVED_HOOK_NOT_AUDITIONED_OR_RUN_EVIDENCE",
+                matchedThemes,
+                method == ReflectionContract.SongSnippetSelectionMethod.TITLE_HOOK);
     }
 
     private GeneratedReflections ordinaryReflection(CompletedRunEvidence evidence, long started)

@@ -1,5 +1,6 @@
 package com.runstate.mobile.music
 
+import com.runstate.mobile.ui.CompletionAudioSession
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
@@ -1512,5 +1513,106 @@ class SpotifySongPassageTest {
         val current = requireNotNull(gate.begin(true, false))
         assertFalse("A late result from the old remote cannot unlock a new tap.", gate.finish(expired))
         assertTrue(gate.owns(current))
+    }
+
+    /**
+     * November 6 report: "the music tried to start, then stopped immediately." These tests
+     * characterize the leading hypothesis without changing behavior. The simulated Spotify asks
+     * for audio focus the first time it plays the chosen song, as a real player does. The
+     * completion keeps one shared pause until the passage entrance, and treats any focus loss
+     * before that handoff as an interruption.
+     */
+    private class CompletionFocusFixture(val clock: Clock, val session: Session) {
+        var controller: SpotifySongPassageController? = null
+        var onLoss: (() -> Unit)? = null
+        var interruptions = 0
+        var releases = 0
+        var chosenSongTookFocusBeforeEntrance = false
+        val diagnostics = mutableListOf<SongPassageDiagnostic>()
+        val completion = CompletionAudioSession(
+            snapshot = { session.snapshot() },
+            requestPause = { lost -> onLoss = lost; true },
+            releasePause = { releases++ },
+            onInterrupted = { interruptions++; controller?.stop() })
+
+        fun chosenSongRequestsFocusWhenItFirstPlays(chosenUri: String) {
+            var requested = false
+            clock.onWait = {
+                val now = session.snapshot()
+                if (!requested && now.mediaId == chosenUri && now.playback == PassagePlayback.PLAYING) {
+                    requested = true
+                    chosenSongTookFocusBeforeEntrance = session.commands.none { it.startsWith("seek:") }
+                    onLoss?.invoke()
+                }
+            }
+        }
+
+        suspend fun play(request: SongPassageRequest): SongPassageResult {
+            assertTrue(completion.begin())
+            val passage = SpotifySongPassageController(session, clock,
+                onEntranceReady = { completion.releaseForPassage() },
+                quiescePausedBeforeEntry = true, diagnosticObserver = { diagnostics += it })
+            controller = passage
+            return passage.play(request)
+        }
+    }
+
+    @Test fun audibleTrackLoadInsideTheCompletionPauseIsStoppedByTheFocusRequestItCauses() = runBlocking {
+        val clock = Clock()
+        val session = Session(clock).apply {
+            enableTrackSelection(prepare = false, originallyPlaying = false)
+            trackLoadDelayMillis = 200
+        }
+        val fixture = CompletionFocusFixture(clock, session).apply {
+            chosenSongRequestsFocusWhenItFirstPlays(selectedUri)
+        }
+        val result = fixture.play(selectedRequest.copy(resumePausedOriginal = true))
+        assertTrue("The chosen song was audible while it loaded", fixture.chosenSongTookFocusBeforeEntrance)
+        assertEquals(1, fixture.interruptions)
+        assertEquals(SongPassageResult(SongPassageStatus.INTERRUPTED, false), result)
+        assertTrue(fixture.diagnostics.any {
+            it.stage == SongPassageStage.TRACK_LOAD && it.reason == SongPassageReason.STOPPED })
+        assertEquals("The loading fragment is paused; no entrance seek, passage or restore follows",
+            listOf("pause", "playTrack:$selectedUri", "pause"), session.commands)
+        assertEquals(selectedUri, session.snapshot().mediaId)
+        assertEquals(PassagePlayback.PAUSED, session.snapshot().playback)
+    }
+
+    @Test fun silentTrackLoadInsideTheCompletionPauseHandsOffBeforeTheSongTakesFocus() = runBlocking {
+        val clock = Clock()
+        val session = Session(clock).apply {
+            enableTrackSelection(prepare = true, originallyPlaying = false)
+            trackLoadDelayMillis = 200
+        }
+        val fixture = CompletionFocusFixture(clock, session).apply {
+            chosenSongRequestsFocusWhenItFirstPlays(selectedUri)
+        }
+        val result = fixture.play(selectedRequest.copy(resumePausedOriginal = true))
+        assertEquals(SongPassageResult(SongPassageStatus.FINISHED, true), result)
+        assertFalse("The chosen song first played after the entrance handoff",
+            fixture.chosenSongTookFocusBeforeEntrance)
+        assertEquals(0, fixture.interruptions)
+        assertEquals(1, fixture.releases)
+        assertTrue(session.commands.none { it.startsWith("playTrack:") })
+        fixture.completion.finish()
+        assertEquals("The handoff released the shared pause exactly once", 1, fixture.releases)
+        assertEquals(originalUri, session.snapshot().mediaId)
+        assertEquals(PassagePlayback.PLAYING, session.snapshot().playback)
+    }
+
+    @Test fun genuineInterruptionDuringASilentTrackLoadStillStopsTheCompletion() = runBlocking {
+        val clock = Clock()
+        val session = Session(clock).apply {
+            enableTrackSelection(prepare = true, originallyPlaying = false)
+            trackLoadDelayMillis = 200
+        }
+        val fixture = CompletionFocusFixture(clock, session)
+        // A call or another app takes focus while the chosen song is still loading silently.
+        // Any fix for the audible-load case must keep this protection.
+        clock.onWait = { if (session.commands.any { it.startsWith("prepareTrack:") }) fixture.onLoss?.invoke() }
+        val result = fixture.play(selectedRequest.copy(resumePausedOriginal = true))
+        assertEquals(SongPassageResult(SongPassageStatus.INTERRUPTED, false), result)
+        assertEquals(1, fixture.interruptions)
+        assertTrue(session.commands.none { it.startsWith("seek:") })
     }
 }

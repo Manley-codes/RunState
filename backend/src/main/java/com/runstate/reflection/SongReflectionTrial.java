@@ -32,9 +32,18 @@ import java.util.regex.Pattern;
 final class SongReflectionTrial {
     enum CreativeApproach { AUTO, DIRECT, PERSONA_ONLY, BLEND }
 
+    /** v1 is the accepted baseline study. v2 also writes the per-song direction the auditions supplied by hand. */
+    enum StudyVersion {
+        V1("song-study-trial-v1.txt"), V2("song-study-trial-v2.txt");
+        final String prompt;
+        StudyVersion(String prompt) { this.prompt = prompt; }
+    }
+
     private static final List<String> BRANCHES = List.of("spent", "feeling_good", "powered_up", "no_selection");
     private static final Set<String> NOTE_FIELDS = Set.of("attitude", "delivery", "artist_context",
             "title_idea", "lyric_echoes", "imagery");
+    private static final Set<String> DIRECTION_FIELDS = Set.of("connection", "intended_effect");
+    private static final List<String> CONNECTIONS = List.of("direct", "persona", "blend");
     private static final Set<String> CHOICE_FIELDS = Set.of("lead", "accent", "anchor", "fit", "reflection");
     private static final Set<String> LEADS = Set.of("persona", "title", "artist", "lyric_echo", "message", "run_only");
     private static final Pattern NUMBER = Pattern.compile("(?<![\\p{L}\\p{N}])\\d+(?:[.:]\\d+)*(?![\\p{L}\\p{N}])");
@@ -72,10 +81,15 @@ final class SongReflectionTrial {
 
     /** Source-only work is safe to prepare before final run facts exist. */
     StudiedSong study(SongMaterial material) throws ReflectionProviderException {
+        return study(material, StudyVersion.V1);
+    }
+
+    StudiedSong study(SongMaterial material, StudyVersion version) throws ReflectionProviderException {
         java.util.Objects.requireNonNull(material, "material");
-        JsonObject notes = exchange.exchange(songInput(material),
-                prompt("song-study-trial-v1.txt"), notesSchema());
+        java.util.Objects.requireNonNull(version, "version");
+        JsonObject notes = exchange.exchange(songInput(material), prompt(version.prompt), notesSchema(version));
         validateNotes(notes, material);
+        if (notes.has("connection") != (version == StudyVersion.V2)) throw invalid("Unexpected song-study fields.");
         return new StudiedSong(material, notes);
     }
 
@@ -130,6 +144,33 @@ final class SongReflectionTrial {
                 branches.getAsJsonObject("feeling_good").get("reflection").getAsString(),
                 branches.getAsJsonObject("powered_up").get("reflection").getAsString(),
                 branches.getAsJsonObject("no_selection").get("reflection").getAsString()), warnings);
+    }
+
+    /**
+     * Batch 1 experiment: the song study's own per-song direction replaces auto plus the generic
+     * landing effect. The writer prompt is unchanged; only the inputs it already accepts differ.
+     */
+    TrialResult writeWithStudyDirection(CompletedRunEvidence evidence, StudiedSong studied, PassageLanding landing)
+            throws ReflectionProviderException {
+        JsonObject notes = studied.linerNotes();
+        validateNotes(notes, studied.material());
+        if (!notes.has("connection")) throw invalid("A study direction requires a v2 song study.");
+        CreativeApproach approach = approachFor(notes.get("connection").getAsString());
+        String effect = notes.get("intended_effect").getAsString().strip().replaceAll("\\s+", " ");
+        DIRECTION_FIELDS.forEach(notes::remove);
+        PassageLanding directed = landing == null ? null : new PassageLanding(landing.trackTitle(),
+                landing.artistName(), landing.musicalMoment(), effect, landing.provenance(),
+                landing.matchedThemes(), landing.titleHook());
+        return write(evidence, new StudiedSong(studied.material(), notes), directed, approach);
+    }
+
+    static CreativeApproach approachFor(String connection) {
+        return switch (connection) {
+            case "direct" -> CreativeApproach.DIRECT;
+            case "persona" -> CreativeApproach.PERSONA_ONLY;
+            case "blend" -> CreativeApproach.BLEND;
+            default -> throw new IllegalArgumentException("Unknown song-study connection.");
+        };
     }
 
     private static void requireMatching(CompletedRunEvidence evidence, SongMaterial material, PassageLanding landing)
@@ -254,7 +295,15 @@ final class SongReflectionTrial {
     }
 
     private static void validateNotes(JsonObject notes, SongMaterial source) throws ReflectionProviderException {
-        exactFields(notes, NOTE_FIELDS);
+        if (notes.has("connection") || notes.has("intended_effect")) {
+            Set<String> expected = new HashSet<>(NOTE_FIELDS);
+            expected.addAll(DIRECTION_FIELDS);
+            exactFields(notes, expected);
+            if (!CONNECTIONS.contains(text(notes, "connection", 20, true))) throw invalid("Invalid song-study connection.");
+            text(notes, "intended_effect", 350, true);
+        } else {
+            exactFields(notes, NOTE_FIELDS);
+        }
         for (String key : List.of("attitude", "delivery", "artist_context", "title_idea")) {
             text(notes, key, 350, key.equals("attitude") || key.equals("delivery"));
         }
@@ -440,11 +489,15 @@ final class SongReflectionTrial {
         return schema;
     }
 
-    private static JsonObject notesSchema() {
+    private static JsonObject notesSchema(StudyVersion version) {
         Map<String, JsonObject> fields = new LinkedHashMap<>();
         for (String key : List.of("attitude", "delivery", "artist_context", "title_idea")) fields.put(key, stringSchema());
         fields.put("lyric_echoes", arraySchema(objectSchema(Map.of("words", stringSchema(), "theme", stringSchema()))));
         fields.put("imagery", arraySchema(stringSchema()));
+        if (version == StudyVersion.V2) {
+            fields.put("connection", enumSchema(CONNECTIONS));
+            fields.put("intended_effect", stringSchema());
+        }
         return objectSchema(fields);
     }
 

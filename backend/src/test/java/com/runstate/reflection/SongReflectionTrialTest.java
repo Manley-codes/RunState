@@ -487,6 +487,102 @@ class SongReflectionTrialTest {
                 response(calls.incrementAndGet() == 1 ? study.apply(notes()) : writer.apply(branches())));
     }
 
+    @Test
+    void v2StudyDirectionReplacesAutoAndTheGenericEffectWithoutChangingTheWriterPrompt() throws Exception {
+        var writerInputs = new java.util.ArrayList<JsonObject>();
+        var prompts = new java.util.ArrayList<String>();
+        var studySchemas = new java.util.ArrayList<JsonObject>();
+        var trial = new SongReflectionTrial((input, prompt, schema) -> {
+            prompts.add(prompt);
+            if (input.has("run_facts")) {
+                writerInputs.add(input.deepCopy());
+                return branches();
+            }
+            studySchemas.add(schema.deepCopy());
+            return directedNotes("persona", "A sly, unbothered\n send-off that lets the beat answer.");
+        });
+        var landing = AnthropicReflectionProvider.automaticLanding(material(),
+                SongSnippetSelectionMethod.TITLE_HOOK, List.of());
+        var studied = trial.study(material(), SongReflectionTrial.StudyVersion.V2);
+        trial.writeWithStudyDirection(evidence(PreRunEnergy.MODERATE), studied, landing);
+        assertTrue(prompts.get(0).contains("song study trial v2"));
+        assertTrue(studySchemas.get(0).getAsJsonObject("properties").has("intended_effect"));
+        JsonObject input = writerInputs.get(0);
+        assertEquals("persona_only", input.get("creative_approach").getAsString());
+        JsonObject target = input.getAsJsonObject("passage_landing");
+        assertEquals("A brief recurring title hook with a source-timed line boundary.",
+                target.get("musical_moment").getAsString());
+        assertEquals("A sly, unbothered send-off that lets the beat answer.",
+                target.get("intended_effect").getAsString());
+        assertEquals(notes(), input.get("liner_notes"), "The direction travels in its own slots, not as liner notes");
+        String writerPrompt = prompts.get(1).replace("\r\n", "\n");
+        assertEquals("a3f07cad9f9ab8483d9e251e95345733cc803b823888f7635936e4f9109a3128",
+                java.util.HexFormat.of().formatHex(java.security.MessageDigest.getInstance("SHA-256")
+                        .digest(writerPrompt.getBytes(java.nio.charset.StandardCharsets.UTF_8))));
+    }
+
+    @Test
+    void studyVersionsAcceptOnlyTheirOwnFieldsAndKnownConnections() {
+        var v1GetsDirection = new SongReflectionTrial((input, prompt, schema) -> directedNotes("direct", "A warm reply."));
+        var v2GetsPlainNotes = new SongReflectionTrial((input, prompt, schema) -> notes());
+        var unknownConnection = new SongReflectionTrial((input, prompt, schema) -> directedNotes("vibes", "A warm reply."));
+        var blankEffect = new SongReflectionTrial((input, prompt, schema) -> directedNotes("blend", " "));
+        assertThrows(ReflectionProviderException.class, () -> v1GetsDirection.study(material()));
+        assertThrows(ReflectionProviderException.class,
+                () -> v2GetsPlainNotes.study(material(), SongReflectionTrial.StudyVersion.V2));
+        assertThrows(ReflectionProviderException.class,
+                () -> unknownConnection.study(material(), SongReflectionTrial.StudyVersion.V2));
+        assertThrows(ReflectionProviderException.class,
+                () -> blankEffect.study(material(), SongReflectionTrial.StudyVersion.V2));
+    }
+
+    @Test
+    void studyDirectionRequiresADirectedStudyAndKeepsAnAbsentLandingAbsent() throws Exception {
+        var plain = new SongReflectionTrial((input, prompt, schema) -> input.has("run_facts") ? branches() : notes());
+        var v1 = plain.study(material());
+        assertThrows(ReflectionProviderException.class,
+                () -> plain.writeWithStudyDirection(evidence(PreRunEnergy.MODERATE), v1, null));
+        var writerInputs = new java.util.ArrayList<JsonObject>();
+        var directed = new SongReflectionTrial((input, prompt, schema) -> {
+            if (input.has("run_facts")) {
+                writerInputs.add(input.deepCopy());
+                return branches();
+            }
+            return directedNotes("direct", "A warm reply that answers one real moment.");
+        });
+        var v2 = directed.study(material(), SongReflectionTrial.StudyVersion.V2);
+        directed.writeWithStudyDirection(evidence(PreRunEnergy.MODERATE), v2, null);
+        assertEquals("direct", writerInputs.get(0).get("creative_approach").getAsString());
+        assertFalse(writerInputs.get(0).has("passage_landing"));
+        assertEquals(notes(), writerInputs.get(0).get("liner_notes"));
+    }
+
+    @Test
+    void automaticLandingKeepsProductionDescriptionsForEveryPassageKind() {
+        assertNull(AnthropicReflectionProvider.automaticLanding(material(),
+                SongSnippetSelectionMethod.RECORDING_OPENING_FALLBACK, List.of()));
+        var title = AnthropicReflectionProvider.automaticLanding(material(),
+                SongSnippetSelectionMethod.TITLE_HOOK, List.of("new beginnings"));
+        assertTrue(title.titleHook());
+        assertEquals(List.of("new beginnings"), title.matchedThemes());
+        assertEquals("TIMED_SOURCE_DERIVED_HOOK_NOT_AUDITIONED_OR_RUN_EVIDENCE", title.provenance());
+        var repeated = AnthropicReflectionProvider.automaticLanding(material(),
+                SongSnippetSelectionMethod.REPEATED_HOOK, List.of());
+        assertEquals("A brief repeated vocal phrase with a source-timed line boundary.", repeated.musicalMoment());
+        assertFalse(repeated.titleHook());
+        var line = AnthropicReflectionProvider.automaticLanding(material(),
+                SongSnippetSelectionMethod.TIMED_LINE_WINDOW, List.of());
+        assertEquals("TIMED_SOURCE_LINE_WINDOW_NOT_AUDITIONED_OR_RUN_EVIDENCE", line.provenance());
+        assertTrue(line.intendedEffect().startsWith("Let this short musical response finish the thought naturally."));
+    }
+
+    private static JsonObject directedNotes(String connection, String effect) {
+        JsonObject result = notes();
+        result.addProperty("connection", connection);
+        result.addProperty("intended_effect", effect);
+        return result;
+    }
+
     private static TransportResponse response(JsonObject output) {
         JsonObject envelope = new JsonObject();
         envelope.addProperty("stop_reason", "end_turn");
@@ -559,6 +655,10 @@ class SongReflectionTrialTest {
     public static void main(String[] args) {
         if (!"1".equals(System.getenv("RUNSTATE_LIVE_SONG_TRIAL"))) {
             System.out.println("Live song trial is disabled.");
+            return;
+        }
+        if ("batch1".equals(System.getenv("RUNSTATE_TRIAL_BATCH"))) {
+            runBatchOne(System.getenv());
             return;
         }
         String stage = "configuration";
@@ -658,6 +758,249 @@ class SongReflectionTrialTest {
                     + "; " + reason + ". No output was installed or saved.");
             System.exit(1);
         }
+    }
+
+    /** One fixed comparison case. Facts are fictional; song information is looked up once per case. */
+    private record BatchCase(String key, String title, String artist, String catalogTrackId, String scenario,
+                             SongSnippetSelectionMethod passage, int repeats, String referenceLabel,
+                             String referenceText) { }
+
+    /**
+     * Batch 1, approved by Manley on Nov 7, 2026. Before: v1 study, auto direction and the generic
+     * automatic landing that real runs receive. After: v2 study whose own direction replaces auto and
+     * the generic effect. Same facts, song material and passage description in both conditions.
+     */
+    private static final List<BatchCase> BATCH_ONE = List.of(
+            new BatchCase("lovely_day", "Lovely Day", "Bill Withers", "460374491", "morning_feeling_good",
+                    SongSnippetSelectionMethod.TITLE_HOOK, 1, "Feeling Good",
+                    "Saturday, just past eight, three miles behind you and feeling good. Some mornings need a "
+                            + "reason to face the day. You went out at seven-thirty and brought one back."),
+            new BatchCase("stronger", "Stronger", "Kanye West", "176269002", "evening_no_selection",
+                    SongSnippetSelectionMethod.TITLE_HOOK, 1, "No answer",
+                    "Four miles. Wednesday. Done by five past seven. Clock out, chest out."),
+            new BatchCase("love_yourz", "Love Yourz", "J. Cole", null, "standard",
+                    SongSnippetSelectionMethod.REPEATED_HOOK, 3, null, null));
+    private static final String BATCH_ONE_MODEL = "claude-opus-5-5";
+    private static final int BATCH_ONE_CALL_LIMIT = 20;
+    private static final List<String[]> BATCH_BRANCHES = List.of(new String[]{"spent", "Spent"},
+            new String[]{"feeling_good", "Feeling Good"}, new String[]{"powered_up", "Powered Up"},
+            new String[]{"no_selection", "No answer"});
+
+    private static void runBatchOne(Map<String, String> environment) {
+        AtomicInteger calls = new AtomicInteger();
+        long[] tokens = new long[2];
+        long started = System.nanoTime();
+        String stage = "configuration";
+        try {
+            Map<String, String> pinned = new java.util.HashMap<>(environment);
+            pinned.put("ANTHROPIC_MUSIC_EDITOR_MODEL", BATCH_ONE_MODEL);
+            var config = AnthropicReflectionProvider.configurationFrom(pinned);
+            if (!BATCH_ONE_MODEL.equals(config.musicEditorModel())) throw new IllegalStateException("Model pin failed.");
+            var realTransport = AnthropicReflectionProvider.productionTransport(config);
+            AnthropicReflectionProvider.Transport measured = request -> {
+                if (calls.incrementAndGet() > BATCH_ONE_CALL_LIMIT) {
+                    throw new java.io.IOException("Batch 1 call limit reached.");
+                }
+                TransportResponse response = realTransport.send(request);
+                try {
+                    JsonObject usage = JsonParser.parseString(response.body()).getAsJsonObject().getAsJsonObject("usage");
+                    if (usage != null) {
+                        tokens[0] += usage.get("input_tokens").getAsLong();
+                        tokens[1] += usage.get("output_tokens").getAsLong();
+                    }
+                } catch (RuntimeException unreadable) { /* Token counts are reporting only. */ }
+                return response;
+            };
+            stage = "report folder";
+            java.nio.file.Path root = java.nio.file.Path.of(environment.getOrDefault("RUNSTATE_TRIAL_REPORT_DIR",
+                    "../docs/local/reflection-batch1")).toAbsolutePath().normalize();
+            if (!root.toString().replace('\\', '/').contains("/docs/local/")) {
+                throw new IllegalStateException("Batch reports must stay in a private docs/local folder.");
+            }
+            java.nio.file.Path folder = root.resolve(java.time.format.DateTimeFormatter
+                    .ofPattern("yyyy-MM-dd'T'HH-mm-ss'Z'").withZone(java.time.ZoneOffset.UTC).format(Instant.now()));
+            java.nio.file.Files.createDirectories(folder);
+            stage = "Musixmatch configuration";
+            var music = MusixmatchSongAnalysis.fromEnvironment(environment)
+                    .orElseThrow(() -> new IllegalStateException("MUSIXMATCH_API_KEY is not set."));
+            var trial = new SongReflectionTrial(new AnthropicReflectionProvider(config, measured));
+            var random = new java.security.SecureRandom();
+            JsonArray generations = new JsonArray();
+            JsonObject key = new JsonObject();
+            StringBuilder review = new StringBuilder("""
+                    # Batch 1 \u2014 blind review
+
+                    Fictional runs only. Each version shows all four Energy answers from one generation.
+                    Versions A and B are shuffled separately in every block, so position tells you nothing.
+                    For each line, mark Hit, Close or Miss on: specific, truthful, natural, musically
+                    connected, worth hearing. Please don't open generations.json or key.json until you're done.
+                    """);
+            int planned = BATCH_ONE.stream().mapToInt(item -> item.repeats() * 2).sum();
+            int finished = 0;
+            for (BatchCase item : BATCH_ONE) {
+                stage = "Musixmatch material for " + item.key();
+                SongMaterial material = (item.catalogTrackId() == null
+                        ? music.lookupMaterial(item.title(), item.artist())
+                        : music.lookupMaterialByTrackId(item.title(), item.artist(), item.catalogTrackId()))
+                        .orElseThrow(() -> new IllegalStateException("No matched Musixmatch material."));
+                CompletedRunEvidence base = trialEvidence(item.scenario());
+                CompletedRunEvidence run = new CompletedRunEvidence(base.officialStartEpochMillis(),
+                        base.finishEpochMillis(), base.startTimezoneId(), base.activeDurationMillis(), base.metrics(),
+                        base.preRunEnergy(), new MusicContext(MusicState.MUSIC, material.trackTitle(),
+                        material.artistName(), null, MusicProvenance.CONTROLLED));
+                var landing = AnthropicReflectionProvider.automaticLanding(material, item.passage(), List.of());
+                review.append(batchCaseHeader(item, material, run, landing));
+                for (int repeat = 1; repeat <= item.repeats(); repeat++) {
+                    boolean beforeIsA = random.nextBoolean();
+                    JsonObject before = null;
+                    JsonObject after = null;
+                    for (String condition : List.of("before", "after")) {
+                        stage = item.key() + " repeat " + repeat + " " + condition;
+                        JsonObject record = batchGeneration(trial, item, condition, repeat, material, run, landing);
+                        generations.add(record);
+                        if (condition.equals("before")) before = record; else after = record;
+                        finished++;
+                        System.out.println("[" + finished + "/" + planned + "] " + stage + ": "
+                                + record.get("status").getAsString() + "; Anthropic calls so far " + calls.get());
+                        writeBatchFiles(folder, generations, key, review.toString(),
+                                batchSummary(calls.get(), tokens, started, finished, planned));
+                    }
+                    review.append(batchReviewBlock("A", repeat, beforeIsA ? before : after));
+                    review.append(batchReviewBlock("B", repeat, beforeIsA ? after : before));
+                    key.addProperty(item.key() + " repeat " + repeat,
+                            beforeIsA ? "A = before, B = after" : "A = after, B = before");
+                }
+            }
+            JsonObject summary = batchSummary(calls.get(), tokens, started, finished, planned);
+            writeBatchFiles(folder, generations, key, review.toString(), summary);
+            System.out.println("Batch 1 finished: " + finished + "/" + planned + " generations, "
+                    + calls.get() + " Anthropic calls, estimated $"
+                    + summary.get("estimated_cost_usd").getAsString() + ". Private report: " + folder);
+        } catch (Exception failure) {
+            String reason = failure instanceof ReflectionProviderException provider
+                    ? provider.failureType().name() + ": " + provider.getMessage()
+                    : failure.getClass().getSimpleName() + ": " + failure.getMessage();
+            System.out.println("Batch 1 stopped during " + stage + "; Anthropic calls=" + calls.get() + "; " + reason);
+            System.exit(1);
+        }
+    }
+
+    private static JsonObject batchGeneration(SongReflectionTrial trial, BatchCase item, String condition, int repeat,
+            SongMaterial material, CompletedRunEvidence run, SongReflectionTrial.PassageLanding landing) {
+        boolean after = condition.equals("after");
+        var version = after ? SongReflectionTrial.StudyVersion.V2 : SongReflectionTrial.StudyVersion.V1;
+        JsonObject record = new JsonObject();
+        record.addProperty("case", item.key());
+        record.addProperty("condition", condition);
+        record.addProperty("repeat", repeat);
+        record.addProperty("model", BATCH_ONE_MODEL);
+        record.addProperty("study_prompt", version.prompt);
+        try {
+            long studyStarted = System.nanoTime();
+            var studied = trial.study(material, version);
+            record.addProperty("study_ms", (System.nanoTime() - studyStarted) / 1_000_000);
+            JsonObject notes = studied.linerNotes();
+            JsonObject study = new JsonObject();
+            for (String field : List.of("attitude", "delivery", "artist_context", "title_idea",
+                    "connection", "intended_effect")) {
+                if (notes.has(field)) study.add(field, notes.get(field));
+            }
+            study.add("imagery", notes.get("imagery"));
+            study.addProperty("lyric_echo_count", notes.getAsJsonArray("lyric_echoes").size());
+            record.add("study", study);
+            record.addProperty("creative_approach", after
+                    ? SongReflectionTrial.approachFor(notes.get("connection").getAsString()).name()
+                    : SongReflectionTrial.CreativeApproach.AUTO.name());
+            record.addProperty("passage_moment", landing == null ? null : landing.musicalMoment());
+            record.addProperty("intended_effect_sent", landing == null ? null : after
+                    ? notes.get("intended_effect").getAsString().strip().replaceAll("\\s+", " ")
+                    : landing.intendedEffect());
+            long writeStarted = System.nanoTime();
+            var result = after ? trial.writeWithStudyDirection(run, studied, landing)
+                    : trial.write(run, studied, landing, SongReflectionTrial.CreativeApproach.AUTO);
+            record.addProperty("writer_ms", (System.nanoTime() - writeStarted) / 1_000_000);
+            JsonObject branches = result.branches();
+            for (String[] branch : BATCH_BRANCHES) {
+                JsonObject choice = branches.getAsJsonObject(branch[0]);
+                if (SongReflectionTrial.copiedSourceWords(choice.get("reflection").getAsString(), material) > 8) {
+                    choice.remove("reflection");
+                    choice.addProperty("reflection_omitted_for_source_overlap", true);
+                }
+            }
+            record.add("branches", branches);
+            JsonArray warnings = new JsonArray();
+            result.reviewWarnings().forEach(warnings::add);
+            record.add("review_warnings", warnings);
+            record.addProperty("status", "generated");
+        } catch (ReflectionProviderException | RuntimeException failure) {
+            record.addProperty("status", "failed");
+            record.addProperty("failure", failure instanceof ReflectionProviderException provider
+                    ? provider.failureType().name() + ": " + provider.getMessage()
+                    : failure.getClass().getSimpleName());
+        }
+        return record;
+    }
+
+    private static String batchCaseHeader(BatchCase item, SongMaterial material, CompletedRunEvidence run,
+            SongReflectionTrial.PassageLanding landing) {
+        JsonObject facts = SongReflectionTrial.facts(run);
+        StringBuilder text = new StringBuilder("\n## " + material.trackTitle() + " \u2014 " + material.artistName() + "\n\n");
+        text.append("Fictional run: ").append(facts.get("start_time_text").getAsString()).append(" to ")
+                .append(facts.get("finish_time_text").getAsString());
+        if (facts.has("distance_text")) text.append(" \u00b7 ").append(facts.get("distance_text").getAsString());
+        if (facts.has("active_duration_text")) {
+            text.append(" \u00b7 ").append(facts.get("active_duration_text").getAsString());
+        }
+        text.append(" \u00b7 Energy before: ")
+                .append(facts.has("energy_before") ? facts.get("energy_before").getAsString() : "not answered")
+                .append("\n\nMusic that follows: ")
+                .append(landing == null ? "the opening of the recording" : landing.musicalMoment()).append("\n");
+        if (item.referenceText() != null) {
+            text.append("\nAccepted reference (").append(item.referenceLabel())
+                    .append("; hand-chosen direction and a listened-to passage): ").append(item.referenceText())
+                    .append("\n");
+        }
+        return text.toString();
+    }
+
+    private static String batchReviewBlock(String label, int repeat, JsonObject record) {
+        StringBuilder text = new StringBuilder("\n### Repeat " + repeat + " \u2014 Version " + label + "\n\n");
+        if (record == null || !"generated".equals(record.get("status").getAsString())) {
+            return text.append("_This version did not generate; generations.json has the reason._\n").toString();
+        }
+        JsonObject branches = record.getAsJsonObject("branches");
+        for (String[] branch : BATCH_BRANCHES) {
+            JsonObject choice = branches.getAsJsonObject(branch[0]);
+            text.append("- **").append(branch[1]).append(":** ").append(choice.has("reflection")
+                    ? choice.get("reflection").getAsString() : "[text omitted: overlaps the supplied song source]")
+                    .append("\n");
+        }
+        return text.toString();
+    }
+
+    private static JsonObject batchSummary(int calls, long[] tokens, long started, int finished, int planned) {
+        JsonObject summary = new JsonObject();
+        summary.addProperty("batch", "batch1");
+        summary.addProperty("model", BATCH_ONE_MODEL);
+        summary.addProperty("generations_finished", finished);
+        summary.addProperty("generations_planned", planned);
+        summary.addProperty("anthropic_calls", calls);
+        summary.addProperty("input_tokens", tokens[0]);
+        summary.addProperty("output_tokens", tokens[1]);
+        summary.addProperty("estimated_cost_usd", String.format(java.util.Locale.US, "%.2f",
+                tokens[0] * 4.0 / 1_000_000 + tokens[1] * 20.0 / 1_000_000));
+        summary.addProperty("price_basis", "Opus 5.5 list price: $4 per million input, $20 per million output tokens");
+        summary.addProperty("seconds", (System.nanoTime() - started) / 1_000_000_000L);
+        return summary;
+    }
+
+    private static void writeBatchFiles(java.nio.file.Path folder, JsonArray generations, JsonObject key,
+            String review, JsonObject summary) throws java.io.IOException {
+        var gson = new com.google.gson.GsonBuilder().setPrettyPrinting().disableHtmlEscaping().create();
+        java.nio.file.Files.writeString(folder.resolve("generations.json"), gson.toJson(generations));
+        java.nio.file.Files.writeString(folder.resolve("key.json"), gson.toJson(key));
+        java.nio.file.Files.writeString(folder.resolve("review.md"), review);
+        java.nio.file.Files.writeString(folder.resolve("summary.json"), gson.toJson(summary));
     }
 
     private static String trialIdentity(java.util.Map<String, String> environment, String key, String fallback) {
