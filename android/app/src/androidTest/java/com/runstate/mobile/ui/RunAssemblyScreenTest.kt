@@ -15,6 +15,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.SemanticsActions
@@ -604,6 +605,148 @@ class RunAssemblyScreenTest {
     }
 
     @Test
+    fun tallMusicArrowsAcceptUpperAndLowerTapsWithoutRunActions() {
+        compose.mainClock.autoAdvance = false
+        val actions = Actions()
+        compose.setContent {
+            val density = LocalDensity.current
+            CompositionLocalProvider(LocalDensity provides Density(density.density, 1f)) {
+                Fixture(actions = actions, player = SpotifyLivePlayerState(connected = true,
+                    title = "Observed song", artist = "Observed artist", paused = true,
+                    canSkipPrevious = true, canSkipNext = true, canTogglePlayback = true))
+            }
+        }
+        compose.mainClock.advanceTimeBy(1_600)
+        compose.onNodeWithTag(ACTIVE_RUN_MUSIC_TAG).scrollWithClock().performClick()
+        compose.mainClock.advanceTimeByFrame()
+        val circle = compose.onNodeWithTag(ACTIVE_RUN_PLAYER_TAG).scrollWithClock().assertIsDisplayed()
+
+        // Tap well above and below the arrow tip, through the parent surface instead of
+        // invoking a semantic click. The old small bottom-row targets miss the upper taps.
+        circle.tapMusicPoint(75f, 118f)
+        assertEquals(1, actions.previousSongs)
+        circle.tapMusicPoint(75f, 232f)
+        assertEquals(2, actions.previousSongs)
+        circle.tapMusicPoint(234f, 118f)
+        assertEquals(1, actions.nextSongs)
+        circle.tapMusicPoint(234f, 232f)
+        assertEquals(2, actions.nextSongs)
+        assertEquals(0, actions.musicToggles)
+        assertEquals(null, actions.linkedTrack)
+        assertEquals(0, actions.pauses)
+        assertEquals(0, actions.resumes)
+        assertEquals(0, actions.stops)
+    }
+
+    @Test
+    fun musicHeaderAndMetadataInterceptSideTapsAndPauseSitsBelowTheDetails() {
+        compose.mainClock.autoAdvance = false
+        val actions = Actions()
+        val uri = "spotify:track:observed"
+        compose.setContent {
+            val density = LocalDensity.current
+            CompositionLocalProvider(LocalDensity provides Density(density.density, 1f)) {
+                Fixture(actions = actions, player = SpotifyLivePlayerState(connected = true,
+                    trackUri = uri, title = "Observed song", artist = "Observed artist",
+                    durationMillis = 180_000, positionMillis = 60_000, paused = true,
+                    canSkipPrevious = true, canSkipNext = true, canTogglePlayback = true))
+            }
+        }
+        compose.mainClock.advanceTimeBy(1_600)
+        compose.onNodeWithTag(ACTIVE_RUN_MUSIC_TAG).scrollWithClock().performClick()
+        compose.mainClock.advanceTimeByFrame()
+        val circle = compose.onNodeWithTag(ACTIVE_RUN_PLAYER_TAG).scrollWithClock().assertIsDisplayed()
+
+        // These visible controls overlap the side targets' bounding rectangles. Real
+        // touches must open Spotify, never leak through to the Previous command underneath.
+        circle.tapMusicPoint(105f, 80f)
+        assertEquals(uri, actions.linkedTrack)
+        actions.linkedTrack = null
+        circle.tapMusicPoint(105f, 150f)
+        assertEquals(uri, actions.linkedTrack)
+        assertEquals(0, actions.previousSongs)
+        assertEquals(0, actions.nextSongs)
+
+        val metadata = compose.onNodeWithContentDescription("Observed song, Observed artist. Open in Spotify")
+            .getUnclippedBoundsInRoot()
+        val progress = compose.onNodeWithTag(ACTIVE_RUN_PLAYER_PROGRESS_TAG).getUnclippedBoundsInRoot()
+        val playback = compose.onNodeWithTag(ACTIVE_RUN_PLAYER_PLAY_TAG).getUnclippedBoundsInRoot()
+        assertTrue("Pause should leave the song details above it", playback.top >= metadata.bottom)
+        assertTrue("Pause should not cover the song progress line", playback.top >= progress.bottom)
+        compose.onNodeWithTag(ACTIVE_RUN_PLAYER_PLAY_TAG).performTouchInput { down(center); up() }
+        assertEquals(1, actions.musicToggles)
+        assertEquals(0, actions.pauses)
+        assertEquals(0, actions.resumes)
+        assertEquals(0, actions.stops)
+
+        // The close control also overlaps the broad right-side rectangle.
+        circle.tapMusicPoint(204f, 80f)
+        compose.mainClock.advanceTimeByFrame()
+        compose.onNodeWithTag(ACTIVE_RUN_PLAYER_TAG).assertDoesNotExist()
+        compose.onNodeWithTag(ACTIVE_RUN_DISTANCE_TAG).scrollWithClock().assertTextEquals("3.24")
+        assertEquals(0, actions.previousSongs)
+        assertEquals(0, actions.nextSongs)
+    }
+
+    @Test
+    fun musicArrowCancellationAndUnavailableCommandsDoNotDispatch() {
+        compose.mainClock.autoAdvance = false
+        val actions = Actions()
+        var player by mutableStateOf(SpotifyLivePlayerState(connected = true,
+            title = "Observed song", artist = "Observed artist", paused = true,
+            canSkipPrevious = true, canSkipNext = true, canTogglePlayback = true))
+        compose.setContent {
+            val density = LocalDensity.current
+            CompositionLocalProvider(LocalDensity provides Density(density.density, 1f)) {
+                Fixture(actions = actions, player = player)
+            }
+        }
+        compose.mainClock.advanceTimeBy(1_600)
+        compose.onNodeWithTag(ACTIVE_RUN_MUSIC_TAG).scrollWithClock().performClick()
+        compose.mainClock.advanceTimeByFrame()
+        val circle = compose.onNodeWithTag(ACTIVE_RUN_PLAYER_TAG).scrollWithClock().assertIsDisplayed()
+
+        circle.performTouchInput {
+            val unit = width / 309f
+            down(Offset(234f * unit, 154f * unit))
+            cancel()
+        }
+        circle.performTouchInput {
+            val unit = width / 309f
+            down(Offset(234f * unit, 154f * unit))
+            moveTo(Offset(154f * unit, 154f * unit))
+            up()
+        }
+        assertEquals(0, actions.nextSongs)
+
+        compose.runOnIdle { player = player.copy(canSkipNext = false, canTogglePlayback = false) }
+        compose.mainClock.advanceTimeByFrame()
+        compose.onNodeWithTag(ACTIVE_RUN_PLAYER_NEXT_TAG).assertIsNotEnabled()
+        compose.onNodeWithTag(ACTIVE_RUN_PLAYER_PLAY_TAG).assertIsNotEnabled()
+        compose.onNodeWithTag(ACTIVE_RUN_PLAYER_PREVIOUS_TAG).assertIsEnabled()
+        circle.tapMusicPoint(234f, 118f)
+        compose.onNodeWithTag(ACTIVE_RUN_PLAYER_PLAY_TAG).performTouchInput { down(center); up() }
+        circle.tapMusicPoint(75f, 118f)
+        assertEquals(0, actions.nextSongs)
+        assertEquals(0, actions.musicToggles)
+        assertEquals(1, actions.previousSongs)
+
+        compose.runOnIdle { player = player.copy(canSkipNext = true, canTogglePlayback = true, busy = true) }
+        compose.mainClock.advanceTimeByFrame()
+        compose.onNodeWithTag(ACTIVE_RUN_PLAYER_PREVIOUS_TAG).assertIsNotEnabled()
+        compose.onNodeWithTag(ACTIVE_RUN_PLAYER_NEXT_TAG).assertIsNotEnabled()
+        compose.onNodeWithTag(ACTIVE_RUN_PLAYER_PLAY_TAG).assertIsNotEnabled()
+        circle.tapMusicPoint(75f, 232f)
+        circle.tapMusicPoint(234f, 232f)
+        compose.onNodeWithTag(ACTIVE_RUN_PLAYER_PLAY_TAG).performTouchInput { down(center); up() }
+        assertEquals(1, actions.previousSongs)
+        assertEquals(0, actions.nextSongs)
+        assertEquals(0, actions.musicToggles)
+        assertEquals(0, actions.pauses)
+        assertEquals(0, actions.stops)
+    }
+
+    @Test
     fun disconnectedPlayerDoesNotInventSongControlsOrAuthorizeOnOpen() {
         compose.mainClock.autoAdvance = false
         val actions = Actions()
@@ -680,14 +823,14 @@ class RunAssemblyScreenTest {
     @Test
     fun musicLayoutUsesActualArtworkAndRecoversWhenThatArtworkIsMissing() {
         compose.mainClock.autoAdvance = false
-        // Reuse bundled RunState art as an explicit test cover. No live Spotify playback,
+        // Reuse the bundled demo album as an explicit test cover. No live Spotify playback,
         // remote album download or stored run is involved in these presentation captures.
         val bitmap = BitmapFactory.decodeResource(
-            InstrumentationRegistry.getInstrumentation().targetContext.resources, R.drawable.start_music_orb)
+            InstrumentationRegistry.getInstrumentation().targetContext.resources, R.drawable.demo_lizzo_cover)
         var layout by mutableStateOf(RunMusicPlayerLayout.ALBUM)
         var day by mutableStateOf(false)
-        var player by mutableStateOf(SpotifyLivePlayerState(connected = true, title = "Observed song",
-            artist = "Observed artist", artwork = bitmap, durationMillis = 180_000, positionMillis = 60_000,
+        var player by mutableStateOf(SpotifyLivePlayerState(connected = true, title = "Good as Hell",
+            artist = "Lizzo", artwork = bitmap, durationMillis = 180_000, positionMillis = 60_000,
             canSkipPrevious = true, canSkipNext = true, canTogglePlayback = true))
         compose.setContent { Fixture(player = player, playerLayout = layout, day = day) }
         compose.mainClock.advanceTimeBy(1_600)
@@ -712,6 +855,53 @@ class RunAssemblyScreenTest {
     }
 
     @Test
+    fun compactMusicStatusAtIncreasedTextSizeStaysClearAndKeepsBusyControlsDisabled() {
+        compose.mainClock.autoAdvance = false
+        val actions = Actions()
+        val title = "Observed song"
+        val message = "Spotify is reconnecting. Music controls will return shortly."
+        compose.setContent {
+            val density = LocalDensity.current
+            CompositionLocalProvider(LocalDensity provides Density(density.density, 1.3f)) {
+                ActiveRunMusicPlayer(
+                    player = SpotifyLivePlayerState(connected = true, title = title,
+                        artist = "Observed artist", durationMillis = 180_000, paused = true,
+                        canSkipPrevious = true, canSkipNext = true, canTogglePlayback = true,
+                        busy = true, unavailableMessage = message),
+                    layout = RunMusicPlayerLayout.HEADPHONES, reducedMotion = true,
+                    onClose = {}, onOpenSpotify = { actions.music++ },
+                    onConnect = { actions.musicConnections++ }, onOpenTrack = { actions.linkedTrack = it },
+                    onPrevious = { actions.previousSongs++ }, onNext = { actions.nextSongs++ },
+                    onTogglePlayback = { actions.musicToggles++ },
+                    // Exercise the compact circle just above its accessible-dialog cutoff.
+                    modifier = Modifier.size(279.dp)
+                )
+            }
+        }
+        compose.mainClock.advanceTimeByFrame()
+        compose.onNodeWithTag(ACTIVE_RUN_PLAYER_ACCESSIBLE_TAG).assertDoesNotExist()
+        val status = compose.onNodeWithText(message).assertIsDisplayed()
+        val statusBounds = status.getUnclippedBoundsInRoot()
+        val titleBounds = compose.onNodeWithText(title, useUnmergedTree = true)
+            .assertIsDisplayed().getUnclippedBoundsInRoot()
+        val closeBounds = compose.onNodeWithTag(ACTIVE_RUN_PLAYER_CLOSE_TAG).getUnclippedBoundsInRoot()
+        assertTrue("Status must clear the header controls", statusBounds.top >= closeBounds.bottom)
+        assertTrue("Status must not overlap the song title at increased text size",
+            statusBounds.bottom <= titleBounds.top)
+        val layouts = mutableListOf<TextLayoutResult>()
+        status.performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
+        assertEquals("A connection status must stay on one line in the compact circle", 1, layouts.single().lineCount)
+        for (tag in listOf(ACTIVE_RUN_PLAYER_PREVIOUS_TAG, ACTIVE_RUN_PLAYER_NEXT_TAG, ACTIVE_RUN_PLAYER_PLAY_TAG)) {
+            compose.onNodeWithTag(tag).assertIsNotEnabled().performTouchInput { down(center); up() }
+        }
+        assertEquals(0, actions.previousSongs)
+        assertEquals(0, actions.nextSongs)
+        assertEquals(0, actions.musicToggles)
+        assertEquals(0, actions.musicConnections)
+        save(ACTIVE_RUN_PLAYER_TAG, "assembly-music-compact-status.png")
+    }
+
+    @Test
     fun largeTextMusicKeepsFullMetadataAndControlsAvailable() {
         compose.mainClock.autoAdvance = false
         val actions = Actions()
@@ -733,8 +923,13 @@ class RunAssemblyScreenTest {
         compose.onNodeWithText(title).performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
         assertFalse(layouts.single().hasVisualOverflow)
         compose.onNodeWithTag(ACTIVE_RUN_PLAYER_NEXT_TAG).scrollWithClock().assertIsDisplayed().performClick()
+        compose.onNodeWithTag(ACTIVE_RUN_PLAYER_PREVIOUS_TAG).scrollWithClock().assertIsDisplayed().performClick()
+        compose.onNodeWithTag(ACTIVE_RUN_PLAYER_PLAY_TAG).scrollWithClock().assertIsDisplayed().performClick()
         assertEquals(1, actions.nextSongs)
+        assertEquals(1, actions.previousSongs)
+        assertEquals(1, actions.musicToggles)
         assertEquals(0, actions.pauses)
+        assertEquals(0, actions.stops)
         compose.onNodeWithText("Back to distance").performClick()
         compose.mainClock.advanceTimeByFrame()
         compose.onNodeWithTag(ACTIVE_RUN_PLAYER_ACCESSIBLE_TAG).assertDoesNotExist()
@@ -742,6 +937,15 @@ class RunAssemblyScreenTest {
 
     private fun assertWholeInsideViewport(tag: String) {
         assertWholeInsideViewport(compose.onNodeWithTag(tag), tag)
+    }
+
+    /** Reference coordinates identify the user-visible upper/lower portions of the circle. */
+    private fun SemanticsNodeInteraction.tapMusicPoint(x: Float, y: Float) {
+        performTouchInput {
+            val unit = width / 309f
+            down(Offset(x * unit, y * unit))
+            up()
+        }
     }
 
     private fun assertWholeInsideViewport(interaction: SemanticsNodeInteraction, description: String) {

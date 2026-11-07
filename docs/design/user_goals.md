@@ -5,6 +5,43 @@ metadata:
   type: user
 ---
 
+## Current amendment — November 7, 2026
+
+**Latest same-day bounded exception completed:** Manley selected the larger music controls
+and authorized Android implementation. The approved tall chevrons, one separate slim trail,
+centered song details and lower translucent Pause are now installed and checked on Moto.
+The browser study remains at `../local/music-controls-study-2026-11-07/`, localhost5196.
+Stop for Manley's review/commit; assess lock-screen feasibility as the next separate checkpoint.
+The public preview and lock screen are unchanged. Return immediately after this bounded
+side task to Spotify permission/access and release/security/iPhone preparation.
+The basic Android system-controller trial and provider replacement remain unapproved.
+
+**Overall sequence remains:** release readiness/accessibility, iPhone work and the agreed
+security/provider/cost/efficiency measures come first. Claude's report is received; investigate
+official Spotify permission/access first. Explain Android system music controls before Manley
+approves a trial. Keep Spotify preferred; other providers are later alternatives, not an
+approved replacement. Preserve accepted circular artwork and reflection experience. After
+readiness, work through accumulated
+features in actual bounded implementation milestones instead of repeatedly parking them.
+Reflection quality remains the strongest product-improvement priority; this does not approve
+all designs or automatically move features until after publication. This ordering supersedes
+the earlier parallel product-work recommendation below.
+
+Release preparation and product improvement proceed together in bounded milestones. Manley
+wants post-run reflection quality to receive the most product attention before release,
+preserving its accepted voices, expressive range and truthful connection to a run. He also
+wants to explore Energy in Countdown, bring clubs/community/leaderboards into near-term scope
+decisions and consider opt-in club photo/video sharing. Exact feature designs and launch
+inclusion remain open; do not automatically implement or silently postpone them.
+
+The single current feedback list is at the top of
+`../local/november_2026_demo_roadmap.md` (AF01–AF11). It also preserves Android downloads,
+iPhone access, Garmin/contact-first, field reliability and older History/first-use follow-ups. Update
+status there at each substantial checkpoint and explicitly reconcile it before publication.
+This amendment supersedes the older blanket community prohibition and earlier phase ordering
+where they conflict. It does not authorize a general social network, paid services, publication
+or changes to saved data. Core identity and privacy/consent remain intact.
+
 **Background:**
 - CS sophomore at SNHU, concentration in Software Engineering (bachelors)
 - Completing CS 230 (Operating Platforms); starting CS 255 (System Analysis & Design) and MAT 230 (Discrete Math) in June 2026
@@ -134,7 +171,8 @@ No new large outside-of-scope ideas. The core is:
 log a run → track how you felt → learn something meaningful from it.
 Everything else is a layer on top of that core.
 
-**Community — clarified July 6, 2026 ("culture-community YES, network-community NO"):**
+**Historical community boundary — July 6, 2026; superseded for the November 5/7 club,
+leaderboard and opt-in club-media proposals above (other social features remain unselected):**
 RunState is not a community-purpose app, but running culture includes community, and the
 user is NOT restricting features that reflect it. The only hard line: direct social-media
 mechanics — profiles with followers, following pages, feeds-as-social-graph, DMs,

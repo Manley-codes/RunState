@@ -373,6 +373,7 @@ internal fun RunAssemblyScreen(
                                 ActiveRunMusicPlayer(
                                     player = musicPlayer, layout = musicPlayerLayout,
                                     reducedMotion = reduced, foreground = motion.foreground,
+                                    motionSeconds = { clock.floatValue },
                                     onClose = { musicOpen = false }, onOpenSpotify = onOpenSpotify,
                                     onConnect = onConnectMusic, onOpenTrack = onOpenMusicTrack,
                                     onPrevious = onPreviousTrack, onNext = onNextTrack,

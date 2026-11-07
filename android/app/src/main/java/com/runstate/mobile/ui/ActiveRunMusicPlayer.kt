@@ -1,10 +1,14 @@
 package com.runstate.mobile.ui
 
 import android.os.SystemClock
+import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsFocusedAsState
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -23,9 +27,12 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
@@ -34,6 +41,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.*
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.runstate.mobile.R
@@ -72,6 +80,7 @@ internal fun ActiveRunMusicPlayer(
     onNext: () -> Unit,
     onTogglePlayback: () -> Unit,
     foreground: Boolean = true,
+    motionSeconds: () -> Float = { 0f },
     modifier: Modifier = Modifier
 ) {
     var elapsedRealtime by remember { mutableLongStateOf(SystemClock.elapsedRealtime()) }
@@ -94,19 +103,30 @@ internal fun ActiveRunMusicPlayer(
             .size((248f * unit).dp).clip(CircleShape).background(Color(0xFF17211D))) {
             MusicArtwork(player, layout, Modifier.fillMaxSize())
             Box(Modifier.fillMaxSize().background(Brush.verticalGradient(
-                0f to Color(0x260A1211), .25f to Color(0x050A1211),
-                .48f to Color(0x590A1211), .78f to Color(0xCC0A1211),
-                1f to Color(0xDB0A1211))))
+                0f to Color(0x1F0C130F), .28f to Color.Transparent,
+                .43f to Color(0x1F0D1411), .67f to Color(0x9E0D1411),
+                1f to Color(0xFF151D19))))
+            // Draw broad targets beneath the header, metadata and playback control. Their
+            // real Spotify actions remain gated by the provider's current capabilities.
+            if (!roomyText && hasTrack) {
+                MusicArrowButton(false, player.canSkipPrevious && !player.busy,
+                    reducedMotion, motionSeconds, onPrevious,
+                    Modifier.offset(y = (15f * unit).dp).size((88f * unit).dp, (218f * unit).dp))
+                MusicArrowButton(true, player.canSkipNext && !player.busy,
+                    reducedMotion, motionSeconds, onNext,
+                    Modifier.offset((160f * unit).dp, (15f * unit).dp)
+                        .size((88f * unit).dp, (218f * unit).dp))
+            }
         }
         if (!roomyText) {
         // The visible icon keeps Spotify's official proportions; the surrounding control is
         // at least 48 dp. The exact official path is bundled in spotify_icon_white.xml.
-        Box(Modifier.offset((66f * unit).dp, (56f * unit).dp)
+        Box(Modifier.offset((116f * unit - 24f).dp, (80f * unit - 24f).dp)
             .size(48.dp).clip(CircleShape).clickable(role = Role.Button, onClick = openTrack)
             .semantics { contentDescription = "Open in Spotify" }, contentAlignment = Alignment.Center) {
             Image(painterResource(R.drawable.spotify_icon_white), null, Modifier.size(24.dp))
         }
-        Box(Modifier.offset((195f * unit).dp, (54f * unit).dp)
+        Box(Modifier.offset((193f * unit - 24f).dp, (80f * unit - 24f).dp)
             .size(48.dp).clip(CircleShape).clickable(role = Role.Button, onClick = onClose)
             .testTag(ACTIVE_RUN_PLAYER_CLOSE_TAG)
             .semantics { contentDescription = "Back to distance" }, contentAlignment = Alignment.Center) {
@@ -118,34 +138,36 @@ internal fun ActiveRunMusicPlayer(
             }
         }
         if (hasTrack) {
-            // Keep the title at the reviewed visual position at standard text size, while
-            // letting larger text use the upper part of its target instead of overlapping Skip.
-            val metadataTopPadding = max(0f, 12f - (LocalDensity.current.fontScale - 1f) * 40f) * unit
-            Column(Modifier.offset((65f * unit).dp, (150f * unit).dp)
-                .width((137f * unit).dp).heightIn(min = 48.dp)
+            // Keep the visible title at138 in the reviewed layout. The48dp link starts a
+            // little earlier; larger text rises to preserve the progress line beneath it.
+            val visibleMetadataTop = (138f - max(0f, LocalDensity.current.fontScale - 1f) * 40f) * unit
+            val metadataTargetTop = min(visibleMetadataTop, 181f * unit - 48f - unit)
+            val textShadow = with(LocalDensity.current) {
+                Shadow(Color.Black.copy(alpha = .9f), Offset(0f, unit.dp.toPx()), (5f * unit).dp.toPx())
+            }
+            Column(Modifier.offset((98.5f * unit).dp, metadataTargetTop.dp)
+                .width((112f * unit).dp).heightIn(min = 48.dp)
                 .clickable(role = Role.Button, onClick = openTrack)
                 .semantics(mergeDescendants = true) {
                     contentDescription = "$fullTitle, $fullArtist. Open in Spotify"
-                }.padding(top = metadataTopPadding.dp)) {
-                Text(fullTitle, color = Color.White, fontSize = (15f * unit).sp,
+                }.padding(top = (visibleMetadataTop - metadataTargetTop).dp),
+                horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(fullTitle, color = Color.White, fontSize = (16f * unit).sp,
                     lineHeight = (21f * unit).sp, fontWeight = FontWeight.Medium,
-                    maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center,
+                    style = androidx.compose.ui.text.TextStyle(shadow = textShadow))
                 Text(fullArtist, color = Color(0xFFE0E3E6), fontSize = (12f * unit).sp,
                     lineHeight = (16f * unit).sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.padding(top = 3.dp))
+                    textAlign = TextAlign.Center,
+                    style = androidx.compose.ui.text.TextStyle(shadow = textShadow),
+                    modifier = Modifier.padding(top = unit.dp))
             }
+            MusicProgress(position, player.durationMillis, !player.paused, reducedMotion,
+                Modifier.offset((123.5f * unit).dp, (181f * unit).dp)
+                    .size((62f * unit).dp, (12f * unit).dp))
             MusicPlayButton(player, onTogglePlayback,
-                Modifier.offset((210f * unit).dp, (156f * unit).dp).size(48.dp))
-            Row(Modifier.offset((69.5f * unit).dp, (205f * unit).dp)
-                .width((170f * unit).dp), horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically) {
-                MusicSkipButton(false, player.connected && player.canSkipPrevious && !player.busy,
-                    onPrevious, Modifier.size((52f * unit).coerceAtLeast(48f).dp))
-                MusicProgress(position, player.durationMillis, !player.paused, reducedMotion,
-                    Modifier.width((62f * unit).dp).height(12.dp))
-                MusicSkipButton(true, player.connected && player.canSkipNext && !player.busy,
-                    onNext, Modifier.size((52f * unit).coerceAtLeast(48f).dp))
-            }
+                Modifier.offset((127f * unit).dp, (211f * unit).dp).size((55f * unit).dp),
+                circular = true)
         } else {
             Column(Modifier.offset((64f * unit).dp, (109f * unit).dp).width((181f * unit).dp),
                 horizontalAlignment = Alignment.CenterHorizontally) {
@@ -169,9 +191,10 @@ internal fun ActiveRunMusicPlayer(
             }
         }
         if (hasTrack && !player.unavailableMessage.isNullOrBlank()) {
-            Text(player.unavailableMessage, color = Color.White, fontSize = 10.sp,
-                maxLines = 2, overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.offset((70f * unit).dp, (111f * unit).dp)
+            Text(player.unavailableMessage, color = Color.White, fontSize = (10f * unit).sp,
+                lineHeight = (11f * unit).sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.offset((70f * unit).dp, max(106f * unit, 82f * unit + 24f).dp)
                     .width((170f * unit).dp).semantics { liveRegion = LiveRegionMode.Polite })
         }
         }
@@ -237,10 +260,11 @@ private fun MusicArtwork(player: SpotifyLivePlayerState, layout: RunMusicPlayerL
 }
 
 @Composable
-private fun MusicPlayButton(player: SpotifyLivePlayerState, onClick: () -> Unit, modifier: Modifier) {
+private fun MusicPlayButton(player: SpotifyLivePlayerState, onClick: () -> Unit, modifier: Modifier,
+                            circular: Boolean = false) {
     val enabled = player.connected && player.canTogglePlayback && !player.busy
-    Box(modifier.clip(if (player.paused) CircleShape else RoundedCornerShape(16.dp))
-        .background(Color(0xFFDCE7CF).copy(alpha = if (enabled) 1f else .5f))
+    Box(modifier.clip(if (circular || player.paused) CircleShape else RoundedCornerShape(16.dp))
+        .background(Color(0xFFDCE7CF).copy(alpha = if (!enabled) .5f else if (circular) .82f else 1f))
         .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
         .testTag(ACTIVE_RUN_PLAYER_PLAY_TAG)
         .semantics { contentDescription = if (player.paused) "Play music" else "Pause music" },
@@ -259,6 +283,102 @@ private fun MusicPlayButton(player: SpotifyLivePlayerState, onClick: () -> Unit,
             }
         }
     }
+}
+
+@Composable
+private fun MusicArrowButton(
+    next: Boolean,
+    enabled: Boolean,
+    reducedMotion: Boolean,
+    motionSeconds: () -> Float,
+    onClick: () -> Unit,
+    modifier: Modifier
+) {
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    val focused by interaction.collectIsFocusedAsState()
+    val (chevron, trail) = remember(next) { musicChevronPaths(next) }
+    Canvas(modifier.clickable(interactionSource = interaction, indication = null,
+        enabled = enabled, role = Role.Button, onClick = onClick)
+        .testTag(if (next) ACTIVE_RUN_PLAYER_NEXT_TAG else ACTIVE_RUN_PLAYER_PREVIOUS_TAG)
+        .semantics { contentDescription = if (next) "Next song" else "Previous song" }) {
+        // Read the existing ring clock only while drawing: no second animation timer or
+        // frame-rate recomposition. Pausing/background/reduced motion are owned by the ring.
+        val phase = if (reducedMotion) 0f else (motionSeconds() / 5.464f) % 1f
+        val pulse = if (reducedMotion) .85f else musicArrowPulse(phase)
+        val availability = if (enabled) 1f else .35f
+        val unit = size.width / 88f
+        withTransform({ scale(unit, unit, pivot = Offset.Zero) }) {
+            if (enabled && (pressed || focused)) {
+                drawRect(Brush.radialGradient(
+                    listOf(Color.White.copy(alpha = if (pressed) .20f else .10f), Color.Transparent),
+                    center = Offset(if (next) 88f else 0f, 109f), radius = 95f), size = Size(88f, 218f))
+            }
+            drawPath(chevron, Color(0xFFF0F4EA).copy(alpha = .5f * pulse * availability))
+            drawPath(trail, Brush.verticalGradient(
+                0f to Color.Transparent, .3f to Color.White.copy(alpha = .24f * pulse * availability),
+                .7f to Color.White.copy(alpha = .24f * pulse * availability), 1f to Color.Transparent,
+                startY = 22f, endY = 194f),
+                style = Stroke(.8f, cap = StrokeCap.Round, join = StrokeJoin.Round))
+            if (!reducedMotion && enabled) {
+                val strength = when {
+                    phase < .18f -> musicArrowEase.transform(phase / .18f) * .64f
+                    phase < .62f -> .64f
+                    phase < .84f -> (1f - musicArrowEase.transform((phase - .62f) / .22f)) * .64f
+                    else -> 0f
+                }
+                if (strength > 0f) {
+                    val lightY = 218f * (1.35f - 1.7f * musicArrowEase.transform((phase / .84f).coerceIn(0f, 1f)))
+                    fun light(alpha: Float) = Brush.verticalGradient(
+                        listOf(Color.Transparent, Color.White.copy(alpha = strength * pulse * alpha), Color.Transparent),
+                        startY = lightY - 65f, endY = lightY + 65f)
+                    drawPath(chevron, light(.10f), style = Stroke(8f, join = StrokeJoin.Round))
+                    drawPath(chevron, light(.18f), style = Stroke(4f, join = StrokeJoin.Round))
+                    drawPath(chevron, light(1f))
+                }
+            }
+        }
+    }
+}
+
+private val musicArrowEase = CubicBezierEasing(.42f, 0f, .58f, 1f)
+
+private fun musicArrowPulse(phase: Float): Float {
+    fun between(start: Float, end: Float, from: Float, to: Float): Float =
+        from + (to - from) * musicArrowEase.transform(((phase - start) / (end - start)).coerceIn(0f, 1f))
+    return when {
+        phase < .24f -> between(0f, .24f, .68f, .94f)
+        phase < .52f -> between(.24f, .52f, .94f, .78f)
+        phase < .76f -> between(.52f, .76f, .78f, .9f)
+        else -> between(.76f, 1f, .9f, .68f)
+    }
+}
+
+/** Exact reviewed Radix chevron silhouette, plus only its separate inner-edge trail. */
+private fun musicChevronPaths(next: Boolean): Pair<Path, Path> {
+    fun x(value: Float, inset: Float = 0f): Float {
+        val right = 18f + (value - 5.9f) * 56f / 5.1f - inset
+        return if (next) right else 88f - right
+    }
+    fun y(value: Float) = 6f + (value - 2.9f) * 204f / 9.2f
+    val body = Path().apply {
+        moveTo(x(6.1584f), y(3.13508f))
+        cubicTo(x(6.35985f), y(2.94621f), x(6.67627f), y(2.95642f), x(6.86514f), y(3.15788f))
+        lineTo(x(10.6151f), y(7.15788f))
+        cubicTo(x(10.7954f), y(7.3502f), x(10.7954f), y(7.64949f), x(10.6151f), y(7.84182f))
+        lineTo(x(6.86514f), y(11.8418f))
+        cubicTo(x(6.67627f), y(12.0433f), x(6.35985f), y(12.0535f), x(6.1584f), y(11.8646f))
+        cubicTo(x(5.95694f), y(11.6757f), x(5.94673f), y(11.3593f), x(6.1356f), y(11.1579f))
+        lineTo(x(9.565f), y(7.49985f)); lineTo(x(6.1356f), y(3.84182f))
+        cubicTo(x(5.94673f), y(3.64036f), x(5.95694f), y(3.32394f), x(6.1584f), y(3.13508f))
+        close()
+    }
+    val trail = Path().apply {
+        moveTo(x(6.1356f, 10f), y(3.84182f))
+        lineTo(x(9.565f, 10f), y(7.49985f))
+        lineTo(x(6.1356f, 10f), y(11.1579f))
+    }
+    return body to trail
 }
 
 @Composable

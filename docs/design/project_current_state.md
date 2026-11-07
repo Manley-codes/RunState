@@ -5,6 +5,200 @@ metadata:
   type: project
 ---
 
+## November 7 music controls — selected design installed on Moto
+
+Manley approved the final browser design after removing the extra contour inside each thick
+arrow and explicitly requested Android implementation. The native player now has tall filled
+previous/next chevrons with exactly one separate faint inward trail, broad side touch areas,
+and a soft traveling white light. Title/artist and short progress line occupy the middle;
+the circular Play/Pause sits below with an82% opaque pale-green background and solid glyph.
+Album/Headphones and Dark/Light are retained. Existing Spotify transport, capability/busy
+gates, badge/title launcher navigation, run controls and saved data are unchanged.
+
+The arrows read the existing equalizer clock while drawing, with no second animation timer.
+Foreground, run-pause and reduced-motion handling remain inherited from that clock. Header,
+metadata and lower playback targets shield the broad side targets. The existing large-text
+dialog remains available; a compact enlarged-text connection-status overlap and text-shadow
+density were corrected before the final build.
+
+Validation: debug/release/test APK builds passed; both857-test JVM suites passed. All nine
+focused Moto UI checks passed in16.314seconds: upper/lower physical tap coordinates, header/
+metadata shielding, lower Pause, cancelled/dragged touches, busy/unavailable commands,
+disconnected state, refresh-on-open, both artwork styles, missing artwork, compact status
+and large-text controls. Native Dark/Light/Album/Headphones captures were visually reviewed.
+These isolated fixtures verify UI and command routing, not fresh live-provider or outdoor
+field behavior. No real music playback was deliberately changed by these tests.
+
+Moto ZT422G8FT4 was updated in place only after Manley finished/discarded the active run and
+a private idle backup confirmed59completed runs. Installed APK hash matches the checked build.
+All12 table hashes/counts, all59 saved runs and database integrity are unchanged after tests
+and normal reopening. Four preference files match exactly; the fifth changed only its bounded
+debug failure-category diagnostic, with remembered authorization/user settings retained.
+The temporary test package was removed and the main app reopened. Private receipts/captures:
+`../local/music-controls-study-2026-11-07/native/QA.md`.
+
+Changed existing source: `ActiveRunMusicPlayer.kt`, one clock argument in
+`RunAssemblyScreen.kt`, and existing `RunAssemblyScreenTest.kt`. No new tracked source,
+test, asset or dependency files. Documentation updates retain the preceding planning work.
+No staging/commit/push/deployment; good checkpoint for Manley's review and commit.
+
+Stop after this bounded native implementation. Lock-screen feasibility is the next separate
+question, then return to Spotify permission/access and release/security/iPhone priorities.
+Neither a lock-screen implementation nor a provider replacement has been approved or built.
+The public GitHub preview remains unchanged; localhost5196 retains the approved comparison.
+
+## November 7 music-control study — earlier browser iteration record
+
+The paragraphs below preserve the preceding review stages; their pending-native statements
+are superseded by the installed checkpoint above.
+
+Manley authorizes a bounded browser-only design study of larger curved previous/next touch
+regions and central play/pause within the accepted music circle. This is a temporary side
+task, not a change of playback provider or abandonment of release preparation. The isolated
+copy lives in `../local/music-controls-study-2026-11-07/`, served at
+`http://127.0.0.1:5196/`. No native app, phone data or public GitHub preview was changed.
+
+The accepted Active Run ring, artwork and surrounding styles were copied directly. New side
+targets now span 88×218 design pixels, with a 55-pixel central control and restrained directional
+pulses sharing the ring's 5.464-second period. Manley liked the first pass's white light and
+requested tall outward chevrons reaching toward the equalizer's top and bottom. The revised
+56×204 arrow icons carry a moving white highlight; center/header spacing and protected song
+text keep the larger targets clear. Browser checks include lower-arrow taps and badge/text
+taps that must not skip. This revision remains pending visual acceptance. Small outside controls compare Current/New,
+Dark/Light and Headphones/Album. The local sample songs use matched Lizzo and Lovely Day
+artwork. This remains a silent interaction study, not a live Spotify connection or provider
+approval claim. It introduces no new explanatory text into the app's screens.
+
+Type-check and production build pass. Actual browser checks pass for skipping through broad
+touch areas, keyboard operation, music pause independent of run pause, close/reopen behavior
+and handset bounds. Existing motion and reduced-motion behavior are retained. These results
+establish a reviewable local prototype, not user acceptance or native-device verification.
+The local study contains its own wrapper/configuration, source copies and reused assets;
+dependencies are reused without a package download or public export. QA/usage receipts belong
+with the private study. No Git mutation or deployment occurred.
+
+Next: Manley reviews the comparison; only a selected design can proceed to potential native
+implementation. Lock-screen feasibility follows as a separate bounded question, with no claim
+that the full animated circle replaces system music controls. After this side task, return
+immediately to official Spotify permission/access and release/security/iPhone preparation.
+The basic Android system-controller trial and any provider replacement remain unapproved.
+AF03 club-partner discussion remains on the single roadmap; no outreach was performed.
+
+Latest visual follow-up: Manley likes the tall-arrow version as a foundation. He requests
+swapping the song details/progress with Pause, a slightly see-through Pause background, and
+considers slim faded lines behind the arrows. The local study now places text at138px,
+progress at181px and Pause at211px; its background is82% opaque while its glyph stays solid.
+A faint inward outline follows each existing chevron and shares its movement. Browser
+checks confirm lower Pause, keyboard playback, song-text shielding and both appearances/art
+choices; final type-check/build pass. The user still needs to review these refinements.
+No native integration or lock-screen work begins at this checkpoint.
+
+Arrow cleanup: Manley wants the separate slim chevrons retained but the fine contours on
+the thick arrows removed. Each trail now uses only the original icon's inner-edge open
+path; the second outline edge is gone. Thick arrows/light, spacing and controls are unchanged.
+Type-check and rendered browser review pass; still local-only.
+
+## November 7 earlier discussion — connection trade-offs, club partner and larger music controls
+
+Manley asks for clearer trade-offs before selecting Android system controls. Current direct
+Spotify integration has stronger existing evidence for selecting an earlier song for the
+reflection passage; Android remains a plausible route for local basic controls, with a
+historically proven same-song passage and failed different-song loads. Neither broad public
+permission nor universal reliability is established by those tests.
+
+New proposals retained as AF03/AF11 in the active roadmap: an established running-club partner
+(Manley is already communicating with leaders); the circle/music visual on the lock screen;
+large left/right music-circle touch regions for previous/next, central pause and centered art,
+possibly directional pulses. These are requests for feedback, not accepted implementations.
+Keep provider choice separate from in-app touch design. Club audience eligibility needs Spotify
+confirmation; a genuine partnership can independently support feedback/testing/introductions.
+Lock-screen system layouts, background control and animation limits need platform-specific
+assessment; do not promise the exact full animated app circle replaces Spotify's system card.
+
+Read-only source/platform research and planning records only. No new tests, screenshots,
+prototypes, device/app changes, outreach, paid requests or Git mutations.
+
+## November 7 Spotify route clarification — investigate before changing the connection
+
+Claude's provider report has been received and discussed. Manley wants Spotify retained and
+authorizes stronger investigation of official access/commercial permission routes first.
+Android's built-in music controls must be explained in plain English before he agrees to a
+trial. Other music providers are a later regional/platform alternative or fallback, not an
+approved whole-app replacement. He never intended to sell Spotify controls themselves;
+subscription planning should measure RunState's AI/voice/hosting costs separately from music
+playback. Preserve the accepted circular artwork and stop reopening that visual decision;
+design assistance is distinct from claiming provider approval for public distribution.
+
+Current work is read-only source and official-documentation investigation plus these planning
+records. No app/controller implementation, device actions, paid requests, provider outreach,
+account changes, deployment or Git mutations. Neither the five-account development restriction
+nor a public commercial exception is confirmed specifically for this registration. Treat a
+different technical connection as a capability to verify, not an automatic rights exemption.
+Record detailed evidence and outstanding provider questions in the existing private readiness
+record. Release readiness stays first; retained AF01–AF10 work follows its agreed checkpoints.
+
+## November 7 earlier sequence — release readiness first; awaiting Claude (report now received)
+
+Manley reaffirms downloadable access, iPhone availability and agreed security/provider/cost/
+efficiency work as the immediate path. After readiness, accumulated product ideas should move
+into bounded implementation rather than repeated indefinite deferrals. Community and the
+reflection/Countdown/media ideas remain on the active AF01–AF10 list; this does not cancel
+them, approve every design, or necessarily defer them until after publication. The next-product
+recommendation in the earlier section below does not override this ordering.
+
+Manley explicitly asks to wait for Claude's provider review. He reports frequent progress
+updates after about25minutes; no direct review-progress inspection was performed here.
+Planning records updated only; no implementation, new files, phone/provider/deployment or Git
+changes. Resume after the report is supplied/reconciled or Manley requests continuation.
+
+## November 7 earlier product clarification — retained feature priorities
+
+Manley clarifies that release/security preparation should continue while he works on product
+changes before publication. The strongest emphasis is substantial quality work on post-run
+reflections, which he reports received the most compliments. Community/clubs/leaderboards,
+optional connected club camera/media and Energy moved into Countdown are named pre-release
+work/discussion priorities, not automatically deferred until after launch. Exact designs,
+feature sizes and launch inclusion remain undecided. No implementation is started by this note.
+
+The active AF01–AF10 list now lives at the top of
+`../local/november_2026_demo_roadmap.md`, including iPhone, Garmin/contact-first, real-run
+verification and the older native History/first-use guidance follow-ups. Maintain this list rather than only
+adding dated notes: each checkpoint reports completed/current/next/awaiting decision; any
+deferral, cancellation or completion must have an explicit reason/evidence. Check the list
+with Manley before invitations/public release. Earlier community-scope rules are superseded
+for these named proposals; generic follower/feed/DM systems are not thereby approved.
+
+Next recommended product work is an AF01 quality brief and bounded representative comparison
+of the full spoken/reflection/music experience against the accepted baseline. Preserve original
+voices, creative range and truthful facts; no new rigid template, prompt/model switch, paid
+evaluation or music-service workaround is selected. Claude is currently doing the provider
+review read-only; Codex retains release/backend integration. Record outcomes here when supplied.
+
+Planning reconciliation only: updated existing roadmap, release assessment, user goals and
+memory/current-state pointers; no new files, app/source/provider/device/deployment/Git changes.
+
+## November 7 release preparation — first readiness checkpoint
+
+Manley resumes work toward downloadable Android and iPhone access, with security/release
+precautions, affordable subscriptions covering paid APIs, and a full efficiency review before
+public release. Use bounded milestones and report before proceeding. Prior GPS/Spotify fixes
+are committed (`36e42f0`, `e2812c2`); entry working tree is clean. Their previous device evidence
+stands, with fresh outdoor validation still useful.
+
+Read-only source and official-policy review completed. Detailed findings, provisional free/paid
+split, cost-measurement requirements and milestone exit criteria are private in
+`../local/release-readiness-2026-11-07.md`. This assessment does not establish public-release
+readiness, actual costs, provider approval or live security configuration. First engineering
+candidate: individual backend access with persistent spending/duplicate-work controls, alongside
+resolution of commercial music/provider scope. Signed Android pilot precedes broader release;
+iPhone feasibility begins alongside preparation, with no platform rewrite selected.
+
+User is unsure about Google Play/Apple developer enrollment and believes neither is present.
+Mac/iPhone development access remains unconfirmed. No accounts/purchases, paid API calls,
+production changes, phone operations, deployment or Git mutation. No subscription price/limit
+is locked. Existing designs, saved data and owner demo remain intact. One private readiness
+record added; project memory/current-state and the local roadmap updated. Stop at this checkpoint.
+
 ## November 5 Spotify navigation follow-up — installed and verified on Moto
 
 Before committing, Manley reports tapping the Spotify symbol inside the music circle opens
