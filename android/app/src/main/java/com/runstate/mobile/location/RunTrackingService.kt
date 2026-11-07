@@ -186,6 +186,8 @@ internal class RunTrackingService : Service() {
     private var announcementMonitor: Job? = null
     private var announcementTimeout: Job? = null
     private var announcementSpeaker: ReflectionSpeaker? = null
+    private var announcementMilestones: RunMilestoneAnnouncements? = null
+    private var announcementInterruption = 0L
     /** An old cancelled monitor must not stop speech belonging to a replacement run. */
     private var announcementGeneration = 0L
     private var countdownToken: Long? = null
@@ -507,61 +509,107 @@ internal class RunTrackingService : Service() {
         val generation = ++announcementGeneration
         announcementMonitor?.cancel()
         stopAnnouncement()
+        announcementMilestones = null
         try { announcementSpeaker?.close() } catch (_: RuntimeException) { }
         announcementSpeaker = null
         announcementMonitor = scope.launch {
+            var announcements: RunMilestoneAnnouncements? = null
+            var lastCheckpoint: Long? = null
             try {
-                // Seed from stored distance on attachment: never replay an old mile after recovery.
-                val initialDistance = app.database.locationDao().pointsFor(id)
-                    .lastOrNull { it.acceptedForDistance && it.cumulativeDistanceMeters != null }
-                    ?.cumulativeDistanceMeters ?: 0.0
-                val announcements = RunMilestoneAnnouncements(initialDistance)
+                var tickFailureReported = false
                 while (runId == id && generation == announcementGeneration) {
-                    val row = app.database.runDao().findById(id) ?: break
-                    if (row.state == StoredRunState.COMPLETED) break
-                    val enabled = app.runPreferences.value?.distanceAnnouncements == true
-                    if (!enabled || row.state != StoredRunState.RUNNING) stopAnnouncement()
-                    if (enabled && announcementSpeaker == null) {
-                        announcementSpeaker = AndroidReflectionSpeaker(this@RunTrackingService)
-                    }
-                    val metrics = app.runSessionCoordinator.runMetrics()
-                    val text = metrics?.let { announcements.update(it,
-                        running = row.state == StoredRunState.RUNNING, enabled = enabled) }
-                    if (text != null) {
-                        // Room/metrics suspend. Recheck the current owner and preferences so a
-                        // pause, completion, replacement run or disabled setting wins before speech.
-                        val snapshot = app.runSessionCoordinator.journeySnapshot()
-                        val currentOwner = snapshot.admission as? RunAdmission.RunInProgress
-                        val speaker = announcementSpeaker
-                        if (generation == announcementGeneration && runId == id &&
-                            currentOwner != null && currentOwner.session.runId == id &&
-                            currentOwner.session.state == com.runstate.mobile.run.RunSessionState.RUNNING &&
-                            snapshot.reservedAction == null && storedState == StoredRunState.RUNNING &&
-                            app.runPreferences.value?.distanceAnnouncements == true && speaker != null) {
-                            // Claims are already consumed; unavailable focus/voice is skipped, not queued.
-                            stopAnnouncement()
-                            val timeout = scope.launch {
-                                delay(45_000L)
-                                if (generation == announcementGeneration && announcementSpeaker === speaker) {
-                                    speaker.stop()
+                    try {
+                        val row = app.database.runDao().findById(id) ?: break
+                        if (row.state == StoredRunState.COMPLETED) break
+                        if (announcements == null) {
+                            // Retry a failed seed read with the latest durable distance. An outage
+                            // must not replay milestones that happened before monitoring recovered.
+                            val initialDistance = app.database.locationDao().pointsFor(id)
+                                .lastOrNull { it.acceptedForDistance && it.cumulativeDistanceMeters != null }
+                                ?.cumulativeDistanceMeters ?: 0.0
+                            if (runId != id || generation != announcementGeneration) break
+                            announcements = RunMilestoneAnnouncements(initialDistance)
+                            announcementMilestones = announcements
+                        }
+                        val milestones = checkNotNull(announcements)
+                        // This checkpoint changes only for lifecycle transitions, not GPS writes.
+                        // It catches a rapid pause/resume even if Room skipped the intermediate row.
+                        if (lastCheckpoint != null && lastCheckpoint != row.lastCheckpointEpochMillis) {
+                            milestones.clearPending()
+                        }
+                        lastCheckpoint = row.lastCheckpointEpochMillis
+                        val enabled = app.runPreferences.value?.distanceAnnouncements == true
+                        if (!enabled || row.state != StoredRunState.RUNNING) stopAnnouncement()
+                        if (enabled && announcementSpeaker == null) {
+                            announcementSpeaker = AndroidReflectionSpeaker(this@RunTrackingService)
+                        }
+                        val interruption = announcementInterruption
+                        val metrics = app.runSessionCoordinator.runMetrics()
+                        val text = milestones.update(metrics,
+                            running = row.state == StoredRunState.RUNNING, enabled = enabled,
+                            nowElapsedMillis = SystemClock.elapsedRealtime())
+                        if (text != null) {
+                            // Room/metrics suspend. Recheck the current owner and preferences so a
+                            // pause, completion, replacement run or disabled setting wins before speech.
+                            val currentRow = app.database.runDao().findById(id)
+                            val snapshot = app.runSessionCoordinator.journeySnapshot()
+                            val currentOwner = snapshot.admission as? RunAdmission.RunInProgress
+                            val speaker = announcementSpeaker
+                            if (generation == announcementGeneration && runId == id &&
+                                interruption == announcementInterruption &&
+                                currentRow?.state == StoredRunState.RUNNING &&
+                                currentRow.lastCheckpointEpochMillis == row.lastCheckpointEpochMillis &&
+                                currentOwner != null && currentOwner.session.runId == id &&
+                                currentOwner.session.state == com.runstate.mobile.run.RunSessionState.RUNNING &&
+                                snapshot.reservedAction == null && storedState == StoredRunState.RUNNING &&
+                                app.runPreferences.value?.distanceAnnouncements == true && speaker != null) {
+                                // Speech owns its brief focus-admission wait; the monitor never
+                                // submits the same crossing again after delivery or interruption.
+                                stopAnnouncement()
+                                val timeout = scope.launch {
+                                    delay(45_000L)
+                                    if (generation == announcementGeneration && announcementSpeaker === speaker) {
+                                        speaker.stop()
+                                    }
+                                }
+                                announcementTimeout = timeout
+                                speaker.speakMileAnnouncement(text) {
+                                    timeout.cancel()
+                                    if (announcementTimeout === timeout) announcementTimeout = null
                                 }
                             }
-                            announcementTimeout = timeout
-                            speaker.speakMileAnnouncement(text) {
-                                timeout.cancel()
-                                if (announcementTimeout === timeout) announcementTimeout = null
-                            }
                         }
+                        if (tickFailureReported) noteAnnouncementMonitor("MONITOR_RECOVERED")
+                        tickFailureReported = false
+                    } catch (cancelled: CancellationException) {
+                        throw cancelled
+                    } catch (_: Exception) {
+                        // A transient optional read/voice error must not silence every later mile.
+                        // Do not stop an already speaking announcement because one metric tick failed.
+                        announcements?.clearPending()
+                        if (!tickFailureReported) noteAnnouncementMonitor("MONITOR_TICK_FAILED")
+                        tickFailureReported = true
                     }
                     delay(1_000L)
                 }
             } catch (cancelled: CancellationException) { throw cancelled }
-            catch (_: Exception) { /* Optional announcements never stop location recording. */ }
-            finally { if (generation == announcementGeneration) stopAnnouncement() }
+            catch (_: Exception) { noteAnnouncementMonitor("MONITOR_INITIALIZATION_FAILED") }
+            finally {
+                if (generation == announcementGeneration) {
+                    stopAnnouncement()
+                    announcementMilestones = null
+                }
+            }
         }
     }
 
+    private fun noteAnnouncementMonitor(reason: String) {
+        if (com.runstate.mobile.BuildConfig.DEBUG) android.util.Log.d("RunStateMilestone", "reason=$reason")
+    }
+
     private fun stopAnnouncement() {
+        ++announcementInterruption
+        announcementMilestones?.clearPending()
         announcementTimeout?.cancel()
         announcementTimeout = null
         try { announcementSpeaker?.stop() } catch (_: RuntimeException) { }

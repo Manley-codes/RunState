@@ -115,6 +115,38 @@ class ReflectionSpeechGatewayTest {
         assertEquals(0, calls)
     }
 
+    @Test fun rejectsShortAndExcessVoiceBodiesBeforePlayback() = runBlocking {
+        for (voice in SpeechVoice.entries) {
+            for (declaredLength in listOf(mp3.size + 1L, mp3.size - 1L, 0L)) {
+                val health = FakeHttps(URL(config.endpoint), capability = "1",
+                    capabilityName = voice.capabilityHeader)
+                val speech = FakeHttps(URL(config.endpoint), mp3, declaredLength = declaredLength)
+                val result = ReflectionSpeechHttpClient.hosted(config, voice) {
+                    if (it.path == "/health") health else speech
+                }.synthesize("One mile completed.")
+                assertNull("${voice.name} must reject a declared-length mismatch", result)
+                assertEquals(1, speech.bodyReads)
+                assertTrue(health.disconnected && speech.disconnected)
+            }
+        }
+    }
+
+    @Test fun acceptsCompleteVoiceBodiesWithExactOrUnknownLength() = runBlocking {
+        for (voice in SpeechVoice.entries) {
+            for (declaredLength in listOf(mp3.size.toLong(), -1L)) {
+                val health = FakeHttps(URL(config.endpoint), capability = "1",
+                    capabilityName = voice.capabilityHeader)
+                val speech = FakeHttps(URL(config.endpoint), mp3, declaredLength = declaredLength)
+                val result = ReflectionSpeechHttpClient.hosted(config, voice) {
+                    if (it.path == "/health") health else speech
+                }.synthesize("One mile completed.")
+                assertArrayEquals(mp3, result)
+                assertEquals(1, speech.bodyReads)
+                assertTrue(health.disconnected && speech.disconnected)
+            }
+        }
+    }
+
     @Test fun transportFailureReturnsNoProviderExceptionOrSecret() = runBlocking {
         assertNull(ReflectionSpeechHttpClient.hosted(config) {
             throw IllegalStateException("secret-bearing transport text")

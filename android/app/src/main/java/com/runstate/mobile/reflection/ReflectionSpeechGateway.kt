@@ -116,8 +116,9 @@ internal class ReflectionSpeechHttpClient private constructor(
             speech.outputStream.use { it.write(body) }
             speech.readTimeout = remaining(15_000)
             if (speech.responseCode != HttpURLConnection.HTTP_OK ||
-                speech.contentType?.substringBefore(';')?.trim()?.lowercase() != "audio/mpeg" ||
-                speech.contentLengthLong > MAX_REFLECTION_AUDIO_BYTES) return null
+                speech.contentType?.substringBefore(';')?.trim()?.lowercase() != "audio/mpeg") return null
+            val expectedAudioBytes = speech.contentLengthLong
+            if (expectedAudioBytes > MAX_REFLECTION_AUDIO_BYTES) return null
             val output = ByteArrayOutputStream()
             speech.inputStream.use { input ->
                 val buffer = ByteArray(8_192)
@@ -126,11 +127,16 @@ internal class ReflectionSpeechHttpClient private constructor(
                     speech.readTimeout = remaining(15_000)
                     val count = input.read(buffer)
                     if (count < 0) break
-                    if (output.size() + count > MAX_REFLECTION_AUDIO_BYTES) return null
+                    val receivedAudioBytes = output.size().toLong() + count
+                    if (receivedAudioBytes > MAX_REFLECTION_AUDIO_BYTES ||
+                        expectedAudioBytes >= 0 && receivedAudioBytes > expectedAudioBytes) return null
                     output.write(buffer, 0, count)
                 }
             }
             coroutineContext.ensureActive()
+            // A truncated file can start audibly and fail halfway through. Reject a known
+            // length mismatch before playback; chunked/unknown-length responses remain supported.
+            if (expectedAudioBytes >= 0 && output.size().toLong() != expectedAudioBytes) return null
             return output.toByteArray().takeIf { it.isNotEmpty() }
         } catch (cancelled: CancellationException) {
             throw cancelled

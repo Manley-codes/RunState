@@ -5,6 +5,69 @@ metadata:
   type: project
 ---
 
+## November 7 reflection follow-up — consistency and snippets assigned to Claude
+
+Manley wants a revised handoff focused on consistent desired writing, understanding the accepted
+successes, and efficient/reliable musical snippets. The existing private handoff was rewritten
+in place, not duplicated. It records the actual combined breakthrough: separate song study and
+writer, original bounded Musixmatch context restored to writer input, a musical landing, shorter
+brief and whole-pipeline Opus trial. Accepted examples demonstrate range, not universal consistency.
+Keep Manley involved; small comparisons, all Energy branches and repeated outputs matter.
+
+Before that handoff, read-only Moto review confirmed the incident is the Nov6 GPS run starting
+09:52CST, about2.20mi, Complete coverage, Spent reflection saved. Love Yourz/J. Cole was selected at
+34,300ms for6,150ms, endpoint40,450ms, LRCLIB repeated-hook cue. Last in-run observed song differed.
+The selection receipt does not prove playback. No retained passage/completion/voice incident logs
+were available. Loading another song can sound briefly before pause/seek; subsequent safeguards
+can abort, while the older completed-but-clipped phrase problem is separate. Exact cause unproven.
+Existing stale-position/duration safeguards predate this incident; don't reimplement them blindly.
+
+Claude owns further snippet diagnosis/selection/playback quality work with coordinated shared-file
+ownership; no independent broad changes or provider replacement. No source edit, paid call, live
+replay, Git mutation or phone-data mutation occurred in this review. Handoff remains for Manley to
+pass along. Private source: `../local/claude-reflection-quality-handoff-2026-11-07.md`; snapshot and
+empty bounded diagnostic capture reuse `../local/music-controls-study-2026-11-07/native/`.
+
+## November 7 mile-announcement repair — installed on Moto; field verification remains
+
+Same confirmed Nov6 run: first-mile speech began, cut off and made an electronic descending sound;
+some mile points went unannounced. Manley used Bluetooth headphones and recalls Spotify continuing.
+Both full-mile splits exist; nearby stored GPS fixes are accepted/stationary, and music samples
+report Playing. That does not prove continuous audio, live coverage at service sampling, or a
+particular stop cause. No explicit beep generator was found in the app; don't blame the headset.
+
+Manley authorized this separate fix while Claude handles reflection quality and song snippets.
+Fresh partial-GPS crossings now have up to15seconds, within the existing0.1mi overshoot limit,
+to regain complete evidence. A mile blocked before playback by busy audio can wait up to5seconds
+using the same downloaded bytes/text, without another synthesis request. Old/recovered crossings,
+disabled settings, pauses and already-started/interrupted speech never become a replay backlog.
+The service clears pending cues on lifecycle changes/read errors, rechecks ownership after suspended
+reads, and keeps monitoring after isolated read/voice failures, including initial seed failures.
+
+A silent Moto regression reproduced a concrete cutoff race: abandoned cloud focus could stop the
+phone fallback under the same utterance ID. Focus-attempt ownership now rejects that stale callback
+while genuine current focus loss still stops speech. Known HTTP audio-length mismatches are rejected
+before playback; unknown-length responses remain supported. Debug speech diagnostics now distinguish
+focus loss, busy-audio expiry, playback error, cancellation and timeout, without text or personal data.
+These are verified defects/defensive fixes, not proof of the exact Nov6 sound or every missed mile.
+
+Final debug/release/test APK builds passed in27seconds; both865-test JVM suites passed. The two
+speech suites passed36 silent device checks, with14 explicit live/provider auditions skipped; the
+final installed APK passed all5 focused announcement checks again. All60 completed runs,12 table
+hashes/counts and five preferences are unchanged; integrity OK. Installed SHA256 matches the build
+(`18BBF53CC0D69F12133E224D9FBE3032C2E60325B8FCA0D3D52354FC83126AB6`). Test helper removed,
+main app reopened. No new tracked files, paid synthesis, backend deployment or Git mutation. Private
+receipts reuse `../local/music-controls-study-2026-11-07/native/mile-*`. Next Bluetooth outdoor run
+is needed; stop here for user review/commit. Shared speaker/gateway edits are narrow infrastructure
+changes; Claude should preserve them when editing snippet behavior in `RunHistoryScreen.kt`.
+
+Manley reports an unpaid Render subscription. Read-only hosted `/health` returned200 in495ms with
+both voice capability headers enabled; that does not verify billing, provider credits or Nov6 uptime.
+Render may suspend unpaid services ([terms](https://render.com/terms)). Cloud voice/reflection/song
+preparation can be affected, but GPS, local runs and device Spotify controls do not depend on Render.
+Audio downloads before local playback, so backend unavailability alone does not explain a line
+already playing cutting off. No account/payment change or paid provider probe was made.
+
 ## November 7 metric emphasis swap — installed on Moto
 
 Manley accepted the companion and requested Distance in the larger left panel, with Average

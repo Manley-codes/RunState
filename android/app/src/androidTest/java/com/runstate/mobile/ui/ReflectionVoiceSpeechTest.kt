@@ -1680,18 +1680,21 @@ class ReflectionVoiceSpeechTest {
         val cloud = mutableListOf<Voice>()
         val songs = mutableListOf<Voice>()
         val focusLoss = mutableMapOf<String, (String) -> Unit>()
+        var focusGranted = true
+        var useRunGateway = false
         var cloudAccepted = true
         var cloudStops = 0
         var focusReleases = 0
         var closes = 0
         override fun reflectionSpeechGateway() = gateway
+        override fun runVoiceGateway() = if (useRunGateway) gateway else null
         override fun initialize(onReady: (Boolean) -> Unit,
             onDone: (String) -> Unit, onError: (String) -> Unit) {
             ready = onReady; localDone = onDone; localError = onError
         }
         override fun requestAudioFocus(id: String, onFocusLost: (String) -> Unit): Boolean {
             focusLoss[id] = onFocusLost
-            return true
+            return focusGranted
         }
         override fun speak(id: String, text: String, rate: Float): Boolean {
             local += id to text
@@ -1723,6 +1726,154 @@ class ReflectionVoiceSpeechTest {
     private fun speaker(platform: Platform, deadlines: MutableList<Runnable> = mutableListOf()) =
         AndroidReflectionSpeaker(rule.activity, platform,
             scheduleTimeout = { task, _ -> deadlines += task }, cancelTimeout = {})
+
+    @Test fun staleCloudFocusLossCannotStopMilePhoneFallbackButCurrentLossStillStopsIt() {
+        rule.runOnUiThread {
+            val platform = Platform(ReflectionSpeechGateway { audio }).apply { useRunGateway = true }
+            val owned = speaker(platform)
+            var finished = 0
+            try {
+                platform.ready(true)
+                owned.speakMileAnnouncement("One mile completed.") { finished++ }
+                val cloud = platform.cloud.single()
+                val oldFocusLoss = platform.focusLoss.getValue(cloud.id)
+                cloud.unavailable(cloud.id)
+                assertEquals(1, platform.local.size)
+                oldFocusLoss(cloud.id)
+                assertEquals("An abandoned cloud focus must not cancel the phone fallback", 0, finished)
+                platform.focusLoss.getValue(cloud.id)(cloud.id)
+                assertEquals(1, finished)
+                platform.localDone(cloud.id)
+                assertEquals(1, finished)
+            } finally { owned.close() }
+        }
+    }
+
+    @Test fun mileWaitsForBusyFocusWithoutRefetchingCloudOrRepeatingQueuedSpeech() {
+        for (cloudVoice in listOf(false, true)) rule.runOnUiThread {
+            var uploads = 0
+            var now = 0L
+            val platform = Platform(ReflectionSpeechGateway { uploads++; audio }).apply {
+                useRunGateway = cloudVoice
+                focusGranted = false
+            }
+            val scheduled = mutableListOf<Pair<Runnable, Long>>()
+            val events = mutableListOf<SpeechDeliveryDiagnostic>()
+            val owned = AndroidReflectionSpeaker(rule.activity, platform,
+                scheduleTimeout = { task, delay -> scheduled += task to delay }, cancelTimeout = {},
+                deliveryDiagnostic = { events += it }, elapsedRealtime = { now })
+            var finished = 0
+            try {
+                platform.ready(true)
+                owned.speakMileAnnouncement("One mile completed.") { finished++ }
+                assertTrue(platform.cloud.isEmpty() && platform.local.isEmpty())
+                assertEquals(0, finished)
+                assertEquals(500L, scheduled.last().second)
+                val staleLoss = platform.focusLoss.values.single()
+                val id = platform.focusLoss.keys.single()
+                now = 500L
+                scheduled.last().first.run() // Still busy: another admission attempt, no synthesis.
+                assertTrue(platform.cloud.isEmpty() && platform.local.isEmpty())
+                val retry = scheduled.last().first
+                platform.focusGranted = true
+                now = 1_000L
+                retry.run()
+                staleLoss(id)
+                retry.run() // Late duplicate delivery cannot queue the line twice.
+                assertEquals(if (cloudVoice) 1 else 0, uploads)
+                assertEquals(1, platform.cloud.size + platform.local.size)
+                assertEquals(0, finished)
+                assertEquals(1, events.count { it.stage == SpeechDeliveryStage.WAITING_FOR_FOCUS })
+                if (cloudVoice) platform.cloud.single().done(id) else platform.localDone(id)
+                assertEquals(1, finished)
+                retry.run()
+                assertEquals(1, platform.cloud.size + platform.local.size)
+            } finally { owned.close() }
+        }
+    }
+
+    @Test fun waitingMileExpiresAndCannotSpeakAfterStopCloseOrReplacement() {
+        for (action in listOf("expire", "stop", "close", "replace")) rule.runOnUiThread {
+            var now = 0L
+            var uploads = 0
+            val platform = Platform(ReflectionSpeechGateway { uploads++; audio }).apply {
+                useRunGateway = true
+                focusGranted = false
+            }
+            val scheduled = mutableListOf<Runnable>()
+            val events = mutableListOf<SpeechDeliveryDiagnostic>()
+            val owned = AndroidReflectionSpeaker(rule.activity, platform,
+                scheduleTimeout = { task, _ -> scheduled += task }, cancelTimeout = {},
+                deliveryDiagnostic = { events += it }, elapsedRealtime = { now })
+            var finished = 0
+            try {
+                platform.ready(true)
+                owned.speakMileAnnouncement("One mile completed.") { finished++ }
+                val retry = scheduled.last()
+                when (action) {
+                    "expire" -> { now = 5_000L; retry.run() }
+                    "stop" -> owned.stop()
+                    "close" -> owned.close()
+                    else -> owned.speakTimedCue("Let's go, runner.", false)
+                }
+                assertEquals(1, finished)
+                platform.focusGranted = true
+                retry.run()
+                assertTrue(platform.cloud.isEmpty() && platform.local.isEmpty())
+                assertEquals(1, uploads)
+                if (action == "expire") assertEquals(SpeechStopReason.FOCUS_UNAVAILABLE, events.last().reason)
+            } finally { owned.close() }
+        }
+    }
+
+    @Test fun admittedMileInterruptionDoesNotReplayAndReportsReason() {
+        for (cause in listOf("focus", "player", "timeout")) rule.runOnUiThread {
+            val platform = Platform(ReflectionSpeechGateway { audio }).apply { useRunGateway = true }
+            val scheduled = mutableListOf<Runnable>()
+            val events = mutableListOf<SpeechDeliveryDiagnostic>()
+            val owned = AndroidReflectionSpeaker(rule.activity, platform,
+                scheduleTimeout = { task, _ -> scheduled += task }, cancelTimeout = {},
+                deliveryDiagnostic = { events += it })
+            var finished = 0
+            try {
+                platform.ready(true)
+                owned.speakMileAnnouncement("One mile completed.") { finished++ }
+                val cloud = platform.cloud.single()
+                when (cause) {
+                    "focus" -> platform.focusLoss.getValue(cloud.id)(cloud.id)
+                    "player" -> cloud.error(cloud.id)
+                    else -> scheduled.last().run()
+                }
+                cloud.done(cloud.id)
+                scheduled.toList().forEach { it.run() }
+                assertEquals(1, finished)
+                assertEquals(1, platform.cloud.size)
+                assertTrue(platform.local.isEmpty())
+                assertEquals(when (cause) {
+                    "focus" -> SpeechStopReason.FOCUS_LOST
+                    "player" -> SpeechStopReason.PLAYBACK_ERROR
+                    else -> SpeechStopReason.TIMEOUT
+                }, events.last().reason)
+            } finally { owned.close() }
+        }
+    }
+
+    @Test fun countdownAndReflectionDoNotGainMileAdmissionRetries() {
+        for (countdown in listOf(false, true)) rule.runOnUiThread {
+            val platform = Platform(ReflectionSpeechGateway { audio }).apply { focusGranted = false }
+            val events = mutableListOf<SpeechDeliveryDiagnostic>()
+            val owned = AndroidReflectionSpeaker(rule.activity, platform, deliveryDiagnostic = { events += it })
+            var finished = 0
+            try {
+                platform.ready(true)
+                if (countdown) owned.speakTimedCue("Three.", false) { finished++ }
+                else owned.speakWithInstrumental("Exact reflection.", { false }) { finished++ }
+                assertEquals(1, finished)
+                assertTrue(platform.cloud.isEmpty() && platform.local.isEmpty())
+                assertFalse(events.any { it.stage == SpeechDeliveryStage.WAITING_FOR_FOCUS })
+            } finally { owned.close() }
+        }
+    }
 
     @Test fun receiptStaysLocalThenExactSelectedReflectionUsesCloudBeforeMusic() {
         val uploaded = mutableListOf<String>()

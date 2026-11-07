@@ -75,19 +75,54 @@ internal data class RunMetrics(
     }
 }
 
-/** Consumes crossings once, including silent ones. Recovery seeds from durable distance. */
+/** A brief GPS recovery may finish a fresh crossing; old or deliberately skipped miles stay silent. */
 internal class RunMilestoneAnnouncements(initialDistanceMeters: Double = 0.0) {
     private var passedMile = mileAt(initialDistanceMeters)
+    private var lastDistanceMeters = initialDistanceMeters
+    private var pendingMile: PendingMile? = null
 
-    fun update(metrics: RunMetrics, running: Boolean, enabled: Boolean): String? {
-        val distance = metrics.distanceMeters ?: return null
+    /** A pause, disabled setting or interrupted observation must never become a delayed cue. */
+    fun clearPending() {
+        pendingMile = null
+    }
+
+    fun update(
+        metrics: RunMetrics?,
+        running: Boolean,
+        enabled: Boolean,
+        nowElapsedMillis: Long = metrics?.elapsedMillis ?: 0L
+    ): String? {
+        if (metrics == null) {
+            pendingMile = null
+            return null
+        }
+        val distance = metrics.distanceMeters
+        if (distance == null) {
+            pendingMile = null
+            return null
+        }
         val mile = mileAt(distance)
-        if (mile <= passedMile) return null
-        val previous = passedMile
-        passedMile = mile // Failed speech, disabled updates and recovery never produce a backlog.
-        if (!running || !enabled || metrics.source != MetricSource.GPS ||
-            metrics.coverage != TelemetryCoverage.COMPLETE || mile != previous + 1 ||
-            distance - mile * METERS_PER_MILE > 160.9344) return null
+        val movedBackward = distance < lastDistanceMeters
+        lastDistanceMeters = distance
+        if (!running || !enabled || metrics.source != MetricSource.GPS || movedBackward) {
+            passedMile = maxOf(passedMile, mile)
+            pendingMile = null
+            return null
+        }
+        if (mile > passedMile) {
+            val previous = passedMile
+            passedMile = mile // Recovery/large jumps cannot queue earlier milestones.
+            pendingMile = if (mile == previous + 1 && distance - mile * METERS_PER_MILE <= MAX_OVERSHOOT_METERS)
+                PendingMile(mile, nowElapsedMillis) else null
+        }
+        val pending = pendingMile ?: return null
+        if (mile != pending.number || nowElapsedMillis - pending.observedAtElapsedMillis !in 0L..GPS_GRACE_MILLIS ||
+            distance - mile * METERS_PER_MILE > MAX_OVERSHOOT_METERS) {
+            pendingMile = null
+            return null
+        }
+        if (metrics.coverage != TelemetryCoverage.COMPLETE) return null
+        pendingMile = null // Once offered to speech it cannot become a duplicate after interruption.
         val paceSeconds = metrics.paceSecondsPerMeter?.times(METERS_PER_MILE)
             ?.takeIf { it.isFinite() && it > 0 && it < Long.MAX_VALUE.toDouble() }?.roundToLong()
         val activeSeconds = metrics.activeMillis?.div(1_000)
@@ -107,5 +142,11 @@ internal class RunMilestoneAnnouncements(initialDistanceMeters: Double = 0.0) {
         return parts.ifEmpty { listOf("0 seconds") }.joinToString(", ")
     }
 
-    private companion object { const val METERS_PER_MILE = 1_609.344 }
+    private data class PendingMile(val number: Int, val observedAtElapsedMillis: Long)
+
+    private companion object {
+        const val METERS_PER_MILE = 1_609.344
+        const val MAX_OVERSHOOT_METERS = 160.9344
+        const val GPS_GRACE_MILLIS = 15_000L
+    }
 }

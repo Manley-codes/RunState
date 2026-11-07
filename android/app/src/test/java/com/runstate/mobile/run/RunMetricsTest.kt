@@ -26,14 +26,72 @@ class RunMetricsTest {
         assertNull(announcements.update(gpsAt(1_620.0), true, true))
     }
 
-    @Test fun `disabled paused and partial crossings never replay when conditions improve`() {
+    @Test fun `disabled and paused crossings never replay when conditions improve`() {
         listOf(Triple(false, true, TelemetryCoverage.COMPLETE),
-            Triple(true, false, TelemetryCoverage.COMPLETE),
-            Triple(true, true, TelemetryCoverage.PARTIAL)).forEach { (running, enabled, coverage) ->
+            Triple(true, false, TelemetryCoverage.COMPLETE)).forEach { (running, enabled, coverage) ->
             val announcements = RunMilestoneAnnouncements()
             assertNull(announcements.update(gpsAt(1_610.0, coverage), running, enabled))
             assertNull(announcements.update(gpsAt(1_620.0), true, true))
             assertTrue(announcements.update(gpsAt(3_220.0), true, true)!!.startsWith("2 miles completed."))
+        }
+    }
+
+    @Test fun `fresh partial crossing can announce once after brief GPS recovery`() {
+        val announcements = RunMilestoneAnnouncements()
+        assertNull(announcements.update(gpsAt(1_610.0, TelemetryCoverage.PARTIAL), true, true, 10_000))
+        assertNull(announcements.update(gpsAt(1_620.0, TelemetryCoverage.PARTIAL), true, true, 14_000))
+        assertTrue(announcements.update(gpsAt(1_625.0), true, true, 24_000)!!.startsWith("1 mile completed."))
+        assertNull(announcements.update(gpsAt(1_630.0), true, true, 25_000))
+    }
+
+    @Test fun `partial crossing expires from its first observation without extending on repeated samples`() {
+        val announcements = RunMilestoneAnnouncements()
+        assertNull(announcements.update(gpsAt(1_610.0, TelemetryCoverage.PARTIAL), true, true, 10_000))
+        assertNull(announcements.update(gpsAt(1_620.0, TelemetryCoverage.PARTIAL), true, true, 24_000))
+        assertNull(announcements.update(gpsAt(1_625.0), true, true, 25_001))
+        assertNull(announcements.update(gpsAt(1_630.0), true, true, 26_000))
+        assertTrue(announcements.update(gpsAt(3_220.0), true, true, 600_000)!!.startsWith("2 miles completed."))
+    }
+
+    @Test fun `pausing or disabling clears a pending partial crossing even without a new mile`() {
+        for ((running, enabled) in listOf(false to true, true to false)) {
+            val announcements = RunMilestoneAnnouncements()
+            assertNull(announcements.update(gpsAt(1_610.0, TelemetryCoverage.PARTIAL), true, true, 10_000))
+            assertNull(announcements.update(gpsAt(1_615.0), running, enabled, 11_000))
+            assertNull(announcements.update(gpsAt(1_620.0), true, true, 12_000))
+        }
+    }
+
+    @Test fun `service lifecycle or read failure discard keeps crossing consumed and later miles eligible`() {
+        val announcements = RunMilestoneAnnouncements()
+        assertNull(announcements.update(gpsAt(1_610.0, TelemetryCoverage.PARTIAL), true, true, 10_000))
+        // The service can observe pause or a failed read between metric samples. It clears
+        // pending work immediately; the gate need not receive a separate paused sample.
+        announcements.clearPending()
+        assertNull(announcements.update(gpsAt(1_620.0), true, true, 11_000))
+        assertTrue(announcements.update(gpsAt(3_220.0), true, true, 600_000)!!.startsWith("2 miles completed."))
+        announcements.clearPending()
+        assertNull(announcements.update(gpsAt(3_225.0), true, true, 601_000))
+    }
+
+    @Test fun `distance cap backward distance and invalid clock discard pending crossings`() {
+        for ((meters, elapsed) in listOf(1_775.0 to 11_000L, 1_609.5 to 11_000L, 1_620.0 to 9_000L)) {
+            val announcements = RunMilestoneAnnouncements()
+            assertNull(announcements.update(gpsAt(1_610.0, TelemetryCoverage.PARTIAL), true, true, 10_000))
+            assertNull(announcements.update(gpsAt(meters), true, true, elapsed))
+            val nextDistance = if (meters > 1_770.0) meters + 1 else 1_625.0
+            assertNull(announcements.update(gpsAt(nextDistance), true, true, 12_000))
+        }
+    }
+
+    @Test fun `unknown distance and a switch to fixture data discard pending GPS crossings`() {
+        val unavailable = RunMetrics(10_000, null, null, null,
+            DistanceUnit.MILES, null, TelemetryCoverage.UNAVAILABLE)
+        for (replacement in listOf(null, unavailable, gpsAt(1_615.0).copy(source = MetricSource.FIXTURE))) {
+            val announcements = RunMilestoneAnnouncements()
+            assertNull(announcements.update(gpsAt(1_610.0, TelemetryCoverage.PARTIAL), true, true, 10_000))
+            assertNull(announcements.update(replacement, true, true, 11_000))
+            assertNull(announcements.update(gpsAt(1_620.0), true, true, 12_000))
         }
     }
 

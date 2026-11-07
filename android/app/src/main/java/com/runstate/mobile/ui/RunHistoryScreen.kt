@@ -146,23 +146,27 @@ private const val COMPLETION_FACTS_PLAYBACK_SPEED = 0.90f
 private const val WARM_UP_UTTERANCE_ID = "runstate-countdown-warm-up"
 private const val WARM_UP_FILE_NAME = "countdown-voice-warm-up.wav"
 internal const val REFLECTION_SONG_HANDOFF_MILLIS = 150L
+private const val MILE_FOCUS_WAIT_MILLIS = 5_000L
+private const val MILE_FOCUS_RETRY_MILLIS = 500L
 
 internal enum class SpeechDeliveryKind { RECEIPT, COMPLETION_FACTS, MILE_ANNOUNCEMENT, TIMED_CUE, REFLECTION }
-internal enum class SpeechDeliveryStage { REQUESTED, CLOUD_QUEUED, PHONE_QUEUED, FINISHED, STOPPED }
+internal enum class SpeechDeliveryStage { REQUESTED, WAITING_FOR_FOCUS, CLOUD_QUEUED, PHONE_QUEUED, FINISHED, STOPPED }
 internal enum class SpeechDeliverySource { CLOUD, PHONE }
+internal enum class SpeechStopReason { CANCELLED, FOCUS_LOST, FOCUS_UNAVAILABLE, PLAYBACK_ERROR, TIMEOUT }
 /** Timing and delivery only: no spoken text, run/song identity, location or credentials. */
 internal data class SpeechDeliveryDiagnostic(
     val kind: SpeechDeliveryKind,
     val stage: SpeechDeliveryStage,
     val source: SpeechDeliverySource?,
     val rate: Float,
-    val elapsedMillis: Long
+    val elapsedMillis: Long,
+    val reason: SpeechStopReason? = null
 )
 
 private fun logSpeechDelivery(event: SpeechDeliveryDiagnostic) {
     if (com.runstate.mobile.BuildConfig.DEBUG) android.util.Log.d("RunStateVoiceDelivery",
         "kind=${event.kind} stage=${event.stage} source=${event.source} " +
-            "rate=${event.rate} elapsedMs=${event.elapsedMillis}")
+            "rate=${event.rate} elapsedMs=${event.elapsedMillis} reason=${event.reason}")
 }
 
 private fun logSongPassage(event: SongPassageDiagnostic) {
@@ -397,9 +401,10 @@ internal class AndroidReflectionSpeaker(
     private val platform: ReflectionSpeechPlatform = AndroidReflectionSpeechPlatform(context),
     private val scheduleTimeout: ((Runnable, Long) -> Unit)? = null,
     private val cancelTimeout: ((Runnable) -> Unit)? = null,
-    private val deliveryDiagnostic: (SpeechDeliveryDiagnostic) -> Unit = ::logSpeechDelivery
+    private val deliveryDiagnostic: (SpeechDeliveryDiagnostic) -> Unit = ::logSpeechDelivery,
+    private val elapsedRealtime: () -> Long = SystemClock::elapsedRealtime
 ) : ReflectionSpeaker {
-    private enum class SpeechPhase { PREPARING_CLOUD, WAITING_FOR_ENGINE, SPEAKING, WAITING_FOR_MUSIC, INSTRUMENTAL }
+    private enum class SpeechPhase { PREPARING_CLOUD, WAITING_FOR_ENGINE, WAITING_FOR_FOCUS, SPEAKING, WAITING_FOR_MUSIC, INSTRUMENTAL }
     private enum class SpeechPurpose { RECEIPT, REFLECTION }
     /** Where a run-voice line may come from. Timed countdown lines never use the network. */
     private enum class RunVoiceMode { NONE, PREPARED_ONLY, PREPARED_OR_FETCH }
@@ -416,7 +421,8 @@ internal class AndroidReflectionSpeaker(
         val requestedAtMillis: Long = SystemClock.elapsedRealtime(),
         var phase: SpeechPhase = SpeechPhase.WAITING_FOR_ENGINE,
         var cloudAudio: Boolean = false,
-        var deliverySource: SpeechDeliverySource? = null
+        var deliverySource: SpeechDeliverySource? = null,
+        var focusWaitStartedAtMillis: Long? = null
     )
 
     private data class PreparedReflection(val text: String, val audio: Deferred<ByteArray?>)
@@ -430,6 +436,7 @@ internal class AndroidReflectionSpeaker(
     private var initializationFailed = false
     private var request: SpeechRequest? = null
     private var speechTimeout: Runnable? = null
+    private var focusAttempt = 0L
     private var closed = false
     private var completionSession: CompletionAudioSession? = null
     /** A rehearsal requested before the engine was ready; real speech always takes precedence. */
@@ -452,7 +459,7 @@ internal class AndroidReflectionSpeaker(
                 onDone = { id -> onMain { if (request?.cloudAudio != true) finishSpeech(id) } },
                 onError = { id -> onMain {
                     if (request?.id == id && !requireNotNull(request).cloudAudio &&
-                        request?.phase == SpeechPhase.SPEAKING) stop()
+                        request?.phase == SpeechPhase.SPEAKING) stop(SpeechStopReason.PLAYBACK_ERROR)
                 } }
             )
         } catch (_: RuntimeException) {
@@ -648,9 +655,9 @@ internal class AndroidReflectionSpeaker(
         try {
             if (!requestFocusFor(current) { id -> onMain {
                     if (request?.id == id && request?.phase in
-                        setOf(SpeechPhase.SPEAKING, SpeechPhase.WAITING_FOR_MUSIC)) stop()
+                        setOf(SpeechPhase.SPEAKING, SpeechPhase.WAITING_FOR_MUSIC)) stop(SpeechStopReason.FOCUS_LOST)
                 } }) {
-                finish(current.id)
+                waitForMileFocus(current) { playCloudVoice(current, audio) }
                 return
             }
             if (request !== current || closed) return
@@ -659,7 +666,7 @@ internal class AndroidReflectionSpeaker(
                 current.cloudAudio && current.phase == SpeechPhase.SPEAKING && !closed
             val onDone: (String) -> Unit = { id -> onMain { if (ownsCloud(id)) finishSpeech(id) } }
             val onUnavailable: (String) -> Unit = { id -> onMain { if (ownsCloud(id)) useLocalVoice(current) } }
-            val onError: (String) -> Unit = { id -> onMain { if (ownsCloud(id)) stop() } }
+            val onError: (String) -> Unit = { id -> onMain { if (ownsCloud(id)) stop(SpeechStopReason.PLAYBACK_ERROR) } }
             val accepted = when {
                 current.deliveryKind == SpeechDeliveryKind.COMPLETION_FACTS ->
                     platform.playCompletionFactsAudio(current.id, audio, onDone, onUnavailable, onError)
@@ -675,14 +682,16 @@ internal class AndroidReflectionSpeaker(
             if (!accepted && ownsCloud(current.id)) useLocalVoice(current)
         } catch (_: RuntimeException) {
             // The platform reports pre-playback failures explicitly. Unknown failures cannot repeat speech.
-            if (request === current) stop()
+            if (request === current) stop(SpeechStopReason.PLAYBACK_ERROR)
         }
     }
 
-    override fun stop() {
+    override fun stop() = stop(SpeechStopReason.CANCELLED)
+
+    private fun stop(reason: SpeechStopReason) {
         val interrupted = request
         request = null
-        interrupted?.let { noteDelivery(it, SpeechDeliveryStage.STOPPED) }
+        interrupted?.let { noteDelivery(it, SpeechDeliveryStage.STOPPED, reason) }
         clearTimeout()
         preparation?.cancel()
         preparation = null
@@ -719,9 +728,12 @@ internal class AndroidReflectionSpeaker(
         try {
             if (!requestFocusFor(current) { id -> onMain {
                     if (request?.id == id && request?.phase in
-                        setOf(SpeechPhase.SPEAKING, SpeechPhase.WAITING_FOR_MUSIC)) stop()
+                        setOf(SpeechPhase.SPEAKING, SpeechPhase.WAITING_FOR_MUSIC)) stop(SpeechStopReason.FOCUS_LOST)
                 } }) {
-                finish(current.id)
+                waitForMileFocus(current) {
+                    current.phase = SpeechPhase.WAITING_FOR_ENGINE
+                    speakPending()
+                }
                 return
             }
             if (request?.id != current.id || closed) return
@@ -734,17 +746,58 @@ internal class AndroidReflectionSpeaker(
                 current.deliverySource = SpeechDeliverySource.PHONE
                 noteDelivery(current, SpeechDeliveryStage.PHONE_QUEUED)
             }
-            if (!accepted && request?.id == current.id) stop()
+            if (!accepted && request?.id == current.id) stop(SpeechStopReason.PLAYBACK_ERROR)
         } catch (_: RuntimeException) {
-            if (request?.id == current.id) stop()
+            if (request?.id == current.id) stop(SpeechStopReason.PLAYBACK_ERROR)
             // Speech failure is independent of the saved reflection.
         }
     }
 
     /** Standalone cues duck; completion participants use their shared pause through the platform. */
-    private fun requestFocusFor(current: SpeechRequest, onFocusLost: (String) -> Unit): Boolean =
-        if (current.purpose == SpeechPurpose.REFLECTION) platform.requestPausingAudioFocus(current.id, onFocusLost)
-        else platform.requestAudioFocus(current.id, onFocusLost)
+    private fun requestFocusFor(current: SpeechRequest, onFocusLost: (String) -> Unit): Boolean {
+        val attempt = ++focusAttempt
+        // Cloud-to-phone fallback reuses the utterance ID, but never the abandoned focus lease.
+        val ownedLoss: (String) -> Unit = { id -> onMain {
+            if (focusAttempt == attempt && request === current && !closed) onFocusLost(id)
+        } }
+        return if (current.purpose == SpeechPurpose.REFLECTION)
+            platform.requestPausingAudioFocus(current.id, ownedLoss)
+        else platform.requestAudioFocus(current.id, ownedLoss)
+    }
+
+    /** Retry only admission, before sound has been queued. Retain the same downloaded audio/text. */
+    private fun waitForMileFocus(current: SpeechRequest, retry: () -> Unit) {
+        if (request !== current || closed) return
+        if (current.deliveryKind != SpeechDeliveryKind.MILE_ANNOUNCEMENT) {
+            finish(current.id)
+            return
+        }
+        clearTimeout()
+        releaseFocus()
+        val now = elapsedRealtime()
+        if (current.focusWaitStartedAtMillis == null) {
+            current.focusWaitStartedAtMillis = now
+            noteDelivery(current, SpeechDeliveryStage.WAITING_FOR_FOCUS)
+        }
+        val deadline = requireNotNull(current.focusWaitStartedAtMillis) + MILE_FOCUS_WAIT_MILLIS
+        if (now >= deadline) {
+            stop(SpeechStopReason.FOCUS_UNAVAILABLE)
+            return
+        }
+        current.phase = SpeechPhase.WAITING_FOR_FOCUS
+        val pending = object : Runnable {
+            override fun run() {
+                if (speechTimeout !== this || request !== current || closed ||
+                    current.phase != SpeechPhase.WAITING_FOR_FOCUS) return
+                speechTimeout = null
+                if (elapsedRealtime() >= deadline) stop(SpeechStopReason.FOCUS_UNAVAILABLE) else retry()
+            }
+        }
+        speechTimeout = pending
+        val delay = minOf(MILE_FOCUS_RETRY_MILLIS, deadline - now)
+        if (scheduleTimeout != null) scheduleTimeout.invoke(pending, delay)
+        else mainHandler.postDelayed(pending, delay)
+    }
 
     private fun armSpeechTimeout(current: SpeechRequest) {
         val maximum = if (current.purpose == SpeechPurpose.RECEIPT) 120_000L else 600_000L
@@ -826,7 +879,8 @@ internal class AndroidReflectionSpeaker(
             override fun run() {
                 if (speechTimeout === this && request?.id == id) {
                     val current = requireNotNull(request)
-                    if (current.phase == SpeechPhase.PREPARING_CLOUD) useLocalVoice(current) else stop()
+                    if (current.phase == SpeechPhase.PREPARING_CLOUD) useLocalVoice(current)
+                    else stop(SpeechStopReason.TIMEOUT)
                 }
             }
         }
@@ -856,13 +910,13 @@ internal class AndroidReflectionSpeaker(
         finished.onFinished?.invoke()
     }
 
-    private fun noteDelivery(current: SpeechRequest, stage: SpeechDeliveryStage) {
+    private fun noteDelivery(current: SpeechRequest, stage: SpeechDeliveryStage, reason: SpeechStopReason? = null) {
         val rate = if (current.deliverySource == SpeechDeliverySource.CLOUD) {
             if (current.deliveryKind == SpeechDeliveryKind.COMPLETION_FACTS ||
                 current.deliveryKind == SpeechDeliveryKind.MILE_ANNOUNCEMENT) COMPLETION_FACTS_PLAYBACK_SPEED else 1f
         } else current.rate
         try { deliveryDiagnostic(SpeechDeliveryDiagnostic(current.deliveryKind, stage,
-            current.deliverySource, rate, (SystemClock.elapsedRealtime() - current.requestedAtMillis).coerceAtLeast(0))) }
+            current.deliverySource, rate, (SystemClock.elapsedRealtime() - current.requestedAtMillis).coerceAtLeast(0), reason)) }
         catch (_: RuntimeException) { /* Diagnostics never interrupt speech or tracking. */ }
     }
 
@@ -873,6 +927,7 @@ internal class AndroidReflectionSpeaker(
     }
 
     private fun releaseFocus() {
+        ++focusAttempt
         try { platform.releaseAudioFocus() }
         catch (_: RuntimeException) { /* Saved text stays readable if the audio service disconnects. */ }
     }
