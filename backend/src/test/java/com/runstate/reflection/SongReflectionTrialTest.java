@@ -19,7 +19,7 @@ import java.util.function.UnaryOperator;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-class SongReflectionTrialTest {
+public class SongReflectionTrialTest {
     @Test
     void separateSourceStudyAndFreshFactsWriterHaveExactlyTheColdInputsAndFrozenPrompts() throws Exception {
         var coldInputs = new java.util.ArrayList<JsonObject>();
@@ -576,6 +576,33 @@ class SongReflectionTrialTest {
         assertTrue(line.intendedEffect().startsWith("Let this short musical response finish the thought naturally."));
     }
 
+    @Test
+    void plainStudyAndWholeRunWriterUseTheirOwnPromptsWithBaselineShapes() throws Exception {
+        var prompts = new java.util.ArrayList<String>();
+        var writerInputs = new java.util.ArrayList<JsonObject>();
+        var trial = new SongReflectionTrial((input, prompt, schema) -> {
+            prompts.add(prompt);
+            if (input.has("run_facts")) {
+                writerInputs.add(input.deepCopy());
+                return branches();
+            }
+            assertFalse(schema.getAsJsonObject("properties").has("connection"));
+            return notes();
+        });
+        var studied = trial.study(material(), SongReflectionTrial.StudyVersion.V3);
+        trial.write(evidence(PreRunEnergy.MODERATE), studied, null, SongReflectionTrial.CreativeApproach.AUTO,
+                SongReflectionTrial.WriterVersion.V2);
+        assertTrue(prompts.get(0).contains("song study trial v3"));
+        assertTrue(prompts.get(0).contains("never as lines to\nreuse") || prompts.get(0).contains("never as lines to\r\nreuse"));
+        assertTrue(prompts.get(1).contains("writer v2"));
+        assertTrue(prompts.get(1).replace("\r\n", "\n").contains("never mention someone else going farther"));
+        assertEquals("auto", writerInputs.get(0).get("creative_approach").getAsString());
+        assertEquals(notes(), writerInputs.get(0).get("liner_notes"));
+        assertThrows(ReflectionProviderException.class, () -> new SongReflectionTrial(
+                (input, prompt, schema) -> directedNotes("direct", "A warm reply."))
+                .study(material(), SongReflectionTrial.StudyVersion.V3));
+    }
+
     private static JsonObject directedNotes(String connection, String effect) {
         JsonObject result = notes();
         result.addProperty("connection", connection);
@@ -657,8 +684,14 @@ class SongReflectionTrialTest {
             System.out.println("Live song trial is disabled.");
             return;
         }
-        if ("batch1".equals(System.getenv("RUNSTATE_TRIAL_BATCH"))) {
-            runBatchOne(System.getenv());
+        String batch = System.getenv("RUNSTATE_TRIAL_BATCH");
+        if (batch != null) {
+            BatchPlan plan = "batch1".equals(batch) ? BATCH_ONE : "batch2".equals(batch) ? BATCH_TWO : null;
+            if (plan == null) {
+                System.out.println("Unknown RUNSTATE_TRIAL_BATCH; nothing was run.");
+                return;
+            }
+            runBatch(System.getenv(), plan);
             return;
         }
         String stage = "configuration";
@@ -765,12 +798,14 @@ class SongReflectionTrialTest {
                              SongSnippetSelectionMethod passage, int repeats, String referenceLabel,
                              String referenceText) { }
 
-    /**
-     * Batch 1, approved by Manley on Nov 7, 2026. Before: v1 study, auto direction and the generic
-     * automatic landing that real runs receive. After: v2 study whose own direction replaces auto and
-     * the generic effect. Same facts, song material and passage description in both conditions.
-     */
-    private static final List<BatchCase> BATCH_ONE = List.of(
+    /** One side of a comparison: which study and writer versions run, and whether the study directs. */
+    private record BatchCondition(String name, SongReflectionTrial.StudyVersion study,
+                                  SongReflectionTrial.WriterVersion writer, boolean studyDirection) { }
+
+    private record BatchPlan(String name, String title, BatchCondition before, BatchCondition after) { }
+
+    /** Identical fictional facts, songs and automatic passage descriptions in every approved batch. */
+    private static final List<BatchCase> BATCH_CASES = List.of(
             new BatchCase("lovely_day", "Lovely Day", "Bill Withers", "460374491", "morning_feeling_good",
                     SongSnippetSelectionMethod.TITLE_HOOK, 1, "Feeling Good",
                     "Saturday, just past eight, three miles behind you and feeling good. Some mornings need a "
@@ -780,26 +815,37 @@ class SongReflectionTrialTest {
                     "Four miles. Wednesday. Done by five past seven. Clock out, chest out."),
             new BatchCase("love_yourz", "Love Yourz", "J. Cole", null, "standard",
                     SongSnippetSelectionMethod.REPEATED_HOOK, 3, null, null));
-    private static final String BATCH_ONE_MODEL = "claude-opus-5-5";
-    private static final int BATCH_ONE_CALL_LIMIT = 20;
+
+    /** Batch 1, Nov 7, 2026: the study's own direction replaces auto plus the generic landing effect. */
+    private static final BatchPlan BATCH_ONE = new BatchPlan("batch1", "Batch 1",
+            new BatchCondition("before", SongReflectionTrial.StudyVersion.V1, SongReflectionTrial.WriterVersion.V1, false),
+            new BatchCondition("after", SongReflectionTrial.StudyVersion.V2, SongReflectionTrial.WriterVersion.V1, true));
+
+    /** Batch 2, Nov 7, 2026: plain study notes, plus the writer's own-words and never-shrink principles. */
+    private static final BatchPlan BATCH_TWO = new BatchPlan("batch2", "Batch 2",
+            new BatchCondition("before", SongReflectionTrial.StudyVersion.V1, SongReflectionTrial.WriterVersion.V1, false),
+            new BatchCondition("after", SongReflectionTrial.StudyVersion.V3, SongReflectionTrial.WriterVersion.V2, false));
+
+    private static final String BATCH_MODEL = "claude-opus-5-5";
+    private static final int BATCH_CALL_LIMIT = 20;
     private static final List<String[]> BATCH_BRANCHES = List.of(new String[]{"spent", "Spent"},
             new String[]{"feeling_good", "Feeling Good"}, new String[]{"powered_up", "Powered Up"},
             new String[]{"no_selection", "No answer"});
 
-    private static void runBatchOne(Map<String, String> environment) {
+    private static void runBatch(Map<String, String> environment, BatchPlan plan) {
         AtomicInteger calls = new AtomicInteger();
         long[] tokens = new long[2];
         long started = System.nanoTime();
         String stage = "configuration";
         try {
             Map<String, String> pinned = new java.util.HashMap<>(environment);
-            pinned.put("ANTHROPIC_MUSIC_EDITOR_MODEL", BATCH_ONE_MODEL);
+            pinned.put("ANTHROPIC_MUSIC_EDITOR_MODEL", BATCH_MODEL);
             var config = AnthropicReflectionProvider.configurationFrom(pinned);
-            if (!BATCH_ONE_MODEL.equals(config.musicEditorModel())) throw new IllegalStateException("Model pin failed.");
+            if (!BATCH_MODEL.equals(config.musicEditorModel())) throw new IllegalStateException("Model pin failed.");
             var realTransport = AnthropicReflectionProvider.productionTransport(config);
             AnthropicReflectionProvider.Transport measured = request -> {
-                if (calls.incrementAndGet() > BATCH_ONE_CALL_LIMIT) {
-                    throw new java.io.IOException("Batch 1 call limit reached.");
+                if (calls.incrementAndGet() > BATCH_CALL_LIMIT) {
+                    throw new java.io.IOException("Batch call limit reached.");
                 }
                 TransportResponse response = realTransport.send(request);
                 try {
@@ -813,7 +859,7 @@ class SongReflectionTrialTest {
             };
             stage = "report folder";
             java.nio.file.Path root = java.nio.file.Path.of(environment.getOrDefault("RUNSTATE_TRIAL_REPORT_DIR",
-                    "../docs/local/reflection-batch1")).toAbsolutePath().normalize();
+                    "../docs/local/reflection-" + plan.name())).toAbsolutePath().normalize();
             if (!root.toString().replace('\\', '/').contains("/docs/local/")) {
                 throw new IllegalStateException("Batch reports must stay in a private docs/local folder.");
             }
@@ -827,17 +873,17 @@ class SongReflectionTrialTest {
             var random = new java.security.SecureRandom();
             JsonArray generations = new JsonArray();
             JsonObject key = new JsonObject();
-            StringBuilder review = new StringBuilder("""
-                    # Batch 1 \u2014 blind review
+            StringBuilder review = new StringBuilder("# " + plan.title() + """
+                     — blind review
 
                     Fictional runs only. Each version shows all four Energy answers from one generation.
                     Versions A and B are shuffled separately in every block, so position tells you nothing.
-                    For each line, mark Hit, Close or Miss on: specific, truthful, natural, musically
-                    connected, worth hearing. Please don't open generations.json or key.json until you're done.
+                    For each block, say which version you would rather hear, and name any clear Hit or Miss.
+                    Please don't open generations.json or key.json until you're done.
                     """);
-            int planned = BATCH_ONE.stream().mapToInt(item -> item.repeats() * 2).sum();
+            int planned = BATCH_CASES.stream().mapToInt(item -> item.repeats() * 2).sum();
             int finished = 0;
-            for (BatchCase item : BATCH_ONE) {
+            for (BatchCase item : BATCH_CASES) {
                 stage = "Musixmatch material for " + item.key();
                 SongMaterial material = (item.catalogTrackId() == null
                         ? music.lookupMaterial(item.title(), item.artist())
@@ -854,16 +900,16 @@ class SongReflectionTrialTest {
                     boolean beforeIsA = random.nextBoolean();
                     JsonObject before = null;
                     JsonObject after = null;
-                    for (String condition : List.of("before", "after")) {
-                        stage = item.key() + " repeat " + repeat + " " + condition;
+                    for (BatchCondition condition : List.of(plan.before(), plan.after())) {
+                        stage = item.key() + " repeat " + repeat + " " + condition.name();
                         JsonObject record = batchGeneration(trial, item, condition, repeat, material, run, landing);
                         generations.add(record);
-                        if (condition.equals("before")) before = record; else after = record;
+                        if (condition == plan.before()) before = record; else after = record;
                         finished++;
                         System.out.println("[" + finished + "/" + planned + "] " + stage + ": "
                                 + record.get("status").getAsString() + "; Anthropic calls so far " + calls.get());
                         writeBatchFiles(folder, generations, key, review.toString(),
-                                batchSummary(calls.get(), tokens, started, finished, planned));
+                                batchSummary(plan, calls.get(), tokens, started, finished, planned));
                     }
                     review.append(batchReviewBlock("A", repeat, beforeIsA ? before : after));
                     review.append(batchReviewBlock("B", repeat, beforeIsA ? after : before));
@@ -871,33 +917,33 @@ class SongReflectionTrialTest {
                             beforeIsA ? "A = before, B = after" : "A = after, B = before");
                 }
             }
-            JsonObject summary = batchSummary(calls.get(), tokens, started, finished, planned);
+            JsonObject summary = batchSummary(plan, calls.get(), tokens, started, finished, planned);
             writeBatchFiles(folder, generations, key, review.toString(), summary);
-            System.out.println("Batch 1 finished: " + finished + "/" + planned + " generations, "
+            System.out.println(plan.title() + " finished: " + finished + "/" + planned + " generations, "
                     + calls.get() + " Anthropic calls, estimated $"
                     + summary.get("estimated_cost_usd").getAsString() + ". Private report: " + folder);
         } catch (Exception failure) {
             String reason = failure instanceof ReflectionProviderException provider
                     ? provider.failureType().name() + ": " + provider.getMessage()
                     : failure.getClass().getSimpleName() + ": " + failure.getMessage();
-            System.out.println("Batch 1 stopped during " + stage + "; Anthropic calls=" + calls.get() + "; " + reason);
+            System.out.println(plan.title() + " stopped during " + stage + "; Anthropic calls=" + calls.get()
+                    + "; " + reason);
             System.exit(1);
         }
     }
 
-    private static JsonObject batchGeneration(SongReflectionTrial trial, BatchCase item, String condition, int repeat,
-            SongMaterial material, CompletedRunEvidence run, SongReflectionTrial.PassageLanding landing) {
-        boolean after = condition.equals("after");
-        var version = after ? SongReflectionTrial.StudyVersion.V2 : SongReflectionTrial.StudyVersion.V1;
+    private static JsonObject batchGeneration(SongReflectionTrial trial, BatchCase item, BatchCondition condition,
+            int repeat, SongMaterial material, CompletedRunEvidence run, SongReflectionTrial.PassageLanding landing) {
         JsonObject record = new JsonObject();
         record.addProperty("case", item.key());
-        record.addProperty("condition", condition);
+        record.addProperty("condition", condition.name());
         record.addProperty("repeat", repeat);
-        record.addProperty("model", BATCH_ONE_MODEL);
-        record.addProperty("study_prompt", version.prompt);
+        record.addProperty("model", BATCH_MODEL);
+        record.addProperty("study_prompt", condition.study().prompt);
+        record.addProperty("writer_prompt", condition.writer().prompt);
         try {
             long studyStarted = System.nanoTime();
-            var studied = trial.study(material, version);
+            var studied = trial.study(material, condition.study());
             record.addProperty("study_ms", (System.nanoTime() - studyStarted) / 1_000_000);
             JsonObject notes = studied.linerNotes();
             JsonObject study = new JsonObject();
@@ -908,16 +954,16 @@ class SongReflectionTrialTest {
             study.add("imagery", notes.get("imagery"));
             study.addProperty("lyric_echo_count", notes.getAsJsonArray("lyric_echoes").size());
             record.add("study", study);
-            record.addProperty("creative_approach", after
+            record.addProperty("creative_approach", condition.studyDirection()
                     ? SongReflectionTrial.approachFor(notes.get("connection").getAsString()).name()
                     : SongReflectionTrial.CreativeApproach.AUTO.name());
             record.addProperty("passage_moment", landing == null ? null : landing.musicalMoment());
-            record.addProperty("intended_effect_sent", landing == null ? null : after
+            record.addProperty("intended_effect_sent", landing == null ? null : condition.studyDirection()
                     ? notes.get("intended_effect").getAsString().strip().replaceAll("\\s+", " ")
                     : landing.intendedEffect());
             long writeStarted = System.nanoTime();
-            var result = after ? trial.writeWithStudyDirection(run, studied, landing)
-                    : trial.write(run, studied, landing, SongReflectionTrial.CreativeApproach.AUTO);
+            var result = condition.studyDirection() ? trial.writeWithStudyDirection(run, studied, landing)
+                    : trial.write(run, studied, landing, SongReflectionTrial.CreativeApproach.AUTO, condition.writer());
             record.addProperty("writer_ms", (System.nanoTime() - writeStarted) / 1_000_000);
             JsonObject branches = result.branches();
             for (String[] branch : BATCH_BRANCHES) {
@@ -944,14 +990,14 @@ class SongReflectionTrialTest {
     private static String batchCaseHeader(BatchCase item, SongMaterial material, CompletedRunEvidence run,
             SongReflectionTrial.PassageLanding landing) {
         JsonObject facts = SongReflectionTrial.facts(run);
-        StringBuilder text = new StringBuilder("\n## " + material.trackTitle() + " \u2014 " + material.artistName() + "\n\n");
+        StringBuilder text = new StringBuilder("\n## " + material.trackTitle() + " — " + material.artistName() + "\n\n");
         text.append("Fictional run: ").append(facts.get("start_time_text").getAsString()).append(" to ")
                 .append(facts.get("finish_time_text").getAsString());
-        if (facts.has("distance_text")) text.append(" \u00b7 ").append(facts.get("distance_text").getAsString());
+        if (facts.has("distance_text")) text.append(" · ").append(facts.get("distance_text").getAsString());
         if (facts.has("active_duration_text")) {
-            text.append(" \u00b7 ").append(facts.get("active_duration_text").getAsString());
+            text.append(" · ").append(facts.get("active_duration_text").getAsString());
         }
-        text.append(" \u00b7 Energy before: ")
+        text.append(" · Energy before: ")
                 .append(facts.has("energy_before") ? facts.get("energy_before").getAsString() : "not answered")
                 .append("\n\nMusic that follows: ")
                 .append(landing == null ? "the opening of the recording" : landing.musicalMoment()).append("\n");
@@ -964,7 +1010,7 @@ class SongReflectionTrialTest {
     }
 
     private static String batchReviewBlock(String label, int repeat, JsonObject record) {
-        StringBuilder text = new StringBuilder("\n### Repeat " + repeat + " \u2014 Version " + label + "\n\n");
+        StringBuilder text = new StringBuilder("\n### Repeat " + repeat + " — Version " + label + "\n\n");
         if (record == null || !"generated".equals(record.get("status").getAsString())) {
             return text.append("_This version did not generate; generations.json has the reason._\n").toString();
         }
@@ -978,10 +1024,14 @@ class SongReflectionTrialTest {
         return text.toString();
     }
 
-    private static JsonObject batchSummary(int calls, long[] tokens, long started, int finished, int planned) {
+    private static JsonObject batchSummary(BatchPlan plan, int calls, long[] tokens, long started, int finished,
+            int planned) {
         JsonObject summary = new JsonObject();
-        summary.addProperty("batch", "batch1");
-        summary.addProperty("model", BATCH_ONE_MODEL);
+        summary.addProperty("batch", plan.name());
+        summary.addProperty("model", BATCH_MODEL);
+        summary.addProperty("before", plan.before().study().prompt + " + " + plan.before().writer().prompt);
+        summary.addProperty("after", plan.after().study().prompt + " + " + plan.after().writer().prompt
+                + (plan.after().studyDirection() ? " (study direction)" : ""));
         summary.addProperty("generations_finished", finished);
         summary.addProperty("generations_planned", planned);
         summary.addProperty("anthropic_calls", calls);

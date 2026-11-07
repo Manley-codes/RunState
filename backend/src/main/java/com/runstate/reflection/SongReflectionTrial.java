@@ -32,11 +32,21 @@ import java.util.regex.Pattern;
 final class SongReflectionTrial {
     enum CreativeApproach { AUTO, DIRECT, PERSONA_ONLY, BLEND }
 
-    /** v1 is the accepted baseline study. v2 also writes the per-song direction the auditions supplied by hand. */
+    /**
+     * v1 is the accepted baseline study. v2 also writes a per-song direction (Nov 7 batch 1, not
+     * adopted). v3 keeps v1's fields but in plain terms a writer cannot lift as spoken wording.
+     */
     enum StudyVersion {
-        V1("song-study-trial-v1.txt"), V2("song-study-trial-v2.txt");
+        V1("song-study-trial-v1.txt"), V2("song-study-trial-v2.txt"), V3("song-study-trial-v3.txt");
         final String prompt;
         StudyVersion(String prompt) { this.prompt = prompt; }
+    }
+
+    /** v1 is the accepted baseline writer. v2 adds own-words use of notes and never shrinking the run. */
+    enum WriterVersion {
+        V1("song-writer-trial-v1.txt"), V2("song-writer-trial-v2.txt");
+        final String prompt;
+        WriterVersion(String prompt) { this.prompt = prompt; }
     }
 
     private static final List<String> BRANCHES = List.of("spent", "feeling_good", "powered_up", "no_selection");
@@ -95,7 +105,13 @@ final class SongReflectionTrial {
 
     TrialResult write(CompletedRunEvidence evidence, StudiedSong studied, PassageLanding landing,
                       CreativeApproach approach) throws ReflectionProviderException {
+        return write(evidence, studied, landing, approach, WriterVersion.V1);
+    }
+
+    TrialResult write(CompletedRunEvidence evidence, StudiedSong studied, PassageLanding landing,
+                      CreativeApproach approach, WriterVersion writer) throws ReflectionProviderException {
         java.util.Objects.requireNonNull(approach, "approach");
+        java.util.Objects.requireNonNull(writer, "writer");
         SongMaterial material = studied.material();
         requireMatching(evidence, material, landing);
         JsonObject notes = studied.linerNotes();
@@ -137,7 +153,7 @@ final class SongReflectionTrial {
             writerInput.add("passage_landing", target);
         }
         JsonObject branches = exchange.exchange(writerInput,
-                prompt("song-writer-trial-v1.txt"), writerSchema(evidence));
+                prompt(writer.prompt), writerSchema(evidence));
         List<String> warnings = validateBranches(branches, facts, evidence, notes, material, approach);
         return new TrialResult(notes, branches, new CandidateReflections(
                 branches.getAsJsonObject("spent").get("reflection").getAsString(),
