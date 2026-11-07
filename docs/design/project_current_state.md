@@ -5,6 +5,32 @@ metadata:
   type: project
 ---
 
+## November 7 backend CI — local verification complete, GitHub run pending
+
+Manley approved the bounded CI plan. Existing Tests workflow now has an independent
+`Backend tests + build` job: Ubuntu, Temurin17,15-minute timeout, read-only repository access,
+backend Maven cache, and `mvn -B --no-transfer-progress verify` inside `backend/`. Existing
+master push/PR/manual triggers and Java/Android jobs are unchanged. Live song trials are
+explicitly disabled; no provider secrets supplied. Failure reports use the distinct
+`backend-surefire-reports` artifact with seven-day retention. Manual paid harness comment fixed.
+
+Actionlint1.7.12 validated the workflow; its official downloaded checksum was verified and the
+tool stays only in ignored build output. Initial backend verify hit one SocketException/reset
+while reading the existing oversized speech-request rejection test. That isolated test passed
+on recheck; fresh full verify passed all229 tests and JAR packaging. No application/test code
+was changed to hide the failure; watch for recurrence in the first GitHub run. Independent
+workflow/source review passed. No paid calls, phone changes, deployment or Git mutations.
+
+Stop at the user's commit/push checkpoint. First hosted job remains unverified until that push;
+then review Actions → Tests → Backend tests + build, failed-step logs and report artifacts with
+Manley. No new tracked files; workflow and existing notes only.
+
+Direction clarification: prepare for public download/store release when Manley chooses, without
+publishing automatically; further product improvements may follow readiness. Initial account
+creation/sign-in is the working preference, but accounts/passwords are paused for a dedicated
+learning session. Subscription boundaries and full pre-distribution review remain undecided;
+existing tester-code foundation is not the selected normal-user account experience.
+
 ## November 7 individual backend access — local implementation checked
 
 Manley resumes release work and requests lightweight learning: brief plain-English explanations

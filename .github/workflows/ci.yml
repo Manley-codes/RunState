@@ -1,11 +1,9 @@
 name: Tests
 
-# Runs the JUnit suite on every push and pull request touching master.
-# The suite is designed to need no MySQL instance and no API key:
-#   - storage is tested through a package-private ConnectionProvider seam
-#   - ResultSet is faked with java.lang.reflect.Proxy
-#   - the live-API evaluation harnesses are separate classes with main() methods,
-#     deliberately outside Surefire's *Test.java pattern, so they never run here
+# Checks the original Java project, reflection backend and Android app on master pushes/PRs.
+# Tests use simulated storage/providers and local HTTP; no MySQL instance or API keys are needed.
+# Paid evaluation harnesses require explicitly invoking their main() methods;
+# JUnit does not invoke those methods, even when they live in a *Test.java class.
 on:
   push:
     branches: [ master ]
@@ -38,6 +36,39 @@ jobs:
         with:
           name: surefire-reports
           path: target/surefire-reports/
+          retention-days: 7
+
+  backend:
+    name: Backend tests + build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    env:
+      RUNSTATE_LIVE_SONG_TRIAL: '0'
+
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v7
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v6
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: maven
+          cache-dependency-path: backend/pom.xml
+
+      - name: Test and package the backend
+        working-directory: backend
+        run: mvn -B --no-transfer-progress verify
+
+      - name: Upload backend test reports on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-surefire-reports
+          path: backend/target/surefire-reports/
           retention-days: 7
 
   android:
