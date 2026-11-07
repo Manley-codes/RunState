@@ -605,6 +605,147 @@ class RunAssemblyScreenTest {
     }
 
     @Test
+    fun musicDistanceCompanionRepositionsOnlyThePaceRowAndRestoresItOnClose() {
+        compose.mainClock.autoAdvance = false
+        val actions = Actions()
+        var day by mutableStateOf(false)
+        var state by mutableStateOf(RunUiState.ActiveRunning)
+        val artwork = BitmapFactory.decodeResource(
+            InstrumentationRegistry.getInstrumentation().targetContext.resources, R.drawable.demo_lizzo_cover)
+        compose.setContent {
+            val density = LocalDensity.current
+            CompositionLocalProvider(LocalDensity provides Density(density.density, 1f)) {
+                Fixture(state = state, day = day, actions = actions,
+                    playerLayout = RunMusicPlayerLayout.ALBUM,
+                    player = SpotifyLivePlayerState(connected = true, title = "Good as Hell",
+                        artist = "Lizzo", artwork = artwork, paused = true,
+                        durationMillis = 180_000, positionMillis = 60_000,
+                        canSkipPrevious = true, canSkipNext = true, canTogglePlayback = true))
+            }
+        }
+        for (isDay in listOf(false, true)) {
+            for (runState in listOf(RunUiState.ActiveRunning, RunUiState.ActivePaused)) {
+                compose.runOnIdle { day = isDay; state = runState }
+                compose.mainClock.advanceTimeBy(1_600)
+                compose.onNodeWithTag(ACTIVE_RUN_DISTANCE_PANEL_TAG).assertDoesNotExist()
+                val paceBefore = compose.onNodeWithTag(ACTIVE_RUN_METRICS_TAG).getUnclippedBoundsInRoot()
+                val fixedTags = listOf(ACTIVE_RUN_SPLIT_PANEL_TAG, ACTIVE_RUN_MUSIC_TAG) +
+                    if (runState == RunUiState.ActivePaused) listOf(HOLD_TO_STOP_TAG) else emptyList()
+                val fixedBounds = fixedTags.associateWith {
+                    compose.onNodeWithTag(it).getUnclippedBoundsInRoot()
+                }
+                compose.onNodeWithTag(ACTIVE_RUN_MUSIC_TAG).assertIsDisplayed().performClick()
+                compose.mainClock.advanceTimeBy(600)
+                compose.onNodeWithTag(ACTIVE_RUN_DISTANCE_TAG).assertDoesNotExist()
+                compose.onNodeWithTag(ACTIVE_RUN_MUSIC_DISTANCE_TAG).assertIsDisplayed().assertTextEquals("3.24 mi")
+                compose.onNodeWithContentDescription("Distance, 3.24 mi").assertIsDisplayed()
+                compose.onNodeWithTag(ACTIVE_RUN_PACE_TAG).assertIsDisplayed().assertTextEquals(metrics.averagePace)
+                val paceOpen = compose.onNodeWithTag(ACTIVE_RUN_METRICS_TAG).getUnclippedBoundsInRoot()
+                val distance = compose.onNodeWithTag(ACTIVE_RUN_DISTANCE_PANEL_TAG)
+                    .assertIsDisplayed().getUnclippedBoundsInRoot()
+                assertTrue("Distance must occupy the left side of the row", distance.left < paceBefore.left)
+                assertTrue("Average pace must move to the right", paceOpen.left > paceBefore.left)
+                assertEquals("Distance must inherit the original large panel width",
+                    (paceBefore.right - paceBefore.left).value, (distance.right - distance.left).value, 1f)
+                assertTrue("Average pace must use the smaller panel",
+                    paceOpen.right - paceOpen.left < distance.right - distance.left)
+                assertEquals("Pace must remain on the same row", paceBefore.top.value, paceOpen.top.value, 1f)
+                assertEquals("Pace height must remain unchanged",
+                    (paceBefore.bottom - paceBefore.top).value, (paceOpen.bottom - paceOpen.top).value, 1f)
+                assertTrue("Average pace must stay to the right without overlap", paceOpen.left > distance.right)
+                assertEquals(paceOpen.top.value, distance.top.value, 1f)
+                assertEquals(paceOpen.bottom.value, distance.bottom.value, 1f)
+                assertEquals("The two-panel row must stay centered",
+                    (paceBefore.left.value + paceBefore.right.value) / 2f,
+                    (distance.left.value + paceOpen.right.value) / 2f, 1f)
+                assertWholeInsideViewport(ACTIVE_RUN_DISTANCE_PANEL_TAG)
+                assertWholeInsideViewport(ACTIVE_RUN_METRICS_TAG)
+                for ((tag, before) in fixedBounds) {
+                    assertEquals("Opening music must not move $tag", before,
+                        compose.onNodeWithTag(tag).getUnclippedBoundsInRoot())
+                }
+                save(ACTIVE_RUN_SCREEN_TAG,
+                    "assembly-music-distance-${if (isDay) "day" else "night"}-${if (runState == RunUiState.ActivePaused) "paused" else "running"}.png")
+                compose.onNodeWithTag(ACTIVE_RUN_PLAYER_CLOSE_TAG).performClick()
+                compose.mainClock.advanceTimeBy(600)
+                compose.onNodeWithTag(ACTIVE_RUN_DISTANCE_PANEL_TAG).assertDoesNotExist()
+                compose.onNodeWithTag(ACTIVE_RUN_MUSIC_DISTANCE_TAG).assertDoesNotExist()
+                compose.onNodeWithTag(ACTIVE_RUN_DISTANCE_TAG).assertIsDisplayed().assertTextEquals("3.24")
+                assertEquals("Closing music must restore the centered pace panel", paceBefore,
+                    compose.onNodeWithTag(ACTIVE_RUN_METRICS_TAG).getUnclippedBoundsInRoot())
+                for ((tag, before) in fixedBounds) {
+                    assertEquals("Closing music must not move $tag", before,
+                        compose.onNodeWithTag(tag).getUnclippedBoundsInRoot())
+                }
+            }
+        }
+        assertEquals(0, actions.music)
+        assertEquals(0, actions.musicToggles)
+        assertEquals(0, actions.musicConnections)
+        assertEquals(0, actions.pauses)
+        assertEquals(0, actions.resumes)
+        assertEquals(0, actions.stops)
+        assertEquals(0, actions.startsNow)
+    }
+
+    @Test
+    fun musicDistanceCompanionUsesLiveValuesAndFitsLongReadings() {
+        compose.mainClock.autoAdvance = false
+        var values by mutableStateOf<RunMetricsDisplay?>(null)
+        var fontScale by mutableStateOf(1.25f)
+        compose.setContent {
+            val density = LocalDensity.current
+            CompositionLocalProvider(LocalDensity provides Density(density.density, fontScale)) {
+                Fixture(state = RunUiState.ActivePaused, values = values,
+                    player = SpotifyLivePlayerState(connected = true, title = "Observed song", paused = true))
+            }
+        }
+        compose.mainClock.advanceTimeBy(1_600)
+        compose.onNodeWithTag(ACTIVE_RUN_MUSIC_TAG).scrollWithClock().performClick()
+        compose.mainClock.advanceTimeBy(600)
+        compose.onNodeWithTag(ACTIVE_RUN_MUSIC_DISTANCE_TAG).scrollWithClock().assertTextEquals("—")
+        compose.onNodeWithContentDescription("Distance, —").assertExists()
+        compose.onNodeWithTag(ACTIVE_RUN_PACE_TAG).assertTextEquals("—")
+        for (scale in listOf(1.25f, 1.3f)) {
+            for ((distance, pace) in listOf("5.22 km" to "8:51 /km", "1234.56 km" to "123:59 /km")) {
+                compose.runOnIdle { fontScale = scale; values = metrics.copy(distance = distance, averagePace = pace) }
+                compose.mainClock.advanceTimeBy(100)
+                val reading = compose.onNodeWithTag(ACTIVE_RUN_MUSIC_DISTANCE_TAG)
+                    .scrollWithClock().assertIsDisplayed().assertTextEquals(distance)
+                compose.onNodeWithContentDescription("Distance, $distance").assertExists()
+                val paceReading = compose.onNodeWithTag(ACTIVE_RUN_PACE_TAG).assertIsDisplayed().assertTextEquals(pace)
+                val texts = listOf(
+                    reading to ACTIVE_RUN_DISTANCE_PANEL_TAG,
+                    compose.onNodeWithText("Distance", useUnmergedTree = true) to ACTIVE_RUN_DISTANCE_PANEL_TAG,
+                    paceReading to ACTIVE_RUN_METRICS_TAG,
+                    compose.onNodeWithText("Average pace", useUnmergedTree = true) to ACTIVE_RUN_METRICS_TAG)
+                for ((text, panelTag) in texts) {
+                    val panel = compose.onNodeWithTag(panelTag).getUnclippedBoundsInRoot()
+                    text.assertIsDisplayed()
+                    val layouts = mutableListOf<TextLayoutResult>()
+                    text.performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
+                    val layout = layouts.single()
+                    if (layout.hasVisualOverflow) save(ACTIVE_RUN_SCREEN_TAG, "assembly-distance-overflow.png")
+                    assertFalse("Companion '${layout.layoutInput.text}' must fit at font scale $scale: " +
+                        "size=${layout.size}, constraints=${layout.layoutInput.constraints}, " +
+                        "widthOverflow=${layout.didOverflowWidth}, heightOverflow=${layout.didOverflowHeight}",
+                        layout.hasVisualOverflow)
+                    val bounds = text.getUnclippedBoundsInRoot()
+                    assertTrue("'${layout.layoutInput.text}' must remain inside $panelTag at font scale $scale",
+                        bounds.left >= panel.left && bounds.right <= panel.right &&
+                            bounds.top >= panel.top && bounds.bottom <= panel.bottom)
+                }
+            }
+        }
+        compose.onNodeWithTag(ACTIVE_RUN_MUSIC_TAG).scrollWithClock().performClick()
+        compose.mainClock.advanceTimeBy(600)
+        compose.onNodeWithTag(ACTIVE_RUN_DISTANCE_PANEL_TAG).assertDoesNotExist()
+        compose.onNodeWithTag(ACTIVE_RUN_DISTANCE_TAG).scrollWithClock().assertTextEquals("1234.56")
+        compose.onNodeWithContentDescription("Distance, 1234.56 km").assertExists()
+        compose.onNodeWithTag(ACTIVE_RUN_PACE_TAG).assertTextEquals("123:59 /km")
+    }
+
+    @Test
     fun tallMusicArrowsAcceptUpperAndLowerTapsWithoutRunActions() {
         compose.mainClock.autoAdvance = false
         val actions = Actions()

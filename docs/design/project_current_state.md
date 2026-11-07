@@ -5,6 +5,83 @@ metadata:
   type: project
 ---
 
+## November 7 metric emphasis swap — installed on Moto
+
+Manley accepted the companion and requested Distance in the larger left panel, with Average
+pace in the smaller right panel while music is open. Source now does this, keeping existing
+row height, lower panels/Stop, themes and transition. Both readings include their live units;
+closing restores centered pace. The existing two device cases now check swapped geometry,
+both labels/readings at enlarged text sizes and long values. No new tracked files.
+
+Initial builds passed; the first phone check found a width-rounding overflow in the larger
+Distance label at125% text. Giving the centered label its full available width corrected it.
+Final debug/release/test APK builds passed in23seconds; both focused device cases passed
+in13.305seconds, including four Dark/Light and Running/Paused states, enlarged text and long
+readings. Four native captures reviewed; independent source review found no blocking issue.
+These are presentation checks, not a fresh provider/GPS field test or full-suite rerun.
+
+Manley finished/discarded the paused run before installation; a new idle backup confirmed60
+completed runs. Moto updated in place, installed hash matches the final APK. After checks and
+normal reopening, all60 runs, all12 table hashes/counts and all five preferences remain
+unchanged; database integrity OK. Temporary test package removed, main app reopened. No new
+tracked source/test/assets/dependencies or Git mutation. Ready for user review/commit; stop
+here. The earlier companion below is historical; this is the current installed panel order.
+
+## November 7 music distance companion — installed on Moto
+
+Manley approved direct Android implementation of a compact Distance panel beside Average
+pace while the circular music player is open. Pace keeps its existing width and slides left;
+Distance appears on its right with the same height and theme styling. Closing music removes
+the companion and restores centered pace. The row's height and vertical position, lower
+split/music panel and Stop position are unchanged. The transition respects reduced motion
+and foreground state. Distance reuses the existing live reading and units; unavailable data
+stays unavailable. No new calculations, GPS, provider, backend or persistence behavior.
+
+Final debug/release/test APK builds passed. The broader24-case device run passed23 cases and
+exposed enlarged-text unit-label overflow; paused spacing and the centered label width were
+corrected without weakening assertions. Both affected focused cases then passed on the final
+build in11.962seconds, covering Dark/Light, Running/Paused, opening/closing, fixed lower-panel
+bounds, live updates, missing data, long distances and125–130% text. Four native captures were
+visually reviewed. This is UI verification, not a new outdoor or live Spotify test; full JVM
+suites were not rerun for this presentation-only follow-up.
+
+Moto ZT422G8FT4 was idle and privately backed up before in-place installation. The installed
+APK matches the final build. After tests and normal reopening, all60 completed runs, all12
+logical table hashes/counts and all five preference files match the baseline; integrity OK,
+zero foreign-key violations. Temporary test package removed; main app reopened. Receipts and
+captures: `../local/music-controls-study-2026-11-07/native/QA.md`.
+
+Only existing `RunAssemblyScreen.kt` and `RunAssemblyScreenTest.kt` changed, alongside these
+memory records. No new tracked source/test/assets/dependencies, public preview change or Git
+mutation. User review and commit are next. Stop at this bounded checkpoint; the reflection
+handoff and Spotify/access/release/security/iPhone priorities below remain in effect.
+
+## November 7 reflection-quality handoff — prepared for Claude, with Manley involved
+
+Manley confirmed the native music-control result looks good. Local master is now3dfbd9d
+(`feat: add expanded music controls to active run player`); the tree was clean when preparing
+this handoff. No remote-push claim is made by this read-only check.
+
+He asks for a substantial Claude handoff to improve existing post-run reflection quality,
+with a thorough review of relevant history/research/code and proactive suggestions. Existing
+decisions can be challenged with reasons; preserve accepted examples as references rather
+than treating them as either untouchable rules or generic templates. Manley wants to shape
+the work throughout. Plain English first; technical terms only when useful for a decision or
+developer learning, explained in context. First checkpoint is read-only assessment and a few
+concrete proposals/examples; bounded implementation follows his direction.
+
+The private handoff is `../local/claude-reflection-quality-handoff-2026-11-07.md`. It distinguishes
+the fixed Lizzo demo from normal generation, historical30-second preparation from current
+60-second observed-playback eligibility, and accepted creative work from unresolved selection/
+musical-ending/latency quality. It includes the source/test map, research pointers and evidence
+limits. No paid generation, phone action or application change was made to prepare it.
+
+Claude's future implementation should use a separate branch AND worktree after coordinating
+file ownership; no branch/worktree was created. Manley retains routine Git operations. Codex
+continues the separate lock-screen feasibility checkpoint and Spotify/access/release/security/
+iPhone track; shared API, playback, UI and central documentation edits need coordination.
+The handoff is prepared for Manley to pass along, not evidence Claude has started or finished.
+
 ## November 7 music controls — selected design installed on Moto
 
 Manley approved the final browser design after removing the extra contour inside each thick

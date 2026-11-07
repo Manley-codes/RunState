@@ -77,6 +77,8 @@ import kotlin.math.sin
 internal const val ACTIVE_RUN_SPLIT_TAG = "activeRunSplit"
 internal const val ACTIVE_RUN_SPLIT_PANEL_TAG = "activeRunSplitPanel"
 internal const val ACTIVE_RUN_MUSIC_TAG = "activeRunMusic"
+internal const val ACTIVE_RUN_DISTANCE_PANEL_TAG = "activeRunDistancePanel"
+internal const val ACTIVE_RUN_MUSIC_DISTANCE_TAG = "activeRunMusicDistance"
 internal const val ACTIVE_RUN_FINISH_TAG = "activeRunFinish"
 internal const val RUN_ASSEMBLY_VIEWPORT_TAG = "runAssemblyViewport"
 internal const val COUNTDOWN_FRAME_TAG = "countdownFrame"
@@ -198,6 +200,14 @@ internal fun RunAssemblyScreen(
     val reduced = !motion.systemEnabled
     val pauseAmount by animateFloatAsState(if (paused) 1f else 0f,
         animationSpec = tween(if (reduced) 0 else 380, easing = AssemblyEase), label = "pause layout")
+    val musicPanelAmount by animateFloatAsState(if (active && musicOpen) 1f else 0f,
+        animationSpec = tween(if (reduced || !motion.foreground) 0 else 380, easing = AssemblyEase),
+        label = "music distance row")
+    val primaryMetricX = mix(84.5f, 22f, musicPanelAmount)
+    val companionMetricX = primaryMetricX + 224f + 12f
+    // Keep a constant gap while the row slides; reveal the companion only once it fits.
+    val companionAlpha = fraction((musicPanelAmount - .65f) / .35f)
+    val showMusicMetrics = musicOpen || musicPanelAmount > 0f
     val beat = remember { mutableFloatStateOf(.3f) }
     val clock = remember { mutableFloatStateOf(if (active) 1.19f else 0f) }
     val lastDigit = remember { mutableIntStateOf(countdownDigit ?: COUNTDOWN_SECONDS) }
@@ -294,7 +304,7 @@ internal fun RunAssemblyScreen(
                         .align(Alignment.TopCenter).offset(y = topInset.dp)) {
                         AssemblyGeometry(
                             active, counting, visibleDigit ?: lastDigit.intValue, colors, beat, clock, reduced,
-                            heroY, heroScale, paceY, paceH, bottomY, bottomH,
+                            heroY, heroScale, primaryMetricX, paceY, paceH, companionMetricX, companionAlpha, bottomY, bottomH,
                             Modifier.fillMaxSize()
                         )
                         AssemblyHeader(colors, if (starting) "Starting" else if (counting) "Ready to run"
@@ -401,18 +411,42 @@ internal fun RunAssemblyScreen(
                                     letterSpacing = (3.3f * unit).sp,
                                     modifier = Modifier.padding(top = (18 * unit).dp))
                             }
-                            Column(Modifier.offset(x = (84.5f * unit).dp, y = (paceY * unit).dp)
+                            Column(Modifier.offset(x = (primaryMetricX * unit).dp, y = (paceY * unit).dp)
                                 .size((224 * unit).dp, (paceH * unit).dp)
+                                .testTag(if (showMusicMetrics) ACTIVE_RUN_DISTANCE_PANEL_TAG else ACTIVE_RUN_METRICS_TAG)
                                 .padding(horizontal = (16 * unit).dp)
-                                .reveal(clock, .38f, reduced).testTag(ACTIVE_RUN_METRICS_TAG),
+                                .reveal(clock, .38f, reduced),
                                 horizontalAlignment = Alignment.CenterHorizontally,
                                 verticalArrangement = Arrangement.Center) {
-                                Text("Average pace", color = colors.label, fontSize = (15 * unit).sp,
-                                    fontWeight = FontWeight.Medium, textAlign = TextAlign.Center)
+                                Text(if (showMusicMetrics) "Distance" else "Average pace",
+                                    color = colors.label, fontSize = (15 * unit).sp,
+                                    fontWeight = FontWeight.Medium, textAlign = TextAlign.Center,
+                                    modifier = Modifier.fillMaxWidth())
                                 Spacer(Modifier.height(3.dp))
-                                AssemblyFittedReading(metrics?.averagePace ?: "—", colors.ink,
+                                val reading = (if (showMusicMetrics) metrics?.distance else metrics?.averagePace) ?: "—"
+                                AssemblyFittedReading(reading, colors.ink,
                                     mix(49f, 43f, pauseAmount) * unit, CompletionNumberFont,
-                                    Modifier.fillMaxWidth(), centered = true, readingTag = ACTIVE_RUN_PACE_TAG)
+                                    Modifier.fillMaxWidth(), centered = true,
+                                    readingTag = if (showMusicMetrics) ACTIVE_RUN_MUSIC_DISTANCE_TAG else ACTIVE_RUN_PACE_TAG,
+                                    description = if (showMusicMetrics) "Distance, $reading" else null)
+                            }
+                            if (showMusicMetrics) {
+                                Column(Modifier.offset(x = (companionMetricX * unit).dp, y = (paceY * unit).dp)
+                                    .size((113 * unit).dp, (paceH * unit).dp)
+                                    .testTag(ACTIVE_RUN_METRICS_TAG)
+                                    .padding(horizontal = (10 * unit).dp)
+                                    .reveal(clock, .38f, reduced)
+                                    .graphicsLayer { alpha = companionAlpha },
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.Center) {
+                                    AssemblyFittedReading("Average pace", colors.label, 15f * unit * fontScale,
+                                        FontFamily.SansSerif, Modifier.fillMaxWidth(), centered = true)
+                                    Spacer(Modifier.height((mix(3f, 1f, pauseAmount) * unit).dp))
+                                    AssemblyFittedReading(metrics?.averagePace ?: "—", colors.ink,
+                                        mix(39f, 29f, pauseAmount) * unit, CompletionNumberFont,
+                                        Modifier.fillMaxWidth(), centered = true,
+                                        readingTag = ACTIVE_RUN_PACE_TAG)
+                                }
                             }
                             Column(Modifier.offset(x = (43 * unit).dp, y = (bottomY * unit).dp)
                                 .size((153 * unit).dp, (bottomH * unit).dp)
@@ -657,8 +691,9 @@ private fun AssemblyNotices(colors: AssemblyColors, metrics: RunMetricsDisplay?,
 
 @Composable
 private fun AssemblyGeometry(active: Boolean, counting: Boolean, digit: Int, colors: AssemblyColors,
-    beat: State<Float>, clock: State<Float>, reduced: Boolean, heroY: Float, heroScale: Float, paceY: Float,
-    paceH: Float, bottomY: Float, bottomH: Float, modifier: Modifier) {
+    beat: State<Float>, clock: State<Float>, reduced: Boolean, heroY: Float, heroScale: Float,
+    primaryMetricX: Float, paceY: Float, paceH: Float, companionMetricX: Float, companionAlpha: Float,
+    bottomY: Float, bottomH: Float, modifier: Modifier) {
     Canvas(modifier) {
         val u = size.width / 393f
         scale(u, u, Offset.Zero) {
@@ -675,9 +710,9 @@ private fun AssemblyGeometry(active: Boolean, counting: Boolean, digit: Int, col
             }
             // Two source squares become the two halves of one unbroken average-pace panel.
             val finals = listOf(AssemblyBox(116f,103f,252f,89f),
-                AssemblyBox(84.5f,paceY,112f,paceH), AssemblyBox(22f,bottomY,174.5f,bottomH),
+                AssemblyBox(primaryMetricX,paceY,112f,paceH), AssemblyBox(22f,bottomY,174.5f,bottomH),
                 AssemblyBox(25f,103f,78f,89f), AssemblyBox(196.5f,bottomY,174.5f,bottomH),
-                AssemblyBox(196.5f,paceY,112f,paceH))
+                AssemblyBox(primaryMetricX+112f,paceY,112f,paceH))
             val orders = listOf(4,0,2,5,1,3)
             repeat(6) { index ->
                 val start = mixBox(source(index, max(0,step-1)), source(index,step), gridTravel)
@@ -692,8 +727,11 @@ private fun AssemblyGeometry(active: Boolean, counting: Boolean, digit: Int, col
             if (active) {
                 val pp=progress(time,.12f,.45f,reduced)
                 val bp=progress(time,.23f,.45f,reduced)
-                drawRoundRect(colors.panel.copy(alpha=if(colors.day)0f else pp),Offset(84.5f,paceY),
+                drawRoundRect(colors.panel.copy(alpha=if(colors.day)0f else pp),Offset(primaryMetricX,paceY),
                     Size(224f,paceH),CornerRadius(10f))
+                if (companionAlpha > 0f) drawRoundRect(
+                    colors.panel.copy(alpha=if(colors.day)0f else pp*companionAlpha),Offset(companionMetricX,paceY),
+                    Size(113f,paceH),CornerRadius(10f))
                 drawRoundRect(colors.panel.copy(alpha=if(colors.day)0f else bp),Offset(22f,bottomY),
                     Size(349f,bottomH),CornerRadius(10f))
                 val musicPath=Path().apply {
@@ -703,7 +741,9 @@ private fun AssemblyGeometry(active: Boolean, counting: Boolean, digit: Int, col
                 }
                 drawPath(musicPath,colors.musicPanel.copy(alpha=if(colors.day)0f else bp))
                 if(colors.day) {
-                    drawRoundRect(colors.grid.copy(alpha=.3f*pp),Offset(84.5f,paceY),Size(224f,paceH),CornerRadius(10f),style=Stroke(1f))
+                    drawRoundRect(colors.grid.copy(alpha=.3f*pp),Offset(primaryMetricX,paceY),Size(224f,paceH),CornerRadius(10f),style=Stroke(1f))
+                    if (companionAlpha > 0f) drawRoundRect(colors.grid.copy(alpha=.3f*pp*companionAlpha),
+                        Offset(companionMetricX,paceY),Size(113f,paceH),CornerRadius(10f),style=Stroke(1f))
                     drawRoundRect(colors.grid.copy(alpha=.3f*bp),Offset(22f,bottomY),Size(349f,bottomH),CornerRadius(10f),style=Stroke(1f))
                     drawLine(colors.grid.copy(alpha=.3f*bp),Offset(196.5f,bottomY),Offset(196.5f,bottomY+bottomH),1f)
                 }
