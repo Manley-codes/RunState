@@ -13,14 +13,18 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
+import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
@@ -90,8 +94,8 @@ public final class ReflectionHttpServer implements AutoCloseable {
     private final Semaphore runVoiceSlots = new Semaphore(MAX_CONCURRENT_RUN_VOICE_CALLS);
     private final int maxCachedRequests;
     private final Object cacheLock = new Object();
-    private final Map<String, RequestWork> workByRequestId = new HashMap<>();
-    private final Map<String, SongPreparationWork> songPreparationById = new HashMap<>();
+    private final Map<OwnedRequestId, RequestWork> workByRequestId = new HashMap<>();
+    private final Map<OwnedRequestId, SongPreparationWork> songPreparationById = new HashMap<>();
     private final AtomicBoolean closed = new AtomicBoolean();
 
     private ReflectionHttpServer(
@@ -313,9 +317,14 @@ public final class ReflectionHttpServer implements AutoCloseable {
             }
             return new EndpointResponse(200, "{\"status\":\"ok\"}");
         }
-        if (remoteAccess != null && !remoteAccess.authorizes(exchange)) {
-            exchange.getResponseHeaders().set("WWW-Authenticate", "Bearer");
-            return error(401, "unauthorized", "A valid demo access token is required.");
+        String principalId = "local-loopback";
+        if (remoteAccess != null) {
+            Optional<BackendAccessPolicy.Principal> principal = remoteAccess.authenticate(exchange);
+            if (principal.isEmpty()) {
+                exchange.getResponseHeaders().set("WWW-Authenticate", "Bearer");
+                return error(401, "unauthorized", "A valid access token is required.");
+            }
+            principalId = principal.get().id();
         }
         boolean speech = SPEECH_PATH.equals(exchange.getRequestURI().getRawPath());
         boolean runVoice = RUN_VOICE_PATH.equals(exchange.getRequestURI().getRawPath());
@@ -356,7 +365,7 @@ public final class ReflectionHttpServer implements AutoCloseable {
             return synthesizeRunVoice(ReflectionApiJson.parseSpeechRequest(body));
         }
         if (songPreparation) {
-            return prepareSongOnce(ReflectionApiJson.parseSongPreparationRequest(body));
+            return prepareSongOnce(ReflectionApiJson.parseSongPreparationRequest(body), principalId);
         }
         ApiRequest request = ReflectionApiJson.parseRequest(body);
         if (provider.supportsSongSnippets()) {
@@ -372,7 +381,7 @@ public final class ReflectionHttpServer implements AutoCloseable {
         if (!request.songCandidates().isEmpty() && !provider.supportsSongSelection()) {
             return error(503, "provider_unavailable", "Song selection is not configured.");
         }
-        return generateOnce(request);
+        return generateOnce(request, principalId);
     }
 
     private boolean hasAllowedHost(HttpExchange exchange) {
@@ -400,8 +409,8 @@ public final class ReflectionHttpServer implements AutoCloseable {
         return exchange.getRequestHeaders().get("Origin") != null;
     }
 
-    private EndpointResponse generateOnce(ApiRequest request) {
-        String requestId = request.identifiers().requestId();
+    private EndpointResponse generateOnce(ApiRequest request, String principalId) {
+        OwnedRequestId requestId = new OwnedRequestId(principalId, request.identifiers().requestId());
         RequestWork work;
         boolean owner;
         synchronized (cacheLock) {
@@ -434,7 +443,7 @@ public final class ReflectionHttpServer implements AutoCloseable {
 
         EndpointResponse response = error(500, "internal_error", "The reflection request could not be completed.");
         try {
-            response = callProvider(request);
+            response = callProvider(request, principalId);
             return response;
         } finally {
             // Even an abnormal provider exit must unblock duplicates and release its bounded slot.
@@ -443,10 +452,17 @@ public final class ReflectionHttpServer implements AutoCloseable {
         }
     }
 
-    private EndpointResponse callProvider(ApiRequest request) {
+    private EndpointResponse callProvider(ApiRequest request, String principalId) {
         try {
+            // Keep client IDs in responses/cache comparisons; isolate every provider preparation lookup.
+            List<ReflectionContract.SongCandidate> candidates = request.songCandidates().stream()
+                    .map(candidate -> new ReflectionContract.SongCandidate(candidate.candidateId(),
+                            candidate.musicContext(), scopedPreparationId(principalId, candidate.songPreparationId()),
+                            candidate.recording()))
+                    .toList();
             ReflectionProvider.GeneratedReflections generated = provider.generateForDelivery(
-                    request.evidence(), request.songPreparationId(), request.songCandidates(), request.allowSongSnippetLookup(),
+                    request.evidence(), scopedPreparationId(principalId, request.songPreparationId()),
+                    candidates, request.allowSongSnippetLookup(),
                     request.allowSongSnippetFallbacks());
             String body = ReflectionApiJson.success(request, generated, generationMode);
             if (body.getBytes(StandardCharsets.UTF_8).length > MAX_RESPONSE_BYTES) {
@@ -469,17 +485,18 @@ public final class ReflectionHttpServer implements AutoCloseable {
         }
     }
 
-    private EndpointResponse prepareSongOnce(ReflectionContract.SongPreparationRequest request) {
+    private EndpointResponse prepareSongOnce(ReflectionContract.SongPreparationRequest request, String principalId) {
         if (!provider.supportsSongPreparation()) {
             return error(503, "provider_unavailable", "Song preparation is not configured.");
         }
         SongPreparationWork work;
         boolean owner;
+        OwnedRequestId preparationId = new OwnedRequestId(principalId, request.preparationId());
         synchronized (cacheLock) {
             long now = System.nanoTime();
             songPreparationById.values().removeIf(item -> item.response().isDone()
                     && now - item.admittedNanos() >= AnthropicReflectionProvider.SONG_PREPARATION_TTL.toNanos());
-            SongPreparationWork existing = songPreparationById.get(request.preparationId());
+            SongPreparationWork existing = songPreparationById.get(preparationId);
             if (existing != null) {
                 if (!sameSongIdentity(existing.request(), request)) {
                     return error(409, "preparation_id_conflict", "The preparationId belongs to a different song.");
@@ -498,14 +515,17 @@ public final class ReflectionHttpServer implements AutoCloseable {
                     return error(503, "server_busy", "The reflection service is busy. Try again later.");
                 }
                 work = new SongPreparationWork(request, now, new CompletableFuture<>());
-                songPreparationById.put(request.preparationId(), work);
+                songPreparationById.put(preparationId, work);
                 owner = true;
             }
         }
         if (!owner) return work.response().join();
         EndpointResponse response = error(500, "internal_error", "Song preparation could not complete.");
         try {
-            ReflectionProvider.SongPreparationState state = provider.prepareSong(request);
+            ReflectionProvider.SongPreparationState state = provider.prepareSong(
+                    new ReflectionContract.SongPreparationRequest(
+                            scopedPreparationId(principalId, request.preparationId()),
+                            request.trackTitle(), request.artistName()));
             if (state == null) response = providerFailure(FailureType.INVALID_RESPONSE);
             else response = new EndpointResponse(200,
                     ReflectionApiJson.songPreparationResponse(request.preparationId(), state));
@@ -529,6 +549,23 @@ public final class ReflectionHttpServer implements AutoCloseable {
                 next.trackTitle().strip().replaceAll("\\s+", " "))
                 && first.artistName().strip().replaceAll("\\s+", " ").equalsIgnoreCase(
                 next.artistName().strip().replaceAll("\\s+", " "));
+    }
+
+    /** A stable, non-secret provider handle; no caller can select another principal's namespace. */
+    private String scopedPreparationId(String principalId, String clientId) {
+        if (clientId == null || remoteAccess == null || !remoteAccess.individualAccess) return clientId;
+        try {
+            byte[] digest = MessageDigest.getInstance("SHA-256").digest(
+                    ("runstate-song-preparation-v1\u0000" + principalId + "\u0000" + clientId)
+                            .getBytes(StandardCharsets.UTF_8));
+            // UUID v8 carries application-defined bits; keep the standard UUID variant.
+            digest[6] = (byte) ((digest[6] & 0x0f) | 0x80);
+            digest[8] = (byte) ((digest[8] & 0x3f) | 0x80);
+            ByteBuffer bytes = ByteBuffer.wrap(digest);
+            return new UUID(bytes.getLong(), bytes.getLong()).toString();
+        } catch (NoSuchAlgorithmException impossible) {
+            throw new IllegalStateException("Required SHA-256 support is unavailable.");
+        }
     }
 
     private EndpointResponse synthesizeSpeech(String text) {
@@ -670,25 +707,27 @@ public final class ReflectionHttpServer implements AutoCloseable {
     public static final class RemoteAccess {
         private final InetAddress bindAddress;
         private final String publicAuthority;
-        private final byte[] authorizationBytes;
+        private final BackendAccessPolicy accessPolicy;
+        private final boolean individualAccess;
 
         public RemoteAccess(String bindAddress, String publicAuthority, String demoToken) {
-            this.bindAddress = numericIpv4(bindAddress);
-            this.publicAuthority = publicAuthority(publicAuthority);
-            if (demoToken == null || !demoToken.matches("[A-Za-z0-9_-]{43,128}")) {
-                throw new IllegalArgumentException(
-                        "RUNSTATE_DEMO_TOKEN requires 43 to 128 URL-safe characters from at least 32 random bytes."
-                );
-            }
-            this.authorizationBytes = ("Bearer " + demoToken).getBytes(StandardCharsets.US_ASCII);
+            this(bindAddress, publicAuthority, BackendAccessPolicy.legacy(demoToken), false);
         }
 
-        private boolean authorizes(HttpExchange exchange) {
-            List<String> values = exchange.getRequestHeaders().get("Authorization");
-            if (values == null || values.size() != 1) return false;
-            String supplied = values.get(0);
-            return supplied.length() <= 7 + 128 && MessageDigest.isEqual(
-                    authorizationBytes, supplied.getBytes(StandardCharsets.UTF_8));
+        static RemoteAccess individual(String bindAddress, String publicAuthority, BackendAccessPolicy accessPolicy) {
+            return new RemoteAccess(bindAddress, publicAuthority, accessPolicy, true);
+        }
+
+        private RemoteAccess(String bindAddress, String publicAuthority,
+                             BackendAccessPolicy accessPolicy, boolean individualAccess) {
+            this.bindAddress = numericIpv4(bindAddress);
+            this.publicAuthority = publicAuthority(publicAuthority);
+            this.accessPolicy = Objects.requireNonNull(accessPolicy, "accessPolicy");
+            this.individualAccess = individualAccess;
+        }
+
+        private Optional<BackendAccessPolicy.Principal> authenticate(HttpExchange exchange) {
+            return accessPolicy.authenticate(exchange.getRequestHeaders().get("Authorization"));
         }
 
         private boolean allowsHost(String supplied) {
@@ -768,6 +807,10 @@ public final class ReflectionHttpServer implements AutoCloseable {
         } finally {
             exchange.close();
         }
+    }
+
+    private record OwnedRequestId(String principalId, String requestId) {
+        @Override public String toString() { return "OwnedRequestId[redacted]"; }
     }
 
     private record RequestWork(

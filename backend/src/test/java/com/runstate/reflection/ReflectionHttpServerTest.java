@@ -1456,6 +1456,253 @@ class ReflectionHttpServerTest {
     }
 
     @Test
+    void individualConfigurationCannotSilentlyFallBackToTheSharedOwnerCredential() {
+        Map<String, String> bothModes = Map.of(
+                "RUNSTATE_REFLECTION_PUBLIC_HOST", DEMO_HOST,
+                "RUNSTATE_DEMO_TOKEN", DUMMY_DEMO_TOKEN,
+                "RUNSTATE_ACCESS_GRANTS_JSON", "[]");
+        assertThrows(IllegalArgumentException.class, () -> ReflectionBackendMain.configuredRemoteAccess(bothModes));
+        assertThrows(IllegalArgumentException.class, () -> ReflectionBackendMain.configuredRemoteAccess(Map.of(
+                "RUNSTATE_REFLECTION_PUBLIC_HOST", DEMO_HOST, "RUNSTATE_ACCESS_GRANTS_JSON", "")));
+        assertThrows(IllegalArgumentException.class, () -> ReflectionBackendMain.configuredRemoteAccess(Map.of(
+                "RUNSTATE_REFLECTION_PUBLIC_HOST", DEMO_HOST, "RUNSTATE_ACCESS_GRANTS_JSON", "[{}]")));
+        assertFalse(ReflectionBackendMain.configuredRemoteAccess(Map.of(
+                "RUNSTATE_REFLECTION_PUBLIC_HOST", DEMO_HOST, "RUNSTATE_ACCESS_GRANTS_JSON", "[]"))
+                .toString().contains("[]"));
+    }
+
+    @Test
+    void individualRequestsAndCredentialRotationKeepTheirOwnCachedResults() throws Exception {
+        String secondToken = "B".repeat(43), rotatedToken = "C".repeat(43);
+        String grants = "[" + accessGrant("runner-a", DUMMY_DEMO_TOKEN, "2099-01-01T00:00:00Z", true)
+                + "," + accessGrant("runner-b", secondToken, "2099-01-01T00:00:00Z", true)
+                + "," + accessGrant("runner-a", rotatedToken, "2099-01-01T00:00:00Z", true) + "]";
+        AtomicInteger calls = new AtomicInteger();
+        ReflectionProvider provider = evidence -> {
+            String text = "Private result " + calls.incrementAndGet();
+            return new CandidateReflections(text, text, text, text);
+        };
+        try (var server = startIndividual(provider, BackendAccessPolicy.fromJson(grants), null, null)) {
+            var first = rawPost(server, accessHeaders(DUMMY_DEMO_TOKEN), validRequest());
+            var second = rawPost(server, accessHeaders(secondToken), validRequest());
+            assertEquals(200, first.status());
+            assertEquals(200, second.status());
+            assertTrue(first.body().contains("Private result 1"));
+            assertTrue(second.body().contains("Private result 2"));
+            assertEquals(first, rawPost(server, accessHeaders(rotatedToken), validRequest()));
+            assertEquals(second, rawPost(server, accessHeaders(secondToken), validRequest()));
+            assertError(rawPost(server, accessHeaders(DUMMY_DEMO_TOKEN),
+                    validRequest().replace(RUN_ID, OTHER_RUN_ID)), 409, "request_id_conflict");
+            assertEquals(2, calls.get());
+            for (String secret : List.of("runner-a", "runner-b", DUMMY_DEMO_TOKEN, secondToken)) {
+                assertFalse(first.body().contains(secret));
+                assertFalse(second.body().contains(secret));
+            }
+        }
+    }
+
+    @Test
+    void simultaneousRecipientsDoNotJoinEachOthersInFlightWork() throws Exception {
+        String secondToken = "B".repeat(43);
+        String grants = "[" + accessGrant("runner-a", DUMMY_DEMO_TOKEN, "2099-01-01T00:00:00Z", true)
+                + "," + accessGrant("runner-b", secondToken, "2099-01-01T00:00:00Z", true) + "]";
+        var bothEntered = new CountDownLatch(2);
+        var release = new CountDownLatch(1);
+        AtomicInteger calls = new AtomicInteger();
+        ReflectionProvider provider = evidence -> {
+            int number = calls.incrementAndGet();
+            bothEntered.countDown();
+            try {
+                if (!release.await(4, TimeUnit.SECONDS)) throw new IllegalStateException("Test release timed out");
+            } catch (InterruptedException interrupted) {
+                Thread.currentThread().interrupt(); throw new IllegalStateException(interrupted);
+            }
+            String text = "Private result " + number;
+            return new CandidateReflections(text, text, text, text);
+        };
+        try (var server = startIndividual(provider, BackendAccessPolicy.fromJson(grants), null, null)) {
+            var first = rawPostAsync(server, remoteHeaders(), validRequest());
+            var second = rawPostAsync(server, accessHeaders(secondToken), validRequest());
+            try {
+                assertTrue(bothEntered.await(2, TimeUnit.SECONDS));
+            } finally {
+                release.countDown();
+            }
+            var firstResult = first.get(3, TimeUnit.SECONDS);
+            var secondResult = second.get(3, TimeUnit.SECONDS);
+            assertEquals(200, firstResult.status()); assertEquals(200, secondResult.status());
+            assertFalse(firstResult.equals(secondResult));
+            assertEquals(2, calls.get());
+        }
+    }
+
+    @Test
+    void individualExpiryIsRecheckedBeforeCachedResultsAndEveryPaidEndpoint() throws Exception {
+        var now = new AtomicReference<>(java.time.Instant.parse("2026-11-07T12:00:00Z"));
+        var clock = new java.time.Clock() {
+            @Override public java.time.ZoneId getZone() { return java.time.ZoneOffset.UTC; }
+            @Override public java.time.Clock withZone(java.time.ZoneId zone) { return this; }
+            @Override public java.time.Instant instant() { return now.get(); }
+        };
+        String grants = "[" + accessGrant("runner-a", DUMMY_DEMO_TOKEN, "2026-11-07T12:00:01Z", true) + "]";
+        AtomicInteger calls = new AtomicInteger();
+        var provider = new ReflectionProvider() {
+            @Override public CandidateReflections generate(CompletedRunEvidence evidence) {
+                calls.incrementAndGet(); return exactCandidates();
+            }
+            @Override public boolean supportsSongPreparation() { return true; }
+            @Override public SongPreparationState prepareSong(ReflectionContract.SongPreparationRequest request) {
+                calls.incrementAndGet(); return SongPreparationState.READY;
+            }
+        };
+        ReflectionHttpServer.SpeechProvider voice = text -> { calls.incrementAndGet(); return new byte[]{1, 2}; };
+        try (var server = startIndividual(provider, BackendAccessPolicy.fromJson(grants, clock), voice, voice)) {
+            assertEquals(200, rawPost(server, remoteHeaders(), validRequest()).status());
+            assertEquals(200, rawRequest(server, "POST", ReflectionHttpServer.SPEECH_PATH,
+                    remoteHeaders(), speechBody("Reflection.")).status());
+            assertEquals(200, rawRequest(server, "POST", ReflectionHttpServer.RUN_VOICE_PATH,
+                    remoteHeaders(), speechBody("One mile.")).status());
+            assertEquals(200, rawRequest(server, "POST", ReflectionHttpServer.SONG_PREPARATION_PATH,
+                    remoteHeaders(), preparationBody(REQUEST_ID)).status());
+            assertEquals(4, calls.get());
+            now.set(java.time.Instant.parse("2026-11-07T12:00:01Z"));
+            assertError(rawPost(server, remoteHeaders(), validRequest()), 401, "unauthorized");
+            for (String path : List.of(ReflectionHttpServer.CANDIDATES_PATH, ReflectionHttpServer.SPEECH_PATH,
+                    ReflectionHttpServer.RUN_VOICE_PATH, ReflectionHttpServer.SONG_PREPARATION_PATH)) {
+                assertError(rawRequest(server, "POST", path, remoteHeaders(), "{"), 401, "unauthorized");
+            }
+            assertEquals(4, calls.get());
+            assertEquals(200, rawRequest(server, "GET", ReflectionHttpServer.HEALTH_PATH,
+                    List.of("Host: " + DEMO_HOST), "").status());
+        }
+    }
+
+    @Test
+    void disabledRemovedMissingOrInvalidIndividualCredentialsMakeNoProviderCalls() throws Exception {
+        String activeToken = "A".repeat(43);
+        AtomicInteger calls = new AtomicInteger();
+        ReflectionProvider provider = evidence -> { calls.incrementAndGet(); return exactCandidates(); };
+        ReflectionHttpServer.SpeechProvider voice = text -> { calls.incrementAndGet(); return new byte[]{1}; };
+        for (String grants : List.of("[]", "[" + accessGrant("runner-a", DUMMY_DEMO_TOKEN,
+                "2099-01-01T00:00:00Z", false) + "]", "[" + accessGrant("runner-a", activeToken,
+                "2099-01-01T00:00:00Z", true) + "]")) {
+            try (var server = startIndividual(provider, BackendAccessPolicy.fromJson(grants), voice, voice)) {
+                for (String path : List.of(ReflectionHttpServer.CANDIDATES_PATH, ReflectionHttpServer.SPEECH_PATH,
+                        ReflectionHttpServer.RUN_VOICE_PATH, ReflectionHttpServer.SONG_PREPARATION_PATH)) {
+                    for (List<String> headers : List.of(remoteHeaders(), List.of("Host: " + DEMO_HOST),
+                            List.of("Host: " + DEMO_HOST, "Authorization: Bearer " + activeToken,
+                                    "Authorization: Bearer " + activeToken))) {
+                        assertError(rawRequest(server, "POST", path, headers, "{"), 401, "unauthorized");
+                    }
+                }
+            }
+        }
+        assertEquals(0, calls.get());
+    }
+
+    @Test
+    void individualPreparationHandlesAreIsolatedForSingleAndMultipleSongLookups() throws Exception {
+        String secondToken = "B".repeat(43);
+        String grants = "[" + accessGrant("runner-a", DUMMY_DEMO_TOKEN, "2099-01-01T00:00:00Z", true)
+                + "," + accessGrant("runner-b", secondToken, "2099-01-01T00:00:00Z", true) + "]";
+        Map<String, String> prepared = new java.util.concurrent.ConcurrentHashMap<>();
+        var delivered = new AtomicReference<String>();
+        var deliveredCandidates = new AtomicReference<List<ReflectionContract.SongCandidate>>();
+        var deliveredFlags = new AtomicReference<List<Boolean>>();
+        AtomicInteger preparations = new AtomicInteger();
+        var provider = new ReflectionProvider() {
+            @Override public CandidateReflections generate(CompletedRunEvidence evidence) { return exactCandidates(); }
+            @Override public boolean supportsSongPreparation() { return true; }
+            @Override public boolean supportsSongSelection() { return true; }
+            @Override public boolean supportsSongSnippets() { return true; }
+            @Override public boolean supportsSongSnippetFallbacks() { return true; }
+            @Override public SongPreparationState prepareSong(ReflectionContract.SongPreparationRequest request) {
+                preparations.incrementAndGet();
+                prepared.put(request.trackTitle(), request.preparationId());
+                return SongPreparationState.READY;
+            }
+            @Override public GeneratedReflections generateForDelivery(CompletedRunEvidence evidence, String handle,
+                    List<ReflectionContract.SongCandidate> candidates, boolean snippets, boolean fallbacks) {
+                delivered.set(handle); deliveredCandidates.set(candidates);
+                deliveredFlags.set(List.of(snippets, fallbacks));
+                return new GeneratedReflections(exactCandidates(), null);
+            }
+        };
+        // Recreating the server proves stable namespacing, not durable response deduplication.
+        Map<String, String> firstHandles = new java.util.HashMap<>();
+        for (int restart = 0; restart < 2; restart++) {
+            try (var server = startIndividual(provider, BackendAccessPolicy.fromJson(grants), null, null)) {
+                for (String token : List.of(DUMMY_DEMO_TOKEN, secondToken)) {
+                    String title = token.equals(DUMMY_DEMO_TOKEN) ? "Controlled track" : "Other track";
+                    String prepBody = preparationBody(REQUEST_ID).replace("Controlled track", title);
+                    var response = rawRequest(server, "POST", ReflectionHttpServer.SONG_PREPARATION_PATH,
+                            accessHeaders(token), prepBody);
+                    assertEquals(200, response.status());
+                    assertEquals(REQUEST_ID, JsonParser.parseString(response.body()).getAsJsonObject()
+                            .get("preparationId").getAsString());
+                    assertEquals(response, rawRequest(server, "POST", ReflectionHttpServer.SONG_PREPARATION_PATH,
+                            accessHeaders(token), prepBody));
+                    String handle = prepared.get(title);
+                    assertFalse(REQUEST_ID.equals(handle));
+                    assertEquals(handle, java.util.UUID.fromString(handle).toString());
+                    assertFalse(response.body().contains(handle));
+                    if (restart == 0) firstHandles.put(title, handle);
+                    else assertEquals(firstHandles.get(title), handle);
+
+                    JsonObject single = JsonParser.parseString(validRequest().replace("Controlled track", title))
+                            .getAsJsonObject();
+                    single.addProperty("songPreparationId", REQUEST_ID);
+                    assertEquals(200, rawPost(server, accessHeaders(token), single.toString()).status());
+                    assertEquals(handle, delivered.get());
+
+                    JsonObject multi = multiSongRequest();
+                    multi.addProperty("requestId", SECOND_REQUEST_ID);
+                    multi.addProperty("allowSongSnippetLookup", true);
+                    multi.addProperty("allowSongSnippetFallbacks", true);
+                    multi.getAsJsonArray("songCandidates").get(0).getAsJsonObject()
+                            .addProperty("songPreparationId", REQUEST_ID);
+                    JsonObject recording = new JsonObject();
+                    recording.addProperty("albumName", "Controlled album");
+                    recording.addProperty("durationMillis", 180_000);
+                    multi.getAsJsonArray("songCandidates").get(0).getAsJsonObject().add("recording", recording);
+                    assertEquals(200, rawPost(server, accessHeaders(token), multi.toString()).status());
+                    assertEquals(handle, deliveredCandidates.get().get(0).songPreparationId());
+                    assertEquals("1", deliveredCandidates.get().get(0).candidateId());
+                    assertEquals(new ReflectionContract.SongRecording("Controlled album", 180_000),
+                            deliveredCandidates.get().get(0).recording());
+                    assertEquals("Observed song 1", deliveredCandidates.get().get(0).musicContext().trackTitle());
+                    assertEquals("Observed artist", deliveredCandidates.get().get(0).musicContext().artistName());
+                    assertNull(deliveredCandidates.get().get(1).songPreparationId());
+                    assertEquals(List.of(true, true), deliveredFlags.get());
+                }
+                assertFalse(prepared.get("Controlled track").equals(prepared.get("Other track")));
+            }
+        }
+        assertEquals(4, preparations.get());
+    }
+
+    private static String accessGrant(String principal, String token, String expiry, boolean enabled) throws Exception {
+        String hash = java.util.HexFormat.of().formatHex(java.security.MessageDigest.getInstance("SHA-256")
+                .digest(token.getBytes(StandardCharsets.US_ASCII)));
+        JsonObject grant = new JsonObject();
+        grant.addProperty("principalId", principal); grant.addProperty("tokenSha256", hash);
+        grant.addProperty("expiresAt", expiry); grant.addProperty("enabled", enabled);
+        return grant.toString();
+    }
+
+    private static List<String> accessHeaders(String token) {
+        return List.of("Host: " + DEMO_HOST, "Authorization: Bearer " + token);
+    }
+
+    private static ReflectionHttpServer startIndividual(ReflectionProvider provider, BackendAccessPolicy policy,
+            ReflectionHttpServer.SpeechProvider voice, ReflectionHttpServer.SpeechProvider runVoice) throws Exception {
+        var server = ReflectionHttpServer.createRemote(provider, 0, ReflectionHttpServer.GenerationMode.FAKE,
+                ReflectionHttpServer.RemoteAccess.individual("127.0.0.1", DEMO_HOST, policy), voice, runVoice);
+        server.start();
+        return server;
+    }
+
+    @Test
     void remoteAuthenticationPrecedesJsonAndForwardedHeadersCannotAuthorizeRequests() throws Exception {
         AtomicInteger calls = new AtomicInteger();
         try (ReflectionHttpServer server = startRemote(evidence -> {

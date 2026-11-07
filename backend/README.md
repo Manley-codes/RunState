@@ -19,6 +19,56 @@ not built into the APK. The Anthropic key belongs only in the backend environmen
 Java records are used as small immutable data holders. A record exposes its values through generated
 accessor methods and does not offer setters; its constructor can still reject invalid combinations.
 
+## Individual access foundation — November 7, local only
+
+Remote mode now supports a small, server-managed list of individual access codes. This is a
+pilot foundation, not a public sign-up, subscription or spending-control system. It has not
+been activated on the hosted service. Android's existing encrypted connection-code entry
+already uses the same Bearer format; no APK credential or phone change is needed for this part.
+
+Configure **one** access mode behind the existing private HTTPS ingress:
+
+- `RUNSTATE_DEMO_TOKEN`: existing owner-only behavior. Never share it with recipients.
+- `RUNSTATE_ACCESS_GRANTS_JSON`: a JSON array of individual grants. Do not also set the demo
+  variable; the launcher rejects both together instead of silently falling back. A malformed
+  list prevents startup, while `[]` deliberately denies all paid endpoints and retains health.
+
+Each grant requires exactly these fields:
+
+| Field | Meaning |
+| --- | --- |
+| `principalId` | Stable opaque recipient ID, 1–64 lowercase letters/digits/underscores/hyphens, starting with a letter or digit. Do not use an email or name. |
+| `tokenSha256` | 64 lowercase hexadecimal characters: SHA-256 of that recipient's exact access code. The code must come from at least 32 cryptographically random bytes, encoded URL-safe; accepted code length is 43–128. A human-made password is not suitable. |
+| `expiresAt` | Required ISO-8601 instant, for example `2026-12-01T00:00:00Z`; the code stops authorizing new requests at that instant. |
+| `enabled` | Required JSON boolean. `false` disables the credential after this configuration is loaded. |
+
+The array permits up to 64 credentials and 32,768 characters. Duplicate fingerprints, unknown
+or missing fields, duplicate JSON keys and incorrect types are rejected. Multiple different
+credentials may share a principal during rotation; do not assign that principal to another
+person. Keep the raw code private and deliver it separately; backend grant records store its
+fingerprint only. No real codes were generated as part of this source change.
+
+Removing/disabling a grant takes effect **after updated configuration is loaded by a server
+restart/redeployment**, not immediately when an environment setting is edited. Expiry is
+checked on every request, including cached-result retrieval. Already admitted provider work
+is not cancelled mid-call. Access errors do not reveal whether a code is unknown, disabled or
+expired. Keep Host/Origin checks, HTTPS ingress and credential redaction intact.
+
+The server derives work ownership from the authenticated principal, never a caller-supplied
+user ID. Reflection and preparation caches are partitioned by that identity. Individual-mode
+preparation handles are also namespaced before every provider lookup, including multi-song
+candidates; responses retain the client's original IDs. Owner/local modes retain their old
+internal handles. Reflection prompts, song content, playback and voices are unchanged.
+
+**Release work still required:** durable per-person/global allowances, rate/capacity fairness,
+duplicate protection across restart, safe provisioning, provider permissions and live setup
+verification. Cache capacity remains shared; speech still has no retry-deduplication key. Do
+not treat this increment as permission to invite users or promise capped API spending. A
+restart still clears response caches, so grant changes do not solve retry charges. The next
+increment needs a selected durable store rather than an assumed persistent container disk.
+
+Security reference: [OWASP REST security guidance](https://cheatsheetseries.owasp.org/cheatsheets/REST_Security_Cheat_Sheet.html).
+
 ## Snippet availability v2 — local implementation, October 19, 2026
 
 This source update separates **a playable ending from an observed song** from **evidence that the

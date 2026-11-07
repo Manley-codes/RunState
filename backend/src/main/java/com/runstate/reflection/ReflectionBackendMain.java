@@ -82,6 +82,18 @@ public final class ReflectionBackendMain {
     }
 
     static ReflectionHttpServer.RemoteAccess configuredRemoteAccess(Map<String, String> environment) {
+        if (environment.containsKey("RUNSTATE_ACCESS_GRANTS_JSON")) {
+            if (environment.containsKey("RUNSTATE_DEMO_TOKEN")) {
+                throw new IllegalArgumentException(
+                        "Configure individual access or owner demo access, not both."
+                );
+            }
+            return ReflectionHttpServer.RemoteAccess.individual(
+                    environment.getOrDefault("RUNSTATE_REFLECTION_BIND_ADDRESS", "0.0.0.0"),
+                    environment.get("RUNSTATE_REFLECTION_PUBLIC_HOST"),
+                    BackendAccessPolicy.fromJson(environment.get("RUNSTATE_ACCESS_GRANTS_JSON"))
+            );
+        }
         return new ReflectionHttpServer.RemoteAccess(
                 environment.getOrDefault("RUNSTATE_REFLECTION_BIND_ADDRESS", "0.0.0.0"),
                 environment.get("RUNSTATE_REFLECTION_PUBLIC_HOST"),

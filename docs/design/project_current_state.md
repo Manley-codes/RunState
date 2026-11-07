@@ -5,6 +5,67 @@ metadata:
   type: project
 ---
 
+## November 7 individual backend access — local implementation checked
+
+Manley resumes release work and requests lightweight learning: brief plain-English explanations
+of meaningful decisions without slowing implementation. First bounded increment adds optional
+individual access at the HTTP boundary; it does not complete paid-usage protection or release.
+
+- `RUNSTATE_ACCESS_GRANTS_JSON` holds bounded strict grants with stable opaque recipient IDs,
+  SHA-256 credential fingerprints, required expiry and enabled state. Existing owner-only
+  `RUNSTATE_DEMO_TOKEN` remains compatible; configuring both fails startup. No real codes issued.
+- All four paid routes authenticate before parsing, cache access or provider work. Expiry is
+  checked per request; removal/disabling applies after updated configuration is loaded/restarted.
+  No immediate revocation or cancellation of already admitted work is claimed.
+- Reflection/preparation HTTP caches and every provider preparation reference are isolated by
+  server-owned identity. Rotation retains ownership; single/multi-song handles are transformed
+  only internally, retaining client response IDs, metadata, snippet flags and legacy/local behavior.
+- New files: `backend/.../BackendAccessPolicy.java` and corresponding `BackendAccessPolicyTest.java`.
+  Existing launcher/server/server tests/backend README changed. Claude's provider/writer/snippet
+  source and all Android files remain untouched. Git shows a separate Claude worktree; its
+  contents were not inspected because access was denied. Coordinate future overlapping files.
+- Java17/Maven verify: all229 backend tests pass, including17 new access/integration checks;
+  packaged JAR built. Initial restricted run could not create localhost sockets; authorized
+  localhost rerun passed. Two independent source reviews found no blocking issue. No paid calls,
+  phone changes, hosted configuration, deployment or Git mutations. User commit checkpoint.
+
+Next bounded increment: choose durable storage, then individual/global usage reservations and
+restart-safe duplicate protection (including speech). Current in-memory/shared capacity and
+per-request speech charges remain; this access foundation is not safe recipient release by itself.
+Spotify access/permissions and iPhone feasibility remain on the main track. Existing private
+readiness review and roadmap updated in place; no new planning document.
+
+## November 7 lock-screen feasibility — research complete, implementation unselected
+
+Manley reports Claude is working on reflection consistency/snippets and resumes Codex's other
+track. The saved AF11 feasibility checkpoint is complete; return to Spotify access/permission
+and release security/iPhone preparation. No app, device, provider, Git or deployment changes.
+
+- Android's closest route to the accepted circle is an optional, dedicated active-run screen
+  displayed above the lock screen with `setShowWhenLocked`, entered through supported user
+  actions. This is distinct from replacing Spotify's system media card. Do not enable it across
+  MainActivity, which also hosts private History, Settings and connection flows. Preserve normal
+  locking and screen timeout; automatic appearance on every wake is not established.
+- A conventional RunState notification with music actions is a smaller alternative, with
+  system-constrained layout. Current Spotify foreground ownership disconnects when idle in the
+  background; either approach needs coordinated ownership and actual Moto lock/wake checks.
+  Preserve announcement/snippet ownership gates and existing observation-only consent boundaries.
+- iPhone could use a compact Live Activity with artwork/ring and controls. Its layout and brief
+  update animations cannot reproduce the full continuously moving app circle. Spotify's iOS
+  background connection guidance and locked-intent behavior require a prototype; neither reliable
+  locked Spotify controls nor a universal unlock requirement is established. No iOS app exists yet.
+
+No lock-screen approach is selected or implemented. Next release increment remains individual
+backend access and durable paid-usage protection, coordinated with Claude's file ownership and
+the existing readiness review. Provider access, hosting/storage choice and iPhone build access
+remain decisions to resolve; do not silently switch providers or start a full iOS rewrite.
+Sources: [Android lock-screen activity](https://developer.android.com/reference/android/app/Activity#setShowWhenLocked(boolean)),
+[custom notifications](https://developer.android.com/develop/ui/views/notifications/custom-notification),
+[Apple Live Activities](https://developer.apple.com/documentation/activitykit/displaying-live-data-with-live-activities),
+[Live Activity animations](https://developer.apple.com/documentation/widgetkit/animating-data-updates-in-widgets-and-live-activities),
+[intent authentication](https://developer.apple.com/documentation/appintents/intentauthenticationpolicy/alwaysallowed),
+[Spotify iOS lifecycle](https://developer.spotify.com/documentation/ios/concepts/application-lifecycle).
+
 ## November 7 reflection follow-up — consistency and snippets assigned to Claude
 
 Manley wants a revised handoff focused on consistent desired writing, understanding the accepted
