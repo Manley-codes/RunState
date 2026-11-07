@@ -5,7 +5,7 @@ metadata:
   type: project
 ---
 
-## November 7 backend CI — local verification complete, GitHub run pending
+## November 7 backend CI — first hosted failure diagnosed; test fix verified locally
 
 Manley approved the bounded CI plan. Existing Tests workflow now has an independent
 `Backend tests + build` job: Ubuntu, Temurin17,15-minute timeout, read-only repository access,
@@ -21,9 +21,21 @@ on recheck; fresh full verify passed all229 tests and JAR packaging. No applicat
 was changed to hide the failure; watch for recurrence in the first GitHub run. Independent
 workflow/source review passed. No paid calls, phone changes, deployment or Git mutations.
 
-Stop at the user's commit/push checkpoint. First hosted job remains unverified until that push;
-then review Actions → Tests → Backend tests + build, failed-step logs and report artifacts with
-Manley. No new tracked files; workflow and existing notes only.
+User pushed `dc45531`. [GitHub run #103](https://github.com/Manley-codes/RunState/actions/runs/42417664066)
+passed Java/Android but failed backend verification with two Host-header test errors. The
+seven-day failure artifact uploaded successfully. GitHub's Temurin17.0.21 rejects missing or
+duplicate HTTP/1.1 Host headers with400 before RunState's handler; local17.0.12 reaches the
+handler's403 JSON rejection. Tests incorrectly required JSON in both environments. This is
+documented in the [Java17.0.21 release notes](https://www.oracle.com/java/technologies/javase/17-0-21-relnotes.html).
+
+Reproduced both original failures using a checksum-verified portable Temurin17.0.21+9 in ignored
+build output. `ReflectionHttpServerTest` now separates the missing/duplicate cases, accepting
+only400 or the exact older403/request_rejected response while checking zero provider calls.
+Other Host/Origin guards retain exact403 JSON assertions; raw-error assertions check status
+before parsing for clearer diagnostics. No production or workflow change. Full Maven verify
+passes all231 tests and JAR packaging on both17.0.21 and17.0.12; independent diff review passed.
+No paid calls, deployment, phone or Git mutations. Test file and two existing notes only; no new
+tracked files. Stop for user commit/push, then confirm the corrected hosted run separately.
 
 Direction clarification: prepare for public download/store release when Manley chooses, without
 publishing automatically; further product improvements may follow readiness. Initial account

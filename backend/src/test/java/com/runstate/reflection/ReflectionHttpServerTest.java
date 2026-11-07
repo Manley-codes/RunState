@@ -1201,6 +1201,24 @@ class ReflectionHttpServerTest {
     }
 
     @Test
+    void rejectsMissingOrDuplicateHostBeforeCallingProvider() throws Exception {
+        AtomicInteger calls = new AtomicInteger();
+        try (ReflectionHttpServer server = start(evidence -> {
+            calls.incrementAndGet();
+            return exactCandidates();
+        })) {
+            List<List<String>> rejectedHeaders = List.of(
+                    List.of(),
+                    List.of(hostHeader(server, "127.0.0.1"), hostHeader(server, "localhost"))
+            );
+            for (List<String> headers : rejectedHeaders) {
+                assertMissingOrDuplicateHostRejected(rawPost(server, headers, validRequest()));
+                assertEquals(0, calls.get(), "Rejected Host headers must not reach the provider: " + headers);
+            }
+        }
+    }
+
+    @Test
     void rejectsInvalidHostOrAnyOriginBeforeCallingProvider() throws Exception {
         AtomicInteger calls = new AtomicInteger();
         ReflectionProvider fake = evidence -> {
@@ -1210,13 +1228,10 @@ class ReflectionHttpServerTest {
 
         try (ReflectionHttpServer server = start(fake)) {
             String allowedHost = hostHeader(server, "127.0.0.1");
-            String secondAllowedHost = hostHeader(server, "localhost");
             int wrongPort = server.address().getPort() == 65_535
                     ? 65_534
                     : server.address().getPort() + 1;
             List<List<String>> rejectedHeaders = List.of(
-                    List.of(),
-                    List.of(allowedHost, secondAllowedHost),
                     List.of("Host: localhost"),
                     List.of("Host: localhost:not-a-port"),
                     List.of("Host: example.test:" + server.address().getPort()),
@@ -1729,6 +1744,25 @@ class ReflectionHttpServerTest {
     }
 
     @Test
+    void remoteMissingOrDuplicateHostIsRejectedEvenWithAValidToken() throws Exception {
+        AtomicInteger calls = new AtomicInteger();
+        try (ReflectionHttpServer server = startRemote(evidence -> {
+            calls.incrementAndGet();
+            return exactCandidates();
+        }, 2, 8)) {
+            List<List<String>> rejectedHeaders = List.of(
+                    List.of("Authorization: Bearer " + DUMMY_DEMO_TOKEN),
+                    List.of("Host: " + DEMO_HOST, "Host: " + DEMO_HOST,
+                            "Authorization: Bearer " + DUMMY_DEMO_TOKEN)
+            );
+            for (List<String> headers : rejectedHeaders) {
+                assertMissingOrDuplicateHostRejected(rawPost(server, headers, validRequest()));
+                assertEquals(0, calls.get(), "Rejected Host headers must not reach the provider");
+            }
+        }
+    }
+
+    @Test
     void remoteHostOriginAndStrictBodyGuardsRemainMandatoryWithAValidToken() throws Exception {
         AtomicInteger calls = new AtomicInteger();
         try (ReflectionHttpServer server = startRemote(evidence -> {
@@ -1736,12 +1770,9 @@ class ReflectionHttpServerTest {
             return exactCandidates();
         }, 2, 8)) {
             List<List<String>> rejected = List.of(
-                    List.of("Authorization: Bearer " + DUMMY_DEMO_TOKEN),
                     List.of("Host: localhost:" + server.address().getPort(),
                             "Authorization: Bearer " + DUMMY_DEMO_TOKEN, "X-Forwarded-Host: " + DEMO_HOST),
                     List.of("Host: " + DEMO_HOST + ":8443", "Authorization: Bearer " + DUMMY_DEMO_TOKEN),
-                    List.of("Host: " + DEMO_HOST, "Host: " + DEMO_HOST,
-                            "Authorization: Bearer " + DUMMY_DEMO_TOKEN),
                     List.of("Host: " + DEMO_HOST, "Authorization: Bearer " + DUMMY_DEMO_TOKEN, "Origin: null"),
                     List.of("Host: " + DEMO_HOST, "Authorization: Bearer " + DUMMY_DEMO_TOKEN, "Origin:")
             );
@@ -2187,14 +2218,22 @@ class ReflectionHttpServerTest {
             int expectedStatus,
             String expectedCode
     ) {
+        assertEquals(expectedStatus, response.status(), "Unexpected HTTP error status");
         JsonObject error = JsonParser.parseString(response.body())
                 .getAsJsonObject()
                 .getAsJsonObject("error");
         assertAll(
-                () -> assertEquals(expectedStatus, response.status()),
                 () -> assertEquals(expectedCode, error.get("code").getAsString()),
                 () -> assertTrue(error.get("message").getAsString().length() > 0)
         );
+    }
+
+    private static void assertMissingOrDuplicateHostRejected(RawHttpResponse response) {
+        // JDK 17.0.21+ rejects these HTTP/1.1 requests with 400 before our handler.
+        // Older JDKs reach RunState's own Host guard, which must still return its exact error.
+        if (response.status() != 400) {
+            assertError(response, 403, "request_rejected");
+        }
     }
 
     private static String validRequest() {
