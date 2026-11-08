@@ -1,6 +1,6 @@
 # RunState
 
-[![Console and Android checks](https://github.com/Manley-codes/RunState/actions/workflows/ci.yml/badge.svg)](https://github.com/Manley-codes/RunState/actions/workflows/ci.yml)
+[![Java, backend and Android checks](https://github.com/Manley-codes/RunState/actions/workflows/ci.yml/badge.svg)](https://github.com/Manley-codes/RunState/actions/workflows/ci.yml)
 
 **A native Android running app that connects the numbers of a run with how it felt.**
 
@@ -93,8 +93,9 @@ mvn -f backend/pom.xml test
 ```
 
 [GitHub Actions](https://github.com/Manley-codes/RunState/actions/workflows/ci.yml) runs the
-console tests and Android unit-test/build checks. Backend tests and physical-device checks have
-their own recorded results; the badge does not certify them or a production release.
+console tests, backend tests/build, and Android debug and release unit-test/build checks.
+Release checks also run Android Lint. These checks do not replace real-run testing or certify
+a signed production release.
 
 ## Design and engineering record
 

@@ -5,6 +5,34 @@ metadata:
   type: project
 ---
 
+## November 8 public Android build checks — local pass; first hosted run pending
+
+Manley missed the planned run and resumed other release-readiness work. Saved-run deletion is
+committed at33bdb8b; Claude's reflection/snippet outdoor check is still pending. No phone update
+or branch combination was performed. Accounts/passwords remain paused.
+
+Added an independent `Android release checks` job to the existing workflow: Ubuntu, JDK17 setup,
+the project's existing Gradle daemon/toolchain configuration, read-only repository permission
+and20-minute timeout. It runs `testReleaseUnitTest`, full `lintRelease` and unsigned
+`assembleRelease`. Failures remain failures; test/lint reports are retained seven days as
+`android-release-reports`. Existing Java, backend and Android debug jobs are unchanged.
+README's CI description now includes backend and both Android build types. No APK upload,
+signing, provider credentials, deployment or publication is added.
+
+Fresh full lint passes with0 errors,70 warnings and8 hints; no suppression or baseline added.
+The exact three-task release command succeeds, reusing current unit/build outputs as up-to-date;
+the release reports contain881 tests with0 failures/errors/skips. YAML parsing and focused
+workflow assertions, diff whitespace and independent review pass. Generated release output
+confirms DEBUG/OWNER_TOOLS_ENABLED=false, cleartext disabled and no debug local-network permission
+or debug network configuration. Evidence remains ignored in `android/build/public-release-check/`
+and normal build reports. This is local verification; the first hosted result awaits user push.
+
+Warnings are largely dependency-update, resource and code-convention advice. The two bitmap
+assets in `drawable/` merit a later density/memory check with visual parity; no artwork or
+dependency changes are included here. No new tracked files, runtime changes, Git mutations or
+phone access. Stop after this milestone. Signing/update proof, privacy/recovery and other release
+gates remain separate; successful static checks do not certify outdoor behavior or a public release.
+
 ## November 8 saved-run deletion — implemented; phone integration pending
 
 Manley approved deleting an individually saved run from Log History with confirmation.
