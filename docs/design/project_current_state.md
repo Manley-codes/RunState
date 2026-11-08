@@ -5,6 +5,24 @@ metadata:
   type: project
 ---
 
+## November 8 privacy/data checkpoint — documentation complete; release decisions remain
+
+Release work resumes with accounts/passwords paused and Claude's reflection/snippet work separate.
+Source reviewed at `3dee96d`, which includes the committed owner/public tools separation below.
+The existing [privacy guide](../DATA_PRIVACY.md) now leads with the current Android data map,
+provider recipients, opt-in boundaries, backup exclusions and actual retention/deletion limits.
+Older console and dated implementation notes are preserved in a collapsed historical section.
+
+Key gaps: no saved-run deletion/export/recovery flow, no in-app Privacy entry, and live hosting/
+provider retention still unverified. Backend reflection requests/results persist in process memory
+without timed expiration; memory-only storage is not a no-retention claim. The guide separates
+these facts from the later public policy and store disclosures. Accounts, signing/publication and
+data-lifecycle implementation remain separate milestones. No app behavior, saved data, phone,
+provider request, deployment or Git changes. Documentation-only checkpoint; no new files.
+Independent Android/backend source reviews found no remaining inaccuracies. Local document
+references, historical-section boundaries and diff whitespace checks pass; no build/test rerun
+was needed for this documentation-only change.
+
 ## November 8 owner tools — public-build separation verified locally
 
 Manley approved keeping Music Reflection Demo, Recording sources and Sample demo in his

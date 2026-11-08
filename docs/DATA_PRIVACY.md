@@ -1,5 +1,106 @@
 # Data & Privacy
 
+## Current Android data handling
+
+Reviewed November 8, 2026 against Android and backend source at `3dee96d`.
+This is the current engineering summary for release preparation. It does not verify the
+running server's configuration or providers' retention settings, and is not the finished
+public privacy policy. Claude's separate reflection-quality branch is outside this checkpoint.
+The dated implementation and Java console records are preserved below as historical context.
+
+### What stays on the phone
+
+RunState stores runs, precise GPS points, timing/splits, Energy and Effort answers, notes,
+route labels, intentions, shoe pairs, weather snapshots, partial music observations and saved
+reflection text in its private Android database. There is no RunState account or cloud history
+sync in the current app. RunState does not record microphone audio or copy Spotify's music.
+
+Location permission supports GPS preparation while Start is visible and recording during a
+deliberately started run. An active run uses a foreground service and can continue with the
+screen off. The music listener uses Android media sessions after notification access is granted;
+the app code does not read message/notification contents. This broad Android permission alone
+does not enable run music observation.
+
+### What can leave the phone
+
+| Feature | Destination and data | When it happens |
+| --- | --- | --- |
+| Written reflection | The configured RunState backend receives run/request identifiers, start/finish time, timezone, active duration, distance with its source/coverage and display unit, starting Energy and permitted optional context. Anthropic receives the relevant run facts and optional context; run/request/access identifiers are excluded from its model input. | A completed run requests a reflection when the backend connection is available. This is separate from the optional music/weather choices. |
+| Music in reflections | Eligible song titles/artists go to RunState, Musixmatch for matching/analysis, and Anthropic for song study/selection/writing. Up to 12 qualifying Spotify songs can be considered; song candidates have opaque selection IDs. | Separate observation and sharing choices, both off by default. Preparation can begin during an opted-in run after sufficient observed playback, including before a run is later discarded. |
+| Automatic song snippets | The backend may receive album and recording duration and query LRCLIB with title, artist, duration and optional album. Spotify recording URI and local playback receipts are not sent in the reflection request. | Separate snippet-lookup choice, off by default and dependent on music sharing. |
+| Spoken lines | RunState forwards the exact text to ElevenLabs using the configured voice. Text can contain metrics, Energy-related wording or song references. | Configured cloud voice prepares fixed countdown/question lines on Start and speaks run facts, announcements or a selected reflection. The fallback is the device-configured speech engine, not a guarantee of offline processing. |
+| Optional live map | OpenFreeMap receives tile/font requests; requested tiles identify the viewed area and zoom. The direct connection also exposes the phone's IP address. | Opening the live street map. The static illustration and offline History route drawing do not request street-map tiles. |
+| Optional weather | Open-Meteo receives a near-start location rounded to two decimal places, the requested hour and weather variables; it also sees the phone's IP address. Saved weather facts may subsequently accompany a reflection, without the lookup coordinates. | A separate choice, off by default, for future GPS runs with a usable early fix. |
+| Spotify controls | Spotify's installed player, login and App Remote SDK handle connection, metadata/artwork and playback commands. | Deliberate connection and music controls; connecting does not enable RunState's music-sharing choice. Spotify's own data handling must also be covered in the release review. |
+
+The reflection request does **not** contain raw GPS routes, note text, route labels, shoe data,
+intention, numeric Effort, artwork or recorded audio. The finishing Energy answer selects one
+of the returned reflection branches locally; the selected text sent for speech may express it.
+
+Musixmatch's bounded song excerpts/quotes can enter Anthropic's song study. LRCLIB timed lyrics
+are used transiently for snippet selection and are not passed to the writer. These are different
+paths; it would be inaccurate to claim that no song text ever reaches AI services.
+
+### Choices, storage and deletion
+
+- Music observation, music sharing, snippet lookup and weather default off and have separate
+  controls. Changes govern future runs; they do not retract requests already sent or rewrite
+  previously frozen reflection evidence. Saving a run does not require music sharing.
+- Hosted app requests require HTTPS. Provider keys stay on the backend. The entered backend
+  access code is encrypted using Android Keystore and excluded from backup. The run database
+  is private app storage; this is not a claim that RunState separately encrypts every database field.
+- Android backup and device-transfer rules exclude the entire run database, map cache and
+  encrypted backend connection. Other preferences remain eligible for Android backup. There
+  is no app export/import or recovery flow: do not rely on reinstalling or changing phones to
+  restore runs. Clearing app storage or uninstalling can lose the local history.
+- There is no saved-run deletion screen or backend deletion endpoint yet. The existing discard
+  action applies only to a reliably short, paused, unfinished run under 30 seconds. Clearing phone
+  data does not send deletion requests to RunState's backend or its service providers.
+- The backend keeps up to 256 reflection request/results in process memory, including run facts
+  and all four generated branches. They have no timed expiration and remain for that process's
+  lifetime to prevent duplicate paid work. Song preparation is separate: up to 32 entries with
+  two-hour reuse eligibility and cleanup on later activity, not an exact timed erasure guarantee.
+- Backend voice audio is request-scoped. No runtime application database/file persistence or
+  request-body logging was found in the reviewed backend code. Hosting logs, SDK behavior and
+  each provider's retention/training settings still require live verification; memory-only
+  application storage does not establish that those services retain nothing.
+
+App-authored diagnostics inspected here contain bounded status/reason/timing information rather
+than coordinates, access codes, song names or speech text. This source review is not a runtime
+audit of every dependency or proof that every production logging setting is correct.
+
+### Remaining public-release decisions
+
+1. Choose and implement saved-data deletion and a clear recovery/export approach before inviting
+   people to rely on their history. Preserve existing saved runs while developing those controls.
+2. Confirm hosting/provider/SDK retention, deletion and AI-data settings, then specify the actual
+   retention policy and a privacy contact. Do not substitute application cache limits for those facts.
+3. Publish the finished privacy policy and make it accessible inside the app; current Settings has
+   no Privacy entry. Complete the store's Data safety answers from the final build and actual services.
+
+Google Play requires an accessible privacy policy covering data use, recipients, security,
+retention/deletion and a contact, with access from the app and the store listing. Its Data safety
+form also covers SDKs and off-device processing; temporary processing should not simply be
+described as no collection. See the official [User Data policy](https://support.google.com/googleplay/android-developer/answer/10144311?hl=en),
+[Data safety guidance](https://support.google.com/googleplay/android-developer/answer/10787469?hl=en)
+and [Android backup documentation](https://developer.android.com/identity/data/autobackup).
+Accounts/passwords, publication and the final store submission remain separate checkpoints.
+
+### Implementation references
+
+- [Phone database](../android/app/src/main/java/com/runstate/mobile/data/local/RunStateDatabase.kt),
+  [preferences](../android/app/src/main/java/com/runstate/mobile/settings/RunPreferences.kt),
+  [reflection request](../android/app/src/main/java/com/runstate/mobile/reflection/ReflectionApiClient.kt)
+- [Backup rules](../android/app/src/main/res/xml/backup_rules.xml),
+  [device-transfer rules](../android/app/src/main/res/xml/data_extraction_rules.xml),
+  [discard boundary](../android/app/src/main/java/com/runstate/mobile/data/local/RunDao.kt)
+- [Backend request contract](../backend/src/main/java/com/runstate/reflection/ReflectionApiJson.java),
+  [request cache/speech routes](../backend/src/main/java/com/runstate/reflection/ReflectionHttpServer.java),
+  [song preparation/writing](../backend/src/main/java/com/runstate/reflection/AnthropicReflectionProvider.java)
+
+<details>
+<summary>Historical implementation notes and Java console privacy record</summary>
+
 This page contains the original **Java console** privacy record and a separate, bounded
 **Android street-map and weather** records below. It is not yet a complete privacy notice for the Android
 app. In particular, the console's request fields and local fallback behavior must not be read
@@ -922,3 +1023,5 @@ Open-Meteo is a free, open-source weather service — no account or API key requ
 RunState is a learning and portfolio project. The two external APIs in the console record
 above power its AI response and weather context features; this does not enumerate the
 Android app's separate hosted services or its map requests.
+
+</details>
