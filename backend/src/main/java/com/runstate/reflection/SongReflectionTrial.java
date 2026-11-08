@@ -57,6 +57,10 @@ final class SongReflectionTrial {
     private static final Set<String> CHOICE_FIELDS = Set.of("lead", "accent", "anchor", "fit", "reflection");
     private static final Set<String> LEADS = Set.of("persona", "title", "artist", "lyric_echo", "message", "run_only");
     private static final Pattern NUMBER = Pattern.compile("(?<![\\p{L}\\p{N}])\\d+(?:[.:]\\d+)*(?![\\p{L}\\p{N}])");
+    /** A spoken clock time: "7:45", "7 AM", "7 p.m." or "7 o'clock". A bare number is never a clock time. */
+    private static final Pattern CLOCK_TIME = Pattern.compile(
+            "(?iu)(?<![\\p{L}\\p{N}.:])(\\d{1,2})(?::(\\d{2}))?(?![\\p{N}:])(\\s*(?:a\\.?m\\.?|p\\.?m\\.?|o['’]clock))?(?![\\p{L}])");
+    private static final long CLOCK_WINDOW_MILLIS = 30 * 60_000L;
     private static final Pattern BANNED = Pattern.compile(
             "(?i)\\b(testament|symphony|unleash\\w*|journey|fuel\\w*|crushed it|conquer\\w*|delve\\w*)\\b");
     @FunctionalInterface
@@ -374,7 +378,9 @@ final class SongReflectionTrial {
             }
             if (wordCount(reflection) > 55) warnings.add(key + ":word_budget_review_required");
             if (BANNED.matcher(reflection).find()) warnings.add(key + ":word_choice_review_required");
-            if (!allowedNumbers.containsAll(numbers(reflection))) warnings.add(key + ":numeric_tokens_review_required");
+            if (!allowedNumbers.containsAll(numbers(withoutRunWindowClockTimes(reflection, evidence)))) {
+                warnings.add(key + ":numeric_tokens_review_required");
+            }
             long usedEchoes = notes.getAsJsonArray("lyric_echoes").asList().stream()
                     .map(value -> value.getAsJsonObject().get("words").getAsString())
                     .distinct().filter(words -> normalizedWords(reflection).contains(normalizedWords(words))).count();
@@ -390,6 +396,51 @@ final class SongReflectionTrial {
             // A numeric-token check is NOT a factual reviewer. This isolated result still needs judgment.
         }
         return List.copyOf(warnings);
+    }
+
+    /**
+     * A spoken clock time can be true without matching the facts' exact text: "7 AM" for a 7:00
+     * start, or "before 7:45" for a 7:42 finish. Only clock forms inside the run's own window, 30
+     * minutes either side, are exempt from the exact-number check. Every other number stays strict.
+     */
+    private static String withoutRunWindowClockTimes(String reflection, CompletedRunEvidence evidence) {
+        Matcher time = CLOCK_TIME.matcher(reflection);
+        StringBuilder kept = new StringBuilder();
+        while (time.find()) {
+            boolean clockForm = time.group(2) != null || time.group(3) != null;
+            time.appendReplacement(kept, Matcher.quoteReplacement(
+                    clockForm && insideRunWindow(time, evidence) ? " " : time.group()));
+        }
+        time.appendTail(kept);
+        return kept.toString();
+    }
+
+    private static boolean insideRunWindow(Matcher time, CompletedRunEvidence evidence) {
+        int hour = Integer.parseInt(time.group(1));
+        int minute = time.group(2) == null ? 0 : Integer.parseInt(time.group(2));
+        if (hour > 23 || minute > 59) return false;
+        String suffix = time.group(3) == null ? "" : time.group(3).strip().toLowerCase(Locale.ROOT);
+        List<Integer> hours = new ArrayList<>();
+        if (suffix.startsWith("a") || suffix.startsWith("p")) {
+            if (hour < 1 || hour > 12) return false;
+            hours.add(hour % 12 + (suffix.startsWith("p") ? 12 : 0));
+        } else if (hour <= 12) {
+            hours.add(hour % 12);
+            hours.add(hour % 12 + 12);
+        } else {
+            hours.add(hour);
+        }
+        ZoneId zone = ZoneId.of(evidence.startTimezoneId());
+        long from = evidence.officialStartEpochMillis() - CLOCK_WINDOW_MILLIS;
+        long to = evidence.finishEpochMillis() + CLOCK_WINDOW_MILLIS;
+        for (long edge : List.of(evidence.officialStartEpochMillis(), evidence.finishEpochMillis())) {
+            java.time.LocalDate day = Instant.ofEpochMilli(edge).atZone(zone).toLocalDate();
+            for (int candidate : hours) {
+                long at = day.atTime(candidate, minute).atZone(zone).toInstant().toEpochMilli();
+                if (at >= from && at <= to) return true;
+            }
+        }
+        return false;
     }
 
     /** Conservative overlap bound, not a detector for remembered or otherwise unsupplied lyrics. */

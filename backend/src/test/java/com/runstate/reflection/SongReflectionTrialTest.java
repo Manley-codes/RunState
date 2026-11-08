@@ -603,6 +603,36 @@ public class SongReflectionTrialTest {
                 .study(material(), SongReflectionTrial.StudyVersion.V3));
     }
 
+    @Test
+    void spokenClockTimesInsideTheRunWindowPassWhileOtherNumbersStayStrict() throws Exception {
+        record Check(CompletedRunEvidence run, String reflection, boolean flagged) { }
+        var morning = evidence(PreRunEnergy.MODERATE);
+        var evening = trialEvidence("evening_no_selection");
+        List<Check> checks = List.of(
+                new Check(morning, "Saturday, 7 AM, 4.20 miles, and you're spent.", false),
+                new Check(morning, "4.20 miles done before 7:45 on a Saturday.", false),
+                new Check(morning, "Out the door at 7:00, back by 7:42, feeling good.", false),
+                new Check(morning, "Back by 9:15 on a Saturday morning.", true),
+                new Check(morning, "7 miles done by 7:42.", true),
+                new Check(evening, "Four miles, done by 7 PM on a Wednesday.", false),
+                new Check(evening, "Four miles, done by 9 PM on a Wednesday.", true));
+        for (Check check : checks) {
+            var trial = new SongReflectionTrial((input, prompt, schema) ->
+                    input.has("run_facts") ? branchesWith(check.reflection()) : notes());
+            boolean flagged = trial.generate(check.run(), material()).reviewWarnings().stream()
+                    .anyMatch(warning -> warning.endsWith("numeric_tokens_review_required"));
+            assertEquals(check.flagged(), flagged, check.reflection());
+        }
+    }
+
+    private static JsonObject branchesWith(String reflection) {
+        JsonObject result = branches();
+        for (String key : List.of("spent", "feeling_good", "powered_up", "no_selection")) {
+            result.getAsJsonObject(key).addProperty("reflection", reflection);
+        }
+        return result;
+    }
+
     private static JsonObject directedNotes(String connection, String effect) {
         JsonObject result = notes();
         result.addProperty("connection", connection);
