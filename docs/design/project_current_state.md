@@ -5,6 +5,41 @@ metadata:
   type: project
 ---
 
+## November 8 saved-run deletion — implemented; phone integration pending
+
+Manley approved deleting an individually saved run from Log History with confirmation.
+An expanded row now has a three-dot menu and Delete run; the dialog identifies its date/distance,
+states permanent local removal, and offers Cancel/Delete. Pending taps are guarded and storage
+failure keeps the record/dialog available for an explicit retry. No automatic or bulk deletion.
+
+The conditional Room delete requires COMPLETED, activityFinalized and a non-null finish time.
+Existing cascades atomically remove all eight run-owned child tables, including route points,
+reflection, music/preparation, weather, splits and transitions. Shared shoes/selection and other
+runs remain; observed History rankings, Energy summaries and shoe mileage recompute. No schema
+migration. The application-owned coordinator retires only the matching completed session after
+success, keeping unrelated active runs intact. Matching reflection presentation caches are cleared;
+late provider responses cannot recreate deleted rows. No external-service deletion is claimed.
+
+History stops its reply before confirming; current/restored recap navigation reconciles a missing
+record from storage. A direct absence check protects newly completed runs while Room's list flow
+catches up. Rotation cannot interrupt database/owner cleanup or restore an empty deleted recap.
+
+Debug/release each pass881 JVM tests; debug, unsigned release and test APKs build. Tests use
+synthetic in-memory/file databases in the isolated emulator, not the Moto's history. Initial UI
+checks exposed legacy sample fixtures hidden by normal History and a test scrolling to an
+uncomposed row; an older completion test also needed a stable dummy hosted configuration to
+avoid Android37's unrelated LAN permission dialog (its gateway remains entirely in-memory).
+Fixture corrections preserve filtering, permission and deletion rules. All15 distinct selected
+database/UI cases pass across corrected runs, including the five final completion/recap cases.
+The confirmation screenshot was visually reviewed; whitespace checks and independent source
+review pass. Detailed results are in ignored `android/build/saved-run-delete-check/`.
+
+The Moto's installed APK exactly matches Claude's reflection-quality build (FEDEC954…CBEB8D),
+not this main-workspace APK. It was inspected read-only and intentionally left installed to avoid
+removing Claude's snippet handoff fix. Combine the approved branches before installing the next
+phone build; user handles Git. No real runs deleted, paid calls, provider changes or deployment.
+All source/tests are existing files; unrelated `Claude outputs/` remains untouched.
+
 ## November 8 privacy/data checkpoint — documentation complete; release decisions remain
 
 Release work resumes with accounts/passwords paused and Claude's reflection/snippet work separate.

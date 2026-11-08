@@ -109,6 +109,22 @@ internal class RunReflectionCoordinator(
     private val mutableVoicePreparation = MutableStateFlow<ReflectionVoicePreparation?>(null)
     val voicePreparation: StateFlow<ReflectionVoicePreparation?> = mutableVoicePreparation.asStateFlow()
 
+    /**
+     * Forget presentation-only state after the run and its children were deleted in Room.
+     * Admitted provider work may still finish; its conditional storage writes cannot recreate
+     * the removed row. Keep request/timer ownership until their existing finally blocks run.
+     */
+    suspend fun onRunDeleted(runId: String) = mutex.withLock {
+        finishedReceipts.remove(runId)
+        completedSongCues.remove(runId)
+        effortSheetHolds.remove(runId)
+        if (activeRunId == runId) {
+            activeRunId = null
+            mutableVoicePreparation.value = null
+            mutableState.value = RunReflectionState.Idle
+        }
+    }
+
     /** Recover local replies without silently starting another potentially paid request. */
     suspend fun initialize() = initialization.withLock {
         if (!initialized) {

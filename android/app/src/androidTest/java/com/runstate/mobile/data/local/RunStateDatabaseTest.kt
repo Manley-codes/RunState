@@ -110,6 +110,135 @@ class RunStateDatabaseTest {
         context.deleteDatabase(DATABASE_NAME)
     }
 
+    private val savedRunChildTables = listOf(
+        "run_transitions", "run_reflections", "run_location_points", "run_music_observations",
+        "run_weather", "run_split_snapshots", "run_splits", "run_song_preparations"
+    )
+
+    /** Durable data in every owned table, including the split table's second-level cascade. */
+    private suspend fun seedSavedRunForDeletion(runId: String, pairId: String, distance: Double): RunEntity {
+        val runs = database.runDao()
+        runs.insert(runningRun.copy(runId = runId, shoePairId = pairId,
+            trackingMode = RunTrackingMode.GPS, activityFinalized = false,
+            musicObservationRequested = true, musicReflectionSharingAllowed = true))
+        database.locationDao().recordObservation(RunLocationObservation(
+            runId, "point", OFFICIAL_START + 1_000, null, 29.76, -95.37,
+            3f, null, null, null, true
+        ))
+        database.musicObservationDao().recordObservation(RunMusicObservation(
+            runId, "music", OFFICIAL_START + 1_000, null, "com.spotify.music",
+            "Test song", "Test artist", MusicPlaybackState.PLAYING, MusicObservationKind.SESSION_SNAPSHOT
+        ))
+        assertTrue(database.weatherDao().claim(runId, true))
+        database.weatherDao().finish(runId, null)
+        // Fixture a prior claim directly: this test exercises deletion, not paid-song eligibility.
+        database.openHelper.writableDatabase.execSQL("""
+            INSERT INTO run_song_preparations
+                (run_id, preparation_id, track_title, artist_name, observation_sequence_number,
+                 destination_fingerprint, claimed_at_epoch_millis, status)
+            VALUES (?, ?, 'Test song', 'Test artist', 1, ?, ?, 'READY')
+        """.trimIndent(), arrayOf<Any>(runId, UUID.randomUUID().toString(), "a".repeat(64), OFFICIAL_START + 60_000))
+        runs.pauseRun(runId, FINISHED_AT)
+        runs.completeRun(runId, FINISHED_AT, FinalRunMetrics(
+            distance, MetricSource.GPS, TelemetryCoverage.COMPLETE, DistanceUnit.MILES
+        ))
+        runs.setPostRunNote(runId, "Saved note")
+        runs.recordEffortRating(runId, 6, FINISHED_AT + 1)
+        val requestId = UUID.randomUUID().toString()
+        val reflections = database.reflectionDao()
+        reflections.ensurePending(RunReflectionEntity(runId, requestId, "{}", FINISHED_AT + 6_000))
+        reflections.recordEnergy(runId, ReflectionBranch.FEELING_GOOD, FINISHED_AT + 2)
+        reflections.saveCandidates(runId, requestId, "{\"feelingGood\":\"exact\"}", true)
+        assertTrue(reflections.finalizeReady(runId, requestId, ReflectionBranch.FEELING_GOOD,
+            "Exact saved reflection.", FINISHED_AT + 3))
+        database.openHelper.writableDatabase.execSQL("""
+            INSERT INTO run_splits
+                (run_id, split_number, start_distance_meters, end_distance_meters,
+                 start_active_millis, end_active_millis, start_epoch_millis, end_epoch_millis,
+                 is_partial, pace_seconds_per_meter)
+            VALUES (?, 1, 0, ?, 0, 1800000, ?, ?, 1, ?)
+        """.trimIndent(), arrayOf<Any>(runId, distance, OFFICIAL_START, FINISHED_AT, 1800.0 / distance))
+        database.openHelper.writableDatabase.execSQL(
+            "UPDATE run_split_snapshots SET status = 'READY' WHERE run_id = ?", arrayOf(runId))
+        assertTrue(runs.finalizeActivity(runId))
+        return requireNotNull(runs.findById(runId))
+    }
+
+    private fun savedRunChildren(runId: String): Map<String, List<List<String?>>> =
+        savedRunChildTables.associateWith { table ->
+            database.openHelper.readableDatabase.query(
+                "SELECT * FROM $table WHERE run_id = ? ORDER BY rowid", arrayOf(runId)
+            ).use { cursor ->
+                buildList {
+                    while (cursor.moveToNext()) add((0 until cursor.columnCount).map { column ->
+                        if (cursor.isNull(column)) null else cursor.getString(column)
+                    })
+                }
+            }
+        }
+
+    @Test
+    fun deleteSavedRunCascadesOnlyItsOwnedDataAndUpdatesHistoryAndShoeMileage() = runBlocking {
+        val pair = ShoePairEntity(UUID.randomUUID().toString(), "ASICS", "Novablast", null, OFFICIAL_START)
+        database.shoeDao().addAndSelect(pair)
+        val target = seedSavedRunForDeletion(UUID.randomUUID().toString(), pair.shoePairId, 1_000.0)
+        val retained = seedSavedRunForDeletion(UUID.randomUUID().toString(), pair.shoePairId, 2_000.0)
+        assertTrue(savedRunChildren(target.runId).values.all { it.size == 1 })
+        val retainedChildren = savedRunChildren(retained.runId)
+        assertEquals(3_000.0, database.shoeDao().observeShoes().first().single().totalDistanceMeters, 0.0)
+
+        assertTrue(database.runDao().deleteSavedRun(target.runId))
+        assertFalse(database.runDao().deleteSavedRun(target.runId))
+        assertNull(database.runDao().findById(target.runId))
+        assertTrue(savedRunChildren(target.runId).values.all { it.isEmpty() })
+        assertEquals(retainedChildren, savedRunChildren(retained.runId))
+        assertEquals(listOf(retained), database.runDao().observeCompletedRuns().first())
+        assertEquals(pair, database.shoeDao().findPair(pair.shoePairId))
+        assertEquals(pair.shoePairId, database.shoeDao().selectedActivePairId())
+        assertEquals(2_000.0, database.shoeDao().observeShoes().first().single().totalDistanceMeters, 0.0)
+
+        database.close()
+        database = openDatabase()
+        assertNull(database.runDao().findById(target.runId))
+        assertTrue(savedRunChildren(target.runId).values.all { it.isEmpty() })
+        assertEquals(retained, database.runDao().findById(retained.runId))
+        assertEquals(retainedChildren, savedRunChildren(retained.runId))
+    }
+
+    @Test
+    fun deleteSavedRunRefusesActiveUnfinalizedAndMissingFinishRecords() = runBlocking {
+        val completed = runningRun.copy(runId = UUID.randomUUID().toString(),
+            state = StoredRunState.COMPLETED, finishEpochMillis = FINISHED_AT,
+            lastCheckpointEpochMillis = FINISHED_AT, activityFinalized = false)
+        val protected = listOf(runningRun,
+            runningRun.copy(runId = UUID.randomUUID().toString(), state = StoredRunState.PAUSED),
+            completed,
+            completed.copy(runId = UUID.randomUUID().toString(), activityFinalized = true, finishEpochMillis = null))
+        protected.forEach { database.runDao().insert(it) }
+        protected.forEach { assertFalse(database.runDao().deleteSavedRun(it.runId)) }
+        assertFalse(database.runDao().deleteSavedRun(UUID.randomUUID().toString()))
+        protected.forEach { assertEquals(it, database.runDao().findById(it.runId)) }
+        assertEquals(protected.size, database.runDao().countRuns())
+    }
+
+    @Test
+    fun failedSavedRunDeletionRollsBackParentAndAllChildren() = runBlocking {
+        val pair = ShoePairEntity(UUID.randomUUID().toString(), "Nike", "Pegasus", null, OFFICIAL_START)
+        database.shoeDao().addAndSelect(pair)
+        val saved = seedSavedRunForDeletion(UUID.randomUUID().toString(), pair.shoePairId, 1_000.0)
+        val before = savedRunChildren(saved.runId)
+        database.openHelper.writableDatabase.execSQL("""
+            CREATE TRIGGER block_test_saved_run_delete BEFORE DELETE ON run_splits
+            BEGIN SELECT RAISE(ABORT, 'test storage failure'); END
+        """.trimIndent())
+        assertTrue(runCatching { database.runDao().deleteSavedRun(saved.runId) }.isFailure)
+        assertEquals(saved, database.runDao().findById(saved.runId))
+        assertEquals(before, savedRunChildren(saved.runId))
+        assertEquals(1_000.0, database.shoeDao().observeShoes().first().single().totalDistanceMeters, 0.0)
+        database.openHelper.writableDatabase.execSQL("DROP TRIGGER block_test_saved_run_delete")
+        assertTrue(database.runDao().deleteSavedRun(saved.runId))
+    }
+
     @Test
     fun numericEffortPreservesLegacyAnswerAndOriginalTimingAcrossEditsClearAndReopen() = runBlocking {
         val runs = database.runDao()

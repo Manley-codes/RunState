@@ -62,6 +62,8 @@ open class FakeRunDao : RunDao() {
     var duringFinalization: (suspend () -> Unit)? = null
     var failFinalizationWith: Exception? = null
     var failPendingCompletionReadWith: Exception? = null
+    var duringSavedRunDelete: (suspend () -> Unit)? = null
+    var failSavedRunDeleteWith: Throwable? = null
 
     /**
      * How many times the discovery query has actually been reached.
@@ -133,6 +135,19 @@ open class FakeRunDao : RunDao() {
         val index = inserted.indexOfFirst { it.runId == runId && it.state == completedState }
         if (index < 0) return 0
         inserted[index] = inserted[index].copy(postRunNote = note)
+        return 1
+    }
+
+    override suspend fun deleteFinalizedCompletedRun(runId: String, completedState: StoredRunState): Int {
+        duringSavedRunDelete?.invoke()
+        failSavedRunDeleteWith?.let { throw it }
+        val index = inserted.indexOfFirst {
+            it.runId == runId && it.state == completedState && it.activityFinalized &&
+                it.finishEpochMillis != null
+        }
+        if (index < 0) return 0
+        inserted.removeAt(index)
+        transitions.removeAll { it.runId == runId }
         return 1
     }
 

@@ -460,6 +460,113 @@ class RunSessionCoordinatorTest {
     }
 
     @Test
+    fun `deleting the saved recap retires its completed owner and allows a new run`() = runBlocking {
+        val fixture = Fixture()
+        try {
+            val finished = startedRun(fixture)
+            fixture.coordinator.requestAction(RunActionKind.PAUSE).await()
+            fixture.coordinator.requestAction(RunActionKind.COMPLETE).await()
+            assertTrue(fixture.coordinator.finalizeActivity(RUN_ID))
+
+            assertTrue(fixture.coordinator.deleteSavedRun(RUN_ID))
+            assertNull(fixture.dao.findById(RUN_ID))
+            assertEquals(RunAdmission.ReadyForCountdown, fixture.admission())
+            assertNull(fixture.coordinator.runMetrics())
+            assertEquals(RunSessionState.COMPLETED, finished.state)
+            assertFalse(fixture.coordinator.deleteSavedRun(RUN_ID))
+
+            fixture.clock.nowMillis = SECOND_START
+            fixture.coordinator.beginCountdown()
+            val next = fixture.startRun()
+            assertEquals(SECOND_RUN_ID, next.runId)
+            assertEquals(RunSessionState.RUNNING, next.state)
+            assertEquals(1, fixture.dao.countRuns())
+        } finally { fixture.scope.cancel() }
+    }
+
+    @Test
+    fun `deleting another saved run preserves the current active run and its metrics`() = runBlocking {
+        val fixture = Fixture()
+        try {
+            val active = startedRun(fixture)
+            fixture.dao.insert(preparedRun(SECOND_RUN_ID, SECOND_START).copy(
+                state = StoredRunState.COMPLETED, finishEpochMillis = SECOND_START + 60_000L,
+                lastCheckpointEpochMillis = SECOND_START + 60_000L, activityFinalized = true))
+            val before = fixture.coordinator.journeySnapshot()
+            val metricsBefore = fixture.coordinator.runMetrics()
+            val activeRow = fixture.dao.findById(RUN_ID)
+
+            assertTrue(fixture.coordinator.deleteSavedRun(SECOND_RUN_ID))
+
+            assertEquals(before, fixture.coordinator.journeySnapshot())
+            assertEquals(metricsBefore, fixture.coordinator.runMetrics())
+            assertEquals(activeRow, fixture.dao.findById(RUN_ID))
+            assertSame(active, (fixture.admission() as RunAdmission.RunInProgress).session)
+            fixture.coordinator.requestAction(RunActionKind.PAUSE).await()
+            assertEquals(RunSessionState.PAUSED, active.state)
+        } finally { fixture.scope.cancel() }
+    }
+
+    @Test
+    fun `saved deletion refuses live paused and protected completion without changing ownership`() = runBlocking {
+        val fixture = Fixture()
+        try {
+            startedRun(fixture)
+            for (action in listOf(null, RunActionKind.PAUSE, RunActionKind.COMPLETE)) {
+                if (action != null) fixture.coordinator.requestAction(action).await()
+                val before = fixture.coordinator.journeySnapshot()
+                val row = fixture.dao.findById(RUN_ID)
+                assertFalse(fixture.coordinator.deleteSavedRun(RUN_ID))
+                assertEquals(before, fixture.coordinator.journeySnapshot())
+                assertEquals(row, fixture.dao.findById(RUN_ID))
+            }
+        } finally { fixture.scope.cancel() }
+    }
+
+    @Test
+    fun `saved deletion failure retains the recap owner and allows an explicit retry`() = runBlocking {
+        val fixture = Fixture()
+        try {
+            startedRun(fixture)
+            fixture.coordinator.requestAction(RunActionKind.PAUSE).await()
+            fixture.coordinator.requestAction(RunActionKind.COMPLETE).await()
+            fixture.coordinator.finalizeActivity(RUN_ID)
+            val before = fixture.coordinator.journeySnapshot()
+            val row = fixture.dao.findById(RUN_ID)
+            fixture.dao.failSavedRunDeleteWith = IllegalStateException("disk unavailable")
+
+            assertTrue(runCatching { fixture.coordinator.deleteSavedRun(RUN_ID) }.isFailure)
+            assertEquals(before, fixture.coordinator.journeySnapshot())
+            assertEquals(row, fixture.dao.findById(RUN_ID))
+
+            fixture.dao.failSavedRunDeleteWith = null
+            assertTrue(fixture.coordinator.deleteSavedRun(RUN_ID))
+            assertEquals(RunAdmission.ReadyForCountdown, fixture.admission())
+        } finally { fixture.scope.cancel() }
+    }
+
+    @Test
+    fun `cancelling the history screen cannot leave a deleted recap owner behind`() = runBlocking {
+        val fixture = Fixture()
+        try {
+            startedRun(fixture)
+            fixture.coordinator.requestAction(RunActionKind.PAUSE).await()
+            fixture.coordinator.requestAction(RunActionKind.COMPLETE).await()
+            fixture.coordinator.finalizeActivity(RUN_ID)
+            val reached = CompletableDeferred<Unit>()
+            val release = CompletableDeferred<Unit>()
+            fixture.dao.duringSavedRunDelete = { reached.complete(Unit); release.await() }
+            val screen = launch { fixture.coordinator.deleteSavedRun(RUN_ID) }
+            reached.await()
+            screen.cancel()
+            release.complete(Unit)
+
+            assertEquals(RunAdmission.ReadyForCountdown, fixture.coordinator.journeySnapshot().admission)
+            assertNull(fixture.dao.findById(RUN_ID))
+        } finally { fixture.scope.cancel() }
+    }
+
+    @Test
     fun `feeling notes are optional bounded local facts and never choose effort or energy`() = runBlocking {
         val fixture = Fixture()
         startedRun(fixture)

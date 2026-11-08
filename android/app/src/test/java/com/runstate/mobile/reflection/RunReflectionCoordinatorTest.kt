@@ -1467,6 +1467,85 @@ class RunReflectionCoordinatorTest {
         assertNull(ready.passage)
     }
 
+    @Test fun deletingReadyRunClearsItsPublishedTextAndVoiceWithoutRegenerating() = runBlocking {
+        val dao = completedDao()
+        dao.finalizeActivity(RUN_ID)
+        val store = MemoryReflectionStore()
+        var calls = 0
+        val coordinator = RunReflectionCoordinator(dao, store,
+            ReflectionGateway { calls++; candidates() }, scope(), nowMillis = { 100L })
+        coordinator.onSavedVisible(RUN_ID).join()
+        assertTrue(coordinator.state.value is RunReflectionState.Ready)
+        assertNotNull(coordinator.voicePreparation.value)
+
+        assertTrue(dao.deleteSavedRun(RUN_ID))
+        store.rows.remove(RUN_ID) // The Room test proves this foreign-key cascade.
+        coordinator.onRunDeleted(RUN_ID)
+        coordinator.retry(RUN_ID).join()
+
+        assertEquals(RunReflectionState.Idle, coordinator.state.value)
+        assertNull(coordinator.voicePreparation.value)
+        assertTrue(store.rows.isEmpty())
+        assertEquals(1, calls)
+    }
+
+    @Test fun lateReplyCannotRestoreADeletedRunOrItsPublishedReflection() = runBlocking {
+        for (fails in listOf(false, true)) {
+            val dao = completedDao()
+            dao.finalizeActivity(RUN_ID)
+            val store = MemoryReflectionStore()
+            val response = CompletableDeferred<ReflectionCandidates>()
+            var calls = 0
+            val coordinator = RunReflectionCoordinator(dao, store,
+                ReflectionGateway { calls++; response.await() }, scope(), nowMillis = { 100L })
+            coordinator.onSavedVisible(RUN_ID).join()
+            assertTrue(coordinator.state.value is RunReflectionState.Preparing)
+
+            assertTrue(dao.deleteSavedRun(RUN_ID))
+            store.rows.remove(RUN_ID)
+            coordinator.onRunDeleted(RUN_ID)
+            if (fails) response.completeExceptionally(IllegalStateException("Late provider failure"))
+            else response.complete(candidates())
+            coordinator.retry(RUN_ID).join()
+            coordinator.startWhenBridgeReady(RUN_ID).join()
+
+            assertNull(dao.findById(RUN_ID))
+            assertTrue(store.rows.isEmpty())
+            assertEquals(RunReflectionState.Idle, coordinator.state.value)
+            assertNull(coordinator.voicePreparation.value)
+            assertEquals(1, calls)
+            assertEquals(1, store.creations)
+        }
+    }
+
+    @Test fun deletingAnotherRunPreservesTheVisibleReflectionWhenItsOldReplyArrives() = runBlocking {
+        val dao = completedDao(RUN_ID, SECOND_RUN_ID)
+        dao.finalizeActivity(RUN_ID)
+        dao.finalizeActivity(SECOND_RUN_ID)
+        val store = MemoryReflectionStore()
+        val firstReply = CompletableDeferred<ReflectionCandidates>()
+        var calls = 0
+        val coordinator = RunReflectionCoordinator(dao, store, ReflectionGateway { request ->
+            calls++
+            if (request.runId == RUN_ID) firstReply.await() else candidates("[FAKE] Visible second run.")
+        }, scope(), nowMillis = { 100L })
+        coordinator.onSavedVisible(RUN_ID).join()
+        coordinator.onSavedVisible(SECOND_RUN_ID).join()
+        val visibleState = coordinator.state.value
+        val visibleVoice = coordinator.voicePreparation.value
+        assertEquals(SECOND_RUN_ID, visibleVoice?.runId)
+
+        assertTrue(dao.deleteSavedRun(RUN_ID))
+        store.rows.remove(RUN_ID)
+        coordinator.onRunDeleted(RUN_ID)
+        firstReply.complete(candidates("[FAKE] Deleted run's late reply."))
+
+        assertEquals(visibleState, coordinator.state.value)
+        assertEquals(visibleVoice, coordinator.voicePreparation.value)
+        assertEquals(setOf(SECOND_RUN_ID), store.rows.keys)
+        assertEquals(2, calls)
+    }
+
     @Test fun lateSuccessForFirstRunCannotReplaceSecondVisibleRun() {
         val first = CompletableDeferred<ReflectionCandidates>()
         val second = CompletableDeferred<ReflectionCandidates>()

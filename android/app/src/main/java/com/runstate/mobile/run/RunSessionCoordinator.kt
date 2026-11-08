@@ -917,6 +917,28 @@ internal class RunSessionCoordinator(
         }
     }.await()
 
+    /**
+     * Deletes one explicitly saved history record. Storage rechecks eligibility in its
+     * conditional delete. If History was opened from that run's recap, retire its completed
+     * owner only after deletion succeeds, so returning to Start cannot depend on a missing row.
+     * A cancelled screen cannot interrupt the database/owner handoff.
+     */
+    suspend fun deleteSavedRun(runId: String): Boolean = applicationScope.async {
+        coordinatorLock.withLock {
+            check(initializationStatus == InitializationStatus.Completed && inconsistentActiveRuns.isEmpty()) {
+                "Saved runs cannot be deleted before recovery has completed."
+            }
+            check(reservedAction == null && !startReserved) {
+                "Wait for the current run action before deleting a saved activity."
+            }
+            val ownsDeletedRun = activeSession?.runId == runId
+            if (ownsDeletedRun && activeSession?.state != RunSessionState.COMPLETED) return@withLock false
+            runDao.deleteSavedRun(runId).also { deleted ->
+                if (deleted && ownsDeletedRun) beginFreshCycle()
+            }
+        }
+    }.await()
+
     /** Local-only annotation: it is not inferred into Energy or included in reflection requests. */
     suspend fun updatePostRunNote(runId: String, note: String?): Boolean = applicationScope.async {
         coordinatorLock.withLock {

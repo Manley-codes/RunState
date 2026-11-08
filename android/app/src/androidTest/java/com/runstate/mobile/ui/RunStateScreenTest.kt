@@ -2381,9 +2381,18 @@ class RunStateScreenTest {
     fun completionRootWaitsForExplicitNotSureBeforeVoiceAndRestoresItsAnswer() =
         shortRunDecisionThroughRoot(save = true, verifyReflectionAcknowledgement = true)
 
+    @Test
+    fun historyRootDeletesSavedRecapAndReturnsToStart() =
+        shortRunDecisionThroughRoot(save = true, deleteSaved = true)
+
+    @Test
+    fun historyRootRestoresDeletedRecapAsStart() =
+        shortRunDecisionThroughRoot(save = true, deleteSaved = true, restoreDeletedRecap = true)
+
     /** Real root + real isolated Room: these actions never touch the phone's runstate.db. */
     private fun shortRunDecisionThroughRoot(save: Boolean, restore: Boolean = false,
-        verifyReflectionAcknowledgement: Boolean = false) {
+        verifyReflectionAcknowledgement: Boolean = false, deleteSaved: Boolean = false,
+        restoreDeletedRecap: Boolean = false) {
         val database = Room.inMemoryDatabaseBuilder(
             ApplicationProvider.getApplicationContext(), RunStateDatabase::class.java).build()
         val appScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -2406,8 +2415,13 @@ class RunStateScreenTest {
                         "Powered reply.", exactReflection)
                 }, appScope, quietWindowMillis = 0L, nowMillis = { time }) else null
         var shown by mutableStateOf(true)
+        var deleteSavedOnDisposal = false
+        var restoredDeletion: kotlinx.coroutines.Deferred<Boolean>? = null
         var receipts = 0
         var reflections = 0
+        val testConnection = com.runstate.mobile.ReflectionConnectionState.Hosted(
+            com.runstate.mobile.reflection.ReflectionConnectionConfig(
+                "https://example.com/api/reflections/candidates", "x".repeat(48)))
         val silentSpeaker = object : ReflectionSpeaker {
             override fun speak(text: String) { reflections++ }
             override fun speakReceipt(text: String, onFinished: () -> Unit) {
@@ -2421,17 +2435,32 @@ class RunStateScreenTest {
             runBlocking {
                 coordinator.initialize()
                 coordinator.beginCountdown()
-                coordinator.requestStart().await()
+                // Ordinary History intentionally hides fixture runs. This isolated GPS
+                // record belongs in that view even without collected location points;
+                // the harness never starts the real location service.
+                coordinator.requestStart(trackingMode = RunTrackingMode.GPS).await()
                 time += 5_000L
                 coordinator.requestAction(RunActionKind.PAUSE).await()
             }
             val restoration = StateRestorationTester(composeTestRule)
             restoration.setContent {
+                DisposableEffect(Unit) {
+                    onDispose {
+                        if (deleteSavedOnDisposal) {
+                            // Emulate an application-owned delete committing after the old
+                            // root's navigation state was saved. Keep work off the UI thread,
+                            // including when the new root starts reading the same coordinator.
+                            restoredDeletion = appScope.async { coordinator.deleteSavedRun(id.toString()) }
+                        }
+                    }
+                }
                 if (shown) RunJourneyRoot(coordinator, reflectionOwner, database,
                     remember { MutableStateFlow(RunTrackingServiceState.Idle) },
                     LocalLifecycleOwner.current.lifecycle,
                     completionSpeakerFactory = { silentSpeaker },
-                    reflectionConnection = com.runstate.mobile.ReflectionConnectionState.Local)
+                    // The gateway above is in-memory. A dummy hosted configuration avoids
+                    // Android 37's unrelated LAN permission dialog in this journey test.
+                    reflectionConnection = testConnection)
             }
             composeTestRule.waitUntil(5_000L) {
                 composeTestRule.onAllNodesWithText(RESUME).fetchSemanticsNodes().isNotEmpty()
@@ -2526,13 +2555,36 @@ class RunStateScreenTest {
                 composeTestRule.waitUntil(5_000L) {
                     composeTestRule.onAllNodesWithTag(RUN_HISTORY_ROW_TAG_PREFIX + id).fetchSemanticsNodes().isNotEmpty()
                 }
+                if (deleteSaved) {
+                    openHistoryDeleteDialog(id.toString())
+                    if (restoreDeletedRecap) {
+                        composeTestRule.runOnIdle { deleteSavedOnDisposal = true }
+                        restoration.emulateSavedInstanceStateRestore()
+                        composeTestRule.runOnIdle { deleteSavedOnDisposal = false }
+                        composeTestRule.waitUntil(5_000L) { restoredDeletion?.isCompleted == true }
+                        assertTrue(runBlocking { requireNotNull(restoredDeletion).await() })
+                    } else {
+                        composeTestRule.onNodeWithTag("runHistoryDeleteConfirm").performClick()
+                    }
+                    composeTestRule.waitUntil(5_000L) {
+                        runBlocking { database.runDao().countRuns() } == 0 &&
+                            composeTestRule.onAllNodesWithText("Your first run starts the story.")
+                                .fetchSemanticsNodes().isNotEmpty()
+                    }
+                    composeTestRule.onNodeWithTag("runHistoryDeleteDialog").assertDoesNotExist()
+                    composeTestRule.onNodeWithTag(RUN_HISTORY_ROW_TAG_PREFIX + id).assertDoesNotExist()
+                    assertEquals(RunAdmission.ReadyForCountdown, runBlocking { coordinator.journeySnapshot().admission })
+                }
                 composeTestRule.onNodeWithText("Back to run").performClick()
-                composeTestRule.onNodeWithTag(RUN_ACTIVITY_RECAP_TAG).assertIsDisplayed()
-                composeTestRule.onNodeWithText("Done").performClick()
+                if (!deleteSaved) {
+                    composeTestRule.onNodeWithTag(RUN_ACTIVITY_RECAP_TAG).assertIsDisplayed()
+                    composeTestRule.onNodeWithText("Done").performClick()
+                }
                 composeTestRule.waitUntil(5_000L) {
                     composeTestRule.onAllNodesWithTag(START_RUN_SCREEN_TAG).fetchSemanticsNodes().isNotEmpty()
                 }
-                assertEquals(1, runBlocking { database.runDao().countRuns() })
+                composeTestRule.onNodeWithTag(RUN_ACTIVITY_RECAP_TAG).assertDoesNotExist()
+                assertEquals(if (deleteSaved) 0 else 1, runBlocking { database.runDao().countRuns() })
                 assertEquals(1, receipts)
             }
         } finally {
@@ -3060,6 +3112,215 @@ class RunStateScreenTest {
 
     /** These older History fixtures intentionally have unknown, rather than simulated, provenance. */
     private fun historyMetrics() = fixtureMetrics().copy(sourceLabel = "")
+
+    private fun deletableHistoryRun(id: String, completeGps: Boolean = true) =
+        RunHistoryItem(id, "Nov 8, 2026 · 7:00 AM", historyMetrics().copy(sourceLabel = "GPS metrics"),
+            null, null, null, false, isGpsRun = true, metricSource = MetricSource.GPS,
+            distanceMeters = 5_000.0, paceSecondsPerMeter = .4,
+            telemetryCoverage = if (completeGps) TelemetryCoverage.COMPLETE else TelemetryCoverage.PARTIAL)
+
+    private fun openHistoryDeleteDialog(runId: String) {
+        composeTestRule.onNodeWithTag(RUN_HISTORY_ROW_TAG_PREFIX + runId).performScrollTo().performClick()
+        composeTestRule.onNodeWithTag("runHistoryMenu:$runId").performScrollTo().performClick()
+        composeTestRule.onNodeWithText("Delete run").performClick()
+        composeTestRule.onNodeWithTag("runHistoryDeleteDialog").assertIsDisplayed()
+    }
+
+    @Test
+    fun historyDeleteCancelPreservesTheRunAndStopsItsReply() {
+        val chosen = deletableHistoryRun("cancel-delete").copy(
+            reflectionStatus = "READY", reflectionText = "The exact saved reflection.")
+        val other = deletableHistoryRun("keep-other")
+        val rows = listOf(chosen, other)
+        var calls = 0
+        var stops = 0
+        val spoken = mutableListOf<String>()
+        composeTestRule.setContent {
+            RunHistoryScreen(rows, {}, {}, modifier = Modifier.systemBarsPadding(),
+                speakerFactory = { object : ReflectionSpeaker {
+                    override fun speak(text: String) { spoken += text }
+                    override fun stop() { stops++ }
+                    override fun close() = Unit
+                } },
+                onDeleteRun = { calls++; true })
+        }
+        composeTestRule.onNodeWithTag(RUN_HISTORY_ROW_TAG_PREFIX + chosen.runId).performScrollTo().performClick()
+        val beforeDeleteMenu = stops
+        composeTestRule.onNodeWithTag("runHistoryMenu:${chosen.runId}").performScrollTo().performClick()
+        composeTestRule.onNodeWithText("Delete run").performClick()
+        composeTestRule.onNodeWithTag("runHistoryDeleteDialog").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Delete this run?").assertIsDisplayed()
+        saveNativePreview("runHistoryDeleteDialog", "history-delete-confirmation.png")
+        composeTestRule.runOnIdle {
+            assertEquals(0, calls)
+            assertEquals(listOf(chosen.reflectionText), spoken)
+            assertTrue("The saved reply must stop before deletion is confirmed", stops > beforeDeleteMenu)
+        }
+        composeTestRule.onNodeWithText("Cancel").performClick()
+        composeTestRule.onNodeWithTag("runHistoryDeleteDialog").assertDoesNotExist()
+        composeTestRule.onNodeWithText("2 activities").assertIsDisplayed()
+        composeTestRule.onNodeWithTag(RUN_HISTORY_ROW_TAG_PREFIX + chosen.runId).performScrollTo().assertIsDisplayed()
+        composeTestRule.onNodeWithTag(RUN_HISTORY_LIST_TAG)
+            .performScrollToNode(hasTestTag(RUN_HISTORY_ROW_TAG_PREFIX + other.runId))
+        composeTestRule.onNodeWithTag(RUN_HISTORY_ROW_TAG_PREFIX + other.runId).assertIsDisplayed()
+        composeTestRule.runOnIdle { assertEquals(0, calls); assertEquals(listOf(chosen, other), rows) }
+    }
+
+    @Test
+    fun historyDeleteUpdatesRankingsAndLastRunEmptyState() {
+        val ranked = deletableHistoryRun("ranked-delete")
+        val partial = deletableHistoryRun("keep-partial", completeGps = false)
+        var rows by mutableStateOf(listOf(ranked, partial))
+        val deleted = mutableListOf<String>()
+        composeTestRule.setContent {
+            RunHistoryScreen(rows, {}, {}, modifier = Modifier.systemBarsPadding(),
+                speakerFactory = { throw AssertionError("Deleting runs without reflections must be silent") },
+                onDeleteRun = { id ->
+                    deleted += id
+                    rows = rows.filterNot { it.runId == id }
+                    true
+                })
+        }
+        composeTestRule.onNodeWithTag("runHistoryFilter:FASTEST").performClick()
+        composeTestRule.onNodeWithText("1 activity").assertIsDisplayed()
+        openHistoryDeleteDialog(ranked.runId)
+        composeTestRule.onNodeWithTag("runHistoryDeleteConfirm").performClick()
+        composeTestRule.onNodeWithTag("runHistoryDeleteDialog").assertDoesNotExist()
+        composeTestRule.onNodeWithTag(RUN_HISTORY_ROW_TAG_PREFIX + ranked.runId).assertDoesNotExist()
+        composeTestRule.onNodeWithText("0 activities").assertIsDisplayed()
+        composeTestRule.onNodeWithText("No runs with complete GPS and a recorded average pace yet.")
+            .performScrollTo().assertIsDisplayed()
+        composeTestRule.onNodeWithTag("runHistoryFilter:ALL").performClick()
+        composeTestRule.onNodeWithText("1 activity").assertIsDisplayed()
+        composeTestRule.runOnIdle {
+            assertEquals(listOf(ranked.runId), deleted)
+            assertEquals(listOf(partial), rows)
+        }
+        openHistoryDeleteDialog(partial.runId)
+        composeTestRule.onNodeWithTag("runHistoryDeleteConfirm").performClick()
+        composeTestRule.onNodeWithTag("runHistoryDeleteDialog").assertDoesNotExist()
+        composeTestRule.onNodeWithTag(RUN_HISTORY_ROW_TAG_PREFIX + partial.runId).assertDoesNotExist()
+        composeTestRule.onNodeWithText("Your first run starts the story.").performScrollTo().assertIsDisplayed()
+        composeTestRule.runOnIdle { assertEquals(listOf(ranked.runId, partial.runId), deleted); assertTrue(rows.isEmpty()) }
+    }
+
+    @Test
+    fun historyDeleteFailureRetainsTheRunAndAllowsAnExplicitRetry() {
+        val chosen = deletableHistoryRun("retry-delete")
+        var rows by mutableStateOf(listOf(chosen))
+        var calls = 0
+        composeTestRule.setContent {
+            RunHistoryScreen(rows, {}, {}, modifier = Modifier.systemBarsPadding(),
+                speakerFactory = { throw AssertionError("Deletion must not generate or speak a reflection") },
+                onDeleteRun = { id ->
+                    assertEquals(chosen.runId, id)
+                    calls++
+                    when (calls) {
+                        1 -> false
+                        2 -> throw IllegalStateException("Simulated storage failure")
+                        else -> { rows = emptyList(); true }
+                    }
+                })
+        }
+        openHistoryDeleteDialog(chosen.runId)
+        repeat(2) {
+            composeTestRule.onNodeWithTag("runHistoryDeleteConfirm").performClick()
+            composeTestRule.onNodeWithTag("runHistoryDeleteDialog").assertIsDisplayed()
+            composeTestRule.onNodeWithText("This run couldn't be deleted. Try again.").assertIsDisplayed()
+            composeTestRule.onNodeWithTag("runHistoryDeleteConfirm").assertIsEnabled()
+            composeTestRule.runOnIdle { assertEquals(it + 1, calls); assertEquals(listOf(chosen), rows) }
+        }
+        composeTestRule.onNodeWithTag("runHistoryDeleteConfirm").performClick()
+        composeTestRule.onNodeWithTag("runHistoryDeleteDialog").assertDoesNotExist()
+        composeTestRule.onNodeWithText("Your first run starts the story.").performScrollTo().assertIsDisplayed()
+        composeTestRule.runOnIdle { assertEquals(3, calls); assertTrue(rows.isEmpty()) }
+    }
+
+    @Test
+    fun historyDeletePendingConfirmationCannotSubmitTwice() {
+        val chosen = deletableHistoryRun("pending-delete")
+        var rows by mutableStateOf(listOf(chosen))
+        val gate = kotlinx.coroutines.CompletableDeferred<Unit>()
+        var calls = 0
+        composeTestRule.setContent {
+            RunHistoryScreen(rows, {}, {}, modifier = Modifier.systemBarsPadding(),
+                speakerFactory = { throw AssertionError("Deletion must stay silent") },
+                onDeleteRun = { id ->
+                    calls++
+                    assertEquals(chosen.runId, id)
+                    gate.await()
+                    rows = emptyList()
+                    true
+                })
+        }
+        openHistoryDeleteDialog(chosen.runId)
+        composeTestRule.onNodeWithTag("runHistoryDeleteConfirm").performClick()
+        composeTestRule.onNodeWithTag("runHistoryDeleteConfirm").assertIsNotEnabled()
+        // A repeated accessibility action must also hit the pending-operation guard.
+        composeTestRule.onNodeWithTag("runHistoryDeleteConfirm")
+            .performSemanticsAction(SemanticsActions.OnClick) { it() }
+        composeTestRule.runOnIdle { assertEquals(1, calls); assertEquals(listOf(chosen), rows) }
+        composeTestRule.runOnIdle { gate.complete(Unit) }
+        composeTestRule.onNodeWithTag("runHistoryDeleteDialog").assertDoesNotExist()
+        composeTestRule.runOnIdle { assertEquals(1, calls); assertTrue(rows.isEmpty()) }
+    }
+
+    @Test
+    fun historyDeleteRestorationKeepsTheConfirmedRunIdentityWhenOrderChanges() {
+        val chosen = deletableHistoryRun("restored-delete")
+        val other = deletableHistoryRun("restored-keep")
+        val newer = deletableHistoryRun("newer-keep").copy(officialStartEpochMillis = 500L)
+        var rows by mutableStateOf(listOf(chosen, other))
+        val deleted = mutableListOf<String>()
+        var addRunOnDisposal = false
+        val restoration = StateRestorationTester(composeTestRule)
+        restoration.setContent {
+            DisposableEffect(Unit) {
+                onDispose { if (addRunOnDisposal) rows = listOf(newer, other, chosen) }
+            }
+            RunHistoryScreen(rows, {}, {}, modifier = Modifier.systemBarsPadding(),
+                speakerFactory = { throw AssertionError("Restoring deletion must stay silent") },
+                onDeleteRun = { id -> deleted += id; rows = rows.filterNot { it.runId == id }; true })
+        }
+        openHistoryDeleteDialog(chosen.runId)
+        composeTestRule.runOnIdle { addRunOnDisposal = true }
+        restoration.emulateSavedInstanceStateRestore()
+        composeTestRule.runOnIdle { addRunOnDisposal = false; assertTrue(deleted.isEmpty()) }
+        composeTestRule.onNodeWithTag("runHistoryDeleteDialog").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("runHistoryDeleteConfirm").performClick()
+        composeTestRule.onNodeWithTag("runHistoryDeleteDialog").assertDoesNotExist()
+        composeTestRule.onNodeWithText("2 activities").assertIsDisplayed()
+        composeTestRule.runOnIdle {
+            assertEquals(listOf(chosen.runId), deleted)
+            assertEquals(listOf(newer, other), rows)
+        }
+    }
+
+    @Test
+    fun historyDeleteRestorationClosesConfirmationForAMissingRun() {
+        val chosen = deletableHistoryRun("missing-delete")
+        val other = deletableHistoryRun("missing-keep")
+        var rows by mutableStateOf(listOf(chosen, other))
+        var removeRunOnDisposal = false
+        var calls = 0
+        val restoration = StateRestorationTester(composeTestRule)
+        restoration.setContent {
+            DisposableEffect(Unit) {
+                onDispose { if (removeRunOnDisposal) rows = listOf(other) }
+            }
+            RunHistoryScreen(rows, {}, {}, modifier = Modifier.systemBarsPadding(),
+                speakerFactory = { throw AssertionError("Restoring deletion must stay silent") },
+                onDeleteRun = { calls++; true })
+        }
+        openHistoryDeleteDialog(chosen.runId)
+        composeTestRule.runOnIdle { removeRunOnDisposal = true }
+        restoration.emulateSavedInstanceStateRestore()
+        composeTestRule.runOnIdle { removeRunOnDisposal = false }
+        composeTestRule.onNodeWithTag("runHistoryDeleteDialog").assertDoesNotExist()
+        composeTestRule.onNodeWithTag("runHistoryDeleteConfirm").assertDoesNotExist()
+        composeTestRule.onNodeWithTag(RUN_HISTORY_ROW_TAG_PREFIX + other.runId).performScrollTo().assertIsDisplayed()
+        composeTestRule.runOnIdle { assertEquals(0, calls); assertEquals(listOf(other), rows) }
+    }
 
     @Test
     fun normalHistoryHidesKnownSamplesAndKeepsUnknownRecords() {

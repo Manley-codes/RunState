@@ -82,6 +82,38 @@ class FakeRunDaoTest {
     }
 
     @Test
+    fun `saved deletion removes only the selected finalized completion and its transitions`() = runBlocking {
+        val dao = FakeRunDao()
+        val target = completedRun.copy(activityFinalized = true)
+        val retained = target.copy(runId = higherUuidRun.runId)
+        dao.insert(target)
+        dao.insert(retained)
+        val targetTransition = RunTransitionEntity(target.runId, 1, RunTransitionType.PAUSE, FINISHED_AT)
+        val retainedTransition = targetTransition.copy(runId = retained.runId)
+        dao.transitions += listOf(targetTransition, retainedTransition)
+
+        assertTrue(dao.deleteSavedRun(target.runId))
+        assertFalse(dao.deleteSavedRun(target.runId))
+        assertEquals(listOf(retained), dao.inserted)
+        assertEquals(listOf(retainedTransition), dao.transitions)
+    }
+
+    @Test
+    fun `saved deletion refuses live pending and incomplete legacy records`() = runBlocking {
+        val protected = listOf(
+            earliestRun.copy(activityFinalized = true),
+            higherUuidRun.copy(activityFinalized = true),
+            completedRun.copy(activityFinalized = false),
+            completedRun.copy(runId = lowerUuidRun.runId, activityFinalized = true, finishEpochMillis = null)
+        )
+        val dao = FakeRunDao()
+        protected.forEach { dao.insert(it) }
+        protected.forEach { assertFalse(dao.deleteSavedRun(it.runId)) }
+        assertFalse(dao.deleteSavedRun("missing"))
+        assertEquals(protected, dao.inserted)
+    }
+
+    @Test
     fun `older numeric edits keep the old scale and unknown answer time`() = runBlocking {
         val dao = FakeRunDao()
         dao.insert(completedRun.copy(postRunEffortRating = 5, postRunEffortQuestionVersion = 1))

@@ -2,7 +2,8 @@
 
 ## Current Android data handling
 
-Reviewed November 8, 2026 against Android and backend source at `3dee96d`.
+Reviewed November 8, 2026 against Android and backend source at `3dee96d`, updated for the
+subsequent saved-run deletion implementation.
 This is the current engineering summary for release preparation. It does not verify the
 running server's configuration or providers' retention settings, and is not the finished
 public privacy policy. Claude's separate reflection-quality branch is outside this checkpoint.
@@ -53,9 +54,12 @@ paths; it would be inaccurate to claim that no song text ever reaches AI service
   encrypted backend connection. Other preferences remain eligible for Android backup. There
   is no app export/import or recovery flow: do not rely on reinstalling or changing phones to
   restore runs. Clearing app storage or uninstalling can lose the local history.
-- There is no saved-run deletion screen or backend deletion endpoint yet. The existing discard
-  action applies only to a reliably short, paused, unfinished run under 30 seconds. Clearing phone
-  data does not send deletion requests to RunState's backend or its service providers.
+- Log History's expanded run menu offers Delete run with explicit confirmation. It permanently
+  removes that finalized, completed run and its local route, splits, music observations, weather,
+  reflection and other owned records. Other runs and shared shoe pairs remain. There is no undo
+  or recovery flow. The separate unfinished-run discard remains limited to reliably short, paused
+  runs under 30 seconds. Neither action sends deletion requests to the backend or providers;
+  no backend deletion endpoint exists, and already admitted provider work may still finish.
 - The backend keeps up to 256 reflection request/results in process memory, including run facts
   and all four generated branches. They have no timed expiration and remain for that process's
   lifetime to prevent duplicate paid work. Song preparation is separate: up to 32 entries with
@@ -71,8 +75,8 @@ audit of every dependency or proof that every production logging setting is corr
 
 ### Remaining public-release decisions
 
-1. Choose and implement saved-data deletion and a clear recovery/export approach before inviting
-   people to rely on their history. Preserve existing saved runs while developing those controls.
+1. Choose a clear recovery/export approach before inviting people to rely on their history.
+   Individual saved-run deletion is implemented; existing runs remain until explicitly deleted.
 2. Confirm hosting/provider/SDK retention, deletion and AI-data settings, then specify the actual
    retention policy and a privacy contact. Do not substitute application cache limits for those facts.
 3. Publish the finished privacy policy and make it accessible inside the app; current Settings has

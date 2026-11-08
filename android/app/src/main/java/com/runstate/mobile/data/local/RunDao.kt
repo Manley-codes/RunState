@@ -83,6 +83,22 @@ abstract class RunDao {
     @Query("UPDATE runs SET activity_finalized = 1 WHERE run_id = :runId AND state = :completedState")
     protected abstract suspend fun finalizeCompletedActivity(runId: String, completedState: StoredRunState): Int
 
+    /**
+     * Removes only a deliberately saved completion. The conditional write and existing
+     * foreign-key cascades are atomic: active runs and completions awaiting Save Activity
+     * cannot be removed, and shared shoe pairs are retained.
+     */
+    suspend fun deleteSavedRun(runId: String): Boolean =
+        deleteFinalizedCompletedRun(runId, StoredRunState.COMPLETED) == 1
+
+    @Query("""
+        DELETE FROM runs WHERE run_id = :runId AND state = :completedState
+          AND activity_finalized = 1 AND finish_epoch_millis IS NOT NULL
+    """)
+    protected abstract suspend fun deleteFinalizedCompletedRun(
+        runId: String, completedState: StoredRunState
+    ): Int
+
     suspend fun setPostRunNote(runId: String, note: String?): Boolean {
         val normalized = note?.trim()?.takeIf { it.isNotEmpty() }
         require(normalized == null || normalized.length <= RunEntity.POST_RUN_NOTE_MAX_LENGTH) {

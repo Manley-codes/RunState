@@ -41,6 +41,10 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
@@ -53,6 +57,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -73,6 +78,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.selected
@@ -81,6 +87,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -1546,7 +1553,8 @@ internal fun RunHistoryScreen(
     splitLoader: (suspend (String) -> HistorySplitDisplay)? = null,
     onRetrySplits: suspend (String) -> Unit = {},
     onSelectEffortRating: (String, Int?) -> Unit = { _, _ -> },
-    showRecordingSources: Boolean = false
+    showRecordingSources: Boolean = false,
+    onDeleteRun: (suspend (String) -> Boolean)? = null
 ) {
     val listState = rememberLazyListState()
     val choices = if (showRecordingSources)
@@ -1578,6 +1586,11 @@ internal fun RunHistoryScreen(
     var editingEffortRunId by rememberSaveable { mutableStateOf<String?>(null) }
     var editingEnergyRunId by rememberSaveable { mutableStateOf<String?>(null) }
     var energyEvidenceOpen by rememberSaveable { mutableStateOf(false) }
+    var deletingRunId by rememberSaveable { mutableStateOf<String?>(null) }
+    var deletePending by remember { mutableStateOf(false) }
+    var deleteError by remember { mutableStateOf<String?>(null) }
+    val deleteScope = rememberCoroutineScope()
+    val currentDeleteRun by rememberUpdatedState(onDeleteRun)
     var speaker by remember { mutableStateOf<ReflectionSpeaker?>(null) }
     var route by remember { mutableStateOf<Pair<String, HistoryRouteDisplay>?>(null) }
     val currentRouteLoader by rememberUpdatedState(routeLoader)
@@ -1595,6 +1608,20 @@ internal fun RunHistoryScreen(
     }
     fun stopSpeaker() {
         try { speaker?.stop() } catch (_: RuntimeException) { closeSpeaker() }
+    }
+
+    // A removed record must not retain an open route, editor, confirmation or voice.
+    LaunchedEffect(availableItems, isLoading) {
+        if (!isLoading) {
+            if (expandedRunId != null && availableItems.none { it.runId == expandedRunId }) {
+                stopSpeaker()
+                expandedRunId = null
+            }
+            if (deletingRunId != null && availableItems.none { it.runId == deletingRunId }) {
+                deletingRunId = null
+                deleteError = null
+            }
+        }
     }
 
     val expandedGpsRun = items.firstOrNull { it.runId == expandedRunId }?.isGpsRun == true
@@ -1901,10 +1928,71 @@ internal fun RunHistoryScreen(
                         onRetrySplits = {
                             retrySplitsForRun = item.runId
                             splitLoadAttempt += 1
+                        },
+                        onDelete = onDeleteRun?.let {
+                            {
+                                stopSpeaker()
+                                deletingRunId = item.runId
+                                deleteError = null
+                            }
                         }
                     )
                 }
             }
+        }
+        val deletingItem = availableItems.firstOrNull { it.runId == deletingRunId }
+        if (deletingItem != null && onDeleteRun != null) {
+            AlertDialog(
+                onDismissRequest = { if (!deletePending) { deletingRunId = null; deleteError = null } },
+                modifier = Modifier.testTag("runHistoryDeleteDialog"),
+                containerColor = HistoryDark,
+                titleContentColor = HistoryLightInk,
+                textContentColor = HistoryLightMuted,
+                title = { Text("Delete this run?") },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Text("${deletingItem.metrics?.distance ?: "Saved run"} · ${deletingItem.dateLabel}",
+                            color = HistoryLightInk, fontWeight = FontWeight.Medium)
+                        Text("This permanently removes the run and its saved details from this phone. This can't be undone.")
+                        deleteError?.let { Text(it, color = Color(0xFFFFB4AB)) }
+                    }
+                },
+                confirmButton = {
+                    TextButton(
+                        enabled = !deletePending,
+                        modifier = Modifier.testTag("runHistoryDeleteConfirm"),
+                        colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFFFFB4AB)),
+                        onClick = {
+                            val delete = currentDeleteRun
+                            if (!deletePending && delete != null) {
+                                val id = deletingItem.runId
+                                deletePending = true
+                                deleteError = null
+                                stopSpeaker()
+                                deleteScope.launch {
+                                    try {
+                                        if (delete(id)) {
+                                            if (expandedRunId == id) expandedRunId = null
+                                            if (editingEffortRunId == id) editingEffortRunId = null
+                                            if (editingEnergyRunId == id) editingEnergyRunId = null
+                                            deletingRunId = null
+                                        } else deleteError = "This run couldn't be deleted. Try again."
+                                    } catch (cancelled: CancellationException) { throw cancelled }
+                                    catch (_: Exception) { deleteError = "This run couldn't be deleted. Try again." }
+                                    finally { deletePending = false }
+                                }
+                            }
+                        }
+                    ) { Text("Delete") }
+                },
+                dismissButton = {
+                    TextButton(enabled = !deletePending,
+                        colors = ButtonDefaults.textButtonColors(contentColor = HistoryLightInk),
+                        onClick = { deletingRunId = null; deleteError = null }) { Text("Cancel") }
+                },
+                properties = DialogProperties(dismissOnBackPress = !deletePending,
+                    dismissOnClickOutside = !deletePending)
+            )
         }
         val editingItem = availableItems.firstOrNull { it.runId == editingEffortRunId }
         if (editingItem != null && (editingItem.energyQuestionVersion == 2 || editingItem.hasNumericEffortHistory())) {
@@ -2051,7 +2139,8 @@ private fun HistoryRow(
     energyError: String?,
     route: HistoryRouteDisplay?,
     splits: HistorySplitDisplay?,
-    onRetrySplits: () -> Unit
+    onRetrySplits: () -> Unit,
+    onDelete: (() -> Unit)? = null
 ) {
     val shape = RoundedCornerShape(13.dp)
     val rowInk = if (expanded) HistoryLightInk else CompletionStrongInk
@@ -2150,14 +2239,37 @@ private fun HistoryRow(
         }
         if (expanded) {
             Column(modifier = Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, bottom = 22.dp)) {
-                Text(
-                    text = "RUNSTATE",
-                    color = rowAccent,
-                    fontSize = 9.sp,
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = 1.8.sp,
-                    modifier = Modifier.padding(top = 4.dp)
-                )
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text(
+                        text = "RUNSTATE",
+                        color = rowAccent,
+                        fontSize = 9.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 1.8.sp,
+                        modifier = Modifier.padding(top = 4.dp)
+                    )
+                    if (onDelete != null) {
+                        var menuOpen by remember { mutableStateOf(false) }
+                        Box {
+                            IconButton(onClick = { menuOpen = true },
+                                modifier = Modifier.testTag("runHistoryMenu:" + item.runId)
+                                    .semantics { contentDescription = "Run options" }) {
+                                Canvas(Modifier.size(20.dp)) {
+                                    listOf(0.2f, 0.5f, 0.8f).forEach { y ->
+                                        drawCircle(rowMuted, radius = 1.8.dp.toPx(),
+                                            center = Offset(size.width / 2, size.height * y))
+                                    }
+                                }
+                            }
+                            DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false },
+                                containerColor = HistoryDark) {
+                                DropdownMenuItem(text = { Text("Delete run", color = Color(0xFFFFB4AB)) },
+                                    onClick = { menuOpen = false; onDelete() })
+                            }
+                        }
+                    }
+                }
                 Text(
                     text = when {
                         item.reflectionStatus == "READY" && !item.reflectionText.isNullOrBlank() -> item.reflectionText

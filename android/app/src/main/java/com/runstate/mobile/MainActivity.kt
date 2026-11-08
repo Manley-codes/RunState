@@ -119,6 +119,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
@@ -1004,6 +1005,40 @@ internal fun RunJourneyRoot(
         metrics = coordinator.runMetrics()?.let(::runMetricsDisplayFor)
     }
 
+    // Rotation can finish while an application-owned deletion is committing. Reconcile
+    // this composition's restored navigation from Room, not the old screen's callbacks.
+    LaunchedEffect(completedRuns, recapRunId, completedRunId) {
+        val savedRows = completedRuns ?: return@LaunchedEffect
+        // A just-completed run can precede Room's next list emission; confirm absence in
+        // storage before stopping audio or clearing any navigation for that run.
+        val missingIds = try {
+            listOfNotNull(recapRunId, completedRunId).distinct().filter { id ->
+                savedRows.none { it.runId == id } && database.runDao().findById(id) == null
+            }
+        } catch (cancelled: CancellationException) { throw cancelled }
+        catch (_: Exception) { return@LaunchedEffect }
+        val missingRecap = recapRunId in missingIds
+        val missingCompletion = completedRunId in missingIds
+        if (missingRecap || missingCompletion) {
+            stopCompletionAudio?.invoke()
+            if (missingRecap) {
+                recapRunId = null
+                recapItem = null
+                recapRoute = null
+                recapSplits = null
+            }
+            refresh()
+            if (model.state == RunUiState.ReadyToStart) {
+                preRunEnergy = null
+                preRunEnergyRecordedAt = null
+                runIntention = null
+                routeLabel = null
+                gpsMessage = null
+                gpsDraftSelected = true
+            }
+        }
+    }
+
     LaunchedEffect(ownedCountdown) {
         if (ownedCountdown != null) refresh()
     }
@@ -1544,6 +1579,37 @@ internal fun RunJourneyRoot(
             onRetrySplits = onRetrySplits,
             isLoading = completedRuns == null || storedReflections == null,
             error = historyError,
+            onDeleteRun = { runId ->
+                // The short local delete/owner cleanup finishes together even if History closes.
+                // No provider request is made here, and no other run's audio or state is reset.
+                withContext(NonCancellable) {
+                    val deleted = coordinator.deleteSavedRun(runId)
+                    if (deleted) {
+                        reflectionCoordinator?.onRunDeleted(runId)
+                        if (recapRunId == runId || completedRunId == runId) {
+                            stopCompletionAudio?.invoke()
+                            recapRunId = null
+                            recapItem = null
+                            recapRoute = null
+                            recapSplits = null
+                            preRunEnergy = null
+                            preRunEnergyRecordedAt = null
+                            runIntention = null
+                            routeLabel = null
+                            gpsMessage = null
+                            gpsDraftSelected = true
+                        }
+                        if (completionSpeechEligibleRunId == runId) completionSpeechEligibleRunId = null
+                        if (completionSpeechSpokenRunId == runId) completionSpeechSpokenRunId = null
+                        if (permissionRunId == runId) permissionRunId = null
+                        if (effortError?.first == runId) effortError = null
+                        if (energyError?.first == runId) energyError = null
+                        historyItems = historyItems.filterNot { it.runId == runId }
+                        refresh()
+                    }
+                    deleted
+                }
+            },
             modifier = modifier
         )
         return
