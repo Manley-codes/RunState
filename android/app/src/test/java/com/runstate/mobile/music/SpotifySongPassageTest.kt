@@ -37,6 +37,7 @@ class SpotifySongPassageTest {
         var ignoreTrackLoad = false
         var trackLoadDelayMillis = 0L
         var ignoreEntranceSeek = false
+        var onSeek: (Long) -> Unit = {}
         var ignorePendingLoadCancellation = false
         private var pendingTrack: SongPassageSnapshot? = null
         private var trackLoadsAt = 0L
@@ -66,6 +67,7 @@ class SpotifySongPassageTest {
         }
         override fun seekTo(positionMillis: Long) {
             commands += "seek:$positionMillis"
+            onSeek(positionMillis)
             if (ignoreEntranceSeek && commands.count { it.startsWith("seek:") } == 1) return
             // Apply the simulated seek error only to the passage entrance, never restoration.
             replace(snapshot().copy(positionMillis = positionMillis +
@@ -1520,10 +1522,10 @@ class SpotifySongPassageTest {
      * phone on November 7: without a silent prepare, loading the chosen song means playing it, its
      * player takes audio focus, and the completion read that as an interruption. The simulated
      * Spotify asks for focus the first time it plays the chosen song, as a real player does. The
-     * fixture wires the completion the way the screen does: an audible load is announced first,
-     * and the passage entrance releases the shared pause.
+     * fixture wires the completion the way the screen does: an audible load is announced first, the
+     * pause is taken back once the loading song is paused, and the passage entrance releases it.
      */
-    private class CompletionFocusFixture(val clock: Clock, val session: Session) {
+    private class CompletionFocusFixture(val clock: Clock, val session: Session, val reholdAfterLoad: Boolean = true) {
         var controller: SpotifySongPassageController? = null
         var onLoss: (() -> Unit)? = null
         var interruptions = 0
@@ -1555,7 +1557,8 @@ class SpotifySongPassageTest {
             val passage = SpotifySongPassageController(session, clock,
                 onEntranceReady = { completion.releaseForPassage() },
                 quiescePausedBeforeEntry = true, diagnosticObserver = { diagnostics += it },
-                onAudibleTrackLoad = { completion.expectPassageLoad() })
+                onAudibleTrackLoad = { completion.expectPassageLoad() },
+                onAudibleTrackContained = { if (reholdAfterLoad) completion.reholdAfterPassageLoad() })
             controller = passage
             return passage.play(request)
         }
@@ -1581,7 +1584,7 @@ class SpotifySongPassageTest {
         assertEquals("The shared pause was released once, at the entrance", 1, fixture.releases)
         assertEquals(listOf(CompletionAudioSession.Event.PAUSE_HELD,
             CompletionAudioSession.Event.PASSAGE_LOADING, CompletionAudioSession.Event.FOCUS_TO_PASSAGE,
-            CompletionAudioSession.Event.PASSAGE_READY), fixture.events)
+            CompletionAudioSession.Event.PAUSE_REHELD, CompletionAudioSession.Event.PASSAGE_READY), fixture.events)
         fixture.completion.finish()
         assertEquals(1, fixture.releases)
         assertEquals(originalUri, session.snapshot().mediaId)
@@ -1663,5 +1666,43 @@ class SpotifySongPassageTest {
             listOf("pause", "playTrack:$selectedUri", "pause", "seek:45000", "play"), session.commands)
         assertEquals(selectedUri, session.snapshot().mediaId)
         assertEquals(PassagePlayback.PAUSED, session.snapshot().playback)
+    }
+
+    @Test fun anAppStartingDuringTheEntranceSeekStopsTheClipOnceThePauseIsTakenBack() = runBlocking {
+        for (rehold in listOf(false, true)) {
+            val clock = Clock()
+            val session = Session(clock).apply {
+                enableTrackSelection(prepare = false, originallyPlaying = false)
+                trackLoadDelayMillis = 200
+            }
+            val fixture = CompletionFocusFixture(clock, session, reholdAfterLoad = rehold).apply {
+                chosenSongRequestsFocusWhenItFirstPlays(selectedUri)
+            }
+            // Another app starts playing while RunState seeks the paused song to the clip.
+            var otherAppStarted = false
+            session.onSeek = { position ->
+                if (position == 45_000L && !otherAppStarted) {
+                    otherAppStarted = true
+                    fixture.onLoss?.invoke()
+                }
+            }
+            val result = fixture.play(selectedRequest.copy(resumePausedOriginal = true))
+            assertTrue(otherAppStarted)
+            if (!rehold) {
+                // The gap: without taking the pause back, nothing notices, and the clip later takes over.
+                assertEquals(SongPassageResult(SongPassageStatus.FINISHED, true), result)
+                assertEquals(0, fixture.interruptions)
+            } else {
+                assertEquals(SongPassageResult(SongPassageStatus.INTERRUPTED, false), result)
+                assertEquals(1, fixture.interruptions)
+                assertEquals(1, fixture.releases)
+                assertEquals("No clip, restore or resume follows the other app",
+                    listOf("pause", "playTrack:$selectedUri", "pause", "seek:45000"), session.commands)
+                assertEquals(listOf(CompletionAudioSession.Event.PAUSE_HELD,
+                    CompletionAudioSession.Event.PASSAGE_LOADING, CompletionAudioSession.Event.FOCUS_TO_PASSAGE,
+                    CompletionAudioSession.Event.PAUSE_REHELD, CompletionAudioSession.Event.FOCUS_LOST,
+                    CompletionAudioSession.Event.CANCELLED), fixture.events)
+            }
+        }
     }
 }

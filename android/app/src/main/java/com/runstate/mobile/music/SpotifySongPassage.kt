@@ -154,6 +154,8 @@ internal class SpotifySongPassageController(
     private val quiescePausedBeforeEntry: Boolean = false,
     /** Called just before the chosen song is started audibly to load it; its player then takes focus. */
     private val onAudibleTrackLoad: () -> Unit = {},
+    /** Called once an audibly loaded song is paused again at its start, before the entrance seek. */
+    private val onAudibleTrackContained: () -> Unit = {},
     // Kept last: existing callers pass the diagnostic observer as a trailing lambda.
     private val diagnosticObserver: (SongPassageDiagnostic) -> Unit = {}
 ) {
@@ -251,6 +253,9 @@ internal class SpotifySongPassageController(
                     artist = request.artistName, durationMillis = targetDuration, positionMillis = 0L)
                 loadTrack(current, beforeLoad, expected, SongPassageStage.TRACK_LOAD)
                 current.switchedTrack = true
+                // An audible load is paused again at the song's start. The shared speech pause may take
+                // its hold back until the entrance; if that ends the completion, the next check stops us.
+                if (!beforeLoad.canPrepareTrack) onAudibleTrackContained()
             }
             var paused = checked(current)
             if (paused.playback != PassagePlayback.PAUSED || !paused.canSeek || !paused.canPlay) {

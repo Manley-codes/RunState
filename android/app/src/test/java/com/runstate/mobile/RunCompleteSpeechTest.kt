@@ -37,6 +37,7 @@ class RunCompleteSpeechTest {
         var releases = 0
         var interruptions = 0
         var loseDuringRequest = false
+        var grantPause = true
         var onLoss: (() -> Unit)? = null
         val lostVoices = mutableListOf<String>()
         val events = mutableListOf<CompletionEvent>()
@@ -46,7 +47,7 @@ class RunCompleteSpeechTest {
                 pauseRequests++
                 onLoss = lost
                 if (loseDuringRequest) lost()
-                true
+                grantPause
             },
             releasePause = { releases++ },
             onInterrupted = { interruptions++ },
@@ -179,6 +180,49 @@ class RunCompleteSpeechTest {
         assertEquals(1, interrupted.releases)
         assertEquals(listOf(CompletionEvent.PAUSE_HELD, CompletionEvent.FOCUS_LOST,
             CompletionEvent.CANCELLED), interrupted.events)
+    }
+
+    @Test fun takingThePauseBackAfterAnAudibleLoadLetsAnOutsideLossInterruptUntilTheEntrance() {
+        val fixture = CompletionAudioFixture()
+        assertTrue(fixture.session.begin())
+        fixture.session.expectPassageLoad()
+        fixture.onLoss!!.invoke() // The chosen song's player takes focus as it starts loading.
+        fixture.session.reholdAfterPassageLoad()
+        assertEquals(2, fixture.pauseRequests)
+        assertFalse("No new voice can start during the passage", fixture.session.canContinue)
+        fixture.onLoss!!.invoke() // Another app starts playing during the entrance seek.
+        fixture.session.releaseForPassage()
+        assertEquals(1, fixture.interruptions)
+        assertEquals(1, fixture.releases)
+        assertEquals(listOf(CompletionEvent.PAUSE_HELD, CompletionEvent.PASSAGE_LOADING,
+            CompletionEvent.FOCUS_TO_PASSAGE, CompletionEvent.PAUSE_REHELD, CompletionEvent.FOCUS_LOST,
+            CompletionEvent.CANCELLED), fixture.events)
+    }
+
+    @Test fun thePauseIsTakenBackOnlyAfterTheSongsOwnFocusChangeAndARefusalEndsTheCompletion() {
+        val early = CompletionAudioFixture()
+        assertTrue(early.session.begin())
+        early.session.expectPassageLoad()
+        early.session.reholdAfterPassageLoad()
+        assertEquals("Without the song's own focus change, nothing is asked again", 1, early.pauseRequests)
+        early.onLoss!!.invoke() // That change can still arrive late; it belongs to the passage.
+        early.session.releaseForPassage()
+        early.session.reholdAfterPassageLoad()
+        assertEquals("Nothing is asked again after the entrance", 1, early.pauseRequests)
+        assertEquals(0, early.interruptions)
+        assertEquals(1, early.releases)
+
+        val refused = CompletionAudioFixture()
+        assertTrue(refused.session.begin())
+        refused.session.expectPassageLoad()
+        refused.onLoss!!.invoke()
+        refused.grantPause = false // For example, a call is in progress.
+        refused.session.reholdAfterPassageLoad()
+        refused.session.releaseForPassage()
+        assertEquals(1, refused.interruptions)
+        assertEquals(1, refused.releases)
+        assertEquals(listOf(CompletionEvent.PAUSE_HELD, CompletionEvent.PASSAGE_LOADING,
+            CompletionEvent.FOCUS_TO_PASSAGE, CompletionEvent.CANCELLED), refused.events)
     }
 
     @Test fun onlyTheOriginalPlayingRecordingCanBeResumedAfterTheSharedPause() {
