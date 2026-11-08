@@ -152,6 +152,9 @@ internal class SpotifySongPassageController(
     private val clock: PassageClock = RealPassageClock,
     private val onEntranceReady: () -> Unit = {},
     private val quiescePausedBeforeEntry: Boolean = false,
+    /** Called just before the chosen song is started audibly to load it; its player then takes focus. */
+    private val onAudibleTrackLoad: () -> Unit = {},
+    // Kept last: existing callers pass the diagnostic observer as a trailing lambda.
     private val diagnosticObserver: (SongPassageDiagnostic) -> Unit = {}
 ) {
     private class Owner(var initial: SongPassageSnapshot) {
@@ -432,7 +435,12 @@ internal class SpotifySongPassageController(
         current.expectedPosition = 0L
         current.expectedAt = clock.nowMillis()
         current.loadingFrom = before
-        val sent = if (before.canPrepareTrack) session.prepareFromTrackUri(uri) else session.playFromTrackUri(uri)
+        val sent = if (before.canPrepareTrack) session.prepareFromTrackUri(uri) else {
+            // Loading by playing makes the chosen song's player take audio focus. Announce it first so
+            // the shared speech pause can treat that change as this handoff, not an interruption.
+            if (stage == SongPassageStage.TRACK_LOAD) onAudibleTrackLoad()
+            session.playFromTrackUri(uri)
+        }
         if (!sent) throw PassageInterrupted(SongPassageReason.TRACK_LOAD_UNSUPPORTED)
         val until = clock.nowMillis() + TRACK_LOAD_TIMEOUT_MILLIS
         do {

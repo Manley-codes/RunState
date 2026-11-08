@@ -1516,11 +1516,12 @@ class SpotifySongPassageTest {
     }
 
     /**
-     * November 6 report: "the music tried to start, then stopped immediately." These tests
-     * characterize the leading hypothesis without changing behavior. The simulated Spotify asks
-     * for audio focus the first time it plays the chosen song, as a real player does. The
-     * completion keeps one shared pause until the passage entrance, and treats any focus loss
-     * before that handoff as an interruption.
+     * November 6 report: "the music tried to start, then stopped immediately." Confirmed on the
+     * phone on November 7: without a silent prepare, loading the chosen song means playing it, its
+     * player takes audio focus, and the completion read that as an interruption. The simulated
+     * Spotify asks for focus the first time it plays the chosen song, as a real player does. The
+     * fixture wires the completion the way the screen does: an audible load is announced first,
+     * and the passage entrance releases the shared pause.
      */
     private class CompletionFocusFixture(val clock: Clock, val session: Session) {
         var controller: SpotifySongPassageController? = null
@@ -1529,11 +1530,13 @@ class SpotifySongPassageTest {
         var releases = 0
         var chosenSongTookFocusBeforeEntrance = false
         val diagnostics = mutableListOf<SongPassageDiagnostic>()
+        val events = mutableListOf<CompletionAudioSession.Event>()
         val completion = CompletionAudioSession(
             snapshot = { session.snapshot() },
             requestPause = { lost -> onLoss = lost; true },
             releasePause = { releases++ },
-            onInterrupted = { interruptions++; controller?.stop() })
+            onInterrupted = { interruptions++; controller?.stop() },
+            diagnostic = { event, _ -> events += event })
 
         fun chosenSongRequestsFocusWhenItFirstPlays(chosenUri: String) {
             var requested = false
@@ -1551,13 +1554,14 @@ class SpotifySongPassageTest {
             assertTrue(completion.begin())
             val passage = SpotifySongPassageController(session, clock,
                 onEntranceReady = { completion.releaseForPassage() },
-                quiescePausedBeforeEntry = true, diagnosticObserver = { diagnostics += it })
+                quiescePausedBeforeEntry = true, diagnosticObserver = { diagnostics += it },
+                onAudibleTrackLoad = { completion.expectPassageLoad() })
             controller = passage
             return passage.play(request)
         }
     }
 
-    @Test fun audibleTrackLoadInsideTheCompletionPauseIsStoppedByTheFocusRequestItCauses() = runBlocking {
+    @Test fun audibleTrackLoadHandsTheCompletionPauseToTheChosenSongInsteadOfStoppingIt() = runBlocking {
         val clock = Clock()
         val session = Session(clock).apply {
             enableTrackSelection(prepare = false, originallyPlaying = false)
@@ -1568,14 +1572,20 @@ class SpotifySongPassageTest {
         }
         val result = fixture.play(selectedRequest.copy(resumePausedOriginal = true))
         assertTrue("The chosen song was audible while it loaded", fixture.chosenSongTookFocusBeforeEntrance)
-        assertEquals(1, fixture.interruptions)
-        assertEquals(SongPassageResult(SongPassageStatus.INTERRUPTED, false), result)
-        assertTrue(fixture.diagnostics.any {
-            it.stage == SongPassageStage.TRACK_LOAD && it.reason == SongPassageReason.STOPPED })
-        assertEquals("The loading fragment is paused; no entrance seek, passage or restore follows",
-            listOf("pause", "playTrack:$selectedUri", "pause"), session.commands)
-        assertEquals(selectedUri, session.snapshot().mediaId)
-        assertEquals(PassagePlayback.PAUSED, session.snapshot().playback)
+        assertEquals(SongPassageResult(SongPassageStatus.FINISHED, true), result)
+        assertEquals(0, fixture.interruptions)
+        assertTrue(fixture.diagnostics.none { it.reason == SongPassageReason.STOPPED })
+        assertEquals("The loading fragment is contained before the entrance; the passage and restore follow",
+            listOf("pause", "playTrack:$selectedUri", "pause", "seek:45000", "play", "pause",
+                "playTrack:$originalUri", "pause", "seek:60000", "play"), session.commands)
+        assertEquals("The shared pause was released once, at the entrance", 1, fixture.releases)
+        assertEquals(listOf(CompletionAudioSession.Event.PAUSE_HELD,
+            CompletionAudioSession.Event.PASSAGE_LOADING, CompletionAudioSession.Event.FOCUS_TO_PASSAGE,
+            CompletionAudioSession.Event.PASSAGE_READY), fixture.events)
+        fixture.completion.finish()
+        assertEquals(1, fixture.releases)
+        assertEquals(originalUri, session.snapshot().mediaId)
+        assertEquals(PassagePlayback.PLAYING, session.snapshot().playback)
     }
 
     @Test fun silentTrackLoadInsideTheCompletionPauseHandsOffBeforeTheSongTakesFocus() = runBlocking {
@@ -1594,6 +1604,8 @@ class SpotifySongPassageTest {
         assertEquals(0, fixture.interruptions)
         assertEquals(1, fixture.releases)
         assertTrue(session.commands.none { it.startsWith("playTrack:") })
+        assertFalse("A silent load never needs the audible handoff",
+            CompletionAudioSession.Event.PASSAGE_LOADING in fixture.events)
         fixture.completion.finish()
         assertEquals("The handoff released the shared pause exactly once", 1, fixture.releases)
         assertEquals(originalUri, session.snapshot().mediaId)
@@ -1614,5 +1626,42 @@ class SpotifySongPassageTest {
         assertEquals(SongPassageResult(SongPassageStatus.INTERRUPTED, false), result)
         assertEquals(1, fixture.interruptions)
         assertTrue(session.commands.none { it.startsWith("seek:") })
+        assertEquals("The log names the loss that cancelled the completion",
+            listOf(CompletionAudioSession.Event.PAUSE_HELD, CompletionAudioSession.Event.FOCUS_LOST,
+                CompletionAudioSession.Event.CANCELLED), fixture.events)
+    }
+
+    @Test fun outsidePauseAfterAnAudibleHandoffStillEndsThePassageWithoutResumingMusic() = runBlocking {
+        val clock = Clock()
+        val session = Session(clock).apply {
+            enableTrackSelection(prepare = false, originallyPlaying = false)
+            trackLoadDelayMillis = 200
+        }
+        val fixture = CompletionFocusFixture(clock, session).apply {
+            chosenSongRequestsFocusWhenItFirstPlays(selectedUri)
+        }
+        // The completion has handed focus to the chosen song. One second into the passage, a call
+        // or another app pauses Spotify. The passage's own playback checks must end it.
+        val songTakesFocus = clock.onWait
+        var pausedFromOutside = false
+        clock.onWait = {
+            songTakesFocus()
+            val now = session.snapshot()
+            if (!pausedFromOutside && "play" in session.commands && now.mediaId == selectedUri &&
+                now.playback == PassagePlayback.PLAYING && now.positionMillis >= 46_000L) {
+                pausedFromOutside = true
+                session.replace(now.copy(playback = PassagePlayback.PAUSED, canPlay = true, canPause = false))
+            }
+        }
+        val result = fixture.play(selectedRequest.copy(resumePausedOriginal = true))
+        assertTrue(pausedFromOutside)
+        assertEquals(SongPassageResult(SongPassageStatus.INTERRUPTED, false), result)
+        assertEquals("The passage noticed the pause itself; the completion had already handed off",
+            0, fixture.interruptions)
+        assertEquals(1, fixture.releases)
+        assertEquals("Nothing is paused again, restored or resumed after the outside pause",
+            listOf("pause", "playTrack:$selectedUri", "pause", "seek:45000", "play"), session.commands)
+        assertEquals(selectedUri, session.snapshot().mediaId)
+        assertEquals(PassagePlayback.PAUSED, session.snapshot().playback)
     }
 }

@@ -187,7 +187,8 @@ internal class CompletionAudioSession(
     private val diagnostic: (Event, Long) -> Unit = { _, _ -> }
 ) {
     enum class Event { PAUSE_HELD, RECEIPT_REQUESTED, RECEIPT_FINISHED, ENERGY_CHOSEN,
-        TEXT_READY, VOICE_READY, REFLECTION_STARTED, PASSAGE_READY, FINISHED, CANCELLED }
+        TEXT_READY, VOICE_READY, REFLECTION_STARTED, PASSAGE_LOADING, FOCUS_TO_PASSAGE, FOCUS_LOST,
+        PASSAGE_READY, FINISHED, CANCELLED }
     private enum class Phase { NEW, HOLDING, PASSAGE, FINISHED, CANCELLED }
     private var phase = Phase.NEW
     private var held = false
@@ -210,8 +211,11 @@ internal class CompletionAudioSession(
         held = true // Also owns cleanup if the driver synchronously reports loss/denial.
         val granted = try {
             requestPause {
-                // A queued loss after handing control to Spotify belongs to the old lease.
+                // After control passes to Spotify, a loss belongs to the passage: the chosen song's
+                // own focus request during an audible load, or a queued loss from the old lease.
+                if (phase == Phase.PASSAGE) note(Event.FOCUS_TO_PASSAGE)
                 if (phase == Phase.HOLDING) {
+                    note(Event.FOCUS_LOST)
                     val callbacks = voices.values.toList()
                     phase = Phase.CANCELLED
                     voices.clear()
@@ -256,8 +260,21 @@ internal class CompletionAudioSession(
             kotlin.math.abs(before.positionMillis - now.positionMillis) <= 2_000L
     }
 
-    fun releaseForPassage() {
+    /**
+     * RunState is about to load the chosen song by playing it, so that player will take audio focus.
+     * Treat that loss as this handoff, not an interruption. Keep the lease until the entrance:
+     * abandoning it now could hand focus back to a paused player before the chosen song claims it.
+     * From here on, the passage's own playback checks are what notice an outside interruption.
+     */
+    fun expectPassageLoad() {
         if (phase != Phase.HOLDING) return
+        phase = Phase.PASSAGE
+        note(Event.PASSAGE_LOADING)
+        voices.clear()
+    }
+
+    fun releaseForPassage() {
+        if (phase != Phase.HOLDING && phase != Phase.PASSAGE) return
         phase = Phase.PASSAGE
         note(Event.PASSAGE_READY)
         voices.clear()
@@ -1369,7 +1386,8 @@ internal class AndroidReflectionSpeechPlatform(
                         onEntranceReady = {
                             completionAudio?.releaseForPassage() ?: releaseAudioFocus()
                         }, quiescePausedBeforeEntry = true,
-                        diagnosticObserver = passageDiagnostics)
+                        diagnosticObserver = passageDiagnostics,
+                        onAudibleTrackLoad = { completionAudio?.expectPassageLoad() })
                     passageController = controller
                     try {
                         session.expectTrack(passage)

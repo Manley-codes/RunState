@@ -11,6 +11,7 @@ import com.runstate.mobile.music.SongReflectionPlan
 import com.runstate.mobile.music.SongPassageSnapshot
 import com.runstate.mobile.music.PassagePlayback
 import com.runstate.mobile.ui.CompletionAudioSession
+import com.runstate.mobile.ui.CompletionAudioSession.Event as CompletionEvent
 import com.runstate.mobile.data.local.RunReflectionEntity
 import com.runstate.mobile.data.local.ReflectionStatus
 import com.runstate.mobile.data.local.ReflectionBranch
@@ -38,6 +39,7 @@ class RunCompleteSpeechTest {
         var loseDuringRequest = false
         var onLoss: (() -> Unit)? = null
         val lostVoices = mutableListOf<String>()
+        val events = mutableListOf<CompletionEvent>()
         val session = CompletionAudioSession(
             snapshot = { snapshotReads++; current },
             requestPause = { lost ->
@@ -47,7 +49,8 @@ class RunCompleteSpeechTest {
                 true
             },
             releasePause = { releases++ },
-            onInterrupted = { interruptions++ })
+            onInterrupted = { interruptions++ },
+            diagnostic = { event, _ -> events += event })
     }
 
     @Test fun completionPauseIsSharedAcrossFactsIdleGapAndReflection() {
@@ -123,6 +126,59 @@ class RunCompleteSpeechTest {
         oldLoss()
         assertEquals(1, fixture.releases)
         assertEquals(0, fixture.interruptions)
+    }
+
+    @Test fun anAudibleSongLoadTreatsItsOwnFocusLossAsTheHandoffAndKeepsTheLeaseUntilTheEntrance() {
+        val fixture = CompletionAudioFixture()
+        val reflection = Any()
+        assertTrue(fixture.session.acquireVoice(reflection, "reflection", fixture.lostVoices::add))
+        fixture.session.releaseVoice(reflection)
+        fixture.session.expectPassageLoad()
+        fixture.onLoss!!.invoke() // The chosen song's player takes focus as it starts loading.
+        assertEquals(0, fixture.interruptions)
+        assertEquals("The lease stays until the entrance", 0, fixture.releases)
+        assertFalse(fixture.session.canContinue)
+        assertFalse(fixture.session.acquireVoice(Any(), "late voice", fixture.lostVoices::add))
+        fixture.session.releaseForPassage()
+        fixture.session.releaseForPassage()
+        fixture.session.finish()
+        fixture.onLoss!!.invoke()
+        assertEquals(1, fixture.releases)
+        assertEquals(0, fixture.interruptions)
+        assertTrue(fixture.lostVoices.isEmpty())
+        assertEquals(listOf(CompletionEvent.PAUSE_HELD, CompletionEvent.PASSAGE_LOADING,
+            CompletionEvent.FOCUS_TO_PASSAGE, CompletionEvent.PASSAGE_READY, CompletionEvent.FINISHED),
+            fixture.events)
+    }
+
+    @Test fun leavingDuringAnAudibleSongLoadReleasesTheLeaseOnceWithoutAnotherInterruption() {
+        val fixture = CompletionAudioFixture()
+        assertTrue(fixture.session.begin())
+        fixture.session.expectPassageLoad()
+        fixture.session.cancel()
+        fixture.session.releaseForPassage()
+        fixture.onLoss!!.invoke()
+        assertEquals(1, fixture.releases)
+        assertEquals("Stopping the passage itself stays with the passage owner", 0, fixture.interruptions)
+        assertEquals(listOf(CompletionEvent.PAUSE_HELD, CompletionEvent.PASSAGE_LOADING,
+            CompletionEvent.CANCELLED), fixture.events)
+    }
+
+    @Test fun audibleLoadHandoffAppliesOnlyWhileTheCompletionHoldsThePause() {
+        val unstarted = CompletionAudioFixture()
+        unstarted.session.expectPassageLoad()
+        assertTrue("An early call cannot skip the shared pause", unstarted.session.begin())
+        assertEquals(listOf(CompletionEvent.PAUSE_HELD), unstarted.events)
+
+        val interrupted = CompletionAudioFixture()
+        assertTrue(interrupted.session.begin())
+        interrupted.onLoss!!.invoke()
+        interrupted.session.expectPassageLoad()
+        interrupted.session.releaseForPassage()
+        assertEquals(1, interrupted.interruptions)
+        assertEquals(1, interrupted.releases)
+        assertEquals(listOf(CompletionEvent.PAUSE_HELD, CompletionEvent.FOCUS_LOST,
+            CompletionEvent.CANCELLED), interrupted.events)
     }
 
     @Test fun onlyTheOriginalPlayingRecordingCanBeResumedAfterTheSharedPause() {
