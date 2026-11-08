@@ -130,7 +130,10 @@ class RunAssemblyScreenTest {
         service: Boolean = true,
         failed: Boolean = false,
         onPause: () -> Unit = {},
-        onResume: () -> Unit = {}
+        onResume: () -> Unit = {},
+        onStop: () -> Unit = {},
+        resumeAllowed: Boolean = true,
+        mapExpanded: Boolean = false
     ) {
         val density = LocalDensity.current
         CompositionLocalProvider(LocalDensity provides Density(density.density, 1f)) {
@@ -141,11 +144,12 @@ class RunAssemblyScreenTest {
                         countdownDigit = if (state == RunUiState.Countdown) 10 else null,
                         onStart = {}, onCancelCountdown = {}, onRetryInitialization = {},
                         onRetryStart = {}, onPause = onPause, onResume = onResume,
-                        onStop = {}, onStartAnother = {},
+                        onStop = onStop, onStartAnother = {},
                         modifier = Modifier.padding(innerPadding),
                         isGpsRun = gps, gpsSelected = gps, gpsServicePresent = service,
                         gpsSignalStatus = signal, runAppearanceDay = day,
-                        countdownTickKey = 10L, countdownCadenceActive = state == RunUiState.Countdown
+                        countdownTickKey = 10L, countdownCadenceActive = state == RunUiState.Countdown,
+                        resumeAllowed = resumeAllowed, liveMapEnabled = mapExpanded, mapExpanded = mapExpanded
                     )
                 }
             }
@@ -435,6 +439,56 @@ class RunAssemblyScreenTest {
         hold.performTouchInput { up() }
         compose.mainClock.advanceTimeByFrame()
         assertEquals(1, actions.stops)
+    }
+
+    @Test
+    fun unavailableSampleResumeKeepsPauseAndHoldToFinishAvailable() {
+        compose.mainClock.autoAdvance = false
+        val actions = Actions()
+        var state by mutableStateOf(RunUiState.ActiveRunning)
+        compose.setContent {
+            WindowFixture(state, day = false, gps = false, resumeAllowed = false,
+                values = metrics.copy(distance = "—", averagePace = "—", sourceLabel = "Fixture metrics",
+                    gpsDistanceAvailable = false, currentMilePace = "—"),
+                onPause = { actions.pauses++; state = RunUiState.ActivePaused },
+                onResume = { actions.resumes++ }, onStop = { actions.stops++ })
+        }
+        compose.mainClock.advanceTimeBy(1_600L)
+        compose.onNodeWithText("Finish this saved sample").assertDoesNotExist()
+        compose.onNodeWithContentDescription("Pause run").scrollWithClock().assertIsEnabled().performClick()
+        compose.mainClock.advanceTimeBy(450L)
+        compose.onNodeWithText("Finish this saved sample").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Resume run").scrollWithClock().assertIsNotEnabled()
+            .performTouchInput { down(center); up() }
+        compose.mainClock.advanceTimeByFrame()
+        assertEquals(1, actions.pauses)
+        assertEquals(0, actions.resumes)
+        val hold = compose.onNodeWithTag(HOLD_TO_STOP_TAG).scrollWithClock().assertIsDisplayed().assertIsEnabled()
+        hold.performTouchInput { down(center) }
+        compose.mainClock.advanceTimeBy(HOLD_TO_STOP_MILLIS + 200L)
+        hold.performTouchInput { up() }
+        compose.mainClock.advanceTimeByFrame()
+        assertEquals(1, actions.stops)
+    }
+
+    @Test
+    fun mapControlsAlsoRespectUnavailableResumeWithoutDisablingPause() {
+        compose.mainClock.autoAdvance = false
+        val actions = Actions()
+        var state by mutableStateOf(RunUiState.ActiveRunning)
+        compose.setContent {
+            WindowFixture(state, day = false, mapExpanded = true, resumeAllowed = false,
+                onPause = { actions.pauses++; state = RunUiState.ActivePaused },
+                onResume = { actions.resumes++ })
+        }
+        compose.mainClock.advanceTimeByFrame()
+        compose.onNodeWithText("Pause").assertIsEnabled().performClick()
+        compose.mainClock.advanceTimeByFrame()
+        compose.onNodeWithText("Resume").assertIsNotEnabled()
+            .performTouchInput { down(center); up() }
+        compose.mainClock.advanceTimeByFrame()
+        assertEquals(1, actions.pauses)
+        assertEquals(0, actions.resumes)
     }
 
     @Test

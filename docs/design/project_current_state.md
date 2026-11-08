@@ -5,7 +5,38 @@ metadata:
   type: project
 ---
 
-## November 7 backend CI — first hosted failure diagnosed; test fix verified locally
+## November 8 owner tools — public-build separation verified locally
+
+Manley approved keeping Music Reflection Demo, Recording sources and Sample demo in his
+development version while hiding and disabling them in the future public version. Explicit
+`OWNER_TOOLS_ENABLED` is true for debug and false for release; it is not a user preference.
+Settings/render callbacks and the concrete demo-audio factory enforce this boundary. Public
+Start always uses GPS, including restored same-process Sample drafts and retry paths.
+
+The application's coordinator receives the same build policy and rejects new Sample starts
+and resumption before any reservation/write. Existing sample records are retained; unfinished
+ones may be paused, finished or saved, with no live simulated distance growth in public mode.
+Resume is visibly disabled for those old samples while Stop remains available. Restored
+Recording sources becomes normal History, including its Energy/Effort editor boundaries.
+
+Initialization retry now uses the shared refresh so recovered run IDs/tracking mode are loaded
+before deciding whether Resume is allowed. Focused checks cover both build policies, stale
+navigation/drafts, direct coordinator calls, GPS continuity and preserved records.
+
+Verification: debug and release each pass871 JVM tests; debug, unsigned release and test APKs
+build successfully.25 distinct silent UI checks pass on a fresh isolated emulator:22 in the
+initial run and3 on the corrected rerun. Those3 exposed stale Start-screen expectations and
+test-clock waits on Active's continuous animation; test-only corrections retain data/consent
+assertions. All8 new screen checks passed initially. Public UI is exercised by disabling owner
+tools in the debug test harness; the compiled release flag is separately confirmed false.
+This is not a signed-release installation/update certification. Evidence stays in ignored
+`android/build/owner-tools-check/`; the temporary emulator is stopped.
+
+No phone installation, account/password work, provider calls, deployment or Git mutations.
+All edited source/tests are existing files; unrelated `Claude outputs/` is left untouched.
+Ready for Manley's review/commit; stop at this milestone.
+
+## November 7 backend CI — verified locally and on GitHub; milestone complete
 
 Manley approved the bounded CI plan. Existing Tests workflow now has an independent
 `Backend tests + build` job: Ubuntu, Temurin17,15-minute timeout, read-only repository access,
@@ -35,7 +66,11 @@ Other Host/Origin guards retain exact403 JSON assertions; raw-error assertions c
 before parsing for clearer diagnostics. No production or workflow change. Full Maven verify
 passes all231 tests and JAR packaging on both17.0.21 and17.0.12; independent diff review passed.
 No paid calls, deployment, phone or Git mutations. Test file and two existing notes only; no new
-tracked files. Stop for user commit/push, then confirm the corrected hosted run separately.
+tracked files. User committed/pushed the fix as `baef09f` with exactly those three files.
+[GitHub run #104](https://github.com/Manley-codes/RunState/actions/runs/42419582560) passed all
+three jobs: original Java, Android unit tests/debug build, and Backend tests + build. Hosted
+backend logs confirm231 tests, zero failures/errors/skips and successful JAR packaging. Failure
+report upload was correctly skipped on success. Milestone complete; stop before further work.
 
 Direction clarification: prepare for public download/store release when Manley chooses, without
 publishing automatically; further product improvements may follow readiness. Initial account

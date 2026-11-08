@@ -236,6 +236,9 @@ internal class AndroidMusicReflectionDemoAudio(context: Context) : MusicReflecti
     createMusicReflectionDemoAudio(context.applicationContext)
 
 private fun createMusicReflectionDemoAudio(context: Context): MusicReflectionDemoAudio {
+    check(com.runstate.mobile.BuildConfig.OWNER_TOOLS_ENABLED) {
+        "Music Reflection Demo is available only in the owner build."
+    }
     val app = context as RunStateApplication
     val voices = DemoVoicePreparation(app.runVoiceGateway, app.reflectionSpeechGateway)
     val base = AndroidReflectionSpeechPlatform(context)

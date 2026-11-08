@@ -20,6 +20,7 @@ import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.assertIsSelected
+import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.isDialog
@@ -192,19 +193,19 @@ class RunSettingsScreenTest {
             )
         }
         compose.mainClock.advanceTimeByFrame()
+        compose.mainClock.advanceTimeBy(START_ENERGY_ENTRY_DURATION_MS.toLong())
         compose.mainClock.advanceTimeByFrame()
         // Permission/provider readiness alone does not claim an acquired satellite fix.
         // The real journey supplies GPS-ready copy separately from its preview evidence.
-        compose.onNodeWithText("GPS enabled").assertIsDisplayed()
+        compose.onNodeWithTag(START_RUN_STATUS_TAG).assertIsDisplayed().assertTextEquals("GPS connecting…")
         assertEquals("Music observation on", compose.onNodeWithTag(START_RUN_SETTINGS_TAG)
             .fetchSemanticsNode().config[SemanticsProperties.StateDescription])
         compose.onNodeWithText("Music observation on").assertDoesNotExist()
-        compose.onNodeWithText("Map artwork").assertIsDisplayed()
+        compose.onNodeWithText("Map artwork").assertDoesNotExist()
         val card = compose.onNodeWithTag(START_AGENT_CARD_TAG).fetchSemanticsNode().boundsInRoot
         for (tag in listOf("startExpandMap", START_HISTORY_TAG, START_RUN_SETTINGS_TAG)) {
             val control = compose.onNodeWithTag(tag).assertIsDisplayed().fetchSemanticsNode().boundsInRoot
-            assertTrue("The utility stays within the white Run State panel", card.contains(control.topLeft) &&
-                card.contains(control.bottomRight - androidx.compose.ui.geometry.Offset(1f, 1f)))
+            assertTrue("The utility stays below the compact Run State panel", control.top >= card.bottom)
             val minimum = with(compose.density) { androidx.compose.ui.unit.Dp(48f).toPx() }
             assertTrue("The utility retains an accessible touch target",
                 control.width >= minimum - 1f && control.height >= minimum - 1f)
@@ -333,6 +334,32 @@ class RunSettingsScreenTest {
         assertEquals(1, done)
         assertEquals(0, observationChanges)
         assertEquals(0, sharingChanges)
+    }
+
+    @Test
+    fun publicSettingsKeepNormalChoicesAndHideAllOwnerTools() {
+        var ownerActions = 0
+        var done = 0
+        renderSettings(
+            ownerToolsEnabled = false,
+            onDemo = { ownerActions++ },
+            onOpenRecordingSources = { ownerActions++ },
+            onOpenMusicReflectionDemo = { ownerActions++ },
+            onDismiss = { done++ }
+        )
+        assertOwnerToolsHidden()
+        compose.onNodeWithTag(SETTINGS_APPEARANCE_TAG).performScrollTo().assertIsDisplayed()
+        compose.onNodeWithTag(SETTINGS_LOCATION_TAG).performScrollTo().assertIsEnabled()
+        compose.onNodeWithTag(SETTINGS_DISTANCE_ANNOUNCEMENTS_TAG).performScrollTo().assertIsOn()
+        compose.onNodeWithTag(SETTINGS_MUSIC_OBSERVATION_TAG).performScrollTo().assertIsOff()
+        compose.onNodeWithTag(SETTINGS_MUSIC_SHARING_TAG).performScrollTo().assertIsOff()
+        compose.onNodeWithTag(SETTINGS_SONG_SNIPPETS_TAG).performScrollTo().assertIsOff()
+        compose.onNodeWithTag(SETTINGS_WEATHER_TAG).performScrollTo().assertIsOff()
+        compose.onNodeWithTag(SETTINGS_REFLECTION_SETUP_TAG).performScrollTo().assertIsEnabled()
+        assertOwnerToolsHidden()
+        compose.onNodeWithTag(SETTINGS_DONE_TAG).performClick()
+        assertEquals(1, done)
+        assertEquals(0, ownerActions)
     }
 
     @Test
@@ -572,6 +599,60 @@ class RunSettingsScreenTest {
     }
 
     @Test
+    fun restoredRecordingSourcesBecomeNormalHistoryWhenOwnerToolsAreUnavailable() {
+        val preferences = RunPreferences(musicSetupComplete = true)
+        val fixture = fixture(preferences)
+        val sessionId = fixture.sessionId
+        val gps = RunEntity(runId = UUID.randomUUID().toString(), state = StoredRunState.COMPLETED,
+            officialStartEpochMillis = fixture.time - 600_000L, startTimezoneId = "America/Chicago",
+            lastCheckpointEpochMillis = fixture.time, finishEpochMillis = fixture.time,
+            finalDistanceMeters = 1609.344, metricSource = MetricSource.GPS,
+            telemetryCoverage = TelemetryCoverage.COMPLETE, displayDistanceUnit = DistanceUnit.MILES,
+            trackingMode = RunTrackingMode.GPS)
+        val sample = gps.copy(runId = UUID.randomUUID().toString(),
+            metricSource = MetricSource.FIXTURE, trackingMode = RunTrackingMode.FIXTURE,
+            officialStartEpochMillis = gps.officialStartEpochMillis - 1_000L)
+        runBlocking {
+            fixture.database.runDao().insert(gps)
+            fixture.database.runDao().insert(sample)
+        }
+        val restoration = renderRoot(fixture)
+        waitForTag(START_RUN_SCREEN_TAG)
+        compose.onNodeWithTag(START_RUN_SETTINGS_TAG).performScrollTo().performClick()
+        waitForTag(SETTINGS_DIALOG_TAG)
+        compose.onNodeWithTag(SETTINGS_RECORDING_SOURCES_TAG).performScrollTo().performClick()
+        waitForTag(RUN_HISTORY_SCREEN_TAG)
+        compose.onNodeWithTag("runHistoryFilter:SAMPLES").performClick()
+        waitForTag(RUN_HISTORY_ROW_TAG_PREFIX + sample.runId)
+        compose.onNodeWithText("RECORDING SOURCES").assertIsDisplayed()
+        // Capture the owner-only destination and filter before the public root restores them.
+        compose.runOnIdle { fixture.ownerToolsAfterDisposal = false }
+        restoration.emulateSavedInstanceStateRestore()
+        waitForTag(RUN_HISTORY_SCREEN_TAG)
+        waitForTag(RUN_HISTORY_ROW_TAG_PREFIX + gps.runId)
+        compose.onNodeWithText("LOG HISTORY").assertIsDisplayed()
+        compose.onNodeWithText("RECORDING SOURCES").assertDoesNotExist()
+        compose.onNodeWithText("All records").assertDoesNotExist()
+        compose.onNodeWithText("Back to settings").assertDoesNotExist()
+        compose.onNodeWithTag("runHistoryFilter:ALL").assertIsSelected()
+        compose.onNodeWithTag("runHistoryFilter:LONGEST").assertIsDisplayed()
+        compose.onNodeWithTag("runHistoryFilter:FASTEST").assertIsDisplayed()
+        compose.onNodeWithTag("runHistoryFilter:GPS").assertDoesNotExist()
+        compose.onNodeWithTag("runHistoryFilter:SAMPLES").assertDoesNotExist()
+        compose.onNodeWithTag(RUN_HISTORY_ROW_TAG_PREFIX + sample.runId).assertDoesNotExist()
+        compose.onNodeWithText("Back to run").performClick()
+        waitForTag(START_RUN_SCREEN_TAG)
+        compose.onNodeWithTag(SETTINGS_DIALOG_TAG).assertDoesNotExist()
+        assertEquals(sessionId, fixture.sessionId)
+        assertEquals(preferences, fixture.loadPreferences())
+        assertEquals(0, fixture.preferenceWrites)
+        assertEquals(0, fixture.preparedRuns)
+        assertEquals(2, runBlocking { fixture.database.runDao().countRuns() })
+        assertEquals(gps, runBlocking { fixture.database.runDao().findById(gps.runId) })
+        assertEquals(sample, runBlocking { fixture.database.runDao().findById(sample.runId) })
+    }
+
+    @Test
     fun musicReflectionDemoFinishesWithoutCreatingARunOrChangingSavedPreferences() {
         compose.mainClock.autoAdvance = true
         val choices = RunPreferences(musicSetupComplete = true, observeMusic = true,
@@ -650,6 +731,27 @@ class RunSettingsScreenTest {
     }
 
     @Test
+    fun removingOwnerToolsClosesAnOpenDemoWithoutCreatingARun() {
+        val choices = RunPreferences(musicSetupComplete = true)
+        val fixture = fixture(choices)
+        renderRoot(fixture)
+        openMusicReflectionDemo()
+        compose.runOnUiThread { fixture.ownerToolsEnabled = false }
+        waitForDemoTag(START_RUN_SCREEN_TAG)
+        compose.onNodeWithTag(MUSIC_REFLECTION_DEMO_SCREEN_TAG).assertDoesNotExist()
+        compose.runOnIdle {
+            assertEquals(1, fixture.demoAudioCreations)
+            assertEquals(1, fixture.demoAudio.closes)
+            assertEquals(0, fixture.demoAudio.starts)
+            assertEquals(0, fixture.demoAudio.finishes)
+        }
+        assertEquals(0, fixture.preparedRuns)
+        assertEquals(0, fixture.preferenceWrites)
+        assertEquals(choices, fixture.loadPreferences())
+        assertEquals(0, demoWork { fixture.database.runDao().countRuns() })
+    }
+
+    @Test
     fun aRealPausedRunTakesOverTheDemoWithoutBeingResumedOrCompleted() {
         compose.mainClock.autoAdvance = true
         val fixture = fixture(RunPreferences(musicSetupComplete = true))
@@ -705,6 +807,32 @@ class RunSettingsScreenTest {
         waitForTag(START_RUN_SCREEN_TAG)
         compose.onNodeWithText("Sample demo · simulated distance").assertDoesNotExist()
         compose.onNodeWithText("GPS run").assertIsDisplayed()
+        assertEquals(0, runBlocking { fixture.database.runDao().countRuns() })
+    }
+
+    @Test
+    fun sameProcessSampleDraftRestoresToGpsWhenOwnerToolsAreUnavailable() {
+        val preferences = RunPreferences(musicSetupComplete = true)
+        val fixture = fixture(preferences)
+        val sessionId = fixture.sessionId
+        val restoration = renderRoot(fixture)
+        waitForTag(START_RUN_SCREEN_TAG)
+        chooseSampleDemo()
+        compose.onNodeWithText("Sample demo · simulated distance").assertIsDisplayed()
+        // The process identity stays the same, so the owner-tools gate itself must reject
+        // the saved Sample draft. Changing the flag before saving would miss that case.
+        compose.runOnIdle { fixture.ownerToolsAfterDisposal = false }
+        restoration.emulateSavedInstanceStateRestore()
+        waitForTag(START_RUN_SCREEN_TAG)
+        assertNormalGpsAndPreferences(fixture, preferences)
+        compose.onNodeWithTag(START_RUN_SETTINGS_TAG).performScrollTo().performClick()
+        waitForTag(SETTINGS_DIALOG_TAG)
+        assertOwnerToolsHidden()
+        compose.onNodeWithTag(SETTINGS_MUSIC_OBSERVATION_TAG).performScrollTo().assertIsOff()
+        assertEquals(sessionId, fixture.sessionId)
+        assertEquals(0, fixture.preferenceWrites)
+        assertEquals(0, fixture.preparedRuns)
+        assertEquals(0, fixture.demoAudioCreations)
         assertEquals(0, runBlocking { fixture.database.runDao().countRuns() })
     }
 
@@ -770,7 +898,10 @@ class RunSettingsScreenTest {
         onShare: (Boolean) -> Unit = {},
         onDemo: (Boolean) -> Unit = {},
         onRetry: () -> Unit = {},
-        onDismiss: () -> Unit = {}
+        onDismiss: () -> Unit = {},
+        ownerToolsEnabled: Boolean = true,
+        onOpenRecordingSources: (() -> Unit)? = null,
+        onOpenMusicReflectionDemo: (() -> Unit)? = null
     ) {
         compose.setContent {
             RunSettingsDialog(
@@ -791,7 +922,10 @@ class RunSettingsScreenTest {
                 onOpenReflectionSetup = {},
                 settingsError = settingsError,
                 preferencesAvailable = preferencesAvailable,
-                onRetryPreferences = onRetry
+                onRetryPreferences = onRetry,
+                ownerToolsEnabled = ownerToolsEnabled,
+                onOpenRecordingSources = onOpenRecordingSources,
+                onOpenMusicReflectionDemo = onOpenMusicReflectionDemo
             )
         }
     }
@@ -808,6 +942,10 @@ class RunSettingsScreenTest {
                         fixture.sessionAfterDisposal?.let { next ->
                             fixture.sessionId = next
                             fixture.sessionAfterDisposal = null
+                        }
+                        fixture.ownerToolsAfterDisposal?.let { next ->
+                            fixture.ownerToolsEnabled = next
+                            fixture.ownerToolsAfterDisposal = null
                         }
                     }
                 }
@@ -827,7 +965,8 @@ class RunSettingsScreenTest {
                     },
                     runSettingsSessionId = fixture.sessionId,
                     musicAccessProvider = { fixture.musicAccess },
-                    musicReflectionDemoAudioFactory = fixture.demoAudioFactory
+                    musicReflectionDemoAudioFactory = fixture.demoAudioFactory,
+                    ownerToolsEnabled = fixture.ownerToolsEnabled
                 )
             }
         }
@@ -901,28 +1040,41 @@ class RunSettingsScreenTest {
         }
         compose.mainClock.advanceTimeBy(COUNTDOWN_STEP_MILLIS)
         compose.mainClock.advanceTimeByFrame()
-        compose.mainClock.autoAdvance = true
+        // Active has a continuous decorative frame loop. Drive it explicitly until Pause,
+        // rather than asking Compose to auto-advance an animation that never becomes idle.
         compose.waitUntil(5_000L) {
-            compose.onAllNodesWithText("Pause").fetchSemanticsNodes().isNotEmpty()
+            compose.mainClock.advanceTimeByFrame()
+            compose.onAllNodesWithContentDescription("Pause run").fetchSemanticsNodes().isNotEmpty()
         }
+        compose.mainClock.advanceTimeBy(1_600L)
+        compose.onNodeWithContentDescription("Pause run").assertIsDisplayed().assertIsEnabled()
         return runBlocking { fixture.database.runDao().findActiveRuns().single() }
     }
 
     private fun finishShortSample(fixture: Fixture, save: Boolean) {
         compose.runOnIdle { fixture.time += 5_000L }
-        compose.onNodeWithText("Pause").performClick()
+        compose.onNodeWithContentDescription("Pause run").performClick()
         compose.waitUntil(5_000L) {
-            compose.onAllNodesWithText("Resume").fetchSemanticsNodes().isNotEmpty()
+            compose.mainClock.advanceTimeByFrame()
+            compose.onAllNodesWithContentDescription("Resume run").fetchSemanticsNodes().isNotEmpty()
         }
-        compose.mainClock.autoAdvance = false
+        compose.mainClock.advanceTimeBy(450L)
+        compose.onNodeWithContentDescription("Resume run").assertIsDisplayed()
         compose.onNodeWithTag(HOLD_TO_STOP_TAG).performTouchInput { down(center) }
         compose.mainClock.advanceTimeBy(HOLD_TO_STOP_MILLIS + 100L)
         compose.onNodeWithTag(HOLD_TO_STOP_TAG).performTouchInput { up() }
-        compose.mainClock.autoAdvance = true
         compose.waitUntil(5_000L) {
+            compose.mainClock.advanceTimeByFrame()
             compose.onAllNodesWithText("Save this short run?").fetchSemanticsNodes().isNotEmpty()
         }
         compose.onNodeWithText(if (save) "Save run" else "Discard run").performClick()
+        // Keep manual frames while Active remains behind its decision dialog. Resume normal
+        // idling only after the saved/discarded result has removed that animated surface.
+        compose.waitUntil(5_000L) {
+            compose.mainClock.advanceTimeByFrame()
+            compose.onAllNodesWithTag(ACTIVE_RUN_SCREEN_TAG).fetchSemanticsNodes().isEmpty()
+        }
+        compose.mainClock.autoAdvance = true
         waitForTag(if (save) RUN_COMPLETE_SCREEN_TAG else START_RUN_SCREEN_TAG)
     }
 
@@ -931,6 +1083,13 @@ class RunSettingsScreenTest {
         compose.onNodeWithText("GPS run").assertIsDisplayed()
         assertEquals(expected, fixture.loadPreferences())
         assertEquals(expected, fixture.preferences)
+    }
+
+    private fun assertOwnerToolsHidden() {
+        compose.onNodeWithText("DEMO & TESTING").assertDoesNotExist()
+        compose.onNodeWithTag(SETTINGS_DEMO_MODE_TAG).assertDoesNotExist()
+        compose.onNodeWithTag(SETTINGS_RECORDING_SOURCES_TAG).assertDoesNotExist()
+        compose.onNodeWithTag(SETTINGS_MUSIC_REFLECTION_DEMO_TAG).assertDoesNotExist()
     }
 
     private fun waitForTag(tag: String) {
@@ -968,6 +1127,8 @@ class RunSettingsScreenTest {
         var shown by mutableStateOf(true)
         var sessionId by mutableStateOf("process-${UUID.randomUUID()}")
         var sessionAfterDisposal: String? = null
+        var ownerToolsEnabled by mutableStateOf(true)
+        var ownerToolsAfterDisposal: Boolean? = null
         var preferenceWrites = 0
         var demoAudioCreations = 0
         val demoAudio = SilentDemoAudio()

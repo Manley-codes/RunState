@@ -381,7 +381,8 @@ class RunStateApplication : Application() {
                 uuidSupplier = UUID::randomUUID,
                 timingMarkSupplier = { RunTimingMark(SystemClock.elapsedRealtime(), timingSessionId) }
             ),
-            applicationScope = applicationScope
+            applicationScope = applicationScope,
+            allowFixtureRuns = BuildConfig.OWNER_TOOLS_ENABLED
         )
     }
 

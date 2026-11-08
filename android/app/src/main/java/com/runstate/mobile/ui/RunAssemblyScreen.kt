@@ -184,7 +184,8 @@ internal fun RunAssemblyScreen(
     onToggleMusicPlayback: () -> Unit = {},
     onConnectMusic: () -> Unit = {},
     onOpenMusicTrack: (String?) -> Unit = {},
-    onMusicVisibilityChange: (Boolean) -> Unit = {}
+    onMusicVisibilityChange: (Boolean) -> Unit = {},
+    resumeAllowed: Boolean = true
 ) {
     val counting = state == RunUiState.Countdown
     val starting = state == RunUiState.StartingRun
@@ -353,8 +354,12 @@ internal fun RunAssemblyScreen(
                                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                     Box(Modifier.size((67 * unit).dp).clip(CircleShape)
                                         .background(if (paused) colors.resume else colors.pause)
-                                        .clickable(enabled = actionsEnabled, role = Role.Button,
-                                            onClick = if (paused) onResume else onPause)
+                                        .clickable(enabled = actionsEnabled && (!paused || resumeAllowed), role = Role.Button,
+                                            onClick = {
+                                                if (paused) {
+                                                    if (resumeAllowed) onResume()
+                                                } else onPause()
+                                            })
                                         .semantics { contentDescription = if (paused) "Resume run" else "Pause run" },
                                         contentAlignment = Alignment.Center) {
                                         AssemblyControlIcon(paused, if (day) colors.ink else Color.White,
@@ -497,7 +502,7 @@ internal fun RunAssemblyScreen(
         if (showNotice) Box(Modifier.fillMaxWidth().heightIn(max = 176.dp)
             .verticalScroll(rememberScrollState())) {
             AssemblyNotices(colors, metrics, actionFailed, isGpsRun,
-                gpsServicePresent, gpsSignalStatus, gpsMessage, paused, actionsEnabled,
+                gpsServicePresent, gpsSignalStatus, gpsMessage, paused, actionsEnabled, resumeAllowed,
                 onResumeGpsTracking)
         }
     }
@@ -668,11 +673,12 @@ private fun AssemblyClockIcon(color: Color, modifier: Modifier) {
 @Composable
 private fun AssemblyNotices(colors: AssemblyColors, metrics: RunMetricsDisplay?, failed: Boolean,
     gps: Boolean, service: Boolean, signal: GpsSignalStatus, message: String?, paused: Boolean,
-    enabled: Boolean, onRestart: () -> Unit) {
+    enabled: Boolean, resumeAllowed: Boolean, onRestart: () -> Unit) {
     Column(Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)) {
         if (failed) Text(ACTION_FAILED_MESSAGE, color = colors.warning, fontSize = 13.sp)
-        if (!gps) Text("Sample run · simulated distance", color = colors.muted, fontSize = 12.sp)
+        if (!gps) Text(if (paused && !resumeAllowed) "Finish this saved sample"
+            else "Sample run · simulated distance", color = colors.muted, fontSize = 12.sp)
         if (gps && !service) {
             Text(message ?: "GPS is not recording. Distance may be incomplete.", color = colors.warning, fontSize = 13.sp)
             Button(onClick = onRestart, enabled = enabled,

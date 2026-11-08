@@ -363,8 +363,11 @@ internal fun RunJourneyRoot(
     dispatchGpsCountdown: (Context, Long, PreRunEnergy?, Boolean, Boolean, Boolean,
         RunIntention?, String?, Long?) -> Unit = RunTrackingService::startCountdown,
     onRunSurfaceChanged: (Boolean?) -> Unit = {},
-    musicReflectionDemoAudioFactory: (Context) -> MusicReflectionDemoAudio = { AndroidMusicReflectionDemoAudio(it) }
+    musicReflectionDemoAudioFactory: (Context) -> MusicReflectionDemoAudio = { AndroidMusicReflectionDemoAudio(it) },
+    ownerToolsEnabled: Boolean = BuildConfig.OWNER_TOOLS_ENABLED
 ) {
+    // A preview/test may turn tools off, but no caller can enable them in a public build.
+    val ownerToolsAvailable = BuildConfig.OWNER_TOOLS_ENABLED && ownerToolsEnabled
 
     val reflectionRequestsAvailable = reflectionConnection is ReflectionConnectionState.Hosted ||
         reflectionConnection == ReflectionConnectionState.Local
@@ -374,7 +377,8 @@ internal fun RunJourneyRoot(
     var model by remember { mutableStateOf(RunUiModel(RunUiState.Initializing)) }
     // A separate, foreground-only presentation. Recreation returns to the real journey;
     // it never restores permission to restart demo music or save demonstration metrics.
-    var musicReflectionDemoVisible by remember { mutableStateOf(false) }
+    var musicReflectionDemoRequested by remember { mutableStateOf(false) }
+    val musicReflectionDemoVisible = ownerToolsAvailable && musicReflectionDemoRequested
     // Appearance is presentation state, not a second run owner. Hold Auto through a session,
     // including recreation, and resolve it again only for a new countdown.
     var latchedRunDay by rememberSaveable { mutableStateOf<Boolean?>(null) }
@@ -451,19 +455,22 @@ internal fun RunJourneyRoot(
     }
     var routeLabel by rememberSaveable { mutableStateOf<String?>(null) }
     // GPS is the normal path. An explicit Sample demo is a temporary draft, never a saved default.
-    val gpsModeSaver = remember(runSettingsSessionId) {
+    val gpsModeSaver = remember(runSettingsSessionId, ownerToolsAvailable) {
         Saver<Boolean, Any>(
             save = { listOf(runSettingsSessionId, it) },
             restore = { raw ->
                 val draft = raw as? List<*>
-                if (draft?.getOrNull(0) == runSettingsSessionId) draft.getOrNull(1) as? Boolean ?: true
+                if (ownerToolsAvailable && draft?.getOrNull(0) == runSettingsSessionId)
+                    draft.getOrNull(1) as? Boolean ?: true
                 else true
             }
         )
     }
-    var gpsSelected by rememberSaveable(runSettingsSessionId, stateSaver = gpsModeSaver) {
+    var gpsDraftSelected by rememberSaveable(runSettingsSessionId, stateSaver = gpsModeSaver) {
         mutableStateOf(true)
     }
+    // Enforce at every read too: stale restored drafts cannot dispatch a Sample start or retry.
+    val gpsSelected = !ownerToolsAvailable || gpsDraftSelected
     var gpsMessage by rememberSaveable { mutableStateOf<String?>(null) }
     var pendingGpsResumeId by rememberSaveable { mutableStateOf<String?>(null) }
     // An unsaved, foreground-only intention. Recreation must never restore permission to start.
@@ -534,7 +541,7 @@ internal fun RunJourneyRoot(
     var connectionError by remember { mutableStateOf<String?>(null) }
     fun closeHistory() {
         historyVisible = false
-        if (historyRecordingSources) runSettingsVisible = true
+        if (ownerToolsAvailable && historyRecordingSources) runSettingsVisible = true
         historyRecordingSources = false
     }
     BackHandler(historyVisible) { closeHistory() }
@@ -816,7 +823,7 @@ internal fun RunJourneyRoot(
         if (preciseLocationReady()) {
             val resumeId = pendingGpsResumeId
             if (resumeId == null) {
-                gpsSelected = true
+                gpsDraftSelected = true
                 gpsMessage = null
             } else {
                 try {
@@ -1429,7 +1436,7 @@ internal fun RunJourneyRoot(
         // Consume an ineligible launcher tap now; never defer it until the runner closes a sheet.
         if (openingBlockedByNavigation) openingPending = false
     }
-    if (musicReflectionDemoVisible) {
+    if (ownerToolsAvailable && musicReflectionDemoVisible) {
         val demoDay = remember { resolvedRunDay }
         val demoAudio = remember(context, musicReflectionDemoAudioFactory) {
             musicReflectionDemoAudioFactory(context)
@@ -1444,13 +1451,13 @@ internal fun RunJourneyRoot(
         LaunchedEffect(model.state, activeRunId, ownedCountdown?.active, trackingState) {
             if (model.state != RunUiState.ReadyToStart || activeRunId != null ||
                 ownedCountdown?.active == true || trackingState != RunTrackingServiceState.Idle) {
-                musicReflectionDemoVisible = false
+                musicReflectionDemoRequested = false
             }
         }
         MusicReflectionDemoScreen(
             audio = demoAudio,
             day = demoDay,
-            onExit = { musicReflectionDemoVisible = false },
+            onExit = { musicReflectionDemoRequested = false },
             modifier = modifier
         )
         return
@@ -1516,7 +1523,7 @@ internal fun RunJourneyRoot(
         RunHistoryScreen(
             items = historyItems,
             onBack = ::closeHistory,
-            showRecordingSources = historyRecordingSources,
+            showRecordingSources = ownerToolsAvailable && historyRecordingSources,
             onRetryReflection = ::retryReflection,
             onSelectEffort = ::saveEffort,
             onSelectEffortRating = ::saveEffortRating,
@@ -1560,7 +1567,7 @@ internal fun RunJourneyRoot(
                 runIntention = null
                 routeLabel = null
                 gpsMessage = null
-                gpsSelected = true
+                gpsDraftSelected = true
                 refresh()
             } catch (cancelled: CancellationException) { throw cancelled }
             catch (_: Exception) { recapLoadError = "Couldn’t return to Start yet. Your activity is saved; try Done again." }
@@ -1655,7 +1662,7 @@ internal fun RunJourneyRoot(
             } else {
                 runGuarded {
                     coordinator.cancelCountdown()
-                    gpsSelected = true
+                    gpsDraftSelected = true
                     refresh()
                 }
             }
@@ -1668,8 +1675,8 @@ internal fun RunJourneyRoot(
             model = RunUiModel(RunUiState.Initializing)
             metrics = null
             runGuarded {
-                model = runUiModelFor(coordinator.initialize())
-                metrics = coordinator.runMetrics()?.let(::runMetricsDisplayFor)
+                coordinator.initialize()
+                refresh()
             }
         },
         onRetryStart = {
@@ -1714,6 +1721,7 @@ internal fun RunJourneyRoot(
         },
         onPause = { requestAction(RunActionKind.PAUSE) },
         onResume = { requestAction(RunActionKind.RESUME) },
+        resumeAllowed = ownerToolsAvailable || activeTrackingMode == RunTrackingMode.GPS,
         onStop = {
             runGuarded {
                 val id = activeRunId
@@ -1734,7 +1742,7 @@ internal fun RunJourneyRoot(
                 runIntention = null
                 routeLabel = null
                 gpsMessage = null
-                gpsSelected = true
+                gpsDraftSelected = true
                 refresh()
             }
         },
@@ -1987,8 +1995,9 @@ internal fun RunJourneyRoot(
     if (runSettingsVisible && model.state == RunUiState.ReadyToStart && !historyVisible &&
         !connectionDialogVisible) {
         RunSettingsDialog(
+            ownerToolsEnabled = ownerToolsAvailable,
             onOpenMusicReflectionDemo = {
-                if (model.state == RunUiState.ReadyToStart && activeRunId == null &&
+                if (ownerToolsAvailable && model.state == RunUiState.ReadyToStart && activeRunId == null &&
                     !actionInFlight && !settingsBusy && !gpsStartRequested && !gpsStartDispatched &&
                     runCountdown?.state?.value?.active != true &&
                     trackingFlow.value == RunTrackingServiceState.Idle) {
@@ -1999,13 +2008,15 @@ internal fun RunJourneyRoot(
                     openingPending = false
                     mapRunId = null
                     runSettingsVisible = false
-                    musicReflectionDemoVisible = true
+                    musicReflectionDemoRequested = true
                 }
             },
             onOpenRecordingSources = {
-                runSettingsVisible = false
-                historyRecordingSources = true
-                historyVisible = true
+                if (ownerToolsAvailable) {
+                    runSettingsVisible = false
+                    historyRecordingSources = true
+                    historyVisible = true
+                }
             },
             musicPlayerLayout = runPreferences?.musicPlayerLayout
                 ?: com.runstate.mobile.settings.RunMusicPlayerLayout.HEADPHONES,
@@ -2084,10 +2095,12 @@ internal fun RunJourneyRoot(
                 }
             },
             onSetDemoMode = { demo ->
-                previewController.stopBeforeRun()
-                mapRunId = null
-                gpsSelected = !demo
-                gpsMessage = null
+                if (ownerToolsAvailable) {
+                    previewController.stopBeforeRun()
+                    mapRunId = null
+                    gpsDraftSelected = !demo
+                    gpsMessage = null
+                }
             },
             onOpenReflectionSetup = {
                 connectionError = null
@@ -2131,7 +2144,7 @@ internal fun RunJourneyRoot(
                         runIntention = null
                         routeLabel = null
                         gpsMessage = null
-                        gpsSelected = true
+                        gpsDraftSelected = true
                     }) { coordinator.requestDiscard(decisionRunId) }
                     if (shortRunDecisionId == decisionRunId) {
                         shortRunDecisionError = "Your run wasn't discarded. It is still paused. Try again or save it."

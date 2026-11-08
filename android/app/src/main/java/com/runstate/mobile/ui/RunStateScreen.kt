@@ -167,7 +167,8 @@ internal fun RunStateScreen(
     onConnectMusic: () -> Unit = {},
     onOpenMusicTrack: (String?) -> Unit = {},
     onMusicVisibilityChange: (Boolean) -> Unit = {},
-    completionActionLabel: String? = null
+    completionActionLabel: String? = null,
+    resumeAllowed: Boolean = true
 ) {
     val state = model.state
 
@@ -266,6 +267,7 @@ internal fun RunStateScreen(
                 gpsMessage = gpsMessage,
                 onPause = onPause,
                 onResume = onResume,
+                resumeAllowed = resumeAllowed,
                 onStop = onStop,
                 onCancel = onCancelCountdown,
                 onStartNow = onStartNow,
@@ -332,8 +334,12 @@ internal fun RunStateScreen(
                             Text("Start")
                         }
                     } else if (state == RunUiState.ActiveRunning || state == RunUiState.ActivePaused) {
-                        Button(onClick = if (state == RunUiState.ActivePaused) onResume else onPause,
-                            enabled = runControlsEnabled, modifier = Modifier.fillMaxWidth()) {
+                        Button(onClick = {
+                            if (state == RunUiState.ActivePaused) {
+                                if (resumeAllowed) onResume()
+                            } else onPause()
+                        }, enabled = runControlsEnabled &&
+                            (state != RunUiState.ActivePaused || resumeAllowed), modifier = Modifier.fillMaxWidth()) {
                             Text(if (state == RunUiState.ActivePaused) "Resume" else "Pause")
                         }
                     }

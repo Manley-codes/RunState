@@ -99,7 +99,8 @@ internal fun RunSettingsDialog(
     musicPlayerLayout: RunMusicPlayerLayout = RunMusicPlayerLayout.HEADPHONES,
     onSetMusicPlayerLayout: (RunMusicPlayerLayout) -> Unit = {},
     onOpenRecordingSources: (() -> Unit)? = null,
-    onOpenMusicReflectionDemo: (() -> Unit)? = null
+    onOpenMusicReflectionDemo: (() -> Unit)? = null,
+    ownerToolsEnabled: Boolean = com.runstate.mobile.BuildConfig.OWNER_TOOLS_ENABLED
 ) {
     val controlsEnabled = actionsEnabled && !settingsLoading
     val preferenceControlsEnabled = controlsEnabled && preferencesAvailable
@@ -335,32 +336,34 @@ internal fun RunSettingsDialog(
                     modifier = Modifier.heightIn(min = 48.dp).testTag(SETTINGS_REFLECTION_SETUP_TAG)
                 ) { Text("Reflection setup", color = SettingsInk) }
 
-                SettingsDivider()
-                SettingsSectionTitle("DEMO & TESTING")
-                if (onOpenMusicReflectionDemo != null) {
-                    TextButton(
-                        onClick = onOpenMusicReflectionDemo,
-                        enabled = controlsEnabled,
-                        modifier = Modifier.heightIn(min = 48.dp).testTag(SETTINGS_MUSIC_REFLECTION_DEMO_TAG)
-                    ) { Text("Music Reflection Demo", color = SettingsInk) }
+                if (com.runstate.mobile.BuildConfig.OWNER_TOOLS_ENABLED && ownerToolsEnabled) {
+                    SettingsDivider()
+                    SettingsSectionTitle("DEMO & TESTING")
+                    if (onOpenMusicReflectionDemo != null) {
+                        TextButton(
+                            onClick = onOpenMusicReflectionDemo,
+                            enabled = controlsEnabled,
+                            modifier = Modifier.heightIn(min = 48.dp).testTag(SETTINGS_MUSIC_REFLECTION_DEMO_TAG)
+                        ) { Text("Music Reflection Demo", color = SettingsInk) }
+                    }
+                    if (onOpenRecordingSources != null) {
+                        TextButton(
+                            onClick = onOpenRecordingSources,
+                            enabled = controlsEnabled,
+                            modifier = Modifier.heightIn(min = 48.dp).testTag(SETTINGS_RECORDING_SOURCES_TAG)
+                        ) { Text("Recording sources", color = SettingsInk) }
+                    }
+                    SettingsPreference(
+                        title = "Sample demo",
+                        description = "Temporary simulated distance, even while standing still. " +
+                            "No GPS is recorded. Saving or discarding returns Start to GPS. " +
+                            "This choice is not remembered after closing the app.",
+                        checked = demoMode,
+                        enabled = preferenceControlsEnabled,
+                        onCheckedChange = onSetDemoMode,
+                        tag = SETTINGS_DEMO_MODE_TAG
+                    )
                 }
-                if (onOpenRecordingSources != null) {
-                    TextButton(
-                        onClick = onOpenRecordingSources,
-                        enabled = controlsEnabled,
-                        modifier = Modifier.heightIn(min = 48.dp).testTag(SETTINGS_RECORDING_SOURCES_TAG)
-                    ) { Text("Recording sources", color = SettingsInk) }
-                }
-                SettingsPreference(
-                    title = "Sample demo",
-                    description = "Temporary simulated distance, even while standing still. " +
-                        "No GPS is recorded. Saving or discarding returns Start to GPS. " +
-                        "This choice is not remembered after closing the app.",
-                    checked = demoMode,
-                    enabled = preferenceControlsEnabled,
-                    onCheckedChange = onSetDemoMode,
-                    tag = SETTINGS_DEMO_MODE_TAG
-                )
             }
         },
         confirmButton = {

@@ -3092,6 +3092,69 @@ class RunStateScreenTest {
     }
 
     @Test
+    fun restoredSampleEffortEditorIsHiddenInNormalHistory() {
+        assertSampleEditorDoesNotRestoreIntoNormalHistory(
+            RUN_HISTORY_EFFORT_TAG_PREFIX, RUN_COMPLETE_EFFORT_SHEET_TAG)
+    }
+
+    @Test
+    fun restoredSampleEnergyEditorIsHiddenInNormalHistory() {
+        assertSampleEditorDoesNotRestoreIntoNormalHistory(
+            RUN_HISTORY_ENERGY_TAG_PREFIX, RUN_HISTORY_ENERGY_SHEET_TAG)
+    }
+
+    private fun assertSampleEditorDoesNotRestoreIntoNormalHistory(
+        editorTagPrefix: String,
+        sheetTag: String
+    ) {
+        val gps = energyInsightHistoryRun(1).copy(preRunEnergy = null, energy = null,
+            energyLabel = null, reflectionStatus = "PENDING", reflectionText = null)
+        val sample = gps.copy(runId = "sample-editor", metricSource = MetricSource.FIXTURE,
+            isGpsRun = false, metrics = fixtureMetrics())
+        val original = listOf(sample, gps)
+        var showRecordingSources by mutableStateOf(true)
+        var disableSourcesAfterDisposal = false
+        var feedbackChanges = 0
+        val restoration = StateRestorationTester(composeTestRule)
+        restoration.setContent {
+            DisposableEffect(Unit) {
+                onDispose {
+                    if (disableSourcesAfterDisposal) showRecordingSources = false
+                }
+            }
+            RunHistoryScreen(
+                items = original,
+                onBack = {},
+                onRetryReflection = { throw AssertionError("Editing must not request a reflection") },
+                showRecordingSources = showRecordingSources,
+                modifier = Modifier.systemBarsPadding(),
+                speakerFactory = { throw AssertionError("Pending saved feedback must stay silent") },
+                onSelectEffort = { _, _ -> feedbackChanges++ },
+                onSelectEffortRating = { _, _ -> feedbackChanges++ },
+                onSelectEnergy = { _, _ -> feedbackChanges++ }
+            )
+        }
+        composeTestRule.onNodeWithTag("runHistoryFilter:SAMPLES").performClick()
+        composeTestRule.onNodeWithTag(RUN_HISTORY_ROW_TAG_PREFIX + sample.runId).performClick()
+        composeTestRule.onNodeWithTag(editorTagPrefix + sample.runId).performScrollTo().performClick()
+        composeTestRule.onNodeWithTag(sheetTag).assertIsDisplayed()
+        // Save the open editor first, then restore its run ID into normal History.
+        // Hiding only the Sample row must not leave its saved editor accessible.
+        composeTestRule.runOnIdle { disableSourcesAfterDisposal = true }
+        restoration.emulateSavedInstanceStateRestore()
+        composeTestRule.onNodeWithTag(sheetTag).assertDoesNotExist()
+        composeTestRule.onNodeWithText("LOG HISTORY").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("runHistoryFilter:SAMPLES").assertDoesNotExist()
+        composeTestRule.onNodeWithTag(RUN_HISTORY_ROW_TAG_PREFIX + sample.runId).assertDoesNotExist()
+        composeTestRule.onNodeWithTag(RUN_HISTORY_ROW_TAG_PREFIX + gps.runId).assertIsDisplayed()
+        composeTestRule.runOnIdle {
+            assertFalse(showRecordingSources)
+            assertEquals(0, feedbackChanges)
+            assertEquals(listOf(sample, gps), original)
+        }
+    }
+
+    @Test
     fun normalHistoryRanksRawMetricsAndClosesTheExactReplyWhenSwitchingViews() {
         val exact = "  The exact saved reply.\nIt must not be regenerated for a ranking.  "
         // The displayed values intentionally round to the same text. Ordering must use saved

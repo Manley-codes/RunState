@@ -98,7 +98,10 @@ class RunSessionCoordinatorTest {
      * count is how the tests tell "reused the prepared row" apart from "prepared a new one
      * that happened to look similar".
      */
-    private class Fixture(val dao: FakeRunDao = FakeRunDao()) {
+    private class Fixture(
+        val dao: FakeRunDao = FakeRunDao(),
+        allowFixtureRuns: Boolean = true
+    ) {
         val clock = SettableClock(OFFICIAL_START)
         private val identities = ArrayDeque(listOf(RUN_ID, SECOND_RUN_ID, THIRD_RUN_ID))
         var identitiesIssued = 0
@@ -116,7 +119,8 @@ class RunSessionCoordinatorTest {
                     UUID.fromString(identities.removeFirst())
                 }
             ),
-            applicationScope = scope
+            applicationScope = scope,
+            allowFixtureRuns = allowFixtureRuns
         )
 
         /** Requests the official start and waits for its owner. */
@@ -152,6 +156,198 @@ class RunSessionCoordinatorTest {
         var cause: Throwable? = null
         attempt.invokeOnCompletion { cause = it }
         return cause
+    }
+
+    @Test
+    fun `public admission rejects implicit and explicit samples before preparation or reservation`() = runBlocking {
+        val fixture = Fixture(allowFixtureRuns = false)
+        try {
+            fixture.coordinator.initialize()
+            fixture.coordinator.beginCountdown()
+            val before = fixture.coordinator.journeySnapshot()
+
+            assertTrue(runCatching { fixture.coordinator.requestStart() }.exceptionOrNull()
+                is IllegalStateException)
+            assertTrue(runCatching {
+                fixture.coordinator.requestStart(trackingMode = RunTrackingMode.FIXTURE)
+            }.exceptionOrNull() is IllegalStateException)
+
+            assertEquals(before, fixture.coordinator.journeySnapshot())
+            assertEquals(0, fixture.identitiesIssued)
+            assertTrue(fixture.dao.inserted.isEmpty())
+            assertTrue(fixture.dao.transitions.isEmpty())
+
+            // Rejection must not leave a hidden reservation or poison the normal GPS path.
+            fixture.coordinator.cancelCountdown()
+            fixture.coordinator.beginCountdown()
+            val gps = fixture.coordinator.requestStart(trackingMode = RunTrackingMode.GPS).await()
+            fixture.clock.nowMillis = FIRST_PAUSE
+            fixture.coordinator.requestAction(RunActionKind.PAUSE).await()
+            fixture.clock.nowMillis = FIRST_FINISH
+            fixture.coordinator.requestAction(RunActionKind.RESUME).await()
+            assertEquals(RunSessionState.RUNNING, gps.state)
+            assertEquals(RunTrackingMode.GPS, fixture.dao.findById(gps.runId)?.trackingMode)
+            assertEquals(1, fixture.dao.countRuns())
+            assertEquals(listOf(RunTransitionType.PAUSE, RunTransitionType.RESUME),
+                fixture.dao.transitions.map { it.transitionType })
+        } finally { fixture.scope.cancel() }
+    }
+
+    @Test
+    fun `public sample request cannot join a pending GPS start`() = runBlocking {
+        val fixture = Fixture(allowFixtureRuns = false)
+        val releaseInsert = CompletableDeferred<Unit>()
+        fixture.dao.duringInsert = { releaseInsert.await() }
+        try {
+            fixture.coordinator.initialize()
+            fixture.coordinator.beginCountdown()
+            val gps = fixture.coordinator.requestStart(trackingMode = RunTrackingMode.GPS)
+            val before = fixture.coordinator.journeySnapshot()
+
+            assertTrue(runCatching { fixture.coordinator.requestStart() }.exceptionOrNull()
+                is IllegalStateException)
+            assertEquals(before, fixture.coordinator.journeySnapshot())
+            assertTrue(gps.isActive)
+            assertTrue(fixture.dao.inserted.isEmpty())
+            assertSame(gps, fixture.coordinator.requestStart(trackingMode = RunTrackingMode.GPS))
+
+            releaseInsert.complete(Unit)
+            assertEquals(RUN_ID, gps.await().runId)
+            assertEquals(1, fixture.dao.countRuns())
+        } finally {
+            releaseInsert.complete(Unit)
+            fixture.scope.cancel()
+        }
+    }
+
+    @Test
+    fun `public sample retry is refused while a failed GPS preparation remains reusable`() = runBlocking {
+        val fixture = Fixture(allowFixtureRuns = false)
+        var insertsAttempted = 0
+        fixture.dao.duringInsert = { insertsAttempted++ }
+        fixture.dao.failWith = IllegalStateException("disk full")
+        try {
+            fixture.coordinator.initialize()
+            fixture.coordinator.beginCountdown()
+            assertTrue(runCatching {
+                fixture.coordinator.requestStart(trackingMode = RunTrackingMode.GPS).await()
+            }.isFailure)
+            val before = fixture.coordinator.journeySnapshot()
+            fixture.dao.failWith = null
+            fixture.clock.nowMillis = SECOND_START
+
+            assertTrue(runCatching {
+                fixture.coordinator.requestStart(trackingMode = RunTrackingMode.FIXTURE)
+            }.exceptionOrNull() is IllegalStateException)
+            assertEquals(before, fixture.coordinator.journeySnapshot())
+            assertEquals(1, insertsAttempted)
+            assertEquals(1, fixture.identitiesIssued)
+            assertTrue(fixture.dao.inserted.isEmpty())
+
+            val gps = fixture.coordinator.requestStart(trackingMode = RunTrackingMode.GPS).await()
+            assertEquals(RUN_ID, gps.runId)
+            assertEquals(OFFICIAL_START, fixture.dao.findById(gps.runId)?.officialStartEpochMillis)
+            assertEquals(RunTrackingMode.GPS, fixture.dao.findById(gps.runId)?.trackingMode)
+            assertEquals(1, fixture.identitiesIssued)
+            assertEquals(2, insertsAttempted)
+        } finally { fixture.scope.cancel() }
+    }
+
+    @Test
+    fun `public recovery preserves paused samples and legacy runs but only permits finishing them`() = runBlocking {
+        for (trackingMode in listOf(RunTrackingMode.FIXTURE, null)) {
+            val fixture = Fixture(allowFixtureRuns = false)
+            val saved = preparedRun().copy(state = StoredRunState.PAUSED,
+                lastCheckpointEpochMillis = FIRST_PAUSE, trackingMode = trackingMode)
+            val pause = RunTransitionEntity(RUN_ID, 1, RunTransitionType.PAUSE, FIRST_PAUSE)
+            fixture.dao.insert(saved)
+            fixture.dao.transitions += pause
+            fixture.clock.nowMillis = FIRST_FINISH
+            try {
+                val recovered = fixture.coordinator.initialize()
+                assertEquals(saved, fixture.dao.findById(RUN_ID))
+                assertEquals(listOf(pause), fixture.dao.transitions)
+
+                assertTrue(runCatching {
+                    fixture.coordinator.requestAction(RunActionKind.RESUME)
+                }.exceptionOrNull() is IllegalStateException)
+                assertEquals(recovered, fixture.coordinator.journeySnapshot())
+                assertEquals(saved, fixture.dao.findById(RUN_ID))
+                assertEquals(listOf(pause), fixture.dao.transitions)
+
+                fixture.coordinator.requestAction(RunActionKind.COMPLETE).await()
+                assertTrue(fixture.coordinator.finalizeActivity(RUN_ID))
+                val completed = requireNotNull(fixture.dao.findById(RUN_ID))
+                assertEquals(StoredRunState.COMPLETED, completed.state)
+                assertEquals(trackingMode, completed.trackingMode)
+                assertEquals(MetricSource.FIXTURE, completed.metricSource)
+                assertEquals(180.0, completed.finalDistanceMeters!!, 0.0)
+                assertTrue(completed.activityFinalized)
+                assertEquals(listOf(pause), fixture.dao.transitions)
+                assertEquals(1, fixture.dao.countRuns())
+            } finally { fixture.scope.cancel() }
+        }
+    }
+
+    @Test
+    fun `public recovery allows an existing running sample to be paused and finished without resuming`() = runBlocking {
+        val fixture = Fixture(allowFixtureRuns = false)
+        val saved = preparedRun()
+        fixture.dao.insert(saved)
+        fixture.clock.nowMillis = OFFICIAL_START + 10_000L
+        try {
+            fixture.coordinator.initialize()
+            assertEquals(saved, fixture.dao.findById(RUN_ID))
+            assertTrue(fixture.dao.transitions.isEmpty())
+            val firstMetrics = requireNotNull(fixture.coordinator.runMetrics())
+            assertNull(firstMetrics.distanceMeters)
+            assertNull(firstMetrics.paceSecondsPerMeter)
+            assertEquals(MetricSource.FIXTURE, firstMetrics.source)
+            assertEquals(TelemetryCoverage.UNAVAILABLE, firstMetrics.coverage)
+            fixture.clock.nowMillis = FIRST_PAUSE
+            assertNull(fixture.coordinator.runMetrics()?.distanceMeters)
+            assertEquals(saved, fixture.dao.findById(RUN_ID))
+
+            fixture.coordinator.requestAction(RunActionKind.PAUSE).await()
+            val paused = fixture.dao.findById(RUN_ID)
+            assertNull(fixture.coordinator.runMetrics()?.distanceMeters)
+            assertTrue(runCatching {
+                fixture.coordinator.requestAction(RunActionKind.RESUME)
+            }.exceptionOrNull() is IllegalStateException)
+            assertEquals(paused, fixture.dao.findById(RUN_ID))
+            fixture.clock.nowMillis = FIRST_FINISH
+            fixture.coordinator.requestAction(RunActionKind.COMPLETE).await()
+            assertEquals(StoredRunState.COMPLETED, fixture.dao.findById(RUN_ID)?.state)
+            assertEquals(MetricSource.FIXTURE, fixture.dao.findById(RUN_ID)?.metricSource)
+            assertEquals(180.0, fixture.coordinator.runMetrics()?.distanceMeters!!, 0.0)
+            assertEquals(1, fixture.dao.countRuns())
+            assertEquals(listOf(RunTransitionType.PAUSE), fixture.dao.transitions.map { it.transitionType })
+        } finally { fixture.scope.cancel() }
+    }
+
+    @Test
+    fun `public recovery keeps a completed sample's saved metrics and finalization available`() = runBlocking {
+        val fixture = Fixture(allowFixtureRuns = false)
+        val saved = preparedRun().copy(state = StoredRunState.COMPLETED,
+            finishEpochMillis = FIRST_FINISH, lastCheckpointEpochMillis = FIRST_FINISH,
+            finalDistanceMeters = 321.0, metricSource = MetricSource.FIXTURE,
+            telemetryCoverage = TelemetryCoverage.COMPLETE, displayDistanceUnit = DistanceUnit.MILES,
+            activityFinalized = false)
+        fixture.dao.insert(saved)
+        fixture.dao.transitions += RunTransitionEntity(RUN_ID, 1, RunTransitionType.PAUSE, FIRST_PAUSE)
+        fixture.clock.nowMillis = SECOND_START
+        try {
+            val snapshot = fixture.coordinator.initialize()
+            assertEquals(RUN_ID, (snapshot.admission as RunAdmission.RunCompleted).session.runId)
+            val metrics = requireNotNull(fixture.coordinator.runMetrics())
+            assertEquals(321.0, metrics.distanceMeters!!, 0.0)
+            assertEquals(MetricSource.FIXTURE, metrics.source)
+            assertEquals(TelemetryCoverage.COMPLETE, metrics.coverage)
+            assertEquals(saved, fixture.dao.findById(RUN_ID))
+            assertTrue(fixture.coordinator.finalizeActivity(RUN_ID))
+            assertEquals(saved.copy(activityFinalized = true), fixture.dao.findById(RUN_ID))
+            assertEquals(1, fixture.dao.countRuns())
+        } finally { fixture.scope.cancel() }
     }
 
     @Test

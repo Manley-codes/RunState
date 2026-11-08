@@ -248,6 +248,8 @@ internal enum class RunActionKind {
  *   cancel the scope for every later one.
  * @property fixtureDistanceCalculator the deterministic Phase 3 distance calculation.
  *   It is process-owned here so a screen never becomes the source of completed metrics.
+ * @property allowFixtureRuns permits owner-only sample creation and resumption. Existing
+ *   sample records can still be recovered and finished without deleting saved data.
  */
 internal class RunSessionCoordinator(
     private val runDao: RunDao,
@@ -255,7 +257,8 @@ internal class RunSessionCoordinator(
     private val applicationScope: CoroutineScope,
     private val locationDao: LocationDao? = null,
     private val fixtureDistanceCalculator: FixtureDistanceCalculator = FixtureDistanceCalculator(),
-    private val shoeDao: ShoeDao? = null
+    private val shoeDao: ShoeDao? = null,
+    private val allowFixtureRuns: Boolean = true
 ) {
 
     /**
@@ -626,8 +629,12 @@ internal class RunSessionCoordinator(
                     metricGpsPoints.lastOrNull {
                         it.acceptedForDistance && it.cumulativeDistanceMeters != null
                     }?.cumulativeDistanceMeters
-                } else {
+                } else if (allowFixtureRuns) {
                     activeMillis?.let(fixtureDistanceCalculator::distanceMetersAt)
+                } else {
+                    // An old sample can still be finished, but public builds do not
+                    // keep generating live simulated distance after restoring it.
+                    run.finalDistanceMeters
                 }
                 val coverage = if (isGps) {
                     GpsCoverageEvaluator.assess(run, transitions, metricGpsPoints,
@@ -1064,6 +1071,12 @@ internal class RunSessionCoordinator(
         routeLabel: String? = null,
         preRunEnergyRecordedAtEpochMillis: Long? = null
     ): Deferred<ActiveRunSession> = coordinatorLock.withLock {
+        // Enforce the build's admission policy below every UI and retry route. A cached
+        // prepared row must satisfy it too; retry arguments never replace that row.
+        check(allowFixtureRuns || trackingMode == RunTrackingMode.GPS &&
+            (preparedRun == null || preparedRun?.trackingMode == RunTrackingMode.GPS)) {
+            "Sample runs are unavailable in this build."
+        }
         require(!musicReflectionSharingAllowed || musicObservationRequested) {
             "Music reflection sharing requires this run's music observation opt-in."
         }
@@ -1242,6 +1255,14 @@ internal class RunSessionCoordinator(
 
         val session = checkNotNull(activeSession) {
             "A run action needs a live run, but this coordinator holds none."
+        }
+
+        // Recovery preserves an old sample as stored. It may be paused or finished,
+        // but cannot resume simulated recording in a public build. Legacy null mode
+        // follows the existing non-GPS fixture semantics rather than gaining GPS status.
+        check(allowFixtureRuns || kind != RunActionKind.RESUME ||
+            metricRun?.trackingMode == RunTrackingMode.GPS) {
+            "Sample runs cannot resume in this build. Finish the saved run instead."
         }
 
         val reserved = reservedAction

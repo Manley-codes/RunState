@@ -1906,7 +1906,7 @@ internal fun RunHistoryScreen(
                 }
             }
         }
-        val editingItem = items.firstOrNull { it.runId == editingEffortRunId }
+        val editingItem = availableItems.firstOrNull { it.runId == editingEffortRunId }
         if (editingItem != null && (editingItem.energyQuestionVersion == 2 || editingItem.hasNumericEffortHistory())) {
             EffortRatingSheet(
                 selectedRating = editingItem.postRunEffortRating,
@@ -1932,7 +1932,7 @@ internal fun RunHistoryScreen(
         if (energyEvidenceOpen && energyFoundation != null && filter != HistoryFilter.SAMPLES) {
             RunnerEnergyEvidenceSheet(energyFoundation, onDismiss = { energyEvidenceOpen = false })
         }
-        val editingEnergyItem = items.firstOrNull { it.runId == editingEnergyRunId }
+        val editingEnergyItem = availableItems.firstOrNull { it.runId == editingEnergyRunId }
         if (editingEnergyItem?.reflectionStatus != null) {
             HistoryEnergyChoiceSheet(
                 selectedEnergy = editingEnergyItem.energy,

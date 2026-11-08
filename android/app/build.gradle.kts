@@ -31,7 +31,11 @@ android {
     }
 
     buildTypes {
+        debug {
+            buildConfigField("boolean", "OWNER_TOOLS_ENABLED", "true")
+        }
         release {
+            buildConfigField("boolean", "OWNER_TOOLS_ENABLED", "false")
             optimization {
                 enable = false
             }
