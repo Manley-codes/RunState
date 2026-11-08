@@ -60,7 +60,6 @@ final class SongReflectionTrial {
     /** A spoken clock time: "7:45", "7 AM", "7 p.m." or "7 o'clock". A bare number is never a clock time. */
     private static final Pattern CLOCK_TIME = Pattern.compile(
             "(?iu)(?<![\\p{L}\\p{N}.:])(\\d{1,2})(?::(\\d{2}))?(?![\\p{N}:])(\\s*(?:a\\.?m\\.?|p\\.?m\\.?|o['’]clock))?(?![\\p{L}])");
-    private static final long CLOCK_WINDOW_MILLIS = 30 * 60_000L;
     private static final Pattern BANNED = Pattern.compile(
             "(?i)\\b(testament|symphony|unleash\\w*|journey|fuel\\w*|crushed it|conquer\\w*|delve\\w*)\\b");
     @FunctionalInterface
@@ -378,7 +377,7 @@ final class SongReflectionTrial {
             }
             if (wordCount(reflection) > 55) warnings.add(key + ":word_budget_review_required");
             if (BANNED.matcher(reflection).find()) warnings.add(key + ":word_choice_review_required");
-            if (!allowedNumbers.containsAll(numbers(withoutRunWindowClockTimes(reflection, evidence)))) {
+            if (!allowedNumbers.containsAll(numbers(withoutRoundedRunClockTimes(reflection, evidence)))) {
                 warnings.add(key + ":numeric_tokens_review_required");
             }
             long usedEchoes = notes.getAsJsonArray("lyric_echoes").asList().stream()
@@ -400,22 +399,24 @@ final class SongReflectionTrial {
 
     /**
      * A spoken clock time can be true without matching the facts' exact text: "7 AM" for a 7:00
-     * start, or "before 7:45" for a 7:42 finish. Only clock forms inside the run's own window, 30
-     * minutes either side, are exempt from the exact-number check. Every other number stays strict.
+     * start, or "before 7:45" for a 7:42 finish. A clock form is exempt from the exact-number check
+     * only as a natural rounding of the real start or finish. Its own precision sets how far it may
+     * round: 30 minutes for a whole hour ("7 AM", "7:00"), 15 for a quarter hour, 5 for a five-minute
+     * mark and 1 for any other minute. A mid-run time such as "7:20" and every other number stay strict.
      */
-    private static String withoutRunWindowClockTimes(String reflection, CompletedRunEvidence evidence) {
+    private static String withoutRoundedRunClockTimes(String reflection, CompletedRunEvidence evidence) {
         Matcher time = CLOCK_TIME.matcher(reflection);
         StringBuilder kept = new StringBuilder();
         while (time.find()) {
             boolean clockForm = time.group(2) != null || time.group(3) != null;
             time.appendReplacement(kept, Matcher.quoteReplacement(
-                    clockForm && insideRunWindow(time, evidence) ? " " : time.group()));
+                    clockForm && roundsToRunEdge(time, evidence) ? " " : time.group()));
         }
         time.appendTail(kept);
         return kept.toString();
     }
 
-    private static boolean insideRunWindow(Matcher time, CompletedRunEvidence evidence) {
+    private static boolean roundsToRunEdge(Matcher time, CompletedRunEvidence evidence) {
         int hour = Integer.parseInt(time.group(1));
         int minute = time.group(2) == null ? 0 : Integer.parseInt(time.group(2));
         if (hour > 23 || minute > 59) return false;
@@ -430,14 +431,18 @@ final class SongReflectionTrial {
         } else {
             hours.add(hour);
         }
+        long tolerance = 60_000L * (minute == 0 ? 30 : minute % 15 == 0 ? 15 : minute % 5 == 0 ? 5 : 1);
         ZoneId zone = ZoneId.of(evidence.startTimezoneId());
-        long from = evidence.officialStartEpochMillis() - CLOCK_WINDOW_MILLIS;
-        long to = evidence.finishEpochMillis() + CLOCK_WINDOW_MILLIS;
-        for (long edge : List.of(evidence.officialStartEpochMillis(), evidence.finishEpochMillis())) {
+        List<Long> edges = List.of(evidence.officialStartEpochMillis(), evidence.finishEpochMillis());
+        for (long edge : edges) {
             java.time.LocalDate day = Instant.ofEpochMilli(edge).atZone(zone).toLocalDate();
             for (int candidate : hours) {
                 long at = day.atTime(candidate, minute).atZone(zone).toInstant().toEpochMilli();
-                if (at >= from && at <= to) return true;
+                for (long target : edges) {
+                    // The facts state whole minutes, so compare with the minute the writer was given.
+                    long given = target - Math.floorMod(target, 60_000L);
+                    if (Math.abs(at - given) <= tolerance) return true;
+                }
             }
         }
         return false;

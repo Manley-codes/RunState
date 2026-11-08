@@ -604,18 +604,30 @@ public class SongReflectionTrialTest {
     }
 
     @Test
-    void spokenClockTimesInsideTheRunWindowPassWhileOtherNumbersStayStrict() throws Exception {
+    void spokenClockTimesPassOnlyAsNaturalRoundingsOfTheRealStartOrFinish() throws Exception {
         record Check(CompletedRunEvidence run, String reflection, boolean flagged) { }
-        var morning = evidence(PreRunEnergy.MODERATE);
-        var evening = trialEvidence("evening_no_selection");
+        var morning = evidence(PreRunEnergy.MODERATE); // 7:00 to 7:42 AM
+        var evening = trialEvidence("evening_no_selection"); // 6:20 to 7:05 PM
+        var midnight = fictionalRun("2026-10-17T04:50:00Z", 45, 43, 4.0, PreRunEnergy.UNKNOWN); // 11:50 PM to 12:35 AM
         List<Check> checks = List.of(
                 new Check(morning, "Saturday, 7 AM, 4.20 miles, and you're spent.", false),
                 new Check(morning, "4.20 miles done before 7:45 on a Saturday.", false),
                 new Check(morning, "Out the door at 7:00, back by 7:42, feeling good.", false),
+                new Check(morning, "Done before 8 AM on a Saturday.", false),
+                new Check(morning, "Wrapped up around 7:40.", false),
+                // Each of these four passed the earlier 30-minute window, yet none rounds the start or finish.
+                new Check(morning, "Somewhere around 7:20 it clicked.", true),
+                new Check(morning, "Out the door at 6:40.", true),
+                new Check(morning, "Out the door at 7:13.", true),
+                new Check(morning, "Back by 8:05 on a Saturday.", true),
                 new Check(morning, "Back by 9:15 on a Saturday morning.", true),
                 new Check(morning, "7 miles done by 7:42.", true),
                 new Check(evening, "Four miles, done by 7 PM on a Wednesday.", false),
-                new Check(evening, "Four miles, done by 9 PM on a Wednesday.", true));
+                new Check(evening, "Out the door around 6:15 on a Wednesday.", false),
+                new Check(evening, "Four miles, done by 7:30 PM.", true),
+                new Check(evening, "Four miles, done by 9 PM on a Wednesday.", true),
+                new Check(midnight, "Out the door at 11:45, done by 12:45.", false),
+                new Check(midnight, "Done by 1:30.", true));
         for (Check check : checks) {
             var trial = new SongReflectionTrial((input, prompt, schema) ->
                     input.has("run_facts") ? branchesWith(check.reflection()) : notes());
