@@ -4,6 +4,8 @@ import com.google.gson.GsonBuilder
 import com.runstate.mobile.data.local.*
 import com.runstate.mobile.weather.RunWeatherSnapshot
 import com.runstate.mobile.music.SongPassageRequest
+import com.runstate.mobile.music.SongPassageSnapshot
+import com.runstate.mobile.music.SongReflectionPlan
 import java.util.UUID
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -89,6 +91,9 @@ internal class RunReflectionCoordinator(
     // Finite values remain a seam for legacy-policy tests, never the production default.
     private val quietWindowMillis: Long = ReflectionDao.UNTIMED_SELECTION_DEADLINE,
     private val nowMillis: () -> Long = System::currentTimeMillis,
+    /** The song loaded in Spotify right now: when a saved run first appears, the one its completion pauses. */
+    private val songLoadedAtFinish: () -> SongPassageSnapshot? = { null },
+    // Kept last: a trailing lambda must keep meaning the quiet delay.
     private val quietDelay: suspend (Long) -> Unit = { delay(it) }
 ) {
     private val gson = GsonBuilder().serializeNulls().create()
@@ -156,9 +161,16 @@ internal class RunReflectionCoordinator(
                         } }
                         catch (cancelled: CancellationException) { throw cancelled }
                         catch (_: Exception) { null }
+                        // Same opt-in as the observations, read once for this first durable snapshot.
+                        val loadedAtFinish = if (run.state == StoredRunState.COMPLETED &&
+                            run.musicObservationRequested && run.musicReflectionSharingAllowed) {
+                            try { songLoadedAtFinish() }
+                            catch (cancelled: CancellationException) { throw cancelled }
+                            catch (_: Exception) { null }
+                        } else null
                         val request = reflectionRequestFromSavedRun(
                             requestIdSupplier().toString(), run, runDao.transitionsFor(runId), music, weather,
-                            store.songPreparation(runId), store.songPreparations(runId))
+                            store.songPreparation(runId), store.songPreparations(runId), loadedAtFinish)
                         val receiptFinishedAt = finishedReceipts[runId]
                         record = store.ensure(RunReflectionEntity(
                             runId = runId, requestId = request.requestId,
@@ -451,6 +463,8 @@ internal fun pairedPassageFor(record: RunReflectionEntity, acknowledgedCueId: St
         val gson = GsonBuilder().create()
         val evidence = gson.fromJson(record.evidenceJson, CompletedRunEvidence::class.java)
         val plan = evidence.songPassage ?: return null
+        // Explicit no-clip for the song paused at the finish, on every path, including saved backup plans.
+        if (evidence.songCandidates.orEmpty().any { it.loadedAtFinish && it.isSongOf(plan) }) return null
         val receipt = evidence.songPlaybackReceipt
         if (receipt != null) {
             if (receipt.version != 2 || acknowledgedCueId != receipt.cueId ||
@@ -496,4 +510,11 @@ internal fun pairedPassageFor(record: RunReflectionEntity, acknowledgedCueId: St
         // Old or damaged optional metadata never prevents reading the exact saved reflection.
         null
     }
+}
+
+private fun ReflectionSongCandidate.isSongOf(plan: SongReflectionPlan): Boolean {
+    fun key(value: String?) = value?.trim()?.lowercase()?.replace(Regex("\\s+"), " ")?.takeIf { it.isNotEmpty() }
+    return recording?.spotifyTrackUri?.let { it == plan.spotifyTrackUri } == true ||
+        key(musicContext.trackTitle) != null && key(musicContext.trackTitle) == key(plan.trackTitle) &&
+        key(musicContext.artistName) == key(plan.artistName)
 }

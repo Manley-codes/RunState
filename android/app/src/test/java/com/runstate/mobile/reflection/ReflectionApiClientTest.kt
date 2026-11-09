@@ -5,6 +5,8 @@ import com.google.gson.JsonParser
 import com.google.gson.GsonBuilder
 import com.runstate.mobile.data.local.*
 import com.runstate.mobile.weather.RunWeatherSnapshot
+import com.runstate.mobile.music.PassagePlayback
+import com.runstate.mobile.music.SongPassageSnapshot
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.InputStream
@@ -188,6 +190,68 @@ class ReflectionApiClientTest {
         assertNull(ordinary.selectedSongId)
     }
 
+    @Test fun theSongLoadedAtTheFinishIsMarkedByRecordingOrByName() {
+        val uri = "spotify:track:" + "a".repeat(22)
+        val row = musicObservation().copy(title = "Example song", artist = "Example artist", albumName = "Example album",
+            spotifyTrackUri = uri, trackDurationMillis = 180_000)
+        val run = sharingRun().copy(songSnippetLookupAllowed = true)
+        fun marked(loaded: SongPassageSnapshot?) =
+            reflectionSongCandidates(run, FINISH, qualifiedMusic(listOf(row)), emptyList(), loaded).single().loadedAtFinish
+        assertTrue(marked(loadedSong(uri, "Renamed upload", "Someone else")))
+        assertTrue(marked(loadedSong(null, " example SONG ", "Example  artist")))
+        assertFalse(marked(loadedSong("spotify:track:" + "b".repeat(22), "Another song", "Example artist")))
+        assertFalse(marked(loadedSong(uri, "Example song", "Example artist", source = "com.example.player")))
+        assertFalse(marked(null))
+    }
+
+    @Test fun aChosenSongThatIsAlreadyLoadedGetsNoClipEvenWithASnippetOrBackupPassage() {
+        val uri = "spotify:track:" + "a".repeat(22)
+        val row = musicObservation().copy(title = "Example song", artist = "Example artist", albumName = "Example album",
+            spotifyTrackUri = uri, trackDurationMillis = 180_000)
+        val marked = reflectionRequestFromSavedRun(REQUEST_ID, sharingRun().copy(songSnippetLookupAllowed = true),
+            completedTransitions(), qualifiedMusic(listOf(row)),
+            songLoadedAtFinish = loadedSong(uri, "Example song", "Example artist"))
+        val parsed = parseReflectionResponse(snippetResponse().toString(), REQUEST_ID, RUN_ID, null,
+            marked.evidence.songCandidates!!, true)
+        val frozen = marked.evidence.withSongSelection(parsed)
+        assertEquals(parsed.selectedSongId, frozen.selectedSongId)
+        assertEquals("Example song", frozen.musicContext.trackTitle)
+        assertNull(frozen.songPassage); assertNull(frozen.songPlaybackReceipt); assertNull(frozen.musicContext.songCue)
+
+        // The saved backup passage of a hand-picked song is skipped too; a song that is not loaded keeps it.
+        val curatedRow = musicObservation().copy(title = "Stronger", artist = "Kanye West", albumName = "Graduation",
+            spotifyTrackUri = "spotify:track:4fzsfWzRhPawzqhX8Qt9F3", trackDurationMillis = 312_000)
+        for (loaded in listOf(true, false)) {
+            val request = reflectionRequestFromSavedRun(REQUEST_ID, sharingRun().copy(songSnippetLookupAllowed = true),
+                completedTransitions(), qualifiedMusic(listOf(curatedRow)),
+                songLoadedAtFinish = if (loaded) loadedSong(curatedRow.spotifyTrackUri, "Stronger", "Kanye West") else null)
+            val candidate = request.evidence.songCandidates!!.single()
+            assertEquals(loaded, candidate.loadedAtFinish)
+            assertNotNull(candidate.songPassage)
+            val chosen = request.evidence.withSongSelection(ReflectionCandidates("S", "G", "P", "N", isTestData = false,
+                selectedSongId = candidate.candidateId, songSelectionMethod = "CONTEXT_MATCH"))
+            assertEquals(if (loaded) null else candidate.songPassage, chosen.songPassage)
+        }
+    }
+
+    @Test fun theLoadedAtFinishMarkNeverLeavesThePhone() = runBlocking {
+        val config = ReflectionConnectionConfig("https://reflection.example.com/api/reflections/candidates", "a".repeat(43))
+        val uri = "spotify:track:" + "a".repeat(22)
+        val row = musicObservation().copy(title = "Example song", artist = "Example artist", albumName = "Example album",
+            spotifyTrackUri = uri, trackDurationMillis = 180_000)
+        val request = reflectionRequestFromSavedRun(REQUEST_ID, sharingRun().copy(songSnippetLookupAllowed = true),
+            completedTransitions(), qualifiedMusic(listOf(row)),
+            songLoadedAtFinish = loadedSong(uri, "Example song", "Example artist"))
+        assertTrue(request.evidence.songCandidates!!.single().loadedAtFinish)
+        val health = FakeHttpsConnection(URL("https://reflection.example.com/health"), "{}", cueCapability = "1",
+            studyCapability = "1", selectionCapability = "1", snippetsCapability = "1")
+        val post = FakeHttpsConnection(URL(config.endpoint), response(generationMode = "ANTHROPIC"))
+        HostedReflectionHttpClient(config, { if (it.path == "/health") health else post }).request(request)
+        val raw = post.sent.toString("UTF-8")
+        assertTrue(JsonParser.parseString(raw).asJsonObject.has("songCandidates"))
+        assertFalse(raw.contains("loadedAtFinish"))
+    }
+
     @Test fun mismatchedOrUnconsentedSnippetCannotStartPlayback() {
         val songs = snippetRequest().evidence.songCandidates!!
         assertThrows(ReflectionBridgeException::class.java) {
@@ -239,6 +303,11 @@ class ReflectionApiClientTest {
             assertEquals(delivered, result.songCueId != null)
         }
     }
+
+    private fun loadedSong(mediaId: String?, title: String?, artist: String?, source: String = "com.spotify.music") =
+        SongPassageSnapshot(sessionKey = "finish-session", sourcePackage = source, mediaId = mediaId, title = title,
+            artist = artist, durationMillis = 180_000, positionMillis = 30_000, playback = PassagePlayback.PAUSED,
+            canPause = false, canPlay = true, canSeek = true)
 
     private fun snippetRequest(): ReflectionApiRequest {
         val row = musicObservation().copy(title = "Example song", artist = "Example artist", albumName = "Example album",

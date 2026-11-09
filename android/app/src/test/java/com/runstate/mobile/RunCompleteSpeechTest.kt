@@ -7,6 +7,7 @@ import com.runstate.mobile.reflection.ReflectionMetricsEvidence
 import com.runstate.mobile.reflection.ReflectionMusicContext
 import com.runstate.mobile.reflection.ReflectionSongCue
 import com.runstate.mobile.reflection.pairedPassageFor
+import com.runstate.mobile.reflection.ReflectionSongCandidate
 import com.runstate.mobile.music.SongReflectionPlan
 import com.runstate.mobile.music.SongPassageSnapshot
 import com.runstate.mobile.music.PassagePlayback
@@ -368,6 +369,23 @@ class RunCompleteSpeechTest {
             Gson().toJson(evidence).replace("10000", "999999")
         )
         for (json in bad) assertNull(pairedPassageFor(readyRecord(json), "checked_cue_v1"))
+    }
+
+    @Test fun theSongPausedForTheFinishNeverGetsAClipFromASavedPlan() {
+        val evidence = songEvidence()
+        fun candidate(title: String, loaded: Boolean) = ReflectionSongCandidate("1",
+            ReflectionMusicContext("MUSIC", title, "Selected artist", provenance = "MEDIA_SESSION_PARTIAL"),
+            loadedAtFinish = loaded)
+        fun passageFor(candidates: List<ReflectionSongCandidate>) =
+            pairedPassageFor(readyRecord(Gson().toJson(evidence.copy(songCandidates = candidates))), "checked_cue_v1")
+        assertNull(passageFor(listOf(candidate(" selected  TITLE", true))))
+        assertEquals(evidence.songPassage?.passage(), passageFor(listOf(candidate("Another title", true))))
+        assertEquals(evidence.songPassage?.passage(), passageFor(listOf(candidate("Selected title", false))))
+        // A record saved before the mark existed simply has no mark.
+        val older = Gson().toJson(evidence.copy(songCandidates = listOf(candidate("Selected title", false))))
+            .replace(",\"loadedAtFinish\":false", "")
+        assertFalse(older.contains("loadedAtFinish"))
+        assertEquals(evidence.songPassage?.passage(), pairedPassageFor(readyRecord(older), "checked_cue_v1"))
     }
 
     private fun songEvidence() = CompletedRunEvidence(

@@ -4,6 +4,8 @@ import com.google.gson.GsonBuilder
 import com.google.gson.JsonParser
 import com.runstate.mobile.data.local.*
 import com.runstate.mobile.weather.RunWeatherSnapshot
+import com.runstate.mobile.music.PassagePlayback
+import com.runstate.mobile.music.SongPassageSnapshot
 import java.util.UUID
 import kotlinx.coroutines.*
 import org.junit.After
@@ -1291,6 +1293,45 @@ class RunReflectionCoordinatorTest {
         reopened.onSavedVisible(RUN_ID)
         assertNull((reopened.state.value as RunReflectionState.Ready).passage)
         assertEquals(saved.text, (reopened.state.value as RunReflectionState.Ready).text)
+    }
+
+    @Test fun theSongLoadedWhenTheRunIsSavedGetsItsReflectionButNoClip() {
+        val dao = completedDao().apply {
+            inserted[0] = inserted[0].copy(musicObservationRequested = true,
+                musicReflectionSharingAllowed = true, songSnippetLookupAllowed = true)
+        }
+        val uri = "spotify:track:" + "a".repeat(22)
+        val store = MemoryReflectionStore().apply {
+            observedMusic = qualifiedMusic(listOf(sampleMusicObservation().copy(title = "Example Song", artist = "Example Artist",
+                spotifyTrackUri = uri, albumName = "Example Album", trackDurationMillis = 180_000L)))
+        }
+        val snippet = ReflectionSongSnippet("lrclib_v1_123_32000_36000", "LRCLIB", "123",
+            "Example Song", "Example Artist", "Example Album", 180_000L, 32_000L, 4_000L, "REPEATED_HOOK", 1)
+        val loaded = SongPassageSnapshot(sessionKey = "finish", sourcePackage = "com.spotify.music", mediaId = uri,
+            title = "Example Song", artist = "Example Artist", durationMillis = 180_000L, positionMillis = 90_000L,
+            playback = PassagePlayback.PAUSED, canPause = false, canPlay = true, canSeek = true)
+        var reads = 0
+        val coordinator = RunReflectionCoordinator(dao, store, ReflectionGateway { request ->
+            candidates().copy(isTestData = false, selectedSongId = request.evidence.songCandidates!!.single().candidateId,
+                songSelectionMethod = "CONTEXT_MATCH", songCueId = snippet.cueId, songSnippet = snippet)
+        }, scope(), quietWindowMillis = 0L, nowMillis = { 100L }, songLoadedAtFinish = { reads++; loaded })
+        coordinator.onSavedVisible(RUN_ID)
+        val ready = coordinator.state.value as RunReflectionState.Ready
+        assertNull("The song paused for the finish resumes; it gets no clip of itself", ready.passage)
+        assertEquals(1, reads)
+        val saved = store.rows.getValue(RUN_ID)
+        val evidence = gson.fromJson(saved.evidenceJson, CompletedRunEvidence::class.java)
+        assertTrue(evidence.songCandidates!!.single().loadedAtFinish)
+        assertNull(evidence.songPassage)
+        assertNull(pairedPassageFor(saved, snippet.cueId))
+    }
+
+    @Test fun theLoadedSongIsReadOnlyWithMusicSharingConsent() {
+        var reads = 0
+        val coordinator = RunReflectionCoordinator(completedDao(), MemoryReflectionStore(), ReflectionGateway { candidates() },
+            scope(), nowMillis = { 100L }, songLoadedAtFinish = { reads++; null })
+        coordinator.onSavedVisible(RUN_ID)
+        assertEquals(0, reads)
     }
 
     @Test fun sourcedSnippetKeepsItsObservedRecordingAndTimingButDoesNotReplayAfterReopening() {

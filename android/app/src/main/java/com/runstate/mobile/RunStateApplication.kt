@@ -22,6 +22,7 @@ import com.runstate.mobile.reflection.HostedSongStudyPreparationClient
 import com.runstate.mobile.reflection.reflectionDestinationFingerprint
 import com.runstate.mobile.reflection.ReflectionBridgeException
 import com.runstate.mobile.reflection.reflectionFailureKind
+import com.runstate.mobile.music.AndroidSpotifyPassageSession
 import com.runstate.mobile.reflection.LOCAL_REFLECTION_ENDPOINT
 import com.runstate.mobile.reflection.PHONE_REFLECTION_ENDPOINT
 import com.runstate.mobile.reflection.RoomReflectionStore
@@ -525,7 +526,8 @@ class RunStateApplication : Application() {
                             throw failure
                         }
                     },
-                    applicationScope = applicationScope
+                    applicationScope = applicationScope,
+                    songLoadedAtFinish = { AndroidSpotifyPassageSession(this@RunStateApplication).snapshot() }
                 ).also { reflectionOwner = it }
             }
         }

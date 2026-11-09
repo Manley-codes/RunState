@@ -21,6 +21,7 @@ import com.runstate.mobile.music.SongReflectionPlan
 import com.runstate.mobile.music.selectSongReflectionPlan
 import com.runstate.mobile.music.reflectionSongCatalog
 import com.runstate.mobile.music.canonicalSpotifyTrackUri
+import com.runstate.mobile.music.SongPassageSnapshot
 import com.runstate.mobile.music.observedSongPlaybackEligible
 import java.util.Locale
 import java.io.ByteArrayOutputStream
@@ -84,7 +85,13 @@ internal data class ReflectionSongCandidate(
     val songPassage: SongReflectionPlan? = null,
     val preparationReference: SongPreparationReference? = null,
     /** Playback URI stays on the phone; only opted-in album/duration can reach the timing lookup. */
-    val recording: ReflectionSongRecording? = null
+    val recording: ReflectionSongRecording? = null,
+    /**
+     * The song loaded in Spotify when the saved run first appeared, so the one the completion pauses
+     * and then resumes. Its own clip would blur into it, so if chosen it plays no clip. Stays on the
+     * phone and is frozen with the evidence, so a retry or History makes the same choice.
+     */
+    val loadedAtFinish: Boolean = false
 )
 
 internal data class ReflectionSongRecording(val albumName: String?, val durationMillis: Long,
@@ -158,7 +165,8 @@ internal fun reflectionRequestFromSavedRun(
     musicObservations: List<RunMusicObservationEntity> = emptyList(),
     weather: RunWeatherSnapshot? = null,
     songPreparation: SongPreparationClaimEntity? = null,
-    songPreparations: List<SongPreparationClaimEntity> = listOfNotNull(songPreparation)
+    songPreparations: List<SongPreparationClaimEntity> = listOfNotNull(songPreparation),
+    songLoadedAtFinish: SongPassageSnapshot? = null
 ): ReflectionApiRequest {
     require(UUID.fromString(requestId).toString() == requestId) {
         "requestId must be canonical lowercase UUID text."
@@ -252,7 +260,8 @@ internal fun reflectionRequestFromSavedRun(
             songPreparationReference = songPreparation?.takeIf { pinnedObservation != null }?.let {
                 SongPreparationReference(it.preparationId, it.destinationFingerprint)
             },
-            songCandidates = reflectionSongCandidates(run, finishEpochMillis, musicObservations, songPreparations),
+            songCandidates = reflectionSongCandidates(run, finishEpochMillis, musicObservations, songPreparations,
+                songLoadedAtFinish),
             songSnippetLookupAllowed = sharedMusicAllowed && run.songSnippetLookupAllowed
         )
     )
@@ -263,7 +272,8 @@ internal fun reflectionSongCandidates(
     run: RunEntity,
     finishEpochMillis: Long,
     observations: List<RunMusicObservationEntity>,
-    preparations: List<SongPreparationClaimEntity> = emptyList()
+    preparations: List<SongPreparationClaimEntity> = emptyList(),
+    loadedAtFinish: SongPassageSnapshot? = null
 ): List<ReflectionSongCandidate> {
     if (!run.musicObservationRequested || !run.musicReflectionSharingAllowed) return emptyList()
     fun key(value: String) = value.trim().lowercase(Locale.ROOT).replace(Regex("\\s+"), " ")
@@ -309,10 +319,17 @@ internal fun reflectionSongCandidates(
             val plan = curated?.plan()?.let { plan -> if (recording == null) plan else plan.copy(
                 spotifyTrackUri = recording.spotifyTrackUri, observedDurationMillis = recording.durationMillis,
                 allowTrackSwitch = run.songSnippetLookupAllowed && recording.spotifyTrackUri in curated.verifiedSpotifyTrackUris) }
+            // The same recording, or the same song by name: either way it would resume right after its own clip.
+            val loadedNow = loadedAtFinish?.takeIf { it.sourcePackage == "com.spotify.music" }?.let { loaded ->
+                canonicalSpotifyTrackUri(loaded.mediaId)?.let { it in knownUris } == true ||
+                    valid(loaded.title) && valid(loaded.artist) &&
+                    key(requireNotNull(loaded.title)) == key(title) && key(requireNotNull(loaded.artist)) == key(artist)
+            } == true
             ReflectionSongCandidate(row.sequenceNumber.toString(),
                 ReflectionMusicContext("MUSIC", curated?.title ?: title, curated?.artist ?: artist,
                     provenance = "MEDIA_SESSION_PARTIAL", songCue = curated?.cue),
-                plan, preparation?.let { SongPreparationReference(it.preparationId, it.destinationFingerprint) }, recording)
+                plan, preparation?.let { SongPreparationReference(it.preparationId, it.destinationFingerprint) }, recording,
+                loadedAtFinish = loadedNow)
         }.toList()
 }
 
@@ -333,6 +350,11 @@ internal fun CompletedRunEvidence.withSongSelection(result: ReflectionCandidates
             "A short vocal line window identified from published timings; not a verified hook."
         else "A short repeated vocal hook identified from published line timings.",
         "Community timing; a musical response to the completed run, not a claim of perfect phrase alignment."))
+    // Explicit no-clip: the song RunState paused for the finish resumes right after its reflection,
+    // so neither a new snippet nor its saved backup passage plays for it.
+    if (selected.loadedAtFinish) return copy(musicContext = selected.musicContext.copy(songCue = null),
+        songPassage = null, songPreparationReference = selected.preparationReference, selectedSongId = id,
+        songSelectionMethod = result.songSelectionMethod, songPlaybackReceipt = null)
     val curated = selected.songPassage?.takeIf { snippet?.version == 2 && it.allowTrackSwitch }
     val plan = if (snippet == null) selected.songPassage else if (curated != null)
         curated.copy(playbackReceiptId = snippet.cueId) else SongReflectionPlan(snippet.cueId,
