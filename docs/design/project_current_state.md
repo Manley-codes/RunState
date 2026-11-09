@@ -5,7 +5,35 @@ metadata:
   type: project
 ---
 
-## November 8 public Android build checks — local pass; first hosted run pending
+## November 8 in-app privacy summary — verified locally; phone integration pending
+
+Manley confirmed the GitHub pass and requested proceeding without repeated hosted checks.
+Settings → Privacy & data now opens an offline, scrollable summary of local records, reflection/
+voice services, optional music/weather/maps, saved-run deletion and backup/recovery limits.
+It remains readable while preferences are loading or unavailable. Opening/returning changes no
+sharing choice, permission or data; Back to settings and Android Back preserve Settings position.
+The dialog survives saved-state restoration and is available in owner and public configurations.
+
+Debug/release each pass 881 JVM tests; debug, unsigned release and test APKs build. Full release
+lint has 0 errors, 70 existing warnings and 8 hints. All six distinct focused screen checks pass
+across reruns, including restoration/system Back and callbacks remaining untouched. Actual Android
+font scale 2.0 was checked separately (a composition-only density override does not enlarge this
+separate dialog window); the final recovery paragraph and Back remain readable/reachable. Normal
+and enlarged previews were reviewed. An emulator SystemUI ANR intercepted the initial Back tests;
+rebooting the isolated emulator fixed this, with the original standard Back test passing and no
+production workaround. Font restored to 1.0. Evidence: ignored `android/build/privacy-summary-check/`.
+
+Source/privacy review and diff checks pass. Existing Settings UI/test files and existing notes
+only; unrelated Claude outputs remain untouched. No phone install, provider calls, data changes,
+publication or Git mutations. Preserve Claude's installed snippet APK until approved work is
+combined. Accounts/passwords remain paused. This is not the finished public privacy policy:
+verified host/provider retention, contact, published policy and export/recovery remain separate.
+Ready for Manley's review/commit; stop after this milestone.
+
+## November 8 public Android build checks — local pass; hosted pass confirmed by Manley
+
+Follow-up: Manley committed bd04555 and confirms the GitHub check passed. He explicitly asks
+not to keep checking it without a new reason; no independent hosted re-query was performed.
 
 Manley missed the planned run and resumed other release-readiness work. Saved-run deletion is
 committed at33bdb8b; Claude's reflection/snippet outdoor check is still pending. No phone update
@@ -25,7 +53,7 @@ the release reports contain881 tests with0 failures/errors/skips. YAML parsing a
 workflow assertions, diff whitespace and independent review pass. Generated release output
 confirms DEBUG/OWNER_TOOLS_ENABLED=false, cleartext disabled and no debug local-network permission
 or debug network configuration. Evidence remains ignored in `android/build/public-release-check/`
-and normal build reports. This is local verification; the first hosted result awaits user push.
+and normal build reports. Those are local results; the later hosted pass is user-confirmed above.
 
 Warnings are largely dependency-update, resource and code-convention advice. The two bitmap
 assets in `drawable/` merit a later density/memory check with visual parity; no artwork or

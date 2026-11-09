@@ -5,6 +5,7 @@ import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.ui.Modifier
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
@@ -15,6 +16,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsOff
@@ -356,10 +358,113 @@ class RunSettingsScreenTest {
         compose.onNodeWithTag(SETTINGS_SONG_SNIPPETS_TAG).performScrollTo().assertIsOff()
         compose.onNodeWithTag(SETTINGS_WEATHER_TAG).performScrollTo().assertIsOff()
         compose.onNodeWithTag(SETTINGS_REFLECTION_SETUP_TAG).performScrollTo().assertIsEnabled()
+        compose.onNodeWithTag(SETTINGS_PRIVACY_TAG).performScrollTo().assertIsEnabled()
         assertOwnerToolsHidden()
         compose.onNodeWithTag(SETTINGS_DONE_TAG).performClick()
         assertEquals(1, done)
         assertEquals(0, ownerActions)
+    }
+
+    @Test
+    fun privacyCanBeReadWhilePreferencesAreUnavailableWithoutInvokingAnyActions() {
+        var actions = 0
+        compose.setContent {
+            PrivacySettingsForTest(
+                onAction = { actions++ },
+                settingsLoading = true,
+                preferencesAvailable = false,
+                actionsEnabled = false
+            )
+        }
+        compose.onNodeWithTag(SETTINGS_PRIVACY_TAG).performScrollTo()
+            .assertIsDisplayed().assertIsEnabled().performClick()
+        compose.onNodeWithTag(SETTINGS_PRIVACY_DIALOG_TAG).assertIsDisplayed()
+        compose.onNodeWithTag(SETTINGS_DIALOG_TAG).assertDoesNotExist()
+        compose.onAllNodes(isDialog()).assertCountEquals(1)
+        saveDialogPreview("run-privacy-summary.png")
+        compose.onNodeWithText("Backups & recovery", ignoreCase = true)
+            .performScrollTo().assertIsDisplayed()
+        compose.onNodeWithTag(SETTINGS_PRIVACY_BACK_TAG).assertIsDisplayed().performClick()
+        compose.onNodeWithTag(SETTINGS_DIALOG_TAG).assertIsDisplayed()
+        compose.onNodeWithTag(SETTINGS_PRIVACY_TAG).assertIsDisplayed()
+        compose.onNodeWithTag(SETTINGS_DONE_TAG).assertIsNotEnabled()
+        assertEquals("Reading privacy must not change settings, request access or dismiss Settings", 0, actions)
+    }
+
+    @Test
+    fun privacyRestoresThenAndroidBackReturnsToTheSameSettingsPosition() {
+        var actions = 0
+        val restoration = StateRestorationTester(compose)
+        restoration.setContent { PrivacySettingsForTest(onAction = { actions++ }) }
+        val originalTop = compose.onNodeWithTag(SETTINGS_PRIVACY_TAG).performScrollTo()
+            .fetchSemanticsNode().boundsInRoot.top
+        compose.onNodeWithTag(SETTINGS_PRIVACY_TAG).performClick()
+        compose.onNodeWithTag(SETTINGS_PRIVACY_DIALOG_TAG).assertIsDisplayed()
+        restoration.emulateSavedInstanceStateRestore()
+        compose.onNodeWithTag(SETTINGS_PRIVACY_DIALOG_TAG).assertIsDisplayed()
+        compose.onAllNodes(isDialog()).assertCountEquals(1)
+        androidx.test.espresso.Espresso.pressBack()
+        compose.onNodeWithTag(SETTINGS_DIALOG_TAG).assertIsDisplayed()
+        compose.onNodeWithTag(SETTINGS_PRIVACY_DIALOG_TAG).assertDoesNotExist()
+        val restoredTop = compose.onNodeWithTag(SETTINGS_PRIVACY_TAG).assertIsDisplayed()
+            .fetchSemanticsNode().boundsInRoot.top
+        assertEquals("Returning from privacy preserves the Settings scroll position", originalTop, restoredTop, 1f)
+        compose.onNodeWithTag(SETTINGS_MUSIC_OBSERVATION_TAG).performScrollTo().assertIsOff()
+        compose.onNodeWithTag(SETTINGS_MUSIC_SHARING_TAG).performScrollTo().assertIsOff()
+        assertEquals(0, actions)
+    }
+
+    @Test
+    fun publicPrivacyIsReadableAtDoubleTextSizeAndReturnsWithoutChangingChoices() {
+        var actions = 0
+        compose.setContent {
+            val density = LocalDensity.current
+            CompositionLocalProvider(LocalDensity provides Density(density.density, 2f)) {
+                PrivacySettingsForTest(onAction = { actions++ }, ownerToolsEnabled = false)
+            }
+        }
+        assertOwnerToolsHidden()
+        compose.onNodeWithTag(SETTINGS_PRIVACY_TAG).performScrollTo().assertIsDisplayed().performClick()
+        for (heading in listOf("On this phone", "Reflections & voice", "Music choices",
+            "Maps & weather", "Deleting a run", "Backups & recovery")) {
+            compose.onNodeWithText(heading, ignoreCase = true).performScrollTo().assertIsDisplayed()
+        }
+        compose.onNodeWithText("currently no export or restore option", substring = true)
+            .performScrollTo().assertIsDisplayed()
+        saveDialogPreview("run-privacy-large-text.png")
+        compose.onNodeWithTag(SETTINGS_PRIVACY_BACK_TAG).assertIsDisplayed().assertIsEnabled().performClick()
+        compose.onNodeWithTag(SETTINGS_DIALOG_TAG).assertIsDisplayed()
+        assertOwnerToolsHidden()
+        compose.onNodeWithTag(SETTINGS_MUSIC_SHARING_TAG).performScrollTo().assertIsOff()
+        compose.onNodeWithTag(SETTINGS_WEATHER_TAG).performScrollTo().assertIsOff()
+        assertEquals(0, actions)
+    }
+
+    @Composable
+    private fun PrivacySettingsForTest(
+        onAction: () -> Unit,
+        ownerToolsEnabled: Boolean = true,
+        settingsLoading: Boolean = false,
+        preferencesAvailable: Boolean = true,
+        actionsEnabled: Boolean = true
+    ) {
+        RunSettingsDialog(
+            gpsReady = false, gpsMessage = null,
+            musicObservationEnabled = false, musicAccessGranted = false,
+            musicReflectionSharingEnabled = false, musicReflectionSharingAvailable = false,
+            reflectionConnectionLabel = null, demoMode = false,
+            onDismiss = onAction, onRequestLocationSetup = onAction,
+            onSetMusicObservation = { onAction() }, onRequestMusicAccess = onAction,
+            onSetMusicReflectionSharing = { onAction() }, onSetDemoMode = { onAction() },
+            onOpenReflectionSetup = onAction, onRetryPreferences = onAction,
+            onSetWeather = { onAction() }, onSetSongSnippets = { onAction() },
+            onSetDistanceAnnouncements = { onAction() }, onConnectSpotify = onAction,
+            onDisconnectSpotify = onAction, onSetAppearance = { onAction() },
+            onSetMusicPlayerLayout = { onAction() }, onOpenRecordingSources = onAction,
+            onOpenMusicReflectionDemo = onAction, ownerToolsEnabled = ownerToolsEnabled,
+            settingsLoading = settingsLoading, preferencesAvailable = preferencesAvailable,
+            actionsEnabled = actionsEnabled
+        )
     }
 
     @Test

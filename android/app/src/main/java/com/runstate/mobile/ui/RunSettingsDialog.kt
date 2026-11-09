@@ -20,6 +20,10 @@ import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -52,6 +56,9 @@ internal const val SETTINGS_DISTANCE_ANNOUNCEMENTS_TAG = "runSettingsDistanceAnn
 internal const val SETTINGS_APPEARANCE_TAG = "runSettingsAppearance"
 internal const val SETTINGS_RECORDING_SOURCES_TAG = "runSettingsRecordingSources"
 internal const val SETTINGS_MUSIC_REFLECTION_DEMO_TAG = "runSettingsMusicReflectionDemo"
+internal const val SETTINGS_PRIVACY_TAG = "runSettingsPrivacy"
+internal const val SETTINGS_PRIVACY_DIALOG_TAG = "runSettingsPrivacyDialog"
+internal const val SETTINGS_PRIVACY_BACK_TAG = "runSettingsPrivacyBack"
 internal fun appearanceOptionTag(appearance: RunAppearance): String =
     "runSettingsAppearance${appearance.name}"
 internal fun musicPlayerOptionTag(layout: RunMusicPlayerLayout): String =
@@ -104,6 +111,13 @@ internal fun RunSettingsDialog(
 ) {
     val controlsEnabled = actionsEnabled && !settingsLoading
     val preferenceControlsEnabled = controlsEnabled && preferencesAvailable
+    var privacyVisible by rememberSaveable { mutableStateOf(false) }
+    // Keep the settings position while the read-only summary replaces this dialog.
+    val settingsScrollState = rememberScrollState()
+    if (privacyVisible) {
+        RunPrivacyDialog(onBack = { privacyVisible = false })
+        return
+    }
     AlertDialog(
         onDismissRequest = { if (controlsEnabled) onDismiss() },
         modifier = Modifier.testTag(SETTINGS_DIALOG_TAG),
@@ -112,7 +126,7 @@ internal fun RunSettingsDialog(
         text = {
             Column(
                 modifier = Modifier.heightIn(max = 520.dp)
-                    .verticalScroll(rememberScrollState()),
+                    .verticalScroll(settingsScrollState),
                 verticalArrangement = Arrangement.spacedBy(14.dp)
             ) {
                 SettingsDescription("Regular runs use GPS. Your optional choices are remembered for future runs.")
@@ -336,6 +350,12 @@ internal fun RunSettingsDialog(
                     modifier = Modifier.heightIn(min = 48.dp).testTag(SETTINGS_REFLECTION_SETUP_TAG)
                 ) { Text("Reflection setup", color = SettingsInk) }
 
+                SettingsDivider()
+                TextButton(
+                    onClick = { privacyVisible = true },
+                    modifier = Modifier.heightIn(min = 48.dp).testTag(SETTINGS_PRIVACY_TAG)
+                ) { Text("Privacy & data", color = SettingsInk) }
+
                 if (com.runstate.mobile.BuildConfig.OWNER_TOOLS_ENABLED && ownerToolsEnabled) {
                     SettingsDivider()
                     SettingsSectionTitle("DEMO & TESTING")
@@ -374,6 +394,68 @@ internal fun RunSettingsDialog(
             ) { Text("Done", color = SettingsInk) }
         }
     )
+}
+
+/** Offline information only: reading it never requests access or changes a preference. */
+@Composable
+private fun RunPrivacyDialog(onBack: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onBack,
+        modifier = Modifier.testTag(SETTINGS_PRIVACY_DIALOG_TAG),
+        containerColor = SettingsCream,
+        title = { Text("Privacy & data", color = SettingsInk) },
+        text = {
+            Column(
+                modifier = Modifier.heightIn(max = 520.dp)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(18.dp)
+            ) {
+                PrivacySection("On this phone",
+                    "RunState saves your runs, GPS routes, Energy and Effort answers, notes, shoe details " +
+                        "and reflections on this phone. GPS recording can continue with the screen off " +
+                        "during an active run. There is currently no cloud history sync.")
+                PrivacySection("Reflections & voice",
+                    "When reflections are connected, run facts and permitted optional context go through " +
+                        "RunState's service to Anthropic. Precise routes, notes and shoe details are not " +
+                        "included in reflection requests. Cloud speech sends the spoken words to ElevenLabs. " +
+                        "Your phone's fallback speech engine may also use the internet.")
+                PrivacySection("Music choices",
+                    "Observe music, music in reflections and song snippets are separate choices, off by " +
+                        "default. Shared song details go through RunState to Musixmatch and Anthropic; " +
+                        "snippet lookup also uses LRCLIB. Preparation can begin during your run.\n\n" +
+                        "Spotify connection and Android notification access do not turn music sharing on. " +
+                        "RunState does not record microphone audio or copy Spotify music. Music and weather " +
+                        "settings apply to future runs; turning them off does not recall data already sent.")
+                PrivacySection("Maps & weather",
+                    "Optional weather sends an approximate start location to Open-Meteo. Opening the live " +
+                        "map requests the viewed area from OpenFreeMap. Both services can see your IP address. " +
+                        "The static illustration and History route drawing do not request live map tiles.")
+                PrivacySection("Deleting a run",
+                    "In Log History, open a saved run, choose its three-dot menu, then Delete run. " +
+                        "This permanently removes that run and its related data from this phone. " +
+                        "It does not delete information previously sent to RunState's service or other providers.")
+                PrivacySection("Backups & recovery",
+                    "Run history is not included in Android backup or phone-to-phone transfer. There is " +
+                        "currently no export or restore option. Uninstalling RunState or clearing its " +
+                        "storage can erase your history.")
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = onBack,
+                modifier = Modifier.heightIn(min = 48.dp).testTag(SETTINGS_PRIVACY_BACK_TAG)
+            ) { Text("Back to settings", color = SettingsInk) }
+        }
+    )
+}
+
+@Composable
+private fun PrivacySection(title: String, description: String) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(title, color = SettingsInk, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+        Text(description, color = SettingsInk.copy(alpha = 0.88f), fontSize = 14.sp,
+            lineHeight = 21.sp)
+    }
 }
 
 @Composable

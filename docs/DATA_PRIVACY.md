@@ -3,7 +3,7 @@
 ## Current Android data handling
 
 Reviewed November 8, 2026 against Android and backend source at `3dee96d`, updated for the
-subsequent saved-run deletion implementation.
+subsequent saved-run deletion implementation and in-app Privacy & data summary.
 This is the current engineering summary for release preparation. It does not verify the
 running server's configuration or providers' retention settings, and is not the finished
 public privacy policy. Claude's separate reflection-quality branch is outside this checkpoint.
@@ -44,6 +44,10 @@ paths; it would be inaccurate to claim that no song text ever reaches AI service
 
 ### Choices, storage and deletion
 
+- Settings → Privacy & data opens an offline summary of local storage, online reflections/voice,
+  optional music/weather/maps, deletion and current recovery limits. Reading it changes no
+  preference and requests no permission or service connection. It remains available while
+  preferences are loading or unavailable. This summary is not the final public privacy policy.
 - Music observation, music sharing, snippet lookup and weather default off and have separate
   controls. Changes govern future runs; they do not retract requests already sent or rewrite
   previously frozen reflection evidence. Saving a run does not require music sharing.
@@ -79,8 +83,8 @@ audit of every dependency or proof that every production logging setting is corr
    Individual saved-run deletion is implemented; existing runs remain until explicitly deleted.
 2. Confirm hosting/provider/SDK retention, deletion and AI-data settings, then specify the actual
    retention policy and a privacy contact. Do not substitute application cache limits for those facts.
-3. Publish the finished privacy policy and make it accessible inside the app; current Settings has
-   no Privacy entry. Complete the store's Data safety answers from the final build and actual services.
+3. Publish the finished privacy policy and link it from the existing Privacy & data summary.
+   Complete the store's Data safety answers from the final build and actual services.
 
 Google Play requires an accessible privacy policy covering data use, recipients, security,
 retention/deletion and a contact, with access from the app and the store listing. Its Data safety
@@ -94,6 +98,7 @@ Accounts/passwords, publication and the final store submission remain separate c
 
 - [Phone database](../android/app/src/main/java/com/runstate/mobile/data/local/RunStateDatabase.kt),
   [preferences](../android/app/src/main/java/com/runstate/mobile/settings/RunPreferences.kt),
+  [in-app data summary](../android/app/src/main/java/com/runstate/mobile/ui/RunSettingsDialog.kt),
   [reflection request](../android/app/src/main/java/com/runstate/mobile/reflection/ReflectionApiClient.kt)
 - [Backup rules](../android/app/src/main/res/xml/backup_rules.xml),
   [device-transfer rules](../android/app/src/main/res/xml/data_extraction_rules.xml),
