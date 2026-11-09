@@ -5,6 +5,32 @@ metadata:
   type: project
 ---
 
+## November 9 public-release journey — update retention verified; offline reflection status repaired
+
+Manley resumed release work with accounts/passwords paused and Claude's phone build preserved.
+Fresh isolated public APK 101 recorded synthetic GPS offline, with notification permission denied;
+location denial first stayed on Start with an explanation. Pause/resume and a background visit
+retained the session. Saved 0.38mi / 3:36 active / 9:27 per mile, High → Feeling Good and Effort4.
+In-place update to102 preserved exact visible History fields, final partial-mile split and both
+recorded route sections. Public Settings omitted owner tools and opened Privacy & data offline.
+This is same-schema visible-data evidence, not all-table extraction or outdoor GPS certification.
+
+The journey exposed a real no-connection race: the unavailable callback could arrive before the
+new reflection row, leaving Completion/History saying Preparing/Pending. MainActivity now passes
+explicit unavailability into the same application-owned operation that creates the row. Only an
+uncached pending reply is failed; cached/ready replies, permission waiting and saved feedback remain.
+Preserve this small coordinator/caller change when combining Claude's separate reflection work.
+
+A regression failed with expected FAILED / actual PENDING before the behavior change. Final debug
+and release suites each pass884 tests; both APK builds and release lint pass (0errors,70 existing
+warnings,8hints). Independent diff review found no concrete regression. A separate fresh signed
+public installation verified the corrected setup message and successful offline save. Both test
+emulators are stopped and the temporary key is deleted; evidence/scripts stay ignored in
+`android/build/release-journey-check/`.
+No new tracked files, phone install, provider calls, deployment or Git mutations. Permanent signing
+identity/backup and distribution strategy remain the next decision; field/Claude integration and
+other release gates remain. Stop at review/commit checkpoint.
+
 ## November 8 signed Android package preparation — verified locally; no production identity created
 
 Privacy summary is committed at a77b908. Manley requested the next release task with accounts/

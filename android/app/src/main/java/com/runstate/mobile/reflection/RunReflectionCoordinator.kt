@@ -149,8 +149,12 @@ internal class RunReflectionCoordinator(
     fun onSavedVisible(
         runId: String,
         bridgeReady: Boolean = true,
-        awaitingReceipt: Boolean = false
+        awaitingReceipt: Boolean = false,
+        bridgeUnavailable: Boolean = false
     ): Job {
+        require(!bridgeReady || !bridgeUnavailable) {
+            "A reflection connection cannot be both ready and unavailable."
+        }
         activeRunId = runId
         return applicationScope.launch {
             try {
@@ -183,7 +187,17 @@ internal class RunReflectionCoordinator(
                             selectionWindowStarted = !awaitingReceipt || receiptFinishedAt != null))
                     }
                     finalizeIfPossible(runId)
-                    publish(requireNotNull(store.find(runId)))
+                    record = requireNotNull(store.find(runId))
+                    // No configured connection is different from waiting for permission.
+                    // Settle it in the same operation that creates the row: a separate
+                    // unavailable callback can arrive before the row exists and be lost.
+                    // Already prepared replies still work without a connection.
+                    if (bridgeUnavailable && record.status == ReflectionStatus.PENDING &&
+                        record.candidatesJson == null) {
+                        store.fail(runId, record.requestId)
+                        record = requireNotNull(store.find(runId))
+                    }
+                    publish(record)
                     if (record.status == ReflectionStatus.PENDING) {
                         if (record.selectionWindowStarted) {
                             scheduleSelection(runId, record.selectionDeadlineEpochMillis)

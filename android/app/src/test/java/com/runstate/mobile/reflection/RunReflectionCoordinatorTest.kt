@@ -1113,6 +1113,75 @@ class RunReflectionCoordinatorTest {
             relativeHumidityPercent = 48.5, windSpeedKmh = 8.0, weatherCode = 0)
     }
 
+    @Test fun unconfiguredCompletionSettlesWithoutASecondCallbackOrProviderRequest() = runBlocking {
+        val dao = completedDao()
+        val savedRun = dao.findById(RUN_ID)
+        val store = MemoryReflectionStore()
+        var calls = 0
+        val coordinator = RunReflectionCoordinator(
+            runDao = dao, store = store,
+            gateway = ReflectionGateway { calls++; candidates() }, applicationScope = scope(),
+            quietWindowMillis = ReflectionDao.UNTIMED_SELECTION_DEADLINE, nowMillis = { 100L }
+        )
+
+        coordinator.onSavedVisible(RUN_ID, bridgeReady = false, awaitingReceipt = true,
+            bridgeUnavailable = true).join()
+
+        assertEquals(ReflectionStatus.FAILED, store.rows.getValue(RUN_ID).status)
+        assertEquals(RunReflectionState.Failed(RUN_ID), coordinator.state.value)
+        assertEquals(0, calls)
+        assertEquals(savedRun, dao.findById(RUN_ID))
+        assertEquals(1, dao.countRuns())
+        coordinator.saveEnergy(RUN_ID, ReflectionBranch.FEELING_GOOD)
+        assertEquals(ReflectionBranch.FEELING_GOOD, store.rows.getValue(RUN_ID).postRunEnergy)
+        assertEquals(ReflectionStatus.FAILED, store.rows.getValue(RUN_ID).status)
+    }
+
+    @Test fun unconfiguredCompletionKeepsCachedCandidatesForTheRunnersAnswer() = runBlocking {
+        val cached = gson.toJson(candidates())
+        val store = MemoryReflectionStore(listOf(RunReflectionEntity(
+            runId = RUN_ID, requestId = FIRST_REQUEST_ID, evidenceJson = "{}",
+            selectionDeadlineEpochMillis = ReflectionDao.UNTIMED_SELECTION_DEADLINE,
+            candidatesJson = cached
+        )))
+        var calls = 0
+        val coordinator = RunReflectionCoordinator(
+            runDao = completedDao(), store = store,
+            gateway = ReflectionGateway { calls++; candidates() }, applicationScope = scope(),
+            quietWindowMillis = ReflectionDao.UNTIMED_SELECTION_DEADLINE, nowMillis = { 100L }
+        )
+
+        coordinator.onSavedVisible(RUN_ID, bridgeReady = false, bridgeUnavailable = true).join()
+        assertEquals(ReflectionStatus.PENDING, store.rows.getValue(RUN_ID).status)
+        assertEquals(cached, store.rows.getValue(RUN_ID).candidatesJson)
+        coordinator.saveEnergy(RUN_ID, ReflectionBranch.SPENT)
+        assertEquals(SPENT_TEXT, store.rows.getValue(RUN_ID).text)
+        assertEquals(ReflectionStatus.READY, store.rows.getValue(RUN_ID).status)
+        assertEquals(0, calls)
+    }
+
+    @Test fun unconfiguredCompletionNeverChangesAnExistingReadyReflection() = runBlocking {
+        val ready = RunReflectionEntity(
+            runId = RUN_ID, requestId = FIRST_REQUEST_ID, evidenceJson = "{}",
+            selectionDeadlineEpochMillis = 100L, status = ReflectionStatus.READY,
+            selectedBranch = ReflectionBranch.SPENT, postRunEnergy = ReflectionBranch.SPENT,
+            text = SPENT_TEXT, finalizedAtEpochMillis = 100L
+        )
+        val store = MemoryReflectionStore(listOf(ready))
+        var calls = 0
+        val coordinator = RunReflectionCoordinator(
+            runDao = completedDao(), store = store,
+            gateway = ReflectionGateway { calls++; candidates() }, applicationScope = scope(),
+            nowMillis = { 200L }
+        )
+
+        coordinator.onSavedVisible(RUN_ID, bridgeReady = false, bridgeUnavailable = true).join()
+        assertEquals(ready, store.rows.getValue(RUN_ID))
+        assertEquals(RunReflectionState.Ready(RUN_ID, SPENT_TEXT, ReflectionBranch.SPENT),
+            coordinator.state.value)
+        assertEquals(0, calls)
+    }
+
     @Test fun bridgeCanWaitForPermissionThenRetryTheSameSavedRun() {
         val dao = completedDao()
         val store = MemoryReflectionStore()

@@ -1100,10 +1100,9 @@ internal fun RunJourneyRoot(
                 val bridgeReady = reflectionRequestsAvailable && localBridgePermissionGranted()
                 activeReflectionCoordinator.onSavedVisible(runId, bridgeReady,
                     awaitingReceipt = completionReceiptRunId == runId &&
-                        completionReceiptFinishedRunId != runId)
-                if (!reflectionRequestsAvailable) {
-                    activeReflectionCoordinator.onBridgeUnavailable(runId)
-                } else if (!bridgeReady) {
+                        completionReceiptFinishedRunId != runId,
+                    bridgeUnavailable = !reflectionRequestsAvailable)
+                if (reflectionRequestsAvailable && !bridgeReady) {
                     permissionRunId = runId
                     permissionForRetry = false
                     localNetworkPermissionLauncher.launch(LOCAL_NETWORK_PERMISSION)
