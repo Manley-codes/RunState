@@ -234,22 +234,26 @@ class ReflectionApiClientTest {
         }
     }
 
-    @Test fun theLoadedAtFinishMarkNeverLeavesThePhone() = runBlocking {
+    @Test fun theLoadedAtFinishMarkIsSentOnlyToAServerThatUnderstandsIt() = runBlocking {
         val config = ReflectionConnectionConfig("https://reflection.example.com/api/reflections/candidates", "a".repeat(43))
-        val uri = "spotify:track:" + "a".repeat(22)
-        val row = musicObservation().copy(title = "Example song", artist = "Example artist", albumName = "Example album",
-            spotifyTrackUri = uri, trackDurationMillis = 180_000)
-        val request = reflectionRequestFromSavedRun(REQUEST_ID, sharingRun().copy(songSnippetLookupAllowed = true),
-            completedTransitions(), qualifiedMusic(listOf(row)),
-            songLoadedAtFinish = loadedSong(uri, "Example song", "Example artist"))
-        assertTrue(request.evidence.songCandidates!!.single().loadedAtFinish)
-        val health = FakeHttpsConnection(URL("https://reflection.example.com/health"), "{}", cueCapability = "1",
-            studyCapability = "1", selectionCapability = "1", snippetsCapability = "1")
-        val post = FakeHttpsConnection(URL(config.endpoint), response(generationMode = "ANTHROPIC"))
-        HostedReflectionHttpClient(config, { if (it.path == "/health") health else post }).request(request)
-        val raw = post.sent.toString("UTF-8")
-        assertTrue(JsonParser.parseString(raw).asJsonObject.has("songCandidates"))
-        assertFalse(raw.contains("loadedAtFinish"))
+        val request = reflectionRequestFromSavedRun(REQUEST_ID, longerSharingRun(), longerSharingTransitions(),
+            qualifiedMusic(listOf(musicObservation(1).copy(title = "Stronger", artist = "Kanye West"),
+                musicObservation(2).copy(title = "Lovely Day", artist = "Bill Withers"))),
+            songLoadedAtFinish = loadedSong(null, "Lovely Day", "Bill Withers"))
+        assertEquals(listOf(false, true), request.evidence.songCandidates!!.map { it.loadedAtFinish })
+        for (understood in listOf(false, true)) {
+            val health = FakeHttpsConnection(URL("https://reflection.example.com/health"), "{}", cueCapability = "1",
+                studyCapability = "1", selectionCapability = "1",
+                loadedAtFinishCapability = if (understood) "1" else null)
+            val post = FakeHttpsConnection(URL(config.endpoint), response(generationMode = "ANTHROPIC"))
+            HostedReflectionHttpClient(config, { if (it.path == "/health") health else post }).request(request)
+            val songs = JsonParser.parseString(post.sent.toString("UTF-8")).asJsonObject.getAsJsonArray("songCandidates")
+            assertEquals(2, songs.size())
+            // An older server rejects unknown fields, and an unmarked song keeps today's exact shape.
+            assertFalse(songs[0].asJsonObject.has("loadedAtFinish"))
+            assertEquals(understood, songs[1].asJsonObject.has("loadedAtFinish"))
+            if (understood) assertTrue(songs[1].asJsonObject.get("loadedAtFinish").asBoolean)
+        }
     }
 
     @Test fun mismatchedOrUnconsentedSnippetCannotStartPlayback() {
@@ -1080,7 +1084,8 @@ class ReflectionApiClientTest {
         private val responseContentType: String? = null,
         private val selectionCapability: String? = null,
         private val snippetsCapability: String? = null,
-        private val snippetFallbacksCapability: String? = null) :
+        private val snippetFallbacksCapability: String? = null,
+        private val loadedAtFinishCapability: String? = null) :
         HttpsURLConnection(url) {
         val sent = ByteArrayOutputStream()
         var wasDisconnected = false
@@ -1101,6 +1106,7 @@ class ReflectionApiClientTest {
             name.equals("X-RunState-Song-Selection", ignoreCase = true) -> selectionCapability
             name.equals("X-RunState-Song-Snippets", ignoreCase = true) -> snippetsCapability
             name.equals("X-RunState-Song-Snippet-Fallbacks", ignoreCase = true) -> snippetFallbacksCapability
+            name.equals("X-RunState-Song-Loaded-At-Finish", ignoreCase = true) -> loadedAtFinishCapability
             name.equals("Content-Type", ignoreCase = true) -> responseContentType
             else -> null
         }

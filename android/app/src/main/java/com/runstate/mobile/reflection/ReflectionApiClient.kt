@@ -88,8 +88,9 @@ internal data class ReflectionSongCandidate(
     val recording: ReflectionSongRecording? = null,
     /**
      * The song loaded in Spotify when the saved run first appeared, so the one the completion pauses
-     * and then resumes. Its own clip would blur into it, so if chosen it plays no clip. Stays on the
-     * phone and is frozen with the evidence, so a retry or History makes the same choice.
+     * and then resumes. Its own clip would blur into it, so if chosen it plays no clip. Frozen with the
+     * evidence, so a retry or History makes the same choice. Sent only to a server that advertises it
+     * understands the mark; that server then favors a song that can have a clip.
      */
     val loadedAtFinish: Boolean = false
 )
@@ -446,7 +447,8 @@ internal class HostedReflectionHttpClient(
     private val capabilityNowNanos: () -> Long = System::nanoTime
 ) : ReflectionGateway {
     private data class SongCapabilities(val editorialCue: Boolean, val studyVersion: Int,
-        val preparation: Boolean, val selection: Boolean, val snippets: Boolean, val snippetFallbacks: Boolean)
+        val preparation: Boolean, val selection: Boolean, val snippets: Boolean, val snippetFallbacks: Boolean,
+        val loadedAtFinish: Boolean)
     private var songCapabilities: SongCapabilities? = null
     private var nextSnippetCapabilityProbeNanos: Long = 0L
 
@@ -471,7 +473,7 @@ internal class HostedReflectionHttpClient(
         postReflectionRequest(URL(config.endpoint), request, gson, connectionFactory, config.accessCode,
             sendCue, sendPreparation, sameDestination, sendSelection,
             sendSelection && request.evidence.songSnippetLookupAllowed && songCapabilities?.snippets == true,
-            songCapabilities?.snippetFallbacks == true)
+            songCapabilities?.snippetFallbacks == true, songCapabilities?.loadedAtFinish == true)
     }
 
     /** A cheap, credential-free capability check keeps the currently deployed strict server usable. */
@@ -499,7 +501,8 @@ internal class HostedReflectionHttpClient(
                     preparation = connection.getHeaderField("X-RunState-Song-Preparation") == "1",
                     selection = connection.getHeaderField("X-RunState-Song-Selection") == "1",
                     snippets = connection.getHeaderField("X-RunState-Song-Snippets") == "1",
-                    snippetFallbacks = connection.getHeaderField("X-RunState-Song-Snippet-Fallbacks") == "1"
+                    snippetFallbacks = connection.getHeaderField("X-RunState-Song-Snippet-Fallbacks") == "1",
+                    loadedAtFinish = connection.getHeaderField("X-RunState-Song-Loaded-At-Finish") == "1"
                 ) else null
                 try { connection.inputStream?.close() } catch (_: Exception) { }
                 ready
@@ -524,7 +527,8 @@ private suspend fun postReflectionRequest(
     includeSharedMusic: Boolean = true,
     includeSongSelection: Boolean = false,
     includeSongSnippets: Boolean = false,
-    includeSongSnippetFallbacks: Boolean = false
+    includeSongSnippetFallbacks: Boolean = false,
+    includeLoadedAtFinish: Boolean = false
 ): ReflectionCandidates = withContext(Dispatchers.IO) {
     val hosted = accessCode != null
     var connection: HttpURLConnection? = null
@@ -551,6 +555,8 @@ private suspend fun postReflectionRequest(
                             it.albumName?.let { album -> put("albumName", album) }
                         })
                     }
+                    // Only the song still loaded at the finish carries the mark, and only to a server that reads it.
+                    if (includeLoadedAtFinish && candidate.loadedAtFinish) put("loadedAtFinish", true)
                 }
             }))
         }

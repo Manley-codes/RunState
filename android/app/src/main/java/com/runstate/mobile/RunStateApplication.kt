@@ -515,8 +515,11 @@ class RunStateApplication : Application() {
                                 }
                                 else -> throw ReflectionBridgeException("Reflection connection needs setup.")
                             }.also { result ->
-                                logReflectionRequest("request=READY selectedSong=${result.selectedSongId != null}",
-                                    android.os.SystemClock.elapsedRealtime() - started)
+                                // sameSong: the chosen song is the one still loaded at the finish, so it plays no clip.
+                                val sameSong = request.evidence.songCandidates.orEmpty()
+                                    .any { it.loadedAtFinish && it.candidateId == result.selectedSongId }
+                                logReflectionRequest("request=READY selectedSong=${result.selectedSongId != null} " +
+                                    "sameSong=$sameSong", android.os.SystemClock.elapsedRealtime() - started)
                             }
                         } catch (cancelled: kotlinx.coroutines.CancellationException) {
                             throw cancelled
