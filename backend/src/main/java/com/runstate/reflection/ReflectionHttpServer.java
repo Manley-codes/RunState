@@ -50,6 +50,7 @@ public final class ReflectionHttpServer implements AutoCloseable {
     public static final String SONG_SELECTION_CAPABILITY_HEADER = "X-RunState-Song-Selection";
     public static final String SONG_SNIPPETS_CAPABILITY_HEADER = "X-RunState-Song-Snippets";
     public static final String SONG_SNIPPET_FALLBACKS_CAPABILITY_HEADER = "X-RunState-Song-Snippet-Fallbacks";
+    public static final String SONG_LOADED_AT_FINISH_CAPABILITY_HEADER = "X-RunState-Song-Loaded-At-Finish";
     public static final String REFLECTION_VOICE_CAPABILITY_HEADER = "X-RunState-Reflection-Voice";
     public static final String RUN_VOICE_CAPABILITY_HEADER = "X-RunState-Run-Voice";
     public static final int MAX_RUN_VOICE_TEXT_LENGTH = 500;
@@ -302,6 +303,8 @@ public final class ReflectionHttpServer implements AutoCloseable {
             }
             if (provider.supportsSongSelection()) {
                 exchange.getResponseHeaders().set(SONG_SELECTION_CAPABILITY_HEADER, "1");
+                // Song candidates may mark the song still loaded at the finish, which gets no clip.
+                exchange.getResponseHeaders().set(SONG_LOADED_AT_FINISH_CAPABILITY_HEADER, "1");
             }
             if (provider.supportsSongSnippets()) {
                 exchange.getResponseHeaders().set(SONG_SNIPPETS_CAPABILITY_HEADER, "1");
@@ -458,7 +461,7 @@ public final class ReflectionHttpServer implements AutoCloseable {
             List<ReflectionContract.SongCandidate> candidates = request.songCandidates().stream()
                     .map(candidate -> new ReflectionContract.SongCandidate(candidate.candidateId(),
                             candidate.musicContext(), scopedPreparationId(principalId, candidate.songPreparationId()),
-                            candidate.recording()))
+                            candidate.recording(), candidate.loadedAtFinish()))
                     .toList();
             ReflectionProvider.GeneratedReflections generated = provider.generateForDelivery(
                     request.evidence(), scopedPreparationId(principalId, request.songPreparationId()),

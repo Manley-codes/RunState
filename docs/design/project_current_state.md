@@ -5,6 +5,40 @@ metadata:
   type: project
 ---
 
+## November 9 reflection integration — verified locally; merge commit pending
+
+Manley created `codex/reflection-integration` from main1eb6f35 and started the no-commit merge of
+Claude's f3f53cd. Six shared files combined without text conflicts. Claude is paused; this milestone
+stops before deployment or phone installation. Manley retains all staging/commit/push operations.
+
+The combined backend's recipient-scoping step copied song candidates through the older constructor,
+silently resetting `loadedAtFinish` to false. It now carries the original flag through with the
+recording and scoped preparation ID. Extended the existing HTTP recipient-isolation test: different
+songs are marked for two recipients across two server starts. Before the fix it failed with expected
+[true,false], actual[false,false]; after the fix all existing isolation and new marker checks pass.
+Only the server copy and its test changed beyond the incoming branch; no new integration source files.
+
+Independent Android/backend reviews found no additional integration regression. Main's unavailable-
+reflection settlement, saved-run deletion, owner-tool restrictions, individual access protections and
+Java Host-header test compatibility remain. Claude's frozen consent-gated marker, older-server
+capability check and audio handoff remain. Accepted production study/writer V1 are unchanged; the four
+incoming experimental prompt resources remain experiments, not newly selected production prompts.
+
+Local verification: backend `verify` passes245 tests and JAR packaging; Android debug/release each
+pass901 unit tests, with debug/release/test APK builds and full release lint successful. Lint reports
+0 errors,71 warnings,8 hints; the additional warning is LogNotTimber for Claude's bounded debug log.
+First full backend attempt hit a connection reset in the pre-existing oversized speech-request test;
+an unchanged full rerun passed. No test was skipped or weakened. Evidence stays ignored under
+`backend/target/integration-check/` and `android/build/reflection-integration-check/`.
+
+No device actions, paid/provider calls, deployment, permanent signing changes or assistant Git
+mutations. Combined device/UI/outdoor playback checks have not run. Stage the two backend files and
+the two tracked project-note updates before the merge commit; leave unrelated `Claude outputs/` out.
+Next: inspect the actual Render branch/automatic-deployment settings before promoting/pushing to its
+deployment branch, then approve and verify backend rollout before installing the combined phone APK.
+No-clip ending quality still needs real listening; accounts/passwords and permanent signing remain
+separate decisions. Stop at this integration checkpoint.
+
 ## November 9 public-release journey — update retention verified; offline reflection status repaired
 
 Manley resumed release work with accounts/passwords paused and Claude's phone build preserved.

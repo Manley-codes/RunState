@@ -21,6 +21,7 @@ import com.runstate.mobile.music.SongReflectionPlan
 import com.runstate.mobile.music.selectSongReflectionPlan
 import com.runstate.mobile.music.reflectionSongCatalog
 import com.runstate.mobile.music.canonicalSpotifyTrackUri
+import com.runstate.mobile.music.SongPassageSnapshot
 import com.runstate.mobile.music.observedSongPlaybackEligible
 import java.util.Locale
 import java.io.ByteArrayOutputStream
@@ -84,7 +85,14 @@ internal data class ReflectionSongCandidate(
     val songPassage: SongReflectionPlan? = null,
     val preparationReference: SongPreparationReference? = null,
     /** Playback URI stays on the phone; only opted-in album/duration can reach the timing lookup. */
-    val recording: ReflectionSongRecording? = null
+    val recording: ReflectionSongRecording? = null,
+    /**
+     * The song loaded in Spotify when the saved run first appeared, so the one the completion pauses
+     * and then resumes. Its own clip would blur into it, so if chosen it plays no clip. Frozen with the
+     * evidence, so a retry or History makes the same choice. Sent only to a server that advertises it
+     * understands the mark; that server then favors a song that can have a clip.
+     */
+    val loadedAtFinish: Boolean = false
 )
 
 internal data class ReflectionSongRecording(val albumName: String?, val durationMillis: Long,
@@ -158,7 +166,8 @@ internal fun reflectionRequestFromSavedRun(
     musicObservations: List<RunMusicObservationEntity> = emptyList(),
     weather: RunWeatherSnapshot? = null,
     songPreparation: SongPreparationClaimEntity? = null,
-    songPreparations: List<SongPreparationClaimEntity> = listOfNotNull(songPreparation)
+    songPreparations: List<SongPreparationClaimEntity> = listOfNotNull(songPreparation),
+    songLoadedAtFinish: SongPassageSnapshot? = null
 ): ReflectionApiRequest {
     require(UUID.fromString(requestId).toString() == requestId) {
         "requestId must be canonical lowercase UUID text."
@@ -252,7 +261,8 @@ internal fun reflectionRequestFromSavedRun(
             songPreparationReference = songPreparation?.takeIf { pinnedObservation != null }?.let {
                 SongPreparationReference(it.preparationId, it.destinationFingerprint)
             },
-            songCandidates = reflectionSongCandidates(run, finishEpochMillis, musicObservations, songPreparations),
+            songCandidates = reflectionSongCandidates(run, finishEpochMillis, musicObservations, songPreparations,
+                songLoadedAtFinish),
             songSnippetLookupAllowed = sharedMusicAllowed && run.songSnippetLookupAllowed
         )
     )
@@ -263,7 +273,8 @@ internal fun reflectionSongCandidates(
     run: RunEntity,
     finishEpochMillis: Long,
     observations: List<RunMusicObservationEntity>,
-    preparations: List<SongPreparationClaimEntity> = emptyList()
+    preparations: List<SongPreparationClaimEntity> = emptyList(),
+    loadedAtFinish: SongPassageSnapshot? = null
 ): List<ReflectionSongCandidate> {
     if (!run.musicObservationRequested || !run.musicReflectionSharingAllowed) return emptyList()
     fun key(value: String) = value.trim().lowercase(Locale.ROOT).replace(Regex("\\s+"), " ")
@@ -309,10 +320,17 @@ internal fun reflectionSongCandidates(
             val plan = curated?.plan()?.let { plan -> if (recording == null) plan else plan.copy(
                 spotifyTrackUri = recording.spotifyTrackUri, observedDurationMillis = recording.durationMillis,
                 allowTrackSwitch = run.songSnippetLookupAllowed && recording.spotifyTrackUri in curated.verifiedSpotifyTrackUris) }
+            // The same recording, or the same song by name: either way it would resume right after its own clip.
+            val loadedNow = loadedAtFinish?.takeIf { it.sourcePackage == "com.spotify.music" }?.let { loaded ->
+                canonicalSpotifyTrackUri(loaded.mediaId)?.let { it in knownUris } == true ||
+                    valid(loaded.title) && valid(loaded.artist) &&
+                    key(requireNotNull(loaded.title)) == key(title) && key(requireNotNull(loaded.artist)) == key(artist)
+            } == true
             ReflectionSongCandidate(row.sequenceNumber.toString(),
                 ReflectionMusicContext("MUSIC", curated?.title ?: title, curated?.artist ?: artist,
                     provenance = "MEDIA_SESSION_PARTIAL", songCue = curated?.cue),
-                plan, preparation?.let { SongPreparationReference(it.preparationId, it.destinationFingerprint) }, recording)
+                plan, preparation?.let { SongPreparationReference(it.preparationId, it.destinationFingerprint) }, recording,
+                loadedAtFinish = loadedNow)
         }.toList()
 }
 
@@ -333,6 +351,11 @@ internal fun CompletedRunEvidence.withSongSelection(result: ReflectionCandidates
             "A short vocal line window identified from published timings; not a verified hook."
         else "A short repeated vocal hook identified from published line timings.",
         "Community timing; a musical response to the completed run, not a claim of perfect phrase alignment."))
+    // Explicit no-clip: the song RunState paused for the finish resumes right after its reflection,
+    // so neither a new snippet nor its saved backup passage plays for it.
+    if (selected.loadedAtFinish) return copy(musicContext = selected.musicContext.copy(songCue = null),
+        songPassage = null, songPreparationReference = selected.preparationReference, selectedSongId = id,
+        songSelectionMethod = result.songSelectionMethod, songPlaybackReceipt = null)
     val curated = selected.songPassage?.takeIf { snippet?.version == 2 && it.allowTrackSwitch }
     val plan = if (snippet == null) selected.songPassage else if (curated != null)
         curated.copy(playbackReceiptId = snippet.cueId) else SongReflectionPlan(snippet.cueId,
@@ -424,7 +447,8 @@ internal class HostedReflectionHttpClient(
     private val capabilityNowNanos: () -> Long = System::nanoTime
 ) : ReflectionGateway {
     private data class SongCapabilities(val editorialCue: Boolean, val studyVersion: Int,
-        val preparation: Boolean, val selection: Boolean, val snippets: Boolean, val snippetFallbacks: Boolean)
+        val preparation: Boolean, val selection: Boolean, val snippets: Boolean, val snippetFallbacks: Boolean,
+        val loadedAtFinish: Boolean)
     private var songCapabilities: SongCapabilities? = null
     private var nextSnippetCapabilityProbeNanos: Long = 0L
 
@@ -449,7 +473,7 @@ internal class HostedReflectionHttpClient(
         postReflectionRequest(URL(config.endpoint), request, gson, connectionFactory, config.accessCode,
             sendCue, sendPreparation, sameDestination, sendSelection,
             sendSelection && request.evidence.songSnippetLookupAllowed && songCapabilities?.snippets == true,
-            songCapabilities?.snippetFallbacks == true)
+            songCapabilities?.snippetFallbacks == true, songCapabilities?.loadedAtFinish == true)
     }
 
     /** A cheap, credential-free capability check keeps the currently deployed strict server usable. */
@@ -477,7 +501,8 @@ internal class HostedReflectionHttpClient(
                     preparation = connection.getHeaderField("X-RunState-Song-Preparation") == "1",
                     selection = connection.getHeaderField("X-RunState-Song-Selection") == "1",
                     snippets = connection.getHeaderField("X-RunState-Song-Snippets") == "1",
-                    snippetFallbacks = connection.getHeaderField("X-RunState-Song-Snippet-Fallbacks") == "1"
+                    snippetFallbacks = connection.getHeaderField("X-RunState-Song-Snippet-Fallbacks") == "1",
+                    loadedAtFinish = connection.getHeaderField("X-RunState-Song-Loaded-At-Finish") == "1"
                 ) else null
                 try { connection.inputStream?.close() } catch (_: Exception) { }
                 ready
@@ -502,7 +527,8 @@ private suspend fun postReflectionRequest(
     includeSharedMusic: Boolean = true,
     includeSongSelection: Boolean = false,
     includeSongSnippets: Boolean = false,
-    includeSongSnippetFallbacks: Boolean = false
+    includeSongSnippetFallbacks: Boolean = false,
+    includeLoadedAtFinish: Boolean = false
 ): ReflectionCandidates = withContext(Dispatchers.IO) {
     val hosted = accessCode != null
     var connection: HttpURLConnection? = null
@@ -529,6 +555,8 @@ private suspend fun postReflectionRequest(
                             it.albumName?.let { album -> put("albumName", album) }
                         })
                     }
+                    // Only the song still loaded at the finish carries the mark, and only to a server that reads it.
+                    if (includeLoadedAtFinish && candidate.loadedAtFinish) put("loadedAtFinish", true)
                 }
             }))
         }
@@ -566,7 +594,13 @@ private suspend fun postReflectionRequest(
             // Never deserialize or display remote error bodies; they can echo credentials.
             throw ReflectionBridgeException(
                 if (hosted) "The hosted reflection service rejected the request (HTTP $responseCode)."
-                else "The local reflection service rejected the request (HTTP $responseCode)."
+                else "The local reflection service rejected the request (HTTP $responseCode).",
+                kind = when (responseCode) {
+                    502 -> ReflectionFailureKind.HTTP_502
+                    503 -> ReflectionFailureKind.HTTP_503
+                    504 -> ReflectionFailureKind.HTTP_504
+                    else -> ReflectionFailureKind.HTTP_OTHER
+                }
             )
         }
         val responseBody = connection.inputStream.use { readBoundedUtf8(it, hosted) }
@@ -574,7 +608,8 @@ private suspend fun postReflectionRequest(
             try {
                 parseReflectionResponse(responseBody, request.requestId, request.runId, expectedCueId, sentSongs, snippetsAllowed, fallbacksAllowed)
             } catch (invalid: ReflectionBridgeException) {
-                throw ReflectionBridgeException("The hosted reflection response was invalid.")
+                throw ReflectionBridgeException("The hosted reflection response was invalid.",
+                    kind = ReflectionFailureKind.INVALID_RESPONSE)
             }
         } else {
             parseReflectionResponse(responseBody, request.requestId, request.runId, expectedCueId, sentSongs, snippetsAllowed, fallbacksAllowed)
@@ -598,8 +633,13 @@ private suspend fun postReflectionRequest(
     } catch (cancelled: CancellationException) {
         throw cancelled
     } catch (unavailable: Exception) {
-        if (hosted) throw ReflectionBridgeException("The hosted reflection service is unavailable.")
-        throw ReflectionBridgeException("The local reflection service is unavailable.", unavailable)
+        val kind = when (unavailable) {
+            is java.net.SocketTimeoutException -> ReflectionFailureKind.TIMEOUT
+            is java.io.IOException -> ReflectionFailureKind.NETWORK
+            else -> ReflectionFailureKind.OTHER
+        }
+        if (hosted) throw ReflectionBridgeException("The hosted reflection service is unavailable.", kind = kind)
+        throw ReflectionBridgeException("The local reflection service is unavailable.", unavailable, kind)
     } finally {
         try { connection?.disconnect() } catch (_: RuntimeException) {
             // Cleanup must not replace a safe error or expose headers through a transport exception.
@@ -618,7 +658,8 @@ private fun readBoundedUtf8(input: InputStream, hosted: Boolean): String {
         if (total > MAX_RESPONSE_BYTES) {
             throw ReflectionBridgeException(
                 if (hosted) "The hosted reflection response was too large."
-                else "The local reflection response was too large."
+                else "The local reflection response was too large.",
+                kind = ReflectionFailureKind.INVALID_RESPONSE
             )
         }
         output.write(buffer, 0, read)
@@ -895,7 +936,18 @@ private fun JsonReader.requireString(): String {
     return nextString()
 }
 
-internal class ReflectionBridgeException(
+/** Debug timing labels only: each names a kind of failure, never a message, address, header or provider text. */
+internal enum class ReflectionFailureKind {
+    HTTP_502, HTTP_503, HTTP_504, HTTP_OTHER, TIMEOUT, NETWORK, INVALID_RESPONSE, OTHER
+}
+
+internal class ReflectionBridgeException @JvmOverloads constructor(
     message: String,
-    cause: Throwable? = null
+    cause: Throwable? = null,
+    val kind: ReflectionFailureKind = ReflectionFailureKind.OTHER
 ) : Exception(message, cause)
+
+/** Coroutine stack recovery can wrap our exception in an unlabeled copy, so look through its causes. */
+internal fun reflectionFailureKind(failure: Throwable): ReflectionFailureKind =
+    generateSequence(failure) { it.cause }.take(8).filterIsInstance<ReflectionBridgeException>()
+        .map { it.kind }.firstOrNull { it != ReflectionFailureKind.OTHER } ?: ReflectionFailureKind.OTHER

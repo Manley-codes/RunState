@@ -7,10 +7,12 @@ import com.runstate.mobile.reflection.ReflectionMetricsEvidence
 import com.runstate.mobile.reflection.ReflectionMusicContext
 import com.runstate.mobile.reflection.ReflectionSongCue
 import com.runstate.mobile.reflection.pairedPassageFor
+import com.runstate.mobile.reflection.ReflectionSongCandidate
 import com.runstate.mobile.music.SongReflectionPlan
 import com.runstate.mobile.music.SongPassageSnapshot
 import com.runstate.mobile.music.PassagePlayback
 import com.runstate.mobile.ui.CompletionAudioSession
+import com.runstate.mobile.ui.CompletionAudioSession.Event as CompletionEvent
 import com.runstate.mobile.data.local.RunReflectionEntity
 import com.runstate.mobile.data.local.ReflectionStatus
 import com.runstate.mobile.data.local.ReflectionBranch
@@ -36,18 +38,21 @@ class RunCompleteSpeechTest {
         var releases = 0
         var interruptions = 0
         var loseDuringRequest = false
+        var grantPause = true
         var onLoss: (() -> Unit)? = null
         val lostVoices = mutableListOf<String>()
+        val events = mutableListOf<CompletionEvent>()
         val session = CompletionAudioSession(
             snapshot = { snapshotReads++; current },
             requestPause = { lost ->
                 pauseRequests++
                 onLoss = lost
                 if (loseDuringRequest) lost()
-                true
+                grantPause
             },
             releasePause = { releases++ },
-            onInterrupted = { interruptions++ })
+            onInterrupted = { interruptions++ },
+            diagnostic = { event, _ -> events += event })
     }
 
     @Test fun completionPauseIsSharedAcrossFactsIdleGapAndReflection() {
@@ -123,6 +128,102 @@ class RunCompleteSpeechTest {
         oldLoss()
         assertEquals(1, fixture.releases)
         assertEquals(0, fixture.interruptions)
+    }
+
+    @Test fun anAudibleSongLoadTreatsItsOwnFocusLossAsTheHandoffAndKeepsTheLeaseUntilTheEntrance() {
+        val fixture = CompletionAudioFixture()
+        val reflection = Any()
+        assertTrue(fixture.session.acquireVoice(reflection, "reflection", fixture.lostVoices::add))
+        fixture.session.releaseVoice(reflection)
+        fixture.session.expectPassageLoad()
+        fixture.onLoss!!.invoke() // The chosen song's player takes focus as it starts loading.
+        assertEquals(0, fixture.interruptions)
+        assertEquals("The lease stays until the entrance", 0, fixture.releases)
+        assertFalse(fixture.session.canContinue)
+        assertFalse(fixture.session.acquireVoice(Any(), "late voice", fixture.lostVoices::add))
+        fixture.session.releaseForPassage()
+        fixture.session.releaseForPassage()
+        fixture.session.finish()
+        fixture.onLoss!!.invoke()
+        assertEquals(1, fixture.releases)
+        assertEquals(0, fixture.interruptions)
+        assertTrue(fixture.lostVoices.isEmpty())
+        assertEquals(listOf(CompletionEvent.PAUSE_HELD, CompletionEvent.PASSAGE_LOADING,
+            CompletionEvent.FOCUS_TO_PASSAGE, CompletionEvent.PASSAGE_READY, CompletionEvent.FINISHED),
+            fixture.events)
+    }
+
+    @Test fun leavingDuringAnAudibleSongLoadReleasesTheLeaseOnceWithoutAnotherInterruption() {
+        val fixture = CompletionAudioFixture()
+        assertTrue(fixture.session.begin())
+        fixture.session.expectPassageLoad()
+        fixture.session.cancel()
+        fixture.session.releaseForPassage()
+        fixture.onLoss!!.invoke()
+        assertEquals(1, fixture.releases)
+        assertEquals("Stopping the passage itself stays with the passage owner", 0, fixture.interruptions)
+        assertEquals(listOf(CompletionEvent.PAUSE_HELD, CompletionEvent.PASSAGE_LOADING,
+            CompletionEvent.CANCELLED), fixture.events)
+    }
+
+    @Test fun audibleLoadHandoffAppliesOnlyWhileTheCompletionHoldsThePause() {
+        val unstarted = CompletionAudioFixture()
+        unstarted.session.expectPassageLoad()
+        assertTrue("An early call cannot skip the shared pause", unstarted.session.begin())
+        assertEquals(listOf(CompletionEvent.PAUSE_HELD), unstarted.events)
+
+        val interrupted = CompletionAudioFixture()
+        assertTrue(interrupted.session.begin())
+        interrupted.onLoss!!.invoke()
+        interrupted.session.expectPassageLoad()
+        interrupted.session.releaseForPassage()
+        assertEquals(1, interrupted.interruptions)
+        assertEquals(1, interrupted.releases)
+        assertEquals(listOf(CompletionEvent.PAUSE_HELD, CompletionEvent.FOCUS_LOST,
+            CompletionEvent.CANCELLED), interrupted.events)
+    }
+
+    @Test fun takingThePauseBackAfterAnAudibleLoadLetsAnOutsideLossInterruptUntilTheEntrance() {
+        val fixture = CompletionAudioFixture()
+        assertTrue(fixture.session.begin())
+        fixture.session.expectPassageLoad()
+        fixture.onLoss!!.invoke() // The chosen song's player takes focus as it starts loading.
+        fixture.session.reholdAfterPassageLoad()
+        assertEquals(2, fixture.pauseRequests)
+        assertFalse("No new voice can start during the passage", fixture.session.canContinue)
+        fixture.onLoss!!.invoke() // Another app starts playing during the entrance seek.
+        fixture.session.releaseForPassage()
+        assertEquals(1, fixture.interruptions)
+        assertEquals(1, fixture.releases)
+        assertEquals(listOf(CompletionEvent.PAUSE_HELD, CompletionEvent.PASSAGE_LOADING,
+            CompletionEvent.FOCUS_TO_PASSAGE, CompletionEvent.PAUSE_REHELD, CompletionEvent.FOCUS_LOST,
+            CompletionEvent.CANCELLED), fixture.events)
+    }
+
+    @Test fun thePauseIsTakenBackOnlyAfterTheSongsOwnFocusChangeAndARefusalEndsTheCompletion() {
+        val early = CompletionAudioFixture()
+        assertTrue(early.session.begin())
+        early.session.expectPassageLoad()
+        early.session.reholdAfterPassageLoad()
+        assertEquals("Without the song's own focus change, nothing is asked again", 1, early.pauseRequests)
+        early.onLoss!!.invoke() // That change can still arrive late; it belongs to the passage.
+        early.session.releaseForPassage()
+        early.session.reholdAfterPassageLoad()
+        assertEquals("Nothing is asked again after the entrance", 1, early.pauseRequests)
+        assertEquals(0, early.interruptions)
+        assertEquals(1, early.releases)
+
+        val refused = CompletionAudioFixture()
+        assertTrue(refused.session.begin())
+        refused.session.expectPassageLoad()
+        refused.onLoss!!.invoke()
+        refused.grantPause = false // For example, a call is in progress.
+        refused.session.reholdAfterPassageLoad()
+        refused.session.releaseForPassage()
+        assertEquals(1, refused.interruptions)
+        assertEquals(1, refused.releases)
+        assertEquals(listOf(CompletionEvent.PAUSE_HELD, CompletionEvent.PASSAGE_LOADING,
+            CompletionEvent.FOCUS_TO_PASSAGE, CompletionEvent.CANCELLED), refused.events)
     }
 
     @Test fun onlyTheOriginalPlayingRecordingCanBeResumedAfterTheSharedPause() {
@@ -268,6 +369,23 @@ class RunCompleteSpeechTest {
             Gson().toJson(evidence).replace("10000", "999999")
         )
         for (json in bad) assertNull(pairedPassageFor(readyRecord(json), "checked_cue_v1"))
+    }
+
+    @Test fun theSongPausedForTheFinishNeverGetsAClipFromASavedPlan() {
+        val evidence = songEvidence()
+        fun candidate(title: String, loaded: Boolean) = ReflectionSongCandidate("1",
+            ReflectionMusicContext("MUSIC", title, "Selected artist", provenance = "MEDIA_SESSION_PARTIAL"),
+            loadedAtFinish = loaded)
+        fun passageFor(candidates: List<ReflectionSongCandidate>) =
+            pairedPassageFor(readyRecord(Gson().toJson(evidence.copy(songCandidates = candidates))), "checked_cue_v1")
+        assertNull(passageFor(listOf(candidate(" selected  TITLE", true))))
+        assertEquals(evidence.songPassage?.passage(), passageFor(listOf(candidate("Another title", true))))
+        assertEquals(evidence.songPassage?.passage(), passageFor(listOf(candidate("Selected title", false))))
+        // A record saved before the mark existed simply has no mark.
+        val older = Gson().toJson(evidence.copy(songCandidates = listOf(candidate("Selected title", false))))
+            .replace(",\"loadedAtFinish\":false", "")
+        assertFalse(older.contains("loadedAtFinish"))
+        assertEquals(evidence.songPassage?.passage(), pairedPassageFor(readyRecord(older), "checked_cue_v1"))
     }
 
     private fun songEvidence() = CompletedRunEvidence(

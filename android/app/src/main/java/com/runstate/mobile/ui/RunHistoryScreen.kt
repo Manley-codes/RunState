@@ -194,10 +194,12 @@ internal class CompletionAudioSession(
     private val diagnostic: (Event, Long) -> Unit = { _, _ -> }
 ) {
     enum class Event { PAUSE_HELD, RECEIPT_REQUESTED, RECEIPT_FINISHED, ENERGY_CHOSEN,
-        TEXT_READY, VOICE_READY, REFLECTION_STARTED, PASSAGE_READY, FINISHED, CANCELLED }
-    private enum class Phase { NEW, HOLDING, PASSAGE, FINISHED, CANCELLED }
+        TEXT_READY, VOICE_READY, REFLECTION_STARTED, PASSAGE_LOADING, FOCUS_TO_PASSAGE, PAUSE_REHELD,
+        FOCUS_LOST, PASSAGE_READY, FINISHED, CANCELLED }
+    private enum class Phase { NEW, HOLDING, PASSAGE, PASSAGE_HOLD, FINISHED, CANCELLED }
     private var phase = Phase.NEW
     private var held = false
+    private var handoffLossSeen = false
     private var original: SongPassageSnapshot? = null
     private val voices = mutableMapOf<Any, Pair<String, (String) -> Unit>>()
     private val createdAtNanos = System.nanoTime()
@@ -215,20 +217,7 @@ internal class CompletionAudioSession(
         original = try { snapshot() } catch (_: RuntimeException) { null }
         phase = Phase.HOLDING
         held = true // Also owns cleanup if the driver synchronously reports loss/denial.
-        val granted = try {
-            requestPause {
-                // A queued loss after handing control to Spotify belongs to the old lease.
-                if (phase == Phase.HOLDING) {
-                    val callbacks = voices.values.toList()
-                    phase = Phase.CANCELLED
-                    voices.clear()
-                    releaseHold()
-                    note(Event.CANCELLED)
-                    onInterrupted()
-                    callbacks.forEach { (id, lost) -> lost(id) }
-                }
-            }
-        } catch (_: RuntimeException) { false }
+        val granted = try { requestPause { onPauseLost() } } catch (_: RuntimeException) { false }
         if (phase != Phase.HOLDING) {
             return false
         }
@@ -238,6 +227,25 @@ internal class CompletionAudioSession(
             onInterrupted()
         } else note(Event.PAUSE_HELD)
         return granted
+    }
+
+    private fun onPauseLost() {
+        // After control passes to Spotify, a loss belongs to the passage: the chosen song's
+        // own focus request during an audible load, or a queued loss from the old lease.
+        if (phase == Phase.PASSAGE) {
+            if (held) handoffLossSeen = true
+            note(Event.FOCUS_TO_PASSAGE)
+        }
+        if (phase == Phase.HOLDING || phase == Phase.PASSAGE_HOLD) {
+            note(Event.FOCUS_LOST)
+            val callbacks = voices.values.toList()
+            phase = Phase.CANCELLED
+            voices.clear()
+            releaseHold()
+            note(Event.CANCELLED)
+            onInterrupted()
+            callbacks.forEach { (id, lost) -> lost(id) }
+        }
     }
 
     fun acquireVoice(owner: Any, id: String, onLost: (String) -> Unit): Boolean {
@@ -263,8 +271,41 @@ internal class CompletionAudioSession(
             kotlin.math.abs(before.positionMillis - now.positionMillis) <= 2_000L
     }
 
-    fun releaseForPassage() {
+    /**
+     * RunState is about to load the chosen song by playing it, so that player will take audio focus.
+     * Treat that loss as this handoff, not an interruption. Keep the lease until the entrance:
+     * abandoning it now could hand focus back to a paused player before the chosen song claims it.
+     * Until the pause is taken back below, the passage's own checks notice an outside interruption.
+     */
+    fun expectPassageLoad() {
         if (phase != Phase.HOLDING) return
+        phase = Phase.PASSAGE
+        handoffLossSeen = false
+        note(Event.PASSAGE_LOADING)
+        voices.clear()
+    }
+
+    /**
+     * The audibly loaded song is paused again at its start. Take the shared pause back until the
+     * entrance, so an app that starts playing during the seek interrupts this completion, as it does
+     * after a silent load. Only after the chosen song's own focus change has arrived, so that change
+     * can never be read as an interruption. A refused request, such as during a call, also ends it.
+     */
+    fun reholdAfterPassageLoad() {
+        if (phase != Phase.PASSAGE || !held || !handoffLossSeen) return
+        phase = Phase.PASSAGE_HOLD
+        val granted = try { requestPause { onPauseLost() } } catch (_: RuntimeException) { false }
+        if (phase != Phase.PASSAGE_HOLD) return
+        if (granted) note(Event.PAUSE_REHELD) else {
+            phase = Phase.CANCELLED
+            note(Event.CANCELLED)
+            releaseHold()
+            onInterrupted()
+        }
+    }
+
+    fun releaseForPassage() {
+        if (phase != Phase.HOLDING && phase != Phase.PASSAGE && phase != Phase.PASSAGE_HOLD) return
         phase = Phase.PASSAGE
         note(Event.PASSAGE_READY)
         voices.clear()
@@ -952,7 +993,8 @@ internal fun completionAudioSessionFor(context: Context, onInterrupted: () -> Un
         snapshot = { AndroidSpotifyPassageSession(appContext).snapshot() },
         requestPause = request@{ lost ->
             if (!spotifyConnection.tryAcquireAudioOwnership(musicControlsOwner)) return@request false
-            val focus = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT)
+            // Taking the pause back asks again with the same request, so the system keeps one entry.
+            val focus = ownedFocus ?: AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT)
                 .setAudioAttributes(AudioAttributes.Builder()
                     .setUsage(AudioAttributes.USAGE_ASSISTANCE_NAVIGATION_GUIDANCE)
                     .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH).build())
@@ -1376,7 +1418,9 @@ internal class AndroidReflectionSpeechPlatform(
                         onEntranceReady = {
                             completionAudio?.releaseForPassage() ?: releaseAudioFocus()
                         }, quiescePausedBeforeEntry = true,
-                        diagnosticObserver = passageDiagnostics)
+                        diagnosticObserver = passageDiagnostics,
+                        onAudibleTrackLoad = { completionAudio?.expectPassageLoad() },
+                        onAudibleTrackContained = { completionAudio?.reholdAfterPassageLoad() })
                     passageController = controller
                     try {
                         session.expectTrack(passage)

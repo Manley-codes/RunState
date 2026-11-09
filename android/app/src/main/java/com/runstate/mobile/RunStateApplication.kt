@@ -21,6 +21,8 @@ import com.runstate.mobile.reflection.SpeechVoice
 import com.runstate.mobile.reflection.HostedSongStudyPreparationClient
 import com.runstate.mobile.reflection.reflectionDestinationFingerprint
 import com.runstate.mobile.reflection.ReflectionBridgeException
+import com.runstate.mobile.reflection.reflectionFailureKind
+import com.runstate.mobile.music.AndroidSpotifyPassageSession
 import com.runstate.mobile.reflection.LOCAL_REFLECTION_ENDPOINT
 import com.runstate.mobile.reflection.PHONE_REFLECTION_ENDPOINT
 import com.runstate.mobile.reflection.RoomReflectionStore
@@ -500,21 +502,42 @@ class RunStateApplication : Application() {
                     store = RoomReflectionStore(database.reflectionDao(), database.musicObservationDao(),
                         database.weatherDao()),
                     gateway = ReflectionGateway { request ->
-                        when (val connection = mutableReflectionConnection.value) {
-                            is ReflectionConnectionState.Hosted ->
-                                HostedReflectionHttpClient(connection.config).request(request)
-                            ReflectionConnectionState.Local -> {
-                                val emulator = Build.PRODUCT.startsWith("sdk_") ||
-                                    Build.DEVICE.startsWith("emu") || Build.HARDWARE == "ranchu"
-                                LocalReflectionHttpClient(
-                                    if (emulator) LOCAL_REFLECTION_ENDPOINT else PHONE_REFLECTION_ENDPOINT
-                                ).request(request)
+                        val started = android.os.SystemClock.elapsedRealtime()
+                        try {
+                            when (val connection = mutableReflectionConnection.value) {
+                                is ReflectionConnectionState.Hosted ->
+                                    HostedReflectionHttpClient(connection.config).request(request)
+                                ReflectionConnectionState.Local -> {
+                                    val emulator = Build.PRODUCT.startsWith("sdk_") ||
+                                        Build.DEVICE.startsWith("emu") || Build.HARDWARE == "ranchu"
+                                    LocalReflectionHttpClient(
+                                        if (emulator) LOCAL_REFLECTION_ENDPOINT else PHONE_REFLECTION_ENDPOINT
+                                    ).request(request)
+                                }
+                                else -> throw ReflectionBridgeException("Reflection connection needs setup.")
+                            }.also { result ->
+                                // sameSong: the chosen song is the one still loaded at the finish, so it plays no clip.
+                                val sameSong = request.evidence.songCandidates.orEmpty()
+                                    .any { it.loadedAtFinish && it.candidateId == result.selectedSongId }
+                                logReflectionRequest("request=READY selectedSong=${result.selectedSongId != null} " +
+                                    "sameSong=$sameSong", android.os.SystemClock.elapsedRealtime() - started)
                             }
-                            else -> throw ReflectionBridgeException("Reflection connection needs setup.")
+                        } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                            throw cancelled
+                        } catch (failure: Exception) {
+                            logReflectionRequest("request=FAILED kind=${reflectionFailureKind(failure)}",
+                                android.os.SystemClock.elapsedRealtime() - started)
+                            throw failure
                         }
                     },
-                    applicationScope = applicationScope
+                    applicationScope = applicationScope,
+                    songLoadedAtFinish = { AndroidSpotifyPassageSession(this@RunStateApplication).snapshot() }
                 ).also { reflectionOwner = it }
             }
         }
+}
+
+/** Debug builds only: the outcome, a bounded failure kind and the request time. No text, run, song or address. */
+private fun logReflectionRequest(outcome: String, elapsedMillis: Long) {
+    if (BuildConfig.DEBUG) android.util.Log.d("RunStateReflection", "$outcome elapsedMs=$elapsedMillis")
 }

@@ -32,12 +32,36 @@ import java.util.regex.Pattern;
 final class SongReflectionTrial {
     enum CreativeApproach { AUTO, DIRECT, PERSONA_ONLY, BLEND }
 
+    /**
+     * v1 is the accepted baseline study. v2 also writes a per-song direction (Nov 7 batch 1, not
+     * adopted). v3 keeps v1's fields but in plain terms a writer cannot lift as spoken wording.
+     */
+    enum StudyVersion {
+        V1("song-study-trial-v1.txt"), V2("song-study-trial-v2.txt"), V3("song-study-trial-v3.txt");
+        final String prompt;
+        StudyVersion(String prompt) { this.prompt = prompt; }
+    }
+
+    /** v1 is the accepted baseline writer. v2 adds own-words use of notes and never shrinking the run. */
+    enum WriterVersion {
+        V1("song-writer-trial-v1.txt"), V2("song-writer-trial-v2.txt"),
+        /** Accepted v1 with only its two clip sentences changed, for a reflection that no clip follows. */
+        V1_NOCLIP("song-writer-trial-v1-noclip.txt");
+        final String prompt;
+        WriterVersion(String prompt) { this.prompt = prompt; }
+    }
+
     private static final List<String> BRANCHES = List.of("spent", "feeling_good", "powered_up", "no_selection");
     private static final Set<String> NOTE_FIELDS = Set.of("attitude", "delivery", "artist_context",
             "title_idea", "lyric_echoes", "imagery");
+    private static final Set<String> DIRECTION_FIELDS = Set.of("connection", "intended_effect");
+    private static final List<String> CONNECTIONS = List.of("direct", "persona", "blend");
     private static final Set<String> CHOICE_FIELDS = Set.of("lead", "accent", "anchor", "fit", "reflection");
     private static final Set<String> LEADS = Set.of("persona", "title", "artist", "lyric_echo", "message", "run_only");
     private static final Pattern NUMBER = Pattern.compile("(?<![\\p{L}\\p{N}])\\d+(?:[.:]\\d+)*(?![\\p{L}\\p{N}])");
+    /** A spoken clock time: "7:45", "7 AM", "7 p.m." or "7 o'clock". A bare number is never a clock time. */
+    private static final Pattern CLOCK_TIME = Pattern.compile(
+            "(?iu)(?<![\\p{L}\\p{N}.:])(\\d{1,2})(?::(\\d{2}))?(?![\\p{N}:])(\\s*(?:a\\.?m\\.?|p\\.?m\\.?|o['’]clock))?(?![\\p{L}])");
     private static final Pattern BANNED = Pattern.compile(
             "(?i)\\b(testament|symphony|unleash\\w*|journey|fuel\\w*|crushed it|conquer\\w*|delve\\w*)\\b");
     @FunctionalInterface
@@ -72,16 +96,27 @@ final class SongReflectionTrial {
 
     /** Source-only work is safe to prepare before final run facts exist. */
     StudiedSong study(SongMaterial material) throws ReflectionProviderException {
+        return study(material, StudyVersion.V1);
+    }
+
+    StudiedSong study(SongMaterial material, StudyVersion version) throws ReflectionProviderException {
         java.util.Objects.requireNonNull(material, "material");
-        JsonObject notes = exchange.exchange(songInput(material),
-                prompt("song-study-trial-v1.txt"), notesSchema());
+        java.util.Objects.requireNonNull(version, "version");
+        JsonObject notes = exchange.exchange(songInput(material), prompt(version.prompt), notesSchema(version));
         validateNotes(notes, material);
+        if (notes.has("connection") != (version == StudyVersion.V2)) throw invalid("Unexpected song-study fields.");
         return new StudiedSong(material, notes);
     }
 
     TrialResult write(CompletedRunEvidence evidence, StudiedSong studied, PassageLanding landing,
                       CreativeApproach approach) throws ReflectionProviderException {
+        return write(evidence, studied, landing, approach, WriterVersion.V1);
+    }
+
+    TrialResult write(CompletedRunEvidence evidence, StudiedSong studied, PassageLanding landing,
+                      CreativeApproach approach, WriterVersion writer) throws ReflectionProviderException {
         java.util.Objects.requireNonNull(approach, "approach");
+        java.util.Objects.requireNonNull(writer, "writer");
         SongMaterial material = studied.material();
         requireMatching(evidence, material, landing);
         JsonObject notes = studied.linerNotes();
@@ -123,13 +158,40 @@ final class SongReflectionTrial {
             writerInput.add("passage_landing", target);
         }
         JsonObject branches = exchange.exchange(writerInput,
-                prompt("song-writer-trial-v1.txt"), writerSchema(evidence));
+                prompt(writer.prompt), writerSchema(evidence));
         List<String> warnings = validateBranches(branches, facts, evidence, notes, material, approach);
         return new TrialResult(notes, branches, new CandidateReflections(
                 branches.getAsJsonObject("spent").get("reflection").getAsString(),
                 branches.getAsJsonObject("feeling_good").get("reflection").getAsString(),
                 branches.getAsJsonObject("powered_up").get("reflection").getAsString(),
                 branches.getAsJsonObject("no_selection").get("reflection").getAsString()), warnings);
+    }
+
+    /**
+     * Batch 1 experiment: the song study's own per-song direction replaces auto plus the generic
+     * landing effect. The writer prompt is unchanged; only the inputs it already accepts differ.
+     */
+    TrialResult writeWithStudyDirection(CompletedRunEvidence evidence, StudiedSong studied, PassageLanding landing)
+            throws ReflectionProviderException {
+        JsonObject notes = studied.linerNotes();
+        validateNotes(notes, studied.material());
+        if (!notes.has("connection")) throw invalid("A study direction requires a v2 song study.");
+        CreativeApproach approach = approachFor(notes.get("connection").getAsString());
+        String effect = notes.get("intended_effect").getAsString().strip().replaceAll("\\s+", " ");
+        DIRECTION_FIELDS.forEach(notes::remove);
+        PassageLanding directed = landing == null ? null : new PassageLanding(landing.trackTitle(),
+                landing.artistName(), landing.musicalMoment(), effect, landing.provenance(),
+                landing.matchedThemes(), landing.titleHook());
+        return write(evidence, new StudiedSong(studied.material(), notes), directed, approach);
+    }
+
+    static CreativeApproach approachFor(String connection) {
+        return switch (connection) {
+            case "direct" -> CreativeApproach.DIRECT;
+            case "persona" -> CreativeApproach.PERSONA_ONLY;
+            case "blend" -> CreativeApproach.BLEND;
+            default -> throw new IllegalArgumentException("Unknown song-study connection.");
+        };
     }
 
     private static void requireMatching(CompletedRunEvidence evidence, SongMaterial material, PassageLanding landing)
@@ -254,7 +316,15 @@ final class SongReflectionTrial {
     }
 
     private static void validateNotes(JsonObject notes, SongMaterial source) throws ReflectionProviderException {
-        exactFields(notes, NOTE_FIELDS);
+        if (notes.has("connection") || notes.has("intended_effect")) {
+            Set<String> expected = new HashSet<>(NOTE_FIELDS);
+            expected.addAll(DIRECTION_FIELDS);
+            exactFields(notes, expected);
+            if (!CONNECTIONS.contains(text(notes, "connection", 20, true))) throw invalid("Invalid song-study connection.");
+            text(notes, "intended_effect", 350, true);
+        } else {
+            exactFields(notes, NOTE_FIELDS);
+        }
         for (String key : List.of("attitude", "delivery", "artist_context", "title_idea")) {
             text(notes, key, 350, key.equals("attitude") || key.equals("delivery"));
         }
@@ -309,7 +379,9 @@ final class SongReflectionTrial {
             }
             if (wordCount(reflection) > 55) warnings.add(key + ":word_budget_review_required");
             if (BANNED.matcher(reflection).find()) warnings.add(key + ":word_choice_review_required");
-            if (!allowedNumbers.containsAll(numbers(reflection))) warnings.add(key + ":numeric_tokens_review_required");
+            if (!allowedNumbers.containsAll(numbers(withoutRoundedRunClockTimes(reflection, evidence)))) {
+                warnings.add(key + ":numeric_tokens_review_required");
+            }
             long usedEchoes = notes.getAsJsonArray("lyric_echoes").asList().stream()
                     .map(value -> value.getAsJsonObject().get("words").getAsString())
                     .distinct().filter(words -> normalizedWords(reflection).contains(normalizedWords(words))).count();
@@ -325,6 +397,57 @@ final class SongReflectionTrial {
             // A numeric-token check is NOT a factual reviewer. This isolated result still needs judgment.
         }
         return List.copyOf(warnings);
+    }
+
+    /**
+     * A spoken clock time can be true without matching the facts' exact text: "7 AM" for a 7:00
+     * start, or "before 7:45" for a 7:42 finish. A clock form is exempt from the exact-number check
+     * only as a natural rounding of the real start or finish. Its own precision sets how far it may
+     * round: 30 minutes for a whole hour ("7 AM", "7:00"), 15 for a quarter hour, 5 for a five-minute
+     * mark and 1 for any other minute. A mid-run time such as "7:20" and every other number stay strict.
+     */
+    private static String withoutRoundedRunClockTimes(String reflection, CompletedRunEvidence evidence) {
+        Matcher time = CLOCK_TIME.matcher(reflection);
+        StringBuilder kept = new StringBuilder();
+        while (time.find()) {
+            boolean clockForm = time.group(2) != null || time.group(3) != null;
+            time.appendReplacement(kept, Matcher.quoteReplacement(
+                    clockForm && roundsToRunEdge(time, evidence) ? " " : time.group()));
+        }
+        time.appendTail(kept);
+        return kept.toString();
+    }
+
+    private static boolean roundsToRunEdge(Matcher time, CompletedRunEvidence evidence) {
+        int hour = Integer.parseInt(time.group(1));
+        int minute = time.group(2) == null ? 0 : Integer.parseInt(time.group(2));
+        if (hour > 23 || minute > 59) return false;
+        String suffix = time.group(3) == null ? "" : time.group(3).strip().toLowerCase(Locale.ROOT);
+        List<Integer> hours = new ArrayList<>();
+        if (suffix.startsWith("a") || suffix.startsWith("p")) {
+            if (hour < 1 || hour > 12) return false;
+            hours.add(hour % 12 + (suffix.startsWith("p") ? 12 : 0));
+        } else if (hour <= 12) {
+            hours.add(hour % 12);
+            hours.add(hour % 12 + 12);
+        } else {
+            hours.add(hour);
+        }
+        long tolerance = 60_000L * (minute == 0 ? 30 : minute % 15 == 0 ? 15 : minute % 5 == 0 ? 5 : 1);
+        ZoneId zone = ZoneId.of(evidence.startTimezoneId());
+        List<Long> edges = List.of(evidence.officialStartEpochMillis(), evidence.finishEpochMillis());
+        for (long edge : edges) {
+            java.time.LocalDate day = Instant.ofEpochMilli(edge).atZone(zone).toLocalDate();
+            for (int candidate : hours) {
+                long at = day.atTime(candidate, minute).atZone(zone).toInstant().toEpochMilli();
+                for (long target : edges) {
+                    // The facts state whole minutes, so compare with the minute the writer was given.
+                    long given = target - Math.floorMod(target, 60_000L);
+                    if (Math.abs(at - given) <= tolerance) return true;
+                }
+            }
+        }
+        return false;
     }
 
     /** Conservative overlap bound, not a detector for remembered or otherwise unsupplied lyrics. */
@@ -440,11 +563,15 @@ final class SongReflectionTrial {
         return schema;
     }
 
-    private static JsonObject notesSchema() {
+    private static JsonObject notesSchema(StudyVersion version) {
         Map<String, JsonObject> fields = new LinkedHashMap<>();
         for (String key : List.of("attitude", "delivery", "artist_context", "title_idea")) fields.put(key, stringSchema());
         fields.put("lyric_echoes", arraySchema(objectSchema(Map.of("words", stringSchema(), "theme", stringSchema()))));
         fields.put("imagery", arraySchema(stringSchema()));
+        if (version == StudyVersion.V2) {
+            fields.put("connection", enumSchema(CONNECTIONS));
+            fields.put("intended_effect", stringSchema());
+        }
         return objectSchema(fields);
     }
 

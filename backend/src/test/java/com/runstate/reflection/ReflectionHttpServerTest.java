@@ -257,6 +257,9 @@ class ReflectionHttpServerTest {
             request.getAsJsonArray("songCandidates").get(1).getAsJsonObject().getAsJsonObject("musicContext")
                     .addProperty("trackTitle", "Changed song");
             assertError(rawPost(server, remoteHeaders(), request.toString()), 409, "request_id_conflict");
+            request = multiSongRequest();
+            request.getAsJsonArray("songCandidates").get(1).getAsJsonObject().addProperty("loadedAtFinish", true);
+            assertError(rawPost(server, remoteHeaders(), request.toString()), 409, "request_id_conflict");
             assertEquals(1, calls.get());
         }
     }
@@ -269,6 +272,8 @@ class ReflectionHttpServerTest {
                         + server.address().getPort() + "/health")).GET().build(), HttpResponse.BodyHandlers.ofString());
                 assertEquals(supported ? "1" : null,
                         health.headers().firstValue(ReflectionHttpServer.SONG_SELECTION_CAPABILITY_HEADER).orElse(null));
+                assertEquals(supported ? "1" : null, health.headers()
+                        .firstValue(ReflectionHttpServer.SONG_LOADED_AT_FINISH_CAPABILITY_HEADER).orElse(null));
                 assertEquals(supported ? 200 : 503, post(server, multiSongRequest().toString()).statusCode());
             }
         }
@@ -287,6 +292,10 @@ class ReflectionHttpServerTest {
         for (String field : List.of("lyrics", "listeningDuration", "runFacts")) {
             JsonObject request = multiSongRequest(); request.getAsJsonArray("songCandidates").get(0).getAsJsonObject()
                     .addProperty(field, "not accepted"); invalid.add(request);
+        }
+        for (String mark : List.of("\"true\"", "1", "null", "{}")) {
+            JsonObject request = multiSongRequest(); request.getAsJsonArray("songCandidates").get(0).getAsJsonObject()
+                    .add("loadedAtFinish", JsonParser.parseString(mark)); invalid.add(request);
         }
         for (String field : List.of("candidateId", "musicContext")) {
             JsonObject request = multiSongRequest(); request.getAsJsonArray("songCandidates").get(0).getAsJsonObject()
@@ -318,6 +327,18 @@ class ReflectionHttpServerTest {
                 "\"candidateId\":\"1\",\"candidateId\":\"3\"");
         assertThrows(ReflectionApiJson.InvalidJsonException.class, () -> ReflectionApiJson.parseRequest(
                 duplicateJsonKey.getBytes(StandardCharsets.UTF_8)));
+    }
+
+    @Test
+    void eachSongCarriesItsOwnLoadedAtFinishMarkAndUnmarkedIsTheDefault() throws Exception {
+        assertEquals(List.of(false, false), ReflectionApiJson.parseRequest(multiSongRequest().toString()
+                .getBytes(StandardCharsets.UTF_8)).songCandidates().stream()
+                .map(ReflectionContract.SongCandidate::loadedAtFinish).toList());
+        JsonObject request = multiSongRequest();
+        request.getAsJsonArray("songCandidates").get(1).getAsJsonObject().addProperty("loadedAtFinish", true);
+        assertEquals(List.of(false, true), ReflectionApiJson.parseRequest(request.toString()
+                .getBytes(StandardCharsets.UTF_8)).songCandidates().stream()
+                .map(ReflectionContract.SongCandidate::loadedAtFinish).toList());
     }
 
     @Test
@@ -1680,7 +1701,14 @@ class ReflectionHttpServerTest {
                     recording.addProperty("albumName", "Controlled album");
                     recording.addProperty("durationMillis", 180_000);
                     multi.getAsJsonArray("songCandidates").get(0).getAsJsonObject().add("recording", recording);
+                    // The finish-song mark must survive the same recipient scoping as preparation IDs.
+                    int loadedIndex = token.equals(DUMMY_DEMO_TOKEN) ? 0 : 1;
+                    multi.getAsJsonArray("songCandidates").get(loadedIndex).getAsJsonObject()
+                            .addProperty("loadedAtFinish", true);
                     assertEquals(200, rawPost(server, accessHeaders(token), multi.toString()).status());
+                    assertEquals(loadedIndex == 0 ? List.of(true, false) : List.of(false, true),
+                            deliveredCandidates.get().stream()
+                                    .map(ReflectionContract.SongCandidate::loadedAtFinish).toList());
                     assertEquals(handle, deliveredCandidates.get().get(0).songPreparationId());
                     assertEquals("1", deliveredCandidates.get().get(0).candidateId());
                     assertEquals(new ReflectionContract.SongRecording("Controlled album", 180_000),
