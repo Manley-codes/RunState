@@ -566,7 +566,13 @@ private suspend fun postReflectionRequest(
             // Never deserialize or display remote error bodies; they can echo credentials.
             throw ReflectionBridgeException(
                 if (hosted) "The hosted reflection service rejected the request (HTTP $responseCode)."
-                else "The local reflection service rejected the request (HTTP $responseCode)."
+                else "The local reflection service rejected the request (HTTP $responseCode).",
+                kind = when (responseCode) {
+                    502 -> ReflectionFailureKind.HTTP_502
+                    503 -> ReflectionFailureKind.HTTP_503
+                    504 -> ReflectionFailureKind.HTTP_504
+                    else -> ReflectionFailureKind.HTTP_OTHER
+                }
             )
         }
         val responseBody = connection.inputStream.use { readBoundedUtf8(it, hosted) }
@@ -574,7 +580,8 @@ private suspend fun postReflectionRequest(
             try {
                 parseReflectionResponse(responseBody, request.requestId, request.runId, expectedCueId, sentSongs, snippetsAllowed, fallbacksAllowed)
             } catch (invalid: ReflectionBridgeException) {
-                throw ReflectionBridgeException("The hosted reflection response was invalid.")
+                throw ReflectionBridgeException("The hosted reflection response was invalid.",
+                    kind = ReflectionFailureKind.INVALID_RESPONSE)
             }
         } else {
             parseReflectionResponse(responseBody, request.requestId, request.runId, expectedCueId, sentSongs, snippetsAllowed, fallbacksAllowed)
@@ -598,8 +605,13 @@ private suspend fun postReflectionRequest(
     } catch (cancelled: CancellationException) {
         throw cancelled
     } catch (unavailable: Exception) {
-        if (hosted) throw ReflectionBridgeException("The hosted reflection service is unavailable.")
-        throw ReflectionBridgeException("The local reflection service is unavailable.", unavailable)
+        val kind = when (unavailable) {
+            is java.net.SocketTimeoutException -> ReflectionFailureKind.TIMEOUT
+            is java.io.IOException -> ReflectionFailureKind.NETWORK
+            else -> ReflectionFailureKind.OTHER
+        }
+        if (hosted) throw ReflectionBridgeException("The hosted reflection service is unavailable.", kind = kind)
+        throw ReflectionBridgeException("The local reflection service is unavailable.", unavailable, kind)
     } finally {
         try { connection?.disconnect() } catch (_: RuntimeException) {
             // Cleanup must not replace a safe error or expose headers through a transport exception.
@@ -618,7 +630,8 @@ private fun readBoundedUtf8(input: InputStream, hosted: Boolean): String {
         if (total > MAX_RESPONSE_BYTES) {
             throw ReflectionBridgeException(
                 if (hosted) "The hosted reflection response was too large."
-                else "The local reflection response was too large."
+                else "The local reflection response was too large.",
+                kind = ReflectionFailureKind.INVALID_RESPONSE
             )
         }
         output.write(buffer, 0, read)
@@ -895,7 +908,18 @@ private fun JsonReader.requireString(): String {
     return nextString()
 }
 
-internal class ReflectionBridgeException(
+/** Debug timing labels only: each names a kind of failure, never a message, address, header or provider text. */
+internal enum class ReflectionFailureKind {
+    HTTP_502, HTTP_503, HTTP_504, HTTP_OTHER, TIMEOUT, NETWORK, INVALID_RESPONSE, OTHER
+}
+
+internal class ReflectionBridgeException @JvmOverloads constructor(
     message: String,
-    cause: Throwable? = null
+    cause: Throwable? = null,
+    val kind: ReflectionFailureKind = ReflectionFailureKind.OTHER
 ) : Exception(message, cause)
+
+/** Coroutine stack recovery can wrap our exception in an unlabeled copy, so look through its causes. */
+internal fun reflectionFailureKind(failure: Throwable): ReflectionFailureKind =
+    generateSequence(failure) { it.cause }.take(8).filterIsInstance<ReflectionBridgeException>()
+        .map { it.kind }.firstOrNull { it != ReflectionFailureKind.OTHER } ?: ReflectionFailureKind.OTHER

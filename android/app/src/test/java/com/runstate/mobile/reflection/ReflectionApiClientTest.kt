@@ -837,6 +837,35 @@ class ReflectionApiClientTest {
         })
     }
 
+    @Test fun hostedFailuresCarryOnlyABoundedKindForDebugTiming() = runBlocking {
+        val config = ReflectionConnectionConfig(
+            "https://reflection.example.com/api/reflections/candidates", "Q".repeat(43)
+        )
+        val request = reflectionRequestFromSavedRun(REQUEST_ID, completedRun(), completedTransitions())
+        fun failureFrom(factory: (URL) -> HttpURLConnection): ReflectionBridgeException =
+            assertThrows(ReflectionBridgeException::class.java) {
+                runBlocking { HostedReflectionHttpClient(config, factory).request(request) }
+            }
+        for ((status, kind) in listOf(502 to ReflectionFailureKind.HTTP_502, 503 to ReflectionFailureKind.HTTP_503,
+                504 to ReflectionFailureKind.HTTP_504, 429 to ReflectionFailureKind.HTTP_OTHER)) {
+            val response = FakeHttpsConnection(URL(config.endpoint), "{}", status)
+            assertEquals(kind, reflectionFailureKind(failureFrom { response }))
+        }
+        assertEquals(ReflectionFailureKind.INVALID_RESPONSE,
+            reflectionFailureKind(failureFrom { FakeHttpsConnection(URL(config.endpoint), "{bad json") }))
+        val slow = failureFrom { throw java.net.SocketTimeoutException(config.accessCode) }
+        assertEquals(ReflectionFailureKind.TIMEOUT, reflectionFailureKind(slow))
+        assertEquals(ReflectionFailureKind.NETWORK,
+            reflectionFailureKind(failureFrom { throw java.net.UnknownHostException(config.accessCode) }))
+        assertEquals(ReflectionFailureKind.OTHER,
+            reflectionFailureKind(failureFrom { throw IllegalStateException(config.accessCode) }))
+        // The label adds no detail: the message stays sanitized and no cause carries the credential.
+        assertEquals("The hosted reflection service is unavailable.", slow.message)
+        assertTrue(generateSequence(slow as Throwable) { it.cause }.none {
+            it.message?.contains(config.accessCode) == true
+        })
+    }
+
     @Test fun hostedOldServerOmitsSongCueAndNeverReceivesLocalPassageInstructions() = runBlocking {
         val request = knownSongRequest()
         val config = ReflectionConnectionConfig("https://reflection.example.com/api/reflections/candidates",
