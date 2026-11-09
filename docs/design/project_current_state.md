@@ -5,11 +5,12 @@ metadata:
   type: project
 ---
 
-## November 9 reflection integration — verified locally; merge commit pending
+## November 9 reflection integration — backend verified; combined app installed on Moto
 
 Manley created `codex/reflection-integration` from main1eb6f35 and started the no-commit merge of
-Claude's f3f53cd. Six shared files combined without text conflicts. Claude is paused; this milestone
-stops before deployment or phone installation. Manley retains all staging/commit/push operations.
+Claude's f3f53cd. Six shared files combined without text conflicts. Manley committed merge706b789,
+promoted/pushed master, and completed the manual Render deploy. Claude remains paused pending
+real-run feedback. Manley retains all staging/commit/push operations.
 
 The combined backend's recipient-scoping step copied song candidates through the older constructor,
 silently resetting `loadedAtFinish` to false. It now carries the original flag through with the
@@ -31,13 +32,25 @@ First full backend attempt hit a connection reset in the pre-existing oversized 
 an unchanged full rerun passed. No test was skipped or weakened. Evidence stays ignored under
 `backend/target/integration-check/` and `android/build/reflection-integration-check/`.
 
-No device actions, paid/provider calls, deployment, permanent signing changes or assistant Git
-mutations. Combined device/UI/outdoor playback checks have not run. Stage the two backend files and
-the two tracked project-note updates before the merge commit; leave unrelated `Claude outputs/` out.
-Next: inspect the actual Render branch/automatic-deployment settings before promoting/pushing to its
-deployment branch, then approve and verify backend rollout before installing the combined phone APK.
-No-clip ending quality still needs real listening; accounts/passwords and permanent signing remain
-separate decisions. Stop at this integration checkpoint.
+Rollout follow-up: Render uses master, Auto-Deploy Off, backend/Dockerfile and backend context.
+Manley reports deployment succeeded; public health returns200 with `X-RunState-Song-Loaded-At-Finish: 1`.
+Billing/plan were left untouched as requested. This proves service reachability and advertised
+capability, not successful paid generation or continued billing availability.
+
+Moto ZT422G8FT4 had65 completed runs and no unfinished run. Private database/preferences and previous
+APK backups preceded an in-place owner/debug update; signing certificates match. Four silent phone
+checks passed: hidden owner-tool presentation, offline privacy entry/back navigation, and failed-
+reflection retry rendering. They use isolated callbacks, not real provider/audio actions. Installed
+APK SHA256 matches the verified combined build. Main app reopened normally after removal of only the
+temporary test package. All65 runs, all12 logical table hashes/counts and allfive preference files
+match the baseline; SQLite integrity is OK with zero foreign-key violations. Evidence/backups remain
+gitignored in `android/build/reflection-integration-check/moto/`; do not publish private snapshots.
+
+No paid generation, deliberate music playback, actual run creation/deletion, permanent signing change
+or assistant Git mutation. Phone presentation checks do not prove outdoor GPS/Bluetooth or musical
+quality. Next is the user's real-run listening check: mile announcements, snippet beginning/ending,
+and whether a same-song/no-clip reflection lands naturally. Accounts/passwords and permanent signing
+remain separate decisions. Stop at this rollout checkpoint; only existing notes changed afterward.
 
 ## November 9 public-release journey — update retention verified; offline reflection status repaired
 
