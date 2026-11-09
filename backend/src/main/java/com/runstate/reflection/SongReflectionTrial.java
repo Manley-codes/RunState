@@ -44,7 +44,9 @@ final class SongReflectionTrial {
 
     /** v1 is the accepted baseline writer. v2 adds own-words use of notes and never shrinking the run. */
     enum WriterVersion {
-        V1("song-writer-trial-v1.txt"), V2("song-writer-trial-v2.txt");
+        V1("song-writer-trial-v1.txt"), V2("song-writer-trial-v2.txt"),
+        /** Accepted v1 with only its two clip sentences changed, for a reflection that no clip follows. */
+        V1_NOCLIP("song-writer-trial-v1-noclip.txt");
         final String prompt;
         WriterVersion(String prompt) { this.prompt = prompt; }
     }
