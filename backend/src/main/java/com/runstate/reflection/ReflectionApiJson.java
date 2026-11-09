@@ -111,8 +111,8 @@ final class ReflectionApiJson {
             for (JsonElement element : array.getAsJsonArray()) {
                 if (!element.isJsonObject()) throw new IllegalArgumentException("A song candidate must be an object");
                 JsonObject candidate = element.getAsJsonObject();
-                requireFields(candidate, Set.of("candidateId", "musicContext", "songPreparationId", "recording"),
-                        Set.of("candidateId", "musicContext"), "song candidate");
+                requireFields(candidate, Set.of("candidateId", "musicContext", "songPreparationId", "recording",
+                        "loadedAtFinish"), Set.of("candidateId", "musicContext"), "song candidate");
                 ReflectionContract.SongRecording recording = null;
                 if (candidate.has("recording")) {
                     JsonObject value = requiredObject(candidate, "recording");
@@ -120,10 +120,18 @@ final class ReflectionApiJson {
                     recording = new ReflectionContract.SongRecording(value.has("albumName")
                             ? requiredString(value, "albumName") : null, requiredLong(value, "durationMillis"));
                 }
+                boolean loadedAtFinish = false;
+                if (candidate.has("loadedAtFinish")) {
+                    JsonElement value = candidate.get("loadedAtFinish");
+                    if (!value.isJsonPrimitive() || !value.getAsJsonPrimitive().isBoolean()) {
+                        throw new IllegalArgumentException("loadedAtFinish requires an explicit boolean");
+                    }
+                    loadedAtFinish = value.getAsBoolean();
+                }
                 candidates.add(new ReflectionContract.SongCandidate(requiredString(candidate, "candidateId"),
                         optionalMusic(candidate, "musicContext"),
                         candidate.has("songPreparationId") ? requiredString(candidate, "songPreparationId") : null,
-                        recording));
+                        recording, loadedAtFinish));
             }
         }
         boolean allowSnippets = false;

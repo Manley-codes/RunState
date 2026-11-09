@@ -39,11 +39,19 @@ public final class ReflectionContract {
         @Override public String toString() { return "SongPreparationRequest[identity=redacted]"; }
     }
 
-    /** One distinct, observed song eligible for selection, without invented listening duration. */
+    /**
+     * One distinct, observed song eligible for selection, without invented listening duration.
+     * loadedAtFinish marks the song the player still had loaded when the run ended. A clip of it would
+     * play just before the same song carries on, so that song never gets one.
+     */
     public record SongCandidate(String candidateId, MusicContext musicContext, String songPreparationId,
-                                SongRecording recording) {
+                                SongRecording recording, boolean loadedAtFinish) {
         public SongCandidate(String candidateId, MusicContext musicContext, String songPreparationId) {
             this(candidateId, musicContext, songPreparationId, null);
+        }
+        public SongCandidate(String candidateId, MusicContext musicContext, String songPreparationId,
+                             SongRecording recording) {
+            this(candidateId, musicContext, songPreparationId, recording, false);
         }
         public SongCandidate {
             require(candidateId != null && candidateId.matches("(?:0|[1-9][0-9]{0,9})"),
