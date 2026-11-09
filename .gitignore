@@ -35,6 +35,14 @@ target/
 ### Backend-local Maven dependency cache ###
 /backend/.m2/
 
+### Private Android signing material ###
+*.jks
+*.keystore
+*.p12
+*.pfx
+keystore.properties
+signing.properties
+
 RunState_intro.html
 docs/LEARNING_AND_COLLABORATION.md
 

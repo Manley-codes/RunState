@@ -5,6 +5,40 @@ metadata:
   type: project
 ---
 
+## November 8 signed Android package preparation — verified locally; no production identity created
+
+Privacy summary is committed at a77b908. Manley requested the next release task with accounts/
+passwords paused and Claude's reflection work separate. The next bounded step prepares package
+signing/versioning; it does not choose a permanent signing identity or publish an app.
+
+`runstate.signRelease=true` explicitly enables environment-supplied signing credentials and
+requires validated `runstate.versionCode`/`runstate.versionName`. All four signing values and an
+absolute readable keystore path are required. Configuration-cache use, --scan and --debug are
+rejected before this build script reads credentials; instructions also use --no-daemon. This
+is not a guarantee against Gradle startup logging before the guard. Standard builds retain
+version 1/1.0, owner debug signing and unsigned release output. Private signing files are now
+Git-ignored; the existing README documents usage, artifact inspection and key/update decisions.
+
+20 configuration checks pass, including malformed/overflow versions, missing signing inputs,
+unsafe cache use, path checks and unsigned builds ignoring signing environment variables.
+A disposable RSA key signed rehearsal APKs 101/102 and Bundle 101. Signature/version/alignment
+checks pass; both APKs and Bundle use the same certificate. Generated passwords were absent from
+decompressed package entries and normal signing logs. The disposable key was deleted and process
+environment restored. Self-signed Bundle verification warnings are expected for this test identity.
+
+A fresh offline ReleasePackageCheck emulator installed 101, retained the Light appearance choice
+through an in-place update to 102, denied run-as for the non-debuggable release, and rejected a
+downgrade to 101. No real run or database migration was exercised. The emulator is stopped.
+Final normal owner APK, unsigned release APK/Bundle, 881 release unit tests and full lint pass
+(0 errors, 70 existing warnings, 8 hints). Default versions/public flags and owner debug certificate
+were checked; stale temporary signed outputs were removed after hash comparison. Ignored evidence:
+`android/build/release-package-check/`. Independent source review and diff checks pass.
+
+No new tracked files, phone update, paid/provider calls, Git mutation or publication. Claude's
+installed APK remains intact. Permanent signing-key ownership/backup, Play/direct-download signing
+strategy, provider certificate registration and final real-data installation/update proof remain.
+This is package preparation, not overall release readiness. Stop at review/commit checkpoint.
+
 ## November 8 in-app privacy summary — verified locally; phone integration pending
 
 Manley confirmed the GitHub pass and requested proceeding without repeated hosted checks.

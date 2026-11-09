@@ -97,6 +97,54 @@ console tests, backend tests/build, and Android debug and release unit-test/buil
 Release checks also run Android Lint. These checks do not replace real-run testing or certify
 a signed production release.
 
+<details>
+<summary>Preparing a signed Android package</summary>
+
+Ordinary builds keep the existing development version (`1` / `1.0`); release outputs remain
+unsigned unless signing is explicitly enabled. Signing preparation does not publish the app.
+
+For signing, supply these environment variables in the local build process:
+
+| Variable | Value |
+|---|---|
+| `RUNSTATE_RELEASE_STORE_FILE` | Absolute path to the private keystore |
+| `RUNSTATE_RELEASE_STORE_PASSWORD` | Keystore password |
+| `RUNSTATE_RELEASE_KEY_ALIAS` | Signing-key alias |
+| `RUNSTATE_RELEASE_KEY_PASSWORD` | Signing-key password |
+
+Keep the permanent keystore outside the repository with a protected backup. Load passwords
+from a password manager or a hidden prompt, not literal commands, tracked files or chat.
+Signing files are ignored by Git, but that does not protect a file already committed.
+
+From `android/`, after setting those variables, an example package build is:
+
+```powershell
+.\gradlew.bat --no-daemon --no-configuration-cache :app:assembleRelease :app:bundleRelease `
+  "-Prunstate.signRelease=true" "-Prunstate.versionCode=2" "-Prunstate.versionName=1.0.0"
+```
+
+Choose the actual version before running this example. `versionCode` is Android's update
+counter (1–2100000000); increase it for every published release. `versionName` is the displayed
+label, such as `1.0.0-beta.1`. The build validates the format but cannot know the highest version
+already distributed. Signed builds require both values and complete signing information;
+configuration caching, `--scan` and `--debug` are rejected. Clear signing variables afterward.
+Avoid verbose logging entirely: Gradle can log environment details before these checks run.
+
+Outputs are `android/app/build/outputs/apk/release/app-release.apk` and
+`android/app/build/outputs/bundle/release/app-release.aab`. Use the outputs from that invocation;
+older signed files can remain beside newer unsigned files. Inspect the certificate and version
+before distribution. A different signing certificate cannot simply replace the current owner
+debug app; never uninstall that app to work around a mismatch and lose its history. The permanent
+key/backup, Play versus direct-download signing strategy, provider registration and actual
+installation/update checks are separate release decisions. Temporary rehearsal keys are never
+production keys.
+
+References: [Android signing](https://developer.android.com/studio/publish/app-signing),
+[versioning](https://developer.android.com/studio/publish/versioning), and
+[Gradle cache security](https://docs.gradle.org/current/userguide/configuration_cache.html#config_cache:security).
+
+</details>
+
 ## Design and engineering record
 
 **[Start with the documentation guide →](docs/README.md)**
