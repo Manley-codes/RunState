@@ -77,6 +77,7 @@ internal class SpotifyAppRemoteConnection internal constructor(
     private var artworkKey: Pair<String?, String?>? = null
     private var artworkRequest = 0L
     private var artwork: Bitmap? = null
+    private var loadingArtwork = false
 
     init { publishLivePlayer() }
 
@@ -152,19 +153,25 @@ internal class SpotifyAppRemoteConnection internal constructor(
     /** Explicit disconnect also removes automatic reconnection permission. */
     fun disconnect() = onMain {
         preferences.edit().remove("authorization_pending").remove("authorized_client").apply()
+        artworkKey = null
+        artwork = null
+        loadingArtwork = false
+        artworkRequest++
         sessions.toList().forEach { it.cancelPendingTrackLoad() }
         background = true
-        if (sessions.isEmpty()) clearConnection(SpotifyRemoteConnectionStatus.DISCONNECTED) else disconnectIfIdle()
+        if (sessions.isEmpty()) clearConnection(SpotifyRemoteConnectionStatus.DISCONNECTED) else publishLivePlayer()
     }
 
     private fun disconnectIfIdle() {
         // Spotify authorization temporarily backgrounds this Activity. Let that explicit
         // attempt finish and remember its result before releasing the idle connection.
         if (background && sessions.isEmpty() && !manualCommands.busy && !interactiveConnecting)
-            clearConnection(SpotifyRemoteConnectionStatus.DISCONNECTED, mutableState.value.failureCategory)
+            clearConnection(SpotifyRemoteConnectionStatus.DISCONNECTED, mutableState.value.failureCategory,
+                keepArtwork = hasGrant())
     }
 
-    private fun clearConnection(status: SpotifyRemoteConnectionStatus, failureCategory: String? = null) {
+    private fun clearConnection(status: SpotifyRemoteConnectionStatus, failureCategory: String? = null,
+                                keepArtwork: Boolean = false) {
         generation++
         interactiveConnecting = false
         playerSubscription?.cancel(); playerSubscription = null
@@ -174,10 +181,16 @@ internal class SpotifyAppRemoteConnection internal constructor(
         player = null
         playerRevision++
         playerReceivedAt = 0L
-        artworkKey = null
+        // Keep a completed image for a normal reconnect. It can only be displayed after a fresh
+        // player report confirms the same recording and image URI in updateArtwork().
+        if (!keepArtwork || artwork == null || artworkKey?.first.isNullOrBlank() ||
+            artworkKey?.second.isNullOrBlank()) {
+            artworkKey = null
+            artwork = null
+        }
         artworkRequest++
-        artwork = null
         manualMessage = null
+        loadingArtwork = false
         capabilitiesKnown = false
         onDemand = false
         refreshPending = false
@@ -196,7 +209,7 @@ internal class SpotifyAppRemoteConnection internal constructor(
         // A retry must not replace a transport while a tap or passage is still settling.
         // Its existing completion/timeout releases ownership; the next explicit retry is safe.
         if (sessions.isNotEmpty() || manualCommands.busy) return
-        clearConnection(SpotifyRemoteConnectionStatus.CONNECTING)
+        clearConnection(SpotifyRemoteConnectionStatus.CONNECTING, keepArtwork = !interactive && hasGrant())
         interactiveConnecting = interactive
         val attempt = generation
         val params = ConnectionParams.Builder(clientId)
@@ -282,8 +295,14 @@ internal class SpotifyAppRemoteConnection internal constructor(
     }
 
     private fun publishLivePlayer() {
-        val ready = remote?.isConnected == true && state.value.status == SpotifyRemoteConnectionStatus.READY
-        val current = player.takeIf { ready }
+        val authorized = hasGrant()
+        val linked = authorized && remote?.isConnected == true
+        val status = state.value.status
+        val ready = linked && status == SpotifyRemoteConnectionStatus.READY
+        // The foreground observer reconnects automatically after a normal idle disconnect.
+        val connecting = status == SpotifyRemoteConnectionStatus.CONNECTING ||
+            (status == SpotifyRemoteConnectionStatus.DISCONNECTED && authorized && background)
+        val current = player.takeIf { linked && (ready || connecting) }
         val track = current?.track
         val owned = sessions.isNotEmpty() || manualCommands.blocked
         val controls = ready && track != null && !owned && !manualCommands.busy
@@ -299,9 +318,9 @@ internal class SpotifyAppRemoteConnection internal constructor(
         }
         mutableLivePlayer.value = SpotifyLivePlayerState(
             connected = ready,
-            connecting = state.value.status == SpotifyRemoteConnectionStatus.CONNECTING,
-            canConnect = configured && !ready && state.value.status != SpotifyRemoteConnectionStatus.CONNECTING,
-            trackUri = track?.uri,
+            connecting = connecting,
+            canConnect = configured && !ready && !connecting && state.value.failureCategory != "NotLoggedInException",
+            trackUri = track?.uri?.takeIf { ready },
             title = track?.name?.takeIf { it.isNotBlank() },
             artist = track?.artists?.mapNotNull { it.name?.takeIf(String::isNotBlank) }
                 ?.joinToString(", ")?.takeIf(String::isNotBlank) ?: track?.artist?.name,
@@ -317,7 +336,8 @@ internal class SpotifyAppRemoteConnection internal constructor(
             // SDK 0.8.0 has no pause/resume restriction field; canPlayOnDemand applies to choosing a track.
             canTogglePlayback = controls,
             busy = manualCommands.busy || owned,
-            unavailableMessage = message
+            unavailableMessage = message,
+            loadingArtwork = track != null && loadingArtwork
         )
     }
 
@@ -327,22 +347,28 @@ internal class SpotifyAppRemoteConnection internal constructor(
         if (artworkKey == key) return
         artworkKey = key
         artwork = null
+        loadingArtwork = false
         val request = ++artworkRequest
         val connected = remote?.takeIf { it.isConnected } ?: return
         val imageUri = track?.imageUri?.takeIf { !it.raw.isNullOrBlank() } ?: return
         val attempt = generation
+        loadingArtwork = true
         try {
             connected.imagesApi.getImage(imageUri, Image.Dimension.MEDIUM)
                 .setResultCallback { image -> onMain {
                     if (generation == attempt && remote === connected && artworkRequest == request && artworkKey == key) {
                         artwork = image
+                        loadingArtwork = false
                         publishLivePlayer()
                     }
                 } }.setErrorCallback { onMain {
                     // Keep the honest empty-art fallback. Never reuse another song's picture.
-                    if (generation == attempt && artworkRequest == request) publishLivePlayer()
+                    if (generation == attempt && artworkRequest == request) {
+                        loadingArtwork = false
+                        publishLivePlayer()
+                    }
                 } }
-        } catch (_: RuntimeException) { /* Metadata/transport still work when artwork is unavailable. */ }
+        } catch (_: RuntimeException) { loadingArtwork = false }
     }
 
     /** Synchronous native audio boundary; each owner releases only its own lease. */
@@ -505,7 +531,9 @@ internal class SpotifyAppRemoteConnection internal constructor(
             val uri = canonicalSpotifyTrackUri(track.uri) ?: return null
             val age = (SystemClock.elapsedRealtime() - playerReceivedAt).coerceAtLeast(0L)
             if (age > 5_000L) return null
-            val nativeState = try { native.snapshot()?.takeIf { it.mediaId == uri } } catch (_: RuntimeException) { null }
+            val nativeReport = try { native.snapshot() } catch (_: RuntimeException) { null }
+            containEarlyNativeReport(nativeReport)
+            val nativeState = nativeReport?.takeIf { it.mediaId == uri }
             if (nativeSessionKey == null && nativeState != null) nativeSessionKey = nativeState.sessionKey
             val stableMetadata = metadata.getOrPut(uri) { (nativeState?.title ?: track.name) to
                 (nativeState?.artist ?: track.artists?.mapNotNull { it.name }?.joinToString(", ")?.takeIf { it.isNotBlank() }
@@ -564,15 +592,31 @@ internal class SpotifyAppRemoteConnection internal constructor(
         override fun pause() {
             if (!currentConnection()) { pauseNativeCleanup(); return }
             val load = pending?.takeIf { player?.track?.uri == it.target }
-            if (load != null) load.pauseSent = true
+            if (load == null) {
+                command { connected.playerApi.pause() }
+                return
+            }
             owned()
-            connected.playerApi.pause().setResultCallback { onMain {
-                if (currentConnection()) {
-                    if (pending === load) load?.pauseAcknowledged = true
-                    player?.let(::observe)
-                    refreshPlayer(force = true)
-                }
-            } }.setErrorCallback { onMain { if (pending === load) load?.pauseSent = false } }
+            // An SDK event can contain the load before the controller's next poll.
+            if (!load.pauseSent) pauseLoadingTrack(load)
+        }
+
+        private fun pauseLoadingTrack(load: SpotifyPendingTrackLoad) {
+            load.pauseSent = true
+            load.pauseAcknowledged = false
+            load.pauseSentAfterLoadAcknowledgement = load.loadAcknowledged
+            try {
+                connected.playerApi.pause().setResultCallback { onMain {
+                    if (currentConnection() && pending === load) {
+                        load.pauseAcknowledged = true
+                        player?.let(::observe)
+                        refreshPlayer(force = true)
+                    }
+                } }.setErrorCallback { onMain { if (pending === load) load.pauseSent = false } }
+            } catch (_: RuntimeException) {
+                // A disconnect or rejected command on the subscription thread must not crash it.
+                load.pauseSent = false
+            }
         }
         override fun seekTo(positionMillis: Long) = command { connected.playerApi.seekTo(positionMillis) }
         override fun play() = command { connected.playerApi.resume() }
@@ -586,6 +630,11 @@ internal class SpotifyAppRemoteConnection internal constructor(
                 if (currentConnection() && pending === load) {
                     load.loadAcknowledged = true
                     player?.let(::observe)
+                    if (pending === load && !load.pauseSent && !load.cancelled) {
+                        // The SDK can acknowledge play before delivering updated track metadata.
+                        val observed = try { native.snapshot() } catch (_: RuntimeException) { null }
+                        containEarlyNativeReport(observed)
+                    }
                     refreshPlayer(force = true)
                 }
             } }.setErrorCallback { onMain {
@@ -619,23 +668,27 @@ internal class SpotifyAppRemoteConnection internal constructor(
                 SpotifyLoadAction.WAIT -> Unit
             }
         }
+        private fun containEarlyNativeReport(report: SongPassageSnapshot?) {
+            val load = pending ?: return
+            val lastSdkState = player ?: return
+            val duration = admittedDurations[load.target] ?: return
+            if (load.shouldPauseFromNative(report, nativeSessionKey, duration, lastSdkState.track?.uri,
+                    lastSdkState.isPaused, lastSdkState.playbackPosition, SystemClock.elapsedRealtime())) {
+                // Only the evidence is native. All commands stay on our live, leased SDK connection.
+                pauseLoadingTrack(load)
+            }
+        }
+
         fun observe(next: PlayerState) {
             val load = pending ?: return
             if (!currentConnection()) { pending = null; return }
-            when (load.observe(next.track?.uri, next.isPaused, next.playbackPosition, SystemClock.elapsedRealtime())) {
+            val track = next.track
+            val duration = admittedDurations[load.target]
+            val verified = track != null && track.uri == load.target && duration != null &&
+                sameSpotifyRecordingDuration(duration, track.duration, track.uri) && next.playbackSpeed == 1f
+            when (load.observe(track?.uri, next.isPaused, next.playbackPosition, SystemClock.elapsedRealtime(), verified)) {
                 SpotifyLoadAction.RELEASE -> pending = null
-                SpotifyLoadAction.PAUSE_TARGET -> {
-                    // A late SDK play result still belongs to this cancelled load. Never pause another track.
-                    load.pauseSent = true
-                    load.pauseAcknowledged = false
-                    connected.playerApi.pause().setResultCallback { onMain {
-                        if (currentConnection() && pending === load) {
-                            load.pauseAcknowledged = true
-                            player?.let(::observe)
-                            refreshPlayer(force = true)
-                        }
-                    } }.setErrorCallback { onMain { if (pending === load) load.pauseSent = false } }
-                }
+                SpotifyLoadAction.PAUSE_TARGET -> pauseLoadingTrack(load)
                 SpotifyLoadAction.WAIT -> Unit
             }
         }
@@ -703,11 +756,33 @@ internal class SpotifyPendingTrackLoad(val target: String, val previous: String?
     var pauseSent = false
     var pauseAcknowledged = false
     var loadAcknowledged = false
+    var pauseSentAfterLoadAcknowledgement = false
 
-    fun observe(uri: String?, paused: Boolean, position: Long, now: Long): SpotifyLoadAction {
+    /** A fresh Android observation may arrive first, while the SDK still shows the original paused song. */
+    fun shouldPauseFromNative(report: SongPassageSnapshot?, sessionKey: Any?, expectedDuration: Long,
+        sdkUri: String?, sdkPaused: Boolean, sdkPosition: Long, now: Long): Boolean {
+        if (cancelled || pauseSent || report == null || sessionKey == null || sdkUri != previous ||
+            !sdkPaused || abs(sdkPosition - previousPosition) > 1_500L) return false
+        val age = report.positionUpdateAgeMillis ?: return false
+        return report.sessionKey == sessionKey && report.sourcePackage == "com.spotify.music" &&
+            report.mediaId == target && report.playback == PassagePlayback.PLAYING &&
+            sameSpotifyRecordingDuration(expectedDuration, report.durationMillis, target) &&
+            age in 0..(now - started).coerceAtLeast(0L) &&
+            observe(target, false, report.positionMillis, now, verifiedEntrance = true) == SpotifyLoadAction.PAUSE_TARGET
+    }
+
+    fun observe(uri: String?, paused: Boolean, position: Long, now: Long,
+        verifiedEntrance: Boolean = false): SpotifyLoadAction {
         if (uri == target) {
             if (paused && loadAcknowledged && pauseAcknowledged) return SpotifyLoadAction.RELEASE
-            if (!cancelled) return SpotifyLoadAction.WAIT
+            if (!cancelled) {
+                val nearStart = position in 0..((now - started).coerceAtLeast(0L) + 1_500L)
+                // Contain the very first verified PLAYING report, without waiting for a polling tick.
+                // If play completed after that first pause, allow one pause against the completed load.
+                val needsPause = !pauseSent || loadAcknowledged && pauseAcknowledged && !pauseSentAfterLoadAcknowledgement
+                return if (verifiedEntrance && nearStart && !paused && needsPause) SpotifyLoadAction.PAUSE_TARGET
+                    else SpotifyLoadAction.WAIT
+            }
             if (position >= 0L && position > (now - started).coerceAtLeast(0L) + 1_500L) return SpotifyLoadAction.RELEASE
             // A delayed play may follow an earlier acknowledged pause. Re-contain that
             // exact owned entrance once, then wait for the new pause acknowledgement.

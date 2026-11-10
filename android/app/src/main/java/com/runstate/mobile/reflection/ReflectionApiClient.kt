@@ -76,7 +76,9 @@ internal data class CompletedRunEvidence(
     val songSelectionMethod: String? = null,
     val songSnippetLookupAllowed: Boolean = false,
     /** Local validated playback coordinates; never sent as run facts or model context. */
-    val songPlaybackReceipt: ReflectionSongSnippet? = null
+    val songPlaybackReceipt: ReflectionSongSnippet? = null,
+    /** Curated plans exist before a response. Only the server's acknowledgement authorizes replay. */
+    val acknowledgedCuratedCueId: String? = null
 )
 
 internal data class ReflectionSongCandidate(
@@ -544,6 +546,7 @@ private suspend fun postReflectionRequest(
         evidence.remove("songSelectionMethod")
         evidence.remove("songSnippetLookupAllowed")
         evidence.remove("songPlaybackReceipt")
+        evidence.remove("acknowledgedCuratedCueId")
         val sentSongs = request.evidence.songCandidates.orEmpty().takeIf { includeSharedMusic && includeSongSelection }.orEmpty()
         if (sentSongs.isNotEmpty()) {
             json.add("songCandidates", gson.toJsonTree(sentSongs.map { candidate ->

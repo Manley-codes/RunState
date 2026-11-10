@@ -2,15 +2,12 @@ package com.runstate.mobile.ui
 
 import com.runstate.mobile.data.local.DistanceUnit
 import com.runstate.mobile.data.local.MetricSource
-import com.runstate.mobile.data.local.MusicObservationKind
-import com.runstate.mobile.data.local.MusicPlaybackState
 import com.runstate.mobile.data.local.PostRunEffort
 import com.runstate.mobile.data.local.PreRunEnergy
 import com.runstate.mobile.data.local.ReflectionBranch
 import com.runstate.mobile.data.local.ReflectionStatus
 import com.runstate.mobile.data.local.RunEntity
 import com.runstate.mobile.data.local.RunIntention
-import com.runstate.mobile.data.local.RunMusicObservationEntity
 import com.runstate.mobile.data.local.RunReflectionEntity
 import com.runstate.mobile.data.local.RunTransitionEntity
 import com.runstate.mobile.data.local.RunTransitionType
@@ -26,8 +23,6 @@ import com.runstate.mobile.weather.RunWeatherSnapshot
 import com.runstate.mobile.run.RunMetrics
 import com.runstate.mobile.run.RunSplitCalculator
 import java.time.Instant
-import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -294,48 +289,16 @@ class RunMetricsDisplayTest {
     }
 
     @Test
-    fun `optional music read failure preserves saved run and reflection history`() = runBlocking {
+    fun `history keeps the saved text without a verified song selection`() {
         val run = sharingHistoryRun()
-        val reflection = musicSnapshotReflection("{\"state\":\"UNKNOWN\"}").copy(
-            status = ReflectionStatus.READY,
-            selectedBranch = ReflectionBranch.FEELING_GOOD,
-            postRunEnergy = ReflectionBranch.FEELING_GOOD,
-            text = "Your saved reflection.\nExactly as delivered.",
-            finalizedAtEpochMillis = historyStart + 607_000L,
-            isTestData = false
-        )
-        val expected = historyItemFor(run, emptyList(), reflection)
-        val item = historyItemWithOptionalMusic(run, emptyList(), reflection) {
-            throw IllegalStateException("Unavailable music store")
-        }
-
-        assertEquals(expected.copy(musicObservationsUnavailable = true), item)
-        assertTrue(item.musicObservationsUnavailable)
-        assertNull(item.lastObservedMedia)
-    }
-
-    @Test
-    fun `empty music result is unknown evidence rather than a loading failure`() = runBlocking {
-        val item = historyItemWithOptionalMusic(sharingHistoryRun(), emptyList(), null) { emptyList() }
-        assertFalse(item.musicObservationsUnavailable)
-        assertEquals(0, item.musicObservationCount)
-    }
-
-    @Test
-    fun `history does not query optional music for an opted out run`() = runBlocking {
-        val run = historyRun(finish = historyStart + 600_000L, historyComplete = false)
-        val item = historyItemWithOptionalMusic(run, emptyList(), null) {
-            throw AssertionError("Opted-out music must not be read")
-        }
-        assertEquals(historyItemFor(run, emptyList(), null), item)
-    }
-
-    @Test(expected = CancellationException::class)
-    fun `leaving history cancels its music read instead of showing unavailable data`() = runBlocking {
-        historyItemWithOptionalMusic(sharingHistoryRun(), emptyList(), null) {
-            throw CancellationException("History closed")
-        }
-        Unit
+        val reflection = musicSnapshotReflection("""{"state":"MUSIC","provenance":"MEDIA_SESSION_PARTIAL",
+            "trackTitle":"Last song","artistName":"Observed artist"}""").copy(
+            status = ReflectionStatus.READY, selectedBranch = ReflectionBranch.FEELING_GOOD,
+            postRunEnergy = ReflectionBranch.FEELING_GOOD, text = "Exact saved reflection.",
+            finalizedAtEpochMillis = historyStart + 607_000L, isTestData = false)
+        val item = historyItemFor(run, emptyList(), reflection)
+        assertEquals("Exact saved reflection.", item.reflectionText)
+        assertNull(item.reflectionSong)
     }
 
     @Test
@@ -497,80 +460,18 @@ class RunMetricsDisplayTest {
     }
 
     @Test
-    fun `history labels music as partial observations under the saved run`() {
-        val run = historyRun(
-            finish = historyStart + 600_000L,
-            historyComplete = true
-        ).copy(musicObservationRequested = true)
-        val first = RunMusicObservationEntity(
-            runId = historyRunId,
-            sequenceNumber = 1,
-            observationKey = "first",
-            observedAtEpochMillis = historyStart + 1_000L,
-            elapsedRealtimeNanos = 1_000_000_000L,
-            sourcePackage = "com.example.player",
-            title = "First title",
-            artist = "Artist",
-            playbackState = MusicPlaybackState.PLAYING,
-            eventKind = MusicObservationKind.SESSION_SNAPSHOT
-        )
-        val second = first.copy(
-            sequenceNumber = 2,
-            observationKey = "second",
-            title = "Later title"
-        )
-
-        val item = historyItemFor(run, emptyList(), null, listOf(second, first))
-
-        assertEquals(true, item.musicObservationRequested)
-        assertEquals(2, item.musicObservationCount)
-        assertEquals("Later title — Artist · com.example.player", item.lastObservedMedia)
-        val spotify = historyItemFor(run, emptyList(), null,
-            listOf(second.copy(sourcePackage = "com.spotify.music")))
-        assertEquals("Later title — Artist · Spotify", spotify.lastObservedMedia)
-        assertEquals("Music observations kept on this phone", item.reflectionMusicSummary)
-        val noObservation = historyItemFor(run, emptyList(), null)
-        assertEquals(0, noObservation.musicObservationCount)
-        assertNull(noObservation.lastObservedMedia)
-    }
-
-    @Test
-    fun `history music context summary reads frozen evidence rather than latest local report`() {
+    fun `recap distinguishes local or unknown music context from a selected song`() {
         val run = sharingHistoryRun()
-        val reflection = musicSnapshotReflection("""{"state":"MUSIC","trackTitle":"Original title",
-            "artistName":"Original artist","artistDescription":null,"provenance":"MEDIA_SESSION_PARTIAL"}""")
-            .copy(status = ReflectionStatus.FAILED)
-        val later = RunMusicObservationEntity(
-            runId = historyRunId, sequenceNumber = 3, observationKey = "later-local-only",
-            observedAtEpochMillis = historyStart + 2_000L, elapsedRealtimeNanos = 2_000_000_000L,
-            sourcePackage = "com.example.player", title = "Later title", artist = "Later artist",
-            playbackState = MusicPlaybackState.PAUSED, eventKind = MusicObservationKind.METADATA_CHANGED
-        )
-
-        val item = historyItemFor(run, emptyList(), reflection, listOf(later))
-        val summary = requireNotNull(item.reflectionMusicSummary)
-        assertEquals("Later title — Later artist · com.example.player", item.lastObservedMedia)
-        assertEquals("One Spotify report included in reflection context · partial", summary)
-        assertFalse(summary.contains("Original title"))
-        assertFalse(summary.contains("Later title"))
-        assertEquals(summary,
-            historyItemFor(run, emptyList(), reflection, emptyList()).reflectionMusicSummary)
-    }
-
-    @Test
-    fun `history frozen unknown context stays unknown despite local metadata`() {
-        val run = sharingHistoryRun()
-        val reflection = musicSnapshotReflection("""{"state":"UNKNOWN","trackTitle":null,
-            "artistName":null,"artistDescription":null,"provenance":null}""")
-        val observed = RunMusicObservationEntity(
-            runId = historyRunId, sequenceNumber = 1, observationKey = "local-title",
-            observedAtEpochMillis = historyStart + 1_000L, elapsedRealtimeNanos = null,
-            sourcePackage = "com.spotify.music", title = "Local title", artist = "Local artist",
-            playbackState = MusicPlaybackState.PLAYING, eventKind = MusicObservationKind.SESSION_SNAPSHOT
-        )
-
+        val unknown = musicSnapshotReflection("""{"state":"UNKNOWN"}""")
+        val observed = musicSnapshotReflection("""{"state":"MUSIC","trackTitle":"Original title",
+            "artistName":"Original artist","provenance":"MEDIA_SESSION_PARTIAL"}""").copy(status = ReflectionStatus.FAILED)
         assertEquals("No Spotify report included in reflection context",
-            historyItemFor(run, emptyList(), reflection, listOf(observed)).reflectionMusicSummary)
+            historyItemFor(run, emptyList(), unknown).reflectionMusicSummary)
+        assertEquals("One Spotify report included in reflection context · partial",
+            historyItemFor(run, emptyList(), observed).reflectionMusicSummary)
+        assertEquals("Music observations kept on this phone",
+            historyItemFor(run.copy(musicReflectionSharingAllowed = false), emptyList(), observed).reflectionMusicSummary)
+        assertNull(historyItemFor(run, emptyList(), observed).reflectionSong)
     }
 
     @Test

@@ -5,6 +5,14 @@ metadata:
   type: project
 ---
 
+## November 10 outdoor run and reflection playback
+
+Manley accepted the written music reflection after his two-mile GPS run. Keep it as the quality reference. He could hear the connection to the excerpt, though its mood felt less convincing to him. Revisit excerpt selection only with more listening evidence. He deferred a decision on whether a mile announcement should continue when he presses Pause near the finish.
+
+The saved reflection selected “Novacane” by Frank Ocean. “Violent Crimes” by Kanye West was the last observed song. The updated History code reproduced the stored Novacane excerpt from 87,750 through 92,950 ms using the actual run backup. A mismatched cue fell back to voice alone. Expanding a run in the owner build plays the saved words and eligible excerpt. Public History offers **Replay reflection**. Both use the original saved selection and respect the run’s music permissions.
+
+Completion and History now pause Spotify’s track load on its first verified playing report and leave 1.2 seconds after the confirmed end of the clip before loading music that should resume. Active Run handles a normal automatic reconnect quietly and reuses cached artwork once Spotify confirms the song. Both Android builds and both 901-test suites passed, release lint reported zero errors, and 20 silent device checks passed. The owner build was installed in place on the Moto. All 68 runs, 12 database tables and five preference files matched the pre-install backup. Audible transitions still need a Bluetooth listening check.
+
 ## November 9 reflection integration — backend verified; combined app installed on Moto
 
 Manley created `codex/reflection-integration` from main1eb6f35 and started the no-commit merge of
@@ -51,6 +59,30 @@ or assistant Git mutation. Phone presentation checks do not prove outdoor GPS/Bl
 quality. Next is the user's real-run listening check: mile announcements, snippet beginning/ending,
 and whether a same-song/no-clip reflection lands naturally. Accounts/passwords and permanent signing
 remain separate decisions. Stop at this rollout checkpoint; only existing notes changed afterward.
+
+### November 9 sample listening — strong reflection; two audio timing follow-ups
+
+Manley reports the mixed-genre sample worked very well, especially the written reflection's song
+connection. Read-only Moto inspection confirms the latest FIXTURE run lasted37:51.897 with10 frozen
+song candidates, READY / FEELING_GOOD, and selected Green Day's Boulevard of Broken Dreams (not the
+song loaded at finish). The reflection contrasts the song's narrator with Low → Feeling Good and
+uses the actual Monday9:54 start. Save as a positive reference, not proof of consistency across runs.
+
+Playback diagnostics confirm successful snippet/restore. Passage entry10:33:29.066 → confirmed
+PLAYING10:33:30.392 is1.326s; TRACK_LOAD consumes0.880s, seek0.220s. These are transport timings,
+not a measured speech-to-sound gap. Endpoint pause is confirmed before RESTORE_TRACK10:33:36.450;
+RESTORE_PLAY finishes10:33:37.447. No intentional post-snippet silence currently precedes restoration.
+Manley wants the entrance smoother and a comfortable short gap after the clip, so it can land before
+the original music returns. Proposed first adjustment: about1.2s after confirmed snippet pause,
+before any original-track load (loading itself can be audible), cancellable on user actions or loss
+of ownership. Do not weaken startup confirmation/containment checks to shave loading time.
+
+Repeated-song preference is an unimplemented idea: consider it only as a weak tie-breaker among
+similarly strong matches; preserve writer and finish-song rules. Observation count is not play count,
+and current records lack playhead/replay intent, so immediate same-track replay is not established.
+No app changes, install, music control or paid requests in this review. All67 stored runs are completed;
+private sample evidence/logs remain ignored in android/build/reflection-integration-check/moto/.
+Next bounded work is audio timing; outdoor GPS/mile-announcement verification remains outstanding.
 
 ## November 9 public-release journey — update retention verified; offline reflection status repaired
 

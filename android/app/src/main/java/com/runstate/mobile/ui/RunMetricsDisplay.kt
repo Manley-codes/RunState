@@ -15,7 +15,6 @@ import com.runstate.mobile.data.local.PreRunEnergy
 import com.runstate.mobile.data.local.ReflectionBranch
 import com.runstate.mobile.data.local.ReflectionStatus
 import com.runstate.mobile.data.local.RunEntity
-import com.runstate.mobile.data.local.RunMusicObservationEntity
 import com.runstate.mobile.data.local.RunReflectionEntity
 import com.runstate.mobile.data.local.RunTransitionEntity
 import com.runstate.mobile.data.local.RunTrackingMode
@@ -23,9 +22,11 @@ import com.runstate.mobile.data.local.StoredRunState
 import com.runstate.mobile.data.local.TelemetryCoverage
 import com.runstate.mobile.data.local.RunWeatherEntity
 import com.runstate.mobile.data.local.RunWeatherStatus
+import com.runstate.mobile.music.SongPassageRequest
+import com.runstate.mobile.reflection.CompletedRunEvidence
+import com.runstate.mobile.reflection.pairedPassageFor
 import com.runstate.mobile.run.RunMetrics
 import com.runstate.mobile.run.RunTimeline
-import kotlinx.coroutines.CancellationException
 import com.runstate.mobile.run.TransitionHistoryCoverage
 import java.time.DateTimeException
 import java.time.Instant
@@ -208,38 +209,15 @@ internal fun weatherSummaryFor(run: RunEntity, record: RunWeatherEntity?): Strin
         "Humidity ${String.format(Locale.US, "%.0f", weather.relativeHumidityPercent)}% · Wind $wind"
 }
 
-/** An optional music read must not erase otherwise readable run and reflection history. */
-internal suspend fun historyItemWithOptionalMusic(
-    run: RunEntity,
-    transitions: List<RunTransitionEntity>,
-    reflection: RunReflectionEntity?,
-    loadMusic: suspend () -> List<RunMusicObservationEntity>
-): RunHistoryItem {
-    val observations = if (!run.musicObservationRequested) emptyList() else try {
-        loadMusic()
-    } catch (cancelled: CancellationException) {
-        throw cancelled
-    } catch (_: Exception) {
-        null
-    }
-    return historyItemFor(run, transitions, reflection, observations.orEmpty()).copy(
-        musicObservationsUnavailable = observations == null
-    )
-}
-
 /** Uses only durable facts; opening History never asks the reflection provider to write again. */
 internal fun historyItemFor(
     run: RunEntity,
     transitions: List<RunTransitionEntity>,
-    reflection: RunReflectionEntity?,
-    musicObservations: List<RunMusicObservationEntity> = emptyList()
+    reflection: RunReflectionEntity?
 ): RunHistoryItem {
     require(run.state == StoredRunState.COMPLETED) { "History requires a completed run." }
     require(reflection == null || reflection.runId == run.runId) {
         "A reflection must belong to the displayed run."
-    }
-    require(musicObservations.all { it.runId == run.runId }) {
-        "Music observations must belong to the displayed run."
     }
 
     val dateLabel = historyDateFormat.format(
@@ -254,6 +232,7 @@ internal fun historyItemFor(
     }
     val metrics = storedMetrics?.let(::runMetricsDisplayFor)
 
+    val reflectionSong = savedReflectionSongFor(run, reflection)
     return RunHistoryItem(
         runId = run.runId,
         dateLabel = dateLabel,
@@ -283,14 +262,8 @@ internal fun historyItemFor(
         // A saved Energy check-in must not wait for the reflection provider to answer.
         insightEligible = run.activityFinalized &&
             reflection?.takeIf { it.status == ReflectionStatus.READY }?.isTestData != true,
-        musicObservationRequested = run.musicObservationRequested,
-        musicObservationCount = musicObservations.size,
-        lastObservedMedia = musicObservations.maxByOrNull { it.sequenceNumber }?.let { last ->
-            val label = listOfNotNull(last.title, last.artist).joinToString(" — ")
-            val source = if (last.sourcePackage == "com.spotify.music") "Spotify" else last.sourcePackage
-            if (label.isBlank()) source else "$label · $source"
-        },
-        reflectionMusicSummary = reflectionMusicSummaryFor(run, reflection),
+        reflectionMusicSummary = reflectionMusicSummaryFor(run, reflection, reflectionSong),
+        reflectionSong = reflectionSong,
         telemetryCoverage = run.telemetryCoverage,
         officialStartEpochMillis = run.officialStartEpochMillis,
         finishEpochMillis = run.finishEpochMillis,
@@ -317,26 +290,54 @@ internal fun historyItemFor(
 
 private val historyEvidenceJson = GsonBuilder().setStrictness(Strictness.STRICT).create()
 
+internal data class SavedReflectionSong(val title: String, val artist: String, val method: String?,
+                                       val passage: SongPassageRequest?)
+
+/** The winner and passage both come from this completed reply. Newer listening observations are irrelevant. */
+internal fun savedReflectionSongFor(run: RunEntity, reflection: RunReflectionEntity?): SavedReflectionSong? {
+    if (!run.musicObservationRequested || !run.musicReflectionSharingAllowed || reflection == null ||
+        reflection.runId != run.runId || reflection.status != ReflectionStatus.READY ||
+        reflection.isTestData || reflection.text.isNullOrBlank()) return null
+    return try {
+        val evidence = historyEvidenceJson.fromJson(reflection.evidenceJson, CompletedRunEvidence::class.java)
+        val music = evidence.musicContext
+        fun label(value: String?) = value?.takeIf { it.isNotBlank() && it.length <= 200 && it.none(Char::isISOControl) }
+        val title = label(music.trackTitle) ?: return null
+        val artist = label(music.artistName) ?: return null
+        if (music.state != "MUSIC" || music.provenance != "MEDIA_SESSION_PARTIAL") return null
+        val method = evidence.songSelectionMethod
+        val winner = evidence.songCandidates.orEmpty().singleOrNull { !it.candidateId.isNullOrBlank() &&
+            it.candidateId == evidence.selectedSongId }
+        val hasSelection = evidence.selectedSongId != null || method != null
+        if (hasSelection && (winner == null || method !in setOf("CONTEXT_MATCH", "AVAILABLE_FALLBACK", "OBSERVED_FALLBACK") ||
+            winner.musicContext.copy(songCue = null) != music.copy(songCue = null))) return null
+        // A v1 timed cue is written only after its acknowledgement. A curated plan alone proves nothing.
+        val acknowledgement = evidence.songPlaybackReceipt?.cueId ?: evidence.acknowledgedCuratedCueId ?:
+            music.songCue?.takeIf { it.source == "LRCLIB" && evidence.songPassage?.timingVersion == 1 }?.cueId
+        val passage = acknowledgement?.let { pairedPassageFor(reflection, it, evidence) }?.takeIf { clip ->
+            val matchesCuratedWinner = music.songCue?.source != "RUNSTATE_CURATED" ||
+                evidence.songPlaybackReceipt != null || !hasSelection || evidence.songPassage == winner?.songPassage
+            clip.trackTitle == title && clip.artistName == artist && matchesCuratedWinner &&
+                (!clip.allowTrackSwitch || run.songSnippetLookupAllowed) &&
+                (clip.observedDurationMillis == null || clip.startPositionMillis <= clip.observedDurationMillis - clip.durationMillis)
+        }
+        if (!hasSelection && passage == null) null else SavedReflectionSong(title, artist, method, passage)
+    } catch (_: RuntimeException) { null }
+}
+
 /** Describes saved context only; it does not claim a request succeeded or music shaped the reply. */
-private fun reflectionMusicSummaryFor(run: RunEntity, reflection: RunReflectionEntity?): String? {
+private fun reflectionMusicSummaryFor(run: RunEntity, reflection: RunReflectionEntity?, song: SavedReflectionSong?): String? {
     if (!run.musicObservationRequested) return null
     if (!run.musicReflectionSharingAllowed) return "Music observations kept on this phone"
     val allowed = "Music sharing allowed for this run"
     val snapshot = reflection?.evidenceJson ?: return allowed
-    if (reflection.status == ReflectionStatus.READY) {
-        try {
-            val selected = historyEvidenceJson.fromJson(snapshot, com.runstate.mobile.reflection.CompletedRunEvidence::class.java)
-            val winner = selected.songCandidates.orEmpty().singleOrNull { it.candidateId == selected.selectedSongId }
-            if (winner != null && winner.musicContext == selected.musicContext &&
-                selected.songSelectionMethod in setOf("CONTEXT_MATCH", "AVAILABLE_FALLBACK", "OBSERVED_FALLBACK")) {
-                val label = when (selected.songSelectionMethod) {
-                    "CONTEXT_MATCH" -> "Chosen for this run"
-                    "OBSERVED_FALLBACK" -> "Song from this run"
-                    else -> "Available song match"
-                }
-                return "$label · ${winner.musicContext.trackTitle} — ${winner.musicContext.artistName}"
-            }
-        } catch (_: RuntimeException) { /* Legacy or damaged optional metadata uses the existing summary. */ }
+    if (song != null) {
+        val label = when (song.method) {
+            "OBSERVED_FALLBACK" -> "Song from this run"
+            "AVAILABLE_FALLBACK" -> "Available song match"
+            else -> "Chosen for this run"
+        }
+        return "$label · ${song.title} — ${song.artist}"
     }
     val music = try {
         val evidence = historyEvidenceJson.fromJson(snapshot, JsonObject::class.java)

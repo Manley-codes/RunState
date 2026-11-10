@@ -963,8 +963,12 @@ class RunAssemblyScreenTest {
         compose.runOnIdle { player = player.copy(connecting = true, canConnect = false,
             unavailableMessage = "Connecting to Spotify…") }
         compose.mainClock.advanceTimeByFrame()
+        compose.onNodeWithText("Connecting to Spotify…").assertDoesNotExist()
+        compose.onNodeWithText("Connect Spotify").assertDoesNotExist()
+        compose.onNodeWithContentDescription("RunState headphones artwork").assertExists()
+        compose.mainClock.advanceTimeBy(1_700)
         compose.onNodeWithText("Connecting to Spotify…").assertIsDisplayed()
-        compose.onNodeWithText("Connect Spotify").assertIsNotEnabled()
+        compose.onNodeWithText("Connect Spotify").assertDoesNotExist()
         compose.runOnUiThread { compose.activity.onBackPressedDispatcher.onBackPressed() }
         compose.mainClock.advanceTimeByFrame()
         compose.onNodeWithTag(ACTIVE_RUN_PLAYER_TAG).assertDoesNotExist()

@@ -3503,10 +3503,7 @@ class RunStateScreenTest {
                 averagePace = "—", sourceLabel = "GPS metrics · partial"),
             "READY", "4.2 miles recorded by partial GPS over 38 minutes. " +
                 "You marked Feeling Good after the run. The saved reply stays unchanged when you update feedback.",
-            "Feeling Good", false, isGpsRun = true, musicObservationRequested = true,
-            musicObservationCount = 2,
-            lastObservedMedia = "Morning Miles — Demo Artist · Spotify",
-            reflectionMusicSummary = "Music observations kept on this phone")
+            "Feeling Good", false, isGpsRun = true)
         val sample = gps.copy(runId = "sample-demo", metrics = fixtureMetrics(), isGpsRun = false)
         val legacy = gps.copy(runId = "unknown-demo", metrics = null, isGpsRun = false)
         composeTestRule.setContent {
@@ -6162,69 +6159,63 @@ class RunStateScreenTest {
     }
 
     @Test
-    fun historyShowsMusicAsPartialEvidenceRatherThanAFullSoundtrack() {
-        val runId = "0f6a2c1e-9d43-4b7a-9c21-7b5e8a4d1f30"
+    fun ownerHistoryReplaysOnlyTheSavedPairAndCancelsItOnCollapse() {
+        val id = "paired-history"
+        val passage = com.runstate.mobile.music.SongPassageRequest("Selected title", "Selected artist", 32_000, 4_000)
+        val song = SavedReflectionSong("Selected title", "Selected artist", "CONTEXT_MATCH", passage)
+        val item = RunHistoryItem(id, "Nov 10, 2026", historyMetrics(), "READY", "Saved words.", null, false,
+            reflectionSong = song)
+        val played = mutableListOf<Pair<String, com.runstate.mobile.music.SongPassageRequest>>()
+        lateinit var eligible: () -> Boolean
+        lateinit var finish: () -> Unit
         composeTestRule.setContent {
-            RunHistoryScreen(
-                items = listOf(
-                    RunHistoryItem(
-                        runId = runId,
-                        dateLabel = "Oct 12, 2026",
-                        metrics = historyMetrics(),
-                        reflectionStatus = null,
-                        reflectionText = null,
-                        energyLabel = null,
-                        isTestData = false,
-                        musicObservationRequested = true,
-                        musicObservationCount = 2,
-                        lastObservedMedia = "Later title — Artist · com.example.player",
-                        reflectionMusicSummary = "Music observations kept on this phone"
-                    )
-                ),
-                onBack = {},
-                onRetryReflection = {}
-            )
+            RunHistoryScreen(listOf(item), {}, { error("No generation during replay") }, speakerFactory = {
+                object : ReflectionSpeaker {
+                    override fun speak(text: String) = error("The stored cue must follow the voice")
+                    override fun speakWithSongPassage(text: String, passage: com.runstate.mobile.music.SongPassageRequest,
+                        canPlayPassage: () -> Boolean, onFinished: () -> Unit) {
+                        played += text to passage
+                        eligible = canPlayPassage
+                        finish = onFinished
+                    }
+                    override fun stop() = Unit
+                    override fun close() = Unit
+                }
+            })
         }
-
-        composeTestRule.onNodeWithText("OBSERVED MEDIA · PARTIAL").assertDoesNotExist()
-        composeTestRule.onNodeWithText("Last observed · Later title — Artist · com.example.player").assertDoesNotExist()
-        composeTestRule.onNodeWithTag(RUN_HISTORY_ROW_TAG_PREFIX + runId).performClick()
-        composeTestRule.onNodeWithText("OBSERVED MEDIA · PARTIAL").assertExists()
-        composeTestRule.onNodeWithText(
-            "Last observed · Later title — Artist · com.example.player"
-        ).assertExists()
-        composeTestRule.onNodeWithText(
-            "2 listening updates saved. This may not be the full soundtrack."
-        ).assertExists()
-        composeTestRule.onNodeWithText("Music observations kept on this phone").assertExists()
-    }
-
-    @Test
-    fun historyWithoutMusicOptInExplainsMissingDetailsOnlyWhenExpanded() {
-        val id = "music-not-enabled"
-        composeTestRule.setContent {
-            RunHistoryScreen(listOf(RunHistoryItem(id, "Oct 15, 2026", historyMetrics(),
-                null, null, null, false)), {}, {})
-        }
-        composeTestRule.onNodeWithText("Music wasn’t recorded for this run.").assertDoesNotExist()
         composeTestRule.onNodeWithTag(RUN_HISTORY_ROW_TAG_PREFIX + id).performClick()
-        composeTestRule.onNodeWithText("Music wasn’t recorded for this run.").assertExists()
-        composeTestRule.onNodeWithText("Last observed", substring = true).assertDoesNotExist()
-        composeTestRule.onNodeWithText("OBSERVED MEDIA · PARTIAL").assertDoesNotExist()
-    }
-
-    @Test
-    fun historyMusicWithoutObservationsRemainsUnknownInsideTheExpandedRecord() {
-        val id = "no-observations"
-        composeTestRule.setContent {
-            RunHistoryScreen(listOf(RunHistoryItem(id, "Oct 15, 2026", historyMetrics(),
-                null, null, null, false, musicObservationRequested = true)), {}, {})
-        }
-        composeTestRule.onNodeWithText("OBSERVED MEDIA · PARTIAL").assertDoesNotExist()
-        composeTestRule.onNodeWithTag(RUN_HISTORY_ROW_TAG_PREFIX + id).performClick()
-        composeTestRule.onNodeWithText("No media session was observed. Music remains unknown.").assertExists()
+        composeTestRule.onNodeWithText("Reflection song · Selected title — Selected artist").assertExists()
         composeTestRule.onNodeWithText("Last observed", substring = true).assertDoesNotExist()
         composeTestRule.onNodeWithText("listening updates saved", substring = true).assertDoesNotExist()
+        composeTestRule.onNodeWithText("Replay reflection").assertIsNotEnabled()
+        composeTestRule.runOnIdle {
+            assertEquals(listOf("Saved words." to passage), played)
+            assertTrue(eligible())
+        }
+        composeTestRule.onNodeWithTag(RUN_HISTORY_ROW_TAG_PREFIX + id).performClick()
+        composeTestRule.runOnIdle { assertFalse(eligible()); finish() }
+    }
+
+    @Test
+    fun publicHistoryIsSilentUntilExplicitReplayAndHasNoInventedSong() {
+        val id = "public-history"
+        val spoken = mutableListOf<String>()
+        composeTestRule.setContent {
+            RunHistoryScreen(listOf(RunHistoryItem(id, "Nov 10, 2026", historyMetrics(), "READY",
+                "Exact saved words.", null, false)), {}, { error("No generation during replay") },
+                autoPlayOnExpand = false, speakerFactory = {
+                    object : ReflectionSpeaker {
+                        override fun speak(text: String) { spoken += text }
+                        override fun stop() = Unit
+                        override fun close() = Unit
+                    }
+                })
+        }
+        composeTestRule.onNodeWithTag(RUN_HISTORY_ROW_TAG_PREFIX + id).performClick()
+        composeTestRule.runOnIdle { assertTrue(spoken.isEmpty()) }
+        composeTestRule.onNodeWithText("Reflection song", substring = true).assertDoesNotExist()
+        composeTestRule.onNodeWithText("Replay reflection").performScrollTo().performClick()
+        composeTestRule.runOnIdle { assertEquals(listOf("Exact saved words."), spoken) }
     }
 
     @Test

@@ -70,7 +70,6 @@ import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.CompositingStrategy
-import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -345,6 +344,9 @@ internal interface ReflectionSpeaker : RehearsableVoice {
     fun cancelPreparation() = Unit
     fun prepareSongPassageConnection() = Unit
     fun speak(text: String)
+    fun speakSavedReflection(text: String, onFinished: () -> Unit) {
+        try { speak(text) } finally { onFinished() }
+    }
     fun speakWithSongPassage(
         text: String,
         passage: SongPassageRequest,
@@ -518,6 +520,10 @@ internal class AndroidReflectionSpeaker(
 
     override fun speak(text: String) {
         submit(text, rate = 0.94f, onFinished = null, canPlayInstrumental = null)
+    }
+
+    override fun speakSavedReflection(text: String, onFinished: () -> Unit) {
+        submit(text, rate = 0.94f, onFinished = onFinished, canPlayInstrumental = null)
     }
 
     override fun warmUp(text: String) {
@@ -1417,7 +1423,7 @@ internal class AndroidReflectionSpeechPlatform(
                     val controller = SpotifySongPassageController(session,
                         onEntranceReady = {
                             completionAudio?.releaseForPassage() ?: releaseAudioFocus()
-                        }, quiescePausedBeforeEntry = true,
+                        }, quiescePausedBeforeEntry = true, pauseBeforeMusicReturns = true,
                         diagnosticObserver = passageDiagnostics,
                         onAudibleTrackLoad = { completionAudio?.expectPassageLoad() },
                         onAudibleTrackContained = { completionAudio?.reholdAfterPassageLoad() })
@@ -1525,10 +1531,6 @@ internal data class RunHistoryItem(
     val energyLabel: String?,
     val isTestData: Boolean,
     val preRunEnergyLabel: String? = null,
-    val musicObservationRequested: Boolean = false,
-    val musicObservationCount: Int = 0,
-    val musicObservationsUnavailable: Boolean = false,
-    val lastObservedMedia: String? = null,
     val effort: PostRunEffort? = null,
     val isGpsRun: Boolean = false,
     val energy: ReflectionBranch? = null,
@@ -1562,7 +1564,8 @@ internal data class RunHistoryItem(
     val firstPostRunEnergy: ReflectionBranch? = null,
     val firstPostRunEnergyQuestionVersion: Int? = null,
     /** Trusted saved pace before display-unit conversion or rounding. */
-    val paceSecondsPerMeter: Double? = null
+    val paceSecondsPerMeter: Double? = null,
+    val reflectionSong: SavedReflectionSong? = null
 )
 
 internal sealed interface HistoryRouteDisplay {
@@ -1598,7 +1601,8 @@ internal fun RunHistoryScreen(
     onRetrySplits: suspend (String) -> Unit = {},
     onSelectEffortRating: (String, Int?) -> Unit = { _, _ -> },
     showRecordingSources: Boolean = false,
-    onDeleteRun: (suspend (String) -> Boolean)? = null
+    onDeleteRun: (suspend (String) -> Boolean)? = null,
+    autoPlayOnExpand: Boolean = com.runstate.mobile.BuildConfig.OWNER_TOOLS_ENABLED
 ) {
     val listState = rememberLazyListState()
     val choices = if (showRecordingSources)
@@ -1636,6 +1640,9 @@ internal fun RunHistoryScreen(
     val deleteScope = rememberCoroutineScope()
     val currentDeleteRun by rememberUpdatedState(onDeleteRun)
     var speaker by remember { mutableStateOf<ReflectionSpeaker?>(null) }
+    var playbackSession by remember { mutableStateOf<CompletionAudioSession?>(null) }
+    var playbackAttempt by remember { mutableStateOf<Any?>(null) }
+    val currentItems by rememberUpdatedState(items)
     var route by remember { mutableStateOf<Pair<String, HistoryRouteDisplay>?>(null) }
     val currentRouteLoader by rememberUpdatedState(routeLoader)
     var splitDetails by remember { mutableStateOf<Pair<String, HistorySplitDisplay>?>(null) }
@@ -1646,19 +1653,59 @@ internal fun RunHistoryScreen(
     val context = LocalContext.current
 
     fun closeSpeaker() {
+        playbackAttempt = null
         val owned = speaker
         speaker = null
+        val session = playbackSession
+        playbackSession = null
+        try { owned?.stop() } catch (_: RuntimeException) { }
+        session?.cancel()
         try { owned?.close() } catch (_: RuntimeException) { /* Saved details remain readable. */ }
     }
-    fun stopSpeaker() {
-        try { speaker?.stop() } catch (_: RuntimeException) { closeSpeaker() }
+    fun playReflection(item: RunHistoryItem) {
+        val exact = item.reflectionText
+        if (playbackAttempt != null || expandedRunId != item.runId || item.reflectionStatus != "READY" ||
+            exact.isNullOrBlank() || !speechLifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) return
+        closeSpeaker()
+        val attempt = Any()
+        playbackAttempt = attempt
+        try {
+            val voice = speakerFactory(context).also { speaker = it }
+            val passage = item.reflectionSong?.passage
+            val finished = {
+                if (playbackAttempt === attempt) {
+                    playbackAttempt = null
+                    playbackSession?.finish()
+                    playbackSession = null
+                }
+            }
+            val session = if (passage == null) null else try {
+                completionAudioSessionFor(context) {
+                    if (playbackAttempt === attempt) closeSpeaker()
+                }
+            } catch (_: RuntimeException) { null }
+            if (passage == null || session == null) {
+                voice.speakSavedReflection(exact, finished)
+            } else {
+                playbackSession = session
+                voice.attachCompletionAudio(session)
+                voice.speakWithSongPassage(exact, passage, canPlayPassage = {
+                    playbackAttempt === attempt && expandedRunId == item.runId &&
+                        speechLifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED) &&
+                        currentItems.any { it.runId == item.runId && it.reflectionStatus == "READY" &&
+                            it.reflectionText == exact && it.reflectionSong?.passage == passage }
+                }, onFinished = finished)
+            }
+        } catch (_: RuntimeException) {
+            closeSpeaker()
+        }
     }
 
     // A removed record must not retain an open route, editor, confirmation or voice.
     LaunchedEffect(availableItems, isLoading) {
         if (!isLoading) {
             if (expandedRunId != null && availableItems.none { it.runId == expandedRunId }) {
-                stopSpeaker()
+                closeSpeaker()
                 expandedRunId = null
             }
             if (deletingRunId != null && availableItems.none { it.runId == deletingRunId }) {
@@ -1707,7 +1754,7 @@ internal fun RunHistoryScreen(
 
     DisposableEffect(speechLifecycle) {
         val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_PAUSE) stopSpeaker()
+            if (event == Lifecycle.Event.ON_PAUSE) closeSpeaker()
         }
         speechLifecycle.addObserver(observer)
         // Read the current speaker on exit, including one created by the last tap before recomposition.
@@ -1721,7 +1768,7 @@ internal fun RunHistoryScreen(
         if (expandedRunId != null &&
             (openItem?.reflectionStatus != "READY" || openItem?.reflectionText.isNullOrBlank())
         ) {
-            stopSpeaker()
+            closeSpeaker()
         }
     }
     LaunchedEffect(items, editingEffortRunId) {
@@ -1780,7 +1827,7 @@ internal fun RunHistoryScreen(
             ) {
                 TextButton(
                     onClick = {
-                        stopSpeaker()
+                        closeSpeaker()
                         onBack()
                     },
                     colors = ButtonDefaults.textButtonColors(contentColor = Color.White),
@@ -1822,7 +1869,7 @@ internal fun RunHistoryScreen(
                                     role = Role.Tab,
                                     onClick = {
                                         if (filter != choice) {
-                                            stopSpeaker()
+                                            closeSpeaker()
                                             expandedRunId = null
                                             editingEffortRunId = null
                                             editingEnergyRunId = null
@@ -1943,23 +1990,15 @@ internal fun RunHistoryScreen(
                         item = item,
                         expanded = expandedRunId == item.runId,
                         onToggle = {
-                            stopSpeaker()
-                            if (expandedRunId == item.runId) {
-                                expandedRunId = null
-                            } else {
-                                expandedRunId = item.runId
-                                val exactText = item.reflectionText
-                                if (item.reflectionStatus == "READY" && !exactText.isNullOrBlank() &&
-                                    speechLifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) {
-                                    try {
-                                        val activeSpeaker = speaker ?: speakerFactory(context).also { speaker = it }
-                                        activeSpeaker.speak(exactText)
-                                    } catch (_: RuntimeException) {
-                                        closeSpeaker()
-                                    }
-                                }
+                            closeSpeaker()
+                            val opening = expandedRunId != item.runId
+                            expandedRunId = if (opening) item.runId else null
+                            if (opening && com.runstate.mobile.BuildConfig.OWNER_TOOLS_ENABLED && autoPlayOnExpand) {
+                                playReflection(item)
                             }
                         },
+                        replayEnabled = playbackAttempt == null,
+                        onReplayReflection = { playReflection(item) },
                         onRetryReflection = { onRetryReflection(item.runId) },
                         onEditEffort = { editingEffortRunId = item.runId },
                         effortSaving = effortSavingRunId == item.runId,
@@ -1975,7 +2014,7 @@ internal fun RunHistoryScreen(
                         },
                         onDelete = onDeleteRun?.let {
                             {
-                                stopSpeaker()
+                                closeSpeaker()
                                 deletingRunId = item.runId
                                 deleteError = null
                             }
@@ -2012,13 +2051,19 @@ internal fun RunHistoryScreen(
                                 val id = deletingItem.runId
                                 deletePending = true
                                 deleteError = null
-                                stopSpeaker()
+                                closeSpeaker()
                                 deleteScope.launch {
                                     try {
                                         if (delete(id)) {
-                                            if (expandedRunId == id) expandedRunId = null
-                                            if (editingEffortRunId == id) editingEffortRunId = null
-                                            if (editingEnergyRunId == id) editingEnergyRunId = null
+                                            if (expandedRunId == id) {
+                                                expandedRunId = null
+                                            }
+                                            if (editingEffortRunId == id) {
+                                                editingEffortRunId = null
+                                            }
+                                            if (editingEnergyRunId == id) {
+                                                editingEnergyRunId = null
+                                            }
                                             deletingRunId = null
                                         } else deleteError = "This run couldn't be deleted. Try again."
                                     } catch (cancelled: CancellationException) { throw cancelled }
@@ -2174,6 +2219,8 @@ private fun HistoryRow(
     item: RunHistoryItem,
     expanded: Boolean,
     onToggle: () -> Unit,
+    replayEnabled: Boolean,
+    onReplayReflection: () -> Unit,
     onRetryReflection: () -> Unit,
     onEditEffort: () -> Unit,
     effortSaving: Boolean,
@@ -2329,6 +2376,15 @@ private fun HistoryRow(
                         .padding(top = 9.dp, bottom = 10.dp)
                         .testTag(RUN_HISTORY_REFLECTION_TAG_PREFIX + item.runId)
                 )
+                if (item.reflectionStatus == "READY" && !item.reflectionText.isNullOrBlank()) {
+                    item.reflectionSong?.let { song ->
+                        Text("Reflection song · ${song.title} — ${song.artist}", color = rowAccent,
+                            fontSize = 14.sp, lineHeight = 20.sp, fontWeight = FontWeight.Medium)
+                    }
+                    TextButton(onClick = onReplayReflection, enabled = replayEnabled) {
+                        Text("Replay reflection", color = if (replayEnabled) rowInk else rowMuted)
+                    }
+                }
                 item.weatherSummary?.let { summary ->
                     Text(text = summary, color = rowInk.copy(alpha = 0.8f),
                         fontSize = 12.sp, lineHeight = 19.sp,
@@ -2336,27 +2392,6 @@ private fun HistoryRow(
                             .testTag("historyWeather:" + item.runId))
                     RunWeatherCredit(color = rowInk.copy(alpha = 0.8f),
                         modifier = Modifier.padding(bottom = 10.dp))
-                }
-                if (item.musicObservationRequested) {
-                    HistoryObservedMusic(item)
-                } else {
-                    Column(
-                        modifier = Modifier.fillMaxWidth().padding(top = 6.dp, bottom = 12.dp),
-                        verticalArrangement = Arrangement.spacedBy(3.dp)
-                    ) {
-                        Text(
-                            text = "Music wasn’t recorded for this run.",
-                            color = rowMuted,
-                            fontSize = 12.sp,
-                            lineHeight = 18.sp
-                        )
-                        Text(
-                            text = "Enable Observe music before a future run to save available song details.",
-                            color = rowMuted,
-                            fontSize = 11.sp,
-                            lineHeight = 17.sp
-                        )
-                    }
                 }
                 if (item.isGpsRun) {
                     when (route) {
@@ -2482,85 +2517,6 @@ private fun HistoryRow(
                     }
                 }
             }
-        }
-    }
-}
-
-/** Saved device evidence belongs beside the reply, without suggesting live playback. */
-@Composable
-private fun HistoryObservedMusic(item: RunHistoryItem) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(top = 9.dp, bottom = 15.dp)
-    ) {
-        Spacer(
-            Modifier.fillMaxWidth().height(1.dp)
-                .background(HistoryGold.copy(alpha = 0.25f))
-        )
-        Row(
-            modifier = Modifier.padding(top = 12.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            // A static mark keeps a saved observation distinct from a player/equalizer.
-            Canvas(Modifier.size(16.dp)) {
-                val center = size.height / 2f
-                val heights = floatArrayOf(0.34f, 0.70f, 1f, 0.55f)
-                heights.forEachIndexed { index, fraction ->
-                    val x = size.width * (index + 0.5f) / heights.size
-                    val halfHeight = size.height * fraction * 0.43f
-                    drawLine(
-                        color = HistoryGold,
-                        start = Offset(x, center - halfHeight),
-                        end = Offset(x, center + halfHeight),
-                        strokeWidth = 1.6.dp.toPx(),
-                        cap = StrokeCap.Round
-                    )
-                }
-            }
-            Text(
-                text = if (item.musicObservationsUnavailable) "OBSERVED MEDIA · UNAVAILABLE"
-                    else "OBSERVED MEDIA · PARTIAL",
-                color = HistoryGold,
-                fontSize = 9.sp,
-                fontWeight = FontWeight.Bold,
-                letterSpacing = 1.sp,
-                lineHeight = 14.sp,
-                modifier = Modifier.weight(1f)
-            )
-        }
-        Text(
-            text = if (item.musicObservationsUnavailable) {
-                "Song details couldn't load. Reopen History to try again. Your run is saved."
-            } else if (item.musicObservationCount == 0) {
-                "No media session was observed. Music remains unknown."
-            } else {
-                "Last observed · ${item.lastObservedMedia ?: "Unknown media"}"
-            },
-            color = HistoryLightInk,
-            fontSize = 13.sp,
-            fontWeight = if (item.musicObservationCount > 0) FontWeight.Medium else FontWeight.Normal,
-            lineHeight = 20.sp,
-            modifier = Modifier.padding(top = 7.dp)
-        )
-        if (item.musicObservationCount > 0) {
-            Text(
-                text = "${item.musicObservationCount} listening updates saved. This may not be the full soundtrack.",
-                color = HistoryLightMuted,
-                fontSize = 11.sp,
-                lineHeight = 17.sp,
-                modifier = Modifier.padding(top = 4.dp)
-            )
-        }
-        item.reflectionMusicSummary?.let { summary ->
-            Text(
-                text = summary,
-                color = HistoryLightMuted,
-                fontSize = 11.sp,
-                lineHeight = 17.sp,
-                modifier = Modifier.padding(top = 6.dp)
-            )
         }
     }
 }

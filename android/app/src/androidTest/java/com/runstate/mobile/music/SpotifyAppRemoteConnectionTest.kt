@@ -4,6 +4,7 @@ import android.app.Activity
 import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
+import android.graphics.Bitmap
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.test.core.app.ActivityScenario
@@ -11,6 +12,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.spotify.android.appremote.api.ConnectionParams
 import com.spotify.android.appremote.api.Connector
+import com.spotify.android.appremote.api.ImagesApi
 import com.spotify.android.appremote.api.PlayerApi
 import com.spotify.android.appremote.api.SpotifyAppRemote
 import com.spotify.android.appremote.api.TestSpotifyAppRemote
@@ -165,6 +167,49 @@ class SpotifyAppRemoteConnectionTest {
         assertNull(connection.livePlayer.value.title)
     }
 
+    @Test fun automaticReturnReusesOnlyFreshlyConfirmedCoverAndNeverRestoresCommands() = onMain {
+        val firstCover = Bitmap.createBitmap(2, 2, Bitmap.Config.ARGB_8888)
+        val replacement = Bitmap.createBitmap(2, 2, Bitmap.Config.ARGB_8888)
+        val imageId = "spotify:image:test"
+        connection.onForeground()
+        connector.succeed(0, FakeRemote(imageId = imageId, cover = firstCover).remote)
+        assertSame(firstCover, connection.livePlayer.value.artwork)
+
+        connection.onBackground()
+        connection.onForeground()
+        val waiting = connection.livePlayer.value
+        assertTrue(waiting.connecting)
+        assertFalse(waiting.canConnect)
+        assertNull(waiting.artwork)
+        assertNull(waiting.trackUri)
+        assertFalse(waiting.canTogglePlayback || waiting.canSkipNext || waiting.canSkipPrevious)
+        connection.next()
+        val same = FakeRemote(imageId = imageId, cover = replacement)
+        connector.succeed(1, same.remote)
+        assertSame(firstCover, connection.livePlayer.value.artwork)
+        assertEquals(0, same.imageRequests)
+        assertEquals(0, same.transportCalls)
+
+        connection.onBackground()
+        connection.onForeground()
+        val newUri = "spotify:track:ABCDEFGHIJKL0123456789"
+        val differentTrack = FakeRemote(trackUri = newUri, imageId = imageId, cover = replacement)
+        connector.succeed(2, differentTrack.remote)
+        assertSame(replacement, connection.livePlayer.value.artwork)
+        assertEquals(1, differentTrack.imageRequests)
+
+        connection.disconnect()
+        assertNull(connection.livePlayer.value.artwork)
+        assertFalse(connection.livePlayer.value.connecting)
+        assertTrue(connection.livePlayer.value.canConnect)
+        preferences.edit().putString("authorized_client", CLIENT).commit()
+        connection.onForeground()
+        val newGrant = FakeRemote(trackUri = newUri, imageId = imageId, cover = firstCover)
+        connector.succeed(3, newGrant.remote)
+        assertSame(firstCover, connection.livePlayer.value.artwork)
+        assertEquals(1, newGrant.imageRequests)
+    }
+
     @Test fun explicitConnectWithRememberedGrantDoesNotOpenApprovalAgain() = onMain {
         assertNull(connection.connectFromUserAction(Activity()))
         assertEquals(1, connector.attempts.size)
@@ -305,11 +350,13 @@ class SpotifyAppRemoteConnectionTest {
         fun succeed(index: Int, remote: SpotifyAppRemote) = attempts[index].listener.onConnected(remote)
     }
 
-    private class FakeRemote {
+    private class FakeRemote(trackUri: String = "spotify:track:0123456789ABCDEFGHIJKL",
+                             imageId: String = "", cover: Bitmap? = null) {
         var transportCalls = 0
+        var imageRequests = 0
         val command = CallResult<Empty>(Types.RequestId.from(3))
         private val track = Track(Artist("Test artist", ""), emptyList(), Album("Test album", ""),
-            180_000L, "Test song", "spotify:track:0123456789ABCDEFGHIJKL", ImageUri(""), false, false)
+            180_000L, "Test song", trackUri, ImageUri(imageId), false, false)
         private val player = PlayerState(track, true, 0f, 30_000L, PlayerOptions.DEFAULT,
             PlayerRestrictions(true, true, true, true, true, true))
         private val client = proxy(RemoteClient::class.java) { name ->
@@ -336,7 +383,12 @@ class SpotifyAppRemoteConnectionTest {
                 else -> error("Unexpected user call: $name")
             }
         }
-        val remote = TestSpotifyAppRemote(playerApi, userApi)
+        private val imagesApi = proxy(ImagesApi::class.java) { name ->
+            check(name == "getImage")
+            imageRequests++
+            completed(requireNotNull(cover))
+        }
+        val remote = TestSpotifyAppRemote(playerApi, userApi, imagesApi)
 
         private fun <T> completed(value: T) = CallResult<T>(Types.RequestId.NONE).apply {
             deliverResult(ResultUtils.createSuccessfulResult(value))

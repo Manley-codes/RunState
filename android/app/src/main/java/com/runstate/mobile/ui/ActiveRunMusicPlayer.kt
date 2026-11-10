@@ -92,7 +92,21 @@ internal fun ActiveRunMusicPlayer(
         }
     }
     val position = player.positionAt(elapsedRealtime)
-    val hasTrack = player.connected && !player.title.isNullOrBlank()
+    val hasTrack = (player.connected || player.connecting) && !player.title.isNullOrBlank()
+    var slowReconnect by remember(player.connecting, foreground) { mutableStateOf(false) }
+    LaunchedEffect(player.connecting, foreground) {
+        if (player.connecting && foreground) {
+            delay(1_500L)
+            slowReconnect = true
+        }
+    }
+    val statusText = when {
+        player.connecting -> if (slowReconnect) "Connecting to Spotify…" else null
+        !player.unavailableMessage.isNullOrBlank() -> player.unavailableMessage
+        hasTrack -> null
+        player.connected -> "Nothing playing"
+        else -> "Spotify not connected"
+    }
     val fullTitle = player.title.orEmpty()
     val fullArtist = player.artist.orEmpty()
     val openTrack = { onOpenTrack(player.trackUri) }
@@ -122,7 +136,7 @@ internal fun ActiveRunMusicPlayer(
         // The visible icon keeps Spotify's official proportions; the surrounding control is
         // at least 48 dp. The exact official path is bundled in spotify_icon_white.xml.
         Box(Modifier.offset((116f * unit - 24f).dp, (80f * unit - 24f).dp)
-            .size(48.dp).clip(CircleShape).clickable(role = Role.Button, onClick = openTrack)
+            .size(48.dp).clip(CircleShape).clickable(enabled = !player.connecting, role = Role.Button, onClick = openTrack)
             .semantics { contentDescription = "Open in Spotify" }, contentAlignment = Alignment.Center) {
             Image(painterResource(R.drawable.spotify_icon_white), null, Modifier.size(24.dp))
         }
@@ -147,7 +161,7 @@ internal fun ActiveRunMusicPlayer(
             }
             Column(Modifier.offset((98.5f * unit).dp, metadataTargetTop.dp)
                 .width((112f * unit).dp).heightIn(min = 48.dp)
-                .clickable(role = Role.Button, onClick = openTrack)
+                .clickable(enabled = player.connected, role = Role.Button, onClick = openTrack)
                 .semantics(mergeDescendants = true) {
                     contentDescription = "$fullTitle, $fullArtist. Open in Spotify"
                 }.padding(top = (visibleMetadataTop - metadataTargetTop).dp),
@@ -171,27 +185,23 @@ internal fun ActiveRunMusicPlayer(
         } else {
             Column(Modifier.offset((64f * unit).dp, (109f * unit).dp).width((181f * unit).dp),
                 horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(when {
-                    player.connecting -> "Connecting to Spotify…"
-                    !player.unavailableMessage.isNullOrBlank() -> player.unavailableMessage
-                    player.connected -> "Nothing playing"
-                    else -> "Spotify not connected"
-                }, color = Color.White, fontSize = 13.sp, lineHeight = 17.sp,
+                if (statusText != null) Text(statusText, color = Color.White, fontSize = 13.sp, lineHeight = 17.sp,
                     maxLines = 3, overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
-                TextButton(onClick = if (player.connected) onOpenSpotify else onConnect,
-                    enabled = !player.busy && (player.connected || (player.canConnect && !player.connecting)),
-                    modifier = Modifier.heightIn(min = 48.dp)) {
-                    Text(if (player.connected) "Open Spotify" else "Connect Spotify", color = Color(0xFFDFE8D2))
+                if (!player.connecting && !player.connected && player.canConnect) {
+                    TextButton(onClick = onConnect, enabled = !player.busy,
+                        modifier = Modifier.heightIn(min = 48.dp)) {
+                        Text("Connect Spotify", color = Color(0xFFDFE8D2))
+                    }
                 }
-                if (!player.connected) TextButton(onClick = onOpenSpotify,
+                if (!player.connecting) TextButton(onClick = onOpenSpotify,
                     modifier = Modifier.heightIn(min = 48.dp)) {
                     Text("Open Spotify", color = Color.White, fontSize = 12.sp)
                 }
             }
         }
-        if (hasTrack && !player.unavailableMessage.isNullOrBlank()) {
-            Text(player.unavailableMessage, color = Color.White, fontSize = (10f * unit).sp,
+        if (hasTrack && statusText != null) {
+            Text(statusText, color = Color.White, fontSize = (10f * unit).sp,
                 lineHeight = (11f * unit).sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
                 textAlign = TextAlign.Center,
                 modifier = Modifier.offset((70f * unit).dp, max(106f * unit, 82f * unit + 24f).dp)
@@ -222,14 +232,13 @@ internal fun ActiveRunMusicPlayer(
                             }
                             MusicProgress(position, player.durationMillis, !player.paused, reducedMotion,
                                 Modifier.fillMaxWidth().height(16.dp))
-                        } else Text(if (player.connected) "Nothing playing" else "Spotify not connected",
-                            color = Color.White)
-                        player.unavailableMessage?.let { Text(it, color = Color(0xFFE0E3E6)) }
-                        if (!player.connected) TextButton(onClick = onConnect,
-                            enabled = !player.busy && player.canConnect && !player.connecting) {
+                        }
+                        statusText?.let { Text(it, color = Color(0xFFE0E3E6)) }
+                        if (!player.connecting && !player.connected && player.canConnect) TextButton(onClick = onConnect,
+                            enabled = !player.busy) {
                             Text("Connect Spotify", color = Color(0xFFDFE8D2))
                         }
-                        TextButton(onClick = if (hasTrack) openTrack else onOpenSpotify) {
+                        if (!player.connecting) TextButton(onClick = if (hasTrack) openTrack else onOpenSpotify) {
                             Image(painterResource(R.drawable.spotify_icon_white), null, Modifier.size(24.dp))
                             Text("Open Spotify", color = Color.White, modifier = Modifier.padding(start = 12.dp))
                         }
@@ -241,13 +250,15 @@ internal fun ActiveRunMusicPlayer(
 
 @Composable
 private fun MusicArtwork(player: SpotifyLivePlayerState, layout: RunMusicPlayerLayout, modifier: Modifier) {
+    val showHeadphones = layout == RunMusicPlayerLayout.HEADPHONES ||
+        (player.artwork == null && (player.connecting || player.loadingArtwork))
     Box(modifier.background(Color(0xFF17211D)).testTag(ACTIVE_RUN_PLAYER_ART_TAG)
         .semantics { contentDescription = when {
-            layout == RunMusicPlayerLayout.HEADPHONES -> "RunState headphones artwork"
+            showHeadphones -> "RunState headphones artwork"
             player.artwork != null -> "Current song album artwork"
             else -> "Album artwork unavailable"
         } }) {
-        if (layout == RunMusicPlayerLayout.HEADPHONES) {
+        if (showHeadphones) {
             Image(painterResource(R.drawable.start_music_orb), null,
                 contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize().graphicsLayer {
                     scaleX = 1.16f; scaleY = 1.16f; translationY = -12.dp.toPx()

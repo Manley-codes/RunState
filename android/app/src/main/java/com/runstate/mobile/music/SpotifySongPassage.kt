@@ -67,7 +67,7 @@ internal enum class PassagePlayback { PLAYING, PAUSED, OTHER }
 /** Optional test diagnostics contain enums and bounded timing differences only, never media identity. */
 internal enum class SongPassageStage {
     ADMISSION, INITIAL_PAUSE, TRACK_LOAD, ENTRANCE_SEEK, ENTRANCE_PLAY, PLAYING, ENDING_PAUSE,
-    RESTORE_TRACK, RESTORE_SEEK, RESTORE_PLAY, CLEANUP
+    RESTORE_DELAY, RESTORE_TRACK, RESTORE_SEEK, RESTORE_PLAY, CLEANUP
 }
 internal enum class SongPassageReason {
     ENTERED, FINISHED, OWNER_BUSY, SESSION_MISSING, REQUEST_MISMATCH, INVALID_DURATION,
@@ -156,6 +156,7 @@ internal class SpotifySongPassageController(
     private val onAudibleTrackLoad: () -> Unit = {},
     /** Called once an audibly loaded song is paused again at its start, before the entrance seek. */
     private val onAudibleTrackContained: () -> Unit = {},
+    private val pauseBeforeMusicReturns: Boolean = false,
     // Kept last: existing callers pass the diagnostic observer as a trailing lambda.
     private val diagnosticObserver: (SongPassageDiagnostic) -> Unit = {}
 ) {
@@ -335,15 +336,8 @@ internal class SpotifySongPassageController(
                 .coerceIn(-MAX_TRACK_MILLIS, MAX_TRACK_MILLIS)
             current.expectsPlaying = false
             current.expectedPosition = ended.positionMillis
-            val beforeRestore = checked(current)
-            if (beforeRestore.playback != PassagePlayback.PAUSED || !beforeRestore.canSeek ||
-                abs(beforeRestore.positionMillis - current.expectedPosition) > POSITION_TOLERANCE) {
-                throw PassageInterrupted(when {
-                    beforeRestore.playback != PassagePlayback.PAUSED -> SongPassageReason.PLAYBACK_CHANGED
-                    !beforeRestore.canSeek -> SongPassageReason.CAPABILITY_CHANGED
-                    else -> SongPassageReason.POSITION_DRIFT
-                })
-            }
+            val rest = pauseBeforeMusicReturns && restoreTarget.playback == PassagePlayback.PLAYING
+            waitBeforeRestore(current, rest)
             restoreOriginal(current, restoreTarget)
             completed = true
             report(current, SongPassageReason.FINISHED)
@@ -503,6 +497,23 @@ internal class SpotifySongPassageController(
             clock.waitMillis(POLL_MILLIS)
         } while (clock.nowMillis() < until)
         throw PassageInterrupted(SongPassageReason.TRACK_LOAD_TIMEOUT)
+    }
+
+    /** Rest on the paused clip. Loading the original in App Remote can already produce sound. */
+    private suspend fun waitBeforeRestore(current: Owner, rest: Boolean) {
+        val deadline = clock.nowMillis() + if (rest) RESTORE_DELAY_MILLIS else 0L
+        if (rest) enter(current, SongPassageStage.RESTORE_DELAY)
+        while (true) {
+            val snapshot = checked(current)
+            if (snapshot.playback != PassagePlayback.PAUSED)
+                throw PassageInterrupted(SongPassageReason.PLAYBACK_CHANGED)
+            if (!snapshot.canSeek) throw PassageInterrupted(SongPassageReason.CAPABILITY_CHANGED)
+            if (abs(snapshot.positionMillis - current.expectedPosition) > POSITION_TOLERANCE)
+                throw PassageInterrupted(SongPassageReason.POSITION_DRIFT)
+            val remaining = deadline - clock.nowMillis()
+            if (remaining <= 0L) return
+            clock.waitMillis(minOf(POLL_MILLIS, remaining))
+        }
     }
 
     private suspend fun restoreOriginal(current: Owner, original: SongPassageSnapshot) {
@@ -686,6 +697,7 @@ internal class SpotifySongPassageController(
         const val POSITION_REPORT_CLOCK_TOLERANCE = 100L
         const val CONFIRM_TIMEOUT_MILLIS = 3_000L
         const val TRACK_LOAD_TIMEOUT_MILLIS = 5_000L
+        const val RESTORE_DELAY_MILLIS = 1_200L
         const val POLL_MILLIS = 100L
         const val MAX_PLAYING_MILLIS = 10_000L
     }

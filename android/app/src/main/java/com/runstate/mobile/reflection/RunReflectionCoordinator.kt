@@ -373,10 +373,16 @@ internal class RunReflectionCoordinator(
             try {
                 val evidence = gson.fromJson(record.evidenceJson, CompletedRunEvidence::class.java)
                 val candidates = gateway.request(ReflectionApiRequest(record.requestId, runId, evidence))
-                // Keep legacy snapshots byte-for-byte. Reconcile only actual new/previous
-                // selection metadata, including clearing a stale winner after a retry fallback.
-                val selectedEvidence = if (candidates.selectedSongId != null || evidence.selectedSongId != null ||
-                    evidence.songSelectionMethod != null) gson.toJson(evidence.withSongSelection(candidates)) else null
+                val selected = if (candidates.selectedSongId != null || evidence.selectedSongId != null ||
+                    evidence.songSelectionMethod != null) evidence.withSongSelection(candidates) else evidence
+                val curatedAck = candidates.songCueId?.takeIf { id ->
+                    selected.songPlaybackReceipt == null && selected.songPassage?.cueId == id &&
+                        selected.musicContext.songCue?.source == "RUNSTATE_CURATED" &&
+                        selected.musicContext.songCue.cueId == id
+                }
+                val frozen = if (selected.acknowledgedCuratedCueId == curatedAck) selected
+                    else selected.copy(acknowledgedCuratedCueId = curatedAck)
+                val selectedEvidence = if (frozen === evidence) null else gson.toJson(frozen)
                 mutex.withLock {
                     store.selectedCandidates(runId, record.requestId, gson.toJson(candidates), candidates.isTestData,
                         selectedEvidence)
@@ -487,11 +493,11 @@ internal class RunReflectionCoordinator(
 }
 
 /** Only a server-acknowledged cue paired with this frozen evidence can launch recorded music. */
-internal fun pairedPassageFor(record: RunReflectionEntity, acknowledgedCueId: String? = null): SongPassageRequest? {
+internal fun pairedPassageFor(record: RunReflectionEntity, acknowledgedCueId: String? = null,
+                             savedEvidence: CompletedRunEvidence? = null): SongPassageRequest? {
     if (record.status != ReflectionStatus.READY || record.isTestData) return null
     return try {
-        val gson = GsonBuilder().create()
-        val evidence = gson.fromJson(record.evidenceJson, CompletedRunEvidence::class.java)
+        val evidence = savedEvidence ?: GsonBuilder().create().fromJson(record.evidenceJson, CompletedRunEvidence::class.java)
         val plan = evidence.songPassage ?: return null
         // Explicit no-clip for the song paused at the finish, on every path, including saved backup plans.
         if (evidence.songCandidates.orEmpty().any { it.loadedAtFinish && it.isSongOf(plan) }) return null

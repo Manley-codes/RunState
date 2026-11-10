@@ -91,10 +91,12 @@ class ReflectionApiClientTest {
                 studyCapability = "1", selectionCapability = "1", snippetsCapability = "1", snippetFallbacksCapability = "1")
             val post = FakeHttpsConnection(URL(config.endpoint), openingResponse().toString(),
                 snippetsCapability = "1", snippetFallbacksCapability = if (delivered) "1" else null)
-            val result = HostedReflectionHttpClient(config, { if (it.path == "/health") health else post }).request(snippetRequest())
+            val saved = snippetRequest().let { it.copy(evidence = it.evidence.copy(acknowledgedCuratedCueId = "private-replay-ack")) }
+            val result = HostedReflectionHttpClient(config, { if (it.path == "/health") health else post }).request(saved)
             val raw = post.sent.toString("UTF-8")
             assertTrue(JsonParser.parseString(raw).asJsonObject.get("allowSongSnippetFallbacks").asBoolean)
             assertFalse(raw.contains("spotify:track:")); assertFalse(raw.contains("songPlaybackReceipt"))
+            assertFalse(raw.contains("acknowledgedCuratedCueId")); assertFalse(raw.contains("private-replay-ack"))
             assertEquals(delivered, result.songSnippet != null)
             assertNull(result.songCueId)
         }

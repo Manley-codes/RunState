@@ -21,7 +21,8 @@ internal data class SpotifyLivePlayerState(
     val canSkipNext: Boolean = false,
     val canTogglePlayback: Boolean = false,
     val busy: Boolean = false,
-    val unavailableMessage: String? = null
+    val unavailableMessage: String? = null,
+    val loadingArtwork: Boolean = false
 ) {
     /** A display estimate only. Spotify remains the authority for position and playback. */
     fun positionAt(elapsedRealtime: Long): Long {

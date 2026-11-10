@@ -104,7 +104,7 @@ import com.runstate.mobile.ui.RunUiModel
 import com.runstate.mobile.ui.RunUiState
 import com.runstate.mobile.ui.rememberLifecycleCountdown
 import com.runstate.mobile.ui.runMetricsDisplayFor
-import com.runstate.mobile.ui.historyItemWithOptionalMusic
+import com.runstate.mobile.ui.historyItemFor
 import com.runstate.mobile.ui.weatherSummaryFor
 import com.runstate.mobile.ui.completionDateLabelFor
 import com.runstate.mobile.ui.savedRunReceiptFor
@@ -568,11 +568,11 @@ internal fun RunJourneyRoot(
             reflectionCoordinator?.initialize()
             val reflectionsByRun = storedReflections.orEmpty().associateBy { it.runId }
             historyItems = completedRuns.orEmpty().filter { it.activityFinalized }.map { run ->
-                historyItemWithOptionalMusic(
+                historyItemFor(
                     run,
                     database.runDao().transitionsFor(run.runId),
                     reflectionsByRun[run.runId]
-                ) { database.musicObservationDao().observationsFor(run.runId) }
+                )
                     .copy(weatherSummary = weatherSummaryFor(run, weatherByRun[run.runId]),
                         splitStatus = splitsByRun[run.runId]?.status,
                         shoeLabel = shoesById[run.shoePairId]?.let { "${it.brand} ${it.model}" +
@@ -592,10 +592,9 @@ internal fun RunJourneyRoot(
         val run = completedRuns?.firstOrNull { it.runId == id && it.activityFinalized }
         if (id == null || run == null) { recapItem = null; return@LaunchedEffect }
         try {
-            recapItem = historyItemWithOptionalMusic(run, database.runDao().transitionsFor(id),
-                storedReflections?.firstOrNull { it.runId == id }) {
-                database.musicObservationDao().observationsFor(id)
-            }.copy(weatherSummary = weatherSummaryFor(run, weatherByRun[id]),
+            recapItem = historyItemFor(run, database.runDao().transitionsFor(id),
+                storedReflections?.firstOrNull { it.runId == id }).copy(
+                weatherSummary = weatherSummaryFor(run, weatherByRun[id]),
                 splitStatus = splitsByRun[id]?.status,
                 shoeLabel = shoesById[run.shoePairId]?.let { "${it.brand} ${it.model}" +
                     (it.nickname?.let { name -> " · $name" } ?: "") })
@@ -1558,6 +1557,7 @@ internal fun RunJourneyRoot(
             items = historyItems,
             onBack = ::closeHistory,
             showRecordingSources = ownerToolsAvailable && historyRecordingSources,
+            autoPlayOnExpand = ownerToolsAvailable,
             onRetryReflection = ::retryReflection,
             onSelectEffort = ::saveEffort,
             onSelectEffortRating = ::saveEffortRating,

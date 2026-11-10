@@ -6,6 +6,7 @@ import com.runstate.mobile.data.local.*
 import com.runstate.mobile.weather.RunWeatherSnapshot
 import com.runstate.mobile.music.PassagePlayback
 import com.runstate.mobile.music.SongPassageSnapshot
+import com.runstate.mobile.ui.savedReflectionSongFor
 import java.util.UUID
 import kotlinx.coroutines.*
 import org.junit.After
@@ -1357,6 +1358,11 @@ class RunReflectionCoordinatorTest {
         assertEquals("2", evidence.selectedSongId)
         assertEquals("Lovely Day", evidence.musicContext.trackTitle)
         assertNull(saved.candidatesJson)
+        val savedSong = savedReflectionSongFor(dao.inserted.first(), saved)!!
+        assertEquals("Lovely Day", savedSong.title)
+        assertEquals(ready.passage, savedSong.passage)
+        val older = evidence.copy(acknowledgedCuratedCueId = null)
+        assertNull(savedReflectionSongFor(dao.inserted.first(), saved.copy(evidenceJson = gson.toJson(older)))!!.passage)
         val reopened = RunReflectionCoordinator(dao, store, ReflectionGateway { error("No regeneration") },
             scope(), nowMillis = { 100L })
         reopened.onSavedVisible(RUN_ID)
@@ -1393,6 +1399,9 @@ class RunReflectionCoordinatorTest {
         assertTrue(evidence.songCandidates!!.single().loadedAtFinish)
         assertNull(evidence.songPassage)
         assertNull(pairedPassageFor(saved, snippet.cueId))
+        val song = savedReflectionSongFor(dao.inserted.first(), saved)!!
+        assertEquals("Example Song", song.title)
+        assertNull(song.passage)
     }
 
     @Test fun theLoadedSongIsReadOnlyWithMusicSharingConsent() {
@@ -1431,6 +1440,10 @@ class RunReflectionCoordinatorTest {
         assertEquals("123", evidence.songPassage!!.timingSourceId)
         assertEquals(1, evidence.songPassage!!.timingVersion)
         assertNull(saved.candidatesJson)
+        assertEquals(passage, savedReflectionSongFor(dao.inserted.first(), saved)!!.passage)
+        val wrongWinner = evidence.copy(selectedSongId = "unrelated")
+        assertNull(savedReflectionSongFor(dao.inserted.first(), saved.copy(evidenceJson = gson.toJson(wrongWinner))))
+        assertNull(savedReflectionSongFor(dao.inserted.first(), saved.copy(evidenceJson = "{invalid")))
         assertNull(pairedPassageFor(saved))
         assertNull(pairedPassageFor(saved, "wrong-cue"))
         val reopened = RunReflectionCoordinator(dao, store, ReflectionGateway { error("No regeneration") },
@@ -1462,10 +1475,12 @@ class RunReflectionCoordinatorTest {
         val saved = store.rows.getValue(RUN_ID)
         val evidence = gson.fromJson(saved.evidenceJson, CompletedRunEvidence::class.java)
         assertNull(evidence.musicContext.songCue); assertEquals(snippet, evidence.songPlaybackReceipt)
+        assertEquals(passage, savedReflectionSongFor(dao.inserted.first(), saved)!!.passage)
         assertNull(pairedPassageFor(saved)); assertNull(pairedPassageFor(saved, "wrong-cue"))
         assertNotNull(pairedPassageFor(saved, snippet.cueId))
         val damaged = evidence.copy(songPassage = evidence.songPassage!!.copy(startPositionMillis = 50_000))
         assertNull(pairedPassageFor(saved.copy(evidenceJson = gson.toJson(damaged)), snippet.cueId))
+        assertNull(savedReflectionSongFor(dao.inserted.first(), saved.copy(evidenceJson = gson.toJson(damaged)))!!.passage)
         val reopened = RunReflectionCoordinator(dao, store, ReflectionGateway { error("No regeneration") },
             scope(), nowMillis = { 100L })
         reopened.onSavedVisible(RUN_ID)
