@@ -1,0 +1,67 @@
+name: iPhone field test
+
+on:
+  push:
+    branches: [master]
+    paths: ['ios/**', '.github/workflows/ios.yml']
+  pull_request:
+    branches: [master]
+    paths: ['ios/**', '.github/workflows/ios.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  field-test:
+    name: Simulator tests and personal device build
+    runs-on: macos-26
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: ios
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.5.app/Contents/Developer
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Run GPS and saved-run tests on iOS
+        run: |
+          xcodebuild -version
+          xcodebuild -project RunState.xcodeproj -scheme RunState -configuration Debug \
+            -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.5' \
+            -parallel-testing-enabled NO \
+            -resultBundlePath "$RUNNER_TEMP/RunStateTests.xcresult" test
+
+      - name: Keep failed simulator results
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: RunState-iOS-test-results
+          path: ${{ runner.temp }}/RunStateTests.xcresult
+          retention-days: 7
+          if-no-files-found: ignore
+
+      - name: Build the unsigned iPhone app
+        run: |
+          xcodebuild -project RunState.xcodeproj -scheme RunState -configuration Release \
+            -destination 'generic/platform=iOS' -derivedDataPath "$RUNNER_TEMP/device-build" \
+            CODE_SIGNING_ALLOWED=NO build
+          app="$RUNNER_TEMP/device-build/Build/Products/Release-iphoneos/RunState.app"
+          test -x "$app/RunState"
+          test "$(plutil -extract CFBundleSupportedPlatforms.0 raw -o - "$app/Info.plist")" = iPhoneOS
+          mkdir -p "$RUNNER_TEMP/package/Payload"
+          ditto "$app" "$RUNNER_TEMP/package/Payload/RunState.app"
+          cd "$RUNNER_TEMP/package"
+          /usr/bin/zip -qry "$RUNNER_TEMP/RunState-field-test.ipa" Payload
+          /usr/bin/unzip -tq "$RUNNER_TEMP/RunState-field-test.ipa"
+
+      - name: Save the build for personal signing
+        uses: actions/upload-artifact@v4
+        with:
+          name: RunState-iPhone-unsigned
+          path: ${{ runner.temp }}/RunState-field-test.ipa
+          if-no-files-found: error
+          retention-days: 7

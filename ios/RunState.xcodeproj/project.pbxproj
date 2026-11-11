@@ -1,0 +1,198 @@
+// !$*UTF8*$!
+{
+    archiveVersion = 1;
+    classes = {};
+    objectVersion = 77;
+    objects = {
+
+/* Begin PBXContainerItemProxy section */
+        120000000000000000000010 = {
+            isa = PBXContainerItemProxy;
+            containerPortal = 120000000000000000000001;
+            proxyType = 1;
+            remoteGlobalIDString = 120000000000000000000007;
+            remoteInfo = RunState;
+        };
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+        120000000000000000000005 = {isa = PBXFileReference; explicitFileType = wrapper.application; path = RunState.app; sourceTree = BUILT_PRODUCTS_DIR; };
+        120000000000000000000006 = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; path = RunStateTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+        120000000000000000000020 = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "Configuration/RunState-Info.plist"; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedRootGroup section */
+        120000000000000000000003 = {isa = PBXFileSystemSynchronizedRootGroup; path = RunState; sourceTree = "<group>"; };
+        120000000000000000000004 = {isa = PBXFileSystemSynchronizedRootGroup; path = RunStateTests; sourceTree = "<group>"; };
+/* End PBXFileSystemSynchronizedRootGroup section */
+
+/* Begin PBXGroup section */
+        120000000000000000000002 = {
+            isa = PBXGroup;
+            children = (120000000000000000000003, 120000000000000000000004, 120000000000000000000020, 12000000000000000000000F);
+            sourceTree = "<group>";
+        };
+        12000000000000000000000F = {
+            isa = PBXGroup;
+            children = (120000000000000000000005, 120000000000000000000006);
+            name = Products;
+            sourceTree = "<group>";
+        };
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+        120000000000000000000007 /* RunState */ = {
+            isa = PBXNativeTarget;
+            buildConfigurationList = 120000000000000000000013;
+            buildPhases = (120000000000000000000009, 12000000000000000000000A, 12000000000000000000000B);
+            buildRules = ();
+            dependencies = ();
+            fileSystemSynchronizedGroups = (120000000000000000000003);
+            name = RunState;
+            productName = RunState;
+            productReference = 120000000000000000000005;
+            productType = "com.apple.product-type.application";
+        };
+        120000000000000000000008 /* RunStateTests */ = {
+            isa = PBXNativeTarget;
+            buildConfigurationList = 120000000000000000000014;
+            buildPhases = (12000000000000000000000C, 12000000000000000000000D, 12000000000000000000000E);
+            buildRules = ();
+            dependencies = (120000000000000000000011);
+            fileSystemSynchronizedGroups = (120000000000000000000004);
+            name = RunStateTests;
+            productName = RunStateTests;
+            productReference = 120000000000000000000006;
+            productType = "com.apple.product-type.bundle.unit-test";
+        };
+/* End PBXNativeTarget section */
+
+        120000000000000000000009 = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+        12000000000000000000000A = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+        12000000000000000000000B = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+        12000000000000000000000C = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+        12000000000000000000000D = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+        12000000000000000000000E = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+
+/* Begin PBXProject section */
+        120000000000000000000001 /* Project object */ = {
+            isa = PBXProject;
+            attributes = {
+                LastSwiftUpdateCheck = 2650;
+                LastUpgradeCheck = 2650;
+                TargetAttributes = {
+                    120000000000000000000007 = {CreatedOnToolsVersion = 26.5; };
+                    120000000000000000000008 = {CreatedOnToolsVersion = 26.5; TestTargetID = 120000000000000000000007; };
+                };
+            };
+            buildConfigurationList = 120000000000000000000012;
+            developmentRegion = en;
+            hasScannedForEncodings = 0;
+            knownRegions = (en, Base);
+            mainGroup = 120000000000000000000002;
+            preferredProjectObjectVersion = 77;
+            productRefGroup = 12000000000000000000000F;
+            projectDirPath = "";
+            projectRoot = "";
+            targets = (120000000000000000000007, 120000000000000000000008);
+        };
+/* End PBXProject section */
+
+        120000000000000000000011 = {
+            isa = PBXTargetDependency;
+            target = 120000000000000000000007;
+            targetProxy = 120000000000000000000010;
+        };
+
+/* Begin XCBuildConfiguration section */
+        120000000000000000000015 = {
+            isa = XCBuildConfiguration;
+            buildSettings = {
+                CLANG_ENABLE_MODULES = YES;
+                ENABLE_TESTABILITY = YES;
+                IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+                SDKROOT = iphoneos;
+                SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+                SWIFT_VERSION = 5.0;
+            };
+            name = Debug;
+        };
+        120000000000000000000016 = {
+            isa = XCBuildConfiguration;
+            buildSettings = {
+                CLANG_ENABLE_MODULES = YES;
+                IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+                SDKROOT = iphoneos;
+                SWIFT_COMPILATION_MODE = wholemodule;
+                SWIFT_VERSION = 5.0;
+            };
+            name = Release;
+        };
+        120000000000000000000017 = {
+            isa = XCBuildConfiguration;
+            buildSettings = {
+                CODE_SIGN_STYLE = Automatic;
+                CURRENT_PROJECT_VERSION = 1;
+                GENERATE_INFOPLIST_FILE = YES;
+                INFOPLIST_FILE = "Configuration/RunState-Info.plist";
+                INFOPLIST_KEY_CFBundleDisplayName = RunState;
+                INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+                LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path/Frameworks");
+                MARKETING_VERSION = 0.1;
+                PRODUCT_BUNDLE_IDENTIFIER = com.runstate.mobile.fieldtest;
+                PRODUCT_NAME = "$(TARGET_NAME)";
+                SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+                TARGETED_DEVICE_FAMILY = 1;
+            };
+            name = Debug;
+        };
+        120000000000000000000018 = {
+            isa = XCBuildConfiguration;
+            buildSettings = {
+                CODE_SIGN_STYLE = Automatic;
+                CURRENT_PROJECT_VERSION = 1;
+                GENERATE_INFOPLIST_FILE = YES;
+                INFOPLIST_FILE = "Configuration/RunState-Info.plist";
+                INFOPLIST_KEY_CFBundleDisplayName = RunState;
+                INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+                LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path/Frameworks");
+                MARKETING_VERSION = 0.1;
+                PRODUCT_BUNDLE_IDENTIFIER = com.runstate.mobile.fieldtest;
+                PRODUCT_NAME = "$(TARGET_NAME)";
+                SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+                TARGETED_DEVICE_FAMILY = 1;
+            };
+            name = Release;
+        };
+        120000000000000000000019 = {
+            isa = XCBuildConfiguration;
+            buildSettings = {
+                BUNDLE_LOADER = "$(TEST_HOST)";
+                GENERATE_INFOPLIST_FILE = YES;
+                PRODUCT_BUNDLE_IDENTIFIER = com.runstate.mobile.fieldtest.tests;
+                PRODUCT_NAME = "$(TARGET_NAME)";
+                TARGETED_DEVICE_FAMILY = 1;
+                TEST_HOST = "$(BUILT_PRODUCTS_DIR)/RunState.app/RunState";
+            };
+            name = Debug;
+        };
+        12000000000000000000001A = {
+            isa = XCBuildConfiguration;
+            buildSettings = {
+                BUNDLE_LOADER = "$(TEST_HOST)";
+                GENERATE_INFOPLIST_FILE = YES;
+                PRODUCT_BUNDLE_IDENTIFIER = com.runstate.mobile.fieldtest.tests;
+                PRODUCT_NAME = "$(TARGET_NAME)";
+                TARGETED_DEVICE_FAMILY = 1;
+                TEST_HOST = "$(BUILT_PRODUCTS_DIR)/RunState.app/RunState";
+            };
+            name = Release;
+        };
+/* End XCBuildConfiguration section */
+
+        120000000000000000000012 = {isa = XCConfigurationList; buildConfigurations = (120000000000000000000015, 120000000000000000000016); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
+        120000000000000000000013 = {isa = XCConfigurationList; buildConfigurations = (120000000000000000000017, 120000000000000000000018); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
+        120000000000000000000014 = {isa = XCConfigurationList; buildConfigurations = (120000000000000000000019, 12000000000000000000001A); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
+    };
+    rootObject = 120000000000000000000001;
+}

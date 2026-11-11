@@ -5,13 +5,35 @@ metadata:
   type: project
 ---
 
+## November 11 free-running and iPhone field tests
+
+Android Settings can turn off cloud reflections while keeping the saved connection. Use that switch for Manley's outdoor free-version test. Check pace and distance while locked, mile announcements over music, Energy and Effort at the finish, and the saved History entry. Decide which free features to keep after listening to that run. The accepted reflection writing and song selection stay as they are. Studying only the winning song is parked.
+
+The server supports a deliberately started seven-day preview with two personalized runs and a manually assigned eight-run monthly pilot. Run IDs bind early song studies and one spoken choice to the same allowance. The pricing hypothesis is US$3.99/month for eight complete reflections. Validate provider usage on an ordinary run and a music-heavy run before setting a store price. No checkout or automatic renewal is configured. Android reuses six fixed voice recordings across restarts from its private cache. A returning runner can hear already-cached cues when cloud reflections are off. A fresh tracking-only installation uses the phone's voice.
+
+The first native iPhone field prototype is in `ios/`. On a push to master that touches its files, or a manual run, the **iPhone field test** workflow tests it on a GitHub-hosted Mac and builds an unsigned IPA. Download the artifact **RunState-iPhone-unsigned** after it passes. Personal signing and an outdoor iPhone test are still required. Start music and a run, lock the screen, cross a mile, check the spoken announcement and music volume, then pause, resume, finish and reopen History. The prototype stores run totals locally.
+
+Both Android variants passed all 926 unit tests and built locally. Release lint completed with zero errors. Two emulator tests verified that switching off cloud reflections survives reopening and that a simulated tracking-only run can keep local music observation on, withhold song-sharing permission and save the activity. The Moto still needs the verified build for its outdoor test.
+
+The zero-charge four-song and ten-song sample comparisons both completed on loopback using simulated providers. Each selected one song, wrote one family of answers and requested one selected voice. Four songs triggered four detailed studies and 12 catalog requests. Ten songs triggered ten studies and 30 catalog requests. In both cases retrying the written response and selected voice returned identical results with no additional provider sends. These counts apply to the controlled fixtures. Account pricing, cache hits and catalog results affect the cost of a live run. See `backend/README.md` for the sample command and usage meter.
+
+## November 11 provider spending limits and iPhone feasibility
+
+The local HTTP backend reserves each Anthropic, ElevenLabs and Musixmatch request against the authenticated runner's monthly allowance and the app's shared allowance. In an offline test, one runner used their 3¢, a second used the remaining 2¢ of the 5¢ shared budget, and the next request was refused before dispatch. Restarting preserved both caps and allowed saved answers and audio to replay. All 277 backend tests passed. A local HTTP server received two GET requests after it dropped the first response with Java 17's default settings, and one with the required startup option. The amounts are test fixtures. Before hosting, choose real caps, verify each provider's maximum cost per request and arrange private persistent storage. See `backend/README.md` for configuration.
+
+All 192 focused Android unit tests passed. In the new Android check, a runner could save one completed 180-meter sample after the reflection service returned HTTP 429. The saved run kept its 60 seconds of active time and 120 seconds of elapsed time.
+
+For iPhone, reuse the Java reflection service, request formats and accepted run behavior. The first proposed native test starts a run in the foreground, locks the phone with Spotify playing, records distance and plays a local mile announcement over Bluetooth. Check that music lowers and returns naturally, that music already paused stays paused, and that pausing and resuming the run saves the correct distance once. Apple's background location and temporary music-volume controls support this approach. Spotify recommends disconnecting its remote control while the app is inactive. Implementation and listening on a physical iPhone are pending. [Apple background location](https://developer.apple.com/documentation/corelocation/cllocationmanager/allowsbackgroundlocationupdates), [Apple audio](https://developer.apple.com/documentation/avfaudio/avaudiosession/categoryoptions-swift.struct/duckothers), [Spotify app lifecycle](https://developer.spotify.com/documentation/ios/concepts/application-lifecycle).
+
+Manley has an iPhone. He still needs access to a compatible Mac with Xcode for the first device test. Xcode supports installing a personal test build with a free Apple Account. Wider beta distribution through TestFlight is a later step. [Apple account and device testing](https://developer.apple.com/help/account/basics/about-your-developer-account), [Xcode compatibility](https://developer.apple.com/xcode/system-requirements/).
+
 ## November 11 written reflection retries
 
 Manley chose a 24-hour window to recover written answers. Android already keeps the completed reflection in History and uses a new request ID when retrying a failed request. After a lost reply and a backend restart, the original backend ran the simulated writer twice. The updated backend returned the same four answers with the phone's new ID and the simulated writer ran once. The HTTP tests cover song and snippet details, runner isolation and request conflicts. A forced crash after a simulated charge also kept the count at one. A recording saved by the previous backend still replayed with its original one-call count.
 
 All 262 backend tests and 53 focused Android client tests passed. The existing oversized speech-request test encountered a Windows socket reset on one run and passed on the unchanged full rerun.
 
-The Render dashboard showed no attached disk and quoted $0.25/GB per month. The live revision was `706b789`. Deployment and hosted restart testing are deferred. The next local release milestone is per-runner and overall spending limits.
+The Render dashboard showed no attached disk and quoted $0.25/GB per month. The live revision was `706b789`. Deployment and hosted restart testing are deferred.
 
 ## November 11 spoken reflection retries
 
