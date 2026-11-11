@@ -89,6 +89,17 @@ final class SpeechReplayStore {
         return new Claim(State.CLAIMED, key, reservation, null);
     }
 
+    void releaseUnsent(Claim claim) throws IOException {
+        try (Connection db = database.open(); PreparedStatement release = db.prepareStatement(
+                "DELETE FROM speech_replays WHERE replay_key=? AND reservation=? AND audio IS NULL")) {
+            release.setString(1, claim.key());
+            release.setString(2, claim.reservation());
+            release.executeUpdate();
+        } catch (SQLException failure) {
+            throw new IOException("Cannot release unsent speech reservation", failure);
+        }
+    }
+
     void complete(Claim claim, byte[] audio) throws IOException {
         if (claim.state() != State.CLAIMED || audio == null || audio.length == 0 || audio.length > MAX_AUDIO) {
             throw new IOException("Invalid reflection speech completion");

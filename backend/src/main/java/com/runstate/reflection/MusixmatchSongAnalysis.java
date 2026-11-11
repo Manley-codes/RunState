@@ -105,6 +105,7 @@ public final class MusixmatchSongAnalysis {
             Thread.currentThread().interrupt();
             return Optional.empty();
         } catch (IOException | RuntimeException unavailable) {
+            ProviderSpendScope.propagateIfDenied(unavailable);
             // Provider exceptions can contain the credential-bearing URL. Never retain or log them.
             return Optional.empty();
         }
@@ -133,6 +134,7 @@ public final class MusixmatchSongAnalysis {
             Thread.currentThread().interrupt();
             return Optional.empty();
         } catch (IOException | RuntimeException unavailable) {
+            ProviderSpendScope.propagateIfDenied(unavailable);
             // Never attach or log a credential-bearing transport exception or provider payload.
             return Optional.empty();
         }
@@ -164,6 +166,7 @@ public final class MusixmatchSongAnalysis {
             Thread.currentThread().interrupt();
             return Optional.empty();
         } catch (IOException | RuntimeException unavailable) {
+            ProviderSpendScope.propagateIfDenied(unavailable);
             // Never attach or log a credential-bearing transport exception or provider payload.
             return Optional.empty();
         }
@@ -210,6 +213,7 @@ public final class MusixmatchSongAnalysis {
             Thread.currentThread().interrupt();
             return null;
         } catch (IOException | RuntimeException unavailable) {
+            ProviderSpendScope.propagateIfDenied(unavailable);
             return null;
         }
     }
@@ -454,7 +458,10 @@ public final class MusixmatchSongAnalysis {
     }
 
     private TransportResponse request(String path, String query) throws IOException, InterruptedException {
+        if (Thread.currentThread().isInterrupted()) throw new InterruptedException();
         URI endpoint = URI.create(API_ORIGIN + path + "?" + query + "&apikey=" + encode(apiKey));
+        var usage = ProviderSpendScope.beforeSend(ProviderSpendBudget.Provider.MUSIXMATCH);
+        if (usage != null) usage.musixmatchAttempt();
         return transport.send(new TransportRequest(endpoint, REQUEST_TIMEOUT));
     }
 

@@ -6,6 +6,7 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.nio.charset.StandardCharsets
 import java.io.IOException
+import java.util.UUID
 import java.util.concurrent.atomic.AtomicReference
 import javax.net.ssl.HttpsURLConnection
 import kotlinx.coroutines.CancellationException
@@ -36,17 +37,22 @@ internal enum class SpeechVoice(val path: String, val capabilityHeader: String, 
     RUN("/api/run-voice/speech", "X-RunState-Run-Voice", 500)
 }
 
-/** Provider credentials never leave the server. Only the exact line being spoken is uploaded. */
+/** Scoped reflection speech includes the run ID only on the authenticated speech request. */
 internal class ReflectionSpeechHttpClient private constructor(
     private val endpoint: URL,
     private val accessCode: String?,
     private val voice: SpeechVoice,
+    private val runId: String?,
     private val connectionFactory: (URL) -> HttpURLConnection
 ) : ReflectionSpeechGateway {
     companion object {
         fun hosted(config: ReflectionConnectionConfig, voice: SpeechVoice = SpeechVoice.REFLECTION,
             connectionFactory: (URL) -> HttpURLConnection = { it.openConnection() as HttpURLConnection }
-        ) = ReflectionSpeechHttpClient(URL(config.endpoint), config.accessCode, voice, connectionFactory)
+        ) = ReflectionSpeechHttpClient(URL(config.endpoint), config.accessCode, voice, null, connectionFactory)
+
+        fun hosted(config: ReflectionConnectionConfig, runId: String?,
+            connectionFactory: (URL) -> HttpURLConnection = { it.openConnection() as HttpURLConnection }
+        ) = ReflectionSpeechHttpClient(URL(config.endpoint), config.accessCode, SpeechVoice.REFLECTION, runId, connectionFactory)
 
         /** Called only after the composition root admits the debug local bridge. */
         fun local(endpoint: String, voice: SpeechVoice = SpeechVoice.REFLECTION,
@@ -56,18 +62,21 @@ internal class ReflectionSpeechHttpClient private constructor(
             require(url.protocol == "http" && url.host in setOf("127.0.0.1", "10.0.2.2") &&
                 url.port == 8787 && url.path == "/api/reflections/candidates" &&
                 url.query == null && url.ref == null && url.userInfo == null)
-            return ReflectionSpeechHttpClient(url, null, voice, connectionFactory)
+            return ReflectionSpeechHttpClient(url, null, voice, null, connectionFactory)
         }
     }
 
-    override suspend fun synthesize(text: String): ByteArray? {
+    override suspend fun synthesize(text: String): ByteArray? = synthesize(text) { true }
+
+    suspend fun synthesize(text: String, stillAllowed: () -> Boolean): ByteArray? {
         if (text.isBlank() || text.length > voice.maxTextLength) return null
+        if (runId != null && runCatching { UUID.fromString(runId).toString() }.getOrNull() != runId) return null
         val active = AtomicReference<HttpURLConnection?>()
         return withTimeoutOrNull(20_000L) {
             coroutineScope {
                 suspendCancellableCoroutine { continuation ->
                     val worker = launch(Dispatchers.IO) {
-                        val result = fetch(text, active)
+                        val result = fetch(text, active, stillAllowed)
                         if (continuation.isActive) continuation.resume(result)
                     }
                     continuation.invokeOnCancellation {
@@ -80,7 +89,7 @@ internal class ReflectionSpeechHttpClient private constructor(
         }
     }
 
-    private suspend fun fetch(text: String, active: AtomicReference<HttpURLConnection?>): ByteArray? {
+    private suspend fun fetch(text: String, active: AtomicReference<HttpURLConnection?>, stillAllowed: () -> Boolean): ByteArray? {
         val deadlineNanos = System.nanoTime() + 20_000_000_000L
         fun remaining(maximum: Int): Int {
             val millis = (deadlineNanos - System.nanoTime()) / 1_000_000L
@@ -104,7 +113,7 @@ internal class ReflectionSpeechHttpClient private constructor(
             health.disconnect()
             active.compareAndSet(health, null)
             coroutineContext.ensureActive()
-            if (!supported) return null
+            if (!supported || !stillAllowed()) return null
             val body = Gson().toJson(mapOf("text" to text)).toByteArray(StandardCharsets.UTF_8)
             val speech = connect(voice.path)
             speech.requestMethod = "POST"
@@ -112,7 +121,9 @@ internal class ReflectionSpeechHttpClient private constructor(
             speech.setRequestProperty("Content-Type", "application/json; charset=utf-8")
             speech.setRequestProperty("Accept", "audio/mpeg")
             accessCode?.let { speech.setRequestProperty("Authorization", "Bearer $it") }
+            runId?.let { speech.setRequestProperty("X-RunState-Run-Id", it) }
             speech.setFixedLengthStreamingMode(body.size)
+            if (!stillAllowed()) return null
             speech.outputStream.use { it.write(body) }
             speech.readTimeout = remaining(15_000)
             if (speech.responseCode != HttpURLConnection.HTTP_OK ||

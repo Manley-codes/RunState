@@ -132,12 +132,13 @@ class SongPassageSpeechTest {
                 }
                 val gateway = com.runstate.mobile.reflection.ReflectionSpeechHttpClient.hosted(
                     config, com.runstate.mobile.reflection.SpeechVoice.RUN)
-                val prepared = com.runstate.mobile.reflection.RunVoiceCueCache(this, gateway, lines)
+                val prepared = com.runstate.mobile.reflection.RunVoiceCueCache(files = null)
+                prepared.select("audition", gateway, clearPrevious = false)
                 var nextAttempt = 0L
                 while (!prepared.hasAll(lines)) {
                     val now = android.os.SystemClock.elapsedRealtime()
                     if (now >= nextAttempt) {
-                        prepared.prefetch()
+                        prepared.prefetch(lines)
                         nextAttempt = now + 5_000L
                     }
                     delay(100L)

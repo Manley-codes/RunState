@@ -49,7 +49,7 @@ class RunReflectionCoordinatorTest {
      * This fake reproduces the state changes at the coordinator/Room seam. The Room
      * instrumented tests separately prove that the same rules are transactional.
      */
-    private class MemoryReflectionStore(
+    internal class MemoryReflectionStore(
         initial: List<RunReflectionEntity> = emptyList()
     ) : ReflectionStore {
         val rows = initial.associateByTo(mutableMapOf()) { it.runId }

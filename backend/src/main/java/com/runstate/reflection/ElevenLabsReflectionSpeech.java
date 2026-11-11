@@ -104,17 +104,22 @@ public final class ElevenLabsReflectionSpeech implements ReflectionHttpServer.Sp
             settings.addProperty("speed", speed);
             body.add("voice_settings", settings);
         }
+        var usage = ProviderSpendScope.beforeSend(ProviderSpendBudget.Provider.ELEVENLABS);
+        boolean runVoice = RUN_VOICE_ENDPOINT.equals(endpoint);
+        if (usage != null) usage.voiceAttempt(runVoice, text.codePointCount(0, text.length()));
         try {
             TransportResponse response = transport.send(new TransportRequest(
                     endpoint, apiKey, body.toString(), REQUEST_TIMEOUT));
             if (response == null) {
                 throw failure(FailureType.INVALID_RESPONSE, "Reflection speech is unavailable.");
             }
+            boolean usable = response.statusCode() == 200 && isMpegAudio(response.contentType()) && response.body() != null
+                    && response.body().length > 0 && response.body().length <= MAX_AUDIO_BYTES;
+            if (usage != null) usage.voiceReply(runVoice, usable, response.characterCost());
             if (response.statusCode() != 200) {
                 throw failure(FailureType.PROVIDER_ERROR, "Reflection speech provider rejected the request.");
             }
-            if (!isMpegAudio(response.contentType()) || response.body() == null
-                    || response.body().length == 0 || response.body().length > MAX_AUDIO_BYTES) {
+            if (!usable) {
                 throw failure(FailureType.INVALID_RESPONSE, "Reflection speech response is invalid.");
             }
             return response.body().clone();
@@ -166,7 +171,10 @@ public final class ElevenLabsReflectionSpeech implements ReflectionHttpServer.Sp
         }
     }
 
-    record TransportResponse(int statusCode, String contentType, byte[] body) {
+    record TransportResponse(int statusCode, String contentType, byte[] body, String characterCost) {
+        TransportResponse(int statusCode, String contentType, byte[] body) {
+            this(statusCode, contentType, body, null);
+        }
         @Override
         public String toString() {
             return "ElevenLabsSpeechResponse[statusCode=" + statusCode + ", body=redacted]";
@@ -191,7 +199,8 @@ public final class ElevenLabsReflectionSpeech implements ReflectionHttpServer.Sp
                 // This deadline includes the entire body, rather than just response headers.
                 HttpResponse<byte[]> response = future.get(request.timeout().toMillis(), TimeUnit.MILLISECONDS);
                 return new TransportResponse(response.statusCode(),
-                        response.headers().firstValue("Content-Type").orElse(null), response.body());
+                        response.headers().firstValue("Content-Type").orElse(null), response.body(),
+                        response.headers().firstValue("character-cost").orElse(null));
             } catch (ExecutionException unavailable) {
                 future.cancel(true);
                 if (unavailable.getCause() instanceof HttpTimeoutException) {

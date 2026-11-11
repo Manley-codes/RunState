@@ -405,7 +405,7 @@ public final class ReflectionContract {
         }
     }
 
-    private static void requireCanonicalUuid(String candidate, String fieldName) {
+    static void requireCanonicalUuid(String candidate, String fieldName) {
         require(candidate != null, fieldName + " must be a canonical lowercase UUID");
 
         try {

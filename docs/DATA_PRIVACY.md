@@ -73,6 +73,11 @@ paths; it would be inaccurate to claim that no song text ever reaches AI service
   The phone keeps the selected reflection in History independently. Deleting a run on the
   phone does not erase the server's retry record. Song preparation still uses a separate
   in-memory cache of up to 32 entries with two-hour reuse eligibility.
+- The monthly spending ledger stores a hash of the authenticated runner ID, the UTC month
+  and cumulative reserved amounts for that runner and the whole app. It contains no run
+  details, song names, text, audio or access codes. A successful reservation in a later
+  month clears the older totals.
+- The local trial and pilot implementation sends an opaque run ID when reserving a reflection and when requesting associated song studies or speech. The allowance database keeps hashed runner, run and preparation identifiers and hashes of permitted voice texts. The server remembers when a runner first started the trial so changing access codes cannot start another one. This database does not contain the song titles, raw run evidence, audio or reflection text.
 - In the backend version prepared November 11, the server saves the selected spoken reflection
   as an MP3 on private storage for seven-day retries and History replays. The recording can
   contain spoken run details. SQLite keeps a hash derived from the authenticated identity,
@@ -85,6 +90,8 @@ paths; it would be inaccurate to claim that no song text ever reaches AI service
 App-authored diagnostics inspected here contain bounded status/reason/timing information rather
 than coordinates, access codes, song names or speech text. This source review is not a runtime
 audit of every dependency or proof that every production logging setting is correct.
+
+An optional loopback developer meter prints provider attempts, model-usage counts, voice lengths and response outcomes to the local console. It excludes run IDs, identities, locations, lyrics, reflection text, audio and credentials. It is disabled on the hosted path.
 
 ### Remaining public-release decisions
 
@@ -294,15 +301,13 @@ and its request path are unchanged.
   is sent, and the key never reaches the phone.
 - **Separate path and limit:** run lines use their own server path (`/api/run-voice/speech`, with
   its own health capability header) and a 500-character limit.
-- **Prepared lines:** the four countdown lines and the energy question are fixed text. They are
-  fetched while the Start screen is open and held in memory for the app session, so the countdown
-  lands on time. If they are not all ready when a countdown begins, that whole countdown uses the
+- **Prepared lines:** the opening countdown prompt, four countdown lines and the Energy question use fixed text. Authorized successful recordings are reused from Android's private cache across app restarts. If the countdown set is incomplete when a countdown begins, that whole countdown uses the
   phone's own voice.
 - **Fallback:** facts and announcements are requested when spoken. If the new voice is not back
   within about five seconds, or preparation fails before playback begins, the phone's own voice
   speaks the same line. An error after playback begins stops that attempt rather than repeating
   the line in another voice.
-- **Storage:** neither the phone nor the backend writes generated run-voice audio to storage.
+- **Storage:** the six fixed recordings are kept in Android's private, non-backed-up cache, scoped to the saved connection, credential fingerprint and voice version. Changing or clearing the connection clears its recordings. Android can evict the files. Personalized facts, mile announcements and reflections are excluded from this cache.
   Provider-side retention follows the ElevenLabs account settings, as for the reflection voice.
   **October 24 exception, phone voice only:** while Start is visible, the phone's own speech
   engine silently rehearses the fixed line "Starting in ten." into a temporary file in RunState's
@@ -310,7 +315,7 @@ and its request path are unchanged.
   finishes or stops, or when that voice is closed. It holds only that fixed line, with no run,
   location, Energy, music, reflection or provider data. RunState sends it nowhere; it goes only to
   the phone's own speech engine, like every phone-voice line.
-- **Cost:** every spoken line uses ElevenLabs credits, roughly a few hundred characters per run.
+- **Cost:** an authorized new voice synthesis can use ElevenLabs credits. Reading a cached cue or speaking through the phone's voice does not call RunState's ElevenLabs service.
 
 ## Protected activities and optional notes — October 18, 2026
 

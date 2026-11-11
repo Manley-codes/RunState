@@ -13,6 +13,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.HashMap;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Optional;
@@ -26,7 +27,7 @@ final class BackendAccessPolicy {
     private static final Pattern TOKEN = Pattern.compile("[A-Za-z0-9_-]{43,128}");
     private static final Pattern PRINCIPAL_ID = Pattern.compile("[a-z0-9][a-z0-9_-]{0,63}");
     private static final Pattern FINGERPRINT = Pattern.compile("[0-9a-f]{64}");
-    private static final Set<String> FIELDS = Set.of("principalId", "tokenSha256", "expiresAt", "enabled");
+    private static final Set<String> REQUIRED_FIELDS = Set.of("principalId", "tokenSha256", "expiresAt", "enabled");
 
     private final List<Credential> credentials;
     private final Clock clock;
@@ -57,6 +58,7 @@ final class BackendAccessPolicy {
             reader.beginArray();
             List<Credential> credentials = new ArrayList<>();
             Set<String> fingerprints = new HashSet<>();
+            var tierByPrincipal = new HashMap<String, Tier>();
             while (reader.hasNext()) {
                 if (credentials.size() == MAX_CREDENTIALS) throw invalidConfiguration();
                 requireToken(reader, JsonToken.BEGIN_OBJECT);
@@ -66,9 +68,11 @@ final class BackendAccessPolicy {
                 String fingerprint = null;
                 Instant expiresAt = null;
                 boolean enabled = false;
+                Tier tier = Tier.OWNER;
                 while (reader.hasNext()) {
                     String name = reader.nextName();
-                    if (!FIELDS.contains(name) || !seen.add(name)) throw invalidConfiguration();
+                    if ((!REQUIRED_FIELDS.contains(name) && !name.equals("reflectionTier")) || !seen.add(name))
+                        throw invalidConfiguration();
                     if (name.equals("enabled")) {
                         requireToken(reader, JsonToken.BOOLEAN);
                         enabled = reader.nextBoolean();
@@ -79,14 +83,22 @@ final class BackendAccessPolicy {
                             case "principalId" -> principalId = value;
                             case "tokenSha256" -> fingerprint = value;
                             case "expiresAt" -> expiresAt = Instant.parse(value);
+                            case "reflectionTier" -> tier = switch (value) {
+                                case "tracking" -> Tier.TRACKING;
+                                case "trial" -> Tier.TRIAL;
+                                case "pilot" -> Tier.PILOT;
+                                default -> throw invalidConfiguration();
+                            };
                             default -> throw invalidConfiguration();
                         }
                     }
                 }
                 reader.endObject();
-                if (!seen.equals(FIELDS) || !FINGERPRINT.matcher(fingerprint).matches()
+                if (!seen.containsAll(REQUIRED_FIELDS) || !FINGERPRINT.matcher(fingerprint).matches()
                         || !fingerprints.add(fingerprint)) throw invalidConfiguration();
-                credentials.add(new Credential(new Principal(principalId),
+                Tier other = tierByPrincipal.putIfAbsent(principalId, tier);
+                if (other != null && other != tier) throw invalidConfiguration();
+                credentials.add(new Credential(new Principal(principalId, tier),
                         HexFormat.of().parseHex(fingerprint), expiresAt, enabled));
             }
             reader.endArray();
@@ -122,6 +134,10 @@ final class BackendAccessPolicy {
         if (reader.peek() != token) throw invalidConfiguration();
     }
 
+    boolean needsRunAllowances() {
+        return credentials.stream().anyMatch(c -> c.principal.tier == Tier.TRIAL || c.principal.tier == Tier.PILOT);
+    }
+
     private static byte[] digest(String token) {
         try {
             return MessageDigest.getInstance("SHA-256").digest(token.getBytes(StandardCharsets.US_ASCII));
@@ -136,7 +152,10 @@ final class BackendAccessPolicy {
 
     @Override public String toString() { return "BackendAccessPolicy[credentials=redacted]"; }
 
-    record Principal(String id) {
+    enum Tier { OWNER, TRACKING, TRIAL, PILOT }
+
+    record Principal(String id, Tier tier) {
+        Principal(String id) { this(id, Tier.OWNER); }
         Principal {
             if (id == null || !PRINCIPAL_ID.matcher(id).matches()) throw invalidConfiguration();
         }

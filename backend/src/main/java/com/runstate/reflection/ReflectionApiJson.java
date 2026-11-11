@@ -166,6 +166,22 @@ final class ReflectionApiJson {
                 requiredString(root, "trackTitle"), requiredString(root, "artistName"));
     }
 
+    static void requireEmptyObject(byte[] body) throws InvalidJsonException {
+        requireFields(parseStrictObject(decodeUtf8(body)), Set.of(), Set.of(), "trial activation");
+    }
+
+    record RunAdmission(String runId, boolean replayOnly) { }
+    static RunAdmission parseRunAdmission(byte[] body) throws InvalidJsonException {
+        JsonObject root = parseStrictObject(decodeUtf8(body));
+        requireFields(root, Set.of("runId", "replayOnly"), Set.of("runId"), "run admission");
+        String runId = requiredString(root, "runId");
+        ReflectionContract.requireCanonicalUuid(runId, "runId");
+        JsonElement replay = root.get("replayOnly");
+        if (replay != null && (!replay.isJsonPrimitive() || !replay.getAsJsonPrimitive().isBoolean()))
+            throw new IllegalArgumentException("replayOnly must be a boolean");
+        return new RunAdmission(runId, replay != null && replay.getAsBoolean());
+    }
+
     static String songPreparationResponse(String preparationId, ReflectionProvider.SongPreparationState state) {
         JsonObject response = new JsonObject();
         response.addProperty("preparationId", preparationId);

@@ -11,11 +11,15 @@ import com.runstate.mobile.location.RunTrackingServiceState
 import com.runstate.mobile.reflection.LocalReflectionHttpClient
 import com.runstate.mobile.reflection.AndroidReflectionConnectionStore
 import com.runstate.mobile.reflection.HostedReflectionHttpClient
+import com.runstate.mobile.reflection.HostedReflectionAccess
+import com.runstate.mobile.reflection.ReflectionTier
+import com.runstate.mobile.reflection.WrittenAccess
 import com.runstate.mobile.reflection.ReflectionConnectionConfig
 import com.runstate.mobile.reflection.ReflectionGateway
 import com.runstate.mobile.reflection.ReflectionSpeechGateway
 import com.runstate.mobile.reflection.ReflectionSpeechHttpClient
 import com.runstate.mobile.reflection.RunVoiceCueCache
+import com.runstate.mobile.reflection.FixedRunVoiceFiles
 import com.runstate.mobile.reflection.PreparedCountdownVoice
 import com.runstate.mobile.reflection.SpeechVoice
 import com.runstate.mobile.reflection.HostedSongStudyPreparationClient
@@ -70,7 +74,9 @@ internal sealed interface ReflectionConnectionState {
     data object Local : ReflectionConnectionState
     data object NotConfigured : ReflectionConnectionState
     data object Unavailable : ReflectionConnectionState
-    data class Hosted(val config: ReflectionConnectionConfig) : ReflectionConnectionState
+    data class Hosted(val config: ReflectionConnectionConfig) : ReflectionConnectionState {
+        val access = HostedReflectionAccess(config)
+    }
 }
 
 /**
@@ -223,13 +229,14 @@ class RunStateApplication : Application() {
         val preparation = songStudyPreparationOwner ?: RunSongStudyPreparation(
             applicationScope, RoomSongPreparationStore(database.runDao(), database.musicObservationDao()),
             allowed = {
-                musicListenerConnected && mutableRunPreferences.value?.observeMusic == true &&
+                musicListenerConnected && mutableRunPreferences.value?.cloudReflectionsEnabled == true &&
+                    mutableRunPreferences.value?.observeMusic == true &&
                     mutableRunPreferences.value?.shareMusicInReflection == true && hasMusicNotificationAccess()
             },
             destination = {
-                (mutableReflectionConnection.value as? ReflectionConnectionState.Hosted)?.config?.let { config ->
-                    SongPreparationDestination(reflectionDestinationFingerprint(config),
-                        HostedSongStudyPreparationClient(config))
+                (mutableReflectionConnection.value as? ReflectionConnectionState.Hosted)?.let { hosted ->
+                    SongPreparationDestination(reflectionDestinationFingerprint(hosted.config),
+                        HostedSongStudyPreparationClient(hosted.config, hosted.access))
                 }
             }
         ).also { songStudyPreparationOwner = it }
@@ -331,7 +338,7 @@ class RunStateApplication : Application() {
                         withContext(Dispatchers.IO) { runPreferencesStore.save(next) }
                         // Publish only after commit, preserving the previous confirmed choice on error.
                         mutableRunPreferences.value = next
-                        if (!next.observeMusic || !next.shareMusicInReflection) cancelSongStudyPreparation()
+                        if (!next.observeMusic || !next.shareMusicInReflection || !next.cloudReflectionsEnabled) cancelSongStudyPreparation()
                         mutableRunPreferencesError.value = null
                     } catch (cancelled: CancellationException) {
                         throw cancelled
@@ -407,7 +414,7 @@ class RunStateApplication : Application() {
         }
         applicationScope.launch {
             connectionLock.withLock {
-                mutableReflectionConnection.value = try {
+                val selected = try {
                     connectionStore.load()?.let { ReflectionConnectionState.Hosted(it) }
                         ?: defaultReflectionConnection()
                 } catch (cancelled: CancellationException) {
@@ -416,6 +423,7 @@ class RunStateApplication : Application() {
                     // Corrupt credentials never silently change the request's destination.
                     ReflectionConnectionState.Unavailable
                 }
+                publishReflectionConnection(selected, clearPreviousCues = false)
             }
         }
     }
@@ -424,13 +432,15 @@ class RunStateApplication : Application() {
         val config = ReflectionConnectionConfig(endpoint.trim(), accessCode.trim())
         changeReflectionConnection {
             connectionStore.save(config)
-            mutableReflectionConnection.value = ReflectionConnectionState.Hosted(config)
+            val previous = (mutableReflectionConnection.value as? ReflectionConnectionState.Hosted)?.config
+            val changed = previous == null || previous.endpoint != config.endpoint || previous.accessCode != config.accessCode
+            if (changed) publishReflectionConnection(ReflectionConnectionState.Hosted(config), clearPreviousCues = true)
         }
     }
 
     internal suspend fun clearReflectionConnection() = changeReflectionConnection {
         connectionStore.clear()
-        mutableReflectionConnection.value = defaultReflectionConnection()
+        publishReflectionConnection(defaultReflectionConnection(), clearPreviousCues = true)
     }
 
     /** Rotation cancels the caller's wait, never a connection write already accepted by the app. */
@@ -448,40 +458,73 @@ class RunStateApplication : Application() {
         if (reflectionBridgeEnabledForBuild()) ReflectionConnectionState.Local
         else ReflectionConnectionState.NotConfigured
 
-    /** Re-read the selected destination per utterance; never keep an obsolete access code in a player. */
-    internal val reflectionSpeechGateway: ReflectionSpeechGateway = ReflectionSpeechGateway { text ->
+    internal suspend fun mayFetchRunVoice(connection: ReflectionConnectionState): Boolean =
+        mutableRunPreferences.value?.cloudReflectionsEnabled == true && when (connection) {
+            is ReflectionConnectionState.Hosted -> connection.access.current()?.tier == ReflectionTier.OWNER
+            ReflectionConnectionState.Local -> reflectionBridgeEnabledForBuild()
+            else -> false
+        }
+
+    internal val reflectionSpeechGateway get() = reflectionSpeechForRun(null)
+
+    /** Resolve the destination again at playback, including when opening an older run in History. */
+    internal fun reflectionSpeechForRun(runId: String?): ReflectionSpeechGateway = ReflectionSpeechGateway { text ->
+        if (mutableRunPreferences.value?.cloudReflectionsEnabled != true) return@ReflectionSpeechGateway null
         when (val connection = mutableReflectionConnection.value) {
-            is ReflectionConnectionState.Hosted ->
-                ReflectionSpeechHttpClient.hosted(connection.config).synthesize(text)
+            is ReflectionConnectionState.Hosted -> {
+                val access = connection.access.current() ?: return@ReflectionSpeechGateway null
+                val boundId = if (access.tier == ReflectionTier.OWNER) null else runId ?: return@ReflectionSpeechGateway null
+                if (!cloudAllowedFor(connection)) return@ReflectionSpeechGateway null
+                ReflectionSpeechHttpClient.hosted(connection.config, runId = boundId)
+                    .synthesize(text) { cloudAllowedFor(connection) }
+            }
             ReflectionConnectionState.Local -> if (reflectionBridgeEnabledForBuild()) {
                 val emulator = Build.PRODUCT.startsWith("sdk_") ||
                     Build.DEVICE.startsWith("emu") || Build.HARDWARE == "ranchu"
                 ReflectionSpeechHttpClient.local(
                     if (emulator) LOCAL_REFLECTION_ENDPOINT else PHONE_REFLECTION_ENDPOINT
-                ).synthesize(text)
+                ).synthesize(text) { cloudAllowedFor(connection) }
             } else null
             else -> null
         }
     }
 
-    /** The run voice (countdown, facts, energy question, announcements) follows the same destination rules. */
-    internal val runVoiceGateway: ReflectionSpeechGateway = ReflectionSpeechGateway { text ->
-        when (val connection = mutableReflectionConnection.value) {
+    private fun runVoiceClient(connection: ReflectionConnectionState): ReflectionSpeechHttpClient? =
+        when (connection) {
             is ReflectionConnectionState.Hosted ->
-                ReflectionSpeechHttpClient.hosted(connection.config, SpeechVoice.RUN).synthesize(text)
+                ReflectionSpeechHttpClient.hosted(connection.config, SpeechVoice.RUN)
             ReflectionConnectionState.Local -> if (reflectionBridgeEnabledForBuild()) {
                 val emulator = Build.PRODUCT.startsWith("sdk_") ||
                     Build.DEVICE.startsWith("emu") || Build.HARDWARE == "ranchu"
                 ReflectionSpeechHttpClient.local(
                     if (emulator) LOCAL_REFLECTION_ENDPOINT else PHONE_REFLECTION_ENDPOINT, SpeechVoice.RUN
-                ).synthesize(text)
+                )
             } else null
             else -> null
         }
+
+    private suspend fun fetchRunVoice(connection: ReflectionConnectionState, text: String): ByteArray? {
+        val client = runVoiceClient(connection) ?: return null
+        if (mutableReflectionConnection.value !== connection || !mayFetchRunVoice(connection)) return null
+        if (mutableReflectionConnection.value !== connection || mutableRunPreferences.value?.cloudReflectionsEnabled != true) return null
+        return client.synthesize(text) { cloudAllowedFor(connection) }
     }
 
-    /** Fixed run-voice lines prepared while Start is open, so the countdown lands on time. Memory only. */
-    internal val runVoiceCues: RunVoiceCueCache by lazy { RunVoiceCueCache(applicationScope, runVoiceGateway) }
+    internal val runVoiceGateway = ReflectionSpeechGateway { text ->
+        fetchRunVoice(mutableReflectionConnection.value, text)
+    }
+
+    internal val runVoiceCues by lazy { RunVoiceCueCache(FixedRunVoiceFiles(cacheDir.resolve("fixed-run-voice"))) }
+
+    private suspend fun publishReflectionConnection(connection: ReflectionConnectionState, clearPreviousCues: Boolean) {
+        val key = when (connection) {
+            is ReflectionConnectionState.Hosted -> reflectionDestinationFingerprint(connection.config)
+            ReflectionConnectionState.Local -> "local-debug"
+            else -> null
+        }
+        runVoiceCues.select(key, ReflectionSpeechGateway { text -> fetchRunVoice(connection, text) }, clearPreviousCues)
+        mutableReflectionConnection.value = connection
+    }
 
     /**
      * One phone voice kept awake and silently rehearsed while Start is visible, so the countdown's
@@ -493,6 +536,9 @@ class RunStateApplication : Application() {
 
     private var reflectionOwner: RunReflectionCoordinator? = null
 
+    private fun cloudAllowedFor(connection: ReflectionConnectionState): Boolean =
+        mutableRunPreferences.value?.cloudReflectionsEnabled == true && mutableReflectionConnection.value === connection
+
     /** Local feedback works offline; network admission separately requires a selected connection. */
     internal val runReflectionCoordinator: RunReflectionCoordinator
         get() {
@@ -502,11 +548,19 @@ class RunStateApplication : Application() {
                     store = RoomReflectionStore(database.reflectionDao(), database.musicObservationDao(),
                         database.weatherDao()),
                     gateway = ReflectionGateway { request ->
+                        if (mutableRunPreferences.value?.cloudReflectionsEnabled != true) {
+                            throw ReflectionBridgeException("Cloud reflections are off.")
+                        }
                         val started = android.os.SystemClock.elapsedRealtime()
                         try {
                             when (val connection = mutableReflectionConnection.value) {
-                                is ReflectionConnectionState.Hosted ->
-                                    HostedReflectionHttpClient(connection.config).request(request)
+                                is ReflectionConnectionState.Hosted -> {
+                                    val access = connection.access.writtenAccess(request.runId)
+                                        ?: throw ReflectionBridgeException("Reflection access is unavailable.")
+                                    if (!cloudAllowedFor(connection)) throw ReflectionBridgeException("Cloud reflection access changed.")
+                                    HostedReflectionHttpClient(connection.config, replayOnly = access == WrittenAccess.REPLAY_ONLY,
+                                        stillAllowed = { cloudAllowedFor(connection) }).request(request)
+                                }
                                 ReflectionConnectionState.Local -> {
                                     val emulator = Build.PRODUCT.startsWith("sdk_") ||
                                         Build.DEVICE.startsWith("emu") || Build.HARDWARE == "ranchu"

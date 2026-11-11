@@ -9,12 +9,14 @@ import com.runstate.reflection.ElevenLabsReflectionSpeech.TransportResponse;
 import com.runstate.reflection.ReflectionProvider.FailureType;
 import com.runstate.reflection.ReflectionProvider.ReflectionProviderException;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 import java.io.IOException;
 import java.net.ConnectException;
 import java.net.URI;
 import java.net.http.HttpTimeoutException;
 import java.nio.ByteBuffer;
+import java.nio.file.Path;
 import java.time.Duration;
 import java.util.Arrays;
 import java.util.List;
@@ -34,6 +36,26 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ElevenLabsReflectionSpeechTest {
+    @Test
+    void runVoiceAndReflectionVoiceEnforceTheSameSpendingAllowance(@TempDir Path directory) throws Exception {
+        AtomicInteger sends = new AtomicInteger();
+        Transport transport = request -> {
+            sends.incrementAndGet();
+            return successful();
+        };
+        var runVoice = ElevenLabsReflectionSpeech.runVoice(DUMMY_KEY, transport);
+        var reflection = provider(transport);
+        var budget = new ProviderSpendBudget(directory, new ProviderSpendBudget.Limits(1, 5, 1, 1, 1));
+        try (var scope = ProviderSpendScope.open(budget, "runner-a")) {
+            runVoice.synthesize("Mile one.");
+        }
+        try (var scope = ProviderSpendScope.open(budget, "runner-a")) {
+            var denial = assertThrows(ProviderSpendScope.Denied.class, () -> reflection.synthesize("Run complete."));
+            assertFalse(denial.attempted());
+            assertFalse(denial.unavailable());
+        }
+        assertEquals(1, sends.get());
+    }
     private static final String DUMMY_KEY = "not-a-real-elevenlabs-key";
     private static final byte[] AUDIO = new byte[]{'I', 'D', '3', 4, 0, 0};
 

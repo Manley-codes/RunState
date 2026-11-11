@@ -153,6 +153,7 @@ internal class RunSongStudyPreparation(
                     return
                 }
                 if (stillEligible(current) == null) return
+                if (!current.destination.gateway.admit(run.runId) || stillEligible(current) == null) return
                 val claimed = store.claim(run.runId, preparationId().toString(), observation.sequenceNumber,
                     current.destination.fingerprint, nowMillis()) ?: return
                 var ready = false

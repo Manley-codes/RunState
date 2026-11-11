@@ -50,6 +50,7 @@ import com.runstate.mobile.reflection.COUNTDOWN_INTRO_TEXT
 import com.runstate.mobile.reflection.COUNTDOWN_FINISH_TEXT
 import com.runstate.mobile.reflection.ENERGY_QUESTION_TEXT
 import com.runstate.mobile.reflection.RUN_VOICE_PREPARED_LINES
+import com.runstate.mobile.reflection.ReflectionTier
 import com.runstate.mobile.reflection.countdownCueText
 import com.runstate.mobile.reflection.PreparedCountdownVoice
 import com.runstate.mobile.data.local.ReflectionBranch
@@ -370,8 +371,18 @@ internal fun RunJourneyRoot(
     // A preview/test may turn tools off, but no caller can enable them in a public build.
     val ownerToolsAvailable = BuildConfig.OWNER_TOOLS_ENABLED && ownerToolsEnabled
 
-    val reflectionRequestsAvailable = reflectionConnection is ReflectionConnectionState.Hosted ||
-        reflectionConnection == ReflectionConnectionState.Local
+    val hostedAccess = (reflectionConnection as? ReflectionConnectionState.Hosted)?.access
+    val accessInfo = hostedAccess?.state?.collectAsState()?.value
+    val cloudEnabled = runPreferences?.cloudReflectionsEnabled == true
+    val localReflections = reflectionConnection == ReflectionConnectionState.Local
+    val reflectionRequestsAvailable = cloudEnabled && (localReflections || accessInfo?.allowsNewRun == true)
+    // A run may already own the final slot through song preparation even when remaining reads zero.
+    val canFinishReflection = reflectionRequestsAvailable || (cloudEnabled && accessInfo?.active == true)
+    // A runner can Start before a sleeping server answers. Keep their existing sharing choice
+    // for the local snapshot. The service still checks access before sending a song or run.
+    val canKeepMusicSharingChoice = reflectionRequestsAvailable ||
+        (cloudEnabled && hostedAccess != null && accessInfo == null)
+    var accessChecked by remember(hostedAccess, cloudEnabled) { mutableStateOf(false) }
 
     // The last answer the coordinator gave, and nothing more. `remember` rather than
     // `rememberSaveable` for the reason above.
@@ -677,6 +688,13 @@ internal fun RunJourneyRoot(
     var voiceForeground by remember(lifecycle) {
         mutableStateOf(lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED))
     }
+    // Resolve access on ordinary launches, including runners who never open Settings.
+    LaunchedEffect(hostedAccess, cloudEnabled, voiceForeground) {
+        if (hostedAccess != null && cloudEnabled && voiceForeground) {
+            hostedAccess.current()
+            accessChecked = true
+        }
+    }
     var countdownSpeaker by remember { mutableStateOf<ReflectionSpeaker?>(null) }
     var sampleStartSpeaker by remember { mutableStateOf<ReflectionSpeaker?>(null) }
     // Chosen once per countdown from fully prepared lines, so one countdown never mixes voices.
@@ -742,13 +760,18 @@ internal fun RunJourneyRoot(
     }
     // Prepare the fixed run-voice lines while Start is on screen. Retry briefly while a sleeping
     // server wakes, but never keep polling in the background or for an unsupported server.
-    val prepareRunVoice = !musicReflectionDemoVisible && voiceForeground && activeRunId == null &&
+    val hasVoiceDestination = reflectionConnection is ReflectionConnectionState.Hosted || reflectionConnection == ReflectionConnectionState.Local
+    val prepareRunVoice = hasVoiceDestination && !reflectionConnectionSaving && !musicReflectionDemoVisible &&
+        !historyVisible && recapRunId == null && !runSettingsVisible && !shoesVisible && !connectionDialogVisible &&
+        voiceForeground && activeRunId == null &&
         (model.state == RunUiState.ReadyToStart || model.state == RunUiState.Countdown)
-    LaunchedEffect(prepareRunVoice, runVoiceCues) {
+    val mayFetchFixedVoice = cloudEnabled && (localReflections || accessInfo?.tier == ReflectionTier.OWNER)
+    LaunchedEffect(prepareRunVoice, runVoiceCues, reflectionConnection, mayFetchFixedVoice) {
         val cues = runVoiceCues ?: return@LaunchedEffect
         repeat(12) {
             if (!prepareRunVoice || cues.hasAll(RUN_VOICE_PREPARED_LINES)) return@LaunchedEffect
-            cues.prefetch()
+            cues.prefetch(fetchMissing = mayFetchFixedVoice)
+            if (!mayFetchFixedVoice) return@LaunchedEffect
             delay(15_000L)
         }
     }
@@ -862,7 +885,8 @@ internal fun RunJourneyRoot(
 
     fun retryReflection(runId: String) {
         if (reflectionCoordinator == null) return
-        if (!reflectionRequestsAvailable) {
+        // An explicit retry can recover a stored server answer after a preview ends.
+        if (!cloudEnabled || (hostedAccess == null && !localReflections)) {
             historyError = "Set up reflections on Start, then reopen this run to retry."
             return
         }
@@ -1091,17 +1115,20 @@ internal fun RunJourneyRoot(
     }
 
     // This reports visibility; the process coordinator owns the delay, Room read and call.
-    LaunchedEffect(model.state, completedRunId, reflectionCoordinator, reflectionConnection) {
+    val preferencesRead = runPreferences != null || runPreferencesError != null
+    LaunchedEffect(model.state, completedRunId, reflectionCoordinator, reflectionConnection, canFinishReflection,
+        preferencesRead, accessChecked, cloudEnabled) {
         val activeReflectionCoordinator = reflectionCoordinator ?: return@LaunchedEffect
-        if (reflectionConnection == ReflectionConnectionState.Loading) return@LaunchedEffect
+        if (!preferencesRead || reflectionConnection == ReflectionConnectionState.Loading) return@LaunchedEffect
+        if (cloudEnabled && hostedAccess != null && accessInfo == null && !accessChecked) return@LaunchedEffect
         if (model.state == RunUiState.Saved) {
             completedRunId?.let { runId ->
-                val bridgeReady = reflectionRequestsAvailable && localBridgePermissionGranted()
+                val bridgeReady = canFinishReflection && localBridgePermissionGranted()
                 activeReflectionCoordinator.onSavedVisible(runId, bridgeReady,
                     awaitingReceipt = completionReceiptRunId == runId &&
                         completionReceiptFinishedRunId != runId,
-                    bridgeUnavailable = !reflectionRequestsAvailable)
-                if (reflectionRequestsAvailable && !bridgeReady) {
+                    bridgeUnavailable = !canFinishReflection)
+                if (canFinishReflection && !bridgeReady) {
                     permissionRunId = runId
                     permissionForRetry = false
                     localNetworkPermissionLauncher.launch(LOCAL_NETWORK_PERMISSION)
@@ -1224,7 +1251,7 @@ internal fun RunJourneyRoot(
                         val token = runCountdown.reserve()
                         try {
                             val observe = musicSelected && musicAccessProvider(context)
-                            val share = observe && reflectionRequestsAvailable && musicReflectionSharingSelected
+                            val share = observe && canKeepMusicSharingChoice && musicReflectionSharingSelected
                             previewController.stopBeforeRun()
                             dispatchGpsCountdown(context, token, preRunEnergy, observe, share,
                                 share && runPreferences?.findSongSnippets == true,
@@ -1274,7 +1301,7 @@ internal fun RunJourneyRoot(
             if (musicSelected && !observeMusicForRun) {
                 musicAccessGranted = false
             }
-            val shareMusicForRun = observeMusicForRun && reflectionRequestsAvailable &&
+            val shareMusicForRun = observeMusicForRun && canKeepMusicSharingChoice &&
                 musicReflectionSharingSelected
             if (gpsSelected) {
                 if (!gpsStartRequested || !lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) {
@@ -1382,8 +1409,12 @@ internal fun RunJourneyRoot(
             }
 
             is RunReflectionState.Failed -> if (current.runId == completedRunId) {
-                if (reflectionRequestsAvailable) RunCompleteReflectionDisplay.Failed
-                else RunCompleteReflectionDisplay.ConnectionNeeded
+                when {
+                    runPreferences?.cloudReflectionsEnabled == false -> null
+                    canFinishReflection -> RunCompleteReflectionDisplay.Failed
+                    accessInfo != null -> null
+                    else -> RunCompleteReflectionDisplay.ConnectionNeeded
+                }
             } else {
                 RunCompleteReflectionDisplay.Preparing
             }
@@ -1748,7 +1779,7 @@ internal fun RunJourneyRoot(
 
             // The same prepared run: the coordinator reuses its UUID and official start.
             val observeMusicForRun = musicSelected && musicAccessProvider(context)
-            val shareMusicForRun = observeMusicForRun && reflectionRequestsAvailable &&
+            val shareMusicForRun = observeMusicForRun && canKeepMusicSharingChoice &&
                 musicReflectionSharingSelected
             if (gpsSelected) {
                 if (preciseLocationReady()) {
@@ -2061,6 +2092,13 @@ internal fun RunJourneyRoot(
         !connectionDialogVisible) {
         RunSettingsDialog(
             ownerToolsEnabled = ownerToolsAvailable,
+            hostedAccess = (reflectionConnection as? ReflectionConnectionState.Hosted)?.access,
+            cloudReflectionsEnabled = runPreferences?.cloudReflectionsEnabled?.takeIf {
+                reflectionConnection is ReflectionConnectionState.Hosted || reflectionConnection == ReflectionConnectionState.Local
+            },
+            onSetCloudReflections = { enabled ->
+                runPreferences?.let { savePreferences(it.copy(cloudReflectionsEnabled = enabled)) }
+            },
             onOpenMusicReflectionDemo = {
                 if (ownerToolsAvailable && model.state == RunUiState.ReadyToStart && activeRunId == null &&
                     !actionInFlight && !settingsBusy && !gpsStartRequested && !gpsStartDispatched &&
@@ -2361,6 +2399,7 @@ internal fun RunCompleteSpeechEffect(
                 val activeSpeaker = speaker ?: speakerFactory(context).also { speaker = it }
                 if (preparationRequestId != preparation.requestId) activeSpeaker.cancelPreparation()
                 preparationRequestId = preparation.requestId
+                completedRunId?.let(activeSpeaker::bindReflectionRun)
                 activeSpeaker.prepare(preparation.text)
             }
         } catch (_: RuntimeException) {
@@ -2393,6 +2432,7 @@ internal fun RunCompleteSpeechEffect(
         try {
             val activeSpeaker = speaker ?: speakerFactory(context).also { speaker = it }
             val runId = completedRunId
+            activeSpeaker.bindReflectionRun(runId)
             val canPlay = {
                 activeAttempt === attempt && speaker === activeSpeaker &&
                     currentVisible && currentRunId == runId

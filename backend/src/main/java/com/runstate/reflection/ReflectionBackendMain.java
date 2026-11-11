@@ -83,6 +83,31 @@ public final class ReflectionBackendMain {
         }
     }
 
+    static ProviderSpendBudget configuredSpendBudget(Map<String, String> environment, boolean remote,
+            String httpAttemptLimit) {
+        try {
+            var limits = ProviderSpendBudget.Limits.fromEnvironment(environment);
+            if (!"1".equals(httpAttemptLimit)) {
+                // OpenJDK can resend a GET after the provider received it and the reply was lost.
+                System.err.println("Paid provider calls disabled: start Java with -Djdk.httpclient.redirects.retrylimit=1.");
+                return null;
+            }
+            return new ProviderSpendBudget(replayDirectory(environment, remote), limits);
+        } catch (IOException | IllegalArgumentException | SecurityException failure) {
+            System.err.println("Paid provider calls disabled: check monthly limits and private persistent storage.");
+            return null;
+        }
+    }
+
+    static ReflectionAllowance configuredAllowance(Map<String, String> env) {
+        try {
+            return new ReflectionAllowance(replayDirectory(env, true), java.time.Clock.systemUTC());
+        } catch (IOException | IllegalArgumentException | SecurityException unavailable) {
+            System.err.println("Scoped reflection access requires private persistent storage.");
+            return null;
+        }
+    }
+
     private static Path replayDirectory(Map<String, String> environment, boolean remote) throws IOException {
         String configured = environment.get(SPEECH_REPLAY_DIRECTORY);
         if (configured == null && !remote) {

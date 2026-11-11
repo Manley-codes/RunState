@@ -339,6 +339,7 @@ internal class CompletionAudioSession(
 
 /** Kept injectable so screen behavior can be checked without a device voice engine. */
 internal interface ReflectionSpeaker : RehearsableVoice {
+    fun bindReflectionRun(runId: String) = Unit
     fun attachCompletionAudio(session: CompletionAudioSession) = Unit
     /** Prepare one exact reflection silently; custom speakers can retain their existing behavior. */
     fun prepare(text: String) = Unit
@@ -391,6 +392,7 @@ internal interface ReflectionSpeaker : RehearsableVoice {
 internal interface ReflectionSpeechPlatform {
     fun attachCompletionAudio(session: CompletionAudioSession) = Unit
     fun reflectionSpeechGateway(): ReflectionSpeechGateway? = null
+    fun reflectionSpeechGateway(runId: String?): ReflectionSpeechGateway? = reflectionSpeechGateway()
     /** The separately chosen run voice; null keeps countdown, facts and announcements on the phone voice. */
     fun runVoiceGateway(): ReflectionSpeechGateway? = null
     /** Fixed run-voice lines prepared ahead of time, so timed lines never wait on the network. */
@@ -482,6 +484,7 @@ internal class AndroidReflectionSpeaker(
     private val voiceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var preparation: Job? = null
     private var preparedReflection: PreparedReflection? = null
+    private var reflectionRunId: String? = null
     private var adoptedReflection: PreparedReflection? = null
     private var initialized = false
     private var initializationFailed = false
@@ -543,6 +546,16 @@ internal class AndroidReflectionSpeaker(
         platform.attachCompletionAudio(session)
     }
 
+    override fun bindReflectionRun(runId: String) {
+        if (reflectionRunId != runId) cancelPreparation()
+        reflectionRunId = runId
+    }
+
+    private fun selectedSpeechGateway(): ReflectionSpeechGateway? {
+        val runId = reflectionRunId ?: return platform.reflectionSpeechGateway()
+        return platform.reflectionSpeechGateway(runId)
+    }
+
     override fun prepare(text: String) {
         if (closed || completionSession?.canContinue == false || !validSpeechText(text)) {
             cancelPreparation()
@@ -550,7 +563,7 @@ internal class AndroidReflectionSpeaker(
         }
         if (preparedReflection?.text == text) return
         cancelPreparation()
-        val gateway = try { platform.reflectionSpeechGateway() } catch (_: RuntimeException) { null } ?: return
+        val gateway = try { selectedSpeechGateway() } catch (_: RuntimeException) { null } ?: return
         preparedReflection = PreparedReflection(text, voiceScope.async {
             withTimeoutOrNull(20_000L) { synthesizeAudio(gateway, text) }?.also {
                 completionSession?.note(CompletionAudioSession.Event.VOICE_READY)
@@ -661,7 +674,7 @@ internal class AndroidReflectionSpeaker(
             return
         }
         val gateway = when {
-            purpose == SpeechPurpose.REFLECTION -> platform.reflectionSpeechGateway()
+            purpose == SpeechPurpose.REFLECTION -> selectedSpeechGateway()
             runVoice == RunVoiceMode.PREPARED_OR_FETCH ->
                 try { platform.runVoiceGateway() } catch (_: RuntimeException) { null }
             else -> null
@@ -1120,6 +1133,8 @@ internal class AndroidReflectionSpeechPlatform(
     private val musicControlsOwner = Any()
     override fun reflectionSpeechGateway(): ReflectionSpeechGateway? =
         (appContext as? RunStateApplication)?.reflectionSpeechGateway
+    override fun reflectionSpeechGateway(runId: String?): ReflectionSpeechGateway? =
+        (appContext as? RunStateApplication)?.reflectionSpeechForRun(runId)
     override fun runVoiceGateway(): ReflectionSpeechGateway? =
         (appContext as? RunStateApplication)?.runVoiceGateway
     override fun preparedRunVoiceAudio(text: String): ByteArray? =
@@ -1738,6 +1753,7 @@ internal fun RunHistoryScreen(
         try {
             val voice = speakerFactory(context).also { speaker = it }
             val passage = item.reflectionSong?.passage
+            voice.bindReflectionRun(item.runId)
             val finished = {
                 if (playbackAttempt === attempt) {
                     playbackAttempt = null

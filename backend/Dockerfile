@@ -17,6 +17,7 @@ EXPOSE 8787
 # Render's command override is documented inconsistently; a complete CMD is unambiguous.
 ENTRYPOINT []
 CMD ["java", "-Xmx256m", \
+    "-Djdk.httpclient.redirects.retrylimit=1", \
     "-Dsun.net.httpserver.maxReqTime=15", "-Dsun.net.httpserver.maxRspTime=95", \
     "-Dsun.net.httpserver.timerMillis=1000", \
     "-Dsun.net.httpserver.maxReqHeaders=32", "-Dsun.net.httpserver.maxReqHeaderSize=16384", \

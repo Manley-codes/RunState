@@ -33,7 +33,7 @@ Configure **one** access mode behind the existing private HTTPS ingress:
   variable; the launcher rejects both together instead of silently falling back. A malformed
   list prevents startup, while `[]` deliberately denies all paid endpoints and retains health.
 
-Each grant requires exactly these fields:
+Each grant requires the first four fields. Set the optional fifth field explicitly for new recipients.
 
 | Field | Meaning |
 | --- | --- |
@@ -41,6 +41,7 @@ Each grant requires exactly these fields:
 | `tokenSha256` | 64 lowercase hexadecimal characters: SHA-256 of that recipient's exact access code. The code must come from at least 32 cryptographically random bytes, encoded URL-safe; accepted code length is 43–128. A human-made password is not suitable. |
 | `expiresAt` | Required ISO-8601 instant, for example `2026-12-01T00:00:00Z`; the code stops authorizing new requests at that instant. |
 | `enabled` | Required JSON boolean. `false` disables the credential after this configuration is loaded. |
+| `reflectionTier` | Optional: `tracking`, `trial` or `pilot`. Omitting it retains the full access of an older grant. |
 
 The array permits up to 64 credentials and 32,768 characters. Duplicate fingerprints, unknown
 or missing fields, duplicate JSON keys and incorrect types are rejected. Multiple different
@@ -62,10 +63,60 @@ internal handles. Reflection prompts, song content, playback and voices are unch
 
 With private persistent storage, the backend can recover a written reflection for 24 hours
 and replay its selected recording for seven days across restarts. Song preparation has a
-separate in-memory cache. Per-person and global spending limits, provider permissions and
-live setup verification remain open release work.
+separate in-memory cache. The monthly limits below cover new provider requests.
 
 Security reference: [OWASP REST security guidance](https://cheatsheetseries.owasp.org/cheatsheets/REST_Security_Cheat_Sheet.html).
+
+## Monthly provider spending limits
+
+The local trial and pilot use a separate allowance from the dollar limits below. Tracking recipients get no new provider work. A trial recipient explicitly starts a seven-day preview with two runs. An operator-assigned pilot gets eight runs per UTC calendar month. Starting a preview does not enroll the runner in billing. Keep each runner's principal stable across credential rotation.
+
+A capable server advertises `X-RunState-Reflection-Access: 1` on public health. Authenticated clients read `GET /api/reflections/access`, opt in with `POST /api/reflections/trial`, and reserve one run with `POST /api/reflections/run-access`. Reusing the same run ID covers its authorized studies, written choices and one spoken choice. A held run normally releases its slot after 24 hours or at period end, whichever comes first. Early preparations are capped at 12 per run and 24 per trial or 96 per pilot month, including attempts on abandoned runs.
+
+A `replayOnly: true` request to run-access checks the authenticated runner's saved written answer using just its run ID. On success the client can retry the original candidates request with `X-RunState-Replay-Only: 1`. This request cannot call the writer if the saved response expires in between. Older replies written before the run-ID index remain recoverable by exact original evidence on the original retry path. Saved answers and recordings have their own replay windows.
+
+The private file `reflection-allowances.sqlite3` belongs alongside the replay databases. All replicas serving one allowance must share the same consistent store. The implemented setup supports a single service instance with a persistent disk.
+
+The HTTP backend reserves the maximum cost of each outbound Anthropic, ElevenLabs or
+Musixmatch request before sending it. Each reservation must fit both the authenticated
+runner's remaining allowance and the app's remaining allowance. A song lookup, study and
+final reflection can each use part of the budget. A timed-out send keeps its reservation
+because the provider may already have processed it. Reading saved answers or audio uses
+no allowance. Separately launched manual trial programs are outside these HTTP limits.
+
+| Server setting | Amount in USD |
+| --- | --- |
+| `RUNSTATE_RUNNER_MONTHLY_USD` | Monthly cap for each authenticated runner. A shared owner code has one shared allowance. |
+| `RUNSTATE_GLOBAL_MONTHLY_USD` | Monthly cap for the entire backend. |
+| `RUNSTATE_ANTHROPIC_MAX_CALL_USD` | Upper bound for the largest enabled model request, including input and output. |
+| `RUNSTATE_ELEVENLABS_MAX_CALL_USD` | Upper bound for synthesizing the longest permitted text with either voice. |
+| `RUNSTATE_MUSIXMATCH_MAX_CALL_USD` | Upper bound for a catalog request. Use zero only for a verified plan with no incremental charge. |
+
+Set both monthly caps and the ceilings for the providers you enable. Amounts accept up
+to six decimal places. A zero monthly cap stops new calls. A missing provider ceiling
+blocks calls to that provider. Verify the ceilings against the actual plans and request
+sizes before rollout. Conservative reservations can use up an allowance ahead of the
+vendor's billed usage. Fixed subscription and hosting fees are separate.
+
+Use the same private persistent directory (`RUNSTATE_SPEECH_REPLAY_DIR`) across restarts
+on one hosted instance. The `provider-spend.sqlite3` file keeps totals by UTC calendar
+month. Multiple independent disks would each have their own allowance. The container
+sets `-Djdk.httpclient.redirects.retrylimit=1` at JVM startup so a dropped response
+cannot automatically send the same paid request a second time. A paid server started
+outside the container requires the same JVM option.
+
+New calls return HTTP 429 when an allowance is insufficient, or 503 when a required
+setting or the ledger is unavailable. A refusal before the first paid send allows a
+later retry once capacity returns. If a written reflection has already used a paid send,
+its replay reservation stays in place for the 24-hour window to prevent a second charge.
+
+### Measure one complete test run
+
+To rehearse the four-song and ten-song reflection samples from the repository root, run `.\backend\compare-sample-runs.ps1` in PowerShell. If Maven is outside your PATH, supply its executable with `-Maven`. The default command uses simulated provider responses. It exercises preparation, song choice, writing, one selected voice and retries. The sample excludes on-course announcements and music playback. A live comparison requires deliberate opt-in, privately configured provider keys and chosen spending limits.
+
+On an isolated loopback backend, set `$env:RUNSTATE_LOCAL_USAGE_METER = '1'` before starting the usual server. Capture the console lines beginning with `RunStateUsage` for one run at a time. Include the start, all song preparations, the selected written reflection, and speech. Repeat for an ordinary run and a music-heavy run. Record whether the six fixed voice cues were already cached. The instrument is disabled in remote mode. A sample that uses simulated providers or only tracking cannot establish the cost of a paid reflection.
+
+Price the reported input, output and cache tokens by model, then add voice usage at the account's rate and count Musixmatch requests against the plan. Include fixed fees separately. An attempted call with unknown usage needs the provider's billing record. Do not count missing usage as zero or add cache-write subtotals to their aggregate a second time. The meter emits counts and step labels only.
 
 ## Snippet availability v2 — local implementation, October 19, 2026
 
@@ -651,14 +702,17 @@ The default mode constructs `AnthropicReflectionProvider` and marks successes `A
 backend process environment; never put it in Android, JSON, source, or command-line arguments.
 `ANTHROPIC_MODEL` remains optional. `RUNSTATE_REFLECTION_PORT` may override the default port `8787`.
 
-From `backend/`, start the production provider with Maven:
+For a paid local run, configure the monthly limits above. In PowerShell, append the
+one-attempt flag to the Maven JVM options for this session and start from `backend/`:
 
 ```powershell
+$env:MAVEN_OPTS = "$env:MAVEN_OPTS -Djdk.httpclient.redirects.retrylimit=1"
 mvn compile org.codehaus.mojo:exec-maven-plugin:3.5.0:java `
   -Dexec.mainClass=com.runstate.reflection.ReflectionBackendMain
 ```
 
-For IntelliJ, run `ReflectionBackendMain` with the same backend-only environment variables.
+For IntelliJ, add `-Djdk.httpclient.redirects.retrylimit=1` to the VM options for
+`ReflectionBackendMain` and supply the same backend-only environment variables.
 
 For a safe local smoke check that makes no Anthropic call, start the explicit fake provider:
 
@@ -780,6 +834,7 @@ The container also sets these OpenJDK 17 HTTP implementation properties **at JVM
 
 | Startup property | Demo setting |
 | --- | --- |
+| `jdk.httpclient.redirects.retrylimit` | 1 total outbound HTTP attempt per send on OpenJDK 17 |
 | `sun.net.httpserver.maxReqTime` | 15 seconds to finish reading a request, including headers/body |
 | `sun.net.httpserver.maxRspTime` | 95 seconds for response generation and writing |
 | `sun.net.httpserver.timerMillis` | 1000 ms request/response deadline polling |

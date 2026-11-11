@@ -613,6 +613,24 @@ class RunSettingsScreenTest {
     }
 
     @Test
+    fun trackingOnlyChoiceSurvivesReopeningWithoutChangingLocalMusicObservation() {
+        val original = RunPreferences(observeMusic = true, shareMusicInReflection = true, musicSetupComplete = true)
+        val fixture = fixture(original)
+        val restoration = renderRoot(fixture)
+        waitForTag(START_RUN_SCREEN_TAG)
+        compose.onNodeWithTag(START_RUN_SETTINGS_TAG).performScrollTo().performClick()
+        compose.onNodeWithTag("runSettingsCloudReflections").performScrollTo().assertIsOn().performClick()
+        compose.waitUntil(5_000L) { fixture.preferenceWrites == 1 }
+        assertEquals(original.copy(cloudReflectionsEnabled = false), fixture.loadPreferences())
+        compose.onNodeWithTag(SETTINGS_DONE_TAG).performClick()
+        restoration.emulateSavedInstanceStateRestore()
+        waitForTag(START_RUN_SCREEN_TAG)
+        compose.onNodeWithTag(START_RUN_SETTINGS_TAG).performScrollTo().performClick()
+        compose.onNodeWithTag("runSettingsCloudReflections").performScrollTo().assertIsOff()
+        compose.onNodeWithTag(SETTINGS_MUSIC_OBSERVATION_TAG).performScrollTo().assertIsOn()
+    }
+
+    @Test
     fun everyMileChoicePersistsAcrossSettingsReopenAndRestorationWithoutChangingMusic() {
         val original = RunPreferences(observeMusic = true, shareMusicInReflection = true,
             musicSetupComplete = true, captureWeather = true, findSongSnippets = true)
@@ -939,6 +957,24 @@ class RunSettingsScreenTest {
         assertEquals(0, fixture.preparedRuns)
         assertEquals(0, fixture.demoAudioCreations)
         assertEquals(0, runBlocking { fixture.database.runDao().countRuns() })
+    }
+
+    @Test
+    fun trackingOnlyRunKeepsLocalMusicAndSavesWithoutSharingSongEvidence() {
+        val fixture = fixture(RunPreferences(observeMusic = true, shareMusicInReflection = true,
+            findSongSnippets = true, cloudReflectionsEnabled = false, musicSetupComplete = true))
+        renderRoot(fixture)
+        waitForTag(START_RUN_SCREEN_TAG)
+        chooseSampleDemo()
+        val run = startSample(fixture)
+        assertTrue(run.musicObservationRequested)
+        assertFalse(run.musicReflectionSharingAllowed)
+        finishShortSample(fixture, save = true)
+        val saved = requireNotNull(runBlocking { fixture.database.runDao().findById(run.runId) })
+        assertEquals(StoredRunState.COMPLETED, saved.state)
+        assertFalse(saved.musicReflectionSharingAllowed)
+        compose.onNodeWithText("Save Activity").assertIsDisplayed().performClick()
+        waitForTag(RUN_ACTIVITY_RECAP_TAG)
     }
 
     @Test

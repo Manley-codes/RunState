@@ -84,6 +84,8 @@ class RunSongStudyPreparationTest {
     }
 
     private class Gateway : SongStudyPreparationGateway {
+        var admission = true
+        override suspend fun admit(runId: String) = admission
         var supported = true
         var multiple = false
         var multipleCapabilityReply: CompletableDeferred<Boolean>? = null
@@ -175,6 +177,15 @@ class RunSongStudyPreparationTest {
             assertEquals(listOf("Eligible song"), fixture.gateway.prepared.map { it.second })
             assertEquals(1, fixture.store.claims.size)
             assertEquals("Another artist", fixture.store.claim?.artistName)
+        } finally { fixture.close() }
+    }
+
+    @Test fun deniedRunCannotClaimOrSendASongForPreparation() {
+        val fixture = Harness(gateway = Gateway().apply { admission = false })
+        try {
+            fixture.observe()
+            assertNull(fixture.store.claim)
+            assertTrue(fixture.gateway.prepared.isEmpty())
         } finally { fixture.close() }
     }
 

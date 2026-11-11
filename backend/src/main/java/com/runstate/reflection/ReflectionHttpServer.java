@@ -5,6 +5,8 @@ import com.runstate.reflection.ReflectionApiJson.InvalidJsonException;
 import com.runstate.reflection.ReflectionContract.CandidateReflections;
 import com.runstate.reflection.ReflectionProvider.FailureType;
 import com.runstate.reflection.ReflectionProvider.ReflectionProviderException;
+import com.runstate.reflection.BackendAccessPolicy.Principal;
+import com.runstate.reflection.BackendAccessPolicy.Tier;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 
@@ -42,6 +44,12 @@ public final class ReflectionHttpServer implements AutoCloseable {
     public static final String SPEECH_PATH = "/api/reflections/speech";
     /** The separately chosen voice for countdown, facts and announcements; never the reflection voice. */
     public static final String RUN_VOICE_PATH = "/api/run-voice/speech";
+    static final String ACCESS_PATH = "/api/reflections/access";
+    static final String TRIAL_PATH = "/api/reflections/trial";
+    static final String RUN_ACCESS_PATH = "/api/reflections/run-access";
+    static final String ACCESS_HEADER = "X-RunState-Reflection-Access";
+    static final String RUN_ID_HEADER = "X-RunState-Run-Id";
+    static final String REPLAY_ONLY_HEADER = "X-RunState-Replay-Only";
     public static final String SONG_PREPARATION_PATH = "/api/reflections/song-study";
     public static final String HEALTH_PATH = "/health";
     public static final String SONG_CUE_CAPABILITY_HEADER = "X-RunState-Song-Cue";
@@ -87,6 +95,9 @@ public final class ReflectionHttpServer implements AutoCloseable {
     private final SpeechProvider speechProvider;
     private final SpeechReplayStore speechReplayStore;
     private final WrittenReflectionReplayStore writtenReplayStore;
+    private final ProviderSpendBudget spendBudget;
+    private final LocalProviderUsage usage;
+    private final ReflectionAllowance allowance;
     private final SpeechProvider runVoiceProvider;
     private final GenerationMode generationMode;
     private final HttpServer server;
@@ -111,12 +122,26 @@ public final class ReflectionHttpServer implements AutoCloseable {
             SpeechProvider speechProvider,
             SpeechProvider runVoiceProvider,
             SpeechReplayStore speechReplayStore,
-            WrittenReflectionReplayStore writtenReplayStore
+            WrittenReflectionReplayStore writtenReplayStore,
+            ProviderSpendBudget spendBudget,
+            ReflectionAllowance allowance
     ) throws IOException {
+        this(provider, port, generationMode, remoteAccess, maxConcurrentProviderCalls, maxCachedRequests,
+                speechProvider, runVoiceProvider, speechReplayStore, writtenReplayStore, spendBudget, allowance,
+                LocalProviderUsage.configured(System.getenv(), remoteAccess != null, System.out));
+    }
+
+    ReflectionHttpServer(ReflectionProvider provider, int port, GenerationMode generationMode, RemoteAccess remoteAccess,
+            int maxConcurrentProviderCalls, int maxCachedRequests, SpeechProvider speechProvider, SpeechProvider runVoiceProvider,
+            SpeechReplayStore speechReplayStore, WrittenReflectionReplayStore writtenReplayStore, ProviderSpendBudget spendBudget,
+            ReflectionAllowance allowance, LocalProviderUsage usage) throws IOException {
         this.provider = Objects.requireNonNull(provider, "provider");
         this.speechProvider = speechProvider;
         this.speechReplayStore = speechReplayStore;
         this.writtenReplayStore = writtenReplayStore;
+        this.spendBudget = spendBudget;
+        this.usage = remoteAccess == null ? usage : null;
+        this.allowance = allowance;
         this.runVoiceProvider = runVoiceProvider;
         this.generationMode = Objects.requireNonNull(generationMode, "generationMode");
         requirePort(port);
@@ -166,9 +191,8 @@ public final class ReflectionHttpServer implements AutoCloseable {
     public static ReflectionHttpServer create(ReflectionProvider provider, int port,
             GenerationMode generationMode, SpeechProvider speechProvider, SpeechProvider runVoiceProvider)
             throws IOException {
-        return create(provider, port, generationMode, speechProvider, runVoiceProvider,
-                ReflectionBackendMain.configuredSpeechReplayStore(speechProvider, System.getenv(), false),
-                ReflectionBackendMain.configuredWrittenReplayStore(generationMode, System.getenv(), false));
+        return configuredServer(provider, port, generationMode, null, MAX_CONCURRENT_PROVIDER_CALLS,
+                MAX_CACHED_REQUESTS, speechProvider, runVoiceProvider);
     }
 
     static ReflectionHttpServer create(ReflectionProvider provider, int port, GenerationMode generationMode,
@@ -181,7 +205,7 @@ public final class ReflectionHttpServer implements AutoCloseable {
             SpeechProvider speechProvider, SpeechProvider runVoiceProvider, SpeechReplayStore replayStore,
             WrittenReflectionReplayStore writtenStore) throws IOException {
         return new ReflectionHttpServer(provider, port, generationMode, null,
-                MAX_CONCURRENT_PROVIDER_CALLS, MAX_CACHED_REQUESTS, speechProvider, runVoiceProvider, replayStore, writtenStore);
+                MAX_CONCURRENT_PROVIDER_CALLS, MAX_CACHED_REQUESTS, speechProvider, runVoiceProvider, replayStore, writtenStore, null, null);
     }
 
     /**
@@ -235,10 +259,22 @@ public final class ReflectionHttpServer implements AutoCloseable {
             GenerationMode generationMode, RemoteAccess remoteAccess, int maxConcurrentProviderCalls,
             int maxCachedRequests, SpeechProvider speechProvider, SpeechProvider runVoiceProvider)
             throws IOException {
-        return createRemote(provider, port, generationMode, remoteAccess, maxConcurrentProviderCalls,
-                maxCachedRequests, speechProvider, runVoiceProvider,
-                ReflectionBackendMain.configuredSpeechReplayStore(speechProvider, System.getenv(), true),
-                ReflectionBackendMain.configuredWrittenReplayStore(generationMode, System.getenv(), true));
+        return configuredServer(provider, port, generationMode, Objects.requireNonNull(remoteAccess, "remoteAccess"),
+                maxConcurrentProviderCalls, maxCachedRequests, speechProvider, runVoiceProvider);
+    }
+
+    private static ReflectionHttpServer configuredServer(ReflectionProvider provider, int port, GenerationMode mode,
+            RemoteAccess access, int providerSlots, int cacheSize, SpeechProvider voice, SpeechProvider runVoice)
+            throws IOException {
+        Map<String, String> env = System.getenv();
+        boolean remote = access != null;
+        boolean usesProviders = mode != GenerationMode.FAKE || voice != null || runVoice != null;
+        return new ReflectionHttpServer(provider, port, mode, access, providerSlots, cacheSize, voice, runVoice,
+                ReflectionBackendMain.configuredSpeechReplayStore(voice, env, remote),
+                ReflectionBackendMain.configuredWrittenReplayStore(mode, env, remote),
+                usesProviders ? ReflectionBackendMain.configuredSpendBudget(env, remote,
+                        System.getProperty("jdk.httpclient.redirects.retrylimit")) : null,
+                remote && access.accessPolicy.needsRunAllowances() ? ReflectionBackendMain.configuredAllowance(env) : null);
     }
 
     static ReflectionHttpServer createRemote(ReflectionProvider provider, int port,
@@ -253,9 +289,25 @@ public final class ReflectionHttpServer implements AutoCloseable {
             RemoteAccess remoteAccess, int maxConcurrentProviderCalls, int maxCachedRequests,
             SpeechProvider speechProvider, SpeechProvider runVoiceProvider, SpeechReplayStore replayStore,
             WrittenReflectionReplayStore writtenStore) throws IOException {
+        return createRemote(provider, port, generationMode, remoteAccess, maxConcurrentProviderCalls,
+                maxCachedRequests, speechProvider, runVoiceProvider, replayStore, writtenStore, null);
+    }
+
+    static ReflectionHttpServer createRemote(ReflectionProvider provider, int port, GenerationMode generationMode,
+            RemoteAccess remoteAccess, int maxConcurrentProviderCalls, int maxCachedRequests,
+            SpeechProvider speechProvider, SpeechProvider runVoiceProvider, SpeechReplayStore replayStore,
+            WrittenReflectionReplayStore writtenStore, ProviderSpendBudget spendBudget) throws IOException {
+        return createRemote(provider, port, generationMode, remoteAccess, maxConcurrentProviderCalls, maxCachedRequests,
+                speechProvider, runVoiceProvider, replayStore, writtenStore, spendBudget, null);
+    }
+
+    static ReflectionHttpServer createRemote(ReflectionProvider provider, int port, GenerationMode generationMode,
+            RemoteAccess remoteAccess, int maxConcurrentProviderCalls, int maxCachedRequests,
+            SpeechProvider speechProvider, SpeechProvider runVoiceProvider, SpeechReplayStore replayStore,
+            WrittenReflectionReplayStore writtenStore, ProviderSpendBudget spendBudget, ReflectionAllowance allowance) throws IOException {
         return new ReflectionHttpServer(provider, port, generationMode,
                 Objects.requireNonNull(remoteAccess, "remoteAccess"),
-                maxConcurrentProviderCalls, maxCachedRequests, speechProvider, runVoiceProvider, replayStore, writtenStore);
+                maxConcurrentProviderCalls, maxCachedRequests, speechProvider, runVoiceProvider, replayStore, writtenStore, spendBudget, allowance);
     }
 
     private static void requirePort(int port) {
@@ -299,6 +351,8 @@ public final class ReflectionHttpServer implements AutoCloseable {
                     "invalid_json",
                     "The request body must contain valid JSON with unique keys."
             );
+        } catch (ReflectionAllowance.Denied denied) {
+            response = deniedAccess(denied);
         } catch (IllegalArgumentException invalidRequest) {
             response = error(
                     400,
@@ -334,6 +388,7 @@ public final class ReflectionHttpServer implements AutoCloseable {
                 return error(405, "method_not_allowed", "Only GET is supported for this endpoint.");
             }
             // Liveness only: no provider call, credentials, run data, or configuration disclosure.
+            exchange.getResponseHeaders().set(ACCESS_HEADER, "1");
             exchange.getResponseHeaders().set(SONG_CUE_CAPABILITY_HEADER, "1");
             exchange.getResponseHeaders().set(SONG_STUDY_CAPABILITY_HEADER, "1");
             if (provider.supportsSongPreparation()) {
@@ -358,28 +413,34 @@ public final class ReflectionHttpServer implements AutoCloseable {
             }
             return new EndpointResponse(200, "{\"status\":\"ok\"}");
         }
-        String principalId = "local-loopback";
+        Principal runner = new Principal("local-loopback");
         if (remoteAccess != null) {
             Optional<BackendAccessPolicy.Principal> principal = remoteAccess.authenticate(exchange);
             if (principal.isEmpty()) {
                 exchange.getResponseHeaders().set("WWW-Authenticate", "Bearer");
                 return error(401, "unauthorized", "A valid access token is required.");
             }
-            principalId = principal.get().id();
+            runner = principal.get();
         }
         boolean speech = SPEECH_PATH.equals(exchange.getRequestURI().getRawPath());
         boolean runVoice = RUN_VOICE_PATH.equals(exchange.getRequestURI().getRawPath());
         boolean songPreparation = SONG_PREPARATION_PATH.equals(exchange.getRequestURI().getRawPath());
-        if (!speech && !runVoice && !songPreparation
-                && !CANDIDATES_PATH.equals(exchange.getRequestURI().getRawPath())) {
+        String path = exchange.getRequestURI().getRawPath();
+        boolean accessStatus = ACCESS_PATH.equals(path);
+        boolean activation = TRIAL_PATH.equals(path), admission = RUN_ACCESS_PATH.equals(path);
+        if (!speech && !runVoice && !songPreparation && !accessStatus && !activation && !admission && !CANDIDATES_PATH.equals(path)) {
             return error(404, "not_found", "The requested endpoint does not exist.");
         }
         if (exchange.getRequestURI().getRawQuery() != null) {
             return error(400, "invalid_request", "This endpoint does not accept query parameters.");
         }
-        if (!"POST".equals(exchange.getRequestMethod())) {
-            exchange.getResponseHeaders().set("Allow", "POST");
-            return error(405, "method_not_allowed", "Only POST is supported for this endpoint.");
+        String method = accessStatus ? "GET" : "POST";
+        if (!method.equals(exchange.getRequestMethod())) {
+            exchange.getResponseHeaders().set("Allow", method);
+            return error(405, "method_not_allowed", "Only " + method + " is supported for this endpoint.");
+        }
+        if (accessStatus) {
+            return accessResponse(runner, path, null);
         }
         List<String> contentTypes = exchange.getRequestHeaders().get("Content-Type");
         if (contentTypes == null || contentTypes.size() != 1 || !isJsonContentType(contentTypes.get(0))) {
@@ -399,20 +460,82 @@ public final class ReflectionHttpServer implements AutoCloseable {
         }
 
         byte[] body = readBoundedBody(exchange);
+        if (activation || admission) return accessResponse(runner, path, body);
+        try (var scope = ProviderSpendScope.open(spendBudget, replayOwner(runner.id()), usage)) {
+            return authorizedPost(exchange, runner, body, speech, runVoice, songPreparation);
+        }
+    }
+
+    private EndpointResponse accessResponse(Principal runner, String path, byte[] body) throws InvalidJsonException {
+        ReflectionApiJson.RunAdmission run = null;
+        if (body != null) {
+            if (TRIAL_PATH.equals(path)) ReflectionApiJson.requireEmptyObject(body);
+            else run = ReflectionApiJson.parseRunAdmission(body);
+        }
+        try {
+            ReflectionAllowance.View view;
+            if (run != null && run.replayOnly()) {
+                if (writtenReplayStore == null) return writtenStorageUnavailable();
+                if (!writtenReplayStore.hasSavedRun(replayOwner(runner.id()), run.runId()))
+                    throw new ReflectionAllowance.Denied("reflection_replay_unavailable");
+                run = null; // Return status without allocating a slot or calling a provider.
+            }
+            if (runner.tier() == Tier.OWNER || runner.tier() == Tier.TRACKING) {
+                if (TRIAL_PATH.equals(path) || (run != null && runner.tier() == Tier.TRACKING))
+                    throw new ReflectionAllowance.Denied("reflection_access_required");
+                view = ReflectionAllowance.basicView(runner.tier());
+            } else if (allowance == null) return accessStorageUnavailable();
+            else if (TRIAL_PATH.equals(path)) view = allowance.activate(runner);
+            else if (run != null) view = allowance.admit(runner, run.runId());
+            else view = allowance.status(runner);
+            return new EndpointResponse(200, view.json(runner.tier()));
+        } catch (IOException storageFailure) {
+            return accessStorageUnavailable();
+        }
+    }
+
+    private static EndpointResponse deniedAccess(ReflectionAllowance.Denied denied) {
+        return error(403, denied.code, "A reflection is not available for this run.");
+    }
+
+    private static EndpointResponse accessStorageUnavailable() {
+        return error(503, "reflection_access_unavailable", "Reflection access storage is unavailable.");
+    }
+
+    private static String requiredRunHeader(HttpExchange exchange) {
+        List<String> ids = exchange.getRequestHeaders().get(RUN_ID_HEADER);
+        if (ids == null || ids.size() != 1) throw new ReflectionAllowance.Denied("run_admission_required");
+        ReflectionContract.requireCanonicalUuid(ids.get(0), "runId");
+        return ids.get(0);
+    }
+
+    private EndpointResponse authorizedPost(HttpExchange exchange, Principal runner, byte[] body,
+            boolean speech, boolean runVoice, boolean songPreparation) throws InvalidJsonException {
         if (speech) {
             // Configured recipient IDs cannot impersonate the loopback or legacy owner on disk.
-            return synthesizeSpeech(replayOwner(principalId), ReflectionApiJson.parseSpeechRequest(body));
+            String runId = runner.tier() == Tier.OWNER || runner.tier() == Tier.TRACKING ? null : requiredRunHeader(exchange);
+            return synthesizeSpeech(runner, runId, ReflectionApiJson.parseSpeechRequest(body));
         }
         if (runVoice) {
+            if (runner.tier() != Tier.OWNER) throw new ReflectionAllowance.Denied("run_voice_not_included");
             return synthesizeRunVoice(ReflectionApiJson.parseSpeechRequest(body));
         }
         if (songPreparation) {
-            return prepareSongOnce(ReflectionApiJson.parseSongPreparationRequest(body), principalId);
+            if (runner.tier() == Tier.TRACKING) throw new ReflectionAllowance.Denied("reflection_access_required");
+            if (runner.tier() != Tier.OWNER && allowance == null) return accessStorageUnavailable();
+            String runId = runner.tier() == Tier.OWNER ? null : requiredRunHeader(exchange);
+            return prepareSongOnce(ReflectionApiJson.parseSongPreparationRequest(body), runner, runId);
         }
         ApiRequest request = ReflectionApiJson.parseRequest(body);
         SnippetCapabilities available = new SnippetCapabilities(provider.supportsSongSnippets(),
                 provider.supportsSongSnippetFallbacks());
-        EndpointResponse response = generateOnce(request, principalId, available);
+        List<String> replayOnly = exchange.getRequestHeaders().get(REPLAY_ONLY_HEADER);
+        EndpointResponse response;
+        if (replayOnly != null) {
+            if (!replayOnly.equals(List.of("1"))) throw new IllegalArgumentException("Invalid replay-only header.");
+            response = writtenReplayStore == null ? writtenStorageUnavailable() : generateWithReplay(request, runner, available,
+                    deniedAccess(new ReflectionAllowance.Denied("reflection_replay_unavailable")));
+        } else response = generateOnce(request, runner, available);
         SnippetCapabilities capabilities = response.snippetCapabilities() == null ? available : response.snippetCapabilities();
         if (capabilities.snippets()) exchange.getResponseHeaders().set(SONG_SNIPPETS_CAPABILITY_HEADER, "1");
         if (capabilities.fallbacks()) exchange.getResponseHeaders().set(SONG_SNIPPET_FALLBACKS_CAPABILITY_HEADER, "1");
@@ -461,9 +584,12 @@ public final class ReflectionHttpServer implements AutoCloseable {
         return exchange.getRequestHeaders().get("Origin") != null;
     }
 
-    private EndpointResponse generateOnce(ApiRequest request, String principalId, SnippetCapabilities available) {
+    private EndpointResponse generateOnce(ApiRequest request, Principal runner, SnippetCapabilities available) {
+        String principalId = runner.id();
         EndpointResponse unsupported = unsupportedRequest(request, available);
         if (writtenReplayStore == null) {
+            if (runner.tier() != Tier.OWNER) return runner.tier() == Tier.TRACKING
+                    ? deniedAccess(new ReflectionAllowance.Denied("reflection_access_required")) : writtenStorageUnavailable();
             if (generationMode != GenerationMode.FAKE) return writtenStorageUnavailable();
             if (unsupported != null) return unsupported;
         }
@@ -502,7 +628,13 @@ public final class ReflectionHttpServer implements AutoCloseable {
         EndpointResponse response = error(500, "internal_error", "The reflection request could not be completed.");
         try {
             response = writtenReplayStore == null ? callProvider(request, principalId)
-                    : generateWithReplay(request, principalId, available, unsupported);
+                    : generateWithReplay(request, runner, available, unsupported);
+            return response;
+        } catch (ProviderSpendScope.Denied denied) {
+            response = spendDenial(denied);
+            if (writtenReplayStore == null && !denied.attempted()) {
+                synchronized (cacheLock) { workByRequestId.remove(requestId, work); }
+            }
             return response;
         } finally {
             // Even an abnormal provider exit must unblock duplicates and release its bounded slot.
@@ -516,12 +648,20 @@ public final class ReflectionHttpServer implements AutoCloseable {
         }
     }
 
-    private EndpointResponse generateWithReplay(ApiRequest request, String principalId,
+    private EndpointResponse generateWithReplay(ApiRequest request, Principal runner,
             SnippetCapabilities available, EndpointResponse unsupported) {
+        String principalId = runner.id();
+        boolean limited = runner.tier() == Tier.TRIAL || runner.tier() == Tier.PILOT;
+        if (unsupported == null) {
+            if (runner.tier() == Tier.TRACKING) unsupported = deniedAccess(new ReflectionAllowance.Denied("reflection_access_required"));
+            else if (limited && allowance == null) unsupported = accessStorageUnavailable();
+        }
         boolean slot = unsupported == null && providerSlots.tryAcquire();
         try {
+            String input = ReflectionApiJson.writtenOperationIdentity(request, generationMode);
+            String runId = request.identifiers().runId();
             var claim = writtenReplayStore.claim(replayOwner(principalId), request.identifiers().requestId(),
-                    ReflectionApiJson.writtenOperationIdentity(request, generationMode), slot);
+                    input, slot);
             return switch (claim.state()) {
                 case CONFLICT -> error(409, "request_id_conflict", "The requestId is already associated with different evidence.");
                 case FULL -> error(503, "server_capacity", "The reflection request capacity has been reached.");
@@ -530,15 +670,38 @@ public final class ReflectionHttpServer implements AutoCloseable {
                 case PENDING -> error(503, "reflection_pending", "This reflection request has already been reserved.");
                 case CACHED -> {
                     var replay = ReflectionApiJson.restoreWrittenReplay(claim.body(), request.identifiers());
+                    if (limited && allowance != null) allowance.settle(runner, runId, input, replay.body());
                     yield new EndpointResponse(200, replay.body(), JSON_CONTENT_TYPE, claim.songStudyAcknowledged(),
                             new SnippetCapabilities(replay.snippets(), replay.fallbacks()));
                 }
                 case CLAIMED -> {
-                    EndpointResponse generated = callProvider(request, principalId);
+                    EndpointResponse generated;
+                    if (limited) {
+                        try {
+                            allowance.startWriting(runner, runId, input);
+                        } catch (ReflectionAllowance.Denied denied) {
+                            writtenReplayStore.releaseUnsent(claim);
+                            yield deniedAccess(denied);
+                        } catch (IOException unavailable) {
+                            writtenReplayStore.releaseUnsent(claim);
+                            yield accessStorageUnavailable();
+                        }
+                    }
+                    try {
+                        generated = callProvider(request, principalId);
+                    } catch (ProviderSpendScope.Denied denied) {
+                        // A partially sent generation must retain its duplicate-charge protection.
+                        if (!denied.attempted()) {
+                            writtenReplayStore.releaseUnsent(claim);
+                            if (limited) allowance.releaseUnsentWriter(runner, runId);
+                        }
+                        throw denied;
+                    }
                     if (generated.status() == 200) {
                         byte[] saved = ReflectionApiJson.writtenReplayPayload(generated.body(),
                                 available.snippets(), available.fallbacks());
-                        writtenReplayStore.complete(claim, saved, generated.songStudyAcknowledged());
+                        writtenReplayStore.complete(claim, saved, generated.songStudyAcknowledged(), replayOwner(principalId), runId);
+                        if (limited) allowance.settle(runner, runId, input, generated.body());
                     }
                     yield generated;
                 }
@@ -552,6 +715,12 @@ public final class ReflectionHttpServer implements AutoCloseable {
 
     private static EndpointResponse writtenStorageUnavailable() {
         return error(503, "reflection_storage_unavailable", "Written reflection storage is unavailable.");
+    }
+
+    private static EndpointResponse spendDenial(ProviderSpendScope.Denied denied) {
+        return denied.unavailable()
+                ? error(503, "spend_control_unavailable", "Paid provider access is currently unavailable.")
+                : error(429, "spend_limit_reached", "The monthly allowance for paid features has been reached.");
     }
 
     private EndpointResponse callProvider(ApiRequest request, String principalId) {
@@ -578,6 +747,8 @@ public final class ReflectionHttpServer implements AutoCloseable {
             return error(409, "preparation_id_conflict", "The preparationId belongs to a different song.");
         } catch (ReflectionProviderException failure) {
             return providerFailure(failure.failureType());
+        } catch (ProviderSpendScope.Denied denied) {
+            throw denied;
         } catch (RuntimeException unexpected) {
             return error(
                     500,
@@ -587,7 +758,8 @@ public final class ReflectionHttpServer implements AutoCloseable {
         }
     }
 
-    private EndpointResponse prepareSongOnce(ReflectionContract.SongPreparationRequest request, String principalId) {
+    private EndpointResponse prepareSongOnce(ReflectionContract.SongPreparationRequest request, Principal runner, String runId) {
+        String principalId = runner.id();
         if (!provider.supportsSongPreparation()) {
             return error(503, "provider_unavailable", "Song preparation is not configured.");
         }
@@ -600,7 +772,7 @@ public final class ReflectionHttpServer implements AutoCloseable {
                     && now - item.admittedNanos() >= AnthropicReflectionProvider.SONG_PREPARATION_TTL.toNanos());
             SongPreparationWork existing = songPreparationById.get(preparationId);
             if (existing != null) {
-                if (!sameSongIdentity(existing.request(), request)) {
+                if (!Objects.equals(existing.runId(), runId) || !sameSongIdentity(existing.request(), request)) {
                     return error(409, "preparation_id_conflict", "The preparationId belongs to a different song.");
                 }
                 work = existing;
@@ -616,7 +788,7 @@ public final class ReflectionHttpServer implements AutoCloseable {
                     songPreparationSlots.release();
                     return error(503, "server_busy", "The reflection service is busy. Try again later.");
                 }
-                work = new SongPreparationWork(request, now, new CompletableFuture<>());
+                work = new SongPreparationWork(request, runId, now, new CompletableFuture<>());
                 songPreparationById.put(preparationId, work);
                 owner = true;
             }
@@ -624,6 +796,7 @@ public final class ReflectionHttpServer implements AutoCloseable {
         if (!owner) return work.response().join();
         EndpointResponse response = error(500, "internal_error", "Song preparation could not complete.");
         try {
+            if (runId != null) allowance.reservePreparation(runner, runId, request.preparationId());
             ReflectionProvider.SongPreparationState state = provider.prepareSong(
                     new ReflectionContract.SongPreparationRequest(
                             scopedPreparationId(principalId, request.preparationId()),
@@ -636,6 +809,22 @@ public final class ReflectionHttpServer implements AutoCloseable {
             return response = error(409, "preparation_id_conflict", "The preparationId belongs to a different song.");
         } catch (ReflectionProviderException failure) {
             return response = providerFailure(failure.failureType());
+        } catch (ProviderSpendScope.Denied denied) {
+            if (!denied.attempted()) {
+                synchronized (cacheLock) { songPreparationById.remove(preparationId, work); }
+                if (runId != null) {
+                    try {
+                        allowance.releaseUnsentPreparation(runner, runId, request.preparationId());
+                    } catch (IOException unavailable) { return response = accessStorageUnavailable(); }
+                }
+            }
+            return response = spendDenial(denied);
+        } catch (ReflectionAllowance.Denied denied) {
+            synchronized (cacheLock) { songPreparationById.remove(preparationId, work); }
+            return response = deniedAccess(denied);
+        } catch (IOException storageFailure) {
+            synchronized (cacheLock) { songPreparationById.remove(preparationId, work); }
+            return response = accessStorageUnavailable();
         } catch (RuntimeException failure) {
             return response;
         } finally {
@@ -670,22 +859,47 @@ public final class ReflectionHttpServer implements AutoCloseable {
         }
     }
 
-    private EndpointResponse synthesizeSpeech(String owner, String text) {
+    private EndpointResponse synthesizeSpeech(Principal runner, String runId, String text) {
         if (speechProvider == null) {
             return error(503, "provider_unavailable", "The reflection voice is not configured.");
         }
         if (speechReplayStore == null) {
             return error(503, "speech_storage_unavailable", "Reflection speech storage is unavailable.");
         }
-        boolean hasProviderSlot = providerSlots.tryAcquire();
+        boolean canGenerate = runner.tier() == Tier.OWNER || (runner.tier() != Tier.TRACKING && allowance != null);
+        boolean hasProviderSlot = canGenerate && providerSlots.tryAcquire();
         try {
-            SpeechReplayStore.Claim claim = speechReplayStore.claim(owner, text, hasProviderSlot);
+            SpeechReplayStore.Claim claim = speechReplayStore.claim(replayOwner(runner.id()), text, hasProviderSlot);
             return switch (claim.state()) {
                 case CACHED -> new EndpointResponse(200, claim.audio(), "audio/mpeg");
                 case PENDING -> error(503, "speech_pending", "This speech request has already been reserved.");
-                case BUSY, FULL -> error(503, "server_busy", "The reflection service is busy. Try again later.");
+                case BUSY, FULL -> canGenerate ? error(503, "server_busy", "The reflection service is busy. Try again later.")
+                        : runner.tier() == Tier.TRACKING ? deniedAccess(new ReflectionAllowance.Denied("reflection_access_required"))
+                        : accessStorageUnavailable();
                 case CLAIMED -> {
-                    byte[] audio = speechProvider.synthesize(text);
+                    byte[] audio;
+                    boolean newlySelected = false;
+                    if (runner.tier() != Tier.OWNER) {
+                        try {
+                            newlySelected = allowance.selectVoice(runner, runId, text);
+                        } catch (ReflectionAllowance.Denied denied) {
+                            speechReplayStore.releaseUnsent(claim);
+                            yield deniedAccess(denied);
+                        } catch (IOException unavailable) {
+                            speechReplayStore.releaseUnsent(claim);
+                            yield accessStorageUnavailable();
+                        }
+                    }
+                    try {
+                        audio = speechProvider.synthesize(text);
+                    } catch (ProviderSpendScope.Denied denied) {
+                        if (!denied.attempted()) {
+                            // Keep the replay reservation until any still-unspent branch choice is released.
+                            if (newlySelected) allowance.releaseUnsentVoice(runner, runId, text);
+                            speechReplayStore.releaseUnsent(claim);
+                        }
+                        yield spendDenial(denied);
+                    }
                     if (audio == null || audio.length == 0 || audio.length > MAX_AUDIO_RESPONSE_BYTES) {
                         yield speechProviderFailure(FailureType.INVALID_RESPONSE);
                     }
@@ -723,6 +937,8 @@ public final class ReflectionHttpServer implements AutoCloseable {
             }
             // Audio remains request-scoped: no cache entry, filename or durable storage.
             return new EndpointResponse(200, audio, "audio/mpeg");
+        } catch (ProviderSpendScope.Denied denied) {
+            return spendDenial(denied);
         } catch (ReflectionProviderException failure) {
             return speechProviderFailure(failure.failureType());
         } catch (RuntimeException unexpected) {
@@ -933,7 +1149,7 @@ public final class ReflectionHttpServer implements AutoCloseable {
     ) {
     }
 
-    private record SongPreparationWork(ReflectionContract.SongPreparationRequest request, long admittedNanos,
+    private record SongPreparationWork(ReflectionContract.SongPreparationRequest request, String runId, long admittedNanos,
                                        CompletableFuture<EndpointResponse> response) {
         @Override public String toString() { return "SongPreparationWork[identity=redacted]"; }
     }

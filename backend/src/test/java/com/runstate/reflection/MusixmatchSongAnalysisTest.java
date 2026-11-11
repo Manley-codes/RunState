@@ -10,11 +10,13 @@ import com.runstate.reflection.MusixmatchSongAnalysis.Transport;
 import com.runstate.reflection.MusixmatchSongAnalysis.TransportRequest;
 import com.runstate.reflection.MusixmatchSongAnalysis.TransportResponse;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 import java.io.IOException;
 import java.net.URLDecoder;
 import java.net.http.HttpTimeoutException;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.LinkedHashMap;
@@ -30,6 +32,24 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class MusixmatchSongAnalysisTest {
+    @Test
+    void optionalLyricRequestConsumesItsOwnAllowanceAndPropagatesDenial(@TempDir Path directory) throws Exception {
+        AtomicInteger sends = new AtomicInteger();
+        var source = provider(request -> {
+            int call = sends.incrementAndGet();
+            if (call == 1) return matched("Example Song", "Example Artist");
+            if (call == 2) return analysisResponse(materialAnalysis());
+            throw new AssertionError("Third request exceeded the runner's allowance");
+        });
+        var budget = new ProviderSpendBudget(directory, new ProviderSpendBudget.Limits(2, 10, 1, 1, 1));
+        try (var scope = ProviderSpendScope.open(budget, "runner-a")) {
+            var denial = assertThrows(ProviderSpendScope.Denied.class,
+                    () -> source.lookupMaterial("Example Song", "Example Artist"));
+            assertTrue(denial.attempted());
+            assertFalse(denial.unavailable());
+            assertEquals(2, sends.get());
+        }
+    }
     private static final String DUMMY_KEY = "not-a-real-key+secret=value";
 
     @Test
@@ -731,6 +751,15 @@ class MusixmatchSongAnalysisTest {
             case 2 -> analysisResponse(analysis);
             default -> snippet;
         }).lookupMaterial("Sunday Best", "Surfaces");
+    }
+
+    static MusixmatchSongAnalysis comparisonCatalog() {
+        return provider(request -> switch (request.endpoint().getPath()) {
+            case "/ws/1.1/matcher.track.get" -> matched(query(request).get("q_track"), query(request).get("q_artist"));
+            case "/ws/1.1/track.lyrics.analysis.get" -> analysisResponse(materialAnalysis());
+            case "/ws/1.1/track.snippet.get" -> snippetResponse("Fictional example.", 0, 0);
+            default -> envelope(404, new JsonObject());
+        });
     }
 
     private static TransportResponse materialMatch() {

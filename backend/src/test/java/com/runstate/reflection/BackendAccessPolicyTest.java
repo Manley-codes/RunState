@@ -92,7 +92,21 @@ class BackendAccessPolicyTest {
         invalid(json(entry("runner-one", FIRST), entry("runner-one", FIRST)));
     }
 
-    @Test void requiresExactlyFourFieldsWithoutCoercionOrDuplicates() {
+    @Test void rejectsInconsistentPlansDuringCredentialRotationAndUnknownPlanValues() {
+        var first = entry("runner", FIRST);
+        first.addProperty("reflectionTier", "trial");
+        var next = entry("runner", SECOND);
+        invalid(json(first, next));
+        next.addProperty("reflectionTier", "pilot");
+        invalid(json(first, next));
+        next.addProperty("reflectionTier", "trial");
+        assertEquals(BackendAccessPolicy.Tier.TRIAL, BackendAccessPolicy.fromJson(json(first, next), FIXED)
+                .authenticate(bearer(SECOND)).orElseThrow().tier());
+        first.addProperty("reflectionTier", "owner");
+        invalid(json(first));
+    }
+
+    @Test void requiresFourCredentialFieldsWithoutCoercionOrDuplicates() {
         JsonObject base = entry("runner", FIRST);
         for (String field : List.of("principalId", "tokenSha256", "expiresAt", "enabled")) {
             JsonObject missing = base.deepCopy();

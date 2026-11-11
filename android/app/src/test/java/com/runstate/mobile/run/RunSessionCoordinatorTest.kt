@@ -12,6 +12,12 @@ import com.runstate.mobile.data.local.RunTrackingMode
 import com.runstate.mobile.data.local.StoredRunState
 import com.runstate.mobile.data.local.TelemetryCoverage
 import com.runstate.mobile.location.missingTrackedRunWasRetired
+import com.runstate.mobile.reflection.HostedReflectionHttpClient
+import com.runstate.mobile.reflection.ReflectionApiClientTest.FakeHttpsConnection
+import com.runstate.mobile.reflection.ReflectionConnectionConfig
+import com.runstate.mobile.reflection.RunReflectionCoordinator
+import com.runstate.mobile.reflection.RunReflectionCoordinatorTest.MemoryReflectionStore
+import com.runstate.mobile.reflection.RunReflectionState
 import java.time.Clock
 import java.time.Instant
 import java.time.ZoneId
@@ -25,8 +31,10 @@ import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -2748,6 +2756,48 @@ class RunSessionCoordinatorTest {
         assertEquals(60_000L, first.activeMillis)
         assertEquals(first, second)
         assertEquals(1, fixture.dao.transitionQueryCalls)
+    }
+
+    @Test
+    fun `cloud spending refusal still lets the runner save one completed run with its metrics`() = runBlocking {
+        val fixture = Fixture()
+        try {
+            fixture.coordinator.initialize()
+            fixture.coordinator.beginCountdown()
+            fixture.startRun()
+            fixture.clock.nowMillis = FIRST_PAUSE
+            fixture.coordinator.requestAction(RunActionKind.PAUSE).await()
+            fixture.clock.nowMillis = FIRST_FINISH
+            fixture.coordinator.requestAction(RunActionKind.COMPLETE).await()
+            val completedMetrics = requireNotNull(fixture.coordinator.runMetrics())
+            assertEquals(180.0, requireNotNull(completedMetrics.distanceMeters), 0.0)
+            assertEquals(60_000L, completedMetrics.activeMillis)
+            assertEquals(120_000L, completedMetrics.elapsedMillis)
+
+            val config = ReflectionConnectionConfig("https://reflection.example.com/api/reflections/candidates",
+                "A".repeat(43))
+            var sends = 0
+            val gateway = HostedReflectionHttpClient(config, { url ->
+                check(url.path == "/api/reflections/candidates")
+                sends++
+                val body = """{"error":{"code":"spend_limit_reached","message":"The monthly allowance for paid features has been reached."}}"""
+                FakeHttpsConnection(url, body, status = 429)
+            })
+            val reflections = RunReflectionCoordinator(fixture.dao, MemoryReflectionStore(), gateway, fixture.scope)
+            reflections.onSavedVisible(RUN_ID).join()
+            withTimeout(5_000) { reflections.state.first { it == RunReflectionState.Failed(RUN_ID) } }
+            assertEquals(1, sends)
+
+            assertTrue(fixture.coordinator.finalizeActivity(RUN_ID))
+            val saved = requireNotNull(fixture.dao.findById(RUN_ID))
+            assertTrue(saved.activityFinalized)
+            assertEquals(StoredRunState.COMPLETED, saved.state)
+            assertEquals(completedMetrics.distanceMeters, saved.finalDistanceMeters)
+            assertEquals(completedMetrics, fixture.coordinator.runMetrics())
+            assertEquals(1, fixture.dao.countRuns())
+        } finally {
+            fixture.scope.cancel()
+        }
     }
 
     /** Completion switches from the live formula to the exact values stored with the finish. */

@@ -830,6 +830,240 @@ class ReflectionHttpServerTest {
         }
     }
 
+    @Test
+    void monthlyLimitsProtectAllPaidRoutesAndAllowFreeReplaysAfterRestart(@TempDir Path directory) throws Exception {
+        String secondToken = "B".repeat(43);
+        String expiry = "2099-01-01T00:00:00Z";
+        String grants = "[" + accessGrant("runner-a", DUMMY_DEMO_TOKEN, expiry, true) + ","
+                + accessGrant("runner-b", secondToken, expiry, true) + "]";
+        var access = ReflectionHttpServer.RemoteAccess.individual("127.0.0.1", DEMO_HOST, BackendAccessPolicy.fromJson(grants));
+        var runnerA = accessHeaders(DUMMY_DEMO_TOKEN);
+        var runnerB = accessHeaders(secondToken);
+        var writtenCalls = new AtomicInteger();
+        var voiceCalls = new AtomicInteger();
+        var lookupCalls = new AtomicInteger();
+        var writer = new ReflectionProvider() {
+            @Override public CandidateReflections generate(CompletedRunEvidence evidence) {
+                ProviderSpendScope.beforeSend(ProviderSpendBudget.Provider.ANTHROPIC);
+                writtenCalls.incrementAndGet();
+                return exactCandidates();
+            }
+            @Override public boolean supportsSongPreparation() { return true; }
+            @Override public SongPreparationState prepareSong(ReflectionContract.SongPreparationRequest request) {
+                ProviderSpendScope.beforeSend(ProviderSpendBudget.Provider.MUSIXMATCH);
+                lookupCalls.incrementAndGet();
+                return SongPreparationState.READY;
+            }
+        };
+        ReflectionHttpServer.SpeechProvider voice = text -> {
+            ProviderSpendScope.beforeSend(ProviderSpendBudget.Provider.ELEVENLABS);
+            return ("ID3-" + voiceCalls.incrementAndGet()).getBytes(StandardCharsets.US_ASCII);
+        };
+        var limits = new ProviderSpendBudget.Limits(30_000, 50_000, 20_000L, 10_000L, 10_000L);
+        String secondRun = validRequest().replace(RUN_ID, OTHER_RUN_ID).replace(REQUEST_ID, SECOND_REQUEST_ID);
+        String speechPath = ReflectionHttpServer.SPEECH_PATH;
+        String runVoicePath = ReflectionHttpServer.RUN_VOICE_PATH;
+        String preparationPath = ReflectionHttpServer.SONG_PREPARATION_PATH;
+        String savedText = speechBody("Your first reflection.");
+        String newText = speechBody("Your next reflection.");
+        RawHttpResponse savedWritten;
+        RawHttpResponse savedAudio;
+        try (var server = startBudgeted(directory, access, writer, voice, limits)) {
+            assertError(rawPost(server, List.of("Host: " + DEMO_HOST), validRequest()), 401, "unauthorized");
+            assertEquals(0, writtenCalls.get());
+            savedWritten = rawPost(server, runnerA, validRequest());
+            savedAudio = rawRequest(server, "POST", speechPath, runnerA, savedText);
+            assertEquals(200, savedWritten.status());
+            assertEquals(200, savedAudio.status());
+            assertError(rawPost(server, runnerA, secondRun), 429, "spend_limit_reached");
+            assertError(rawRequest(server, "POST", speechPath, runnerA, newText), 429, "spend_limit_reached");
+            assertError(rawRequest(server, "POST", runVoicePath, runnerA, speechBody("One mile.")), 429, "spend_limit_reached");
+            assertError(rawRequest(server, "POST", preparationPath, runnerA, preparationBody(REQUEST_ID)), 429, "spend_limit_reached");
+
+            assertEquals(200, rawRequest(server, "POST", preparationPath, runnerB, preparationBody(REQUEST_ID)).status());
+            assertEquals(200, rawRequest(server, "POST", runVoicePath, runnerB, speechBody("One mile.")).status());
+            assertError(rawRequest(server, "POST", runVoicePath, runnerB, speechBody("Two miles.")), 429, "spend_limit_reached");
+        }
+        try (var restarted = startBudgeted(directory, access, writer, voice, limits)) {
+            assertError(rawRequest(restarted, "POST", preparationPath, runnerB, preparationBody(SECOND_REQUEST_ID)),
+                    429, "spend_limit_reached");
+            assertEquals(savedWritten, rawPost(restarted, runnerA, validRequest()));
+            assertEquals(savedAudio, rawRequest(restarted, "POST", speechPath, runnerA, savedText));
+            assertEquals(1, writtenCalls.get());
+            assertEquals(2, voiceCalls.get());
+            assertEquals(1, lookupCalls.get());
+        }
+        var raised = new ProviderSpendBudget.Limits(100_000, 200_000, 20_000L, 10_000L, 10_000L);
+        try (var restarted = startBudgeted(directory, access, writer, voice, raised)) {
+            assertEquals(200, rawPost(restarted, runnerA, secondRun).status());
+            assertEquals(200, rawRequest(restarted, "POST", speechPath, runnerA, newText).status());
+            assertEquals(2, writtenCalls.get());
+            assertEquals(3, voiceCalls.get());
+        }
+    }
+
+    @Test
+    void budgetDenialAfterOnePaidWriterCallPreservesReplayProtection(@TempDir Path directory) throws Exception {
+        var access = new ReflectionHttpServer.RemoteAccess("127.0.0.1", DEMO_HOST, DUMMY_DEMO_TOKEN);
+        var calls = new AtomicInteger();
+        ReflectionProvider writer = evidence -> {
+            for (int step = 0; step < 2; step++) {
+                ProviderSpendScope.beforeSend(ProviderSpendBudget.Provider.ANTHROPIC);
+                calls.incrementAndGet();
+            }
+            return exactCandidates();
+        };
+        var limits = new ProviderSpendBudget.Limits(10_000, 200_000, 10_000L, 10_000L, 10_000L);
+        try (var first = startBudgeted(directory, access, writer, null, limits)) {
+            assertError(rawPost(first, remoteHeaders(), validRequest()), 429, "spend_limit_reached");
+            assertEquals(1, calls.get());
+        }
+        var raised = new ProviderSpendBudget.Limits(100_000, 200_000, 10_000L, 10_000L, 10_000L);
+        try (var restarted = startBudgeted(directory, access, writer, null, raised)) {
+            var sameRun = validRequest().replace(REQUEST_ID, SECOND_REQUEST_ID);
+            assertError(rawPost(restarted, remoteHeaders(), sameRun), 503, "reflection_pending");
+            assertEquals(1, calls.get());
+            var newRun = validRequest().replace(REQUEST_ID, THIRD_REQUEST_ID).replace(RUN_ID, OTHER_RUN_ID);
+            assertEquals(200, rawPost(restarted, remoteHeaders(), newRun).status());
+            assertEquals(3, calls.get());
+        }
+    }
+
+    @Test
+    void missingSpendConfigurationAllowsSavedRepliesAndBlocksNewProviderCalls(@TempDir Path directory) throws Exception {
+        var access = new ReflectionHttpServer.RemoteAccess("127.0.0.1", DEMO_HOST, DUMMY_DEMO_TOKEN);
+        var writtenCalls = new AtomicInteger();
+        var voiceCalls = new AtomicInteger();
+        ReflectionProvider writer = evidence -> {
+            ProviderSpendScope.beforeSend(ProviderSpendBudget.Provider.ANTHROPIC);
+            writtenCalls.incrementAndGet();
+            return exactCandidates();
+        };
+        ReflectionHttpServer.SpeechProvider voice = text -> {
+            ProviderSpendScope.beforeSend(ProviderSpendBudget.Provider.ELEVENLABS);
+            voiceCalls.incrementAndGet();
+            return "ID3saved".getBytes(StandardCharsets.US_ASCII);
+        };
+        var limits = new ProviderSpendBudget.Limits(100_000, 200_000, 10_000L, 10_000L, 10_000L);
+        String text = speechBody("Previously generated speech.");
+        String speechPath = ReflectionHttpServer.SPEECH_PATH;
+        try (var first = startBudgeted(directory, access, writer, voice, limits)) {
+            assertEquals(200, rawPost(first, remoteHeaders(), validRequest()).status());
+            assertEquals(200, rawRequest(first, "POST", speechPath, remoteHeaders(), text).status());
+        }
+        try (var restarted = ReflectionHttpServer.createRemote(writer, 0, ReflectionHttpServer.GenerationMode.ANTHROPIC,
+                access, 2, 256, voice, voice, new SpeechReplayStore(directory), new WrittenReflectionReplayStore(directory), null)) {
+            restarted.start();
+            assertEquals(200, rawPost(restarted, remoteHeaders(), validRequest()).status());
+            assertEquals(200, rawRequest(restarted, "POST", speechPath, remoteHeaders(), text).status());
+            String newRun = validRequest().replace(REQUEST_ID, SECOND_REQUEST_ID).replace(RUN_ID, OTHER_RUN_ID);
+            assertError(rawPost(restarted, remoteHeaders(), newRun), 503, "spend_control_unavailable");
+            assertError(rawRequest(restarted, "POST", speechPath, remoteHeaders(), speechBody("New speech.")),
+                    503, "spend_control_unavailable");
+            assertEquals(1, writtenCalls.get());
+            assertEquals(1, voiceCalls.get());
+        }
+    }
+
+    @Test void scopedPreviewBindsPreparationWritingAndOnlyOneSelectedVoiceToAnAdmittedRun(@TempDir Path directory)
+            throws Exception {
+        var observed = new AtomicInteger();
+        var writer = new ReflectionProvider() {
+            @Override public CandidateReflections generate(CompletedRunEvidence evidence) {
+                observed.incrementAndGet();
+                return exactCandidates();
+            }
+            @Override public boolean supportsSongPreparation() { return true; }
+            @Override public SongPreparationState prepareSong(ReflectionContract.SongPreparationRequest request) {
+                observed.incrementAndGet();
+                return SongPreparationState.READY;
+            }
+        };
+        ReflectionHttpServer.SpeechProvider voice = text -> ("audio-" + observed.incrementAndGet()).getBytes(StandardCharsets.US_ASCII);
+        var headers = accessHeaders(DUMMY_DEMO_TOKEN);
+        var runHeaders = new java.util.ArrayList<>(headers);
+        runHeaders.add(ReflectionHttpServer.RUN_ID_HEADER + ": " + RUN_ID);
+        var replayHeaders = new java.util.ArrayList<>(headers);
+        replayHeaders.add(ReflectionHttpServer.REPLAY_ONLY_HEADER + ": 1");
+        String replayQuery = "{\"runId\":\"" + RUN_ID + "\",\"replayOnly\":true}";
+        var tracking = startScoped(directory, "tracking", writer, voice);
+        try (tracking) {
+            assertEquals("tracking", JsonParser.parseString(rawRequest(tracking, "GET", ReflectionHttpServer.ACCESS_PATH,
+                    headers, "").body()).getAsJsonObject().get("status").getAsString());
+            assertError(rawPost(tracking, headers, validRequest()), 403, "reflection_access_required");
+            assertError(rawRequest(tracking, "POST", ReflectionHttpServer.RUN_ACCESS_PATH, headers, "{\"runId\":\"" + RUN_ID + "\"}"),
+                    403, "reflection_access_required");
+            assertError(rawRequest(tracking, "POST", ReflectionHttpServer.SONG_PREPARATION_PATH, runHeaders, preparationBody(REQUEST_ID)),
+                    403, "reflection_access_required");
+            assertError(rawRequest(tracking, "POST", ReflectionHttpServer.RUN_VOICE_PATH, runHeaders, speechBody("Mile.")),
+                    403, "run_voice_not_included");
+            assertError(rawRequest(tracking, "POST", ReflectionHttpServer.SPEECH_PATH, runHeaders, speechBody(SPENT)),
+                    403, "reflection_access_required");
+            assertEquals(0, observed.get());
+        }
+        RawHttpResponse savedWritten, savedVoice;
+        try (var server = startScoped(directory, "trial", writer, voice)) {
+            assertError(rawPost(server, headers, validRequest()), 403, "reflection_access_required");
+            assertError(rawRequest(server, "POST", ReflectionHttpServer.RUN_ACCESS_PATH, headers, replayQuery),
+                    403, "reflection_replay_unavailable");
+            assertError(rawRequest(server, "POST", ReflectionHttpServer.RUN_ACCESS_PATH, headers, "{\"runId\":\"" + RUN_ID + "\"}"),
+                    403, "reflection_access_required");
+            assertEquals(200, rawRequest(server, "POST", ReflectionHttpServer.TRIAL_PATH, headers, "{}").status());
+            assertError(rawPost(server, headers, validRequest()), 403, "run_admission_required");
+            String runBody = "{\"runId\":\"" + RUN_ID + "\"}";
+            assertEquals(200, rawRequest(server, "POST", ReflectionHttpServer.RUN_ACCESS_PATH, headers, runBody).status());
+            var lastSlot = rawRequest(server, "POST", ReflectionHttpServer.RUN_ACCESS_PATH, headers, runBody.replace(RUN_ID, OTHER_RUN_ID));
+            assertEquals(0, JsonParser.parseString(lastSlot.body()).getAsJsonObject().get("remaining").getAsInt());
+            assertError(rawRequest(server, "POST", ReflectionHttpServer.RUN_ACCESS_PATH, headers, runBody.replace(RUN_ID, THIRD_REQUEST_ID)),
+                    403, "reflection_limit_reached");
+            assertError(rawPost(server, headers, validRequest().replace(RUN_ID, THIRD_REQUEST_ID)), 403, "run_admission_required");
+            assertError(rawPost(server, replayHeaders, validRequest()), 403, "reflection_replay_unavailable");
+            assertError(rawRequest(server, "POST", ReflectionHttpServer.SONG_PREPARATION_PATH, headers, preparationBody(REQUEST_ID)),
+                    403, "run_admission_required");
+            assertEquals(200, rawRequest(server, "POST", ReflectionHttpServer.SONG_PREPARATION_PATH, runHeaders,
+                    preparationBody(REQUEST_ID)).status());
+            savedWritten = rawPost(server, headers, validRequest());
+            assertEquals(200, savedWritten.status());
+            assertError(rawRequest(server, "POST", ReflectionHttpServer.SPEECH_PATH, runHeaders, speechBody("Unrelated.")),
+                    403, "reflection_voice_not_included");
+            savedVoice = rawRequest(server, "POST", ReflectionHttpServer.SPEECH_PATH, runHeaders, speechBody(SPENT));
+            assertEquals(200, savedVoice.status());
+            assertError(rawRequest(server, "POST", ReflectionHttpServer.SPEECH_PATH, runHeaders, speechBody(POWERED_UP)),
+                    403, "reflection_voice_not_included");
+            assertEquals(3, observed.get());
+        }
+        try (var downgraded = startScoped(directory, "tracking", writer, voice)) {
+            assertEquals(200, rawRequest(downgraded, "POST", ReflectionHttpServer.RUN_ACCESS_PATH, headers, replayQuery).status());
+            assertError(rawRequest(downgraded, "POST", ReflectionHttpServer.RUN_ACCESS_PATH, headers, replayQuery.replace(RUN_ID, OTHER_RUN_ID)),
+                    403, "reflection_replay_unavailable");
+            assertEquals(savedWritten, rawPost(downgraded, replayHeaders, validRequest()));
+            assertEquals(savedVoice, rawRequest(downgraded, "POST", ReflectionHttpServer.SPEECH_PATH, headers, speechBody(SPENT)));
+            assertEquals(3, observed.get());
+        }
+    }
+
+    private static ReflectionHttpServer startScoped(Path directory, String tier, ReflectionProvider writer,
+            ReflectionHttpServer.SpeechProvider voice) throws Exception {
+        JsonObject grant = JsonParser.parseString(accessGrant("runner", DUMMY_DEMO_TOKEN, "2099-01-01T00:00:00Z", true)).getAsJsonObject();
+        grant.addProperty("reflectionTier", tier);
+        var access = ReflectionHttpServer.RemoteAccess.individual("127.0.0.1", DEMO_HOST, BackendAccessPolicy.fromJson("[" + grant + "]"));
+        var server = ReflectionHttpServer.createRemote(writer, 0, ReflectionHttpServer.GenerationMode.ANTHROPIC,
+                access, 2, 256, voice, voice, new SpeechReplayStore(directory), new WrittenReflectionReplayStore(directory), null,
+                new ReflectionAllowance(directory, java.time.Clock.systemUTC()));
+        server.start();
+        return server;
+    }
+
+    private static ReflectionHttpServer startBudgeted(Path directory, ReflectionHttpServer.RemoteAccess access,
+            ReflectionProvider writer, ReflectionHttpServer.SpeechProvider voice, ProviderSpendBudget.Limits limits)
+            throws IOException {
+        var server = ReflectionHttpServer.createRemote(writer, 0, ReflectionHttpServer.GenerationMode.ANTHROPIC,
+                access, 2, 256, voice, voice, new SpeechReplayStore(directory), new WrittenReflectionReplayStore(directory),
+                new ProviderSpendBudget(directory, limits));
+        server.start();
+        return server;
+    }
+
     private ReflectionHttpServer startWritten(ReflectionProvider provider, Path directory) throws IOException {
         var server = ReflectionHttpServer.create(provider, 0, ReflectionHttpServer.GenerationMode.ANTHROPIC,
                 null, null, null, new WrittenReflectionReplayStore(directory));
@@ -2395,8 +2629,11 @@ class ReflectionHttpServerTest {
             socket.connect(server.address(), 2_000);
             socket.setSoTimeout(5_000);
             socket.getOutputStream().write(requestHead.getBytes(StandardCharsets.US_ASCII));
-            socket.getOutputStream().write(bodyBytes);
+            // Oversized declared lengths must be rejected from headers, even before the payload arrives.
+            // Sending unread bytes while the peer closes can reset the socket before Windows delivers its 413.
+            if (bodyBytes.length <= ReflectionHttpServer.MAX_REQUEST_BYTES) socket.getOutputStream().write(bodyBytes);
             socket.getOutputStream().flush();
+            if (bodyBytes.length > ReflectionHttpServer.MAX_REQUEST_BYTES) socket.shutdownOutput();
             return readFramedResponse(socket.getInputStream());
         }
     }
@@ -2538,7 +2775,7 @@ class ReflectionHttpServerTest {
         }
     }
 
-    private static String validRequest() {
+    static String validRequest() {
         JsonObject metrics = new JsonObject();
         metrics.addProperty("distanceMeters", 5_000.25);
         metrics.addProperty("source", "FIXTURE");

@@ -7,6 +7,15 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class RunPreferencesTest {
+    @Test fun trackingOnlyChoicePersistsWithoutChangingMusicConsent() {
+        val values = FakeValues()
+        val store = StoredRunPreferences(values)
+        val previous = store.load().copy(observeMusic = true)
+        assertTrue(previous.cloudReflectionsEnabled)
+        store.save(previous.copy(cloudReflectionsEnabled = false))
+        assertEquals(previous.copy(cloudReflectionsEnabled = false), StoredRunPreferences(values).load())
+    }
+
     @Test
     fun musicLayoutDefaultsWithoutEnablingObservationAndSurvivesReopening() {
         val values = FakeValues()
@@ -143,12 +152,13 @@ class RunPreferencesTest {
         StoredRunPreferences(values).save(enabled)
         assertEquals(enabled, StoredRunPreferences(values).load())
 
-        val disabled = RunPreferences(musicSetupComplete = true)
+        val disabled = RunPreferences(musicSetupComplete = true, cloudReflectionsEnabled = false)
         StoredRunPreferences(values).save(disabled)
 
         assertEquals(disabled, StoredRunPreferences(values).load())
         assertEquals(2, values.commits)
-        assertEquals(setOf("observe_music", "share_music_in_reflection", "music_setup_complete", "capture_weather", "find_song_snippets", "distance_announcements"),
+        assertEquals(setOf("observe_music", "share_music_in_reflection", "music_setup_complete", "capture_weather",
+            "find_song_snippets", "distance_announcements", "cloud_reflections_enabled"),
             values.saved.keys)
     }
 

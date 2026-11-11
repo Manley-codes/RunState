@@ -817,6 +817,7 @@ class ReflectionApiClientTest {
         )
         assertEquals("Bearer $code", fake.getRequestProperty("Authorization"))
         assertEquals("POST", fake.requestMethod)
+        assertNull(fake.getRequestProperty("X-RunState-Replay-Only"))
         assertEquals(3_000, fake.connectTimeout)
         assertEquals(100_000, fake.readTimeout)
         assertFalse(fake.instanceFollowRedirects)
@@ -829,6 +830,22 @@ class ReflectionApiClientTest {
         assertEquals("[FAKE] None.", result.noSelection)
         assertFalse(result.isTestData)
         assertTrue(fake.wasDisconnected)
+    }
+
+    @Test fun replayOnlyPostCarriesTheServerGuardAndRevokedConsentWithholdsTheBody() = runBlocking {
+        val config = ReflectionConnectionConfig("https://reflection.example.com/api/reflections/candidates", "W".repeat(43))
+        val request = reflectionRequestFromSavedRun(REQUEST_ID, completedRun(), completedTransitions())
+        val permitted = FakeHttpsConnection(URL(config.endpoint), response())
+        HostedReflectionHttpClient(config, { permitted }, replayOnly = true).request(request)
+        assertEquals("1", permitted.getRequestProperty("X-RunState-Replay-Only"))
+        assertTrue(permitted.sent.size() > 0)
+        val revoked = FakeHttpsConnection(URL(config.endpoint), response())
+        try {
+            HostedReflectionHttpClient(config, { revoked }, stillAllowed = { false }).request(request)
+            fail("Expected a changed sharing preference to stop the request")
+        } catch (_: ReflectionBridgeException) {
+            assertEquals(0, revoked.sent.size())
+        }
     }
 
     @Test fun hostedClientSendsExactKnownWeatherWithoutLookupCoordinates() = runBlocking {
@@ -1079,7 +1096,7 @@ class ReflectionApiClientTest {
     private fun knownSongRequest() = reflectionRequestFromSavedRun(REQUEST_ID, sharingRun(),
         completedTransitions(), qualifiedMusic(listOf(musicObservation().copy(title = "Sunday Best", artist = "Surfaces"))))
 
-    private class FakeHttpsConnection(url: URL, private val body: String, private val status: Int = 200,
+    internal class FakeHttpsConnection(url: URL, private val body: String, private val status: Int = 200,
         private val cueCapability: String? = null,
         private val studyCapability: String? = null,
         private val preparationCapability: String? = null,
@@ -1087,7 +1104,8 @@ class ReflectionApiClientTest {
         private val selectionCapability: String? = null,
         private val snippetsCapability: String? = null,
         private val snippetFallbacksCapability: String? = null,
-        private val loadedAtFinishCapability: String? = null) :
+        private val loadedAtFinishCapability: String? = null,
+        private val accessCapability: String? = null) :
         HttpsURLConnection(url) {
         val sent = ByteArrayOutputStream()
         var wasDisconnected = false
@@ -1103,6 +1121,7 @@ class ReflectionApiClientTest {
         override fun getResponseCode(): Int = status
         override fun getHeaderField(name: String?): String? = when {
             name.equals("X-RunState-Song-Cue", ignoreCase = true) -> cueCapability
+            name.equals("X-RunState-Reflection-Access", ignoreCase = true) -> accessCapability
             name.equals("X-RunState-Song-Study", ignoreCase = true) -> studyCapability
             name.equals("X-RunState-Song-Preparation", ignoreCase = true) -> preparationCapability
             name.equals("X-RunState-Song-Selection", ignoreCase = true) -> selectionCapability

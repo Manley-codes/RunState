@@ -53,6 +53,35 @@ final class WrittenReflectionReplayStore {
                     replay_key TEXT NOT NULL REFERENCES written_replays(replay_key) ON DELETE CASCADE
                 ) STRICT
                 """, "CREATE INDEX written_requests_by_replay ON written_requests(replay_key)");
+        // Older replay records intentionally omitted run IDs. They still replay by exact evidence.
+        try (Connection db = database.open(); Statement sql = db.createStatement()) {
+            sql.executeUpdate("""
+                    CREATE TABLE IF NOT EXISTS written_runs (
+                        run_key TEXT NOT NULL,
+                        replay_key TEXT NOT NULL REFERENCES written_replays(replay_key) ON DELETE CASCADE,
+                        PRIMARY KEY(run_key,replay_key)
+                    ) STRICT
+                    """);
+        } catch (SQLException failure) {
+            throw new IOException("Cannot open written replay index", failure);
+        }
+    }
+
+    boolean hasSavedRun(String principalId, String runId) throws IOException {
+        try (Connection db = database.open(); PreparedStatement lookup = db.prepareStatement("""
+                SELECT 1 FROM written_runs JOIN written_replays USING(replay_key)
+                WHERE run_key=? AND expires_at>? AND result IS NOT NULL LIMIT 1
+                """)) {
+            lookup.setString(1, runKey(principalId, runId));
+            lookup.setLong(2, clock.millis());
+            try (ResultSet match = lookup.executeQuery()) { return match.next(); }
+        } catch (SQLException failure) {
+            throw new IOException("Cannot check written replay", failure);
+        }
+    }
+
+    private static String runKey(String principalId, String runId) {
+        return ReplayDatabase.scopedKey("written-run-v1\0", principalId, runId);
     }
 
     Claim claim(String principalId, String requestId, String operationIdentity, boolean allowNew) throws IOException {
@@ -137,7 +166,22 @@ final class WrittenReflectionReplayStore {
         }
     }
 
+    void releaseUnsent(Claim claim) throws IOException {
+        try (Connection db = database.open(); PreparedStatement release = db.prepareStatement(
+                "DELETE FROM written_replays WHERE replay_key=? AND reservation=? AND result IS NULL")) {
+            release.setString(1, claim.key());
+            release.setString(2, claim.reservation());
+            release.executeUpdate(); // Request ID bindings expire with their unsent reservation.
+        } catch (SQLException failure) {
+            throw new IOException("Cannot release unsent written reservation", failure);
+        }
+    }
+
     void complete(Claim claim, byte[] body, boolean songStudyAcknowledged) throws IOException {
+        complete(claim, body, songStudyAcknowledged, null, null);
+    }
+
+    void complete(Claim claim, byte[] body, boolean songStudyAcknowledged, String principalId, String runId) throws IOException {
         if (claim.state() != State.CLAIMED || body == null || body.length == 0 || body.length > MAX_RESULT) {
             throw new IOException("Invalid written reflection result");
         }
@@ -145,6 +189,7 @@ final class WrittenReflectionReplayStore {
                 UPDATE written_replays SET result=?, song_study=?, expires_at=?
                 WHERE replay_key=? AND reservation=? AND result IS NULL AND expires_at>?
                 """)) {
+            db.setAutoCommit(false);
             long now = clock.millis();
             update.setBytes(1, body);
             update.setBoolean(2, songStudyAcknowledged);
@@ -153,6 +198,14 @@ final class WrittenReflectionReplayStore {
             update.setString(5, claim.reservation());
             update.setLong(6, now);
             if (update.executeUpdate() != 1) throw new IOException("Written reflection reservation is no longer current");
+            if (runId != null) {
+                try (PreparedStatement index = db.prepareStatement("INSERT INTO written_runs(run_key,replay_key) VALUES(?,?)")) {
+                    index.setString(1, runKey(principalId, runId));
+                    index.setString(2, claim.key());
+                    index.executeUpdate();
+                }
+            }
+            db.commit();
         } catch (SQLException failure) {
             throw new IOException("Cannot save written reflection", failure);
         }

@@ -446,7 +446,9 @@ internal class HostedReflectionHttpClient(
     private val config: ReflectionConnectionConfig,
     private val connectionFactory: (URL) -> HttpURLConnection = { it.openConnection() as HttpURLConnection },
     private val gson: Gson = GsonBuilder().serializeNulls().create(),
-    private val capabilityNowNanos: () -> Long = System::nanoTime
+    private val capabilityNowNanos: () -> Long = System::nanoTime,
+    private val replayOnly: Boolean = false,
+    private val stillAllowed: () -> Boolean = { true }
 ) : ReflectionGateway {
     private data class SongCapabilities(val editorialCue: Boolean, val studyVersion: Int,
         val preparation: Boolean, val selection: Boolean, val snippets: Boolean, val snippetFallbacks: Boolean,
@@ -475,7 +477,8 @@ internal class HostedReflectionHttpClient(
         postReflectionRequest(URL(config.endpoint), request, gson, connectionFactory, config.accessCode,
             sendCue, sendPreparation, sameDestination, sendSelection,
             sendSelection && request.evidence.songSnippetLookupAllowed && songCapabilities?.snippets == true,
-            songCapabilities?.snippetFallbacks == true, songCapabilities?.loadedAtFinish == true)
+            songCapabilities?.snippetFallbacks == true, songCapabilities?.loadedAtFinish == true,
+            replayOnly = replayOnly, stillAllowed = stillAllowed)
     }
 
     /** A cheap, credential-free capability check keeps the currently deployed strict server usable. */
@@ -530,7 +533,9 @@ private suspend fun postReflectionRequest(
     includeSongSelection: Boolean = false,
     includeSongSnippets: Boolean = false,
     includeSongSnippetFallbacks: Boolean = false,
-    includeLoadedAtFinish: Boolean = false
+    includeLoadedAtFinish: Boolean = false,
+    replayOnly: Boolean = false,
+    stillAllowed: () -> Boolean = { true }
 ): ReflectionCandidates = withContext(Dispatchers.IO) {
     val hosted = accessCode != null
     var connection: HttpURLConnection? = null
@@ -588,7 +593,9 @@ private suspend fun postReflectionRequest(
         connection.setRequestProperty("Content-Type", "application/json; charset=utf-8")
         connection.setRequestProperty("Accept", "application/json")
         if (accessCode != null) connection.setRequestProperty("Authorization", "Bearer $accessCode")
+        if (replayOnly) connection.setRequestProperty("X-RunState-Replay-Only", "1")
         connection.setFixedLengthStreamingMode(body.size)
+        if (!stillAllowed()) throw ReflectionBridgeException("Cloud reflection access changed.")
         connection.outputStream.use { it.write(body) }
 
         val responseCode = connection.responseCode
@@ -650,7 +657,7 @@ private suspend fun postReflectionRequest(
     }
 }
 
-private fun readBoundedUtf8(input: InputStream, hosted: Boolean): String {
+internal fun readBoundedUtf8(input: InputStream, hosted: Boolean): String {
     val output = ByteArrayOutputStream()
     val buffer = ByteArray(4_096)
     var total = 0
@@ -683,14 +690,34 @@ private const val MAX_RESPONSE_BYTES = 64 * 1_024
 internal interface SongStudyPreparationGateway {
     suspend fun supports(): Boolean
     suspend fun supportsMultiple(): Boolean = false
+    suspend fun admit(runId: String): Boolean = true
     suspend fun prepare(preparationId: String, trackTitle: String, artistName: String): Boolean
 }
 
 internal class HostedSongStudyPreparationClient(
     private val config: ReflectionConnectionConfig,
+    private val access: HostedReflectionAccess? = null,
     private val connectionFactory: (URL) -> HttpURLConnection = { it.openConnection() as HttpURLConnection }
 ) : SongStudyPreparationGateway {
     private var multipleSupported = false
+    private var admittedScopedRun: String? = null
+    private var admittedAccess: ReflectionAccessInfo? = null
+    override suspend fun admit(runId: String): Boolean {
+        val grants = access ?: return true
+        val current = grants.current() ?: return false
+        if (current.tier == ReflectionTier.OWNER) {
+            admittedScopedRun = null
+            admittedAccess = null
+            return true
+        }
+        if (!current.active) return false
+        if (admittedScopedRun == runId && admittedAccess?.tier == current.tier &&
+            admittedAccess?.expiresAt == current.expiresAt) return true
+        if (!grants.admit(runId)) return false
+        admittedScopedRun = runId
+        admittedAccess = grants.state.value
+        return true
+    }
     override suspend fun supports(): Boolean = exchange(null)
     override suspend fun supportsMultiple(): Boolean = multipleSupported
 
@@ -744,6 +771,7 @@ internal class HostedSongStudyPreparationClient(
             connection.setRequestProperty("Content-Type", "application/json; charset=utf-8")
             connection.setRequestProperty("Accept", "application/json")
             connection.setRequestProperty("Authorization", "Bearer ${config.accessCode}")
+            admittedScopedRun?.let { connection.setRequestProperty("X-RunState-Run-Id", it) }
             val body = Gson().toJson(mapOf("preparationId" to song.first,
                 "trackTitle" to song.second, "artistName" to song.third)).toByteArray(StandardCharsets.UTF_8)
             connection.setFixedLengthStreamingMode(body.size)

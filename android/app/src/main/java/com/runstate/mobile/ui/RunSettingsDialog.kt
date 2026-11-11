@@ -20,6 +20,10 @@ import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -37,6 +41,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.runstate.mobile.settings.RunAppearance
+import com.runstate.mobile.reflection.HostedReflectionAccess
+import com.runstate.mobile.reflection.ReflectionTier
+import kotlinx.coroutines.launch
 import com.runstate.mobile.settings.RunMusicPlayerLayout
 
 internal const val SETTINGS_DIALOG_TAG = "runSettingsDialog"
@@ -107,7 +114,10 @@ internal fun RunSettingsDialog(
     onSetMusicPlayerLayout: (RunMusicPlayerLayout) -> Unit = {},
     onOpenRecordingSources: (() -> Unit)? = null,
     onOpenMusicReflectionDemo: (() -> Unit)? = null,
-    ownerToolsEnabled: Boolean = com.runstate.mobile.BuildConfig.OWNER_TOOLS_ENABLED
+    ownerToolsEnabled: Boolean = com.runstate.mobile.BuildConfig.OWNER_TOOLS_ENABLED,
+    hostedAccess: HostedReflectionAccess? = null,
+    cloudReflectionsEnabled: Boolean? = null,
+    onSetCloudReflections: (Boolean) -> Unit = {}
 ) {
     val controlsEnabled = actionsEnabled && !settingsLoading
     val preferenceControlsEnabled = controlsEnabled && preferencesAvailable
@@ -349,6 +359,10 @@ internal fun RunSettingsDialog(
                     enabled = controlsEnabled,
                     modifier = Modifier.heightIn(min = 48.dp).testTag(SETTINGS_REFLECTION_SETUP_TAG)
                 ) { Text("Reflection setup", color = SettingsInk) }
+                if (cloudReflectionsEnabled != null) {
+                    CloudReflectionSettings(hostedAccess, cloudReflectionsEnabled, preferenceControlsEnabled,
+                        onSetCloudReflections)
+                }
 
                 SettingsDivider()
                 TextButton(
@@ -472,6 +486,41 @@ private fun SettingsDescription(text: String) {
 @Composable
 private fun SettingsDivider() {
     HorizontalDivider(color = SettingsInk.copy(alpha = 0.12f))
+}
+
+@Composable
+private fun CloudReflectionSettings(access: HostedReflectionAccess?, enabled: Boolean,
+    controlsEnabled: Boolean, onSetCloudReflections: (Boolean) -> Unit) {
+    val info = access?.state?.collectAsState()?.value
+    val scope = rememberCoroutineScope()
+    var starting by remember(access) { mutableStateOf(false) }
+    var failed by remember(access) { mutableStateOf(false) }
+    LaunchedEffect(access) { access?.refresh() }
+    when {
+        info?.tier == ReflectionTier.TRACKING -> SettingsDescription("Tracking only")
+        info?.tier == ReflectionTier.TRIAL && info.status == "available" -> {
+            SettingsDescription("Try two personalized reflections over seven days. No automatic charge.")
+            TextButton(onClick = {
+                starting = true
+                scope.launch {
+                    try {
+                        failed = access?.startTrial() != true
+                        if (!failed && !enabled) onSetCloudReflections(true)
+                    } finally { starting = false }
+                }
+            }, enabled = controlsEnabled && !starting) { Text("Start free preview", color = SettingsInk) }
+            if (failed) SettingsDescription("Couldn’t start the preview. Try again.")
+        }
+        info?.status == "expired" -> SettingsDescription("Your reflection preview has ended.")
+        else -> {
+            SettingsPreference("Cloud reflections", "Turn off for a tracking-only run.", enabled,
+                controlsEnabled, onSetCloudReflections, "runSettingsCloudReflections")
+            info?.remaining?.let { count ->
+                val period = if (info.tier == ReflectionTier.TRIAL) "in your preview" else "this month"
+                SettingsDescription("$count ${if (count == 1) "reflection" else "reflections"} left $period.")
+            }
+        }
+    }
 }
 
 @Composable

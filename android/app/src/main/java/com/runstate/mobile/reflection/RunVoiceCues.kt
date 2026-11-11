@@ -2,9 +2,10 @@ package com.runstate.mobile.reflection
 
 import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 /** The neutral question after the saved facts. One exact string, so its prepared audio matches. */
 internal const val ENERGY_QUESTION_TEXT = "How’s your energy now?"
@@ -27,37 +28,54 @@ internal val COUNTDOWN_VOICE_LINES: List<String> =
 /** Fixed run-voice lines prepared ahead of time: the countdown first, then the energy question. */
 internal val RUN_VOICE_PREPARED_LINES: List<String> = COUNTDOWN_VOICE_LINES + ENERGY_QUESTION_TEXT
 
-/**
- * Keeps the fixed run-voice lines in memory for this app session, so a timed cue never waits on
- * the network. Lines are fetched one at a time. A failed line ends that attempt, and a later
- * [prefetch] fetches only what is still missing. Nothing is written to storage.
- */
-internal class RunVoiceCueCache(
-    private val scope: CoroutineScope,
-    private val gateway: ReflectionSpeechGateway,
-    private val lines: List<String> = RUN_VOICE_PREPARED_LINES
-) {
-    private val audio = ConcurrentHashMap<String, ByteArray>()
-    @Volatile private var attempt: Job? = null
+/** Timed playback reads memory immediately. Only the six fixed phrases may also use private disk cache. */
+internal class RunVoiceCueCache(private val files: FixedRunVoiceFiles?) {
+    private class Voice(val key: String, val gateway: ReflectionSpeechGateway) {
+        val audio = ConcurrentHashMap<String, ByteArray>()
+    }
 
-    /** Safe to call repeatedly: one attempt at a time, and finished lines are never fetched again. */
-    fun prefetch() {
-        if (attempt?.isActive == true || hasAll(lines)) return
-        attempt = scope.launch {
-            for (line in lines) {
-                if (audio.containsKey(line)) continue
-                val bytes = try { gateway.synthesize(line) }
+    @Volatile private var voice: Voice? = null
+    private val preparing = Mutex()
+
+    /** Called by the serialized connection owner. An old response cannot populate a new voice. */
+    suspend fun select(key: String?, gateway: ReflectionSpeechGateway?, clearPrevious: Boolean) {
+        voice = null
+        if (clearPrevious) files?.clear()
+        if (key != null && gateway != null) voice = Voice(key, gateway)
+    }
+
+    /** Owned by the visible Start/countdown. Leaving it cancels further requests. */
+    suspend fun prefetch(requested: List<String> = RUN_VOICE_PREPARED_LINES, fetchMissing: Boolean = true) = preparing.withLock {
+        val selected = voice ?: return@withLock
+        val lines = RUN_VOICE_PREPARED_LINES.filter { it in requested }
+        for (line in lines) {
+            if (voice !== selected) return@withLock
+            if (selected.audio.containsKey(line)) continue
+            files?.read(selected.key, line)?.let { selected.audio[line] = it }
+        }
+        if (!fetchMissing) return@withLock
+        for (line in lines) {
+            currentCoroutineContext().ensureActive()
+            if (voice !== selected) return@withLock
+            if (selected.audio.containsKey(line)) continue
+            val bytes = try { selected.gateway.synthesize(line) }
                 catch (cancelled: CancellationException) { throw cancelled }
                 catch (_: Exception) { null }
-                if (bytes == null || bytes.isEmpty() || bytes.size > MAX_REFLECTION_AUDIO_BYTES) return@launch
-                audio[line] = bytes
+            currentCoroutineContext().ensureActive()
+            if (voice !== selected || bytes == null || bytes.isEmpty() || bytes.size > MAX_REFLECTION_AUDIO_BYTES) {
+                return@withLock
             }
+            selected.audio[line] = bytes
+            files?.write(selected.key, line, bytes) { voice === selected }
         }
     }
 
-    fun audioFor(text: String): ByteArray? = audio[text]
+    fun audioFor(text: String): ByteArray? = voice?.audio?.get(text)
 
-    fun hasAll(texts: List<String>): Boolean = texts.all { audio.containsKey(it) }
+    fun hasAll(texts: List<String>): Boolean {
+        val selected = voice ?: return false
+        return texts.all { selected.audio.containsKey(it) }
+    }
 }
 
 /** A voice that can load itself silently before its first line, and be released if never used. */

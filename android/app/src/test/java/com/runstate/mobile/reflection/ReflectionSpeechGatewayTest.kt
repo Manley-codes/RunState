@@ -39,12 +39,37 @@ class ReflectionSpeechGatewayTest {
         assertEquals(setOf("text"), body.keySet())
         assertEquals(text, body["text"].asString)
         assertNull(health.getRequestProperty("Authorization"))
+        assertNull(speech.getRequestProperty("X-RunState-Run-Id"))
         assertEquals("Bearer ${config.accessCode}", speech.getRequestProperty("Authorization"))
         assertEquals("POST", speech.requestMethod)
         assertEquals("audio/mpeg", speech.getRequestProperty("Accept"))
         assertFalse(health.instanceFollowRedirects)
         assertFalse(speech.instanceFollowRedirects)
         assertTrue(health.disconnected && speech.disconnected)
+    }
+
+    @Test fun scopedSpeechSendsTheRunIdOnlyOnTheAuthenticatedPost() = runBlocking {
+        val runId = "aaaabbbb-1234-4abc-8def-123456789012"
+        val health = FakeHttps(URL(config.endpoint), capability = "1")
+        val speech = FakeHttps(URL(config.endpoint), mp3)
+        val result = ReflectionSpeechHttpClient.hosted(config, runId = runId) {
+            if (it.path == "/health") health else speech
+        }.synthesize("Exact")
+        assertArrayEquals(mp3, result)
+        assertNull(health.getRequestProperty("Authorization"))
+        assertNull(health.getRequestProperty("X-RunState-Run-Id"))
+        assertEquals("Bearer ${config.accessCode}", speech.getRequestProperty("Authorization"))
+        assertEquals(runId, speech.getRequestProperty("X-RunState-Run-Id"))
+        assertEquals(setOf("text"), JsonParser.parseString(speech.sent.toString("UTF-8")).asJsonObject.keySet())
+    }
+
+    @Test fun malformedScopedRunIdNeverOpensAConnection() = runBlocking {
+        var calls = 0
+        for (invalid in listOf("   ", "1-2-3-4-5", "bad\r\nheader")) {
+            assertNull(ReflectionSpeechHttpClient.hosted(config, runId = invalid) { calls++; error("Unexpected") }
+                .synthesize("Exact"))
+        }
+        assertEquals(0, calls)
     }
 
     @Test fun runVoiceUsesItsOwnPathCapabilityAndShorterLimit() = runBlocking {
@@ -58,6 +83,7 @@ class ReflectionSpeechGatewayTest {
         }.synthesize("Starting in ten.")
         assertArrayEquals(mp3, result)
         assertEquals(listOf("/health", "/api/run-voice/speech"), urls.map { it.path })
+        assertNull(speech.getRequestProperty("X-RunState-Run-Id"))
         assertEquals("Bearer ${config.accessCode}", speech.getRequestProperty("Authorization"))
         val body = JsonParser.parseString(speech.sent.toString("UTF-8")).asJsonObject
         assertEquals(setOf("text"), body.keySet())
@@ -75,6 +101,20 @@ class ReflectionSpeechGatewayTest {
         assertNull(ReflectionSpeechHttpClient.hosted(config, SpeechVoice.RUN) { opened++; error("Unexpected") }
             .synthesize("x".repeat(501)))
         assertEquals(0, opened)
+    }
+
+    @Test fun optingOutDuringTheVoiceProbeWithholdsTheSelectedReflection() = runBlocking {
+        var allowed = true
+        val health = FakeHttps(URL(config.endpoint), capability = "1")
+        val calls = mutableListOf<String>()
+        val client = ReflectionSpeechHttpClient.hosted(config) { url ->
+            calls.add(url.path)
+            allowed = false
+            health
+        }
+        assertNull(client.synthesize("Saved personal reflection") { allowed })
+        assertEquals(listOf("/health"), calls)
+        assertEquals(0, health.sent.size())
     }
 
     @Test fun oldUnconfiguredRedirectedAndUnavailableHealthNeverUploadsText() = runBlocking {

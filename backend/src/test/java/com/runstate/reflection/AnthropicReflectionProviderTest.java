@@ -25,11 +25,16 @@ import com.runstate.reflection.ReflectionContract.WeatherResolution;
 import com.runstate.reflection.ReflectionProvider.FailureType;
 import com.runstate.reflection.ReflectionProvider.ReflectionProviderException;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 import java.math.BigDecimal;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.PrintStream;
 import java.net.ConnectException;
 import java.net.URI;
 import java.net.http.HttpTimeoutException;
+import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -49,6 +54,171 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 
 class AnthropicReflectionProviderTest {
+    /** Injects only the model's network response for the manual, offline comparison. */
+    static AnthropicReflectionProvider comparisonModel(AnthropicReflectionProvider.SongMaterialLookup material) throws Exception {
+        return new AnthropicReflectionProvider(testConfiguration(), request -> {
+            var input = evidenceFrom(request);
+            if (input.has("song_candidates")) {
+                var choice = new JsonObject();
+                choice.addProperty("candidateId", "1");
+                return songResponse(choice);
+            }
+            if (input.has("run_facts")) return songResponse(writerBranches());
+            JsonObject notes = studyNotes();
+            notes.add("lyric_echoes", new JsonArray());
+            return songResponse(notes);
+        }, material);
+    }
+    @Test void isolatedLocalRunCountsActualProviderWorkWithoutExposingContent(@TempDir Path directory) throws Exception {
+        var receipts = new ByteArrayOutputStream();
+        var output = new PrintStream(receipts);
+        var enabled = Map.of("RUNSTATE_LOCAL_USAGE_METER", "1");
+        assertNull(LocalProviderUsage.configured(enabled, true, output));
+        assertNull(LocalProviderUsage.configured(Map.of(), false, output));
+        var meter = LocalProviderUsage.configured(enabled, false, output);
+        var budget = new ProviderSpendBudget(directory, new ProviderSpendBudget.Limits(100, 100, 1, 1, 1));
+        var model = new AnthropicReflectionProvider(testConfiguration(), request -> {
+            var input = evidenceFrom(request);
+            JsonObject generated;
+            if (input.has("song_candidates")) {
+                generated = new JsonObject();
+                generated.addProperty("candidateId", "1");
+            } else {
+                generated = input.has("run_facts") ? writerBranches() : studyNotes();
+            }
+            var reply = JsonParser.parseString(songResponse(generated).body()).getAsJsonObject();
+            reply.add("usage", JsonParser.parseString("""
+                    {"input_tokens":321,"output_tokens":51,"cache_read_input_tokens":123,
+                     "cache_creation_input_tokens":8,"cache_creation":{"ephemeral_5m_input_tokens":3,"ephemeral_1h_input_tokens":5}}
+                    """));
+            return new TransportResponse(200, reply.toString());
+        }, (title, artist) -> Optional.of(songMaterial(title, artist)));
+
+        try (var scope = ProviderSpendScope.open(budget, "private-runner", meter)) {
+            model.generateForDelivery(knownEvidence(), null, List.of(recordedSong("1", "Private Title"),
+                    recordedSong("2", "Other Title")), false);
+            var voice = new ElevenLabsReflectionSpeech("private-key", request ->
+                    new ElevenLabsReflectionSpeech.TransportResponse(200, "audio/mpeg", new byte[]{1, 2}, "4"));
+            voice.synthesize("Hi 🎵");
+            var runVoice = ElevenLabsReflectionSpeech.runVoice("private-key", request -> { throw new IOException(); });
+            assertThrows(ReflectionProviderException.class, () -> runVoice.synthesize("Private voice"));
+            new MusixmatchSongAnalysis("private-key", request -> { throw new IOException(); }).lookup("Private Title", "Private Artist");
+        }
+        String recorded = receipts.toString(java.nio.charset.StandardCharsets.UTF_8);
+        for (var step : List.of("STUDY", "WRITER", "CHOOSER")) {
+            assertTrue(recorded.contains("anthropic step=" + step + " model=claude-opus-5-5 attempted=1"));
+            assertTrue(recorded.contains("anthropic step=" + step + " reply=1 input=321 output=51 cache_read=123 "
+                    + "cache_write_total=8 cache_write_5m=3 cache_write_1h=5"));
+        }
+        assertTrue(recorded.contains("elevenlabs voice=reflection attempted=1 submitted_chars=4"));
+        assertTrue(recorded.contains("elevenlabs voice=reflection reply=1 usable_audio=true provider_character_cost=4"));
+        assertTrue(recorded.contains("elevenlabs voice=run attempted=1 submitted_chars=13"));
+        assertFalse(recorded.contains("elevenlabs voice=run reply"));
+        assertTrue(recorded.contains("musixmatch attempted=1"));
+        assertFalse(recorded.toLowerCase(java.util.Locale.ROOT).contains("private"));
+    }
+
+    @Test void missingOrInvalidUsageNeverPretendsToBeZeroOrLogsProviderText() {
+        var receipts = new ByteArrayOutputStream();
+        var meter = LocalProviderUsage.configured(Map.of("RUNSTATE_LOCAL_USAGE_METER", "1"), false,
+                new PrintStream(receipts));
+        meter.anthropicReply(LocalProviderUsage.Step.ORDINARY, "confidential damaged content");
+        meter.anthropicReply(LocalProviderUsage.Step.WRITER, """
+                {"usage":{"input_tokens":"confidential","output_tokens":0,"cache_read_input_tokens":-1}}
+                """);
+        meter.voiceReply(true, false, "confidential");
+        String recorded = receipts.toString(java.nio.charset.StandardCharsets.UTF_8);
+        assertTrue(recorded.contains("step=ORDINARY reply=1 input=unknown output=unknown"));
+        assertTrue(recorded.contains("step=WRITER reply=1 input=unknown output=0 cache_read=unknown"));
+        assertTrue(recorded.contains("usable_audio=false provider_character_cost=unknown"));
+        assertFalse(recorded.contains("confidential"));
+    }
+
+    @Test
+    void eachSongModelExchangeReservesBudgetBeforeItsTransport(@TempDir Path directory) throws Exception {
+        AtomicInteger sends = new AtomicInteger();
+        var provider = new AnthropicReflectionProvider(testConfiguration(), request -> {
+            sends.incrementAndGet();
+            return songResponse(studyNotes());
+        }, (title, artist) -> Optional.of(songMaterial(title, artist)));
+        var budget = new ProviderSpendBudget(directory, new ProviderSpendBudget.Limits(1, 5, 1, 1, 1));
+        try (var scope = ProviderSpendScope.open(budget, "runner-a")) {
+            var denial = assertThrows(ProviderSpendScope.Denied.class, () -> provider.generateForDelivery(
+                    knownEvidence(), null, List.of(recordedSong("1", "Example Song")), false));
+            assertTrue(denial.attempted());
+            assertFalse(denial.unavailable());
+            assertEquals(1, sends.get()); // The song study used the allowance. The writer did not send.
+        }
+    }
+
+    @Test
+    void parallelSongSourcesUseTheirRunnersBudgetAndCannotFallBackToPaidWriting(@TempDir Path directory)
+            throws Exception {
+        var source = new MusixmatchSongAnalysis("test-key", request -> {
+            throw new AssertionError("A denied source request reached the transport");
+        });
+        var provider = new AnthropicReflectionProvider(testConfiguration(), request -> {
+            throw new AssertionError("A denied lookup fell through to the writer");
+        }, source::lookupReflectionMaterial);
+        var budget = new ProviderSpendBudget(directory, new ProviderSpendBudget.Limits(1, 5, 1, 1, 2));
+        try (var scope = ProviderSpendScope.open(budget, "runner-a")) {
+            var denial = assertThrows(ProviderSpendScope.Denied.class, () -> provider.generateForDelivery(
+                    knownEvidence(), null, List.of(recordedSong("1", "First"), recordedSong("2", "Second")), false));
+            assertFalse(denial.attempted());
+            assertFalse(denial.unavailable());
+        }
+    }
+
+    @Test
+    void unfundedPreparationCanRetryAndACompletedPreparationNeedsNoNewReservation(@TempDir Path directory)
+            throws Exception {
+        AtomicInteger studies = new AtomicInteger();
+        var provider = new AnthropicReflectionProvider(testConfiguration(), request -> {
+            studies.incrementAndGet();
+            return songResponse(studyNotes());
+        }, (title, artist) -> Optional.of(songMaterial(title, artist)));
+        var song = new ReflectionContract.SongPreparationRequest(PREPARATION_ID, "Example Song", "Fixture Artist");
+        try (var scope = ProviderSpendScope.open(null, "runner-a")) {
+            var denied = assertThrows(ProviderSpendScope.Denied.class, () -> provider.prepareSong(song));
+            assertTrue(denied.unavailable());
+            assertFalse(denied.attempted());
+        }
+        var budget = new ProviderSpendBudget(directory, new ProviderSpendBudget.Limits(1, 1, 1, 1, 1));
+        try (var scope = ProviderSpendScope.open(budget, "runner-a")) {
+            assertEquals(ReflectionProvider.SongPreparationState.READY, provider.prepareSong(song));
+        }
+        try (var scope = ProviderSpendScope.open(null, "runner-a")) {
+            assertEquals(ReflectionProvider.SongPreparationState.READY, provider.prepareSong(song));
+        }
+        assertEquals(1, studies.get());
+    }
+
+    @Test
+    void joiningAPartiallyPaidPreparationPreservesTheJoiningRequestsOwnDispatchHistory(@TempDir Path directory)
+            throws Exception {
+        var provider = new AnthropicReflectionProvider(testConfiguration(), request -> {
+            throw new AssertionError("The model should not receive a request");
+        }, (title, artist) -> {
+            ProviderSpendScope.beforeSend(ProviderSpendBudget.Provider.MUSIXMATCH);
+            return Optional.of(songMaterial(title, artist));
+        });
+        var song = new ReflectionContract.SongPreparationRequest(PREPARATION_ID, "Example Song", "Fixture Artist");
+        var facts = evidenceWithMusic(new MusicContext(MusicState.MUSIC, song.trackTitle(), song.artistName(), null));
+        var budget = new ProviderSpendBudget(directory, new ProviderSpendBudget.Limits(2, 2, 2, 1, 1));
+        try (var scope = ProviderSpendScope.open(budget, "runner-a")) {
+            assertTrue(assertThrows(ProviderSpendScope.Denied.class, () -> provider.prepareSong(song)).attempted());
+        }
+        try (var scope = ProviderSpendScope.open(budget, "runner-a")) {
+            assertFalse(assertThrows(ProviderSpendScope.Denied.class,
+                    () -> provider.generateForDelivery(facts, PREPARATION_ID)).attempted());
+        }
+        try (var scope = ProviderSpendScope.open(budget, "runner-a")) {
+            ProviderSpendScope.beforeSend(ProviderSpendBudget.Provider.MUSIXMATCH);
+            assertTrue(assertThrows(ProviderSpendScope.Denied.class,
+                    () -> provider.generateForDelivery(facts, PREPARATION_ID)).attempted());
+        }
+    }
+
     private static final String PREPARATION_ID = "09bf1430-b193-49b9-a9c3-4f3577dc67b6";
 
     @Test void absentAnalysisStillProvidesAuthorizedObservedSongWithoutCreativeAcknowledgement() throws Exception {

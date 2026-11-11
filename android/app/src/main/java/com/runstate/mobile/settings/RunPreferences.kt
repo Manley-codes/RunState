@@ -30,7 +30,8 @@ internal data class RunPreferences(
     val findSongSnippets: Boolean = false,
     val distanceAnnouncements: Boolean = true,
     val appearance: RunAppearance = RunAppearance.NIGHT,
-    val musicPlayerLayout: RunMusicPlayerLayout = RunMusicPlayerLayout.HEADPHONES
+    val musicPlayerLayout: RunMusicPlayerLayout = RunMusicPlayerLayout.HEADPHONES,
+    val cloudReflectionsEnabled: Boolean = true
 ) {
     init {
         require(!shareMusicInReflection || observeMusic) {
@@ -75,7 +76,8 @@ internal class StoredRunPreferences(
             } ?: RunAppearance.NIGHT,
             musicPlayerLayout = values.readString(MUSIC_PLAYER_LAYOUT)?.let { stored ->
                 RunMusicPlayerLayout.entries.firstOrNull { it.name == stored }
-            } ?: RunMusicPlayerLayout.HEADPHONES
+            } ?: RunMusicPlayerLayout.HEADPHONES,
+            cloudReflectionsEnabled = values.readBoolean(CLOUD_REFLECTIONS) ?: true
         )
     }
 
@@ -86,7 +88,8 @@ internal class StoredRunPreferences(
             MUSIC_SETUP_COMPLETE to preferences.musicSetupComplete,
             CAPTURE_WEATHER to preferences.captureWeather,
             FIND_SONG_SNIPPETS to preferences.findSongSnippets,
-            DISTANCE_ANNOUNCEMENTS to preferences.distanceAnnouncements
+            DISTANCE_ANNOUNCEMENTS to preferences.distanceAnnouncements,
+            CLOUD_REFLECTIONS to preferences.cloudReflectionsEnabled
         ), mapOf(RUN_APPEARANCE to preferences.appearance.name,
             MUSIC_PLAYER_LAYOUT to preferences.musicPlayerLayout.name)))
     }
@@ -104,6 +107,7 @@ internal class StoredRunPreferences(
         const val CAPTURE_WEATHER = "capture_weather"
         const val FIND_SONG_SNIPPETS = "find_song_snippets"
         const val DISTANCE_ANNOUNCEMENTS = "distance_announcements"
+        const val CLOUD_REFLECTIONS = "cloud_reflections_enabled"
         const val RUN_APPEARANCE = "run_appearance"
         const val MUSIC_PLAYER_LAYOUT = "music_player_layout"
     }

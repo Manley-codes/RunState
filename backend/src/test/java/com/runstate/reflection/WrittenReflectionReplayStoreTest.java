@@ -27,9 +27,12 @@ final class WrittenReflectionReplayStoreTest {
         var first = storeAt(0, 1);
         var claim = first.claim("runner A", "request A", "run evidence A", true);
         assertEquals(CLAIMED, claim.state());
+        assertFalse(first.hasSavedRun("runner A", "run"));
         var finishing = storeAt(15, 1);
-        finishing.complete(claim, RESULT, true);
+        finishing.complete(claim, RESULT, true, "runner A", "run");
         var lastSecond = storeAt(24 * 3600 + 14, 1);
+        assertTrue(lastSecond.hasSavedRun("runner A", "run"));
+        assertFalse(lastSecond.hasSavedRun("runner B", "run"));
         var replay = lastSecond.claim("runner A", "retry B", "run evidence A", false);
         assertEquals(CACHED, replay.state());
         assertArrayEquals(RESULT, replay.body());
@@ -37,6 +40,7 @@ final class WrittenReflectionReplayStoreTest {
         assertEquals(CONFLICT, lastSecond.claim("runner A", "retry B", "run evidence B", false).state());
         assertEquals(FULL, lastSecond.claim("runner B", "request A", "run evidence A", true).state());
         var atExpiry = storeAt(24 * 3600 + 15, 1);
+        assertFalse(atExpiry.hasSavedRun("runner A", "run"));
         assertEquals(BUSY, atExpiry.claim("runner A", "request A", "run evidence A", false).state());
         assertEquals(CLAIMED, atExpiry.claim("runner A", "retry B", "run evidence B", true).state());
     }
