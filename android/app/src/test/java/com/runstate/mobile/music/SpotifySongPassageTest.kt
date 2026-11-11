@@ -193,7 +193,14 @@ class SpotifySongPassageTest {
                     endingPauseDue = null
                 }
             }
-            val result = SpotifySongPassageController(delayedPause, clock, pauseBeforeMusicReturns = true) { event ->
+            val chimeTimes = mutableListOf<Long>()
+            val result = SpotifySongPassageController(delayedPause, clock, pauseBeforeMusicReturns = true,
+                onPassageEnded = {
+                    assertEquals(selectedUri, session.snapshot().mediaId)
+                    assertEquals(PassagePlayback.PAUSED, session.snapshot().playback)
+                    chimeTimes += clock.time
+                    410L
+                }) { event ->
                 if (event.reason == SongPassageReason.ENTERED) when (event.stage) {
                     SongPassageStage.RESTORE_DELAY -> restStartedAt = clock.time
                     SongPassageStage.RESTORE_TRACK -> restoreStartedAt = clock.time
@@ -202,6 +209,7 @@ class SpotifySongPassageTest {
             }.play(selectedRequest)
             assertEquals(SongPassageResult(SongPassageStatus.FINISHED, true), result)
             assertEquals(4_200L, restStartedAt)
+            assertEquals(listOf(4_200L), chimeTimes)
             assertEquals(5_400L, restoreStartedAt)
             assertEquals(5_400L, clock.time)
             assertEquals(60_000L, session.snapshot().positionMillis)
@@ -218,6 +226,80 @@ class SpotifySongPassageTest {
         assertEquals(originalUri, session.snapshot().mediaId)
         assertEquals(60_000L, session.snapshot().positionMillis)
         assertEquals(PassagePlayback.PAUSED, session.snapshot().playback)
+    }
+
+    @Test fun anOriginallyPausedSongWaitsOnlyForTheChimeAndRemainsPaused() = runBlocking {
+        val clock = Clock()
+        val session = Session(clock).apply { enableTrackSelection(originallyPlaying = false) }
+        var chimes = 0
+        val result = SpotifySongPassageController(session, clock, pauseBeforeMusicReturns = true,
+            onPassageEnded = {
+                assertEquals(PassagePlayback.PAUSED, session.snapshot().playback)
+                assertEquals(selectedUri, session.snapshot().mediaId)
+                chimes++
+                410L
+            }).play(selectedRequest)
+        assertEquals(SongPassageResult(SongPassageStatus.FINISHED, true), result)
+        assertEquals(1, chimes)
+        assertEquals(4_410L, clock.time)
+        assertEquals(originalUri, session.snapshot().mediaId)
+        assertEquals(PassagePlayback.PAUSED, session.snapshot().playback)
+    }
+
+    @Test fun localCueFailureStillRestoresTheOriginalSongAfterTheUsualGap() = runBlocking {
+        val clock = Clock()
+        val session = Session(clock).apply { enableTrackSelection() }
+        val result = SpotifySongPassageController(session, clock, pauseBeforeMusicReturns = true,
+            onPassageEnded = { throw IllegalStateException("local cue unavailable") }).play(selectedRequest)
+        assertEquals(SongPassageResult(SongPassageStatus.FINISHED, true), result)
+        assertEquals(5_200L, clock.time)
+        assertEquals(originalUri, session.snapshot().mediaId)
+        assertEquals(PassagePlayback.PLAYING, session.snapshot().playback)
+    }
+
+    @Test fun aUserSeekReportedWithTheEndingPauseGetsNoChimeOrRestore() = runBlocking {
+        val clock = Clock()
+        val session = Session(clock).apply { enableTrackSelection() }
+        val manualSeek = object : SongPassageSession by session {
+            override fun pause() {
+                session.pause()
+                if (session.snapshot().mediaId == selectedUri) {
+                    session.replace(session.snapshot().copy(positionMillis = 90_000L))
+                }
+            }
+        }
+        val result = SpotifySongPassageController(manualSeek, clock, pauseBeforeMusicReturns = true,
+            onPassageEnded = { throw AssertionError("A seek is not a completed snippet") }).play(selectedRequest)
+        assertEquals(SongPassageResult(SongPassageStatus.INTERRUPTED, false), result)
+        assertEquals(selectedUri, session.snapshot().mediaId)
+        assertEquals(90_000L, session.snapshot().positionMillis)
+    }
+
+    @Test fun aGenuinelyLateEndingPauseSkipsTheChimeAndStillRestoresTheOriginal() = runBlocking {
+        val clock = Clock()
+        val session = Session(clock).apply { enableTrackSelection() }
+        var pauseDue: Long? = null
+        val slowEndingPause = object : SongPassageSession by session {
+            override fun pause() {
+                if (session.snapshot().mediaId == selectedUri) pauseDue = clock.time + 2_000L
+                else session.pause()
+            }
+        }
+        clock.onWait = {
+            if (clock.time == pauseDue) {
+                session.pause()
+                assertEquals(51_000L, session.snapshot().positionMillis)
+                pauseDue = null
+            }
+        }
+        val result = SpotifySongPassageController(slowEndingPause, clock, pauseBeforeMusicReturns = true,
+            onPassageEnded = { throw AssertionError("A missed excerpt ending must not be marked") })
+            .play(selectedRequest)
+        assertEquals(SongPassageResult(SongPassageStatus.FINISHED, true), result)
+        assertEquals(7_200L, clock.time)
+        assertEquals(originalUri, session.snapshot().mediaId)
+        assertEquals(60_000L, session.snapshot().positionMillis)
+        assertEquals(PassagePlayback.PLAYING, session.snapshot().playback)
     }
 
     @Test fun aManualPlaySeekOrStopDuringTheRestNeverStartsRestoration() = runBlocking {
@@ -254,8 +336,9 @@ class SpotifySongPassageTest {
                 current = if (missingCapability) current.copy(canPrepareTrack = false, canPlayTrack = false)
                     else current.copy(mediaId = "not-an-exact-spotify-track")
             }
-            assertEquals(SongPassageStatus.UNAVAILABLE,
-                SpotifySongPassageController(session, clock).play(selectedRequest).status)
+            assertEquals(SongPassageStatus.UNAVAILABLE, SpotifySongPassageController(session, clock,
+                onPassageEnded = { throw AssertionError("An unplayed snippet must be silent") })
+                .play(selectedRequest).status)
             assertTrue(session.commands.isEmpty())
         }
     }
@@ -872,7 +955,8 @@ class SpotifySongPassageTest {
     @Test fun navigationOrExplicitStopPausesOwnedPassageAndNeverRestoresOrResumes() = runBlocking {
         val clock = Clock()
         val session = Session(clock)
-        val controller = SpotifySongPassageController(session, clock)
+        val controller = SpotifySongPassageController(session, clock,
+            onPassageEnded = { throw AssertionError("Stopping midway must not play the closing cue") })
         clock.onWait = { if (clock.time >= 500) controller.stop() }
         val result = controller.play(request)
         assertEquals(SongPassageStatus.INTERRUPTED, result.status)

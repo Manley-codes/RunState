@@ -108,6 +108,7 @@ import com.runstate.mobile.music.SongPassageStatus
 import com.runstate.mobile.music.SongPassageDiagnostic
 import com.runstate.mobile.music.SongPassageSession
 import com.runstate.mobile.music.SongPassageSnapshot
+import com.runstate.mobile.music.SONG_PASSAGE_RETURN_GAP_MILLIS
 import com.runstate.mobile.music.SpotifySongPassageController
 import com.runstate.mobile.music.SpotifyAppRemoteConnection
 import com.runstate.mobile.music.sameSpotifyRecordingDuration
@@ -1029,9 +1030,64 @@ internal fun completionAudioSessionFor(context: Context, onInterrupted: () -> Un
     )
 }
 
+internal enum class SnippetChimeLevel(val gain: Float) {
+    RUN(0.76f), HISTORY(0.47f)
+}
+
+/** One local media sound per excerpt, prepared silently without taking audio focus from Spotify. */
+private class SnippetClosingChime(context: Context, private val level: SnippetChimeLevel) {
+    private var player: MediaPlayer? = null
+    private var ready = false
+
+    init {
+        try {
+            val media = MediaPlayer()
+            player = media
+            media.setAudioAttributes(AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_MEDIA)
+                .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION).build())
+            media.setVolume(level.gain, level.gain)
+            media.setOnPreparedListener { if (player === it) ready = true }
+            media.setOnErrorListener { _, _, _ -> close(); true }
+            context.resources.openRawResourceFd(R.raw.snippet_close).use {
+                media.setDataSource(it.fileDescriptor, it.startOffset, it.length)
+            }
+            media.prepareAsync()
+        } catch (_: Exception) {
+            close()
+        }
+    }
+
+    fun play(): Long {
+        val duration = try { playIfReady() } catch (_: RuntimeException) { 0L }
+        if (com.runstate.mobile.BuildConfig.DEBUG) {
+            val result = if (duration > 0L) "started" else "unavailable"
+            android.util.Log.d("RunStateSongPassage", "closingChime=$result level=${level.name}")
+        }
+        return duration
+    }
+
+    private fun playIfReady(): Long {
+        val media = player ?: return 0L
+        if (!ready) return 0L
+        ready = false
+        val duration = media.duration.toLong()
+        if (duration !in 1L..SONG_PASSAGE_RETURN_GAP_MILLIS) return 0L
+        media.start()
+        return duration
+    }
+
+    fun close() {
+        val media = player
+        player = null
+        ready = false
+        try { media?.release() } catch (_: RuntimeException) { }
+    }
+}
+
 internal class AndroidReflectionSpeechPlatform(
     context: Context,
     private val passageSessionFactory: (() -> SongPassageSession)? = null,
+    private val snippetChimeLevel: SnippetChimeLevel = SnippetChimeLevel.RUN,
     passageDiagnosticObserver: (SongPassageDiagnostic) -> Unit = ::logSongPassage
 ) : ReflectionSpeechPlatform {
     private class MemoryAudioSource(private var audio: ByteArray?) : MediaDataSource() {
@@ -1073,6 +1129,7 @@ internal class AndroidReflectionSpeechPlatform(
     private var passageController: SpotifySongPassageController? = null
     private var passageJob: Job? = null
     private var passageId: String? = null
+    private var closingChime: SnippetClosingChime? = null
     private val mainHandler = Handler(Looper.getMainLooper())
     private val audioManager = appContext.getSystemService(AudioManager::class.java)
     private val speechAttributes = AudioAttributes.Builder()
@@ -1420,10 +1477,13 @@ internal class AndroidReflectionSpeechPlatform(
                     val session = passageSessionFactory?.invoke()
                         ?: SpotifyAppRemoteConnection.get(appContext).newPassageSession()
                         ?: AndroidSpotifyPassageSession(appContext)
+                    val chime = SnippetClosingChime(appContext, snippetChimeLevel)
+                    closingChime = chime
                     val controller = SpotifySongPassageController(session,
                         onEntranceReady = {
                             completionAudio?.releaseForPassage() ?: releaseAudioFocus()
                         }, quiescePausedBeforeEntry = true, pauseBeforeMusicReturns = true,
+                        onPassageEnded = { if (!closed && passageId == utteranceId) chime.play() else 0L },
                         diagnosticObserver = passageDiagnostics,
                         onAudibleTrackLoad = { completionAudio?.expectPassageLoad() },
                         onAudibleTrackContained = { completionAudio?.reholdAfterPassageLoad() })
@@ -1438,6 +1498,8 @@ internal class AndroidReflectionSpeechPlatform(
                         controller.play(passageToPlay)
                     }
                     finally {
+                        chime.close()
+                        if (closingChime === chime) closingChime = null
                         withContext(NonCancellable) { session.release() }
                         if (passageController === controller) passageController = null
                     }
@@ -1465,6 +1527,8 @@ internal class AndroidReflectionSpeechPlatform(
 
     override fun stopSongPassage() {
         passageId = null
+        closingChime?.close()
+        closingChime = null
         passageController?.stop()
         passageJob?.cancel()
         passageJob = null
@@ -1588,7 +1652,9 @@ internal fun RunHistoryScreen(
     modifier: Modifier = Modifier,
     isLoading: Boolean = false,
     error: String? = null,
-    speakerFactory: (Context) -> ReflectionSpeaker = { AndroidReflectionSpeaker(it) },
+    speakerFactory: (Context) -> ReflectionSpeaker = {
+        AndroidReflectionSpeaker(it, AndroidReflectionSpeechPlatform(it, snippetChimeLevel = SnippetChimeLevel.HISTORY))
+    },
     onSelectEffort: (String, PostRunEffort?) -> Unit = { _, _ -> },
     effortSavingRunId: String? = null,
     effortError: Pair<String, String>? = null,

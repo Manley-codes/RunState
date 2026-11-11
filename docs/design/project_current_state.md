@@ -7,6 +7,8 @@ metadata:
 
 ## November 10 outdoor run and reflection playback
 
+Manley liked the separation he heard in History and wanted it more apparent after a run. His next sample's 7.31-second snippet reached the ending pause and restored playing music. That version had no intentional closing tone. The owner update now plays an original 420 ms, two-note media sound when Spotify confirms the excerpt ended. Run gain is 0.76 and History gain is 0.47. The sound fits inside the existing 1.2-second return gap. The Android emulator started the packaged sound at both levels, and 905 unit tests passed in each build. The owner update opened on the Moto with all 69 runs and settings intact. Listening with headphones after a run remains the check for the perceived balance.
+
 Manley accepted the written music reflection after his two-mile GPS run. Keep it as the quality reference. He could hear the connection to the excerpt, though its mood felt less convincing to him. Revisit excerpt selection only with more listening evidence. He deferred a decision on whether a mile announcement should continue when he presses Pause near the finish.
 
 The saved reflection selected “Novacane” by Frank Ocean. “Violent Crimes” by Kanye West was the last observed song. The updated History code reproduced the stored Novacane excerpt from 87,750 through 92,950 ms using the actual run backup. A mismatched cue fell back to voice alone. Expanding a run in the owner build plays the saved words and eligible excerpt. Public History offers **Replay reflection**. Both use the original saved selection and respect the run’s music permissions.

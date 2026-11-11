@@ -66,6 +66,53 @@ class SongPassageSpeechTest {
 
     private val passage = SongPassageRequest("Selected title", "Selected artist", 5_000L)
 
+    /** Auditions the bundled chime on Android. The synthetic song never touches the Spotify app. */
+    @Test fun closingChimePlaysAtRunAndHistoryLevels() {
+        assumeTrue(InstrumentationRegistry.getArguments().getString("runstateChimeCheck") == "true")
+        assertTrue(SnippetChimeLevel.RUN.gain > SnippetChimeLevel.HISTORY.gain)
+        for (level in listOf(SnippetChimeLevel.RUN, SnippetChimeLevel.HISTORY)) {
+            var playing = false
+            var position = 20_000L
+            var started = 0L
+            var endingPause = 0L
+            var restoration = 0L
+            fun now() = android.os.SystemClock.elapsedRealtime()
+            fun positionNow() = if (playing) position + (now() - started) else position
+            val session = object : SongPassageSession {
+                override fun snapshot() = SongPassageSnapshot(this, "com.spotify.music", "local-test",
+                    passage.trackTitle, passage.artistName, 180_000L, positionNow(),
+                    if (playing) PassagePlayback.PLAYING else PassagePlayback.PAUSED, true, true, true)
+                override fun pause() {
+                    if (playing) endingPause = now()
+                    position = positionNow()
+                    playing = false
+                }
+                override fun play() { started = now(); playing = true }
+                override fun seekTo(positionMillis: Long) {
+                    if (positionMillis == 20_000L) restoration = now()
+                    position = positionMillis
+                }
+            }
+            val finished = CountDownLatch(1)
+            val success = AtomicBoolean(false)
+            lateinit var platform: AndroidReflectionSpeechPlatform
+            try {
+                composeTestRule.runOnUiThread {
+                    platform = AndroidReflectionSpeechPlatform(composeTestRule.activity, { session }, level)
+                    assertTrue(platform.playSongPassage("closing-audition", passage.copy(durationMillis = 1_500L),
+                        { success.set(true); finished.countDown() }, { finished.countDown() }, { finished.countDown() }))
+                }
+                assertTrue("Timed out at ${level.name}", finished.await(10L, TimeUnit.SECONDS))
+                assertTrue(success.get())
+                // With a paused original the controller waits only if the real Android player started the cue.
+                assertTrue("Missing closing cue at ${level.name}", endingPause > 0L && restoration - endingPause >= 400L)
+                assertFalse(playing)
+            } finally {
+                composeTestRule.runOnUiThread { platform.close() }
+            }
+        }
+    }
+
     /** Visible, real-time listening check: production countdown UI/owner, no run/Room writes or Spotify transport. */
     @Test fun realRunVoiceCountdownAndPacedMileAudition() {
         assumeTrue(InstrumentationRegistry.getArguments().getString("runstateRunVoiceCheck") == "true")

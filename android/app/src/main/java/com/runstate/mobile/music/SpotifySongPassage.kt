@@ -135,6 +135,8 @@ internal interface PassageClock {
     suspend fun waitMillis(millis: Long)
 }
 
+internal const val SONG_PASSAGE_RETURN_GAP_MILLIS = 1_200L
+
 private object RealPassageClock : PassageClock {
     override fun nowMillis() = System.nanoTime() / 1_000_000
     override suspend fun waitMillis(millis: Long) = delay(millis)
@@ -157,6 +159,8 @@ internal class SpotifySongPassageController(
     /** Called once an audibly loaded song is paused again at its start, before the entrance seek. */
     private val onAudibleTrackContained: () -> Unit = {},
     private val pauseBeforeMusicReturns: Boolean = false,
+    /** Starts the optional local closing cue after a confirmed ending pause. Zero means silence. */
+    private val onPassageEnded: () -> Long = { 0L },
     // Kept last: existing callers pass the diagnostic observer as a trailing lambda.
     private val diagnosticObserver: (SongPassageDiagnostic) -> Unit = {}
 ) {
@@ -330,14 +334,21 @@ internal class SpotifySongPassageController(
             enter(current, SongPassageStage.ENDING_PAUSE)
             // We confirmed our own playback. A missing advertised action must not suppress the
             // bounded pause attempt; the following same-recording PAUSED confirmation is decisive.
+            val pauseRequestedAt = clock.nowMillis()
             session.pause()
             val ended = await(current) { it.playback == PassagePlayback.PAUSED }
             current.pausedEndingPositionError = (ended.positionMillis - endPositionMillis)
                 .coerceIn(-MAX_TRACK_MILLIS, MAX_TRACK_MILLIS)
             current.expectsPlaying = false
+            // A late pause can leave the song past its cue while still following our playback.
+            // A jump outside that elapsed trajectory belongs to the listener.
+            val pauseElapsed = (clock.nowMillis() - pauseRequestedAt).coerceAtLeast(0L)
+            val advance = ended.positionMillis - finalPlaying.positionMillis
+            if (advance !in -POSITION_TOLERANCE..(pauseElapsed + POSITION_TOLERANCE))
+                throw PassageInterrupted(SongPassageReason.POSITION_DRIFT)
             current.expectedPosition = ended.positionMillis
             val rest = pauseBeforeMusicReturns && restoreTarget.playback == PassagePlayback.PLAYING
-            waitBeforeRestore(current, rest)
+            waitBeforeRestore(current, endPositionMillis, rest)
             restoreOriginal(current, restoreTarget)
             completed = true
             report(current, SongPassageReason.FINISHED)
@@ -500,19 +511,30 @@ internal class SpotifySongPassageController(
     }
 
     /** Rest on the paused clip. Loading the original in App Remote can already produce sound. */
-    private suspend fun waitBeforeRestore(current: Owner, rest: Boolean) {
-        val deadline = clock.nowMillis() + if (rest) RESTORE_DELAY_MILLIS else 0L
+    private suspend fun waitBeforeRestore(current: Owner, endPosition: Long, rest: Boolean) {
         if (rest) enter(current, SongPassageStage.RESTORE_DELAY)
-        while (true) {
+        suspend fun confirmEndingPause(): SongPassageSnapshot {
             val snapshot = checked(current)
             if (snapshot.playback != PassagePlayback.PAUSED)
                 throw PassageInterrupted(SongPassageReason.PLAYBACK_CHANGED)
             if (!snapshot.canSeek) throw PassageInterrupted(SongPassageReason.CAPABILITY_CHANGED)
             if (abs(snapshot.positionMillis - current.expectedPosition) > POSITION_TOLERANCE)
                 throw PassageInterrupted(SongPassageReason.POSITION_DRIFT)
+            return snapshot
+        }
+        val paused = confirmEndingPause()
+        val startedAt = clock.nowMillis()
+        val chimeMillis = if (abs(paused.positionMillis - endPosition) <= POSITION_TOLERANCE) {
+            try { onPassageEnded().coerceIn(0L, SONG_PASSAGE_RETURN_GAP_MILLIS) }
+            catch (cancelled: CancellationException) { throw cancelled }
+            catch (_: RuntimeException) { 0L }
+        } else 0L
+        val deadline = startedAt + if (rest) SONG_PASSAGE_RETURN_GAP_MILLIS else chimeMillis
+        while (true) {
             val remaining = deadline - clock.nowMillis()
             if (remaining <= 0L) return
             clock.waitMillis(minOf(POLL_MILLIS, remaining))
+            confirmEndingPause()
         }
     }
 
@@ -697,7 +719,6 @@ internal class SpotifySongPassageController(
         const val POSITION_REPORT_CLOCK_TOLERANCE = 100L
         const val CONFIRM_TIMEOUT_MILLIS = 3_000L
         const val TRACK_LOAD_TIMEOUT_MILLIS = 5_000L
-        const val RESTORE_DELAY_MILLIS = 1_200L
         const val POLL_MILLIS = 100L
         const val MAX_PLAYING_MILLIS = 10_000L
     }
