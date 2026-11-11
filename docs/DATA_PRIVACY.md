@@ -4,7 +4,7 @@
 
 Reviewed November 8, 2026 against Android and backend source at `3dee96d`, updated for the
 subsequent saved-run deletion, in-app Privacy & data summary, and November 11 backend
-storage for spoken reflection replays.
+storage for written retries and spoken reflection replays.
 This is the current engineering summary for release preparation. It does not verify the
 running server's configuration or providers' retention settings, and is not the finished
 public privacy policy. Claude's separate reflection-quality branch is outside this checkpoint.
@@ -65,10 +65,14 @@ paths; it would be inaccurate to claim that no song text ever reaches AI service
   or recovery flow. The separate unfinished-run discard remains limited to reliably short, paused
   runs under 30 seconds. Neither action sends deletion requests to the backend or providers;
   no backend deletion endpoint exists, and already admitted provider work may still finish.
-- The backend keeps up to 256 reflection request/results in process memory, including run facts
-  and all four generated branches. They have no timed expiration and remain for that process's
-  lifetime to prevent duplicate paid work. Song preparation is separate: up to 32 entries with
-  two-hour reuse eligibility and cleanup on later activity, not an exact timed erasure guarantee.
+- The November 11 backend update saves the four written reflection choices and any returned
+  song or excerpt details on private storage for 24-hour retries. The answers can mention
+  run metrics, feelings, weather or music. The server matches requests using hashes and
+  does not keep a separate copy of the submitted run evidence in this database. Retrying
+  leaves the expiry unchanged. Expired entries are cleared on startup or later requests.
+  The phone keeps the selected reflection in History independently. Deleting a run on the
+  phone does not erase the server's retry record. Song preparation still uses a separate
+  in-memory cache of up to 32 entries with two-hour reuse eligibility.
 - In the backend version prepared November 11, the server saves the selected spoken reflection
   as an MP3 on private storage for seven-day retries and History replays. The recording can
   contain spoken run details. SQLite keeps a hash derived from the authenticated identity,

@@ -86,6 +86,7 @@ public final class ReflectionHttpServer implements AutoCloseable {
     private final ReflectionProvider provider;
     private final SpeechProvider speechProvider;
     private final SpeechReplayStore speechReplayStore;
+    private final WrittenReflectionReplayStore writtenReplayStore;
     private final SpeechProvider runVoiceProvider;
     private final GenerationMode generationMode;
     private final HttpServer server;
@@ -109,11 +110,13 @@ public final class ReflectionHttpServer implements AutoCloseable {
             int maxCachedRequests,
             SpeechProvider speechProvider,
             SpeechProvider runVoiceProvider,
-            SpeechReplayStore speechReplayStore
+            SpeechReplayStore speechReplayStore,
+            WrittenReflectionReplayStore writtenReplayStore
     ) throws IOException {
         this.provider = Objects.requireNonNull(provider, "provider");
         this.speechProvider = speechProvider;
         this.speechReplayStore = speechReplayStore;
+        this.writtenReplayStore = writtenReplayStore;
         this.runVoiceProvider = runVoiceProvider;
         this.generationMode = Objects.requireNonNull(generationMode, "generationMode");
         requirePort(port);
@@ -164,14 +167,21 @@ public final class ReflectionHttpServer implements AutoCloseable {
             GenerationMode generationMode, SpeechProvider speechProvider, SpeechProvider runVoiceProvider)
             throws IOException {
         return create(provider, port, generationMode, speechProvider, runVoiceProvider,
-                ReflectionBackendMain.configuredSpeechReplayStore(speechProvider, System.getenv(), false));
+                ReflectionBackendMain.configuredSpeechReplayStore(speechProvider, System.getenv(), false),
+                ReflectionBackendMain.configuredWrittenReplayStore(generationMode, System.getenv(), false));
     }
 
     static ReflectionHttpServer create(ReflectionProvider provider, int port, GenerationMode generationMode,
             SpeechProvider speechProvider, SpeechProvider runVoiceProvider, SpeechReplayStore replayStore)
             throws IOException {
+        return create(provider, port, generationMode, speechProvider, runVoiceProvider, replayStore, null);
+    }
+
+    static ReflectionHttpServer create(ReflectionProvider provider, int port, GenerationMode generationMode,
+            SpeechProvider speechProvider, SpeechProvider runVoiceProvider, SpeechReplayStore replayStore,
+            WrittenReflectionReplayStore writtenStore) throws IOException {
         return new ReflectionHttpServer(provider, port, generationMode, null,
-                MAX_CONCURRENT_PROVIDER_CALLS, MAX_CACHED_REQUESTS, speechProvider, runVoiceProvider, replayStore);
+                MAX_CONCURRENT_PROVIDER_CALLS, MAX_CACHED_REQUESTS, speechProvider, runVoiceProvider, replayStore, writtenStore);
     }
 
     /**
@@ -227,16 +237,25 @@ public final class ReflectionHttpServer implements AutoCloseable {
             throws IOException {
         return createRemote(provider, port, generationMode, remoteAccess, maxConcurrentProviderCalls,
                 maxCachedRequests, speechProvider, runVoiceProvider,
-                ReflectionBackendMain.configuredSpeechReplayStore(speechProvider, System.getenv(), true));
+                ReflectionBackendMain.configuredSpeechReplayStore(speechProvider, System.getenv(), true),
+                ReflectionBackendMain.configuredWrittenReplayStore(generationMode, System.getenv(), true));
     }
 
     static ReflectionHttpServer createRemote(ReflectionProvider provider, int port,
             GenerationMode generationMode, RemoteAccess remoteAccess, int maxConcurrentProviderCalls,
             int maxCachedRequests, SpeechProvider speechProvider, SpeechProvider runVoiceProvider,
             SpeechReplayStore replayStore) throws IOException {
+        return createRemote(provider, port, generationMode, remoteAccess, maxConcurrentProviderCalls, maxCachedRequests,
+                speechProvider, runVoiceProvider, replayStore, null);
+    }
+
+    static ReflectionHttpServer createRemote(ReflectionProvider provider, int port, GenerationMode generationMode,
+            RemoteAccess remoteAccess, int maxConcurrentProviderCalls, int maxCachedRequests,
+            SpeechProvider speechProvider, SpeechProvider runVoiceProvider, SpeechReplayStore replayStore,
+            WrittenReflectionReplayStore writtenStore) throws IOException {
         return new ReflectionHttpServer(provider, port, generationMode,
                 Objects.requireNonNull(remoteAccess, "remoteAccess"),
-                maxConcurrentProviderCalls, maxCachedRequests, speechProvider, runVoiceProvider, replayStore);
+                maxConcurrentProviderCalls, maxCachedRequests, speechProvider, runVoiceProvider, replayStore, writtenStore);
     }
 
     private static void requirePort(int port) {
@@ -382,9 +401,7 @@ public final class ReflectionHttpServer implements AutoCloseable {
         byte[] body = readBoundedBody(exchange);
         if (speech) {
             // Configured recipient IDs cannot impersonate the loopback or legacy owner on disk.
-            String owner = remoteAccess != null && remoteAccess.individualAccess
-                    ? "recipient:" + principalId : principalId;
-            return synthesizeSpeech(owner, ReflectionApiJson.parseSpeechRequest(body));
+            return synthesizeSpeech(replayOwner(principalId), ReflectionApiJson.parseSpeechRequest(body));
         }
         if (runVoice) {
             return synthesizeRunVoice(ReflectionApiJson.parseSpeechRequest(body));
@@ -393,20 +410,30 @@ public final class ReflectionHttpServer implements AutoCloseable {
             return prepareSongOnce(ReflectionApiJson.parseSongPreparationRequest(body), principalId);
         }
         ApiRequest request = ReflectionApiJson.parseRequest(body);
-        if (provider.supportsSongSnippets()) {
-            exchange.getResponseHeaders().set(SONG_SNIPPETS_CAPABILITY_HEADER, "1");
-        } else if (request.allowSongSnippetLookup()) {
+        SnippetCapabilities available = new SnippetCapabilities(provider.supportsSongSnippets(),
+                provider.supportsSongSnippetFallbacks());
+        EndpointResponse response = generateOnce(request, principalId, available);
+        SnippetCapabilities capabilities = response.snippetCapabilities() == null ? available : response.snippetCapabilities();
+        if (capabilities.snippets()) exchange.getResponseHeaders().set(SONG_SNIPPETS_CAPABILITY_HEADER, "1");
+        if (capabilities.fallbacks()) exchange.getResponseHeaders().set(SONG_SNIPPET_FALLBACKS_CAPABILITY_HEADER, "1");
+        return response;
+    }
+
+    private String replayOwner(String principalId) {
+        return remoteAccess != null && remoteAccess.individualAccess ? "recipient:" + principalId : principalId;
+    }
+
+    private EndpointResponse unsupportedRequest(ApiRequest request, SnippetCapabilities available) {
+        if (request.allowSongSnippetLookup() && !available.snippets()) {
             return error(503, "provider_unavailable", "Song snippet lookup is not configured.");
         }
-        if (provider.supportsSongSnippetFallbacks()) {
-            exchange.getResponseHeaders().set(SONG_SNIPPET_FALLBACKS_CAPABILITY_HEADER, "1");
-        } else if (request.allowSongSnippetFallbacks()) {
+        if (request.allowSongSnippetFallbacks() && !available.fallbacks()) {
             return error(503, "provider_unavailable", "Song snippet fallbacks are not configured.");
         }
         if (!request.songCandidates().isEmpty() && !provider.supportsSongSelection()) {
             return error(503, "provider_unavailable", "Song selection is not configured.");
         }
-        return generateOnce(request, principalId);
+        return null;
     }
 
     private boolean hasAllowedHost(HttpExchange exchange) {
@@ -434,7 +461,12 @@ public final class ReflectionHttpServer implements AutoCloseable {
         return exchange.getRequestHeaders().get("Origin") != null;
     }
 
-    private EndpointResponse generateOnce(ApiRequest request, String principalId) {
+    private EndpointResponse generateOnce(ApiRequest request, String principalId, SnippetCapabilities available) {
+        EndpointResponse unsupported = unsupportedRequest(request, available);
+        if (writtenReplayStore == null) {
+            if (generationMode != GenerationMode.FAKE) return writtenStorageUnavailable();
+            if (unsupported != null) return unsupported;
+        }
         OwnedRequestId requestId = new OwnedRequestId(principalId, request.identifiers().requestId());
         RequestWork work;
         boolean owner;
@@ -451,13 +483,14 @@ public final class ReflectionHttpServer implements AutoCloseable {
                 work = existing;
                 owner = false;
             } else {
-                // Never evict a completed ID and silently pay to regenerate its exact duplicate.
-                if (workByRequestId.size() >= maxCachedRequests) {
-                    return error(503, "server_capacity", "The demo request capacity has been reached.");
-                }
-                if (!providerSlots.tryAcquire()) {
-                    // Busy requests are not cached; retry with the same ID is safe after admission frees.
-                    return error(503, "server_busy", "The reflection service is busy. Try again later.");
+                if (writtenReplayStore == null) {
+                    // The fake demo keeps its bounded, process-local results.
+                    if (workByRequestId.size() >= maxCachedRequests) {
+                        return error(503, "server_capacity", "The demo request capacity has been reached.");
+                    }
+                    if (!providerSlots.tryAcquire()) {
+                        return error(503, "server_busy", "The reflection service is busy. Try again later.");
+                    }
                 }
                 work = new RequestWork(request, new CompletableFuture<>());
                 workByRequestId.put(requestId, work);
@@ -468,13 +501,57 @@ public final class ReflectionHttpServer implements AutoCloseable {
 
         EndpointResponse response = error(500, "internal_error", "The reflection request could not be completed.");
         try {
-            response = callProvider(request, principalId);
+            response = writtenReplayStore == null ? callProvider(request, principalId)
+                    : generateWithReplay(request, principalId, available, unsupported);
             return response;
         } finally {
             // Even an abnormal provider exit must unblock duplicates and release its bounded slot.
             work.response().complete(response);
-            providerSlots.release();
+            if (writtenReplayStore == null) {
+                providerSlots.release();
+            } else {
+                // This map only joins simultaneous requests. SQLite owns completed results and their expiry.
+                synchronized (cacheLock) { workByRequestId.remove(requestId); }
+            }
         }
+    }
+
+    private EndpointResponse generateWithReplay(ApiRequest request, String principalId,
+            SnippetCapabilities available, EndpointResponse unsupported) {
+        boolean slot = unsupported == null && providerSlots.tryAcquire();
+        try {
+            var claim = writtenReplayStore.claim(replayOwner(principalId), request.identifiers().requestId(),
+                    ReflectionApiJson.writtenOperationIdentity(request, generationMode), slot);
+            return switch (claim.state()) {
+                case CONFLICT -> error(409, "request_id_conflict", "The requestId is already associated with different evidence.");
+                case FULL -> error(503, "server_capacity", "The reflection request capacity has been reached.");
+                case BUSY -> unsupported != null ? unsupported :
+                        error(503, "server_busy", "The reflection service is busy. Try again later.");
+                case PENDING -> error(503, "reflection_pending", "This reflection request has already been reserved.");
+                case CACHED -> {
+                    var replay = ReflectionApiJson.restoreWrittenReplay(claim.body(), request.identifiers());
+                    yield new EndpointResponse(200, replay.body(), JSON_CONTENT_TYPE, claim.songStudyAcknowledged(),
+                            new SnippetCapabilities(replay.snippets(), replay.fallbacks()));
+                }
+                case CLAIMED -> {
+                    EndpointResponse generated = callProvider(request, principalId);
+                    if (generated.status() == 200) {
+                        byte[] saved = ReflectionApiJson.writtenReplayPayload(generated.body(),
+                                available.snippets(), available.fallbacks());
+                        writtenReplayStore.complete(claim, saved, generated.songStudyAcknowledged());
+                    }
+                    yield generated;
+                }
+            };
+        } catch (IOException failure) {
+            return writtenStorageUnavailable();
+        } finally {
+            if (slot) providerSlots.release();
+        }
+    }
+
+    private static EndpointResponse writtenStorageUnavailable() {
+        return error(503, "reflection_storage_unavailable", "Written reflection storage is unavailable.");
     }
 
     private EndpointResponse callProvider(ApiRequest request, String principalId) {
@@ -861,7 +938,14 @@ public final class ReflectionHttpServer implements AutoCloseable {
         @Override public String toString() { return "SongPreparationWork[identity=redacted]"; }
     }
 
-    private record EndpointResponse(int status, byte[] body, String contentType, boolean songStudyAcknowledged) {
+    private record SnippetCapabilities(boolean snippets, boolean fallbacks) { }
+
+    private record EndpointResponse(int status, byte[] body, String contentType, boolean songStudyAcknowledged,
+                                   SnippetCapabilities snippetCapabilities) {
+        EndpointResponse(int status, byte[] body, String contentType, boolean songStudyAcknowledged) {
+            this(status, body, contentType, songStudyAcknowledged, null);
+        }
+
         EndpointResponse(int status, String body) {
             this(status, body.getBytes(StandardCharsets.UTF_8), JSON_CONTENT_TYPE, false);
         }

@@ -64,25 +64,34 @@ public final class ReflectionBackendMain {
     static SpeechReplayStore configuredSpeechReplayStore(ReflectionHttpServer.SpeechProvider voice,
             Map<String, String> environment, boolean remote) {
         if (voice == null) return null;
-        String configured = environment.get(SPEECH_REPLAY_DIRECTORY);
-        // A host's default working directory may disappear during a restart or redeploy.
-        if (remote && (configured == null || configured.isBlank())) {
-            System.err.println("Reflection voice disabled: set " + SPEECH_REPLAY_DIRECTORY
-                    + " to a private directory on persistent storage.");
-            return null;
-        }
         try {
-            Path directory = configured == null ? Path.of(System.getProperty("user.home"), ".runstate", "speech-replay")
-                    : Path.of(configured);
-            if (!directory.isAbsolute()) {
-                System.err.println("Reflection voice disabled: " + SPEECH_REPLAY_DIRECTORY + " must be absolute.");
-                return null;
-            }
-            return new SpeechReplayStore(directory);
+            return new SpeechReplayStore(replayDirectory(environment, remote));
         } catch (IOException | InvalidPathException | SecurityException failure) {
-            System.err.println("Reflection voice disabled: could not open its private persistent storage.");
+            System.err.println("Reflection voice disabled: check private persistent storage in " + SPEECH_REPLAY_DIRECTORY);
             return null;
         }
+    }
+
+    static WrittenReflectionReplayStore configuredWrittenReplayStore(ReflectionHttpServer.GenerationMode mode,
+            Map<String, String> environment, boolean remote) {
+        if (mode == ReflectionHttpServer.GenerationMode.FAKE) return null;
+        try {
+            return new WrittenReflectionReplayStore(replayDirectory(environment, remote));
+        } catch (IOException | InvalidPathException | SecurityException failure) {
+            System.err.println("Written reflections disabled: check private persistent storage in " + SPEECH_REPLAY_DIRECTORY);
+            return null;
+        }
+    }
+
+    private static Path replayDirectory(Map<String, String> environment, boolean remote) throws IOException {
+        String configured = environment.get(SPEECH_REPLAY_DIRECTORY);
+        if (configured == null && !remote) {
+            return Path.of(System.getProperty("user.home"), ".runstate", "speech-replay");
+        }
+        if (configured == null || configured.isBlank()) throw new IOException("Missing persistent replay directory");
+        Path directory = Path.of(configured);
+        if (!directory.isAbsolute()) throw new IOException("Replay storage requires an absolute directory");
+        return directory;
     }
 
     static int configuredPort(Map<String, String> environment, boolean remote) {

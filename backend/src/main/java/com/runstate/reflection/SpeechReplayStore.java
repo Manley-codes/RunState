@@ -1,24 +1,14 @@
 package com.runstate.reflection;
 
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.FileAlreadyExistsException;
-import java.nio.file.Files;
-import java.nio.file.LinkOption;
 import java.nio.file.Path;
-import java.nio.file.attribute.PosixFilePermissions;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.sql.Connection;
-import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.time.Clock;
 import java.time.Duration;
-import java.util.HexFormat;
-import java.util.Properties;
 import java.util.UUID;
 
 /** A committed, audio-less row means the provider may already have charged for this request. */
@@ -32,7 +22,7 @@ final class SpeechReplayStore {
     enum State { CLAIMED, CACHED, PENDING, FULL, BUSY }
     record Claim(State state, String key, String reservation, byte[] audio) { }
 
-    private final String databaseUrl;
+    private final ReplayDatabase database;
     private final Clock clock;
     private final int capacity;
 
@@ -44,73 +34,23 @@ final class SpeechReplayStore {
         if (capacity < 1 || capacity > MAX_ENTRIES) throw new IllegalArgumentException("Invalid replay capacity");
         this.capacity = capacity;
         this.clock = clock;
-        Path folder = directory.toAbsolutePath().normalize();
-        Path file = folder.resolve("reflection-speech.sqlite3");
-        boolean posix = folder.getFileSystem().supportedFileAttributeViews().contains("posix");
-        if (posix) {
-            Files.createDirectories(folder, PosixFilePermissions.asFileAttribute(
-                    PosixFilePermissions.fromString("rwx------")));
-        } else {
-            Files.createDirectories(folder);
-        }
-        try {
-            if (posix) {
-                Files.createFile(file, PosixFilePermissions.asFileAttribute(PosixFilePermissions.fromString("rw-------")));
-            } else {
-                Files.createFile(file);
-            }
-        } catch (FileAlreadyExistsException existing) {
-            if (!Files.isRegularFile(file, LinkOption.NOFOLLOW_LINKS)) throw new IOException("Invalid replay file");
-        }
-        // mode=rw prevents a running instance silently creating a fresh ledger if the file disappears.
-        databaseUrl = "jdbc:sqlite:" + file.toUri().toASCIIString() + "?mode=rw";
-        try (Connection db = open(); Statement sql = db.createStatement()) {
-            db.setAutoCommit(false);
-            int version;
-            try (ResultSet schema = sql.executeQuery("PRAGMA user_version")) {
-                schema.next();
-                version = schema.getInt(1);
-            }
-            if (version == 0) {
-                try (ResultSet tables = sql.executeQuery("SELECT count(*) FROM sqlite_schema")) {
-                    tables.next();
-                    if (tables.getInt(1) != 0) throw new IOException("Unrecognized speech replay database");
-                }
-                sql.executeUpdate("""
-                        CREATE TABLE speech_replays (
-                            replay_key TEXT PRIMARY KEY,
-                            reservation TEXT NOT NULL,
-                            expires_at INTEGER NOT NULL,
-                            audio BLOB CHECK(audio IS NULL OR length(audio) BETWEEN 1 AND %d)
-                        ) STRICT
-                        """.formatted(MAX_AUDIO));
-                sql.executeUpdate("PRAGMA user_version = 1");
-            } else if (version != 1) {
-                throw new IOException("Unsupported speech replay schema");
-            }
-            purgeExpired(db, clock.millis());
-            db.commit();
-        } catch (SQLException e) {
-            throw new IOException("Cannot open speech replay storage", e);
-        }
-    }
-
-    private Connection open() throws SQLException {
-        Properties options = new Properties();
-        options.setProperty("busy_timeout", "5000");
-        // Serialize the lookup, capacity check and reservation even across independent processes.
-        options.setProperty("transaction_mode", "IMMEDIATE");
-        options.setProperty("synchronous", "FULL");
-        options.setProperty("secure_delete", "ON");
-        return DriverManager.getConnection(databaseUrl, options);
+        database = new ReplayDatabase(directory, "reflection-speech.sqlite3",
+                "DELETE FROM speech_replays WHERE expires_at <= ?", clock.millis(), """
+                CREATE TABLE speech_replays (
+                    replay_key TEXT PRIMARY KEY,
+                    reservation TEXT NOT NULL,
+                    expires_at INTEGER NOT NULL,
+                    audio BLOB CHECK(audio IS NULL OR length(audio) BETWEEN 1 AND %d)
+                ) STRICT
+                """.formatted(MAX_AUDIO));
     }
 
     Claim claim(String principalId, String text, boolean allowNew) throws IOException {
-        String key = replayKey(principalId, text);
-        try (Connection db = open()) {
+        String key = ReplayDatabase.scopedKey(VOICE_IDENTITY, principalId, text);
+        try (Connection db = database.open()) {
             db.setAutoCommit(false);
             long now = clock.millis();
-            purgeExpired(db, now);
+            database.purgeExpired(db, now);
             Claim result;
             try (PreparedStatement lookup = db.prepareStatement("SELECT audio FROM speech_replays WHERE replay_key=?")) {
                 lookup.setString(1, key);
@@ -154,7 +94,7 @@ final class SpeechReplayStore {
             throw new IOException("Invalid reflection speech completion");
         }
         // A stale provider result must never overwrite a newer reservation for the same input.
-        try (Connection db = open(); PreparedStatement update = db.prepareStatement(
+        try (Connection db = database.open(); PreparedStatement update = db.prepareStatement(
                 "UPDATE speech_replays SET audio=?, expires_at=? WHERE replay_key=? AND reservation=? AND audio IS NULL")) {
             update.setBytes(1, audio);
             update.setLong(2, clock.millis() + RETENTION_MILLIS);
@@ -166,23 +106,4 @@ final class SpeechReplayStore {
         }
     }
 
-    private static void purgeExpired(Connection db, long now) throws SQLException {
-        try (PreparedStatement purge = db.prepareStatement("DELETE FROM speech_replays WHERE expires_at <= ?")) {
-            purge.setLong(1, now);
-            purge.executeUpdate();
-        }
-    }
-
-    private static String replayKey(String principalId, String text) {
-        try {
-            MessageDigest digest = MessageDigest.getInstance("SHA-256");
-            digest.update(VOICE_IDENTITY.getBytes(StandardCharsets.UTF_8));
-            // Authenticated principal IDs cannot contain NUL. Neither raw inputs nor credentials are stored.
-            digest.update(principalId.getBytes(StandardCharsets.UTF_8));
-            digest.update((byte) 0);
-            return HexFormat.of().formatHex(digest.digest(text.getBytes(StandardCharsets.UTF_8)));
-        } catch (NoSuchAlgorithmException impossible) {
-            throw new IllegalStateException(impossible);
-        }
-    }
 }

@@ -60,10 +60,10 @@ preparation handles are also namespaced before every provider lookup, including 
 candidates; responses retain the client's original IDs. Owner/local modes retain their old
 internal handles. Reflection prompts, song content, playback and voices are unchanged.
 
-Selected reflection speech can reuse saved audio across restarts for seven days. Written
-reflections and song preparation still use process memory. Per-person and global spending
-limits, fair use of shared capacity, safe provisioning, provider permissions and live setup
-verification remain open release work.
+With private persistent storage, the backend can recover a written reflection for 24 hours
+and replay its selected recording for seven days across restarts. Song preparation has a
+separate in-memory cache. Per-person and global spending limits, provider permissions and
+live setup verification remain open release work.
 
 Security reference: [OWASP REST security guidance](https://cheatsheetseries.owasp.org/cheatsheets/REST_Security_Cheat_Sheet.html).
 
@@ -322,8 +322,9 @@ path to a private directory on persistent storage. For example, for a single Ren
 with a persistent disk mounted at `/var/data`, use `/var/data/runstate/speech`. The container's
 user (UID 10001) needs write access. Confirm the mount survives redeploys before enabling hosted
 speech. See [Render persistent disks](https://render.com/docs/disks). Local loopback mode defaults
-to `~/.runstate/speech-replay`. Without usable storage at startup the backend keeps serving
-ordinary reflections and the phone can use its device voice.
+to `~/.runstate/speech-replay`. Written reflections and speech open separate databases in this
+directory. If the directory is unavailable, both paid endpoints decline new work. The phone
+can still display saved reflections and use its device voice.
 `--fake` never enables the real speech provider. The Android app uses the same saved hosted
 connection/access code and requires no ElevenLabs credential of its own.
 
@@ -608,34 +609,40 @@ Errors use a stable envelope such as
 - `unauthorized` for a missing, invalid or repeated remote Authorization header;
 - `method_not_allowed` and `not_found` for unsupported HTTP routes;
 - `request_id_conflict` when one request ID is reused with different run evidence;
-- `server_busy` when both provider slots are occupied, and `server_capacity` when the bounded
-  process-local request cache is full;
+- `reflection_pending` when a written request has already been reserved and has no saved answer yet;
+- `reflection_storage_unavailable` when paid writing cannot safely open or use its replay store;
+- `server_busy` when the provider slots are occupied, and `server_capacity` when the
+  request store reaches its limit;
 - `provider_timeout`, `provider_unavailable`, and `provider_failure` for provider outcomes; and
 - `internal_error` for an unexpected server failure.
 
 Error responses never include request bodies, provider bodies, prompts, credentials, or underlying
 exception messages.
 
-### Duplicate-request behavior
+### Retrying a written reflection
 
-The server keeps an in-memory map keyed by `requestId`. Concurrent identical requests share one
-provider call, and later identical requests receive the same cached success or failure. Reusing an
-ID with different identifiers or evidence returns `request_id_conflict` without calling the provider.
+When the phone loses a reply, tapping **Retry** sends its saved run evidence with a fresh
+`requestId`. The backend recognizes the authenticated runner, run ID and validated inputs,
+including music-sharing choices and the order of the offered songs. It saves the four generated
+answers and the accompanying song details before sending the reply. For 24 hours after that
+save, the phone can receive the same answers with its current request ID, even across a server
+restart. Reusing an ID for different evidence returns HTTP 409. Retrying never extends the
+window. Once the phone has saved its reflection, History can keep displaying it after expiry.
 
-The same limits apply locally and remotely: two simultaneous provider calls, 256 retained request
-IDs, eight HTTP workers and a queue of 32 tasks. Request and success-response bodies are each at
-most 64 KiB; oversized provider output becomes a safe cached `provider_failure`. A new request
-that would exceed provider concurrency receives `503 server_busy` and is not cached, so retrying
-the same ID later does not create a second generation. At 256 retained IDs, new IDs receive
-`503 server_capacity`; retained successes, failures and conflicting-ID checks still work.
+Before the first provider call, the backend records the request in SQLite. If it stops after
+that point without saving a usable answer, it withholds another paid generation for the
+reservation's 24-hour window. A request rejected before admission can be retried when the
+service is available. The response and request limits remain 64 KiB each. The written store
+holds up to 256 operations and remembers up to 64 accepted request IDs per operation.
+It clears expired entries on startup or subsequent requests.
+This protection covers the generation of the written answers. Song preparation and cumulative
+provider spending have separate lifecycles.
 
-There is deliberately no automatic eviction. Expiring an ID and generating it again would silently
-make a second potentially paid call for the same request. Deliberate restart clears the cache and
-its duplicate protection, so an old ID may generate again afterward. Use one service instance for
-the demo; multiple replicas do not share this map. Durable idempotency, user accounts and distributed
-admission belong to a later service design. For a deliberate new attempt after a cached provider
-failure, use a new canonical request UUID. Do not interpret `server_capacity` as permission to
-automatically restart or repeat paid work.
+For hosted generation, point `RUNSTATE_SPEECH_REPLAY_DIR` at the private persistent disk
+described in the reflection voice setup above. Written results have their own database there,
+`written-reflections.sqlite3`, and do not require a speech API key. Without usable storage,
+the paid writing endpoint returns HTTP 503 before it contacts the writer. The local `--fake`
+mode keeps its in-memory request cache.
 
 ## Start the local server
 

@@ -5,6 +5,14 @@ metadata:
   type: project
 ---
 
+## November 11 written reflection retries
+
+Manley chose a 24-hour window to recover written answers. Android already keeps the completed reflection in History and uses a new request ID when retrying a failed request. After a lost reply and a backend restart, the original backend ran the simulated writer twice. The updated backend returned the same four answers with the phone's new ID and the simulated writer ran once. The HTTP tests cover song and snippet details, runner isolation and request conflicts. A forced crash after a simulated charge also kept the count at one. A recording saved by the previous backend still replayed with its original one-call count.
+
+All 262 backend tests and 53 focused Android client tests passed. The existing oversized speech-request test encountered a Windows socket reset on one run and passed on the unchanged full rerun.
+
+The Render dashboard showed no attached disk and quoted $0.25/GB per month. The live revision was `706b789`. Deployment and hosted restart testing are deferred. The next local release milestone is per-runner and overall spending limits.
+
 ## November 11 spoken reflection retries
 
 Manley chose seven days for repeat requests and History replays. The backend saves each selected recording before sending it to the phone. Two independent server processes returned identical audio for the same runner and text with one simulated voice call total. The previous version made two calls. A separate forced crash after the simulated charge and before the audio was saved also held the count at one. In that case the phone can use its fallback voice.

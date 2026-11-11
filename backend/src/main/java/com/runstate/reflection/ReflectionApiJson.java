@@ -1,5 +1,7 @@
 package com.runstate.reflection;
 
+import com.google.gson.Gson;
+import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParseException;
@@ -36,11 +38,13 @@ import java.util.HashSet;
 import java.util.Set;
 import java.util.List;
 import java.util.ArrayList;
+import java.util.TreeMap;
 
 /** Strict JSON translation at the local HTTP boundary. Domain validation stays in the contract. */
 final class ReflectionApiJson {
 
     private static final int MAX_JSON_DEPTH = 32;
+    private static final Gson REPLAY_JSON = new Gson();
     private static final Set<String> REQUIRED_REQUEST_FIELDS = Set.of("requestId", "runId", "evidence");
     private static final Set<String> REQUEST_FIELDS = Set.of("requestId", "runId", "evidence", "songPreparationId", "songCandidates", "allowSongSnippetLookup", "allowSongSnippetFallbacks");
     private static final Set<String> EVIDENCE_FIELDS = Set.of(
@@ -265,6 +269,52 @@ final class ReflectionApiJson {
         }
         response.add("candidates", candidateJson);
         return response.toString();
+    }
+
+    /** The phone can issue a new request ID for the same saved run after a lost reply. */
+    static String writtenOperationIdentity(ApiRequest request, ReflectionHttpServer.GenerationMode mode) {
+        JsonObject operation = REPLAY_JSON.toJsonTree(request).getAsJsonObject();
+        operation.getAsJsonObject("identifiers").remove("requestId");
+        operation.addProperty("generationMode", mode.name());
+        return orderedFields(operation).toString();
+    }
+
+    // Field and input JSON order are immaterial; song candidate order is meaningful.
+    private static JsonElement orderedFields(JsonElement element) {
+        if (element.isJsonObject()) {
+            JsonObject ordered = new JsonObject();
+            new TreeMap<>(element.getAsJsonObject().asMap())
+                    .forEach((name, value) -> ordered.add(name, orderedFields(value)));
+            return ordered;
+        }
+        if (element.isJsonArray()) {
+            JsonArray ordered = new JsonArray();
+            element.getAsJsonArray().forEach(value -> ordered.add(orderedFields(value)));
+            return ordered;
+        }
+        return element;
+    }
+
+    static byte[] writtenReplayPayload(byte[] wireBody, boolean snippets, boolean fallbacks) {
+        JsonObject payload = JsonParser.parseString(new String(wireBody, StandardCharsets.UTF_8)).getAsJsonObject();
+        payload.remove("requestId");
+        payload.remove("runId");
+        payload.addProperty("_snippets", snippets);
+        payload.addProperty("_fallbacks", fallbacks);
+        return payload.toString().getBytes(StandardCharsets.UTF_8);
+    }
+
+    record WrittenReplay(byte[] body, boolean snippets, boolean fallbacks) { }
+
+    static WrittenReplay restoreWrittenReplay(byte[] savedBody, RequestIdentifiers identifiers) {
+        JsonObject payload = JsonParser.parseString(new String(savedBody, StandardCharsets.UTF_8)).getAsJsonObject();
+        boolean snippets = payload.remove("_snippets").getAsBoolean();
+        boolean fallbacks = payload.remove("_fallbacks").getAsBoolean();
+        JsonObject wire = new JsonObject();
+        wire.addProperty("requestId", identifiers.requestId());
+        wire.addProperty("runId", identifiers.runId());
+        payload.entrySet().forEach(member -> wire.add(member.getKey(), member.getValue()));
+        return new WrittenReplay(wire.toString().getBytes(StandardCharsets.UTF_8), snippets, fallbacks);
     }
 
     static String error(String code, String message) {

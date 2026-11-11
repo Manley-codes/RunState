@@ -680,6 +680,164 @@ class ReflectionHttpServerTest {
     }
 
     @Test
+    void newPhoneAttemptAfterRestartGetsOriginalFamilySnippetAndAcknowledgement(@TempDir Path directory)
+            throws Exception {
+        AtomicInteger calls = new AtomicInteger();
+        JsonObject request = snippetRequest();
+        JsonObject original;
+        try (var first = startWritten(snippetProvider(calls), directory)) {
+            var result = post(first, request.toString());
+            assertEquals(200, result.statusCode());
+            assertEquals("1", result.headers().firstValue(ReflectionHttpServer.SONG_STUDY_CAPABILITY_HEADER).orElseThrow());
+            original = JsonParser.parseString(result.body()).getAsJsonObject();
+            assertEquals(4, original.getAsJsonObject("candidates").size());
+            assertEquals("2", original.get("selectedSongId").getAsString());
+            assertEquals("lrclib_v1_42_10000_15000", original.getAsJsonObject("songSnippet").get("cueId").getAsString());
+        }
+        // A provider capability can be temporarily unavailable after restart. Saved writing still replays.
+        ReflectionProvider offlineWriter = evidence -> { throw new AssertionError("Replay called writer"); };
+        try (var restarted = startWritten(offlineWriter, directory)) {
+            request.addProperty("requestId", SECOND_REQUEST_ID);
+            var retry = post(restarted, request.toString());
+            assertEquals(200, retry.statusCode());
+            assertEquals("1", retry.headers().firstValue(ReflectionHttpServer.SONG_STUDY_CAPABILITY_HEADER).orElseThrow());
+            assertEquals("1", retry.headers().firstValue(ReflectionHttpServer.SONG_SNIPPETS_CAPABILITY_HEADER).orElseThrow());
+            original.addProperty("requestId", SECOND_REQUEST_ID);
+            assertEquals(original, JsonParser.parseString(retry.body()));
+            assertEquals(1, calls.get());
+            for (String id : List.of(REQUEST_ID, SECOND_REQUEST_ID)) {
+                request.addProperty("requestId", id);
+                request.addProperty("runId", OTHER_RUN_ID);
+                assertError(post(restarted, request.toString()), 409, "request_id_conflict");
+            }
+            assertEquals(1, calls.get());
+        }
+    }
+
+    @Test
+    void freshAttemptAfterSnippetConsentChangesCannotReceiveOldSnippet(@TempDir Path directory) throws Exception {
+        AtomicInteger calls = new AtomicInteger();
+        JsonObject consent = snippetRequest();
+        try (var first = startWritten(snippetProvider(calls), directory)) {
+            assertEquals(200, post(first, consent.toString()).statusCode());
+        }
+        try (var restarted = startWritten(selectingProvider(calls), directory)) {
+            consent.addProperty("allowSongSnippetLookup", false);
+            assertError(post(restarted, consent.toString()), 409, "request_id_conflict");
+            consent.addProperty("requestId", SECOND_REQUEST_ID);
+            var changed = post(restarted, consent.toString());
+            assertEquals(200, changed.statusCode());
+            assertFalse(JsonParser.parseString(changed.body()).getAsJsonObject().has("songSnippet"));
+            assertEquals(2, calls.get());
+        }
+    }
+
+    @Test
+    void savedWritingBelongsToTheAuthenticatedRunner(@TempDir Path directory) throws Exception {
+        String otherToken = "B".repeat(43);
+        String expiry = "2099-01-01T00:00:00Z";
+        var policy = BackendAccessPolicy.fromJson("[" + accessGrant("runner-a", DUMMY_DEMO_TOKEN, expiry, true)
+                + "," + accessGrant("runner-b", otherToken, expiry, true) + "]");
+        var access = ReflectionHttpServer.RemoteAccess.individual("127.0.0.1", DEMO_HOST, policy);
+        AtomicInteger calls = new AtomicInteger();
+        ReflectionProvider provider = evidence -> new CandidateReflections("Runner result " + calls.incrementAndGet(),
+                FEELING_GOOD, POWERED_UP, NO_SELECTION);
+        try (var server = ReflectionHttpServer.createRemote(provider, 0, ReflectionHttpServer.GenerationMode.ANTHROPIC,
+                access, 2, 8, null, null, null, new WrittenReflectionReplayStore(directory))) {
+            server.start();
+            String body = validRequest();
+            assertEquals(200, rawPost(server, accessHeaders(DUMMY_DEMO_TOKEN), body).status());
+            assertError(rawPost(server, List.of("Host: " + DEMO_HOST), body), 401, "unauthorized");
+            var other = rawPost(server, accessHeaders(otherToken), body);
+            assertEquals(200, other.status());
+            assertEquals("Runner result 2", JsonParser.parseString(other.body()).getAsJsonObject()
+                    .getAsJsonObject("candidates").get("spent").getAsString());
+            var owner = rawPost(server, accessHeaders(DUMMY_DEMO_TOKEN), body.replace(REQUEST_ID, SECOND_REQUEST_ID));
+            assertEquals(200, owner.status());
+            assertEquals("Runner result 1", JsonParser.parseString(owner.body()).getAsJsonObject()
+                    .getAsJsonObject("candidates").get("spent").getAsString());
+            assertEquals(2, calls.get());
+        }
+    }
+
+    @Test
+    void twoWritersReceivingDifferentPhoneAttemptsReserveOnePaidCall(@TempDir Path directory) throws Exception {
+        AtomicInteger calls = new AtomicInteger();
+        CountDownLatch started = new CountDownLatch(1);
+        CountDownLatch finish = new CountDownLatch(1);
+        ReflectionProvider provider = evidence -> {
+            calls.incrementAndGet();
+            started.countDown();
+            try {
+                if (!finish.await(5, TimeUnit.SECONDS)) throw new AssertionError("Writer timed out");
+            } catch (InterruptedException interrupted) {
+                Thread.currentThread().interrupt();
+                throw new AssertionError(interrupted);
+            }
+            return exactCandidates();
+        };
+        try (var first = startWritten(provider, directory); var other = startWritten(provider, directory)) {
+            var pending = postAsync(first, validRequest());
+            String retryBody = validRequest().replace(REQUEST_ID, SECOND_REQUEST_ID);
+            try {
+                assertTrue(started.await(2, TimeUnit.SECONDS));
+                assertError(post(other, retryBody), 503, "reflection_pending");
+                assertEquals(1, calls.get());
+            } finally {
+                finish.countDown();
+            }
+            assertEquals(200, pending.get(5, TimeUnit.SECONDS).statusCode());
+            assertEquals(200, post(other, retryBody).statusCode());
+            assertEquals(1, calls.get());
+        }
+    }
+
+    @Test
+    void uncertainWriterAttemptCannotBecomeANewPaidAttemptAfterRestart(@TempDir Path directory) throws Exception {
+        AtomicInteger calls = new AtomicInteger();
+        ReflectionProvider provider = evidence -> {
+            if (calls.incrementAndGet() == 1) throw new ReflectionProviderException(FailureType.TIMEOUT, "fake timeout");
+            return exactCandidates();
+        };
+        try (var first = startWritten(provider, directory)) {
+            assertError(post(first, validRequest()), 504, "provider_timeout");
+        }
+        try (var restarted = startWritten(provider, directory)) {
+            var retry = post(restarted, validRequest().replace(REQUEST_ID, SECOND_REQUEST_ID));
+            assertTrue(retry.statusCode() >= 400, "An uncertain paid attempt cannot be repeated");
+            assertEquals(1, calls.get());
+            assertEquals(200, post(restarted, validRequest().replace(REQUEST_ID, THIRD_REQUEST_ID)
+                    .replace(RUN_ID, OTHER_RUN_ID)).statusCode());
+            assertEquals(2, calls.get());
+        }
+    }
+
+    @Test
+    void missingOrUnreadableHostedStorageAdmitsNoPaidWriter(@TempDir Path directory) throws Exception {
+        var mode = ReflectionHttpServer.GenerationMode.ANTHROPIC;
+        assertNull(ReflectionBackendMain.configuredWrittenReplayStore(mode, Map.of(), true));
+        assertNull(ReflectionBackendMain.configuredWrittenReplayStore(mode,
+                Map.of("RUNSTATE_SPEECH_REPLAY_DIR", "relative"), true));
+        var misplaced = Files.createFile(directory.resolve("ordinary-file"));
+        assertNull(ReflectionBackendMain.configuredWrittenReplayStore(mode,
+                Map.of("RUNSTATE_SPEECH_REPLAY_DIR", misplaced.toString()), true));
+        assertNotNull(ReflectionBackendMain.configuredWrittenReplayStore(mode,
+                Map.of("RUNSTATE_SPEECH_REPLAY_DIR", directory.toString()), true));
+        ReflectionProvider provider = evidence -> { throw new AssertionError("Storage must precede a paid call"); };
+        try (var server = ReflectionHttpServer.create(provider, 0, mode, null, null, null, null)) {
+            server.start();
+            assertError(post(server, validRequest()), 503, "reflection_storage_unavailable");
+        }
+    }
+
+    private ReflectionHttpServer startWritten(ReflectionProvider provider, Path directory) throws IOException {
+        var server = ReflectionHttpServer.create(provider, 0, ReflectionHttpServer.GenerationMode.ANTHROPIC,
+                null, null, null, new WrittenReflectionReplayStore(directory));
+        server.start();
+        return server;
+    }
+
+    @Test
     void hostedVoiceRequiresUsableExplicitStorage() {
         ReflectionHttpServer.SpeechProvider voice = text -> { throw new AssertionError("Unexpected synthesis"); };
         assertNull(ReflectionBackendMain.configuredSpeechReplayStore(voice, Map.of(), true));
@@ -990,7 +1148,8 @@ class ReflectionHttpServerTest {
         );
         for (ReflectionHttpServer.GenerationMode mode : ReflectionHttpServer.GenerationMode.values()) {
             // ANTHROPIC configuration is simulated here; the test makes no external call.
-            try (ReflectionHttpServer server = ReflectionHttpServer.create(evidence -> fixed, 0, mode)) {
+            try (ReflectionHttpServer server = ReflectionHttpServer.create(evidence -> fixed, 0, mode, null, null, null,
+                    mode == ReflectionHttpServer.GenerationMode.ANTHROPIC ? new WrittenReflectionReplayStore(speechDirectory) : null)) {
                 server.start();
                 HttpResponse<String> response = post(server, validRequest());
                 JsonObject responseJson = JsonParser.parseString(response.body()).getAsJsonObject();
@@ -2137,7 +2296,8 @@ class ReflectionHttpServerTest {
         ReflectionHttpServer server = ReflectionHttpServer.createRemote(provider, 0,
                 ReflectionHttpServer.GenerationMode.ANTHROPIC,
                 new ReflectionHttpServer.RemoteAccess("127.0.0.1", DEMO_HOST, DUMMY_DEMO_TOKEN),
-                providerCalls, cachedRequests, speech, null, new SpeechReplayStore(speechDirectory));
+                providerCalls, cachedRequests, speech, null, new SpeechReplayStore(speechDirectory),
+                new WrittenReflectionReplayStore(Files.createTempDirectory(speechDirectory, "written-")));
         server.start();
         return server;
     }
