@@ -134,10 +134,13 @@ Outputs are `android/app/build/outputs/apk/release/app-release.apk` and
 `android/app/build/outputs/bundle/release/app-release.aab`. Use the outputs from that invocation;
 older signed files can remain beside newer unsigned files. Inspect the certificate and version
 before distribution. A different signing certificate cannot simply replace the current owner
-debug app; never uninstall that app to work around a mismatch and lose its history. The permanent
-key/backup, Play versus direct-download signing strategy, provider registration and actual
-installation/update checks are separate release decisions. Temporary rehearsal keys are never
-production keys.
+debug app; never uninstall that app to work around a mismatch and lose its history.
+
+RunState's Android distribution plan uses Google Play App Signing. The developer keeps the
+private upload key and signs the bundle sent to Play. When Play is set up, Google will create and
+manage the separate key that signs the installs runners receive. Use Google's app-signing
+certificate when registering the Play version with providers such as Spotify, then test an install
+and an update delivered through Play.
 
 References: [Android signing](https://developer.android.com/studio/publish/app-signing),
 [versioning](https://developer.android.com/studio/publish/versioning), and

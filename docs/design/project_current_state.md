@@ -5,6 +5,12 @@ metadata:
   type: project
 ---
 
+## November 11 Google Play upload
+
+Manley chose Google Play to manage the app-signing key and will handle registration later. RunState's separate RSA 3072 upload key was created outside Git. Its encrypted personal OneDrive backup matched the working copy and successfully signed a test request. The password was entered privately by Manley.
+
+The signed bundle for `com.runstate.mobile` uses the existing version 1.0 and build code 1, from app commit `bd19e2e`. Bundletool validated it. All 281 payload files matched the tested public build and verified against the upload certificate exported from the backup. Its SHA-256 digest is `2138f33bfb07aa61610d2bf5aca4a49f50f1aa7d87f04333f24964c79936678c`. Release checks passed with the current 905-test results and zero lint errors. On a fresh offline emulator the locally test-signed app from the bundle installed, opened and displayed public settings. A Play-delivered install, update and Spotify check belong to the later Play testing milestone.
+
 ## November 10 outdoor run and reflection playback
 
 Manley liked the separation he heard in History and wanted it more apparent after a run. His next sample's 7.31-second snippet reached the ending pause and restored playing music. That version had no intentional closing tone. The owner update now plays an original 420 ms, two-note media sound when Spotify confirms the excerpt ended. Run gain is 0.76 and History gain is 0.47. The sound fits inside the existing 1.2-second return gap. The Android emulator started the packaged sound at both levels, and 905 unit tests passed in each build. The owner update opened on the Moto with all 69 runs and settings intact. Listening with headphones after a run remains the check for the perceived balance.
