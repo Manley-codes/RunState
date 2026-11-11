@@ -3,6 +3,9 @@ package com.runstate.reflection;
 import com.runstate.reflection.ReflectionContract.CandidateReflections;
 import com.runstate.reflection.ReflectionProvider.ReflectionProviderException;
 
+import java.io.IOException;
+import java.nio.file.InvalidPathException;
+import java.nio.file.Path;
 import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 
@@ -11,6 +14,7 @@ public final class ReflectionBackendMain {
 
     private static final int DEFAULT_PORT = 8_787;
     private static final String PORT_ENVIRONMENT_VARIABLE = "RUNSTATE_REFLECTION_PORT";
+    private static final String SPEECH_REPLAY_DIRECTORY = "RUNSTATE_SPEECH_REPLAY_DIR";
 
     private ReflectionBackendMain() {
     }
@@ -55,6 +59,30 @@ public final class ReflectionBackendMain {
 
     static int configuredPort(Map<String, String> environment) {
         return configuredPort(environment, false);
+    }
+
+    static SpeechReplayStore configuredSpeechReplayStore(ReflectionHttpServer.SpeechProvider voice,
+            Map<String, String> environment, boolean remote) {
+        if (voice == null) return null;
+        String configured = environment.get(SPEECH_REPLAY_DIRECTORY);
+        // A host's default working directory may disappear during a restart or redeploy.
+        if (remote && (configured == null || configured.isBlank())) {
+            System.err.println("Reflection voice disabled: set " + SPEECH_REPLAY_DIRECTORY
+                    + " to a private directory on persistent storage.");
+            return null;
+        }
+        try {
+            Path directory = configured == null ? Path.of(System.getProperty("user.home"), ".runstate", "speech-replay")
+                    : Path.of(configured);
+            if (!directory.isAbsolute()) {
+                System.err.println("Reflection voice disabled: " + SPEECH_REPLAY_DIRECTORY + " must be absolute.");
+                return null;
+            }
+            return new SpeechReplayStore(directory);
+        } catch (IOException | InvalidPathException | SecurityException failure) {
+            System.err.println("Reflection voice disabled: could not open its private persistent storage.");
+            return null;
+        }
     }
 
     static int configuredPort(Map<String, String> environment, boolean remote) {

@@ -17,6 +17,7 @@ import com.runstate.reflection.ReflectionContract.TelemetryCoverage;
 import com.runstate.reflection.ReflectionProvider.FailureType;
 import com.runstate.reflection.ReflectionProvider.ReflectionProviderException;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
@@ -29,6 +30,8 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
@@ -43,6 +46,7 @@ import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -537,8 +541,10 @@ class ReflectionHttpServerTest {
             .connectTimeout(Duration.ofSeconds(2))
             .build();
 
+    @TempDir Path speechDirectory;
+
     @Test
-    void reflectionSpeechPreservesExactTextAndReturnsOnlyUncachedMp3Bytes() throws Exception {
+    void reflectionSpeechPreservesExactTextAndReturnsPrivateMp3Bytes() throws Exception {
         String exact = "  Your exact reflection.\nA second line — unchanged.  ";
         byte[] audio = new byte[]{'I', 'D', '3', 0, (byte) 0xff, 1};
         AtomicReference<String> spoken = new AtomicReference<>();
@@ -549,7 +555,7 @@ class ReflectionHttpServerTest {
         }, 0, ReflectionHttpServer.GenerationMode.ANTHROPIC, text -> {
             spoken.set(text);
             return audio;
-        })) {
+        }, null, new SpeechReplayStore(speechDirectory))) {
             server.start();
             HttpResponse<byte[]> response = client.send(speechRequest(server, speechBody(exact)),
                     HttpResponse.BodyHandlers.ofByteArray());
@@ -658,7 +664,7 @@ class ReflectionHttpServerTest {
     }
 
     @Test
-    void speechDoesNotCacheTextAudioOrConsumeTheReflectionRequestCache() throws Exception {
+    void speechReplayDoesNotConsumeTheReflectionGenerationCache() throws Exception {
         AtomicInteger calls = new AtomicInteger();
         try (ReflectionHttpServer server = startRemoteSpeech(evidence -> exactCandidates(), text -> {
             calls.incrementAndGet();
@@ -668,14 +674,116 @@ class ReflectionHttpServerTest {
                 assertEquals(200, rawRequest(server, "POST", ReflectionHttpServer.SPEECH_PATH,
                         remoteHeaders(), speechBody("Same exact reflection.")).status());
             }
-            assertEquals(3, calls.get());
+            assertEquals(1, calls.get());
             assertEquals(200, rawPost(server, remoteHeaders(), validRequest()).status());
+        }
+    }
+
+    @Test
+    void hostedVoiceRequiresUsableExplicitStorage() {
+        ReflectionHttpServer.SpeechProvider voice = text -> { throw new AssertionError("Unexpected synthesis"); };
+        assertNull(ReflectionBackendMain.configuredSpeechReplayStore(voice, Map.of(), true));
+        assertNull(ReflectionBackendMain.configuredSpeechReplayStore(voice,
+                Map.of("RUNSTATE_SPEECH_REPLAY_DIR", "relative-directory"), true));
+        var configured = Map.of("RUNSTATE_SPEECH_REPLAY_DIR", speechDirectory.toString());
+        assertNotNull(ReflectionBackendMain.configuredSpeechReplayStore(voice, configured, true));
+        assertNull(ReflectionBackendMain.configuredSpeechReplayStore(voice,
+                Map.of("RUNSTATE_SPEECH_REPLAY_DIR", speechDirectory.resolve("reflection-speech.sqlite3").toString()), true));
+    }
+
+    @Test
+    void restartedServerReplaysTheChargedReflectionOnlyToItsAuthenticatedRunner() throws Exception {
+        String firstToken = DUMMY_DEMO_TOKEN;
+        String rotatedToken = "R".repeat(43);
+        String otherToken = "B".repeat(43);
+        String expiry = "2099-01-01T00:00:00Z";
+        String text = "  First mile.\nThat last turn was yours.  ";
+        AtomicInteger providerCalls = new AtomicInteger();
+        ReflectionHttpServer.SpeechProvider speech = ignored ->
+                ("ID3-result-" + providerCalls.incrementAndGet()).getBytes(StandardCharsets.US_ASCII);
+        String initialGrants = "[" + accessGrant("runner-a", firstToken, expiry, true) + "]";
+        RawHttpResponse original;
+        try (var first = startIndividual(evidence -> exactCandidates(), BackendAccessPolicy.fromJson(initialGrants), speech, null)) {
+            original = rawRequest(first, "POST", ReflectionHttpServer.SPEECH_PATH, accessHeaders(firstToken), speechBody(text));
+            assertEquals(new RawHttpResponse(200, "ID3-result-1"), original);
+        }
+        String newGrants = "[" + accessGrant("runner-a", rotatedToken, expiry, true) + ","
+                + accessGrant("runner-b", otherToken, expiry, true) + "]";
+        // Fresh HTTP server, access policy and store instance; only the on-disk directory survives.
+        try (var restarted = startIndividual(evidence -> exactCandidates(), BackendAccessPolicy.fromJson(newGrants), speech, null)) {
+            assertError(rawRequest(restarted, "POST", ReflectionHttpServer.SPEECH_PATH, accessHeaders(firstToken),
+                    speechBody(text)), 401, "unauthorized");
+            assertEquals(original, rawRequest(restarted, "POST", ReflectionHttpServer.SPEECH_PATH,
+                    accessHeaders(rotatedToken), speechBody(text)));
+            assertEquals(1, providerCalls.get(), "Retry after restart must replay the first paid result");
+            assertEquals(new RawHttpResponse(200, "ID3-result-2"), rawRequest(restarted, "POST",
+                    ReflectionHttpServer.SPEECH_PATH, accessHeaders(otherToken), speechBody(text)));
+            assertEquals(new RawHttpResponse(200, "ID3-result-3"), rawRequest(restarted, "POST",
+                    ReflectionHttpServer.SPEECH_PATH, accessHeaders(rotatedToken), speechBody(text.strip())));
+            assertEquals(3, providerCalls.get());
+        }
+    }
+
+    @Test
+    void twoServersSharingStorageDoNotChargeForTheSameInFlightSpeech() throws Exception {
+        var entered = new CountDownLatch(1);
+        var release = new CountDownLatch(1);
+        var calls = new AtomicInteger();
+        String body = speechBody("The last half mile.");
+        ReflectionHttpServer.SpeechProvider speech = ignored -> {
+            calls.incrementAndGet();
+            entered.countDown();
+            try {
+                if (!release.await(5, TimeUnit.SECONDS)) throw new AssertionError("Speech provider did not release");
+            } catch (InterruptedException interrupted) {
+                Thread.currentThread().interrupt();
+                throw new AssertionError(interrupted);
+            }
+            return "ID3fixture".getBytes(StandardCharsets.US_ASCII);
+        };
+        try (var first = startRemoteSpeech(evidence -> exactCandidates(), speech, 1, 4);
+             var second = startRemoteSpeech(evidence -> exactCandidates(), speech, 1, 4)) {
+            var inFlight = CompletableFuture.supplyAsync(() -> {
+                try { return rawRequest(first, "POST", ReflectionHttpServer.SPEECH_PATH, remoteHeaders(), body); }
+                catch (Exception failure) { throw new CompletionException(failure); }
+            });
+            try {
+                assertTrue(entered.await(3, TimeUnit.SECONDS));
+                assertError(rawRequest(second, "POST", ReflectionHttpServer.SPEECH_PATH, remoteHeaders(), body),
+                        503, "speech_pending");
+                assertEquals(1, calls.get());
+            } finally { release.countDown(); }
+            RawHttpResponse completed = inFlight.get(3, TimeUnit.SECONDS);
+            assertEquals(new RawHttpResponse(200, "ID3fixture"), completed);
+            assertEquals(completed, rawRequest(second, "POST", ReflectionHttpServer.SPEECH_PATH, remoteHeaders(), body));
+            assertEquals(1, calls.get());
+        }
+    }
+
+    @Test
+    void missingReplayStorageDisablesOnlyPaidReflectionSpeech() throws Exception {
+        var calls = new AtomicInteger();
+        ReflectionHttpServer.SpeechProvider speech = text -> { calls.incrementAndGet(); return new byte[]{1}; };
+        try (var server = ReflectionHttpServer.create(evidence -> exactCandidates(), 0,
+                ReflectionHttpServer.GenerationMode.FAKE, speech, text -> new byte[]{2}, null)) {
+            server.start();
+            var health = client.send(HttpRequest.newBuilder(URI.create("http://127.0.0.1:"
+                    + server.address().getPort() + ReflectionHttpServer.HEALTH_PATH)).GET().build(),
+                    HttpResponse.BodyHandlers.ofString());
+            assertTrue(health.headers().firstValue(ReflectionHttpServer.REFLECTION_VOICE_CAPABILITY_HEADER).isEmpty());
+            assertEquals("1", health.headers().firstValue(ReflectionHttpServer.RUN_VOICE_CAPABILITY_HEADER).orElseThrow());
+            assertEquals(503, client.send(speechRequest(server, speechBody("Reflection.")),
+                    HttpResponse.BodyHandlers.ofString()).statusCode());
+            assertEquals(200, client.send(runVoiceRequest(server, speechBody("One mile.")),
+                    HttpResponse.BodyHandlers.ofByteArray()).statusCode());
+            assertEquals(0, calls.get());
         }
     }
 
     @Test
     void speechAndReflectionGenerationShareTheSameBoundedProviderSlots() throws Exception {
         for (boolean firstIsSpeech : List.of(true, false)) {
+            String freshSpeech = speechBody(firstIsSpeech ? "Speech starts first." : "Reflection starts first.");
             CountDownLatch entered = new CountDownLatch(1);
             CountDownLatch release = new CountDownLatch(1);
             ReflectionProvider reflections = evidence -> {
@@ -698,14 +806,14 @@ class ReflectionHttpServerTest {
                 CompletableFuture<RawHttpResponse> running = CompletableFuture.supplyAsync(() -> {
                     try {
                         return firstIsSpeech ? rawRequest(server, "POST", ReflectionHttpServer.SPEECH_PATH,
-                                remoteHeaders(), speechBody("Exact reflection.")) : rawPost(server, remoteHeaders(), validRequest());
+                                remoteHeaders(), freshSpeech) : rawPost(server, remoteHeaders(), validRequest());
                     } catch (Exception failure) { throw new CompletionException(failure); }
                 });
                 try {
                     assertTrue(entered.await(2, TimeUnit.SECONDS));
                     RawHttpResponse busy = firstIsSpeech ? rawPost(server, remoteHeaders(), validRequest())
                             : rawRequest(server, "POST", ReflectionHttpServer.SPEECH_PATH,
-                                    remoteHeaders(), speechBody("Exact reflection."));
+                                    remoteHeaders(), freshSpeech);
                     assertError(busy, 503, "server_busy");
                 } finally {
                     release.countDown();
@@ -716,7 +824,7 @@ class ReflectionHttpServerTest {
     }
 
     @Test
-    void speechFailuresAreSanitizedReleaseSlotsAndDoNotCacheFailures() throws Exception {
+    void speechFailuresAreSanitizedReleaseSlotsAndProtectAmbiguousCharges() throws Exception {
         for (FailureType type : FailureType.values()) {
             AtomicInteger calls = new AtomicInteger();
             try (ReflectionHttpServer server = startSpeech(text -> {
@@ -733,7 +841,10 @@ class ReflectionHttpServerTest {
                 assertFalse(failed.body().contains("private-voice-text-and-key"));
                 assertFalse(failed.body().contains("Exact reflection."));
                 assertTrue(failed.headers().firstValue("Content-Type").orElseThrow().startsWith("application/json"));
-                assertEquals(200, client.send(speechRequest(server, speechBody("Exact reflection.")),
+                assertError(client.send(speechRequest(server, speechBody("Exact reflection.")),
+                        HttpResponse.BodyHandlers.ofString()), 503, "speech_pending");
+                assertEquals(1, calls.get());
+                assertEquals(200, client.send(speechRequest(server, speechBody("A different reflection.")),
                         HttpResponse.BodyHandlers.ofString()).statusCode());
                 assertEquals(2, calls.get());
             }
@@ -770,7 +881,7 @@ class ReflectionHttpServerTest {
                 }, text -> {
                     runSpoken.set(text);
                     return runAudio;
-                })) {
+                }, new SpeechReplayStore(speechDirectory))) {
             server.start();
             HttpResponse<byte[]> response = client.send(runVoiceRequest(server, speechBody("Starting in ten.")),
                     HttpResponse.BodyHandlers.ofByteArray());
@@ -1737,10 +1848,12 @@ class ReflectionHttpServerTest {
         return List.of("Host: " + DEMO_HOST, "Authorization: Bearer " + token);
     }
 
-    private static ReflectionHttpServer startIndividual(ReflectionProvider provider, BackendAccessPolicy policy,
+    private ReflectionHttpServer startIndividual(ReflectionProvider provider, BackendAccessPolicy policy,
             ReflectionHttpServer.SpeechProvider voice, ReflectionHttpServer.SpeechProvider runVoice) throws Exception {
         var server = ReflectionHttpServer.createRemote(provider, 0, ReflectionHttpServer.GenerationMode.FAKE,
-                ReflectionHttpServer.RemoteAccess.individual("127.0.0.1", DEMO_HOST, policy), voice, runVoice);
+                ReflectionHttpServer.RemoteAccess.individual("127.0.0.1", DEMO_HOST, policy),
+                ReflectionHttpServer.MAX_CONCURRENT_PROVIDER_CALLS, ReflectionHttpServer.MAX_CACHED_REQUESTS,
+                voice, runVoice, voice == null ? null : new SpeechReplayStore(speechDirectory));
         server.start();
         return server;
     }
@@ -2013,7 +2126,8 @@ class ReflectionHttpServerTest {
 
     private ReflectionHttpServer startSpeech(ReflectionHttpServer.SpeechProvider speech) throws Exception {
         ReflectionHttpServer server = ReflectionHttpServer.create(evidence -> exactCandidates(), 0,
-                ReflectionHttpServer.GenerationMode.ANTHROPIC, speech);
+                ReflectionHttpServer.GenerationMode.ANTHROPIC, speech, null,
+                new SpeechReplayStore(Files.createTempDirectory(speechDirectory, "voice-")));
         server.start();
         return server;
     }
@@ -2023,7 +2137,7 @@ class ReflectionHttpServerTest {
         ReflectionHttpServer server = ReflectionHttpServer.createRemote(provider, 0,
                 ReflectionHttpServer.GenerationMode.ANTHROPIC,
                 new ReflectionHttpServer.RemoteAccess("127.0.0.1", DEMO_HOST, DUMMY_DEMO_TOKEN),
-                providerCalls, cachedRequests, speech);
+                providerCalls, cachedRequests, speech, null, new SpeechReplayStore(speechDirectory));
         server.start();
         return server;
     }

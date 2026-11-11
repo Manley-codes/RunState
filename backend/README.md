@@ -60,12 +60,10 @@ preparation handles are also namespaced before every provider lookup, including 
 candidates; responses retain the client's original IDs. Owner/local modes retain their old
 internal handles. Reflection prompts, song content, playback and voices are unchanged.
 
-**Release work still required:** durable per-person/global allowances, rate/capacity fairness,
-duplicate protection across restart, safe provisioning, provider permissions and live setup
-verification. Cache capacity remains shared; speech still has no retry-deduplication key. Do
-not treat this increment as permission to invite users or promise capped API spending. A
-restart still clears response caches, so grant changes do not solve retry charges. The next
-increment needs a selected durable store rather than an assumed persistent container disk.
+Selected reflection speech can reuse saved audio across restarts for seven days. Written
+reflections and song preparation still use process memory. Per-person and global spending
+limits, fair use of shared capacity, safe provisioning, provider permissions and live setup
+verification remain open release work.
 
 Security reference: [OWASP REST security guidance](https://cheatsheetseries.owasp.org/cheatsheets/REST_Security_Cheat_Sheet.html).
 
@@ -319,7 +317,13 @@ Backend environment configuration:
 The selected reflection can use Manley's existing designed **`1st test voice`**, fixed voice ID
 `DocoybWhaSQMUIs7gLNe` and model `eleven_multilingual_v2`. This does not change the Android
 saved-run-facts voice or generate new reflection wording. Configure `ELEVENLABS_API_KEY` only on
-the backend; a missing key disables cloud speech and does not prevent ordinary reflections.
+the backend. Hosted reflection speech also requires `RUNSTATE_SPEECH_REPLAY_DIR`, an absolute
+path to a private directory on persistent storage. For example, for a single Render instance
+with a persistent disk mounted at `/var/data`, use `/var/data/runstate/speech`. The container's
+user (UID 10001) needs write access. Confirm the mount survives redeploys before enabling hosted
+speech. See [Render persistent disks](https://render.com/docs/disks). Local loopback mode defaults
+to `~/.runstate/speech-replay`. Without usable storage at startup the backend keeps serving
+ordinary reflections and the phone can use its device voice.
 `--fake` never enables the real speech provider. The Android app uses the same saved hosted
 connection/access code and requires no ElevenLabs credential of its own.
 
@@ -329,16 +333,27 @@ Text must be nonblank valid Unicode and at most 4,000 characters; it is not trim
 Existing Host/Origin, remote bearer, method, query, media/encoding and 64 KiB request limits apply
 before synthesis. Successful responses are `audio/mpeg`, nonempty and at most 2 MiB, with
 `Cache-Control: no-store` and `X-Content-Type-Options: nosniff`. Failures use the existing sanitized
-JSON error style. Voice generation shares the existing two-provider-call admission limit and
-creates no request cache or durable audio/text storage.
+JSON error style. New voice generation shares the existing two-provider-call admission limit.
+
+The backend records a reservation in SQLite before contacting ElevenLabs, then saves the MP3
+before returning it. For seven days from successful synthesis, completion retries and History
+replays with the same authenticated identity, exact text and voice can reuse those bytes.
+Replaying does not extend the window. After expiry a new synthesis can use credits. A shared
+owner access code represents one identity. Individual grants keep runners' recordings separate.
+
+If the server stops after the provider may have charged but before it saves the audio, retries
+receive HTTP 503 for that reservation's seven-day window. A duplicate request arriving while
+the first call is in progress can retry after it finishes. The store holds 128 entries total,
+including unfinished reservations. When full, existing audio stays available and new speech
+requests receive HTTP 503 until space opens. Expired entries are cleared on startup or later
+requests. These limits apply only to selected reflection speech.
 
 `ElevenLabsReflectionSpeech` uses the fixed official HTTPS conversion endpoint, an API-key header,
 MP3 44.1 kHz/128 kbps, a three-second connect timeout and a twenty-second complete-response budget.
 It follows no redirects and performs no automatic retries. Only `text` and `model_id` are sent in
 the JSON body. Voice settings are not overridden, preserving the voice's stored settings.
 Provider exceptions, bodies, keys and selected text are not logged. Provider-side retention still
-follows the ElevenLabs account/service settings; request-scoped memory in RunState does not mean
-zero retention at ElevenLabs. The documented zero-retention option is enterprise-only, so this
+follows the ElevenLabs account/service settings. The documented zero-retention option is enterprise-only, so this
 implementation does not claim or request it. See the official
 [speech endpoint documentation](https://elevenlabs.io/docs/api-reference/text-to-speech/convert).
 
@@ -346,11 +361,11 @@ Android synthesizes only the final selected text when speech is requested, not a
 candidates. Facts use local Android TTS. Reflection audio is played from memory, and genuine
 completion feeds the existing music handoff. Missing/older/unavailable service or an unplayable
 response can fall back to local speech before cloud audio starts. Errors after audible playback,
-Stop, navigation and focus loss never repeat speech or start music. History Read uses reflection
-speech without music. New requests, including deliberate repeated History reads, can consume
-ElevenLabs credits; there is no durable audio cache. Configure a usage limit on the separate
-speech-only RunState API key. Backend tests use fake speech transports, not paid synthesis.
-The voice code is tested locally and the Android update is installed; Render's private key is
+Stop, navigation and focus loss never repeat speech or start music. A History replay uses the
+saved reflection text and can play its eligible music excerpt. Configure a usage limit on the
+separate speech-only RunState API key. Backend tests use fake speech transports.
+
+At the original October voice checkpoint, the Android update was installed and Render's private key was
 saved. Manley committed/pushed through `cb23da6`; that version deployed successfully in 55.2 seconds
 and public health advertises voice support. A separate gated real Moto check passed in 40.732
 seconds: local sample facts completed, actual cloud MP3 was accepted and naturally completed with

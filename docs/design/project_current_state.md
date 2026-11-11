@@ -5,6 +5,12 @@ metadata:
   type: project
 ---
 
+## November 11 spoken reflection retries
+
+Manley chose seven days for repeat requests and History replays. The backend saves each selected recording before sending it to the phone. Two independent server processes returned identical audio for the same runner and text with one simulated voice call total. The previous version made two calls. A separate forced crash after the simulated charge and before the audio was saved also held the count at one. In that case the phone can use its fallback voice.
+
+Before deploying, configure `RUNSTATE_SPEECH_REPLAY_DIR` on a private persistent disk for the single backend instance. There are 128 shared slots. A full store still serves existing recordings. Written reflections, run announcements, and cumulative spending limits are separate. Deployment and hosted restart verification remain open.
+
 ## November 11 Google Play upload
 
 Manley chose Google Play to manage the app-signing key and will handle registration later. RunState's separate RSA 3072 upload key was created outside Git. Its encrypted personal OneDrive backup matched the working copy and successfully signed a test request. The password was entered privately by Manley.

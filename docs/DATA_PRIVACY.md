@@ -3,7 +3,8 @@
 ## Current Android data handling
 
 Reviewed November 8, 2026 against Android and backend source at `3dee96d`, updated for the
-subsequent saved-run deletion implementation and in-app Privacy & data summary.
+subsequent saved-run deletion, in-app Privacy & data summary, and November 11 backend
+storage for spoken reflection replays.
 This is the current engineering summary for release preparation. It does not verify the
 running server's configuration or providers' retention settings, and is not the finished
 public privacy policy. Claude's separate reflection-quality branch is outside this checkpoint.
@@ -68,10 +69,14 @@ paths; it would be inaccurate to claim that no song text ever reaches AI service
   and all four generated branches. They have no timed expiration and remain for that process's
   lifetime to prevent duplicate paid work. Song preparation is separate: up to 32 entries with
   two-hour reuse eligibility and cleanup on later activity, not an exact timed erasure guarantee.
-- Backend voice audio is request-scoped. No runtime application database/file persistence or
-  request-body logging was found in the reviewed backend code. Hosting logs, SDK behavior and
-  each provider's retention/training settings still require live verification; memory-only
-  application storage does not establish that those services retain nothing.
+- In the backend version prepared November 11, the server saves the selected spoken reflection
+  as an MP3 on private storage for seven-day retries and History replays. The recording can
+  contain spoken run details. SQLite keeps a hash derived from the authenticated identity,
+  exact text and voice, a reservation identifier, and an expiry time. It does not store a
+  separate copy of the text or the access code. Replaying leaves the expiry unchanged.
+  Expired entries are removed on startup or later speech requests. Deleting a run on the phone
+  does not delete the server recording. Run announcement audio remains request-scoped.
+  Hosting backups, logs and provider retention settings require separate live verification.
 
 App-authored diagnostics inspected here contain bounded status/reason/timing information rather
 than coordinates, access codes, song names or speech text. This source review is not a runtime
@@ -656,10 +661,10 @@ route, a full listening-history list or all four unused candidates. Connected-ac
 was read-only. After Manley privately created/saved the backend key and pushed the voice code,
 the hosted phone check sent one selected, newly generated fictional sample reflection to
 ElevenLabs and played its returned audio successfully; no saved History was uploaded. Android
-plays the returned bounded audio from memory and releases it on completion/cancellation; neither
-the phone nor backend writes or caches generated audio. This does not remove provider-side
+played the returned bounded audio from memory and released it on completion/cancellation. At
+that October checkpoint neither the phone nor backend cached generated audio. This did not remove provider-side
 retention under the ElevenLabs account/service settings. The standard request does not opt into
-enterprise-only zero-retention mode. Deliberate repeated Read requests can consume speech credits.
+enterprise-only zero-retention mode. At that checkpoint repeated Read requests could consume speech credits.
 Manley saved the backend key privately on Render; deployment and hearing passed at `cb23da6`.
 Broader tester-facing disclosure remains separate. No provider key is sent to or stored on the phone.
 

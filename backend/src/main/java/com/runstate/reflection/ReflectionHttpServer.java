@@ -85,6 +85,7 @@ public final class ReflectionHttpServer implements AutoCloseable {
 
     private final ReflectionProvider provider;
     private final SpeechProvider speechProvider;
+    private final SpeechReplayStore speechReplayStore;
     private final SpeechProvider runVoiceProvider;
     private final GenerationMode generationMode;
     private final HttpServer server;
@@ -107,10 +108,12 @@ public final class ReflectionHttpServer implements AutoCloseable {
             int maxConcurrentProviderCalls,
             int maxCachedRequests,
             SpeechProvider speechProvider,
-            SpeechProvider runVoiceProvider
+            SpeechProvider runVoiceProvider,
+            SpeechReplayStore speechReplayStore
     ) throws IOException {
         this.provider = Objects.requireNonNull(provider, "provider");
         this.speechProvider = speechProvider;
+        this.speechReplayStore = speechReplayStore;
         this.runVoiceProvider = runVoiceProvider;
         this.generationMode = Objects.requireNonNull(generationMode, "generationMode");
         requirePort(port);
@@ -160,8 +163,15 @@ public final class ReflectionHttpServer implements AutoCloseable {
     public static ReflectionHttpServer create(ReflectionProvider provider, int port,
             GenerationMode generationMode, SpeechProvider speechProvider, SpeechProvider runVoiceProvider)
             throws IOException {
+        return create(provider, port, generationMode, speechProvider, runVoiceProvider,
+                ReflectionBackendMain.configuredSpeechReplayStore(speechProvider, System.getenv(), false));
+    }
+
+    static ReflectionHttpServer create(ReflectionProvider provider, int port, GenerationMode generationMode,
+            SpeechProvider speechProvider, SpeechProvider runVoiceProvider, SpeechReplayStore replayStore)
+            throws IOException {
         return new ReflectionHttpServer(provider, port, generationMode, null,
-                MAX_CONCURRENT_PROVIDER_CALLS, MAX_CACHED_REQUESTS, speechProvider, runVoiceProvider);
+                MAX_CONCURRENT_PROVIDER_CALLS, MAX_CACHED_REQUESTS, speechProvider, runVoiceProvider, replayStore);
     }
 
     /**
@@ -215,9 +225,18 @@ public final class ReflectionHttpServer implements AutoCloseable {
             GenerationMode generationMode, RemoteAccess remoteAccess, int maxConcurrentProviderCalls,
             int maxCachedRequests, SpeechProvider speechProvider, SpeechProvider runVoiceProvider)
             throws IOException {
+        return createRemote(provider, port, generationMode, remoteAccess, maxConcurrentProviderCalls,
+                maxCachedRequests, speechProvider, runVoiceProvider,
+                ReflectionBackendMain.configuredSpeechReplayStore(speechProvider, System.getenv(), true));
+    }
+
+    static ReflectionHttpServer createRemote(ReflectionProvider provider, int port,
+            GenerationMode generationMode, RemoteAccess remoteAccess, int maxConcurrentProviderCalls,
+            int maxCachedRequests, SpeechProvider speechProvider, SpeechProvider runVoiceProvider,
+            SpeechReplayStore replayStore) throws IOException {
         return new ReflectionHttpServer(provider, port, generationMode,
                 Objects.requireNonNull(remoteAccess, "remoteAccess"),
-                maxConcurrentProviderCalls, maxCachedRequests, speechProvider, runVoiceProvider);
+                maxConcurrentProviderCalls, maxCachedRequests, speechProvider, runVoiceProvider, replayStore);
     }
 
     private static void requirePort(int port) {
@@ -312,7 +331,7 @@ public final class ReflectionHttpServer implements AutoCloseable {
             if (provider.supportsSongSnippetFallbacks()) {
                 exchange.getResponseHeaders().set(SONG_SNIPPET_FALLBACKS_CAPABILITY_HEADER, "1");
             }
-            if (speechProvider != null) {
+            if (speechProvider != null && speechReplayStore != null) {
                 exchange.getResponseHeaders().set(REFLECTION_VOICE_CAPABILITY_HEADER, "1");
             }
             if (runVoiceProvider != null) {
@@ -362,7 +381,10 @@ public final class ReflectionHttpServer implements AutoCloseable {
 
         byte[] body = readBoundedBody(exchange);
         if (speech) {
-            return synthesizeSpeech(ReflectionApiJson.parseSpeechRequest(body));
+            // Configured recipient IDs cannot impersonate the loopback or legacy owner on disk.
+            String owner = remoteAccess != null && remoteAccess.individualAccess
+                    ? "recipient:" + principalId : principalId;
+            return synthesizeSpeech(owner, ReflectionApiJson.parseSpeechRequest(body));
         }
         if (runVoice) {
             return synthesizeRunVoice(ReflectionApiJson.parseSpeechRequest(body));
@@ -571,30 +593,42 @@ public final class ReflectionHttpServer implements AutoCloseable {
         }
     }
 
-    private EndpointResponse synthesizeSpeech(String text) {
+    private EndpointResponse synthesizeSpeech(String owner, String text) {
         if (speechProvider == null) {
             return error(503, "provider_unavailable", "The reflection voice is not configured.");
         }
-        if (!providerSlots.tryAcquire()) {
-            return error(503, "server_busy", "The reflection service is busy. Try again later.");
+        if (speechReplayStore == null) {
+            return error(503, "speech_storage_unavailable", "Reflection speech storage is unavailable.");
         }
+        boolean hasProviderSlot = providerSlots.tryAcquire();
         try {
-            byte[] audio = speechProvider.synthesize(text);
-            if (audio == null || audio.length == 0 || audio.length > MAX_AUDIO_RESPONSE_BYTES) {
-                return speechProviderFailure(FailureType.INVALID_RESPONSE);
-            }
-            // Audio remains request-scoped: no cache entry, filename or durable storage.
-            return new EndpointResponse(200, audio, "audio/mpeg");
+            SpeechReplayStore.Claim claim = speechReplayStore.claim(owner, text, hasProviderSlot);
+            return switch (claim.state()) {
+                case CACHED -> new EndpointResponse(200, claim.audio(), "audio/mpeg");
+                case PENDING -> error(503, "speech_pending", "This speech request has already been reserved.");
+                case BUSY, FULL -> error(503, "server_busy", "The reflection service is busy. Try again later.");
+                case CLAIMED -> {
+                    byte[] audio = speechProvider.synthesize(text);
+                    if (audio == null || audio.length == 0 || audio.length > MAX_AUDIO_RESPONSE_BYTES) {
+                        yield speechProviderFailure(FailureType.INVALID_RESPONSE);
+                    }
+                    // A lost HTTP reply can be replayed only after the completed audio is durable.
+                    speechReplayStore.complete(claim, audio);
+                    yield new EndpointResponse(200, audio, "audio/mpeg");
+                }
+            };
+        } catch (IOException failure) {
+            return error(503, "speech_storage_unavailable", "Reflection speech storage is unavailable.");
         } catch (ReflectionProviderException failure) {
             return speechProviderFailure(failure.failureType());
         } catch (RuntimeException unexpected) {
             return error(500, "internal_error", "The reflection voice could not be generated.");
         } finally {
-            providerSlots.release();
+            if (hasProviderSlot) providerSlots.release();
         }
     }
 
-    /** Same request-scoped audio rules as the reflection voice, with its own slots and shorter limit. */
+    /** Run announcements use their own slots, shorter limit and request-scoped audio. */
     private EndpointResponse synthesizeRunVoice(String text) {
         if (runVoiceProvider == null) {
             return error(503, "provider_unavailable", "The run voice is not configured.");
