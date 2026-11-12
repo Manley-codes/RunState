@@ -162,7 +162,7 @@ struct ActiveRunView: View {
             let run = tracker.journal.active
             let elapsed = tracker.activeSeconds
             let meters = run?.meters ?? 0
-            let pace = Self.paceText(meters: meters, activeSeconds: elapsed)
+            let pace = run.flatMap { Self.averagePaceText(for: $0, at: elapsed) }
             let mile = run?.splitProgress?.currentMile(meters: meters, activeSeconds: elapsed)
             let layout = typeSize.isAccessibilitySize ? AnyLayout(VStackLayout(spacing: 6)) :
                 AnyLayout(HStackLayout(spacing: 8 * unit))
@@ -227,6 +227,11 @@ struct ActiveRunView: View {
         guard pace > 0, pace < Double(Int64.max) else { return nil }
         let seconds = Int64(pace)
         return String(format: "%lld:%02lld /mi", seconds / 60, seconds % 60)
+    }
+
+    nonisolated static func averagePaceText(for run: RecordedRun, at activeSeconds: TimeInterval) -> String? {
+        guard !run.hasPartialDistance(at: activeSeconds) else { return nil }
+        return paceText(meters: run.meters, activeSeconds: activeSeconds)
     }
 }
 

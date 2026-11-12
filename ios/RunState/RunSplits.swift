@@ -94,7 +94,7 @@ struct RunSplitProgress: Codable, Equatable {
         interrupted = false
     }
 
-    private func hasCoverage(meters: Double, at seconds: TimeInterval) -> Bool {
+    fileprivate func hasCoverage(meters: Double, at seconds: TimeInterval) -> Bool {
         guard reliable, !interrupted, distance > 0,
               abs(distance - meters) <= Self.distanceTolerance,
               seconds.isFinite, seconds > 0 else { return false }
@@ -140,17 +140,36 @@ struct RunSplitProgress: Codable, Equatable {
     }
 }
 
+enum RunGPSObservation: Equatable {
+    case tracking, waiting
+}
+
 extension RecordedRun {
+    func hasPartialDistance(at seconds: TimeInterval) -> Bool {
+        guard meters.isFinite, meters > 0 else { return false }
+        if let splitProgress { return !splitProgress.hasCoverage(meters: meters, at: seconds) }
+        // Build 4 saved totals without either field. A newer run recovered after an
+        // interrupted recording loses its split timeline but retains its checkpoint flag.
+        return pausedWithCompleteTime != nil
+    }
+
+    var partialDistanceNote: String? {
+        hasPartialDistance(at: activeSeconds) ? "GPS recorded a partial distance. Average pace is unavailable." : nil
+    }
+
     /// Apply a complete Core Location delivery in timestamp order supplied by the OS. A
     /// batched mile crossing uses the fix time, independent of when the callback arrived.
+    @discardableResult
     mutating func record(_ locations: [CLLocation], using distance: inout RunDistance,
-                         deliveredAt: Date, activeAtDelivery: TimeInterval, segmentStart: TimeInterval) {
+                         deliveredAt: Date, activeAtDelivery: TimeInterval, segmentStart: TimeInterval) -> RunGPSObservation? {
+        var observation: RunGPSObservation?
         for point in locations {
             switch distance.classify(point, now: deliveredAt) {
             case .ignored:
                 continue
             case .interrupted:
                 splitProgress?.interrupt()
+                observation = .waiting
                 continue
             case .anchor:
                 splitProgress?.interrupt()
@@ -161,9 +180,11 @@ extension RecordedRun {
             case .stationary:
                 break
             }
+            observation = .tracking
             let age = deliveredAt.timeIntervalSince(point.timestamp)
             splitProgress?.observe(meters: meters, at: max(segmentStart, activeAtDelivery - age))
         }
+        return observation
     }
 
     var mileSplits: [RunMileSplit] {

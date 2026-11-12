@@ -5,6 +5,31 @@ import XCTest
 final class RunSplitTests: XCTestCase {
     private let mile = RunDistance.metersPerMile
 
+    func testGpsStatusReflectsAcceptedAndRejectedFixesAndIgnoresOldCallbacks() {
+        let epoch = Date(timeIntervalSince1970: 1_800_000_000)
+        var run = RecordedRun(id: UUID(), startedAt: epoch)
+        var filter = RunDistance()
+        filter.startSegment(at: epoch)
+        func point(_ east: Double, at seconds: Double) -> CLLocation {
+            CLLocation(coordinate: CLLocationCoordinate2D(latitude: 0, longitude: east / 111_319.49),
+                       altitude: 0, horizontalAccuracy: 1, verticalAccuracy: 2,
+                       timestamp: epoch.addingTimeInterval(seconds))
+        }
+        func deliver(_ points: [CLLocation], at seconds: Double) -> RunGPSObservation? {
+            run.record(points, using: &filter, deliveredAt: epoch.addingTimeInterval(seconds),
+                       activeAtDelivery: seconds, segmentStart: 0)
+        }
+        XCTAssertEqual(deliver([point(0, at: 0)], at: 0), .tracking)
+        XCTAssertEqual(deliver([point(20, at: 5), point(5, at: 2)], at: 5), .tracking)
+        XCTAssertEqual(deliver([point(20, at: 6)], at: 6), .tracking)
+        // Good reported accuracy cannot make a stale fix usable.
+        XCTAssertEqual(deliver([point(30, at: 10), point(20, at: 6)], at: 22), .waiting)
+        XCTAssertNil(deliver([point(10, at: 4)], at: 22))
+        XCTAssertEqual(deliver([point(40, at: 23)], at: 23), .tracking)
+        XCTAssertEqual(deliver([point(41, at: 24), point(1_000, at: 25)], at: 25), .waiting)
+        XCTAssertEqual(run.meters, 20, accuracy: 0.2)
+    }
+
     func testMileBoundaryUsesIndividualBatchedFixTimesAndPausedTimeIsExcluded() throws {
         var journal = RunJournal()
         let epoch = Date(timeIntervalSince1970: 1_800_000_000)
@@ -41,15 +66,16 @@ final class RunSplitTests: XCTestCase {
         journal.active = run
         journal.finish(at: epoch.addingTimeInterval(760))
         let saved = try XCTUnwrap(journal.history.first)
-        XCTAssertEqual(saved.meters, 1_840, accuracy: 1)
+        let measuredSpeed = point(20, at: 5).distance(from: point(0, at: 0)) / 5
+        XCTAssertEqual(saved.meters, 460 * measuredSpeed, accuracy: 0.1)
         let rows = saved.mileSplits
         XCTAssertEqual(rows.count, 2)
         let first = try XCTUnwrap(rows.first)
         XCTAssertFalse(first.isPartial)
-        XCTAssertEqual(first.activeSeconds, mile / 4, accuracy: 0.2)
+        XCTAssertEqual(first.activeSeconds, mile / measuredSpeed, accuracy: 0.05)
         let partial = try XCTUnwrap(rows.last)
         XCTAssertTrue(partial.isPartial)
-        XCTAssertEqual(partial.meters, 1_840 - mile, accuracy: 1)
+        XCTAssertEqual(partial.meters, saved.meters - mile, accuracy: 0.001)
         XCTAssertEqual(rows.map(\.activeSeconds).reduce(0, +), 460, accuracy: 0.001)
     }
 
@@ -103,6 +129,45 @@ final class RunSplitTests: XCTestCase {
         XCTAssertEqual(row.activeSeconds, 612)
     }
 
+    func testAveragePaceUsesRecordedCoverageLiveAndAfterSaving() throws {
+        var journal = RunJournal()
+        journal.beginRun(at: Date())
+        var run = try XCTUnwrap(journal.active)
+        XCTAssertNil(ActiveRunView.averagePaceText(for: run, at: 20))
+        XCTAssertNil(run.partialDistanceNote)
+        run.splitProgress?.startSegment(at: 0)
+        run.splitProgress?.observe(meters: 0, at: 0)
+        for i in 1...54 { run.splitProgress?.observe(meters: mile * Double(i) / 54, at: Double(i * 10)) }
+        run.meters = mile
+        run.activeSeconds = 540
+        XCTAssertEqual(ActiveRunView.averagePaceText(for: run, at: 540), "9:00 /mi")
+        var complete = run
+        complete.splitProgress?.endSegment(at: 540)
+        complete.finishedAt = Date()
+        XCTAssertEqual(ActiveRunView.averagePaceText(for: complete, at: 540), "9:00 /mi")
+        XCTAssertNil(complete.partialDistanceNote)
+
+        // No usable fix during the next minute. Preserve the mile's distance and stop
+        // displaying a slower pace as if all of that minute had been measured.
+        XCTAssertNil(ActiveRunView.averagePaceText(for: run, at: 600))
+        run.activeSeconds = 600
+        journal.active = run
+        journal.finish(at: Date())
+        let partial = try XCTUnwrap(journal.history.first)
+        XCTAssertEqual(partial.meters, mile)
+        XCTAssertNil(ActiveRunView.averagePaceText(for: partial, at: 600))
+        XCTAssertNotNil(partial.partialDistanceNote)
+        XCTAssertTrue(partial.mileSplits.isEmpty)
+    }
+
+    func testLegacyAveragePaceStillDisplaysWithoutClaimingModernGpsCoverage() {
+        let older = RecordedRun(id: UUID(), startedAt: Date(), meters: mile, activeSeconds: 600, finishedAt: Date())
+        XCTAssertNil(older.splitProgress)
+        XCTAssertNil(older.pausedWithCompleteTime)
+        XCTAssertEqual(ActiveRunView.averagePaceText(for: older, at: 600), "10:00 /mi")
+        XCTAssertNil(older.partialDistanceNote)
+    }
+
     @MainActor
     func testRelaunchDuringRunKeepsTotalsAndWithholdsIncompleteSplits() throws {
         let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
@@ -118,6 +183,10 @@ final class RunSplitTests: XCTestCase {
         XCTAssertEqual(tracker.journal.active?.meters, 400)
         XCTAssertEqual(tracker.journal.active?.activeSeconds, 100)
         XCTAssertNil(tracker.journal.active?.splitProgress)
+        tracker.finish()
+        let saved = try XCTUnwrap(tracker.journal.history.first)
+        XCTAssertNotNil(saved.partialDistanceNote)
+        XCTAssertNil(ActiveRunView.averagePaceText(for: saved, at: 100))
     }
 
     func testBriefGpsRecoveryReanchorsWithoutInventingMovement() throws {

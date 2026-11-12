@@ -21,6 +21,9 @@ struct RunHistoryView: View {
                             Text("\(distanceText(run)) · \(ActiveRunView.clockText(run.activeSeconds))")
                                 .font(.headline)
                                 .monospacedDigit()
+                            if run.hasPartialDistance(at: run.activeSeconds) {
+                                Text("Partial GPS distance").font(.footnote).foregroundStyle(.secondary)
+                            }
                             if let energy = run.preRunEnergy {
                                 Text("Starting energy · " + energy).font(.footnote)
                             }
@@ -62,11 +65,13 @@ private struct SavedRunDetail: View {
                 Section {
                     LabeledContent("Distance", value: distanceText(run))
                     LabeledContent("Active time", value: ActiveRunView.clockText(run.activeSeconds))
-                    let pace = ActiveRunView.paceText(meters: run.meters, activeSeconds: run.activeSeconds)
+                    let pace = ActiveRunView.averagePaceText(for: run, at: run.activeSeconds)
                     LabeledContent("Average pace", value: pace ?? "Unavailable")
                 } header: {
                     Text(run.startedAt.formatted(date: .complete, time: .shortened))
                         .textCase(nil)
+                } footer: {
+                    if let note = run.partialDistanceNote { Text(note) }
                 }
                 Section("Check-in") {
                     if let energy = run.preRunEnergy {

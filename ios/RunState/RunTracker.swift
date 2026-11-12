@@ -205,12 +205,12 @@ final class RunTracker: NSObject, ObservableObject, CLLocationManagerDelegate {
         let tick = clock.now
         let now = Date()
         let deliverySeconds = (journal.active?.activeSeconds ?? 0) + elapsedSinceCheckpoint(at: tick)
-        journal.active?.record(locations, using: &distance, deliveredAt: now,
-                               activeAtDelivery: deliverySeconds, segmentStart: segmentStartActiveSeconds)
-        if let point = locations.last {
-            if manager.accuracyAuthorization == .reducedAccuracy { gpsStatus = "Enable Precise Location in Settings for distance." }
-            else if point.horizontalAccuracy < 0 || point.horizontalAccuracy > 25 { gpsStatus = "Waiting for a clearer GPS signal…" }
-            else { gpsStatus = "Tracking GPS" }
+        let observation = journal.active?.record(locations, using: &distance, deliveredAt: now,
+                                                 activeAtDelivery: deliverySeconds, segmentStart: segmentStartActiveSeconds)
+        if manager.accuracyAuthorization == .reducedAccuracy {
+            gpsStatus = "Enable Precise Location in Settings for distance."
+        } else if let observation {
+            gpsStatus = observation == .tracking ? "Tracking GPS" : "Waiting for a clearer GPS signal…"
         }
         let mile = RunDistance.mileCrossed(from: previousMeters, to: journal.active?.meters ?? previousMeters)
         if mile != nil || elapsedSinceCheckpoint(at: tick) >= 15 {

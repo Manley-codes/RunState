@@ -67,8 +67,9 @@ struct RunCompletionView: View {
                 : AnyLayout(HStackLayout(alignment: .top, spacing: 32))
             layout {
                 metric("Active time", ActiveRunView.clockText(run.activeSeconds))
-                metric("Average pace", ActiveRunView.paceText(meters: run.meters, activeSeconds: run.activeSeconds) ?? "—")
+                metric("Average pace", ActiveRunView.averagePaceText(for: run, at: run.activeSeconds) ?? "—")
             }
+            if let note = run.partialDistanceNote { Text(note).font(.footnote).foregroundStyle(Self.muted) }
         }
     }
 

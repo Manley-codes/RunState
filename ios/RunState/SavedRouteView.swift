@@ -41,8 +41,10 @@ struct SavedRouteView: View {
         guard let first = route.points.first, size.width > 0, size.height > 0 else { return [] }
         var points: [CGPoint] = []
         var previousLongitude = first.longitude
-        var minX = CGFloat(first.longitude), maxX = minX
-        var minY = CGFloat(first.latitude), maxY = minY
+        var minX = CGFloat(first.longitude)
+        var maxX = minX
+        var minY = CGFloat(first.latitude)
+        var maxY = minY
         for point in route.points {
             let delta = (point.longitude - previousLongitude).remainder(dividingBy: 360)
             previousLongitude += delta
