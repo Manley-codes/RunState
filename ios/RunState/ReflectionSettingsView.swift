@@ -22,6 +22,9 @@ struct ReflectionSettingsView: View {
             } footer: {
                 Text("RunState’s writing service uses Anthropic. The summary includes timing, time zone, available distance and starting energy. Routes, shoes and Spotify history stay out of this request.")
             }
+            Section("Listening") {
+                Text("On a saved reflection, choose RunState voice to have ElevenLabs read the text. A new recording may use voice credits. The iPhone voice can read saved reflections offline.")
+            }
             Section("RunState access code") {
                 if !connection.hasAccessCode || replacing {
                     SecureField("Enter your private code", text: $code)

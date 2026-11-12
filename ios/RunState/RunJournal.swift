@@ -45,6 +45,7 @@ struct RecordedRun: Codable, Identifiable, Equatable {
     var splitProgress: RunSplitProgress?
     var startTimezoneID: String?
     var writtenReflection: RunWrittenReflection?
+    var spokenRequest: SpokenReflectionRequestRecord?
 
     var canDiscardAsShortRun: Bool {
         finishedAt == nil && pausedWithCompleteTime == true && (0..<30).contains(activeSeconds)

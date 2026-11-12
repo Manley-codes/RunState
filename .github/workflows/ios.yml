@@ -83,6 +83,7 @@ jobs:
           test -s "$app/Frameworks/SpotifyiOS.framework/PrivacyInfo.xcprivacy"
           test -s "$app/SpotifyNotices.txt"
           test -s "$app/Assets.car"
+          test ! -e "$app/reflection-test-tone.mp3"
           test "$(plutil -extract RunStateSpotifyClientID raw -o - "$app/Info.plist")" = "$PUBLIC_SPOTIFY_ID"
           test "$(plutil -extract CFBundleSupportedPlatforms.0 raw -o - "$app/Info.plist")" = iPhoneOS
           for photo in ../android/app/src/main/assets/opening/*.webp; do
@@ -105,7 +106,7 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
-      - name: Export the simulator screenshots and synthetic reflection request
+      - name: Export the simulator screenshots and synthetic reflection requests
         run: |
           xcrun xcresulttool export attachments --path "$RUNNER_TEMP/RunStateTests.xcresult" --output-path "$RUNNER_TEMP/ios-attachments"
           python3 - <<'PY'
@@ -119,16 +120,19 @@ jobs:
           target = temp / "run-screens"
           target.mkdir()
           manifest = json.loads((source / "manifest.json").read_text())
+          screens = ("RunState-PostRun", "RunState-HistoryDetail", "RunState-WrittenReflection", "RunState-NowPlaying", "RunState-SpokenReflection")
           for test in manifest:
               for item in test["attachments"]:
                   if "RunState-ReflectionRequest" in item.get("suggestedHumanReadableName", ""):
                       shutil.copyfile(source / item["exportedFileName"], temp / "iphone-test-request.json")
-                  for name in ("RunState-PostRun", "RunState-HistoryDetail", "RunState-WrittenReflection", "RunState-NowPlaying"):
+                  if "RunState-SpeechRequest" in item.get("suggestedHumanReadableName", ""):
+                      shutil.copyfile(source / item["exportedFileName"], temp / "iphone-test-speech.json")
+                  for name in screens:
                       if name in item.get("suggestedHumanReadableName", ""):
                           image = source / item["exportedFileName"]
                           if image.read_bytes()[:8] == bytes.fromhex("89504e470d0a1a0a"):
                               shutil.copyfile(image, target / (name + ".png"))
-          for name in ("RunState-PostRun", "RunState-HistoryDetail", "RunState-WrittenReflection", "RunState-NowPlaying"):
+          for name in screens:
               if not (target / (name + ".png")).is_file():
                   raise SystemExit(f"Simulator screenshot missing: {name}")
           PY
@@ -170,6 +174,12 @@ jobs:
           assert all(text.startswith("[FAKE]") for text in response["candidates"].values())
           print("The Java backend accepted the iPhone request and returned all four test answers.")
           PY
+
+      - name: Verify the iPhone voice request with a simulated Java speech provider
+        run: |
+          mvn -B --no-transfer-progress -f ../backend/pom.xml test \
+            '-Dtest=ReflectionHttpServerTest#reflectionSpeechPreservesExactTextAndReturnsPrivateMp3Bytes' \
+            "-Drunstate.test.iosSpeechBody=$RUNNER_TEMP/iphone-test-speech.json"
 
       - name: Save the simulator screenshots
         uses: actions/upload-artifact@v4

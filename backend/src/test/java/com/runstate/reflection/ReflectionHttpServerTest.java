@@ -546,6 +546,8 @@ class ReflectionHttpServerTest {
     @Test
     void reflectionSpeechPreservesExactTextAndReturnsPrivateMp3Bytes() throws Exception {
         String exact = "  Your exact reflection.\nA second line — unchanged.  ";
+        String iosBody = System.getProperty("runstate.test.iosSpeechBody");
+        String body = iosBody == null ? speechBody(exact) : Files.readString(Path.of(iosBody));
         byte[] audio = new byte[]{'I', 'D', '3', 0, (byte) 0xff, 1};
         AtomicReference<String> spoken = new AtomicReference<>();
         AtomicInteger reflections = new AtomicInteger();
@@ -557,7 +559,7 @@ class ReflectionHttpServerTest {
             return audio;
         }, null, new SpeechReplayStore(speechDirectory))) {
             server.start();
-            HttpResponse<byte[]> response = client.send(speechRequest(server, speechBody(exact)),
+            HttpResponse<byte[]> response = client.send(speechRequest(server, body),
                     HttpResponse.BodyHandlers.ofByteArray());
             HttpResponse<String> health = client.send(HttpRequest.newBuilder(URI.create("http://127.0.0.1:"
                     + server.address().getPort() + ReflectionHttpServer.HEALTH_PATH)).GET().build(),

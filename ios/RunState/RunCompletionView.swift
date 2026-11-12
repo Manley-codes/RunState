@@ -43,6 +43,7 @@ struct RunCompletionView: View {
         .toolbarBackground(.visible, for: .navigationBar)
         .navigationTitle("Run complete")
         .navigationBarTitleDisplayMode(.inline)
+        .onDisappear { tracker.stopSpokenReflection(for: runID) }
         .alert("Couldn’t save your check-in", isPresented: Binding(
             get: { saveError != nil }, set: { if !$0 { saveError = nil } }
         )) {

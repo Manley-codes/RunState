@@ -31,6 +31,9 @@ struct WrittenReflectionView: View {
                     .lineSpacing(3)
                     .textSelection(.enabled)
                     .accessibilityIdentifier("reflection.text")
+                if let voice = tracker.spokenReflectionState(for: run) {
+                    listenControls(voice)
+                }
             case .available:
                 Text("Requesting a reflection sends this run’s summary to RunState and may use one reflection from your allowance.")
                     .font(.subheadline).foregroundStyle(.secondary)
@@ -79,6 +82,50 @@ struct WrittenReflectionView: View {
                         }
                 }
             }
+        }
+    }
+
+    @ViewBuilder
+    private func listenControls(_ voice: SpokenReflectionState) -> some View {
+        if voice.playing != nil || voice.hosted == .loading {
+            Button {
+                tracker.stopSpokenReflection(for: run.id)
+            } label: {
+                Label(voice.hosted == .loading ? "Cancel voice request" : "Stop reading", systemImage: "stop.fill")
+            }
+            .buttonStyle(.bordered)
+            .accessibilityIdentifier("reflection.voice.stop")
+            if voice.hosted == .loading {
+                ProgressView("Preparing RunState voice…").font(.footnote)
+            }
+        } else {
+            if voice.hosted == .generate || voice.hosted == .replay {
+                Button {
+                    Task { await tracker.playSpokenReflection(for: run.id) }
+                } label: {
+                    Label(voice.hosted == .replay ? "Replay RunState voice" : "Listen with RunState voice",
+                          systemImage: "play.fill")
+                }
+                .buttonStyle(.bordered)
+                .accessibilityIdentifier("reflection.voice.hosted")
+                if voice.hosted == .generate {
+                    Text("Sends this text to RunState’s voice service. A new recording may use voice credits.")
+                        .font(.footnote).foregroundStyle(.secondary)
+                }
+            }
+            Button {
+                tracker.speakOnDevice(for: run.id)
+            } label: {
+                Label("Read with iPhone voice", systemImage: "speaker.wave.2")
+                    .frame(minHeight: 44)
+            }
+            .buttonStyle(.plain)
+            .disabled(tracker.running)
+            .accessibilityHint("Reads this reflection on your iPhone without using RunState voice credits.")
+            .accessibilityIdentifier("reflection.voice.device")
+        }
+        if let message = voice.message {
+            Text(verbatim: message).font(.footnote).foregroundStyle(.secondary)
         }
     }
 

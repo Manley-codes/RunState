@@ -83,6 +83,7 @@ struct KeychainReflectionVault: ReflectionCredentialVault {
 final class ReflectionConnection: ObservableObject {
     @Published private(set) var isEnabled = false
     @Published private(set) var hasAccessCode = false
+    private(set) var credentialID: UUID?
     @Published private(set) var revision = 0
     @Published private(set) var storageMessage: String?
     private let preferences: UserDefaults
@@ -98,16 +99,19 @@ final class ReflectionConnection: ObservableObject {
     func refresh() {
         let previousEnabled = isEnabled
         let previousSaved = hasAccessCode
+        let previousID = credentialID
         do {
-            hasAccessCode = try vault.read() != nil
+            credentialID = try vault.read()?.id
+            hasAccessCode = credentialID != nil
             isEnabled = hasAccessCode && preferences.bool(forKey: enabledKey)
             storageMessage = nil
         } catch {
+            credentialID = nil
             isEnabled = false
             hasAccessCode = false
             storageMessage = ConnectionError.storage.localizedDescription
         }
-        if previousEnabled != isEnabled || previousSaved != hasAccessCode { revision += 1 }
+        if previousEnabled != isEnabled || previousSaved != hasAccessCode || previousID != credentialID { revision += 1 }
     }
 
     func credentials() throws -> ReflectionCredentials {
@@ -119,9 +123,9 @@ final class ReflectionConnection: ObservableObject {
         let trimmed = code.trimmingCharacters(in: .whitespacesAndNewlines)
         guard ReflectionService.validAccessCode(trimmed) else { throw ConnectionError.invalid }
         let existing = try vault.read()
-        if existing?.code != trimmed {
-            try vault.write(ReflectionCredentials(code: trimmed))
-        }
+        let saved = ReflectionCredentials(code: trimmed)
+        if existing?.code != trimmed { try vault.write(saved) }
+        credentialID = saved.id
         hasAccessCode = true
         isEnabled = true
         storageMessage = nil
@@ -131,7 +135,8 @@ final class ReflectionConnection: ObservableObject {
 
     func setEnabled(_ enabled: Bool) throws {
         if enabled {
-            guard try vault.read() != nil else { throw ConnectionError.missing }
+            guard let saved = try vault.read() else { throw ConnectionError.missing }
+            credentialID = saved.id
             hasAccessCode = true
         }
         preferences.set(enabled, forKey: enabledKey)
@@ -142,7 +147,9 @@ final class ReflectionConnection: ObservableObject {
     func forget() throws {
         try setEnabled(false)
         try vault.remove()
+        credentialID = nil
         hasAccessCode = false
+        revision += 1
         storageMessage = nil
     }
 }

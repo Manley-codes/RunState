@@ -19,6 +19,10 @@ final class RunTracker: NSObject, ObservableObject, CLLocationManagerDelegate {
     let reflectionConnection: ReflectionConnection
     let reflectionService: any WrittenReflectionServing
     @Published var reflectionWork = WrittenReflectionWork()
+    let speechService: any ReflectionSpeechServing
+    private let suppliedPlayer: (any ReflectionVoicePlaying)?
+    @MainActor lazy var reflectionPlayer: any ReflectionVoicePlaying = suppliedPlayer ?? ReflectionVoicePlayer()
+    @Published var spokenWork = SpokenReflectionWork()
     private var connectionChanges: AnyCancellable?
 
     private static let mileAnnouncementsKey = "run.mileAnnouncementsEnabled"
@@ -55,7 +59,8 @@ final class RunTracker: NSObject, ObservableObject, CLLocationManagerDelegate {
                 try? JSONDecoder().decode(WrittenReflectionAnswers.self, from: Data($0.utf8))
             }
             self.init(preferences: preferences, journalURL: url, reflectionConnection: connection,
-                      reflectionService: SimulatorWrittenReflectionService(answers: fixture))
+                      reflectionService: SimulatorWrittenReflectionService(answers: fixture),
+                      speechService: SimulatorReflectionSpeechService(audio: environment["RUNSTATE_TEST_SPEECH_AUDIO"].flatMap { Data(base64Encoded: $0) }))
             return
         }
         #endif
@@ -63,16 +68,21 @@ final class RunTracker: NSObject, ObservableObject, CLLocationManagerDelegate {
     }
 
     init(preferences: UserDefaults, journalURL: URL, reflectionConnection: ReflectionConnection? = nil,
-         reflectionService: any WrittenReflectionServing = ReflectionService()) {
+         reflectionService: any WrittenReflectionServing = ReflectionService(),
+         speechService: any ReflectionSpeechServing = ReflectionSpeechService(),
+         reflectionPlayer: (any ReflectionVoicePlaying)? = nil) {
         self.preferences = preferences
         self.journalURL = journalURL
         self.reflectionConnection = reflectionConnection ?? ReflectionConnection(preferences: preferences)
         self.reflectionService = reflectionService
+        self.speechService = speechService
+        self.suppliedPlayer = reflectionPlayer
         mileAnnouncementsEnabled = preferences.object(forKey: Self.mileAnnouncementsKey) as? Bool ?? true
         saveRoutes = preferences.bool(forKey: Self.saveRoutesKey)
         super.init()
-        connectionChanges = self.reflectionConnection.$revision.dropFirst().sink { [weak self] _ in
+        connectionChanges = self.reflectionConnection.$revision.dropFirst().sink { [weak self] revision in
             self?.cancelWrittenReflectionWork()
+            Task { @MainActor [weak self] in self?.spokenConnectionChanged(to: revision) }
         }
         refreshLocationAuthorization()
         do {
@@ -137,9 +147,19 @@ final class RunTracker: NSObject, ObservableObject, CLLocationManagerDelegate {
         }
     }
 
-    func deleteSavedRun(_ id: UUID) throws {
+    @MainActor func deleteSavedRun(_ id: UUID) throws {
         try saveJournalChange { try $0.deleteSavedRun(id) }
         cancelWrittenReflectionWork(for: id)
+        removeSpokenReflection(for: id)
+    }
+
+    func storeSpokenRequest(_ record: SpokenReflectionRequestRecord?, for id: UUID,
+                            answer: SavedWrittenReflection) throws {
+        try saveJournalChange { next in
+            guard let index = next.history.firstIndex(where: { $0.id == id && $0.finishedAt != nil }),
+                  next.history[index].writtenReflection?.saved == answer else { throw SavedRunError.notSaved }
+            next.history[index].spokenRequest = record
+        }
     }
 
     func storeWrittenReflection(_ value: RunWrittenReflection, for id: UUID, replacing expected: PendingWrittenReflection?) throws {
@@ -174,7 +194,7 @@ final class RunTracker: NSObject, ObservableObject, CLLocationManagerDelegate {
         return result
     }
 
-    func startOrResume(preRunEnergy: String? = nil) {
+    @MainActor func startOrResume(preRunEnergy: String? = nil) {
         guard !running, hasLocationPermission, canWrite else { return }
         let now = Date()
         errorMessage = nil
@@ -186,6 +206,7 @@ final class RunTracker: NSObject, ObservableObject, CLLocationManagerDelegate {
         // A crash after resuming must never leave an older pause eligible for discard.
         next.active?.pausedWithCompleteTime = false
         guard store(next) else { return }
+        stopSpokenReflection()
         journal = next
         segmentHasCompleteTime = completeTime
         segmentStartActiveSeconds = journal.active?.activeSeconds ?? 0

@@ -3,6 +3,9 @@ import Foundation
 struct SavedWrittenReflection: Codable, Equatable {
     let text: String
     let isTestData: Bool
+    // An identifier from the local Keychain record, never an access code or provider key.
+    // Older saved answers have no known credential binding.
+    var credentialID: UUID? = nil
 }
 
 struct PendingWrittenReflection: Codable, Equatable {
@@ -158,7 +161,9 @@ extension RunTracker {
         do {
             let answers = try await reflectionService.generate(pending.request, accessCode: credentials.code, replayOnly: replayOnly)
             guard ownsWrittenResponse(for: id, token: token, revision: revision) else { return }
-            let answer = SavedWrittenReflection(text: answers.text(for: pending.selectedEnergy), isTestData: answers.isTestData)
+            let answer = SavedWrittenReflection(text: answers.text(for: pending.selectedEnergy),
+                                                isTestData: answers.isTestData,
+                                                credentialID: answers.isTestData ? nil : pending.credentialID)
             saveWrittenAnswer(answer, for: id, pending: pending)
         } catch {
             guard ownsWrittenResponse(for: id, token: token, revision: revision) else { return }

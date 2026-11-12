@@ -109,6 +109,7 @@ private struct SavedRunDetail: View {
         }
         .navigationTitle("Run details")
         .navigationBarTitleDisplayMode(.inline)
+        .onDisappear { tracker.stopSpokenReflection(for: runID) }
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
                 Button {

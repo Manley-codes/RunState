@@ -1,6 +1,6 @@
 import Foundation
 
-/// The only run fields that can leave this field build. A request is created from a
+/// The only run facts shared with the reflection writer. A request is created from a
 /// saved activity once and persisted before its first send so all retries use the same facts.
 struct WrittenReflectionRequest: Codable, Equatable {
     struct Metrics: Codable, Equatable {
@@ -129,10 +129,10 @@ final class ReflectionService: WrittenReflectionServing {
     typealias Transport = (URLRequest) async throws -> (Data, HTTPURLResponse)
 
     private let transport: Transport
-    private static let origin = URL(string: "https://runstate-reflections.onrender.com")!
-    fileprivate static let responseLimit = 64 * 1_024
+    static let origin = URL(string: "https://runstate-reflections.onrender.com")!
+    static let responseLimit = 64 * 1_024
 
-    init() { transport = Self.send }
+    init() { transport = { try await Self.send($0, limit: Self.responseLimit) } }
     init(transport: @escaping Transport) { self.transport = transport }
 
     static func validAccessCode(_ value: String) -> Bool {
@@ -263,7 +263,7 @@ final class ReflectionService: WrittenReflectionServing {
         return (data, response)
     }
 
-    private static func send(_ request: URLRequest) async throws -> (Data, HTTPURLResponse) {
+    static func send(_ request: URLRequest, limit: Int) async throws -> (Data, HTTPURLResponse) {
         let config = URLSessionConfiguration.ephemeral
         config.urlCache = nil
         config.httpShouldSetCookies = false
@@ -278,10 +278,11 @@ final class ReflectionService: WrittenReflectionServing {
         guard http.statusCode == 200 || (http.statusCode == 403 && http.mimeType == "application/json") else {
             return (Data(), http)
         }
-        guard http.expectedContentLength <= responseLimit else { throw URLError(.dataLengthExceedsMaximum) }
+        guard http.expectedContentLength <= Int64(limit) else { throw URLError(.dataLengthExceedsMaximum) }
         var data = Data()
+        if http.expectedContentLength > 0 { data.reserveCapacity(Int(http.expectedContentLength)) }
         for try await byte in bytes {
-            guard data.count < responseLimit else { throw URLError(.dataLengthExceedsMaximum) }
+            guard data.count < limit else { throw URLError(.dataLengthExceedsMaximum) }
             data.append(byte)
         }
         return (data, http)

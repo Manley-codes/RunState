@@ -109,6 +109,10 @@ final class RunCompletionUITests: XCTestCase {
         XCTAssertFalse(app.buttons["reflection.request"].exists)
         if !reflection.isHittable { app.swipeUp() }
         attachScreenshot("RunState-WrittenReflection", in: app)
+        let deviceVoice = app.buttons["reflection.voice.device"]
+        if !deviceVoice.isHittable { app.swipeUp() }
+        XCTAssertTrue(deviceVoice.isHittable)
+        XCTAssertFalse(app.buttons["reflection.voice.hosted"].exists)
 
         let edit = app.buttons["history.checkIn"]
         if !edit.isHittable { app.swipeDown() }
@@ -119,6 +123,7 @@ final class RunCompletionUITests: XCTestCase {
         XCTAssertTrue(spent.isSelected)
         if !reflection.isHittable { app.swipeUp() }
         XCTAssertEqual(reflection.label, passage)
+        XCTAssertTrue(deviceVoice.exists)
 
         app.terminate()
         app.launch()
@@ -131,6 +136,62 @@ final class RunCompletionUITests: XCTestCase {
         XCTAssertFalse(app.buttons["reflection.request"].exists)
         #else
         throw XCTSkip("This test uses an isolated simulator journal containing a saved sample reflection.")
+        #endif
+    }
+
+    @MainActor
+    func testListenToSavedReflectionAndReplayFromHistory() throws {
+        #if targetEnvironment(simulator)
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments = ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
+        app.launchEnvironment["RUNSTATE_TEST_JOURNAL"] = UUID().uuidString
+        // A synthetic legacy answer exercises the ordinary saved-run screen.
+        // All hosted requests from this test journal go to an isolated simulator service.
+        let passage = "You finished two steady miles and found your rhythm on the way back."
+        app.launchEnvironment["RUNSTATE_TEST_SEED"] = """
+            {"history":[{"id":"\(runID)","startedAt":816202800,"finishedAt":816203994,
+             "meters":3218.688,"activeSeconds":1194,"pausedWithCompleteTime":true,
+             "writtenReflection":{"saved":{"text":"\(passage)","isTestData":false}}}]}
+            """
+        let tone = try XCTUnwrap(Bundle(for: Self.self).url(forResource: "reflection-test-tone", withExtension: "mp3"))
+        app.launchEnvironment["RUNSTATE_TEST_SPEECH_AUDIO"] = try Data(contentsOf: tone).base64EncodedString()
+        app.launch()
+        defer { app.terminate() }
+
+        let settings = app.buttons["startSettings"]
+        XCTAssertTrue(settings.waitForExistence(timeout: 30))
+        settings.tap()
+        let connection = app.buttons["Written reflections"]
+        if !connection.isHittable { app.swipeUp() }
+        connection.tap()
+        let field = app.secureTextFields["reflections.accessCode"]
+        if !field.isHittable { app.swipeUp() }
+        field.tap()
+        field.typeText(String(repeating: "s", count: 45))
+        let save = app.buttons["Save code and enable"]
+        if !save.isHittable { app.swipeUp() }
+        save.tap()
+        XCTAssertTrue(app.switches.matching(identifier: "reflections.enabled").firstMatch.waitForExistence(timeout: 10))
+        app.navigationBars["Written reflections"].buttons.element(boundBy: 0).tap()
+        app.navigationBars["Run Settings"].buttons["Done"].tap()
+        app.buttons["startHistory"].tap()
+        app.buttons["history.run." + runID].tap()
+
+        let listen = app.buttons["reflection.voice.hosted"]
+        XCTAssertTrue(listen.waitForExistence(timeout: 10))
+        if !listen.isHittable { app.swipeUp() }
+        XCTAssertEqual(listen.label, "Listen with RunState voice")
+        attachScreenshot("RunState-SpokenReflection", in: app)
+        listen.tap()
+        let replay = app.buttons.matching(identifier: "reflection.voice.hosted")
+            .matching(NSPredicate(format: "label == %@", "Replay RunState voice")).firstMatch
+        XCTAssertTrue(replay.waitForExistence(timeout: 10))
+        replay.tap()
+        XCTAssertTrue(replay.waitForExistence(timeout: 10))
+        XCTAssertEqual(app.staticTexts["reflection.text"].label, passage)
+        #else
+        throw XCTSkip("Personal phone audio is tested separately.")
         #endif
     }
 

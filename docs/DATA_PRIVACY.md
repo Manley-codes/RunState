@@ -1,6 +1,6 @@
 # Data & Privacy
 
-## iPhone personal field-test build 7
+## iPhone personal field-test build 8
 
 RunState keeps run summaries, mile splits when GPS coverage allows, optional Energy and
 Effort answers, and shoe assignments in the app’s local journal. The journal is excluded
@@ -15,6 +15,14 @@ starting Energy. For an older run the runner may confirm the starting zone befor
 The service can use Anthropic to write alternatives for finishing Energy. The iPhone selects
 the corresponding answer and stores its text locally. The request excludes route points,
 shoes, Effort, finishing Energy and music history.
+
+Selecting **Listen with RunState voice** sends the saved reflection text and run ID to
+RunState over the authenticated connection. ElevenLabs receives the exact selected text
+when a new recording is needed. The iPhone holds the most recent recording in memory for
+replay and keeps the status of a voice request with the run to prevent accidental repeats.
+Closing the app clears that recording. The server’s replay and expiry behavior depends
+on its deployed version and storage. **Read with iPhone voice** reads the same saved text
+on the device and uses no RunState voice credits. Opening a run does not request audio.
 
 The Spotify shortcut opens the Spotify app. The optional Now Playing connection is separate.
 Connecting from Run Settings asks the Spotify app for authorization. While RunState is open,

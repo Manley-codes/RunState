@@ -14,12 +14,15 @@ final class RunWrittenReflectionTests: XCTestCase {
         }
         var calls: [Call] = []
         private var failures: [ReflectionServiceError]
+        private let answers: WrittenReflectionAnswers
         private let started: XCTestExpectation?
         private var continuation: CheckedContinuation<Void, Never>?
 
-        init(failures: [ReflectionServiceError] = [], started: XCTestExpectation? = nil) {
+        init(failures: [ReflectionServiceError] = [], started: XCTestExpectation? = nil,
+             answers: WrittenReflectionAnswers = RunWrittenReflectionTests.answers) {
             self.failures = failures
             self.started = started
+            self.answers = answers
         }
         func generate(_ request: WrittenReflectionRequest, accessCode: String, replayOnly: Bool) async throws -> WrittenReflectionAnswers {
             calls.append(.init(request: request, replayOnly: replayOnly))
@@ -30,7 +33,7 @@ final class RunWrittenReflectionTests: XCTestCase {
                 }
             }
             if !failures.isEmpty { throw failures.removeFirst() }
-            return RunWrittenReflectionTests.answers
+            return answers
         }
         func release() {
             continuation?.resume()
@@ -105,6 +108,7 @@ final class RunWrittenReflectionTests: XCTestCase {
         try f.connection.setEnabled(false)
         let reopened = f.relaunch()
         XCTAssertEqual(reopened.writtenReflectionState(for: reopened.journal.history[0]), .saved(text: "Low ending.", isTestData: true))
+        XCTAssertNil(reopened.journal.history[0].writtenReflection?.saved?.credentialID)
         XCTAssertNil(reopened.journal.history[0].writtenReflection?.pending)
         await reopened.requestWrittenReflection(for: f.runID)
         let calls = await service.calls
@@ -112,6 +116,28 @@ final class RunWrittenReflectionTests: XCTestCase {
         let disk = try String(contentsOf: f.file, encoding: .utf8)
         XCTAssertFalse(disk.contains(f.originalCode))
         XCTAssertFalse(disk.contains("High ending."))
+    }
+
+    @MainActor
+    func testRealSavedAnswerKeepsOriginalCredentialIDWithoutStoringCodeOrInventingLegacyBinding() async throws {
+        let oldJSON = Data(#"{"text":"Older reflection","isTestData":false}"#.utf8)
+        let old = try JSONDecoder().decode(SavedWrittenReflection.self, from: oldJSON)
+        XCTAssertNil(old.credentialID)
+        let answers = WrittenReflectionAnswers(spent: "A", feelingGood: "B", poweredUp: "C",
+                                              noSelection: "  Original words.  ", isTestData: false)
+        let f = try Fixture(service: Service(answers: answers))
+        defer { f.cleanup() }
+        try f.connection.save(code: f.originalCode)
+        let originalID = try f.connection.credentials().id
+        await f.tracker.requestWrittenReflection(for: f.runID)
+        try f.connection.save(code: f.otherCode)
+        let saved = try XCTUnwrap(f.relaunch().journal.history[0].writtenReflection?.saved)
+        XCTAssertEqual(saved.text, "  Original words.  ")
+        XCTAssertEqual(saved.credentialID, originalID)
+        XCTAssertNotEqual(saved.credentialID, try f.connection.credentials().id)
+        let journal = try String(contentsOf: f.file, encoding: .utf8)
+        XCTAssertFalse(journal.contains(f.originalCode))
+        XCTAssertFalse(journal.contains(f.otherCode))
     }
 
     @MainActor

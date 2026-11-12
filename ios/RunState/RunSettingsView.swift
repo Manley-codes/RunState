@@ -60,6 +60,7 @@ struct RunSettingsView: View {
                             Section("Written reflections") {
                                 Text("With a private access code, you can choose to send a run summary to RunState for a written reflection. RunState uses Anthropic to generate the answers. Your access code stays in this iPhone’s Keychain and is sent only to authenticate with RunState.")
                                 Text("Your route points, shoe information and Spotify history are excluded. Deleting a run removes its saved reflection from this device. Turning off reflections stops new requests from this app.")
+                                Text("Choosing RunState voice sends the saved text and run ID to RunState. ElevenLabs receives the text to read aloud. The iPhone keeps the latest recording in memory for replay. Choosing the iPhone voice reads the text on this device.")
                             }
                             Section("Remove a saved run") {
                                 Text("In History, open the run and tap the trash button. After you confirm, its check-in, route and splits are removed and its distance comes off the shoe’s total.")
