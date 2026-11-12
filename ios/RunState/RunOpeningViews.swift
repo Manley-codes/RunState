@@ -101,7 +101,8 @@ struct RunOpeningView: View {
         }
         .contentShape(Rectangle()).onTapGesture(perform: finish)
         .accessibilityElement(children: .ignore).accessibilityLabel("Skip RunState opening")
-        .accessibilityAddTraits(.isButton).accessibilityAction(perform: finish)
+        .accessibilityAddTraits(.isButton)
+        .accessibilityAction { finish() }
         .accessibilityIdentifier("runOpening")
         .task {
             if !reduceMotion {
