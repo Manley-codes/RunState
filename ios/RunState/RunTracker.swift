@@ -11,7 +11,7 @@ final class RunTracker: NSObject, ObservableObject, CLLocationManagerDelegate {
     private(set) var canWrite = true
 
     private let gps = CLLocationManager()
-    private let voice = MileVoice()
+    let voice = RunVoice()
     private let journalURL = URL.applicationSupportDirectory.appending(path: "FieldTest/runs.json")
     private var distance = RunDistance()
     private let clock = ContinuousClock()
@@ -38,13 +38,13 @@ final class RunTracker: NSObject, ObservableObject, CLLocationManagerDelegate {
     var hasLocationPermission: Bool { authorization == .authorizedAlways || authorization == .authorizedWhenInUse }
     func requestPermission() { gps.requestWhenInUseAuthorization() }
 
-    func startOrResume() {
+    func startOrResume(preRunEnergy: String? = nil) {
         guard !running, hasLocationPermission, canWrite else { return }
         let now = Date()
         errorMessage = nil
         if journal.active == nil {
             var next = journal
-            next.active = RecordedRun(id: UUID(), startedAt: now)
+            next.active = RecordedRun(id: UUID(), startedAt: now, preRunEnergy: preRunEnergy)
             guard store(next) else { return }
             journal = next
         }
@@ -58,6 +58,7 @@ final class RunTracker: NSObject, ObservableObject, CLLocationManagerDelegate {
 
     func pause() {
         guard running else { return }
+        voice.stopCountdownCue()
         checkpoint(at: clock.now)
         timerAnchor = nil
         running = false

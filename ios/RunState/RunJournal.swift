@@ -7,6 +7,7 @@ struct RecordedRun: Codable, Identifiable, Equatable {
     var meters = 0.0
     var activeSeconds: TimeInterval = 0
     var finishedAt: Date?
+    var preRunEnergy: String?
 }
 
 struct RunJournal: Codable, Equatable {

@@ -8,69 +8,111 @@ struct RunStateApp: App {
     var body: some Scene { WindowGroup { RunScreen(tracker: tracker) } }
 }
 
+@MainActor
 private struct RunScreen: View {
     @ObservedObject var tracker: RunTracker
+    @StateObject private var countdown: RunCountIn
     @Environment(\.openURL) private var openURL
-    private let accent = Color(red: 0.8, green: 0.94, blue: 0.34)
+    @Environment(\.scenePhase) private var scenePhase
+    @State private var opening: Bool
+    @State private var showHistory = false
+    @State private var energy: String?
+    @State private var startMessage: String?
+
+    init(tracker: RunTracker) {
+        self.tracker = tracker
+        _opening = State(initialValue: tracker.journal.active == nil && tracker.canWrite)
+        _countdown = StateObject(wrappedValue: RunCountIn(speak: tracker.voice.countdownCue, silence: tracker.voice.stop))
+    }
 
     var body: some View {
-        NavigationStack {
-            List {
-                if let active = tracker.journal.active {
-                    Section(tracker.running ? "Active run" : "Paused run") {
-                        LabeledContent("Distance", value: miles(active.meters))
-                        TimelineView(.periodic(from: .now, by: 1)) { _ in
-                            LabeledContent("Active time", value: duration(tracker.activeSeconds))
-                        }
-                        if tracker.running {
-                            Text(tracker.gpsStatus).font(.footnote).foregroundStyle(.secondary)
-                            Button("Pause run", action: tracker.pause)
-                        } else {
-                            locationControl("Resume run")
-                            Button("Finish and save", action: tracker.finish)
+        ZStack {
+            Color.black.ignoresSafeArea()
+            if tracker.journal.active != nil {
+                ActiveRunView(tracker: tracker, onResume: resume, onFinish: finish)
+            } else if opening {
+                RunOpeningView { opening = false }
+            } else if let seconds = countdown.seconds {
+                RunCountdownView(seconds: seconds, cadenceActive: countdown.cadenceActive,
+                                 onStartNow: countdown.startNow, onCancel: countdown.cancel)
+            } else {
+                RunStartView(primaryTitle: primaryTitle, locationStatus: startStatus, canStart: tracker.canWrite,
+                             selectedEnergy: energy, onSelectEnergy: { energy = $0 },
+                             onPrimary: prepareStart, onHistory: { showHistory = true })
+            }
+        }
+        .preferredColorScheme(.dark)
+        .onChange(of: scenePhase) { phase in
+            if phase != .active && countdown.seconds != nil {
+                countdown.cancel()
+                startMessage = "Countdown canceled. Start again when ready."
+            }
+        }
+        .onChange(of: tracker.authorization) { _ in
+            startMessage = nil
+            if !tracker.hasLocationPermission { countdown.cancel() }
+        }
+        .sheet(isPresented: $showHistory) {
+            NavigationStack {
+                List {
+                    if tracker.journal.history.isEmpty {
+                        Text("Your saved runs will appear here.").foregroundStyle(.secondary)
+                    }
+                    ForEach(tracker.journal.history.reversed()) { run in
+                        VStack(alignment: .leading, spacing: 5) {
+                            Text(run.startedAt.formatted(date: .abbreviated, time: .shortened))
+                            Text("\((run.meters / RunDistance.metersPerMile).formatted(.number.precision(.fractionLength(2)))) mi · \(ActiveRunView.clockText(run.activeSeconds))")
+                                .monospacedDigit()
+                            if let selection = run.preRunEnergy { Text("Starting energy · " + selection).font(.footnote) }
                         }
                     }
-                } else {
-                    Section { locationControl("Start run") }
                 }
-                if let message = tracker.errorMessage {
-                    Section { Text(message).accessibilityLabel("Status. " + message) }
-                }
-                if !tracker.journal.history.isEmpty {
-                    Section("Saved runs") {
-                        ForEach(tracker.journal.history.reversed()) { run in
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(run.startedAt.formatted(date: .abbreviated, time: .shortened))
-                                Text(miles(run.meters) + " · " + duration(run.activeSeconds))
-                                    .font(.subheadline.monospacedDigit()).foregroundStyle(.secondary)
-                            }
-                        }
-                    }
+                .navigationTitle("Saved runs")
+                .toolbar {
+                    ToolbarItem(placement: .confirmationAction) { Button("Done") { showHistory = false } }
                 }
             }
-            .navigationTitle("RunState")
-            .tint(accent)
             .preferredColorScheme(.dark)
         }
     }
 
-    @ViewBuilder private func locationControl(_ title: String) -> some View {
-        if tracker.hasLocationPermission {
-            Button(title, action: tracker.startOrResume).disabled(!tracker.canWrite)
-        } else if tracker.authorization == .notDetermined {
-            Button("Enable location", action: tracker.requestPermission)
-        } else {
-            Button("Open location settings") {
-                if let url = URL(string: UIApplication.openSettingsURLString) { openURL(url) }
+    private var primaryTitle: String {
+        if tracker.hasLocationPermission { return "Start run" }
+        return tracker.authorization == .notDetermined ? "Enable location" : "Open location settings"
+    }
+
+    private var startStatus: String {
+        if let message = tracker.errorMessage ?? startMessage { return message }
+        return tracker.hasLocationPermission ? "Location enabled" : "Location access needed"
+    }
+
+    private func requestLocation() {
+        if tracker.authorization == .notDetermined { tracker.requestPermission() }
+        else if let settings = URL(string: UIApplication.openSettingsURLString) { openURL(settings) }
+    }
+
+    private func prepareStart() {
+        guard tracker.canWrite, tracker.journal.active == nil else { return }
+        guard tracker.hasLocationPermission else { requestLocation(); return }
+        startMessage = nil
+        let selection = energy
+        countdown.begin {
+            guard UIApplication.shared.applicationState == .active, tracker.journal.active == nil else { return }
+            tracker.startOrResume(preRunEnergy: selection)
+            if tracker.running {
+                energy = nil
+                tracker.voice.announceStart()
             }
         }
     }
 
-    private func miles(_ meters: Double) -> String {
-        (meters / RunDistance.metersPerMile).formatted(.number.precision(.fractionLength(2))) + " mi"
+    private func resume() {
+        if tracker.hasLocationPermission { tracker.startOrResume() }
+        else { requestLocation() }
     }
 
-    private func duration(_ seconds: TimeInterval) -> String {
-        Duration.seconds(Int(seconds)).formatted(.time(pattern: .minuteSecond))
+    private func finish() {
+        tracker.finish()
+        if tracker.journal.active == nil { showHistory = true }
     }
 }

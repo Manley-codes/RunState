@@ -1,4 +1,5 @@
 import CoreLocation
+import UIKit
 import XCTest
 @testable import RunState
 
@@ -63,5 +64,77 @@ final class RunStateTests: XCTestCase {
         XCTAssertEqual(reopened.history.first?.id, id)
         XCTAssertEqual(reopened.history.first?.meters, 1_610)
         XCTAssertEqual(reopened.history.first?.activeSeconds, 540)
+    }
+
+    func testOriginalSavedRunsOpenAndOptionalStartingEnergySurvivesSaving() throws {
+        let old = """
+            {"history":[{"id":"8C588C75-AACA-49C2-B849-355D732E80BB","startedAt":0,"meters":1610,"activeSeconds":540}]}
+            """
+        var journal = try JSONDecoder().decode(RunJournal.self, from: Data(old.utf8))
+        XCTAssertNil(journal.history.first?.preRunEnergy)
+        journal.active = RecordedRun(id: UUID(), startedAt: epoch, preRunEnergy: "High")
+        journal.finish(at: epoch.addingTimeInterval(60))
+        let saved = try JSONDecoder().decode(RunJournal.self, from: JSONEncoder().encode(journal))
+        XCTAssertEqual(saved.history.map(\.preRunEnergy), [nil, "High"])
+    }
+
+    @MainActor
+    func testCanceledCountdownCannotStartTheNextRunAndStartNowStartsOnce() throws {
+        var introCallbacks: [() -> Void] = []
+        var starts = 0
+        let countdown = RunCountIn(speak: { _, completion in introCallbacks.append(completion) }, silence: {})
+        countdown.begin { starts += 1 }
+        countdown.begin { XCTFail("Duplicate countdown") }
+        let stale = try XCTUnwrap(introCallbacks.first)
+        XCTAssertEqual(countdown.seconds, 10)
+        countdown.cancel()
+        countdown.begin { starts += 1 }
+        stale()
+        XCTAssertFalse(countdown.cadenceActive)
+        XCTAssertEqual(introCallbacks.count, 2)
+        introCallbacks[1]()
+        XCTAssertTrue(countdown.cadenceActive)
+        countdown.startNow()
+        countdown.startNow()
+        introCallbacks[1]()
+        XCTAssertNil(countdown.seconds)
+        XCTAssertEqual(starts, 1)
+    }
+
+    @MainActor
+    func testTimedCountdownStartsOnceAndSpeaksOnlyTheLastThreeDigits() async {
+        let started = expectation(description: "Countdown finished")
+        var cues: [String] = []
+        let countdown = RunCountIn(speak: { text, finished in cues.append(text); finished() }, silence: {})
+        countdown.begin { started.fulfill() }
+        await fulfillment(of: [started], timeout: 20)
+        XCTAssertNil(countdown.seconds)
+        XCTAssertEqual(cues, ["Starting in ten.", "3", "2", "1"])
+    }
+
+    @MainActor
+    func testElapsedCountdownAndLiveRunMetrics() {
+        let beginning = ContinuousClock().now
+        XCTAssertEqual(RunCountIn.secondsLeft(since: beginning, now: beginning + .milliseconds(999)), 10)
+        XCTAssertEqual(RunCountIn.secondsLeft(since: beginning, now: beginning + .seconds(7)), 3)
+        XCTAssertEqual(RunCountIn.secondsLeft(since: beginning, now: beginning + .seconds(12)), 0)
+        XCTAssertNil(ActiveRunView.paceText(meters: 0, activeSeconds: 20))
+        XCTAssertEqual(ActiveRunView.paceText(meters: RunDistance.metersPerMile, activeSeconds: 540), "9:00 /mi")
+        XCTAssertEqual(ActiveRunView.clockText(3_901), "01:05:01")
+    }
+
+    @MainActor
+    func testAppBundleContainsThePhotographicOpeningAndInstrumentFonts() throws {
+        let bundle = Bundle(for: RunTracker.self)
+        let opening = try XCTUnwrap(bundle.urls(forResourcesWithExtension: "webp", subdirectory: "opening"))
+        XCTAssertEqual(opening.count, 33)
+        for url in opening { XCTAssertNotNil(UIImage(contentsOfFile: url.path), url.lastPathComponent) }
+        for (name, ext) in [("opening_first_frame", "webp"), ("start_map_reference", "jpg")] {
+            let picture = try XCTUnwrap(bundle.url(forResource: name, withExtension: ext))
+            XCTAssertNotNil(UIImage(contentsOfFile: picture.path))
+        }
+        for name in ["BarlowCondensed-Medium", "Anton-Regular"] {
+            XCTAssertNotNil(UIFont(name: name, size: 18), name)
+        }
     }
 }

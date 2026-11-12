@@ -11,5 +11,10 @@
     </array>
     <key>UILaunchScreen</key>
     <dict/>
+    <key>UIAppFonts</key>
+    <array>
+        <string>barlow_condensed_medium.ttf</string>
+        <string>anton_regular.ttf</string>
+    </array>
 </dict>
 </plist>
