@@ -78,6 +78,107 @@ final class RunStateTests: XCTestCase {
         XCTAssertEqual(saved.history.map(\.preRunEnergy), [nil, "High"])
     }
 
+    func testBuild3HistoryAndPausedRunStayUnassignedAfterAddingShoes() throws {
+        let saved = """
+            {"active":{"id":"77777777-7777-4777-8777-777777777777","startedAt":10,"meters":180,"activeSeconds":60,"preRunEnergy":"Low"},
+             "history":[{"id":"88888888-8888-4888-8888-888888888888","startedAt":0,"meters":1609.344,"activeSeconds":600,"finishedAt":700}]}
+            """
+        var journal = try JSONDecoder().decode(RunJournal.self, from: Data(saved.utf8))
+        XCTAssertTrue(journal.shoePairs.isEmpty)
+        try journal.addShoe(brand: "Nike", model: "Pegasus 42", nickname: nil)
+        let pair = try XCTUnwrap(journal.selectedShoe)
+        journal.beginRun(at: epoch, preRunEnergy: "High")
+        XCTAssertEqual(journal.active?.preRunEnergy, "Low")
+        XCTAssertNil(journal.active?.shoePairID)
+        journal.finish(at: epoch)
+        XCTAssertEqual(journal.history.count, 2)
+        XCTAssertTrue(journal.history.allSatisfy { $0.shoePairID == nil })
+        XCTAssertEqual(journal.miles(for: pair.id), 0)
+    }
+
+    func testPairCapturedAtStartCountsFinishedDistanceOnceAcrossReloads() throws {
+        var journal = RunJournal()
+        try journal.addShoe(brand: "Brooks", model: "Ghost 18", nickname: "First pair")
+        let first = try XCTUnwrap(journal.selectedShoe)
+        journal.beginRun(at: epoch, preRunEnergy: nil)
+        journal.active?.meters = 2 * RunDistance.metersPerMile
+        XCTAssertEqual(journal.miles(for: first.id), 0)
+
+        try journal.addShoe(brand: "Brooks", model: "Ghost 18", nickname: "Second pair")
+        let second = try XCTUnwrap(journal.selectedShoe)
+        XCTAssertNotEqual(first.id, second.id)
+        journal = try JSONDecoder().decode(RunJournal.self, from: JSONEncoder().encode(journal))
+        journal.beginRun(at: epoch, preRunEnergy: nil)
+        XCTAssertEqual(journal.active?.shoePairID, first.id)
+        journal.finish(at: epoch.addingTimeInterval(900))
+        journal.finish(at: epoch.addingTimeInterval(901))
+
+        try journal.selectShoe(nil)
+        journal.beginRun(at: epoch.addingTimeInterval(1_000), preRunEnergy: nil)
+        journal.active?.meters = RunDistance.metersPerMile
+        journal.finish(at: epoch.addingTimeInterval(1_500))
+        let reopened = try JSONDecoder().decode(RunJournal.self, from: JSONEncoder().encode(journal))
+        XCTAssertEqual(reopened.history.map(\.shoePairID), [first.id, nil])
+        XCTAssertEqual(reopened.miles(for: first.id), 2, accuracy: 0.0001)
+        XCTAssertEqual(reopened.miles(for: second.id), 0)
+    }
+
+    func testAddingTheSamePhysicalPairTwiceIsSafeToRetry() throws {
+        let id = UUID()
+        var journal = RunJournal()
+        try journal.addShoe(brand: "  Nike ", model: "Pegasus 42", nickname: " Race ", id: id)
+        try journal.addShoe(brand: "Nike", model: "Pegasus 42", nickname: "Race", id: id)
+        XCTAssertEqual(journal.shoePairs.count, 1)
+        XCTAssertEqual(journal.selectedShoe?.displayName, "Race")
+        XCTAssertThrowsError(try journal.addShoe(brand: "Nike", model: "Another model", id: id))
+        XCTAssertThrowsError(try journal.addShoe(brand: " ", model: "Unbranded"))
+        XCTAssertEqual(journal.shoePairs.count, 1)
+        XCTAssertEqual(journal.selectedShoe?.id, id)
+    }
+
+    func testArchivingPreservesMilesAndUndoHonorsLaterSelection() throws {
+        var journal = RunJournal()
+        try journal.addShoe(brand: "HOKA", model: "Clifton 11", nickname: nil)
+        let pair = try XCTUnwrap(journal.selectedShoe)
+        journal.beginRun(at: epoch, preRunEnergy: nil)
+        journal.active?.meters = RunDistance.metersPerMile
+        journal.finish(at: epoch.addingTimeInterval(600))
+
+        let archive = try journal.archiveShoe(pair.id)
+        XCTAssertNil(journal.selectedShoe)
+        XCTAssertEqual(journal.shoe(for: journal.history.first?.shoePairID)?.id, pair.id)
+        XCTAssertThrowsError(try journal.selectShoe(pair.id))
+        try journal.undoArchive(archive)
+        XCTAssertEqual(journal.selectedShoe?.id, pair.id)
+        let again = try journal.archiveShoe(pair.id)
+        try journal.selectShoe(nil) // An explicit choice after archiving must win over Undo.
+        try journal.undoArchive(again)
+        XCTAssertNil(journal.selectedShoe)
+        _ = try journal.archiveShoe(pair.id)
+        try journal.restoreShoe(pair.id)
+        XCTAssertEqual(journal.selectedShoe?.id, pair.id)
+        XCTAssertEqual(journal.miles(for: pair.id), 1, accuracy: 0.0001)
+    }
+
+    @MainActor
+    func testShoeSelectionWriteFailureLeavesPublishedJournalUntouched() throws {
+        let suite = "RunStateTests." + UUID().uuidString
+        let preferences = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { preferences.removePersistentDomain(forName: suite) }
+        let folder = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let url = folder.appending(path: "runs.json")
+        let tracker = RunTracker(preferences: preferences, journalURL: url)
+        try tracker.addShoe(brand: "Nike", model: "Pegasus 42", nickname: nil)
+        let saved = tracker.journal
+        XCTAssertEqual(try RunJournal.load(from: url), saved)
+        // Make the expected file path a directory to force a real atomic-write failure.
+        try FileManager.default.removeItem(at: url)
+        try FileManager.default.createDirectory(at: url, withIntermediateDirectories: false)
+        XCTAssertThrowsError(try tracker.selectShoe(nil))
+        XCTAssertEqual(tracker.journal, saved)
+    }
+
     @MainActor
     func testCanceledCountdownCannotStartTheNextRunAndStartNowStartsOnce() throws {
         var introCallbacks: [() -> Void] = []

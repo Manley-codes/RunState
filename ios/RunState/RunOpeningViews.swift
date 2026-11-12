@@ -191,6 +191,9 @@ struct RunStartView: View {
     let onOpenMap: () -> Void
     let onOpenSettings: () -> Void
     let onOpenSpotify: () -> Void
+    let selectedShoeName: String?
+    let shoeMileageText: String?
+    let onOpenShoes: () -> Void
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.dynamicTypeSize) private var typeSize
     @State private var entered = false
@@ -391,6 +394,34 @@ struct RunStartView: View {
         .accessibilityLabel(primaryTitle).accessibilityIdentifier("startPrimary")
     }
 
+    private var shoeButton: some View {
+        Button(action: onOpenShoes) {
+            VStack(spacing: 2) {
+                ShoeIllustration().frame(width: 64, height: 64).padding(.bottom, 5)
+                Text("SHOES").font(.caption.weight(.bold)).tracking(1)
+                    .foregroundColor(.white.opacity(0.8))
+                if let selectedShoeName {
+                    Text(selectedShoeName).font(.caption2.weight(.semibold))
+                        .foregroundColor(.white.opacity(0.9))
+                        .multilineTextAlignment(.center).lineLimit(typeSize.isAccessibilitySize ? nil : 2)
+                    if let shoeMileageText {
+                        Text(shoeMileageText).font(.caption2.weight(.medium))
+                            .foregroundColor(.white.opacity(0.75))
+                    }
+                } else {
+                    Text("ADD PAIR").font(.caption2.weight(.semibold)).tracking(1)
+                        .foregroundColor(.white.opacity(0.75))
+                }
+            }
+            .padding(.bottom, 6).contentShape(Rectangle())
+        }
+        .accessibilityLabel("Choose shoes")
+        .accessibilityValue(Text(selectedShoeName.map { name in
+            [name, shoeMileageText].compactMap { $0 }.joined(separator: ", ")
+        } ?? "No shoes selected"))
+        .accessibilityIdentifier("startShoes")
+    }
+
     private var spotifyButton: some View {
         Button(action: onOpenSpotify) {
             VStack(spacing: 2) {
@@ -414,10 +445,14 @@ struct RunStartView: View {
     private var footer: some View {
         Group {
             if typeSize.isAccessibilitySize {
-                VStack(spacing: 18) { startButton; spotifyButton }
+                VStack(spacing: 18) {
+                    startButton
+                    shoeButton
+                    spotifyButton
+                }
             } else {
                 HStack(alignment: .bottom, spacing: 0) {
-                    Spacer(minLength: 0).frame(width: 72)
+                    shoeButton.frame(width: 72)
                     startButton.frame(maxWidth: .infinity)
                     spotifyButton.frame(width: 72)
                 }
@@ -436,6 +471,103 @@ struct RunStartView: View {
                 .fill(LinearGradient(colors: [ink(0x2d3827), ink(0x1d261b)], startPoint: .leading, endPoint: .trailing))
             }.ignoresSafeArea(edges: .bottom)
         }
+    }
+}
+
+/// RunState's illustrated shoe, drawn in the same 100-unit coordinates as the Android artwork.
+struct ShoeIllustration: View {
+    var withBacking = true
+
+    var body: some View {
+        Canvas { original, size in
+            var context = original
+            context.scaleBy(x: size.width / 100, y: size.height / 100)
+            if withBacking { drawBacking(in: context) }
+            context.translateBy(x: 50, y: 54)
+            context.rotate(by: .degrees(-12))
+            context.translateBy(x: -50, y: -54)
+            drawShoe(in: context)
+        }
+        .accessibilityHidden(true)
+    }
+
+    private func point(_ x: CGFloat, _ y: CGFloat) -> CGPoint {
+        CGPoint(x: x, y: y)
+    }
+
+    private func drawBacking(in context: GraphicsContext) {
+        let outline = Path { path in
+            path.move(to: point(47, 4.5))
+            path.addCurve(to: point(94, 47), control1: point(72, 0), control2: point(97, 22))
+            path.addCurve(to: point(48, 94), control1: point(98, 75), control2: point(72, 96))
+            path.addCurve(to: point(5, 48), control1: point(20, 97), control2: point(2.5, 74))
+            path.addCurve(to: point(47, 4.5), control1: point(2, 22), control2: point(22, 7))
+            path.closeSubpath()
+        }
+        context.fill(outline, with: .linearGradient(Gradient(colors: [ink(0xb7ce72), ink(0x718a48)]),
+                                                     startPoint: point(15, 0), endPoint: point(85, 100)))
+        let inset = Path { path in
+            path.move(to: point(49, 15))
+            path.addCurve(to: point(85, 49), control1: point(70, 11), control2: point(86, 29))
+            path.addCurve(to: point(46, 84), control1: point(87, 69), control2: point(67, 86))
+            path.addCurve(to: point(15, 46), control1: point(24, 86), control2: point(13, 66))
+            path.addCurve(to: point(49, 15), control1: point(16, 27), control2: point(29, 17))
+            path.closeSubpath()
+        }
+        context.fill(inset, with: .color(ink(0xd7e2ac, opacity: 0.55)))
+    }
+
+    private func drawShoe(in context: GraphicsContext) {
+        let sole = Path { path in
+            path.move(to: point(13, 63))
+            path.addCurve(to: point(88, 63), control1: point(30, 63), control2: point(64, 69))
+            path.addCurve(to: point(72, 76), control1: point(91, 69), control2: point(84, 76))
+            path.addLine(to: point(21, 73))
+            path.addCurve(to: point(13, 63), control1: point(14, 72), control2: point(12, 68))
+            path.closeSubpath()
+        }
+        context.fill(sole, with: .color(ink(0xe9edd8)))
+        let upper = Path { path in
+            path.move(to: point(14, 63))
+            path.addLine(to: point(17, 39))
+            path.addCurve(to: point(31, 46), control1: point(22, 34), control2: point(24, 48))
+            path.addLine(to: point(40, 32))
+            path.addLine(to: point(46, 34))
+            path.addCurve(to: point(69, 55), control1: point(48, 43), control2: point(58, 53))
+            path.addCurve(to: point(88, 63), control1: point(81, 56), control2: point(87, 57))
+            path.addCurve(to: point(14, 63), control1: point(66, 69), control2: point(30, 63))
+            path.closeSubpath()
+        }
+        context.fill(upper, with: .color(ink(0xfafbf1)))
+        let panel = Path { path in
+            path.move(to: point(22, 48))
+            path.addLine(to: point(33, 51))
+            path.addLine(to: point(45, 41))
+            path.addLine(to: point(58, 55))
+            path.addCurve(to: point(23, 60), control1: point(47, 56), control2: point(39, 62))
+            path.closeSubpath()
+        }
+        context.fill(panel, with: .color(ink(0x95a67a)))
+        func line(from: CGPoint, to: CGPoint, color: Color, width: CGFloat) {
+            let path = Path { path in
+                path.move(to: from)
+                path.addLine(to: to)
+            }
+            context.stroke(path, with: .color(color), style: StrokeStyle(lineWidth: width, lineCap: .round))
+        }
+        line(from: point(17, 64), to: point(56, 67), color: ink(0xb7d948), width: 4.5)
+        line(from: point(19, 72), to: point(72, 75), color: ink(0x53673b), width: 2.6)
+        for lace in 0..<3 {
+            let offset = CGFloat(lace) * 4.5
+            line(from: point(39 + offset, 40 + offset), to: point(32 + offset, 43.5 + offset),
+                 color: ink(0x59684b), width: 1.7)
+        }
+        let toeStitch = Path { path in
+            path.move(to: point(62, 58))
+            path.addCurve(to: point(83, 62), control1: point(72, 59), control2: point(79, 59))
+        }
+        context.stroke(toeStitch, with: .color(ink(0xb6c1a5)), style: StrokeStyle(lineWidth: 1.2, lineCap: .round))
+        line(from: point(18, 39), to: point(17, 32), color: ink(0x53673b), width: 2.7)
     }
 }
 

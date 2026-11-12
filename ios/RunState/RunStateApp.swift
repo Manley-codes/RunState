@@ -8,6 +8,12 @@ struct RunStateApp: App {
     var body: some Scene { WindowGroup { RunScreen(tracker: tracker) } }
 }
 
+extension RunJournal {
+    func shoeMileageText(for id: UUID) -> String {
+        miles(for: id).formatted(.number.precision(.fractionLength(1))) + " MI"
+    }
+}
+
 @MainActor
 private struct RunScreen: View {
     @ObservedObject var tracker: RunTracker
@@ -16,7 +22,7 @@ private struct RunScreen: View {
     @Environment(\.scenePhase) private var scenePhase
     @State private var opening: Bool
     private enum RunSheet: String, Identifiable {
-        case history, map, settings
+        case history, map, settings, shoes
         var id: Self { self }
     }
 
@@ -42,11 +48,15 @@ private struct RunScreen: View {
                 RunCountdownView(seconds: seconds, cadenceActive: countdown.cadenceActive,
                                  onStartNow: countdown.startNow, onCancel: countdown.cancel)
             } else {
+                let shoe = tracker.journal.selectedShoe
                 RunStartView(primaryTitle: primaryTitle, locationStatus: startStatus, canStart: tracker.canWrite,
                              selectedEnergy: energy, onSelectEnergy: { energy = $0 },
                              onPrimary: prepareStart, onHistory: { sheet = .history },
                              onOpenMap: { sheet = .map }, onOpenSettings: { sheet = .settings },
-                             onOpenSpotify: openSpotify)
+                             onOpenSpotify: openSpotify,
+                             selectedShoeName: shoe?.displayName,
+                             shoeMileageText: shoe.map { tracker.journal.shoeMileageText(for: $0.id) },
+                             onOpenShoes: { sheet = .shoes })
             }
         }
         .preferredColorScheme(.dark)
@@ -65,6 +75,7 @@ private struct RunScreen: View {
             case .history: history
             case .map: RunLiveMapView(tracker: tracker)
             case .settings: RunSettingsView(tracker: tracker)
+            case .shoes: RunShoesView(tracker: tracker)
             }
         }
         .alert("Spotify couldn’t open", isPresented: $spotifyUnavailable) {
@@ -89,6 +100,9 @@ private struct RunScreen: View {
                         Text("\((run.meters / RunDistance.metersPerMile).formatted(.number.precision(.fractionLength(2)))) mi · \(ActiveRunView.clockText(run.activeSeconds))")
                             .monospacedDigit()
                         if let selection = run.preRunEnergy { Text("Starting energy · " + selection).font(.footnote) }
+                        if let shoe = tracker.journal.shoe(for: run.shoePairID) {
+                            Text("Shoes · " + shoe.fullName).font(.footnote)
+                        }
                     }
                 }
             }

@@ -53,13 +53,46 @@ final class RunTracker: NSObject, ObservableObject, CLLocationManagerDelegate {
         if gps.authorizationStatus == .notDetermined { gps.requestWhenInUseAuthorization() }
     }
 
+    func addShoe(brand: String, model: String, nickname: String? = nil, id: UUID = UUID()) throws {
+        try saveShoeChange { try $0.addShoe(brand: brand, model: model, nickname: nickname, id: id) }
+    }
+
+    func selectShoe(_ id: UUID?) throws {
+        try saveShoeChange { try $0.selectShoe(id) }
+    }
+
+    func archiveShoe(_ id: UUID) throws -> ShoeArchiveUndo {
+        try saveShoeChange { try $0.archiveShoe(id) }
+    }
+
+    func undoArchive(_ receipt: ShoeArchiveUndo) throws {
+        try saveShoeChange { try $0.undoArchive(receipt) }
+    }
+
+    func restoreShoe(_ id: UUID) throws {
+        try saveShoeChange { try $0.restoreShoe(id) }
+    }
+
+    private func saveShoeChange<Result>(_ change: (inout RunJournal) throws -> Result) throws -> Result {
+        guard canWrite else { throw ShoeChangeError("RunState could not open your saved runs.") }
+        var next = journal
+        let result = try change(&next)
+        do {
+            try next.save(to: journalURL)
+        } catch {
+            throw ShoeChangeError("Couldn’t save your shoe change. Check the iPhone’s storage and try again.")
+        }
+        journal = next
+        return result
+    }
+
     func startOrResume(preRunEnergy: String? = nil) {
         guard !running, hasLocationPermission, canWrite else { return }
         let now = Date()
         errorMessage = nil
         if journal.active == nil {
             var next = journal
-            next.active = RecordedRun(id: UUID(), startedAt: now, preRunEnergy: preRunEnergy)
+            next.beginRun(at: now, preRunEnergy: preRunEnergy)
             guard store(next) else { return }
             journal = next
         }

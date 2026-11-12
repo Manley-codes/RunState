@@ -2,6 +2,45 @@ import XCTest
 
 final class StartControlsUITests: XCTestCase {
     @MainActor
+    func testChoosingShoesIsRememberedAndCanBeClearedBeforeARun() throws {
+        #if targetEnvironment(simulator)
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments = ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
+        app.launch()
+
+        let shoes = app.buttons["startShoes"]
+        XCTAssertTrue(shoes.waitForExistence(timeout: 30))
+        shoes.tap()
+        let catalogPair = app.buttons["shoeCatalog_ASICS_Novablast6"]
+        if catalogPair.waitForExistence(timeout: 3) {
+            catalogPair.tap()
+        } else {
+            // A reused simulator may already have added this pair on an earlier test run.
+            let savedPair = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@ AND label CONTAINS[c] %@",
+                                                              "shoeSelect_", "Novablast 6")).firstMatch
+            XCTAssertTrue(savedPair.waitForExistence(timeout: 5))
+            savedPair.tap()
+        }
+        let chosen = NSPredicate(format: "value CONTAINS[c] %@", "Novablast 6")
+        let picked = XCTNSPredicateExpectation(predicate: chosen, object: shoes)
+        XCTAssertEqual(XCTWaiter.wait(for: [picked], timeout: 10), .completed)
+        app.terminate()
+        app.launch()
+        XCTAssertTrue(shoes.waitForExistence(timeout: 30))
+        XCTAssertTrue(chosen.evaluate(with: shoes))
+        shoes.tap()
+        let clear = app.buttons["shoeNoTracking"]
+        XCTAssertTrue(clear.waitForExistence(timeout: 5))
+        clear.tap()
+        let cleared = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == %@", "No shoes selected"), object: shoes)
+        XCTAssertEqual(XCTWaiter.wait(for: [cleared], timeout: 10), .completed)
+        #else
+        throw XCTSkip("This test adds a shoe pair to the simulator’s local test library.")
+        #endif
+    }
+
+    @MainActor
     func testMapSettingsAndSpotifyReturnToStartWithoutRecordingARun() throws {
         #if targetEnvironment(simulator)
         continueAfterFailure = false

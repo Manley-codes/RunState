@@ -8,16 +8,135 @@ struct RecordedRun: Codable, Identifiable, Equatable {
     var activeSeconds: TimeInterval = 0
     var finishedAt: Date?
     var preRunEnergy: String?
+    var shoePairID: UUID?
+}
+
+struct ShoePair: Codable, Identifiable, Equatable {
+    let id: UUID
+    let brand: String
+    let model: String
+    let nickname: String?
+    fileprivate var archiveID: UUID?
+
+    var isArchived: Bool { archiveID != nil }
+    var displayName: String { nickname ?? model }
+    var fullName: String { [brand, model, nickname].compactMap { $0 }.joined(separator: " · ") }
+}
+
+struct ShoeArchiveUndo: Equatable {
+    fileprivate let pairID: UUID
+    fileprivate let archiveID: UUID
+    fileprivate let clearedSelectionRevision: UUID?
+}
+
+struct ShoeChangeError: LocalizedError {
+    let errorDescription: String?
+    init(_ message: String) { errorDescription = message }
 }
 
 struct RunJournal: Codable, Equatable {
     var active: RecordedRun?
     var history: [RecordedRun] = []
+    private(set) var shoePairs: [ShoePair] = []
+    private var selectedShoeID: UUID?
+    private var selectionRevision: UUID?
+
+    init() {}
+
+    init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        active = try values.decodeIfPresent(RecordedRun.self, forKey: .active)
+        history = try values.decode([RecordedRun].self, forKey: .history)
+        // Earlier builds stored only active and history. Never infer a shoe for those runs.
+        if values.contains(.shoePairs) {
+            shoePairs = try values.decode([ShoePair].self, forKey: .shoePairs)
+        }
+        selectedShoeID = try values.decodeIfPresent(UUID.self, forKey: .selectedShoeID)
+        selectionRevision = try values.decodeIfPresent(UUID.self, forKey: .selectionRevision)
+    }
+
+    func shoe(for id: UUID?) -> ShoePair? {
+        guard let id else { return nil }
+        return shoePairs.first { $0.id == id }
+    }
+
+    var selectedShoe: ShoePair? {
+        guard let pair = shoe(for: selectedShoeID), !pair.isArchived else { return nil }
+        return pair
+    }
+
+    func miles(for id: UUID) -> Double {
+        // The iPhone journal records measured GPS distance. Active runs never enter this sum.
+        let meters = history.reduce(0.0) { total, run in
+            guard run.shoePairID == id, run.finishedAt != nil, run.meters.isFinite, run.meters > 0 else { return total }
+            return total + run.meters
+        }
+        return meters / RunDistance.metersPerMile
+    }
+
+    mutating func addShoe(brand: String, model: String, nickname: String? = nil, id: UUID = UUID()) throws {
+        let brand = brand.trimmingCharacters(in: .whitespacesAndNewlines)
+        let model = model.trimmingCharacters(in: .whitespacesAndNewlines)
+        let name = (nickname ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !brand.isEmpty, brand.count <= 60 else { throw ShoeChangeError("Enter a brand of 1–60 characters.") }
+        guard !model.isEmpty, model.count <= 80 else { throw ShoeChangeError("Enter a model of 1–80 characters.") }
+        guard name.count <= 40 else { throw ShoeChangeError("Keep the pair nickname to 40 characters or fewer.") }
+        let pair = ShoePair(id: id, brand: brand, model: model, nickname: name.isEmpty ? nil : name)
+        if let existing = shoe(for: id) {
+            guard existing == pair else { throw ShoeChangeError("This pair’s ID is already in use. Reopen Add Shoes to add a pair.") }
+        } else {
+            shoePairs.insert(pair, at: 0)
+        }
+        rememberSelection(id)
+    }
+
+    mutating func selectShoe(_ id: UUID?) throws {
+        if let id, shoe(for: id)?.isArchived != false { throw ShoeChangeError("Select an active saved pair.") }
+        rememberSelection(id)
+    }
+
+    mutating func archiveShoe(_ id: UUID) throws -> ShoeArchiveUndo {
+        guard let index = shoePairs.firstIndex(where: { $0.id == id }), !shoePairs[index].isArchived
+        else { throw ShoeChangeError("This pair is no longer in Your Shoes.") }
+        let archiveID = UUID()
+        let wasSelected = selectedShoeID == id
+        shoePairs[index].archiveID = archiveID
+        if wasSelected { rememberSelection(nil) }
+        return ShoeArchiveUndo(pairID: id, archiveID: archiveID, clearedSelectionRevision: wasSelected ? selectionRevision : nil)
+    }
+
+    mutating func undoArchive(_ receipt: ShoeArchiveUndo) throws {
+        guard let index = shoePairs.firstIndex(where: { $0.id == receipt.pairID }),
+              shoePairs[index].archiveID == receipt.archiveID
+        else { throw ShoeChangeError("This removal has already changed. Check the saved pairs.") }
+        shoePairs[index].archiveID = nil
+        if let revision = receipt.clearedSelectionRevision, selectionRevision == revision {
+            rememberSelection(receipt.pairID)
+        }
+    }
+
+    mutating func restoreShoe(_ id: UUID) throws {
+        guard let index = shoePairs.firstIndex(where: { $0.id == id }), shoePairs[index].isArchived
+        else { throw ShoeChangeError("This pair is no longer archived.") }
+        shoePairs[index].archiveID = nil
+        rememberSelection(id)
+    }
+
+    private mutating func rememberSelection(_ id: UUID?) {
+        selectedShoeID = id
+        // Even an explicit choice to run without shoes supersedes an earlier archive's Undo.
+        selectionRevision = UUID()
+    }
+
+    mutating func beginRun(at date: Date, preRunEnergy: String? = nil) {
+        guard active == nil else { return }
+        active = RecordedRun(id: UUID(), startedAt: date, preRunEnergy: preRunEnergy, shoePairID: selectedShoe?.id)
+    }
 
     mutating func finish(at date: Date) {
         guard var run = active else { return }
         run.finishedAt = date
-        history.append(run)
+        if !history.contains(where: { $0.id == run.id }) { history.append(run) }
         active = nil
     }
 
