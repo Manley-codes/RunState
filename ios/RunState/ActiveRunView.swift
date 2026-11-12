@@ -68,7 +68,7 @@ struct ActiveRunView: View {
         }
         .foregroundStyle(Self.ink)
         .confirmationDialog("Finish and save this run?", isPresented: $confirmingFinish, titleVisibility: .visible) {
-            Button("Finish and save", action: onFinish)
+            Button("Save run", action: onFinish)
             Button("Cancel", role: .cancel) {}
         }
         .alert("Save this short run?", isPresented: Binding(

@@ -30,6 +30,24 @@ final class RunTracker: NSObject, ObservableObject, CLLocationManagerDelegate {
     private var segmentStartActiveSeconds: TimeInterval = 0
 
     override convenience init() {
+        #if DEBUG && targetEnvironment(simulator)
+        let environment = ProcessInfo.processInfo.environment
+        if let value = environment["RUNSTATE_TEST_JOURNAL"], let id = UUID(uuidString: value) {
+            let folder = URL.applicationSupportDirectory.appending(path: "UITests").appending(path: id.uuidString)
+            let url = folder.appending(path: "runs.json")
+            // A relaunch in one test reuses its journal. Other tests always start independently.
+            if !FileManager.default.fileExists(atPath: url.path), let seed = environment["RUNSTATE_TEST_SEED"] {
+                do {
+                    let journal = try JSONDecoder().decode(RunJournal.self, from: Data(seed.utf8))
+                    try journal.save(to: url)
+                } catch {
+                    preconditionFailure("Invalid simulator test journal: \(error)")
+                }
+            }
+            self.init(preferences: UserDefaults(suiteName: "uitest." + id.uuidString)!, journalURL: url)
+            return
+        }
+        #endif
         self.init(preferences: .standard, journalURL: URL.applicationSupportDirectory.appending(path: "FieldTest/runs.json"))
     }
 

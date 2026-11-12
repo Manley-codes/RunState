@@ -1,41 +1,27 @@
 import XCTest
 
 final class RunCompletionUITests: XCTestCase {
+    private let runID = "CA6CD111-0A66-44C7-8487-F620B69CBF7C"
+    private let earlierID = "8B59A990-B02B-47FE-9AE1-BF59F863248F"
+
     @MainActor
     func testFinishSaveCheckInAndDeleteOnlyThisRunFromHistory() throws {
         #if targetEnvironment(simulator)
         continueAfterFailure = false
-        let app = XCUIApplication()
-        app.launchArguments = ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
-        app.resetAuthorizationStatus(for: .location)
-        defer {
-            app.terminate()
-            app.resetAuthorizationStatus(for: .location)
-        }
-        app.launch()
-
-        let history = app.buttons["startHistory"]
-        XCTAssertTrue(history.waitForExistence(timeout: 30))
-        history.tap()
-        let savedRuns = app.navigationBars["Saved runs"]
-        XCTAssertTrue(savedRuns.waitForExistence(timeout: 10))
-        let rows = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "history.run."))
-        let originalIDs = Set(rows.allElementsBoundByIndex.map(\.identifier))
-        savedRuns.buttons["Done"].tap()
-
-        let start = app.buttons["startPrimary"]
-        start.tap()
-        let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
-        let allowLocation = springboard.buttons.matching(NSPredicate(format: "label BEGINSWITH[c] %@", "Allow While Using")).firstMatch
-        XCTAssertTrue(allowLocation.waitForExistence(timeout: 15))
-        allowLocation.tap()
-        let ready = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label == %@", "Start run"), object: start)
-        XCTAssertEqual(XCTWaiter.wait(for: [ready], timeout: 10), .completed)
-        let shortRunPrompt = app.alerts["Save this short run?"]
-        startAndPauseShortRun(in: app)
+        // A checkpoint of a paused, measured 2.20-mile run. The simulator exercises
+        // the real Finish, check-in and storage flows without claiming it ran outdoors.
+        let checkpoint = """
+            {"id":"\(runID)","startedAt":816202800,"meters":3540.5568,"activeSeconds":1194,
+             "preRunEnergy":"Moderate","pausedWithCompleteTime":true,
+             "splitProgress":{"mileEnds":[547,1080],"distance":3540.5568,"closedAt":1194,
+                              "uncovered":3,"interrupted":false,"reliable":true}}
+            """
+        let app = launchPausedRun(checkpoint)
+        defer { app.terminate() }
         showFinishPrompt(in: app)
-        XCTAssertTrue(shortRunPrompt.waitForExistence(timeout: 10))
-        shortRunPrompt.buttons["Save run"].tap()
+        let confirm = app.buttons["Save run"]
+        XCTAssertTrue(confirm.waitForExistence(timeout: 10))
+        confirm.tap()
 
         let good = app.buttons["completion.energy.feelingGood"]
         XCTAssertTrue(good.waitForExistence(timeout: 10))
@@ -54,13 +40,16 @@ final class RunCompletionUITests: XCTestCase {
         // A relaunch from the check-in itself exercises saving before dismissal.
         app.terminate()
         app.launch()
+        let history = app.buttons["startHistory"]
         XCTAssertTrue(history.waitForExistence(timeout: 30))
         history.tap()
+        let savedRuns = app.navigationBars["Saved runs"]
         XCTAssertTrue(savedRuns.waitForExistence(timeout: 10))
-        let newIDs = Set(rows.allElementsBoundByIndex.map(\.identifier)).subtracting(originalIDs)
-        XCTAssertEqual(newIDs.count, 1)
-        let row = app.buttons[try XCTUnwrap(newIDs.first)]
-        row.tap()
+        let recorded = app.buttons["history.run." + runID]
+        let earlier = app.buttons["history.run." + earlierID]
+        XCTAssertTrue(recorded.waitForExistence(timeout: 10))
+        XCTAssertTrue(earlier.exists)
+        recorded.tap()
         XCTAssertTrue(app.navigationBars["Run details"].waitForExistence(timeout: 10))
         attachScreenshot("RunState-HistoryDetail", in: app)
         let edit = app.buttons["history.checkIn"]
@@ -82,38 +71,58 @@ final class RunCompletionUITests: XCTestCase {
         delete.tap()
         deletion.buttons["Delete run"].tap()
         XCTAssertTrue(savedRuns.waitForExistence(timeout: 10))
-        XCTAssertEqual(Set(rows.allElementsBoundByIndex.map(\.identifier)), originalIDs)
-        savedRuns.buttons["Done"].tap()
-
-        startAndPauseShortRun(in: app)
-        showFinishPrompt(in: app)
-        shortRunPrompt.buttons["Keep paused"].tap()
-        XCTAssertTrue(app.buttons["Resume run"].waitForExistence(timeout: 10))
-        showFinishPrompt(in: app)
-        shortRunPrompt.buttons["Discard run"].tap()
-        XCTAssertTrue(history.waitForExistence(timeout: 10))
-        history.tap()
-        XCTAssertTrue(savedRuns.waitForExistence(timeout: 10))
-        XCTAssertEqual(Set(rows.allElementsBoundByIndex.map(\.identifier)), originalIDs)
+        XCTAssertFalse(recorded.exists)
+        XCTAssertTrue(earlier.exists)
         #else
-        throw XCTSkip("This test grants location, records a run and removes its own record on the simulator.")
+        throw XCTSkip("This test uses an isolated simulator journal.")
         #endif
     }
 
     @MainActor
-    private func startAndPauseShortRun(in app: XCUIApplication) {
-        app.buttons["startPrimary"].tap()
-        let skipCountdown = app.buttons["Start now"]
-        if skipCountdown.waitForExistence(timeout: 3), skipCountdown.isHittable { skipCountdown.tap() }
-        let pause = app.buttons["Pause run"]
-        XCTAssertTrue(pause.waitForExistence(timeout: 30))
-        pause.tap()
+    func testShortPausedRunCanBeKeptThenDiscardedWithoutTouchingHistory() throws {
+        #if targetEnvironment(simulator)
+        continueAfterFailure = false
+        let checkpoint = """
+            {"id":"\(runID)","startedAt":816202800,"activeSeconds":12,"meters":0,"pausedWithCompleteTime":true}
+            """
+        let app = launchPausedRun(checkpoint)
+        defer { app.terminate() }
+        let shortRun = app.alerts["Save this short run?"]
+        showFinishPrompt(in: app)
+        XCTAssertTrue(shortRun.waitForExistence(timeout: 10))
+        XCTAssertTrue(shortRun.buttons["Save run"].exists)
+        shortRun.buttons["Keep paused"].tap()
+        showFinishPrompt(in: app)
+        XCTAssertTrue(shortRun.waitForExistence(timeout: 10))
+        shortRun.buttons["Discard run"].tap()
+        let history = app.buttons["startHistory"]
+        XCTAssertTrue(history.waitForExistence(timeout: 10))
+        history.tap()
+        let earlier = app.buttons["history.run." + earlierID]
+        XCTAssertTrue(earlier.waitForExistence(timeout: 10))
+        XCTAssertFalse(app.buttons["history.run." + runID].exists)
+        #else
+        throw XCTSkip("This test uses an isolated simulator journal.")
+        #endif
+    }
+
+    @MainActor
+    private func launchPausedRun(_ checkpoint: String) -> XCUIApplication {
+        let app = XCUIApplication()
+        app.launchArguments = ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
+        app.launchEnvironment["RUNSTATE_TEST_JOURNAL"] = UUID().uuidString
+        app.launchEnvironment["RUNSTATE_TEST_SEED"] = """
+            {"active":\(checkpoint),"history":[{"id":"\(earlierID)","startedAt":816030000,
+            "meters":1609.344,"activeSeconds":600,"finishedAt":816030600}]}
+            """
+        app.launch()
+        return app
     }
 
     @MainActor
     private func showFinishPrompt(in app: XCUIApplication) {
         let finish = app.buttons["Finish and save"]
-        XCTAssertTrue(finish.waitForExistence(timeout: 10))
+        XCTAssertTrue(finish.waitForExistence(timeout: 15))
         if !finish.isHittable { app.swipeUp() }
         finish.tap()
     }

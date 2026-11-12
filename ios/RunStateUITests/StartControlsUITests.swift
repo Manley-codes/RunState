@@ -2,10 +2,49 @@ import XCTest
 
 final class StartControlsUITests: XCTestCase {
     @MainActor
+    func testRunnerCanStartPauseAndResumeAfterTheCountdown() throws {
+        #if targetEnvironment(simulator)
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchEnvironment["RUNSTATE_TEST_JOURNAL"] = UUID().uuidString
+        app.launchArguments = ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
+        app.resetAuthorizationStatus(for: .location)
+        defer {
+            app.terminate()
+            app.resetAuthorizationStatus(for: .location)
+        }
+        app.launch()
+        let start = app.buttons["startPrimary"]
+        XCTAssertTrue(start.waitForExistence(timeout: 30))
+        start.tap()
+        let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+        let allow = springboard.buttons.matching(NSPredicate(format: "label BEGINSWITH[c] %@", "Allow While Using")).firstMatch
+        XCTAssertTrue(allow.waitForExistence(timeout: 15))
+        allow.tap()
+        let ready = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label == %@", "Start run"), object: start)
+        XCTAssertEqual(XCTWaiter.wait(for: [ready], timeout: 10), .completed)
+        start.tap()
+        // Wait for the stable run control after the normal countdown finishes.
+        let pause = app.buttons["Pause run"]
+        let resume = app.buttons["Resume run"]
+        XCTAssertTrue(pause.waitForExistence(timeout: 60))
+        pause.tap()
+        XCTAssertTrue(resume.waitForExistence(timeout: 15))
+        resume.tap()
+        XCTAssertTrue(pause.waitForExistence(timeout: 15))
+        pause.tap()
+        XCTAssertTrue(resume.waitForExistence(timeout: 15))
+        #else
+        throw XCTSkip("This test records an isolated run on the simulator.")
+        #endif
+    }
+
+    @MainActor
     func testChoosingShoesIsRememberedAndCanBeClearedBeforeARun() throws {
         #if targetEnvironment(simulator)
         continueAfterFailure = false
         let app = XCUIApplication()
+        app.launchEnvironment["RUNSTATE_TEST_JOURNAL"] = UUID().uuidString
         app.launchArguments = ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
         app.launch()
 
@@ -45,7 +84,9 @@ final class StartControlsUITests: XCTestCase {
         #if targetEnvironment(simulator)
         continueAfterFailure = false
         let app = XCUIApplication()
+        app.launchEnvironment["RUNSTATE_TEST_JOURNAL"] = UUID().uuidString
         app.launchArguments = ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
+        app.resetAuthorizationStatus(for: .location)
         app.launch()
 
         // The photographic opening dismisses itself. Use the normal launch path.
