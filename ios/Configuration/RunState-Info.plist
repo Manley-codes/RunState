@@ -2,6 +2,17 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+    <key>CFBundleURLTypes</key>
+    <array>
+        <dict>
+            <key>CFBundleURLName</key><string>com.runstate.mobile.spotify</string>
+            <key>CFBundleURLSchemes</key><array><string>runstate</string></array>
+        </dict>
+    </array>
+    <key>LSApplicationQueriesSchemes</key>
+    <array><string>spotify</string></array>
+    <key>RunStateSpotifyClientID</key>
+    <string>$(RUNSTATE_SPOTIFY_CLIENT_ID)</string>
     <key>NSLocationWhenInUseUsageDescription</key>
     <string>RunState uses location for the map and to measure runs, including while the screen is locked. You can also choose to save a route on this iPhone.</string>
     <key>UIBackgroundModes</key>

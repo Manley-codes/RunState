@@ -1,6 +1,6 @@
 # Data & Privacy
 
-## iPhone personal field-test build 6
+## iPhone personal field-test build 7
 
 RunState keeps run summaries, mile splits when GPS coverage allows, optional Energy and
 Effort answers, and shoe assignments in the app’s local journal. The journal is excluded
@@ -14,7 +14,15 @@ times, the starting time zone, available GPS distance and coverage, eligible act
 starting Energy. For an older run the runner may confirm the starting zone before requesting.
 The service can use Anthropic to write alternatives for finishing Energy. The iPhone selects
 the corresponding answer and stores its text locally. The request excludes route points,
-shoes, Effort, finishing Energy and music history. The Spotify shortcut opens the Spotify app.
+shoes, Effort, finishing Energy and music history.
+
+The Spotify shortcut opens the Spotify app. The optional Now Playing connection is separate.
+Connecting from Run Settings asks the Spotify app for authorization. While RunState is open,
+it can display the current track from Spotify. Leaving the foreground clears the track and
+disconnects the observer. Returning asks Spotify for a fresh update when a session is available.
+The Spotify authorization session and song information are held in memory. A manually entered
+public app identifier can be remembered on the phone. RunState keeps Spotify track details
+out of the run journal, written reflections and backend requests.
 
 The fixed RunState HTTPS service authenticates the access code. The iPhone stores the
 code in its device-only Keychain, accessible when unlocked. A runner may switch off new

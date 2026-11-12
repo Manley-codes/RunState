@@ -6,6 +6,7 @@ on:
     paths:
       - 'ios/**'
       - '.github/workflows/ios.yml'
+      - 'android/gradle.properties'
       - 'android/app/src/main/assets/opening/**'
       - 'android/app/src/main/assets/opening-photo-sources.json'
       - 'android/app/src/main/assets/third_party_notices.txt'
@@ -19,6 +20,7 @@ on:
     paths:
       - 'ios/**'
       - '.github/workflows/ios.yml'
+      - 'android/gradle.properties'
       - 'android/app/src/main/assets/opening/**'
       - 'android/app/src/main/assets/opening-photo-sources.json'
       - 'android/app/src/main/assets/third_party_notices.txt'
@@ -66,11 +68,22 @@ jobs:
 
       - name: Build the unsigned iPhone app
         run: |
+          # Both field apps use the existing public registration. The SDK performs its own authorization.
+          PUBLIC_SPOTIFY_ID="$(sed -n 's/^runstate\.spotifyClientId=//p' ../android/gradle.properties | tr -d '\r')"
+          if [[ -n "$PUBLIC_SPOTIFY_ID" && ! "$PUBLIC_SPOTIFY_ID" =~ ^[[:xdigit:]]{32}$ ]]; then
+            echo 'Expected a 32-character public Spotify client ID.'
+            exit 1
+          fi
           xcodebuild -project RunState.xcodeproj -scheme RunState -configuration Release \
             -destination 'generic/platform=iOS' -derivedDataPath "$RUNNER_TEMP/device-build" \
-            CODE_SIGNING_ALLOWED=NO build
+            "RUNSTATE_SPOTIFY_CLIENT_ID=$PUBLIC_SPOTIFY_ID" CODE_SIGNING_ALLOWED=NO build
           app="$RUNNER_TEMP/device-build/Build/Products/Release-iphoneos/RunState.app"
           test -x "$app/RunState"
+          test -s "$app/Frameworks/SpotifyiOS.framework/SpotifyiOS"
+          test -s "$app/Frameworks/SpotifyiOS.framework/PrivacyInfo.xcprivacy"
+          test -s "$app/SpotifyNotices.txt"
+          test -s "$app/Assets.car"
+          test "$(plutil -extract RunStateSpotifyClientID raw -o - "$app/Info.plist")" = "$PUBLIC_SPOTIFY_ID"
           test "$(plutil -extract CFBundleSupportedPlatforms.0 raw -o - "$app/Info.plist")" = iPhoneOS
           for photo in ../android/app/src/main/assets/opening/*.webp; do
             test -s "$app/opening/$(basename "$photo")"
@@ -110,12 +123,12 @@ jobs:
               for item in test["attachments"]:
                   if "RunState-ReflectionRequest" in item.get("suggestedHumanReadableName", ""):
                       shutil.copyfile(source / item["exportedFileName"], temp / "iphone-test-request.json")
-                  for name in ("RunState-PostRun", "RunState-HistoryDetail", "RunState-WrittenReflection"):
+                  for name in ("RunState-PostRun", "RunState-HistoryDetail", "RunState-WrittenReflection", "RunState-NowPlaying"):
                       if name in item.get("suggestedHumanReadableName", ""):
                           image = source / item["exportedFileName"]
                           if image.read_bytes()[:8] == bytes.fromhex("89504e470d0a1a0a"):
                               shutil.copyfile(image, target / (name + ".png"))
-          for name in ("RunState-PostRun", "RunState-HistoryDetail", "RunState-WrittenReflection"):
+          for name in ("RunState-PostRun", "RunState-HistoryDetail", "RunState-WrittenReflection", "RunState-NowPlaying"):
               if not (target / (name + ".png")).is_file():
                   raise SystemExit(f"Simulator screenshot missing: {name}")
           PY

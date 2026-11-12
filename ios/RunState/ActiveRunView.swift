@@ -3,6 +3,7 @@ import SwiftUI
 
 struct ActiveRunView: View {
     @ObservedObject var tracker: RunTracker
+    @ObservedObject var spotify: SpotifyObservation
     let onResume: () -> Void
     let onFinish: () -> Void
 
@@ -19,8 +20,9 @@ struct ActiveRunView: View {
     private static let stopFace = Color(red: 220/255, green: 231/255, blue: 207/255)
     private static let stopIcon = Color(red: 37/255, green: 58/255, blue: 44/255)
 
-    init(tracker: RunTracker, onResume: @escaping () -> Void, onFinish: @escaping () -> Void) {
+    init(tracker: RunTracker, spotify: SpotifyObservation, onResume: @escaping () -> Void, onFinish: @escaping () -> Void) {
         self.tracker = tracker
+        self.spotify = spotify
         self.onResume = onResume
         self.onFinish = onFinish
     }
@@ -58,6 +60,17 @@ struct ActiveRunView: View {
                         if !tracker.running {
                             finishControl(unit: unit)
                                 .padding(.top, 14 * unit)
+                        }
+                        switch spotify.state {
+                        case .playing, .paused:
+                            SpotifyTrackLink(state: spotify.state)
+                                .padding(.horizontal, 13)
+                                .padding(.vertical, 8)
+                                .frame(width: 344 * unit)
+                                .background(Self.panel, in: RoundedRectangle(cornerRadius: 10 * unit))
+                                .padding(.top, 8)
+                        default:
+                            EmptyView()
                         }
                     }
                     .frame(width: width)

@@ -4,6 +4,7 @@ import UIKit
 
 struct RunSettingsView: View {
     @ObservedObject var tracker: RunTracker
+    @ObservedObject var spotify: SpotifyObservation
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
     @Environment(\.scenePhase) private var scenePhase
@@ -14,6 +15,10 @@ struct RunSettingsView: View {
                 Section("During a run") {
                     Toggle("Announce each mile", isOn: $tracker.mileAnnouncementsEnabled)
                         .accessibilityIdentifier("mileAnnouncements")
+                    NavigationLink("Spotify now playing") {
+                        SpotifyObservationSettings(observation: spotify)
+                    }
+                    .accessibilityIdentifier("spotify.settings")
                 }
                 Section {
                     Toggle("Save route in History", isOn: $tracker.saveRoutes)
@@ -50,7 +55,7 @@ struct RunSettingsView: View {
                             }
                             Section("Maps and music") {
                                 Text("History draws saved routes on this iPhone. The live street map uses Apple Maps to load the area you view.")
-                                Text("The Spotify shortcut opens Spotify. RunState does not collect your listening history on this iPhone.")
+                                Text("The Spotify shortcut opens the Spotify app. If you connect in Run Settings, RunState can display the current track while open. Leaving RunState clears the displayed song. Listening activity is never saved in your run history or sent to the reflection service.")
                             }
                             Section("Written reflections") {
                                 Text("With a private access code, you can choose to send a run summary to RunState for a written reflection. RunState uses Anthropic to generate the answers. Your access code stays in this iPhone’s Keychain and is sent only to authenticate with RunState.")
