@@ -124,12 +124,29 @@ final class RunStateTests: XCTestCase {
     }
 
     @MainActor
+    func testMileAnnouncementPreferenceSurvivesRelaunchWithoutCreatingARun() throws {
+        let suite = "RunStateTests." + UUID().uuidString
+        let preferences = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { preferences.removePersistentDomain(forName: suite) }
+        let journalURL = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString + ".json")
+        let first = RunTracker(preferences: preferences, journalURL: journalURL)
+        XCTAssertTrue(first.mileAnnouncementsEnabled)
+        first.mileAnnouncementsEnabled = false
+
+        let reopened = RunTracker(preferences: preferences, journalURL: journalURL)
+        XCTAssertFalse(reopened.mileAnnouncementsEnabled)
+        reopened.mileAnnouncementsEnabled = true
+        XCTAssertTrue(RunTracker(preferences: preferences, journalURL: journalURL).mileAnnouncementsEnabled)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: journalURL.path))
+    }
+
+    @MainActor
     func testAppBundleContainsThePhotographicOpeningAndInstrumentFonts() throws {
         let bundle = Bundle(for: RunTracker.self)
         let opening = try XCTUnwrap(bundle.urls(forResourcesWithExtension: "webp", subdirectory: "opening"))
         XCTAssertEqual(opening.count, 33)
         for url in opening { XCTAssertNotNil(UIImage(contentsOfFile: url.path), url.lastPathComponent) }
-        for (name, ext) in [("opening_first_frame", "webp"), ("start_map_reference", "jpg")] {
+        for (name, ext) in [("opening_first_frame", "webp"), ("start_map_reference", "jpg"), ("start_music_orb", "jpg")] {
             let picture = try XCTUnwrap(bundle.url(forResource: name, withExtension: ext))
             XCTAssertNotNil(UIImage(contentsOfFile: picture.path))
         }

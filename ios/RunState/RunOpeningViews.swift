@@ -188,11 +188,15 @@ struct RunStartView: View {
     let onSelectEnergy: (String) -> Void
     let onPrimary: () -> Void
     let onHistory: () -> Void
+    let onOpenMap: () -> Void
+    let onOpenSettings: () -> Void
+    let onOpenSpotify: () -> Void
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.dynamicTypeSize) private var typeSize
     @State private var entered = false
     @Namespace private var intake
     private static let map = bundledPicture("start_map_reference", "jpg")
+    private static let musicOrb = bundledPicture("start_music_orb", "jpg")
 
     var body: some View {
         GeometryReader { geometry in
@@ -200,15 +204,12 @@ struct RunStartView: View {
                 VStack(spacing: 0) {
                     VStack(spacing: 8) {
                         readyCard
-                        HStack {
-                            Spacer()
-                            Button(action: onHistory) {
-                                Image(systemName: "clock.arrow.circlepath")
-                                    .font(.system(size: 23, weight: .medium))
-                                    .frame(width: 48, height: 48)
-                            }
-                            .accessibilityLabel("Log history").accessibilityIdentifier("startHistory")
+                        VStack(spacing: 4) {
+                            utilityButton("map", label: "Open live map", id: "startMap", action: onOpenMap)
+                            utilityButton("clock.arrow.circlepath", label: "Log history", id: "startHistory", action: onHistory)
+                            utilityButton("gearshape", label: "Run settings", id: "startSettings", action: onOpenSettings)
                         }
+                        .frame(maxWidth: .infinity, alignment: .trailing)
                     }
                     .padding(.horizontal, 20).padding(.top, 18)
 
@@ -241,6 +242,16 @@ struct RunStartView: View {
         }
         .foregroundColor(ink(0x293326)).buttonStyle(.plain)
         .onAppear { entered = true }
+    }
+
+    private func utilityButton(_ symbol: String, label: String, id: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: symbol)
+                .font(.system(size: 23, weight: .medium))
+                .frame(width: 48, height: 48)
+                .contentShape(Rectangle())
+        }
+        .accessibilityLabel(Text(label)).accessibilityIdentifier(id)
     }
 
     private var readyCard: some View {
@@ -366,18 +377,53 @@ struct RunStartView: View {
         .allowsHitTesting(selectedEnergy == nil).accessibilityHidden(selectedEnergy != nil)
     }
 
-    private var footer: some View {
+    private var startButton: some View {
         Button(action: onPrimary) {
             VStack(spacing: 2) {
                 StartDial(lit: selectedEnergy != nil).frame(width: 102, height: 102)
                 Text(primaryTitle).font(.headline.weight(.heavy)).tracking(1.4)
+                    .multilineTextAlignment(.center).fixedSize(horizontal: false, vertical: true)
                 Text("GPS run").font(.caption2.weight(.semibold)).foregroundColor(.white.opacity(0.8))
             }
             .foregroundColor(.white).padding(.horizontal, 8).contentShape(Rectangle())
         }
         .disabled(!canStart).opacity(canStart ? 1 : 0.55)
         .accessibilityLabel(primaryTitle).accessibilityIdentifier("startPrimary")
-        .frame(maxWidth: .infinity).padding(.top, 24).padding(.bottom, 8)
+    }
+
+    private var spotifyButton: some View {
+        Button(action: onOpenSpotify) {
+            VStack(spacing: 2) {
+                Group {
+                    if let orb = Self.musicOrb {
+                        Image(uiImage: orb).resizable().scaledToFit()
+                    } else {
+                        Image(systemName: "music.note").font(.title)
+                    }
+                }
+                .frame(width: 64, height: 64).clipShape(Circle()).padding(.bottom, 5)
+                Text("MUSIC").font(.caption.weight(.bold)).tracking(1)
+                Text("SPOTIFY").font(.caption2.weight(.semibold)).tracking(1)
+            }
+            .foregroundColor(.white.opacity(0.86))
+            .padding(.horizontal, 4).padding(.bottom, 6).contentShape(Rectangle())
+        }
+        .accessibilityLabel("Open Spotify").accessibilityIdentifier("startSpotify")
+    }
+
+    private var footer: some View {
+        Group {
+            if typeSize.isAccessibilitySize {
+                VStack(spacing: 18) { startButton; spotifyButton }
+            } else {
+                HStack(alignment: .bottom, spacing: 0) {
+                    Spacer(minLength: 0).frame(width: 72)
+                    startButton.frame(maxWidth: .infinity)
+                    spotifyButton.frame(width: 72)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity).padding(.horizontal, 20).padding(.top, 24).padding(.bottom, 8)
         .background {
             GeometryReader { g in
                 Path { path in

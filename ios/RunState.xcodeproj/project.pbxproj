@@ -13,6 +13,7 @@
         120000000000000000000044 /* Anton */ = {isa = PBXBuildFile; fileRef = 120000000000000000000034 /* Anton */; };
         120000000000000000000045 /* Photograph sources */ = {isa = PBXBuildFile; fileRef = 120000000000000000000035 /* Photograph sources */; };
         120000000000000000000046 /* Third-party notices */ = {isa = PBXBuildFile; fileRef = 120000000000000000000036 /* Third-party notices */; };
+        120000000000000000000047 /* Spotify shortcut artwork */ = {isa = PBXBuildFile; fileRef = 120000000000000000000038 /* Spotify shortcut artwork */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -33,25 +34,28 @@
         120000000000000000000034 /* Anton */ = {isa = PBXFileReference; lastKnownFileType = file; path = "res/font/anton_regular.ttf"; sourceTree = "<group>"; };
         120000000000000000000035 /* Photograph sources */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "assets/opening-photo-sources.json"; sourceTree = "<group>"; };
         120000000000000000000036 /* Third-party notices */ = {isa = PBXFileReference; lastKnownFileType = text; path = "assets/third_party_notices.txt"; sourceTree = "<group>"; };
+        120000000000000000000038 /* Spotify shortcut artwork */ = {isa = PBXFileReference; lastKnownFileType = image.jpeg; path = "res/drawable/start_music_orb.jpg"; sourceTree = "<group>"; };
         120000000000000000000005 = {isa = PBXFileReference; explicitFileType = wrapper.application; path = RunState.app; sourceTree = BUILT_PRODUCTS_DIR; };
         120000000000000000000006 = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; path = RunStateTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+        120000000000000000000051 = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; path = RunStateUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
         120000000000000000000020 = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "Configuration/RunState-Info.plist"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
         120000000000000000000003 = {isa = PBXFileSystemSynchronizedRootGroup; path = RunState; sourceTree = "<group>"; };
         120000000000000000000004 = {isa = PBXFileSystemSynchronizedRootGroup; path = RunStateTests; sourceTree = "<group>"; };
+        120000000000000000000052 = {isa = PBXFileSystemSynchronizedRootGroup; path = RunStateUITests; sourceTree = "<group>"; };
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXGroup section */
         120000000000000000000002 = {
             isa = PBXGroup;
-            children = (120000000000000000000003, 120000000000000000000004, 120000000000000000000020, 120000000000000000000037, 12000000000000000000000F);
+            children = (120000000000000000000003, 120000000000000000000004, 120000000000000000000052, 120000000000000000000020, 120000000000000000000037, 12000000000000000000000F);
             sourceTree = "<group>";
         };
         12000000000000000000000F = {
             isa = PBXGroup;
-            children = (120000000000000000000005, 120000000000000000000006);
+            children = (120000000000000000000005, 120000000000000000000006, 120000000000000000000051);
             name = Products;
             sourceTree = "<group>";
         };
@@ -60,7 +64,7 @@
             name = "Shared run artwork";
             path = "../android/app/src/main";
             sourceTree = "<group>";
-            children = (120000000000000000000030, 120000000000000000000031, 120000000000000000000032, 120000000000000000000033, 120000000000000000000034, 120000000000000000000035, 120000000000000000000036);
+            children = (120000000000000000000030, 120000000000000000000031, 120000000000000000000032, 120000000000000000000033, 120000000000000000000034, 120000000000000000000035, 120000000000000000000036, 120000000000000000000038);
         };
 /* End PBXGroup section */
 
@@ -89,14 +93,29 @@
             productReference = 120000000000000000000006;
             productType = "com.apple.product-type.bundle.unit-test";
         };
+        120000000000000000000050 /* RunStateUITests */ = {
+            isa = PBXNativeTarget;
+            buildConfigurationList = 120000000000000000000056;
+            buildPhases = (120000000000000000000053, 120000000000000000000054, 120000000000000000000055);
+            buildRules = ();
+            dependencies = (120000000000000000000059);
+            fileSystemSynchronizedGroups = (120000000000000000000052);
+            name = RunStateUITests;
+            productName = RunStateUITests;
+            productReference = 120000000000000000000051;
+            productType = "com.apple.product-type.bundle.ui-testing";
+        };
 /* End PBXNativeTarget section */
 
+        120000000000000000000053 = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+        120000000000000000000054 = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+        120000000000000000000055 = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
         120000000000000000000009 = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
         12000000000000000000000A = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
         12000000000000000000000B = {
             isa = PBXResourcesBuildPhase;
             buildActionMask = 2147483647;
-            files = (120000000000000000000040, 120000000000000000000041, 120000000000000000000042, 120000000000000000000043, 120000000000000000000044, 120000000000000000000045, 120000000000000000000046);
+            files = (120000000000000000000040, 120000000000000000000041, 120000000000000000000042, 120000000000000000000043, 120000000000000000000044, 120000000000000000000045, 120000000000000000000046, 120000000000000000000047);
             runOnlyForDeploymentPostprocessing = 0;
         };
         12000000000000000000000C = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
@@ -112,6 +131,7 @@
                 TargetAttributes = {
                     120000000000000000000007 = {CreatedOnToolsVersion = 26.5; };
                     120000000000000000000008 = {CreatedOnToolsVersion = 26.5; TestTargetID = 120000000000000000000007; };
+                    120000000000000000000050 = {CreatedOnToolsVersion = 26.5; TestTargetID = 120000000000000000000007; };
                 };
             };
             buildConfigurationList = 120000000000000000000012;
@@ -123,7 +143,7 @@
             productRefGroup = 12000000000000000000000F;
             projectDirPath = "";
             projectRoot = "";
-            targets = (120000000000000000000007, 120000000000000000000008);
+            targets = (120000000000000000000007, 120000000000000000000008, 120000000000000000000050);
         };
 /* End PBXProject section */
 
@@ -133,7 +153,31 @@
             targetProxy = 120000000000000000000010;
         };
 
+        120000000000000000000059 = {isa = PBXTargetDependency; target = 120000000000000000000007; targetProxy = 120000000000000000000010; };
+
 /* Begin XCBuildConfiguration section */
+        120000000000000000000057 = {
+            isa = XCBuildConfiguration;
+            buildSettings = {
+                GENERATE_INFOPLIST_FILE = YES;
+                PRODUCT_BUNDLE_IDENTIFIER = com.runstate.mobile.fieldtest.uitests;
+                PRODUCT_NAME = "$(TARGET_NAME)";
+                TARGETED_DEVICE_FAMILY = 1;
+                TEST_TARGET_NAME = RunState;
+            };
+            name = Debug;
+        };
+        120000000000000000000058 = {
+            isa = XCBuildConfiguration;
+            buildSettings = {
+                GENERATE_INFOPLIST_FILE = YES;
+                PRODUCT_BUNDLE_IDENTIFIER = com.runstate.mobile.fieldtest.uitests;
+                PRODUCT_NAME = "$(TARGET_NAME)";
+                TARGETED_DEVICE_FAMILY = 1;
+                TEST_TARGET_NAME = RunState;
+            };
+            name = Release;
+        };
         120000000000000000000015 = {
             isa = XCBuildConfiguration;
             buildSettings = {
@@ -161,7 +205,7 @@
             isa = XCBuildConfiguration;
             buildSettings = {
                 CODE_SIGN_STYLE = Automatic;
-                CURRENT_PROJECT_VERSION = 2;
+                CURRENT_PROJECT_VERSION = 3;
                 GENERATE_INFOPLIST_FILE = YES;
                 INFOPLIST_FILE = "Configuration/RunState-Info.plist";
                 INFOPLIST_KEY_CFBundleDisplayName = RunState;
@@ -179,7 +223,7 @@
             isa = XCBuildConfiguration;
             buildSettings = {
                 CODE_SIGN_STYLE = Automatic;
-                CURRENT_PROJECT_VERSION = 2;
+                CURRENT_PROJECT_VERSION = 3;
                 GENERATE_INFOPLIST_FILE = YES;
                 INFOPLIST_FILE = "Configuration/RunState-Info.plist";
                 INFOPLIST_KEY_CFBundleDisplayName = RunState;
@@ -222,6 +266,7 @@
         120000000000000000000012 = {isa = XCConfigurationList; buildConfigurations = (120000000000000000000015, 120000000000000000000016); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
         120000000000000000000013 = {isa = XCConfigurationList; buildConfigurations = (120000000000000000000017, 120000000000000000000018); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
         120000000000000000000014 = {isa = XCConfigurationList; buildConfigurations = (120000000000000000000019, 12000000000000000000001A); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
+        120000000000000000000056 = {isa = XCConfigurationList; buildConfigurations = (120000000000000000000057, 120000000000000000000058); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
     };
     rootObject = 120000000000000000000001;
 }

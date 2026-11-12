@@ -15,7 +15,13 @@ private struct RunScreen: View {
     @Environment(\.openURL) private var openURL
     @Environment(\.scenePhase) private var scenePhase
     @State private var opening: Bool
-    @State private var showHistory = false
+    private enum RunSheet: String, Identifiable {
+        case history, map, settings
+        var id: Self { self }
+    }
+
+    @State private var sheet: RunSheet?
+    @State private var spotifyUnavailable = false
     @State private var energy: String?
     @State private var startMessage: String?
 
@@ -38,7 +44,9 @@ private struct RunScreen: View {
             } else {
                 RunStartView(primaryTitle: primaryTitle, locationStatus: startStatus, canStart: tracker.canWrite,
                              selectedEnergy: energy, onSelectEnergy: { energy = $0 },
-                             onPrimary: prepareStart, onHistory: { showHistory = true })
+                             onPrimary: prepareStart, onHistory: { sheet = .history },
+                             onOpenMap: { sheet = .map }, onOpenSettings: { sheet = .settings },
+                             onOpenSpotify: openSpotify)
             }
         }
         .preferredColorScheme(.dark)
@@ -52,27 +60,50 @@ private struct RunScreen: View {
             startMessage = nil
             if !tracker.hasLocationPermission { countdown.cancel() }
         }
-        .sheet(isPresented: $showHistory) {
-            NavigationStack {
-                List {
-                    if tracker.journal.history.isEmpty {
-                        Text("Your saved runs will appear here.").foregroundStyle(.secondary)
-                    }
-                    ForEach(tracker.journal.history.reversed()) { run in
-                        VStack(alignment: .leading, spacing: 5) {
-                            Text(run.startedAt.formatted(date: .abbreviated, time: .shortened))
-                            Text("\((run.meters / RunDistance.metersPerMile).formatted(.number.precision(.fractionLength(2)))) mi · \(ActiveRunView.clockText(run.activeSeconds))")
-                                .monospacedDigit()
-                            if let selection = run.preRunEnergy { Text("Starting energy · " + selection).font(.footnote) }
-                        }
-                    }
+        .sheet(item: $sheet) { destination in
+            switch destination {
+            case .history: history
+            case .map: RunLiveMapView(tracker: tracker)
+            case .settings: RunSettingsView(tracker: tracker)
+            }
+        }
+        .alert("Spotify couldn’t open", isPresented: $spotifyUnavailable) {
+            Button("View in App Store") {
+                openURL(URL(string: "https://apps.apple.com/app/id324684580")!)
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Check that Spotify is installed on this iPhone.")
+        }
+    }
+
+    private var history: some View {
+        NavigationStack {
+            List {
+                if tracker.journal.history.isEmpty {
+                    Text("Your saved runs will appear here.").foregroundStyle(.secondary)
                 }
-                .navigationTitle("Saved runs")
-                .toolbar {
-                    ToolbarItem(placement: .confirmationAction) { Button("Done") { showHistory = false } }
+                ForEach(tracker.journal.history.reversed()) { run in
+                    VStack(alignment: .leading, spacing: 5) {
+                        Text(run.startedAt.formatted(date: .abbreviated, time: .shortened))
+                        Text("\((run.meters / RunDistance.metersPerMile).formatted(.number.precision(.fractionLength(2)))) mi · \(ActiveRunView.clockText(run.activeSeconds))")
+                            .monospacedDigit()
+                        if let selection = run.preRunEnergy { Text("Starting energy · " + selection).font(.footnote) }
+                    }
                 }
             }
-            .preferredColorScheme(.dark)
+            .navigationTitle("Saved runs")
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) { Button("Done") { sheet = nil } }
+            }
+        }
+        .preferredColorScheme(.dark)
+    }
+
+    private func openSpotify() {
+        // Open the app without sending a track or playback command.
+        openURL(URL(string: "spotify:")!) { opened in
+            spotifyUnavailable = !opened
         }
     }
 
@@ -113,6 +144,6 @@ private struct RunScreen: View {
 
     private func finish() {
         tracker.finish()
-        if tracker.journal.active == nil { showHistory = true }
+        if tracker.journal.active == nil { sheet = .history }
     }
 }

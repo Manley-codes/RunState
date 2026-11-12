@@ -11,6 +11,7 @@ on:
       - 'android/app/src/main/assets/third_party_notices.txt'
       - 'android/app/src/main/res/drawable-nodpi/opening_first_frame.webp'
       - 'android/app/src/main/res/drawable-nodpi/start_map_reference.jpg'
+      - 'android/app/src/main/res/drawable/start_music_orb.jpg'
       - 'android/app/src/main/res/font/barlow_condensed_medium.ttf'
       - 'android/app/src/main/res/font/anton_regular.ttf'
   pull_request:
@@ -23,6 +24,7 @@ on:
       - 'android/app/src/main/assets/third_party_notices.txt'
       - 'android/app/src/main/res/drawable-nodpi/opening_first_frame.webp'
       - 'android/app/src/main/res/drawable-nodpi/start_map_reference.jpg'
+      - 'android/app/src/main/res/drawable/start_music_orb.jpg'
       - 'android/app/src/main/res/font/barlow_condensed_medium.ttf'
       - 'android/app/src/main/res/font/anton_regular.ttf'
   workflow_dispatch:
@@ -73,7 +75,7 @@ jobs:
           for photo in ../android/app/src/main/assets/opening/*.webp; do
             test -s "$app/opening/$(basename "$photo")"
           done
-          for file in opening_first_frame.webp start_map_reference.jpg barlow_condensed_medium.ttf anton_regular.ttf opening-photo-sources.json third_party_notices.txt; do
+          for file in opening_first_frame.webp start_map_reference.jpg start_music_orb.jpg barlow_condensed_medium.ttf anton_regular.ttf opening-photo-sources.json third_party_notices.txt PrivacyInfo.xcprivacy; do
             test -s "$app/$file"
           done
           mkdir -p "$RUNNER_TEMP/package/Payload"

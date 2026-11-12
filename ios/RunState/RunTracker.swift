@@ -6,20 +6,33 @@ final class RunTracker: NSObject, ObservableObject, CLLocationManagerDelegate {
     @Published private(set) var journal = RunJournal()
     @Published private(set) var running = false
     @Published private(set) var authorization: CLAuthorizationStatus = .notDetermined
+    @Published private(set) var accuracyAuthorization: CLAccuracyAuthorization = .reducedAccuracy
+    @Published var mileAnnouncementsEnabled: Bool {
+        didSet { preferences.set(mileAnnouncementsEnabled, forKey: Self.mileAnnouncementsKey) }
+    }
     @Published private(set) var gpsStatus = ""
     @Published private(set) var errorMessage: String?
     private(set) var canWrite = true
 
+    private static let mileAnnouncementsKey = "run.mileAnnouncementsEnabled"
+    private let preferences: UserDefaults
     private let gps = CLLocationManager()
     let voice = RunVoice()
-    private let journalURL = URL.applicationSupportDirectory.appending(path: "FieldTest/runs.json")
+    private let journalURL: URL
     private var distance = RunDistance()
     private let clock = ContinuousClock()
     private var timerAnchor: ContinuousClock.Instant?
 
-    override init() {
+    override convenience init() {
+        self.init(preferences: .standard, journalURL: URL.applicationSupportDirectory.appending(path: "FieldTest/runs.json"))
+    }
+
+    init(preferences: UserDefaults, journalURL: URL) {
+        self.preferences = preferences
+        self.journalURL = journalURL
+        mileAnnouncementsEnabled = preferences.object(forKey: Self.mileAnnouncementsKey) as? Bool ?? true
         super.init()
-        authorization = gps.authorizationStatus
+        refreshLocationAuthorization()
         do {
             journal = try RunJournal.load(from: journalURL)
         } catch {
@@ -36,7 +49,9 @@ final class RunTracker: NSObject, ObservableObject, CLLocationManagerDelegate {
     }
 
     var hasLocationPermission: Bool { authorization == .authorizedAlways || authorization == .authorizedWhenInUse }
-    func requestPermission() { gps.requestWhenInUseAuthorization() }
+    func requestPermission() {
+        if gps.authorizationStatus == .notDetermined { gps.requestWhenInUseAuthorization() }
+    }
 
     func startOrResume(preRunEnergy: String? = nil) {
         guard !running, hasLocationPermission, canWrite else { return }
@@ -94,12 +109,17 @@ final class RunTracker: NSObject, ObservableObject, CLLocationManagerDelegate {
         timerAnchor = instant
     }
 
-    func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
-        authorization = manager.authorizationStatus
+    func refreshLocationAuthorization() {
+        authorization = gps.authorizationStatus
+        accuracyAuthorization = gps.accuracyAuthorization
         if running && !hasLocationPermission {
             pause()
             errorMessage = "Run paused because location access changed."
         }
+    }
+
+    func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
+        refreshLocationAuthorization()
     }
 
     func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
@@ -119,7 +139,7 @@ final class RunTracker: NSObject, ObservableObject, CLLocationManagerDelegate {
             checkpoint(at: tick)
             _ = store(journal)
         }
-        if let mile { voice.announce(mile) }
+        if let mile, mileAnnouncementsEnabled { voice.announce(mile) }
     }
 
     func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
