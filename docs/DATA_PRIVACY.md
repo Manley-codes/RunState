@@ -1,6 +1,6 @@
 # Data & Privacy
 
-## iPhone personal field-test build 5
+## iPhone personal field-test build 6
 
 RunState keeps run summaries, mile splits when GPS coverage allows, optional Energy and
 Effort answers, and shoe assignments in the app’s local journal. The journal is excluded
@@ -8,7 +8,20 @@ from device backups. **Save route in History** is off by default. Turning it on 
 starting a run also stores location points in that run. History draws the saved path on
 the device. Opening the separate live street map uses Apple Maps. Deleting a saved run
 also removes its answers, splits and route and updates the shoe’s recorded mileage.
-This build uses a local recap and does not send a run to the reflection backend.
+The recap works locally. Written reflections are optional and start with an explicit request
+on a saved run. RunState sends its hosted service a run ID, a request ID, start and finish
+times, the starting time zone, available GPS distance and coverage, eligible active time and
+starting Energy. For an older run the runner may confirm the starting zone before requesting.
+The service can use Anthropic to write alternatives for finishing Energy. The iPhone selects
+the corresponding answer and stores its text locally. The request excludes route points,
+shoes, Effort, finishing Energy and music history. The Spotify shortcut opens the Spotify app.
+
+The fixed RunState HTTPS service authenticates the access code. The iPhone stores the
+code in its device-only Keychain, accessible when unlocked. A runner may switch off new
+requests or remove the code in Settings. Previously saved text remains readable offline.
+After an uncertain send the app requests recovery only when the server advertises compatible
+access support. Deleting a run removes its local text and pending request. Backend retention
+depends on the deployed service.
 
 ## Current Android data handling
 

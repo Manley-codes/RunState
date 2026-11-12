@@ -43,6 +43,8 @@ struct RecordedRun: Codable, Identifiable, Equatable {
     var firstPostRunEffort: Int?
     var route: RunRoute?
     var splitProgress: RunSplitProgress?
+    var startTimezoneID: String?
+    var writtenReflection: RunWrittenReflection?
 
     var canDiscardAsShortRun: Bool {
         finishedAt == nil && pausedWithCompleteTime == true && (0..<30).contains(activeSeconds)
@@ -169,7 +171,8 @@ struct RunJournal: Codable, Equatable {
     mutating func beginRun(at date: Date, preRunEnergy: String? = nil, saveRoute: Bool = false) {
         guard active == nil else { return }
         active = RecordedRun(id: UUID(), startedAt: date, preRunEnergy: preRunEnergy, shoePairID: selectedShoe?.id,
-                             route: saveRoute ? RunRoute() : nil, splitProgress: RunSplitProgress())
+                             route: saveRoute ? RunRoute() : nil, splitProgress: RunSplitProgress(),
+                             startTimezoneID: TimeZone.current.identifier)
     }
 
     mutating func discardShortPausedRun(_ id: UUID) throws {

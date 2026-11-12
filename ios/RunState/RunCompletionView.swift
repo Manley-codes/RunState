@@ -23,6 +23,8 @@ struct RunCompletionView: View {
                     energySection(run)
                     Divider()
                     effortSection(run)
+                    Divider()
+                    WrittenReflectionView(tracker: tracker, run: run)
                 }
                 .padding(20)
                 .frame(maxWidth: 550, alignment: .leading)

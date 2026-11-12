@@ -92,7 +92,7 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
-      - name: Export the post-run and History simulator screenshots
+      - name: Export the simulator screenshots and synthetic reflection request
         run: |
           xcrun xcresulttool export attachments --path "$RUNNER_TEMP/RunStateTests.xcresult" --output-path "$RUNNER_TEMP/ios-attachments"
           python3 - <<'PY'
@@ -108,14 +108,54 @@ jobs:
           manifest = json.loads((source / "manifest.json").read_text())
           for test in manifest:
               for item in test["attachments"]:
-                  for name in ("RunState-PostRun", "RunState-HistoryDetail"):
+                  if "RunState-ReflectionRequest" in item.get("suggestedHumanReadableName", ""):
+                      shutil.copyfile(source / item["exportedFileName"], temp / "iphone-test-request.json")
+                  for name in ("RunState-PostRun", "RunState-HistoryDetail", "RunState-WrittenReflection"):
                       if name in item.get("suggestedHumanReadableName", ""):
                           image = source / item["exportedFileName"]
                           if image.read_bytes()[:8] == bytes.fromhex("89504e470d0a1a0a"):
                               shutil.copyfile(image, target / (name + ".png"))
-          for name in ("RunState-PostRun", "RunState-HistoryDetail"):
+          for name in ("RunState-PostRun", "RunState-HistoryDetail", "RunState-WrittenReflection"):
               if not (target / (name + ".png")).is_file():
                   raise SystemExit(f"Simulator screenshot missing: {name}")
+          PY
+
+      - name: Set up Java for the reflection contract check
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: maven
+          cache-dependency-path: backend/pom.xml
+
+      - name: Send the iPhone test request to the local Java fake writer
+        env:
+          RUNSTATE_REFLECTION_PORT: '18787'
+        run: |
+          set -euo pipefail
+          mvn -B --no-transfer-progress -f ../backend/pom.xml compile dependency:build-classpath \
+            "-Dmdep.outputFile=$RUNNER_TEMP/iphone-test-classpath"
+          java -cp "../backend/target/classes:$(cat "$RUNNER_TEMP/iphone-test-classpath")" \
+            com.runstate.reflection.ReflectionBackendMain --fake > "$RUNNER_TEMP/iphone-test-backend.log" 2>&1 &
+          backend_pid=$!
+          trap 'kill "$backend_pid" 2>/dev/null || true' EXIT
+          url="http://127.0.0.1:$RUNSTATE_REFLECTION_PORT"
+          curl --fail --silent --show-error --retry 10 --retry-connrefused --retry-delay 1 "$url/health"
+          curl --fail-with-body --silent --show-error --max-time 10 -H 'Content-Type: application/json' \
+            --data-binary "@$RUNNER_TEMP/iphone-test-request.json" \
+            "$url/api/reflections/candidates" -o "$RUNNER_TEMP/iphone-test-response.json"
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          folder = Path(os.environ["RUNNER_TEMP"])
+          request = json.loads((folder / "iphone-test-request.json").read_text())
+          response = json.loads((folder / "iphone-test-response.json").read_text())
+          assert response["requestId"] == request["requestId"] and response["runId"] == request["runId"]
+          assert response["generationMode"] == "FAKE"
+          assert set(response["candidates"]) == {"spent", "feeling_good", "powered_up", "no_selection"}
+          assert all(text.startswith("[FAKE]") for text in response["candidates"].values())
+          print("The Java backend accepted the iPhone request and returned all four test answers.")
           PY
 
       - name: Save the simulator screenshots

@@ -16,6 +16,10 @@ final class RunTracker: NSObject, ObservableObject, CLLocationManagerDelegate {
     @Published private(set) var gpsStatus = ""
     @Published private(set) var errorMessage: String?
     private(set) var canWrite = true
+    let reflectionConnection: ReflectionConnection
+    let reflectionService: any WrittenReflectionServing
+    @Published var reflectionWork = WrittenReflectionWork()
+    private var connectionChanges: AnyCancellable?
 
     private static let mileAnnouncementsKey = "run.mileAnnouncementsEnabled"
     private static let saveRoutesKey = "run.saveRoutes"
@@ -44,19 +48,32 @@ final class RunTracker: NSObject, ObservableObject, CLLocationManagerDelegate {
                     preconditionFailure("Invalid simulator test journal: \(error)")
                 }
             }
-            self.init(preferences: UserDefaults(suiteName: "uitest." + id.uuidString)!, journalURL: url)
+            let preferences = UserDefaults(suiteName: "uitest." + id.uuidString)!
+            let vault = KeychainReflectionVault(service: "runstate.uitest." + id.uuidString)
+            let connection = ReflectionConnection(preferences: preferences, vault: vault)
+            let fixture = environment["RUNSTATE_TEST_WRITTEN_ANSWERS"].flatMap {
+                try? JSONDecoder().decode(WrittenReflectionAnswers.self, from: Data($0.utf8))
+            }
+            self.init(preferences: preferences, journalURL: url, reflectionConnection: connection,
+                      reflectionService: SimulatorWrittenReflectionService(answers: fixture))
             return
         }
         #endif
         self.init(preferences: .standard, journalURL: URL.applicationSupportDirectory.appending(path: "FieldTest/runs.json"))
     }
 
-    init(preferences: UserDefaults, journalURL: URL) {
+    init(preferences: UserDefaults, journalURL: URL, reflectionConnection: ReflectionConnection? = nil,
+         reflectionService: any WrittenReflectionServing = ReflectionService()) {
         self.preferences = preferences
         self.journalURL = journalURL
+        self.reflectionConnection = reflectionConnection ?? ReflectionConnection(preferences: preferences)
+        self.reflectionService = reflectionService
         mileAnnouncementsEnabled = preferences.object(forKey: Self.mileAnnouncementsKey) as? Bool ?? true
         saveRoutes = preferences.bool(forKey: Self.saveRoutesKey)
         super.init()
+        connectionChanges = self.reflectionConnection.$revision.dropFirst().sink { [weak self] _ in
+            self?.cancelWrittenReflectionWork()
+        }
         refreshLocationAuthorization()
         do {
             journal = try RunJournal.load(from: journalURL)
@@ -107,8 +124,31 @@ final class RunTracker: NSObject, ObservableObject, CLLocationManagerDelegate {
         try saveJournalChange { try $0.saveCheckIn(for: id, energy: energy, effort: effort) }
     }
 
+    /// Earlier builds recorded the absolute instant. Only the runner can identify the missing local zone.
+    func confirmStartTimeZone(for id: UUID, identifier: String) throws {
+        guard identifier == "UTC" || TimeZone.knownTimeZoneIdentifiers.contains(identifier) else { throw RunStartZoneError.invalid }
+        guard journal.active?.id != id, let run = journal.history.first(where: { $0.id == id && $0.finishedAt != nil })
+        else { throw SavedRunError.notSaved }
+        if run.startTimezoneID == identifier { return }
+        guard run.startTimezoneID == nil, run.writtenReflection == nil else { throw RunStartZoneError.alreadyRecorded }
+        try saveJournalChange { next in
+            guard let index = next.history.firstIndex(where: { $0.id == id }) else { throw SavedRunError.notSaved }
+            next.history[index].startTimezoneID = identifier
+        }
+    }
+
     func deleteSavedRun(_ id: UUID) throws {
         try saveJournalChange { try $0.deleteSavedRun(id) }
+        cancelWrittenReflectionWork(for: id)
+    }
+
+    func storeWrittenReflection(_ value: RunWrittenReflection, for id: UUID, replacing expected: PendingWrittenReflection?) throws {
+        try saveJournalChange { journal in
+            guard let index = journal.history.firstIndex(where: { $0.id == id && $0.finishedAt != nil }),
+                  journal.history[index].writtenReflection?.saved == nil,
+                  journal.history[index].writtenReflection?.pending == expected else { throw SavedRunError.notSaved }
+            journal.history[index].writtenReflection = value
+        }
     }
 
     func discardShortPausedRun(_ id: UUID) {

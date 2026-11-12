@@ -39,6 +39,9 @@ struct RunSettingsView: View {
                     }
                 }
                 Section {
+                    NavigationLink("Written reflections") {
+                        ReflectionSettingsView(connection: tracker.reflectionConnection)
+                    }
                     NavigationLink("Privacy & data") {
                         List {
                             Section("Saved on this iPhone") {
@@ -47,7 +50,11 @@ struct RunSettingsView: View {
                             }
                             Section("Maps and music") {
                                 Text("History draws saved routes on this iPhone. The live street map uses Apple Maps to load the area you view.")
-                                Text("The Spotify shortcut opens Spotify. This iPhone build does not collect your listening history or send your runs to the reflection service.")
+                                Text("The Spotify shortcut opens Spotify. RunState does not collect your listening history on this iPhone.")
+                            }
+                            Section("Written reflections") {
+                                Text("With a private access code, you can choose to send a run summary to RunState for a written reflection. RunState uses Anthropic to generate the answers. Your access code stays in this iPhone’s Keychain and is sent only to authenticate with RunState.")
+                                Text("Your route points, shoe information and Spotify history are excluded. Deleting a run removes its saved reflection from this device. Turning off reflections stops new requests from this app.")
                             }
                             Section("Remove a saved run") {
                                 Text("In History, open the run and tap the trash button. After you confirm, its check-in, route and splits are removed and its distance comes off the shoe’s total.")

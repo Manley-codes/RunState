@@ -90,6 +90,10 @@ private struct SavedRunDetail: View {
                     }
                     .accessibilityIdentifier("history.checkIn")
                 }
+                Section {
+                    WrittenReflectionView(tracker: tracker, run: run)
+                        .padding(.vertical, 4)
+                }
                 if let shoe = tracker.journal.shoe(for: run.shoePairID) {
                     Section("Shoes") { Text(shoe.fullName) }
                 }
