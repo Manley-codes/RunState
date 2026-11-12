@@ -1,14 +1,52 @@
 import CoreLocation
 import Foundation
 
+enum PostRunEnergy: String, Codable, CaseIterable {
+    case spent, feelingGood, poweredUp, notSure
+
+    var label: String {
+        switch self {
+        case .spent: return "Spent"
+        case .feelingGood: return "Feeling Good"
+        case .poweredUp: return "Powered Up"
+        case .notSure: return "Not sure"
+        }
+    }
+}
+
+enum SavedRunError: LocalizedError {
+    case notSaved, invalidEffort, storage, ineligibleForDiscard
+    var errorDescription: String? {
+        switch self {
+        case .notSaved: return "This run is no longer in History."
+        case .invalidEffort: return "Choose an effort from 0 to 10."
+        case .storage: return "RunState couldn’t save that change. Check your iPhone’s storage and try again."
+        case .ineligibleForDiscard: return "This run can no longer be discarded as a short, paused run."
+        }
+    }
+}
+
 struct RecordedRun: Codable, Identifiable, Equatable {
     let id: UUID
     let startedAt: Date
     var meters = 0.0
     var activeSeconds: TimeInterval = 0
+    // Absent on older records. A recording interrupted between checkpoints may have uncounted time.
+    var pausedWithCompleteTime: Bool?
     var finishedAt: Date?
     var preRunEnergy: String?
     var shoePairID: UUID?
+    var postRunEnergy: PostRunEnergy?
+    var postRunEffort: Int?
+    // Preserve the first reported answers when a runner revisits a saved activity.
+    var firstPostRunEnergy: PostRunEnergy?
+    var firstPostRunEffort: Int?
+    var route: RunRoute?
+    var splitProgress: RunSplitProgress?
+
+    var canDiscardAsShortRun: Bool {
+        finishedAt == nil && pausedWithCompleteTime == true && (0..<30).contains(activeSeconds)
+    }
 }
 
 struct ShoePair: Codable, Identifiable, Equatable {
@@ -128,16 +166,38 @@ struct RunJournal: Codable, Equatable {
         selectionRevision = UUID()
     }
 
-    mutating func beginRun(at date: Date, preRunEnergy: String? = nil) {
+    mutating func beginRun(at date: Date, preRunEnergy: String? = nil, saveRoute: Bool = false) {
         guard active == nil else { return }
-        active = RecordedRun(id: UUID(), startedAt: date, preRunEnergy: preRunEnergy, shoePairID: selectedShoe?.id)
+        active = RecordedRun(id: UUID(), startedAt: date, preRunEnergy: preRunEnergy, shoePairID: selectedShoe?.id,
+                             route: saveRoute ? RunRoute() : nil, splitProgress: RunSplitProgress())
+    }
+
+    mutating func discardShortPausedRun(_ id: UUID) throws {
+        guard let run = active, run.id == id, run.canDiscardAsShortRun,
+              !history.contains(where: { $0.id == id }) else { throw SavedRunError.ineligibleForDiscard }
+        active = nil
     }
 
     mutating func finish(at date: Date) {
         guard var run = active else { return }
+        run.splitProgress?.endSegment(at: run.activeSeconds)
         run.finishedAt = date
         if !history.contains(where: { $0.id == run.id }) { history.append(run) }
         active = nil
+    }
+
+    mutating func saveCheckIn(for id: UUID, energy: PostRunEnergy?, effort: Int?) throws {
+        guard active?.id != id, let index = history.firstIndex(where: { $0.id == id }) else { throw SavedRunError.notSaved }
+        if let effort, !(0...10).contains(effort) { throw SavedRunError.invalidEffort }
+        if history[index].firstPostRunEnergy == nil { history[index].firstPostRunEnergy = energy }
+        if history[index].firstPostRunEffort == nil { history[index].firstPostRunEffort = effort }
+        history[index].postRunEnergy = energy
+        history[index].postRunEffort = effort
+    }
+
+    mutating func deleteSavedRun(_ id: UUID) throws {
+        guard active?.id != id else { throw SavedRunError.notSaved }
+        history.removeAll { $0.id == id }
     }
 
     static func load(from url: URL) throws -> Self {
@@ -160,6 +220,11 @@ struct RunJournal: Codable, Equatable {
 
 /// Hold the distance anchor while fixes overlap, so a stationary runner's GPS noise does not add up.
 struct RunDistance {
+    enum FixResult {
+        case ignored, interrupted, anchor, stationary
+        case movement(Double)
+    }
+
     static let metersPerMile = 1_609.344
     static func mileCrossed(from previous: Double, to total: Double) -> Int? {
         let mile = Int(total / metersPerMile)
@@ -178,22 +243,27 @@ struct RunDistance {
     }
 
     mutating func receive(_ point: CLLocation, now: Date) -> Double {
+        if case let .movement(meters) = classify(point, now: now) { return meters }
+        return 0
+    }
+
+    mutating func classify(_ point: CLLocation, now: Date) -> FixResult {
         let time = point.timestamp
-        guard time >= segmentStart, lastSeen.map({ time > $0 }) ?? true else { return 0 }
+        guard time >= segmentStart, lastSeen.map({ time > $0 }) ?? true else { return .ignored }
         let age = now.timeIntervalSince(time)
-        guard age >= 0 else { return 0 }
+        guard age >= 0 else { return .ignored }
         lastSeen = time
         guard age <= 10, point.horizontalAccuracy >= 0, point.horizontalAccuracy <= 25,
               CLLocationCoordinate2DIsValid(point.coordinate) else {
             anchor = nil
             latest = nil
-            return 0
+            return .interrupted
         }
         guard let previous = latest, let origin = anchor,
               time.timeIntervalSince(previous.timestamp) <= 15 else {
             anchor = point
             latest = point
-            return 0
+            return .anchor
         }
         let interval = time.timeIntervalSince(previous.timestamp)
         let recentTravel = point.distance(from: previous) - previous.horizontalAccuracy - point.horizontalAccuracy
@@ -203,11 +273,11 @@ struct RunDistance {
                   || meters <= 9 * time.timeIntervalSince(origin.timestamp) else {
             anchor = nil
             latest = nil
-            return 0
+            return .interrupted
         }
         latest = point
-        guard meters > origin.horizontalAccuracy + point.horizontalAccuracy else { return 0 }
+        guard meters > origin.horizontalAccuracy + point.horizontalAccuracy else { return .stationary }
         anchor = point
-        return meters
+        return .movement(meters)
     }
 }

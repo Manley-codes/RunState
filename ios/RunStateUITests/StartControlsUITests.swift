@@ -68,6 +68,15 @@ final class StartControlsUITests: XCTestCase {
         settings.tap()
         let announcements = app.switches.matching(identifier: "mileAnnouncements").firstMatch
         XCTAssertTrue(announcements.waitForExistence(timeout: 10))
+        let route = app.switches.matching(identifier: "saveRunRoute").firstMatch
+        XCTAssertTrue(route.exists)
+        let privacy = app.buttons["Privacy & data"]
+        if !privacy.isHittable { app.swipeUp() }
+        privacy.tap()
+        let privacyPage = app.navigationBars["Privacy & data"]
+        XCTAssertTrue(privacyPage.waitForExistence(timeout: 10))
+        privacyPage.buttons.element(boundBy: 0).tap()
+        if !announcements.isHittable { app.swipeDown() }
         let original = try XCTUnwrap(announcements.value as? String)
         XCTAssertTrue(["0", "1"].contains(original))
         let changed = original == "1" ? "0" : "1"

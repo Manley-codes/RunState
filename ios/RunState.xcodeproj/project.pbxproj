@@ -205,7 +205,7 @@
             isa = XCBuildConfiguration;
             buildSettings = {
                 CODE_SIGN_STYLE = Automatic;
-                CURRENT_PROJECT_VERSION = 4;
+                CURRENT_PROJECT_VERSION = 5;
                 GENERATE_INFOPLIST_FILE = YES;
                 INFOPLIST_FILE = "Configuration/RunState-Info.plist";
                 INFOPLIST_KEY_CFBundleDisplayName = RunState;
@@ -223,7 +223,7 @@
             isa = XCBuildConfiguration;
             buildSettings = {
                 CODE_SIGN_STYLE = Automatic;
-                CURRENT_PROJECT_VERSION = 4;
+                CURRENT_PROJECT_VERSION = 5;
                 GENERATE_INFOPLIST_FILE = YES;
                 INFOPLIST_FILE = "Configuration/RunState-Info.plist";
                 INFOPLIST_KEY_CFBundleDisplayName = RunState;

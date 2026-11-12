@@ -91,3 +91,37 @@ jobs:
           path: ${{ runner.temp }}/RunState-field-test.ipa
           if-no-files-found: error
           retention-days: 7
+
+      - name: Export the post-run and History simulator screenshots
+        run: |
+          xcrun xcresulttool export attachments --path "$RUNNER_TEMP/RunStateTests.xcresult" --output-path "$RUNNER_TEMP/ios-attachments"
+          python3 - <<'PY'
+          import json
+          import os
+          import shutil
+          from pathlib import Path
+
+          temp = Path(os.environ["RUNNER_TEMP"])
+          source = temp / "ios-attachments"
+          target = temp / "run-screens"
+          target.mkdir()
+          manifest = json.loads((source / "manifest.json").read_text())
+          for test in manifest:
+              for item in test["attachments"]:
+                  for name in ("RunState-PostRun", "RunState-HistoryDetail"):
+                      if name in item.get("suggestedHumanReadableName", ""):
+                          image = source / item["exportedFileName"]
+                          if image.read_bytes()[:8] == bytes.fromhex("89504e470d0a1a0a"):
+                              shutil.copyfile(image, target / (name + ".png"))
+          for name in ("RunState-PostRun", "RunState-HistoryDetail"):
+              if not (target / (name + ".png")).is_file():
+                  raise SystemExit(f"Simulator screenshot missing: {name}")
+          PY
+
+      - name: Save the simulator screenshots
+        uses: actions/upload-artifact@v4
+        with:
+          name: RunState-iPhone-screens
+          path: ${{ runner.temp }}/run-screens/*.png
+          if-no-files-found: error
+          retention-days: 7

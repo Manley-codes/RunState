@@ -1,5 +1,15 @@
 # Data & Privacy
 
+## iPhone personal field-test build 5
+
+RunState keeps run summaries, mile splits when GPS coverage allows, optional Energy and
+Effort answers, and shoe assignments in the app’s local journal. The journal is excluded
+from device backups. **Save route in History** is off by default. Turning it on before
+starting a run also stores location points in that run. History draws the saved path on
+the device. Opening the separate live street map uses Apple Maps. Deleting a saved run
+also removes its answers, splits and route and updates the shoe’s recorded mileage.
+This build uses a local recap and does not send a run to the reflection backend.
+
 ## Current Android data handling
 
 Reviewed November 8, 2026 against Android and backend source at `3dee96d`, updated for the

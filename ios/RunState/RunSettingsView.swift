@@ -15,6 +15,14 @@ struct RunSettingsView: View {
                     Toggle("Announce each mile", isOn: $tracker.mileAnnouncementsEnabled)
                         .accessibilityIdentifier("mileAnnouncements")
                 }
+                Section {
+                    Toggle("Save route in History", isOn: $tracker.saveRoutes)
+                        .accessibilityIdentifier("saveRunRoute")
+                } header: {
+                    Text("Run history")
+                } footer: {
+                    Text("For new runs, save GPS points on this iPhone to draw your route. You can delete a run and its route together in History. Distance and pace work with this off.")
+                }
                 Section("Location") {
                     LabeledContent("Access", value: authorizationLabel)
                     if tracker.hasLocationPermission {
@@ -28,6 +36,25 @@ struct RunSettingsView: View {
                         Button("Allow location access", action: tracker.requestPermission)
                     } else if let settings = URL(string: UIApplication.openSettingsURLString) {
                         Button("Open iPhone Settings") { openURL(settings) }
+                    }
+                }
+                Section {
+                    NavigationLink("Privacy & data") {
+                        List {
+                            Section("Saved on this iPhone") {
+                                Text("RunState saves run totals, available mile splits, your check-in answers and your shoe choices on this device. Run History is excluded from device backups.")
+                                Text("GPS measures distance even when Save route in History is off. Turning it on keeps the path for runs you start afterward.")
+                            }
+                            Section("Maps and music") {
+                                Text("History draws saved routes on this iPhone. The live street map uses Apple Maps to load the area you view.")
+                                Text("The Spotify shortcut opens Spotify. This iPhone build does not collect your listening history or send your runs to the reflection service.")
+                            }
+                            Section("Remove a saved run") {
+                                Text("In History, open the run and tap the trash button. After you confirm, its check-in, route and splits are removed and its distance comes off the shoe’s total.")
+                            }
+                        }
+                        .navigationTitle("Privacy & data")
+                        .navigationBarTitleDisplayMode(.inline)
                     }
                 }
             }

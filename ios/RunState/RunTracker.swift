@@ -10,11 +10,15 @@ final class RunTracker: NSObject, ObservableObject, CLLocationManagerDelegate {
     @Published var mileAnnouncementsEnabled: Bool {
         didSet { preferences.set(mileAnnouncementsEnabled, forKey: Self.mileAnnouncementsKey) }
     }
+    @Published var saveRoutes: Bool {
+        didSet { preferences.set(saveRoutes, forKey: Self.saveRoutesKey) }
+    }
     @Published private(set) var gpsStatus = ""
     @Published private(set) var errorMessage: String?
     private(set) var canWrite = true
 
     private static let mileAnnouncementsKey = "run.mileAnnouncementsEnabled"
+    private static let saveRoutesKey = "run.saveRoutes"
     private let preferences: UserDefaults
     private let gps = CLLocationManager()
     let voice = RunVoice()
@@ -22,6 +26,8 @@ final class RunTracker: NSObject, ObservableObject, CLLocationManagerDelegate {
     private var distance = RunDistance()
     private let clock = ContinuousClock()
     private var timerAnchor: ContinuousClock.Instant?
+    private var segmentHasCompleteTime = false
+    private var segmentStartActiveSeconds: TimeInterval = 0
 
     override convenience init() {
         self.init(preferences: .standard, journalURL: URL.applicationSupportDirectory.appending(path: "FieldTest/runs.json"))
@@ -31,10 +37,16 @@ final class RunTracker: NSObject, ObservableObject, CLLocationManagerDelegate {
         self.preferences = preferences
         self.journalURL = journalURL
         mileAnnouncementsEnabled = preferences.object(forKey: Self.mileAnnouncementsKey) as? Bool ?? true
+        saveRoutes = preferences.bool(forKey: Self.saveRoutesKey)
         super.init()
         refreshLocationAuthorization()
         do {
             journal = try RunJournal.load(from: journalURL)
+            if journal.active?.pausedWithCompleteTime == false {
+                // A running checkpoint may predate the last movement before termination.
+                // Keep its recorded totals and route, but there is no complete split timeline.
+                journal.active?.splitProgress = nil
+            }
         } catch {
             canWrite = false
             errorMessage = "RunState could not open the saved runs."
@@ -54,33 +66,51 @@ final class RunTracker: NSObject, ObservableObject, CLLocationManagerDelegate {
     }
 
     func addShoe(brand: String, model: String, nickname: String? = nil, id: UUID = UUID()) throws {
-        try saveShoeChange { try $0.addShoe(brand: brand, model: model, nickname: nickname, id: id) }
+        try saveJournalChange { try $0.addShoe(brand: brand, model: model, nickname: nickname, id: id) }
     }
 
     func selectShoe(_ id: UUID?) throws {
-        try saveShoeChange { try $0.selectShoe(id) }
+        try saveJournalChange { try $0.selectShoe(id) }
     }
 
     func archiveShoe(_ id: UUID) throws -> ShoeArchiveUndo {
-        try saveShoeChange { try $0.archiveShoe(id) }
+        try saveJournalChange { try $0.archiveShoe(id) }
     }
 
     func undoArchive(_ receipt: ShoeArchiveUndo) throws {
-        try saveShoeChange { try $0.undoArchive(receipt) }
+        try saveJournalChange { try $0.undoArchive(receipt) }
     }
 
     func restoreShoe(_ id: UUID) throws {
-        try saveShoeChange { try $0.restoreShoe(id) }
+        try saveJournalChange { try $0.restoreShoe(id) }
     }
 
-    private func saveShoeChange<Result>(_ change: (inout RunJournal) throws -> Result) throws -> Result {
-        guard canWrite else { throw ShoeChangeError("RunState could not open your saved runs.") }
+    func saveCheckIn(for id: UUID, energy: PostRunEnergy?, effort: Int?) throws {
+        try saveJournalChange { try $0.saveCheckIn(for: id, energy: energy, effort: effort) }
+    }
+
+    func deleteSavedRun(_ id: UUID) throws {
+        try saveJournalChange { try $0.deleteSavedRun(id) }
+    }
+
+    func discardShortPausedRun(_ id: UUID) {
+        guard !running else { return }
+        do {
+            try saveJournalChange { try $0.discardShortPausedRun(id) }
+            errorMessage = nil
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func saveJournalChange<Result>(_ change: (inout RunJournal) throws -> Result) throws -> Result {
+        guard canWrite else { throw SavedRunError.storage }
         var next = journal
         let result = try change(&next)
         do {
             try next.save(to: journalURL)
         } catch {
-            throw ShoeChangeError("Couldn’t save your shoe change. Check the iPhone’s storage and try again.")
+            throw SavedRunError.storage
         }
         journal = next
         return result
@@ -90,14 +120,20 @@ final class RunTracker: NSObject, ObservableObject, CLLocationManagerDelegate {
         guard !running, hasLocationPermission, canWrite else { return }
         let now = Date()
         errorMessage = nil
-        if journal.active == nil {
-            var next = journal
-            next.beginRun(at: now, preRunEnergy: preRunEnergy)
-            guard store(next) else { return }
-            journal = next
+        let completeTime = journal.active == nil || journal.active?.pausedWithCompleteTime == true
+        var next = journal
+        if next.active == nil {
+            next.beginRun(at: now, preRunEnergy: preRunEnergy, saveRoute: saveRoutes)
         }
+        // A crash after resuming must never leave an older pause eligible for discard.
+        next.active?.pausedWithCompleteTime = false
+        guard store(next) else { return }
+        journal = next
+        segmentHasCompleteTime = completeTime
+        segmentStartActiveSeconds = journal.active?.activeSeconds ?? 0
+        journal.active?.splitProgress?.startSegment(at: segmentStartActiveSeconds)
         timerAnchor = clock.now
-        distance.startSegment(at: now)
+        distance.startSegment(at: Date())
         gpsStatus = "Finding GPS…"
         running = true
         gps.allowsBackgroundLocationUpdates = true
@@ -108,6 +144,9 @@ final class RunTracker: NSObject, ObservableObject, CLLocationManagerDelegate {
         guard running else { return }
         voice.stopCountdownCue()
         checkpoint(at: clock.now)
+        journal.active?.pausedWithCompleteTime = segmentHasCompleteTime
+        let pausedAt = journal.active?.activeSeconds ?? 0
+        journal.active?.splitProgress?.endSegment(at: pausedAt)
         timerAnchor = nil
         running = false
         gps.stopUpdatingLocation()
@@ -142,6 +181,12 @@ final class RunTracker: NSObject, ObservableObject, CLLocationManagerDelegate {
         timerAnchor = instant
     }
 
+    func checkpointForBackground() {
+        guard running else { return }
+        checkpoint(at: clock.now)
+        _ = store(journal)
+    }
+
     func refreshLocationAuthorization() {
         authorization = gps.authorizationStatus
         accuracyAuthorization = gps.accuracyAuthorization
@@ -156,18 +201,18 @@ final class RunTracker: NSObject, ObservableObject, CLLocationManagerDelegate {
     }
 
     func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
-        guard running, let previous = journal.active else { return }
+        guard running, let previousMeters = journal.active?.meters else { return }
+        let tick = clock.now
         let now = Date()
-        var added = 0.0
-        for point in locations { added += distance.receive(point, now: now) }
+        let deliverySeconds = (journal.active?.activeSeconds ?? 0) + elapsedSinceCheckpoint(at: tick)
+        journal.active?.record(locations, using: &distance, deliveredAt: now,
+                               activeAtDelivery: deliverySeconds, segmentStart: segmentStartActiveSeconds)
         if let point = locations.last {
             if manager.accuracyAuthorization == .reducedAccuracy { gpsStatus = "Enable Precise Location in Settings for distance." }
             else if point.horizontalAccuracy < 0 || point.horizontalAccuracy > 25 { gpsStatus = "Waiting for a clearer GPS signal…" }
             else { gpsStatus = "Tracking GPS" }
         }
-        journal.active?.meters += added
-        let mile = RunDistance.mileCrossed(from: previous.meters, to: previous.meters + added)
-        let tick = clock.now
+        let mile = RunDistance.mileCrossed(from: previousMeters, to: journal.active?.meters ?? previousMeters)
         if mile != nil || elapsedSinceCheckpoint(at: tick) >= 15 {
             checkpoint(at: tick)
             _ = store(journal)
@@ -178,6 +223,7 @@ final class RunTracker: NSObject, ObservableObject, CLLocationManagerDelegate {
     func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
         guard running else { return }
         distance.startSegment(at: Date())
+        journal.active?.splitProgress?.interrupt()
         if (error as? CLError)?.code == .denied {
             pause()
             errorMessage = "Run paused because location is unavailable."

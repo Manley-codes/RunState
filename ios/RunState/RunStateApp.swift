@@ -21,8 +21,9 @@ private struct RunScreen: View {
     @Environment(\.openURL) private var openURL
     @Environment(\.scenePhase) private var scenePhase
     @State private var opening: Bool
-    private enum RunSheet: String, Identifiable {
+    private enum RunSheet: Hashable, Identifiable {
         case history, map, settings, shoes
+        case completion(UUID)
         var id: Self { self }
     }
 
@@ -61,6 +62,7 @@ private struct RunScreen: View {
         }
         .preferredColorScheme(.dark)
         .onChange(of: scenePhase) { phase in
+            if phase == .background { tracker.checkpointForBackground() }
             if phase != .active && countdown.seconds != nil {
                 countdown.cancel()
                 startMessage = "Countdown canceled. Start again when ready."
@@ -72,7 +74,17 @@ private struct RunScreen: View {
         }
         .sheet(item: $sheet) { destination in
             switch destination {
-            case .history: history
+            case .history: RunHistoryView(tracker: tracker)
+            case .completion(let runID):
+                NavigationStack {
+                    RunCompletionView(tracker: tracker, runID: runID)
+                        .toolbar {
+                            ToolbarItem(placement: .confirmationAction) {
+                                Button("Done") { sheet = nil }
+                            }
+                        }
+                }
+                .preferredColorScheme(.light)
             case .map: RunLiveMapView(tracker: tracker)
             case .settings: RunSettingsView(tracker: tracker)
             case .shoes: RunShoesView(tracker: tracker)
@@ -86,32 +98,6 @@ private struct RunScreen: View {
         } message: {
             Text("Check that Spotify is installed on this iPhone.")
         }
-    }
-
-    private var history: some View {
-        NavigationStack {
-            List {
-                if tracker.journal.history.isEmpty {
-                    Text("Your saved runs will appear here.").foregroundStyle(.secondary)
-                }
-                ForEach(tracker.journal.history.reversed()) { run in
-                    VStack(alignment: .leading, spacing: 5) {
-                        Text(run.startedAt.formatted(date: .abbreviated, time: .shortened))
-                        Text("\((run.meters / RunDistance.metersPerMile).formatted(.number.precision(.fractionLength(2)))) mi · \(ActiveRunView.clockText(run.activeSeconds))")
-                            .monospacedDigit()
-                        if let selection = run.preRunEnergy { Text("Starting energy · " + selection).font(.footnote) }
-                        if let shoe = tracker.journal.shoe(for: run.shoePairID) {
-                            Text("Shoes · " + shoe.fullName).font(.footnote)
-                        }
-                    }
-                }
-            }
-            .navigationTitle("Saved runs")
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) { Button("Done") { sheet = nil } }
-            }
-        }
-        .preferredColorScheme(.dark)
     }
 
     private func openSpotify() {
@@ -157,7 +143,10 @@ private struct RunScreen: View {
     }
 
     private func finish() {
+        guard let runID = tracker.journal.active?.id else { return }
         tracker.finish()
-        if tracker.journal.active == nil { sheet = .history }
+        if tracker.journal.active == nil, tracker.journal.history.contains(where: { $0.id == runID }) {
+            sheet = .completion(runID)
+        }
     }
 }

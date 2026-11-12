@@ -3,7 +3,7 @@
 <plist version="1.0">
 <dict>
     <key>NSLocationWhenInUseUsageDescription</key>
-    <string>RunState uses your location to show you on the map. During a run, it measures distance and can announce miles, even while the screen is locked.</string>
+    <string>RunState uses location for the map and to measure runs, including while the screen is locked. You can also choose to save a route on this iPhone.</string>
     <key>UIBackgroundModes</key>
     <array>
         <string>location</string>

@@ -10,6 +10,7 @@ struct ActiveRunView: View {
     @Environment(\.dynamicTypeSize) private var typeSize
     @Environment(\.scenePhase) private var scenePhase
     @State private var confirmingFinish = false
+    @State private var shortRunID: UUID?
 
     private static let ink = Color(red: 245/255, green: 245/255, blue: 247/255)
     private static let label = Color(red: 167/255, green: 170/255, blue: 183/255)
@@ -69,6 +70,17 @@ struct ActiveRunView: View {
         .confirmationDialog("Finish and save this run?", isPresented: $confirmingFinish, titleVisibility: .visible) {
             Button("Finish and save", action: onFinish)
             Button("Cancel", role: .cancel) {}
+        }
+        .alert("Save this short run?", isPresented: Binding(
+            get: { shortRunID != nil }, set: { if !$0 { shortRunID = nil } }
+        ), presenting: shortRunID) { id in
+            Button("Save run") {
+                if tracker.journal.active?.id == id && !tracker.running { onFinish() }
+            }
+            Button("Discard run", role: .destructive) { tracker.discardShortPausedRun(id) }
+            Button("Keep paused", role: .cancel) {}
+        } message: { _ in
+            Text("You recorded less than 30 seconds of active time. Save it to History, or permanently discard it if you started by accident.")
         }
     }
 
@@ -147,27 +159,47 @@ struct ActiveRunView: View {
 
     private func pacePanel(unit: CGFloat) -> some View {
         TimelineView(.animation(minimumInterval: 1, paused: !tracker.running || scenePhase != .active)) { _ in
-            let pace = Self.paceText(meters: tracker.journal.active?.meters ?? 0, activeSeconds: tracker.activeSeconds)
-            VStack(spacing: 3) {
-                Text("Average pace").font(.subheadline.weight(.medium)).foregroundStyle(Self.label)
-                Text(verbatim: pace ?? "—")
-                    .font(.custom("BarlowCondensed-Medium", size: 47 * unit, relativeTo: .title))
-                    .lineLimit(1).minimumScaleFactor(0.5)
+            let run = tracker.journal.active
+            let elapsed = tracker.activeSeconds
+            let meters = run?.meters ?? 0
+            let pace = Self.paceText(meters: meters, activeSeconds: elapsed)
+            let mile = run?.splitProgress?.currentMile(meters: meters, activeSeconds: elapsed)
+            let layout = typeSize.isAccessibilitySize ? AnyLayout(VStackLayout(spacing: 6)) :
+                AnyLayout(HStackLayout(spacing: 8 * unit))
+            layout {
+                paceCard("Average pace", pace: pace, unit: unit, primary: true)
+                if run?.splitProgress != nil {
+                    paceCard("Current mile", pace: mile.flatMap { Self.paceText(meters: $0.meters, activeSeconds: $0.activeSeconds) },
+                             unit: unit, primary: false)
+                }
             }
-            .padding(.vertical, 10 * unit)
-            .padding(.horizontal, 12)
-            .frame(width: (typeSize.isAccessibilitySize ? 344 : 224) * unit)
-            .frame(minHeight: (tracker.running ? 104 : 82) * unit)
-            .background(Self.panel, in: RoundedRectangle(cornerRadius: 10 * unit))
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel("Average pace")
-            .accessibilityValue(pace?.replacingOccurrences(of: " /mi", with: " per mile") ?? "Unavailable")
         }
+    }
+
+    private func paceCard(_ title: String, pace: String?, unit: CGFloat, primary: Bool) -> some View {
+        VStack(spacing: 3) {
+            Text(title).font(.subheadline.weight(.medium)).foregroundStyle(Self.label)
+            Text(verbatim: pace ?? "—")
+                .font(.custom("BarlowCondensed-Medium", size: (primary ? 47 : 36) * unit, relativeTo: .title))
+                .lineLimit(1).minimumScaleFactor(0.5)
+        }
+        .padding(.vertical, 10 * unit)
+        .padding(.horizontal, 8)
+        .frame(width: (typeSize.isAccessibilitySize ? 344 : (primary ? 195 : 141)) * unit)
+        .frame(minHeight: (tracker.running ? 104 : 82) * unit)
+        .background(Self.panel, in: RoundedRectangle(cornerRadius: 10 * unit))
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(title)
+        .accessibilityValue(pace?.replacingOccurrences(of: " /mi", with: " per mile") ?? "Unavailable")
     }
 
     private func finishControl(unit: CGFloat) -> some View {
         Button {
-            confirmingFinish = true
+            if let run = tracker.journal.active, run.canDiscardAsShortRun {
+                shortRunID = run.id
+            } else {
+                confirmingFinish = true
+            }
         } label: {
             VStack(spacing: 6) {
                 Image(systemName: "stop.fill")
