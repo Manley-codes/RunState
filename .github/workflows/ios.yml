@@ -4,6 +4,8 @@ on:
   push:
     branches: [master]
     paths:
+      - 'backend/src/main/java/com/runstate/reflection/ReflectionApiJson.java'
+      - 'backend/src/main/java/com/runstate/reflection/ReflectionContract.java'
       - 'ios/**'
       - '.github/workflows/ios.yml'
       - 'android/gradle.properties'
@@ -15,9 +17,12 @@ on:
       - 'android/app/src/main/res/drawable/start_music_orb.jpg'
       - 'android/app/src/main/res/font/barlow_condensed_medium.ttf'
       - 'android/app/src/main/res/font/anton_regular.ttf'
+      - 'android/app/src/main/res/raw/snippet_close.wav'
   pull_request:
     branches: [master]
     paths:
+      - 'backend/src/main/java/com/runstate/reflection/ReflectionApiJson.java'
+      - 'backend/src/main/java/com/runstate/reflection/ReflectionContract.java'
       - 'ios/**'
       - '.github/workflows/ios.yml'
       - 'android/gradle.properties'
@@ -29,13 +34,42 @@ on:
       - 'android/app/src/main/res/drawable/start_music_orb.jpg'
       - 'android/app/src/main/res/font/barlow_condensed_medium.ttf'
       - 'android/app/src/main/res/font/anton_regular.ttf'
+      - 'android/app/src/main/res/raw/snippet_close.wav'
   workflow_dispatch:
+    inputs:
+      checks:
+        description: Checks to run
+        type: choice
+        options: [full, music]
+        default: full
 
 permissions:
   contents: read
 
 jobs:
+  music:
+    if: github.event_name == 'workflow_dispatch' && inputs.checks == 'music'
+    name: Focused iPhone finish checks
+    runs-on: macos-26
+    timeout-minutes: 20
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.5.app/Contents/Developer
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Run the iPhone music and playback tests
+        working-directory: ios
+        run: |
+          xcodebuild -project RunState.xcodeproj -scheme RunState -configuration Debug \
+            -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.5' \
+            -parallel-testing-enabled NO RUNSTATE_FIELD_TOOLS=YES \
+            -only-testing:RunStateTests/FieldSamplePlaybackTests \
+            -only-testing:RunStateTests/MusicReflectionResponseTests \
+            -only-testing:RunStateUITests/FieldSampleUITests test
+
   field-test:
+    if: github.event_name != 'workflow_dispatch' || inputs.checks != 'music'
     name: Simulator tests and personal device build
     runs-on: macos-26
     timeout-minutes: 30
@@ -54,7 +88,7 @@ jobs:
           xcodebuild -version
           xcodebuild -project RunState.xcodeproj -scheme RunState -configuration Debug \
             -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.5' \
-            -parallel-testing-enabled NO \
+            -parallel-testing-enabled NO RUNSTATE_FIELD_TOOLS=YES \
             -resultBundlePath "$RUNNER_TEMP/RunStateTests.xcresult" test
 
       - name: Keep failed simulator results
@@ -76,7 +110,7 @@ jobs:
           fi
           xcodebuild -project RunState.xcodeproj -scheme RunState -configuration Release \
             -destination 'generic/platform=iOS' -derivedDataPath "$RUNNER_TEMP/device-build" \
-            "RUNSTATE_SPOTIFY_CLIENT_ID=$PUBLIC_SPOTIFY_ID" CODE_SIGNING_ALLOWED=NO build
+            "RUNSTATE_SPOTIFY_CLIENT_ID=$PUBLIC_SPOTIFY_ID" CODE_SIGNING_ALLOWED=NO RUNSTATE_FIELD_TOOLS=YES build
           app="$RUNNER_TEMP/device-build/Build/Products/Release-iphoneos/RunState.app"
           test -x "$app/RunState"
           test -s "$app/Frameworks/SpotifyiOS.framework/SpotifyiOS"
@@ -84,6 +118,11 @@ jobs:
           test -s "$app/SpotifyNotices.txt"
           test -s "$app/Assets.car"
           test ! -e "$app/reflection-test-tone.mp3"
+          for file in music-finish-response.json field-finish-original.mp3 field-finish-excerpt.mp3 snippet_close.wav; do
+            test -s "$app/$file"
+          done
+          cmp "$app/snippet_close.wav" ../android/app/src/main/res/raw/snippet_close.wav
+          LC_ALL=C grep -aFq 'settings.sampleRunFinish' "$app/RunState"
           test "$(plutil -extract RunStateSpotifyClientID raw -o - "$app/Info.plist")" = "$PUBLIC_SPOTIFY_ID"
           test "$(plutil -extract CFBundleSupportedPlatforms.0 raw -o - "$app/Info.plist")" = iPhoneOS
           for photo in ../android/app/src/main/assets/opening/*.webp; do
@@ -97,6 +136,21 @@ jobs:
           cd "$RUNNER_TEMP/package"
           /usr/bin/zip -qry "$RUNNER_TEMP/RunState-field-test.ipa" Payload
           /usr/bin/unzip -tq "$RUNNER_TEMP/RunState-field-test.ipa"
+
+      - name: Check the ordinary Release build excludes the desk sample
+        run: |
+          xcodebuild -project RunState.xcodeproj -scheme RunState -configuration Release \
+            -destination 'generic/platform=iOS' -derivedDataPath "$RUNNER_TEMP/ordinary-build" \
+            CODE_SIGNING_ALLOWED=NO build
+          app="$RUNNER_TEMP/ordinary-build/Build/Products/Release-iphoneos/RunState.app"
+          test -x "$app/RunState"
+          for file in music-finish-response.json field-finish-original.mp3 field-finish-excerpt.mp3 snippet_close.wav; do
+            test ! -e "$app/$file"
+          done
+          if LC_ALL=C grep -aFq 'settings.sampleRunFinish' "$app/RunState"; then
+            echo "Field-only controls found in the ordinary Release build."
+            exit 1
+          fi
 
       - name: Save the build for personal signing
         uses: actions/upload-artifact@v4
@@ -120,7 +174,7 @@ jobs:
           target = temp / "run-screens"
           target.mkdir()
           manifest = json.loads((source / "manifest.json").read_text())
-          screens = ("RunState-PostRun", "RunState-HistoryDetail", "RunState-WrittenReflection", "RunState-NowPlaying", "RunState-SpokenReflection")
+          screens = ("RunState-PostRun", "RunState-HistoryDetail", "RunState-WrittenReflection", "RunState-NowPlaying", "RunState-SpokenReflection", "RunState-SampleFinish")
           for test in manifest:
               for item in test["attachments"]:
                   if "RunState-ReflectionRequest" in item.get("suggestedHumanReadableName", ""):
@@ -175,10 +229,11 @@ jobs:
           print("The Java backend accepted the iPhone request and returned all four test answers.")
           PY
 
-      - name: Verify the iPhone voice request with a simulated Java speech provider
+      - name: Check the iPhone voice request and music response against Java
         run: |
           mvn -B --no-transfer-progress -f ../backend/pom.xml test \
-            '-Dtest=ReflectionHttpServerTest#reflectionSpeechPreservesExactTextAndReturnsPrivateMp3Bytes' \
+            '-Dtest=ReflectionHttpServerTest#reflectionSpeechPreservesExactTextAndReturnsPrivateMp3Bytes+iphoneMusicFinishFixtureMatchesServerOutput' \
+            "-Drunstate.test.iosMusicFixture=$GITHUB_WORKSPACE/ios/RunState/music-finish-response.json" \
             "-Drunstate.test.iosSpeechBody=$RUNNER_TEMP/iphone-test-speech.json"
 
       - name: Save the simulator screenshots

@@ -70,6 +70,14 @@ struct RunSettingsView: View {
                         .navigationBarTitleDisplayMode(.inline)
                     }
                 }
+                #if RUNSTATE_FIELD_TOOLS
+                if tracker.canWrite && !tracker.running && tracker.journal.active == nil {
+                    Section("Field test") {
+                        NavigationLink("Sample run finish") { FieldSampleView() }
+                            .accessibilityIdentifier("settings.sampleRunFinish")
+                    }
+                }
+                #endif
             }
             .navigationTitle("Run Settings")
             .toolbar {

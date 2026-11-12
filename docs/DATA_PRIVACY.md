@@ -1,6 +1,6 @@
 # Data & Privacy
 
-## iPhone personal field-test build 8
+## iPhone personal field-test build 9
 
 RunState keeps run summaries, mile splits when GPS coverage allows, optional Energy and
 Effort answers, and shoe assignments in the app’s local journal. The journal is excluded
@@ -23,6 +23,11 @@ replay and keeps the status of a voice request with the run to prevent accidenta
 Closing the app clears that recording. The server’s replay and expiry behavior depends
 on its deployed version and storage. **Read with iPhone voice** reads the same saved text
 on the device and uses no RunState voice credits. Opening a run does not request audio.
+
+The personal field build also has a **Sample run finish** in Run Settings. It reads a
+fictional reflection with the iPhone voice and plays two original bundled music tracks
+and the closing sound. It works offline without creating a run or reading Spotify.
+The ordinary Release configuration excludes this tool and its sample resources.
 
 The Spotify shortcut opens the Spotify app. The optional Now Playing connection is separate.
 Connecting from Run Settings asks the Spotify app for authorization. While RunState is open,

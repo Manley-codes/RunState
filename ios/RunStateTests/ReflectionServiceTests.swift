@@ -239,7 +239,7 @@ final class ReflectionServiceTests: XCTestCase {
         let request = try WrittenReflectionRequest(run: completeRun())
         let changed: [[String: Any]] = [["runId": UUID().uuidString.lowercased()], ["generationMode": "OTHER"],
                                         ["requestId": UUID().uuidString.lowercased()],
-                                        ["candidates": ["spent": "Only one"]], ["songCueId": "unauthorized"]]
+                                        ["candidates": ["spent": "Only one"]], ["unknownField": "unauthorized"]]
         for change in changed {
             let service = ReflectionService { http in
                 if http.httpMethod == "GET" { return try self.reply(http, ["status": "ok"]) }

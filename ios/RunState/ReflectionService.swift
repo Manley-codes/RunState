@@ -17,8 +17,7 @@ struct WrittenReflectionRequest: Codable, Equatable {
         let activeDurationMillis: Int64?
         let metrics: Metrics
         let preRunEnergy: String
-        // The iPhone Spotify shortcut does not observe songs. An absent musicContext
-        // is interpreted as UNKNOWN by the server, including on its older versions.
+        // Now Playing is display-only. An absent musicContext is interpreted as UNKNOWN.
     }
 
     let requestId: String
@@ -63,6 +62,8 @@ struct WrittenReflectionAnswers: Codable, Equatable {
     let poweredUp: String
     let noSelection: String
     let isTestData: Bool
+    var selectedSongID: String? = nil
+    var snippet: ReflectionMusicSnippet? = nil
 
     func text(for energy: PostRunEnergy?) -> String {
         switch energy {
@@ -165,7 +166,7 @@ final class ReflectionService: WrittenReflectionServing {
             if result.response.statusCode == 401 { throw ReflectionServiceError.invalidCode }
             if replayOnly && Self.isReplayMiss(result) { throw ReflectionServiceError.replayUnavailable }
             guard result.response.statusCode == 200 else { throw ReflectionServiceError.deliveryFailed(result.response.statusCode) }
-            return try Self.answers(from: result.data, request: request)
+            return try Self.answers(from: result.data, requestID: request.requestId, runID: request.runId)
         } catch is CancellationError {
             throw CancellationError()
         } catch let error as ReflectionServiceError {
@@ -288,19 +289,36 @@ final class ReflectionService: WrittenReflectionServing {
         return (data, http)
     }
 
-    private static func answers(from data: Data, request: WrittenReflectionRequest) throws -> WrittenReflectionAnswers {
-        guard let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
-              Set(json.keys) == Set(["requestId", "runId", "generationMode", "candidates"]),
-              json["requestId"] as? String == request.requestId,
-              json["runId"] as? String == request.runId,
+    static func answers(from data: Data, requestID: String, runID: String,
+                        recordings: [ReflectionRecording] = []) throws -> WrittenReflectionAnswers {
+        let allowed = Set(["requestId", "runId", "generationMode", "candidates",
+                           "songCueId", "selectedSongId", "songSelectionMethod", "songSnippet"])
+        guard data.count <= responseLimit,
+              let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
+              Set(json.keys).isSubset(of: allowed),
+              json["requestId"] as? String == requestID, json["runId"] as? String == runID,
               let mode = json["generationMode"] as? String, ["FAKE", "ANTHROPIC"].contains(mode),
               let values = json["candidates"] as? [String: String],
               Set(values.keys) == Set(["spent", "feeling_good", "powered_up", "no_selection"]),
               values.values.allSatisfy({ !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }),
               let spent = values["spent"], let good = values["feeling_good"], let powered = values["powered_up"],
               let unsure = values["no_selection"] else { throw ReflectionServiceError.unreadableResponse }
-        return WrittenReflectionAnswers(spent: spent, feelingGood: good, poweredUp: powered, noSelection: unsure,
-                                        isTestData: mode == "FAKE")
+        var result = WrittenReflectionAnswers(spent: spent, feelingGood: good, poweredUp: powered, noSelection: unsure,
+                                              isTestData: mode == "FAKE")
+        // A missing or untrusted music receipt cannot invalidate the words already generated.
+        guard mode == "ANTHROPIC", let id = json["selectedSongId"] as? String,
+              let selection = json["songSelectionMethod"] as? String,
+              let winner = recordings.first(where: { $0.id == id }),
+              recordings.filter({ $0.id == id }).count == 1 else { return result }
+        let snippet = ReflectionMusicSnippet.validated(in: json, for: winner)
+        switch selection {
+        case "CONTEXT_MATCH", "AVAILABLE_FALLBACK": break
+        case "OBSERVED_FALLBACK" where snippet?.version == 2 && json["songCueId"] == nil: break
+        default: return result
+        }
+        result.selectedSongID = winner.id
+        result.snippet = winner.loadedAtFinish ? nil : snippet
+        return result
     }
 }
 
