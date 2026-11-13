@@ -4,6 +4,10 @@ import UIKit
 
 struct RunSettingsView: View {
     @ObservedObject var tracker: RunTracker
+    @ObservedObject var spotify: SpotifyObservation
+    #if RUNSTATE_FIELD_TOOLS
+    @EnvironmentObject private var fieldRecognition: FieldRecognitionTest
+    #endif
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
     @Environment(\.scenePhase) private var scenePhase
@@ -14,6 +18,18 @@ struct RunSettingsView: View {
                 Section("During a run") {
                     Toggle("Announce each mile", isOn: $tracker.mileAnnouncementsEnabled)
                         .accessibilityIdentifier("mileAnnouncements")
+                    NavigationLink("Spotify now playing") {
+                        SpotifyObservationSettings(observation: spotify)
+                    }
+                    .accessibilityIdentifier("spotify.settings")
+                }
+                Section {
+                    Toggle("Save route in History", isOn: $tracker.saveRoutes)
+                        .accessibilityIdentifier("saveRunRoute")
+                } header: {
+                    Text("Run history")
+                } footer: {
+                    Text("For new runs, save GPS points on this iPhone to draw your route. You can delete a run and its route together in History. Distance and pace work with this off.")
                 }
                 Section("Location") {
                     LabeledContent("Access", value: authorizationLabel)
@@ -30,6 +46,45 @@ struct RunSettingsView: View {
                         Button("Open iPhone Settings") { openURL(settings) }
                     }
                 }
+                Section {
+                    NavigationLink("Written reflections") {
+                        ReflectionSettingsView(connection: tracker.reflectionConnection)
+                    }
+                    NavigationLink("Privacy & data") {
+                        List {
+                            Section("Saved on this iPhone") {
+                                Text("RunState saves run totals, available mile splits, your check-in answers and your shoe choices on this device. Run History is excluded from device backups.")
+                                Text("GPS measures distance even when Save route in History is off. Turning it on keeps the path for runs you start afterward.")
+                            }
+                            Section("Maps and music") {
+                                Text("History draws saved routes on this iPhone. The live street map uses Apple Maps to load the area you view.")
+                                Text("The Spotify shortcut opens the Spotify app. If you connect in Run Settings, RunState can display the current track while open. Leaving RunState clears the displayed song. Listening activity is never saved in your run history or sent to the reflection service.")
+                            }
+                            Section("Written reflections") {
+                                Text("With a private access code, you can choose to send a run summary to RunState for a written reflection. RunState uses Anthropic to generate the answers. Your access code stays in this iPhone’s Keychain and is sent only to authenticate with RunState.")
+                                Text("Your route points, shoe information and Spotify history are excluded. Deleting a run removes its saved reflection from this device. Turning off reflections stops new requests from this app.")
+                                Text("Choosing RunState voice sends the saved text and run ID to RunState. ElevenLabs receives the text to read aloud. The iPhone keeps the latest recording in memory for replay. Choosing the iPhone voice reads the text on this device.")
+                            }
+                            Section("Remove a saved run") {
+                                Text("In History, open the run and tap the trash button. After you confirm, its check-in, route and splits are removed and its distance comes off the shoe’s total.")
+                            }
+                        }
+                        .navigationTitle("Privacy & data")
+                        .navigationBarTitleDisplayMode(.inline)
+                    }
+                }
+                #if RUNSTATE_FIELD_TOOLS
+                if tracker.canWrite && !tracker.running && tracker.journal.active == nil {
+                    Section("Field test") {
+                        NavigationLink("Sample run finish") { FieldSampleView() }
+                            .accessibilityIdentifier("settings.sampleRunFinish")
+                        NavigationLink("Two-song recognition") {
+                            FieldRecognitionView(test: fieldRecognition)
+                        }
+                        .accessibilityIdentifier("settings.lockedSongTest")
+                    }
+                }
+                #endif
             }
             .navigationTitle("Run Settings")
             .toolbar {

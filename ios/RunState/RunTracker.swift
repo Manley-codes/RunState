@@ -10,11 +10,23 @@ final class RunTracker: NSObject, ObservableObject, CLLocationManagerDelegate {
     @Published var mileAnnouncementsEnabled: Bool {
         didSet { preferences.set(mileAnnouncementsEnabled, forKey: Self.mileAnnouncementsKey) }
     }
+    @Published var saveRoutes: Bool {
+        didSet { preferences.set(saveRoutes, forKey: Self.saveRoutesKey) }
+    }
     @Published private(set) var gpsStatus = ""
     @Published private(set) var errorMessage: String?
     private(set) var canWrite = true
+    let reflectionConnection: ReflectionConnection
+    let reflectionService: any WrittenReflectionServing
+    @Published var reflectionWork = WrittenReflectionWork()
+    let speechService: any ReflectionSpeechServing
+    private let suppliedPlayer: (any ReflectionVoicePlaying)?
+    @MainActor lazy var reflectionPlayer: any ReflectionVoicePlaying = suppliedPlayer ?? ReflectionVoicePlayer()
+    @Published var spokenWork = SpokenReflectionWork()
+    private var connectionChanges: AnyCancellable?
 
     private static let mileAnnouncementsKey = "run.mileAnnouncementsEnabled"
+    private static let saveRoutesKey = "run.saveRoutes"
     private let preferences: UserDefaults
     private let gps = CLLocationManager()
     let voice = RunVoice()
@@ -22,19 +34,64 @@ final class RunTracker: NSObject, ObservableObject, CLLocationManagerDelegate {
     private var distance = RunDistance()
     private let clock = ContinuousClock()
     private var timerAnchor: ContinuousClock.Instant?
+    private var segmentHasCompleteTime = false
+    private var segmentStartActiveSeconds: TimeInterval = 0
 
     override convenience init() {
+        #if DEBUG && targetEnvironment(simulator)
+        let environment = ProcessInfo.processInfo.environment
+        if let value = environment["RUNSTATE_TEST_JOURNAL"], let id = UUID(uuidString: value) {
+            let folder = URL.applicationSupportDirectory.appending(path: "UITests").appending(path: id.uuidString)
+            let url = folder.appending(path: "runs.json")
+            // A relaunch in one test reuses its journal. Other tests always start independently.
+            if !FileManager.default.fileExists(atPath: url.path), let seed = environment["RUNSTATE_TEST_SEED"] {
+                do {
+                    let journal = try JSONDecoder().decode(RunJournal.self, from: Data(seed.utf8))
+                    try journal.save(to: url)
+                } catch {
+                    preconditionFailure("Invalid simulator test journal: \(error)")
+                }
+            }
+            let preferences = UserDefaults(suiteName: "uitest." + id.uuidString)!
+            let vault = KeychainReflectionVault(service: "runstate.uitest." + id.uuidString)
+            let connection = ReflectionConnection(preferences: preferences, vault: vault)
+            let fixture = environment["RUNSTATE_TEST_WRITTEN_ANSWERS"].flatMap {
+                try? JSONDecoder().decode(WrittenReflectionAnswers.self, from: Data($0.utf8))
+            }
+            self.init(preferences: preferences, journalURL: url, reflectionConnection: connection,
+                      reflectionService: SimulatorWrittenReflectionService(answers: fixture),
+                      speechService: SimulatorReflectionSpeechService(audio: environment["RUNSTATE_TEST_SPEECH_AUDIO"].flatMap { Data(base64Encoded: $0) }))
+            return
+        }
+        #endif
         self.init(preferences: .standard, journalURL: URL.applicationSupportDirectory.appending(path: "FieldTest/runs.json"))
     }
 
-    init(preferences: UserDefaults, journalURL: URL) {
+    init(preferences: UserDefaults, journalURL: URL, reflectionConnection: ReflectionConnection? = nil,
+         reflectionService: any WrittenReflectionServing = ReflectionService(),
+         speechService: any ReflectionSpeechServing = ReflectionSpeechService(),
+         reflectionPlayer: (any ReflectionVoicePlaying)? = nil) {
         self.preferences = preferences
         self.journalURL = journalURL
+        self.reflectionConnection = reflectionConnection ?? ReflectionConnection(preferences: preferences)
+        self.reflectionService = reflectionService
+        self.speechService = speechService
+        self.suppliedPlayer = reflectionPlayer
         mileAnnouncementsEnabled = preferences.object(forKey: Self.mileAnnouncementsKey) as? Bool ?? true
+        saveRoutes = preferences.bool(forKey: Self.saveRoutesKey)
         super.init()
+        connectionChanges = self.reflectionConnection.$revision.dropFirst().sink { [weak self] revision in
+            self?.cancelWrittenReflectionWork()
+            Task { @MainActor [weak self] in self?.spokenConnectionChanged(to: revision) }
+        }
         refreshLocationAuthorization()
         do {
             journal = try RunJournal.load(from: journalURL)
+            if journal.active?.pausedWithCompleteTime == false {
+                // A running checkpoint may predate the last movement before termination.
+                // Keep its recorded totals and route, but there is no complete split timeline.
+                journal.active?.splitProgress = nil
+            }
         } catch {
             canWrite = false
             errorMessage = "RunState could not open the saved runs."
@@ -54,50 +111,108 @@ final class RunTracker: NSObject, ObservableObject, CLLocationManagerDelegate {
     }
 
     func addShoe(brand: String, model: String, nickname: String? = nil, id: UUID = UUID()) throws {
-        try saveShoeChange { try $0.addShoe(brand: brand, model: model, nickname: nickname, id: id) }
+        try saveJournalChange { try $0.addShoe(brand: brand, model: model, nickname: nickname, id: id) }
     }
 
     func selectShoe(_ id: UUID?) throws {
-        try saveShoeChange { try $0.selectShoe(id) }
+        try saveJournalChange { try $0.selectShoe(id) }
     }
 
     func archiveShoe(_ id: UUID) throws -> ShoeArchiveUndo {
-        try saveShoeChange { try $0.archiveShoe(id) }
+        try saveJournalChange { try $0.archiveShoe(id) }
     }
 
     func undoArchive(_ receipt: ShoeArchiveUndo) throws {
-        try saveShoeChange { try $0.undoArchive(receipt) }
+        try saveJournalChange { try $0.undoArchive(receipt) }
     }
 
     func restoreShoe(_ id: UUID) throws {
-        try saveShoeChange { try $0.restoreShoe(id) }
+        try saveJournalChange { try $0.restoreShoe(id) }
     }
 
-    private func saveShoeChange<Result>(_ change: (inout RunJournal) throws -> Result) throws -> Result {
-        guard canWrite else { throw ShoeChangeError("RunState could not open your saved runs.") }
+    func saveCheckIn(for id: UUID, energy: PostRunEnergy?, effort: Int?) throws {
+        try saveJournalChange { try $0.saveCheckIn(for: id, energy: energy, effort: effort) }
+    }
+
+    /// Earlier builds recorded the absolute instant. Only the runner can identify the missing local zone.
+    func confirmStartTimeZone(for id: UUID, identifier: String) throws {
+        guard identifier == "UTC" || TimeZone.knownTimeZoneIdentifiers.contains(identifier) else { throw RunStartZoneError.invalid }
+        guard journal.active?.id != id, let run = journal.history.first(where: { $0.id == id && $0.finishedAt != nil })
+        else { throw SavedRunError.notSaved }
+        if run.startTimezoneID == identifier { return }
+        guard run.startTimezoneID == nil, run.writtenReflection == nil else { throw RunStartZoneError.alreadyRecorded }
+        try saveJournalChange { next in
+            guard let index = next.history.firstIndex(where: { $0.id == id }) else { throw SavedRunError.notSaved }
+            next.history[index].startTimezoneID = identifier
+        }
+    }
+
+    @MainActor func deleteSavedRun(_ id: UUID) throws {
+        try saveJournalChange { try $0.deleteSavedRun(id) }
+        cancelWrittenReflectionWork(for: id)
+        removeSpokenReflection(for: id)
+    }
+
+    func storeSpokenRequest(_ record: SpokenReflectionRequestRecord?, for id: UUID,
+                            answer: SavedWrittenReflection) throws {
+        try saveJournalChange { next in
+            guard let index = next.history.firstIndex(where: { $0.id == id && $0.finishedAt != nil }),
+                  next.history[index].writtenReflection?.saved == answer else { throw SavedRunError.notSaved }
+            next.history[index].spokenRequest = record
+        }
+    }
+
+    func storeWrittenReflection(_ value: RunWrittenReflection, for id: UUID, replacing expected: PendingWrittenReflection?) throws {
+        try saveJournalChange { journal in
+            guard let index = journal.history.firstIndex(where: { $0.id == id && $0.finishedAt != nil }),
+                  journal.history[index].writtenReflection?.saved == nil,
+                  journal.history[index].writtenReflection?.pending == expected else { throw SavedRunError.notSaved }
+            journal.history[index].writtenReflection = value
+        }
+    }
+
+    func discardShortPausedRun(_ id: UUID) {
+        guard !running else { return }
+        do {
+            try saveJournalChange { try $0.discardShortPausedRun(id) }
+            errorMessage = nil
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func saveJournalChange<Result>(_ change: (inout RunJournal) throws -> Result) throws -> Result {
+        guard canWrite else { throw SavedRunError.storage }
         var next = journal
         let result = try change(&next)
         do {
             try next.save(to: journalURL)
         } catch {
-            throw ShoeChangeError("Couldn’t save your shoe change. Check the iPhone’s storage and try again.")
+            throw SavedRunError.storage
         }
         journal = next
         return result
     }
 
-    func startOrResume(preRunEnergy: String? = nil) {
+    @MainActor func startOrResume(preRunEnergy: String? = nil) {
         guard !running, hasLocationPermission, canWrite else { return }
         let now = Date()
         errorMessage = nil
-        if journal.active == nil {
-            var next = journal
-            next.beginRun(at: now, preRunEnergy: preRunEnergy)
-            guard store(next) else { return }
-            journal = next
+        let completeTime = journal.active == nil || journal.active?.pausedWithCompleteTime == true
+        var next = journal
+        if next.active == nil {
+            next.beginRun(at: now, preRunEnergy: preRunEnergy, saveRoute: saveRoutes)
         }
+        // A crash after resuming must never leave an older pause eligible for discard.
+        next.active?.pausedWithCompleteTime = false
+        guard store(next) else { return }
+        stopSpokenReflection()
+        journal = next
+        segmentHasCompleteTime = completeTime
+        segmentStartActiveSeconds = journal.active?.activeSeconds ?? 0
+        journal.active?.splitProgress?.startSegment(at: segmentStartActiveSeconds)
         timerAnchor = clock.now
-        distance.startSegment(at: now)
+        distance.startSegment(at: Date())
         gpsStatus = "Finding GPS…"
         running = true
         gps.allowsBackgroundLocationUpdates = true
@@ -108,6 +223,9 @@ final class RunTracker: NSObject, ObservableObject, CLLocationManagerDelegate {
         guard running else { return }
         voice.stopCountdownCue()
         checkpoint(at: clock.now)
+        journal.active?.pausedWithCompleteTime = segmentHasCompleteTime
+        let pausedAt = journal.active?.activeSeconds ?? 0
+        journal.active?.splitProgress?.endSegment(at: pausedAt)
         timerAnchor = nil
         running = false
         gps.stopUpdatingLocation()
@@ -142,6 +260,12 @@ final class RunTracker: NSObject, ObservableObject, CLLocationManagerDelegate {
         timerAnchor = instant
     }
 
+    func checkpointForBackground() {
+        guard running else { return }
+        checkpoint(at: clock.now)
+        _ = store(journal)
+    }
+
     func refreshLocationAuthorization() {
         authorization = gps.authorizationStatus
         accuracyAuthorization = gps.accuracyAuthorization
@@ -156,18 +280,18 @@ final class RunTracker: NSObject, ObservableObject, CLLocationManagerDelegate {
     }
 
     func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
-        guard running, let previous = journal.active else { return }
-        let now = Date()
-        var added = 0.0
-        for point in locations { added += distance.receive(point, now: now) }
-        if let point = locations.last {
-            if manager.accuracyAuthorization == .reducedAccuracy { gpsStatus = "Enable Precise Location in Settings for distance." }
-            else if point.horizontalAccuracy < 0 || point.horizontalAccuracy > 25 { gpsStatus = "Waiting for a clearer GPS signal…" }
-            else { gpsStatus = "Tracking GPS" }
-        }
-        journal.active?.meters += added
-        let mile = RunDistance.mileCrossed(from: previous.meters, to: previous.meters + added)
+        guard running, let previousMeters = journal.active?.meters else { return }
         let tick = clock.now
+        let now = Date()
+        let deliverySeconds = (journal.active?.activeSeconds ?? 0) + elapsedSinceCheckpoint(at: tick)
+        let observation = journal.active?.record(locations, using: &distance, deliveredAt: now,
+                                                 activeAtDelivery: deliverySeconds, segmentStart: segmentStartActiveSeconds)
+        if manager.accuracyAuthorization == .reducedAccuracy {
+            gpsStatus = "Enable Precise Location in Settings for distance."
+        } else if let observation {
+            gpsStatus = observation == .tracking ? "Tracking GPS" : "Waiting for a clearer GPS signal…"
+        }
+        let mile = RunDistance.mileCrossed(from: previousMeters, to: journal.active?.meters ?? previousMeters)
         if mile != nil || elapsedSinceCheckpoint(at: tick) >= 15 {
             checkpoint(at: tick)
             _ = store(journal)
@@ -178,6 +302,7 @@ final class RunTracker: NSObject, ObservableObject, CLLocationManagerDelegate {
     func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
         guard running else { return }
         distance.startSegment(at: Date())
+        journal.active?.splitProgress?.interrupt()
         if (error as? CLError)?.code == .denied {
             pause()
             errorMessage = "Run paused because location is unavailable."

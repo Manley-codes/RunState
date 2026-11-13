@@ -6,6 +6,9 @@
     objects = {
 
 /* Begin PBXBuildFile section */
+        120000000000000000000066 /* Snippet closing chime */ = {isa = PBXBuildFile; fileRef = 120000000000000000000065; };
+        120000000000000000000064 /* Test tone in UI tests */ = {isa = PBXBuildFile; fileRef = 120000000000000000000063; };
+        120000000000000000000062 /* SpotifyiOS in Frameworks */ = {isa = PBXBuildFile; productRef = 120000000000000000000061 /* SpotifyiOS */; };
         120000000000000000000040 /* opening */ = {isa = PBXBuildFile; fileRef = 120000000000000000000030 /* opening */; };
         120000000000000000000041 /* opening_first_frame.webp */ = {isa = PBXBuildFile; fileRef = 120000000000000000000031 /* opening_first_frame.webp */; };
         120000000000000000000042 /* start_map_reference.jpg */ = {isa = PBXBuildFile; fileRef = 120000000000000000000032 /* start_map_reference.jpg */; };
@@ -27,6 +30,9 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+        120000000000000000000065 /* Snippet closing chime */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; path = "res/raw/snippet_close.wav"; sourceTree = "<group>"; };
+        120000000000000000000067 /* Field build settings */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = "Configuration/FieldTools.xcconfig"; sourceTree = "<group>"; };
+        120000000000000000000063 /* Shared test tone */ = {isa = PBXFileReference; lastKnownFileType = audio.mp3; path = "RunStateTests/reflection-test-tone.mp3"; sourceTree = SOURCE_ROOT; };
         120000000000000000000030 /* opening */ = {isa = PBXFileReference; lastKnownFileType = folder; path = "assets/opening"; sourceTree = "<group>"; };
         120000000000000000000031 /* opening_first_frame.webp */ = {isa = PBXFileReference; lastKnownFileType = image.webp; path = "res/drawable-nodpi/opening_first_frame.webp"; sourceTree = "<group>"; };
         120000000000000000000032 /* start_map_reference.jpg */ = {isa = PBXFileReference; lastKnownFileType = image.jpeg; path = "res/drawable-nodpi/start_map_reference.jpg"; sourceTree = "<group>"; };
@@ -50,7 +56,7 @@
 /* Begin PBXGroup section */
         120000000000000000000002 = {
             isa = PBXGroup;
-            children = (120000000000000000000003, 120000000000000000000004, 120000000000000000000052, 120000000000000000000020, 120000000000000000000037, 12000000000000000000000F);
+            children = (120000000000000000000003, 120000000000000000000004, 120000000000000000000052, 120000000000000000000020, 120000000000000000000067, 120000000000000000000037, 12000000000000000000000F);
             sourceTree = "<group>";
         };
         12000000000000000000000F = {
@@ -64,7 +70,7 @@
             name = "Shared run artwork";
             path = "../android/app/src/main";
             sourceTree = "<group>";
-            children = (120000000000000000000030, 120000000000000000000031, 120000000000000000000032, 120000000000000000000033, 120000000000000000000034, 120000000000000000000035, 120000000000000000000036, 120000000000000000000038);
+            children = (120000000000000000000030, 120000000000000000000031, 120000000000000000000032, 120000000000000000000033, 120000000000000000000034, 120000000000000000000035, 120000000000000000000036, 120000000000000000000038, 120000000000000000000065);
         };
 /* End PBXGroup section */
 
@@ -77,6 +83,7 @@
             dependencies = ();
             fileSystemSynchronizedGroups = (120000000000000000000003);
             name = RunState;
+            packageProductDependencies = (120000000000000000000061 /* SpotifyiOS */);
             productName = RunState;
             productReference = 120000000000000000000005;
             productType = "com.apple.product-type.application";
@@ -109,13 +116,13 @@
 
         120000000000000000000053 = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
         120000000000000000000054 = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
-        120000000000000000000055 = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+        120000000000000000000055 = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (120000000000000000000064); runOnlyForDeploymentPostprocessing = 0; };
         120000000000000000000009 = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
-        12000000000000000000000A = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+        12000000000000000000000A = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (120000000000000000000062 /* SpotifyiOS in Frameworks */); runOnlyForDeploymentPostprocessing = 0; };
         12000000000000000000000B = {
             isa = PBXResourcesBuildPhase;
             buildActionMask = 2147483647;
-            files = (120000000000000000000040, 120000000000000000000041, 120000000000000000000042, 120000000000000000000043, 120000000000000000000044, 120000000000000000000045, 120000000000000000000046, 120000000000000000000047);
+            files = (120000000000000000000040, 120000000000000000000041, 120000000000000000000042, 120000000000000000000043, 120000000000000000000044, 120000000000000000000045, 120000000000000000000046, 120000000000000000000047, 120000000000000000000066);
             runOnlyForDeploymentPostprocessing = 0;
         };
         12000000000000000000000C = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
@@ -139,6 +146,7 @@
             hasScannedForEncodings = 0;
             knownRegions = (en, Base);
             mainGroup = 120000000000000000000002;
+            packageReferences = (120000000000000000000060 /* Spotify iOS SDK */);
             preferredProjectObjectVersion = 77;
             productRefGroup = 12000000000000000000000F;
             projectDirPath = "";
@@ -146,6 +154,17 @@
             targets = (120000000000000000000007, 120000000000000000000008, 120000000000000000000050);
         };
 /* End PBXProject section */
+
+        120000000000000000000060 /* Spotify iOS SDK */ = {
+            isa = XCRemoteSwiftPackageReference;
+            repositoryURL = "https://github.com/spotify/ios-sdk.git";
+            requirement = {kind = revision; revision = 0b3e54771738ad5e64f22c8e5e19ca76d6becc6c; };
+        };
+        120000000000000000000061 /* SpotifyiOS */ = {
+            isa = XCSwiftPackageProductDependency;
+            package = 120000000000000000000060 /* Spotify iOS SDK */;
+            productName = SpotifyiOS;
+        };
 
         120000000000000000000011 = {
             isa = PBXTargetDependency;
@@ -180,11 +199,13 @@
         };
         120000000000000000000015 = {
             isa = XCBuildConfiguration;
+            baseConfigurationReference = 120000000000000000000067;
             buildSettings = {
                 CLANG_ENABLE_MODULES = YES;
                 ENABLE_TESTABILITY = YES;
                 IPHONEOS_DEPLOYMENT_TARGET = 16.0;
                 SDKROOT = iphoneos;
+                SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) DEBUG $(RUNSTATE_FIELD_FLAG)";
                 SWIFT_OPTIMIZATION_LEVEL = "-Onone";
                 SWIFT_VERSION = 5.0;
             };
@@ -192,11 +213,13 @@
         };
         120000000000000000000016 = {
             isa = XCBuildConfiguration;
+            baseConfigurationReference = 120000000000000000000067;
             buildSettings = {
                 CLANG_ENABLE_MODULES = YES;
                 IPHONEOS_DEPLOYMENT_TARGET = 16.0;
                 SDKROOT = iphoneos;
                 SWIFT_COMPILATION_MODE = wholemodule;
+                SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) $(RUNSTATE_FIELD_FLAG)";
                 SWIFT_VERSION = 5.0;
             };
             name = Release;
@@ -205,8 +228,10 @@
             isa = XCBuildConfiguration;
             buildSettings = {
                 CODE_SIGN_STYLE = Automatic;
-                CURRENT_PROJECT_VERSION = 4;
+                CURRENT_PROJECT_VERSION = 10;
                 GENERATE_INFOPLIST_FILE = YES;
+                INFOPLIST_PREPROCESS = YES;
+                INFOPLIST_PREPROCESSOR_DEFINITIONS = "$(inherited) $(RUNSTATE_FIELD_FLAG)";
                 INFOPLIST_FILE = "Configuration/RunState-Info.plist";
                 INFOPLIST_KEY_CFBundleDisplayName = RunState;
                 INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
@@ -223,8 +248,10 @@
             isa = XCBuildConfiguration;
             buildSettings = {
                 CODE_SIGN_STYLE = Automatic;
-                CURRENT_PROJECT_VERSION = 4;
+                CURRENT_PROJECT_VERSION = 10;
                 GENERATE_INFOPLIST_FILE = YES;
+                INFOPLIST_PREPROCESS = YES;
+                INFOPLIST_PREPROCESSOR_DEFINITIONS = "$(inherited) $(RUNSTATE_FIELD_FLAG)";
                 INFOPLIST_FILE = "Configuration/RunState-Info.plist";
                 INFOPLIST_KEY_CFBundleDisplayName = RunState;
                 INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;

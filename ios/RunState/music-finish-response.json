@@ -1,0 +1,26 @@
+{
+  "requestId": "00000000-0000-0000-0000-000000000001",
+  "runId": "00000000-0000-0000-0000-000000000002",
+  "generationMode": "ANTHROPIC",
+  "selectedSongId": "1",
+  "songSelectionMethod": "CONTEXT_MATCH",
+  "songCueId": "lrclib_v2_42_4000_8000",
+  "songSnippet": {
+    "cueId": "lrclib_v2_42_4000_8000",
+    "source": "LRCLIB",
+    "sourceId": "42",
+    "trackTitle": "Evening Stride",
+    "artistName": "RunState Studio",
+    "trackDurationMillis": 30000,
+    "startPositionMillis": 4000,
+    "durationMillis": 4000,
+    "selectionMethod": "TITLE_HOOK",
+    "version": 2
+  },
+  "candidates": {
+    "spent": "Two miles took some work today. Let that last note ring out.",
+    "feeling_good": "You found a steady rhythm over those two miles. Evening Stride carries that feeling into the finish.",
+    "powered_up": "You came through two miles with energy to spare. That lift at the end feels like Evening Stride.",
+    "no_selection": "Two miles are in the books. Evening Stride closes this one out."
+  }
+}

@@ -2,10 +2,80 @@ import XCTest
 
 final class StartControlsUITests: XCTestCase {
     @MainActor
+    func testRunnerCanConnectSpotifyThenStartPauseAndResumeAfterTheCountdown() throws {
+        #if targetEnvironment(simulator)
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchEnvironment["RUNSTATE_TEST_JOURNAL"] = UUID().uuidString
+        app.launchEnvironment["RUNSTATE_TEST_SPOTIFY_TRACK"] = "1"
+        app.launchArguments = ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
+        app.resetAuthorizationStatus(for: .location)
+        defer {
+            app.terminate()
+            app.resetAuthorizationStatus(for: .location)
+        }
+        app.launch()
+        let start = app.buttons["startPrimary"]
+        XCTAssertTrue(start.waitForExistence(timeout: 30))
+        let track = app.descendants(matching: .any).matching(identifier: "spotify.nowPlaying").firstMatch
+        XCTAssertFalse(track.exists)
+        XCTAssertFalse(app.buttons["spotify.connect"].exists)
+        start.tap()
+        let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+        let allow = springboard.buttons.matching(NSPredicate(format: "label BEGINSWITH[c] %@", "Allow While Using")).firstMatch
+        XCTAssertTrue(allow.waitForExistence(timeout: 15))
+        allow.tap()
+        let ready = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label == %@", "Start run"), object: start)
+        XCTAssertEqual(XCTWaiter.wait(for: [ready], timeout: 10), .completed)
+        app.buttons["startSettings"].tap()
+        let spotifySettings = app.buttons["spotify.settings"]
+        XCTAssertTrue(spotifySettings.waitForExistence(timeout: 10))
+        spotifySettings.tap()
+        let connect = app.buttons["spotify.connect"]
+        let clientID = app.textFields["spotify.clientID"]
+        XCTAssertTrue(clientID.waitForExistence(timeout: 10))
+        XCTAssertFalse(connect.isEnabled)
+        clientID.tap()
+        clientID.typeText(String(repeating: "a", count: 32) + "\n")
+        XCTAssertTrue(connect.isEnabled)
+        connect.tap()
+        let expectedTrack = "Playing on Spotify, Morning Circuit, RunState Test Artist"
+        XCTAssertTrue(track.waitForExistence(timeout: 10))
+        XCTAssertEqual(track.label, expectedTrack)
+        app.navigationBars["Spotify"].buttons.element(boundBy: 0).tap()
+        app.navigationBars["Run Settings"].buttons["Done"].tap()
+        XCTAssertFalse(track.exists)
+        start.tap()
+        // Wait for the stable run control after the normal countdown finishes.
+        let pause = app.buttons["Pause run"]
+        let resume = app.buttons["Resume run"]
+        XCTAssertTrue(pause.waitForExistence(timeout: 60))
+        XCTAssertTrue(track.waitForExistence(timeout: 10))
+        XCTAssertEqual(track.label, expectedTrack)
+        if !track.isHittable { app.scrollViews.firstMatch.swipeUp() }
+        XCTAssertTrue(track.isHittable)
+        let screenshot = XCTAttachment(data: app.screenshot().pngRepresentation, uniformTypeIdentifier: "public.png")
+        screenshot.name = "RunState-NowPlaying"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+        if !pause.isHittable { app.scrollViews.firstMatch.swipeDown() }
+        pause.tap()
+        XCTAssertTrue(resume.waitForExistence(timeout: 15))
+        resume.tap()
+        XCTAssertTrue(pause.waitForExistence(timeout: 15))
+        pause.tap()
+        XCTAssertTrue(resume.waitForExistence(timeout: 15))
+        #else
+        throw XCTSkip("This test records an isolated run on the simulator.")
+        #endif
+    }
+
+    @MainActor
     func testChoosingShoesIsRememberedAndCanBeClearedBeforeARun() throws {
         #if targetEnvironment(simulator)
         continueAfterFailure = false
         let app = XCUIApplication()
+        app.launchEnvironment["RUNSTATE_TEST_JOURNAL"] = UUID().uuidString
         app.launchArguments = ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
         app.launch()
 
@@ -45,7 +115,9 @@ final class StartControlsUITests: XCTestCase {
         #if targetEnvironment(simulator)
         continueAfterFailure = false
         let app = XCUIApplication()
+        app.launchEnvironment["RUNSTATE_TEST_JOURNAL"] = UUID().uuidString
         app.launchArguments = ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
+        app.resetAuthorizationStatus(for: .location)
         app.launch()
 
         // The photographic opening dismisses itself. Use the normal launch path.
@@ -68,6 +140,15 @@ final class StartControlsUITests: XCTestCase {
         settings.tap()
         let announcements = app.switches.matching(identifier: "mileAnnouncements").firstMatch
         XCTAssertTrue(announcements.waitForExistence(timeout: 10))
+        let route = app.switches.matching(identifier: "saveRunRoute").firstMatch
+        XCTAssertTrue(route.exists)
+        let privacy = app.buttons["Privacy & data"]
+        if !privacy.isHittable { app.swipeUp() }
+        privacy.tap()
+        let privacyPage = app.navigationBars["Privacy & data"]
+        XCTAssertTrue(privacyPage.waitForExistence(timeout: 10))
+        privacyPage.buttons.element(boundBy: 0).tap()
+        if !announcements.isHittable { app.swipeDown() }
         let original = try XCTUnwrap(announcements.value as? String)
         XCTAssertTrue(["0", "1"].contains(original))
         let changed = original == "1" ? "0" : "1"

@@ -1,5 +1,49 @@
 # Data & Privacy
 
+## iPhone personal field-test build 9
+
+RunState keeps run summaries, mile splits when GPS coverage allows, optional Energy and
+Effort answers, and shoe assignments in the app’s local journal. The journal is excluded
+from device backups. **Save route in History** is off by default. Turning it on before
+starting a run also stores location points in that run. History draws the saved path on
+the device. Opening the separate live street map uses Apple Maps. Deleting a saved run
+also removes its answers, splits and route and updates the shoe’s recorded mileage.
+The recap works locally. Written reflections are optional and start with an explicit request
+on a saved run. RunState sends its hosted service a run ID, a request ID, start and finish
+times, the starting time zone, available GPS distance and coverage, eligible active time and
+starting Energy. For an older run the runner may confirm the starting zone before requesting.
+The service can use Anthropic to write alternatives for finishing Energy. The iPhone selects
+the corresponding answer and stores its text locally. The request excludes route points,
+shoes, Effort, finishing Energy and music history.
+
+Selecting **Listen with RunState voice** sends the saved reflection text and run ID to
+RunState over the authenticated connection. ElevenLabs receives the exact selected text
+when a new recording is needed. The iPhone holds the most recent recording in memory for
+replay and keeps the status of a voice request with the run to prevent accidental repeats.
+Closing the app clears that recording. The server’s replay and expiry behavior depends
+on its deployed version and storage. **Read with iPhone voice** reads the same saved text
+on the device and uses no RunState voice credits. Opening a run does not request audio.
+
+The personal field build also has a **Sample run finish** in Run Settings. It reads a
+fictional reflection with the iPhone voice and plays two original bundled music tracks
+and the closing sound. It works offline without creating a run or reading Spotify.
+The ordinary Release configuration excludes this tool and its sample resources.
+
+The Spotify shortcut opens the Spotify app. The optional Now Playing connection is separate.
+Connecting from Run Settings asks the Spotify app for authorization. While RunState is open,
+it can display the current track from Spotify. Leaving the foreground clears the track and
+disconnects the observer. Returning asks Spotify for a fresh update when a session is available.
+The Spotify authorization session and song information are held in memory. A manually entered
+public app identifier can be remembered on the phone. RunState keeps Spotify track details
+out of the run journal, written reflections and backend requests.
+
+The fixed RunState HTTPS service authenticates the access code. The iPhone stores the
+code in its device-only Keychain, accessible when unlocked. A runner may switch off new
+requests or remove the code in Settings. Previously saved text remains readable offline.
+After an uncertain send the app requests recovery only when the server advertises compatible
+access support. Deleting a run removes its local text and pending request. Backend retention
+depends on the deployed service.
+
 ## Current Android data handling
 
 Reviewed November 8, 2026 against Android and backend source at `3dee96d`, updated for the

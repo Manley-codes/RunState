@@ -52,6 +52,34 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ReflectionHttpServerTest {
+    @Test
+    void iphoneMusicFinishFixtureMatchesServerOutput() throws IOException {
+        var identity = new ReflectionContract.RequestIdentifiers("00000000-0000-0000-0000-000000000001",
+                "00000000-0000-0000-0000-000000000002");
+        var music = new MusicContext(MusicState.MUSIC, "Evening Stride", "RunState Studio", null,
+                MusicProvenance.MEDIA_SESSION_PARTIAL, null);
+        var song = new ReflectionContract.SongCandidate("1", music, null,
+                new ReflectionContract.SongRecording(null, 30_000), false);
+        var request = new ReflectionApiJson.ApiRequest(identity, knownEvidence(), null, List.of(song), true, true);
+        // The artist, writing, and cue are fictional. The production serializer is the subject of this check.
+        var words = new CandidateReflections(
+                "Two miles took some work today. Let that last note ring out.",
+                "You found a steady rhythm over those two miles. Evening Stride carries that feeling into the finish.",
+                "You came through two miles with energy to spare. That lift at the end feels like Evening Stride.",
+                "Two miles are in the books. Evening Stride closes this one out.");
+        var clip = new ReflectionContract.SongSnippet("lrclib_v2_42_4000_8000", "LRCLIB", "42",
+                music.trackTitle(), music.artistName(), null, 30_000, 4_000, 4_000,
+                ReflectionContract.SongSnippetSelectionMethod.TITLE_HOOK, 2);
+        var result = new ReflectionProvider.GeneratedReflections(words, clip.cueId(), song.candidateId(),
+                ReflectionProvider.SongSelectionMethod.CONTEXT_MATCH, clip);
+        var actual = JsonParser.parseString(ReflectionApiJson.success(request, result, ReflectionHttpServer.GenerationMode.ANTHROPIC));
+        assertEquals(clip.cueId(), actual.getAsJsonObject().get("songCueId").getAsString());
+        String fixture = System.getProperty("runstate.test.iosMusicFixture");
+        if (fixture != null) {
+            assertEquals(actual, JsonParser.parseString(Files.readString(Path.of(fixture))));
+        }
+    }
+
     @Test void v2ObservedEndingIsExplicitIdempotentAndSeparateFromCreativeCue() throws Exception {
         AtomicInteger calls = new AtomicInteger();
         var provider = new ReflectionProvider() {
@@ -546,6 +574,8 @@ class ReflectionHttpServerTest {
     @Test
     void reflectionSpeechPreservesExactTextAndReturnsPrivateMp3Bytes() throws Exception {
         String exact = "  Your exact reflection.\nA second line — unchanged.  ";
+        String iosBody = System.getProperty("runstate.test.iosSpeechBody");
+        String body = iosBody == null ? speechBody(exact) : Files.readString(Path.of(iosBody));
         byte[] audio = new byte[]{'I', 'D', '3', 0, (byte) 0xff, 1};
         AtomicReference<String> spoken = new AtomicReference<>();
         AtomicInteger reflections = new AtomicInteger();
@@ -557,7 +587,7 @@ class ReflectionHttpServerTest {
             return audio;
         }, null, new SpeechReplayStore(speechDirectory))) {
             server.start();
-            HttpResponse<byte[]> response = client.send(speechRequest(server, speechBody(exact)),
+            HttpResponse<byte[]> response = client.send(speechRequest(server, body),
                     HttpResponse.BodyHandlers.ofByteArray());
             HttpResponse<String> health = client.send(HttpRequest.newBuilder(URI.create("http://127.0.0.1:"
                     + server.address().getPort() + ReflectionHttpServer.HEALTH_PATH)).GET().build(),
