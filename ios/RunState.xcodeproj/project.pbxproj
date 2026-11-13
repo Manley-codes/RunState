@@ -228,8 +228,10 @@
             isa = XCBuildConfiguration;
             buildSettings = {
                 CODE_SIGN_STYLE = Automatic;
-                CURRENT_PROJECT_VERSION = 9;
+                CURRENT_PROJECT_VERSION = 10;
                 GENERATE_INFOPLIST_FILE = YES;
+                INFOPLIST_PREPROCESS = YES;
+                INFOPLIST_PREPROCESSOR_DEFINITIONS = "$(inherited) $(RUNSTATE_FIELD_FLAG)";
                 INFOPLIST_FILE = "Configuration/RunState-Info.plist";
                 INFOPLIST_KEY_CFBundleDisplayName = RunState;
                 INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
@@ -246,8 +248,10 @@
             isa = XCBuildConfiguration;
             buildSettings = {
                 CODE_SIGN_STYLE = Automatic;
-                CURRENT_PROJECT_VERSION = 9;
+                CURRENT_PROJECT_VERSION = 10;
                 GENERATE_INFOPLIST_FILE = YES;
+                INFOPLIST_PREPROCESS = YES;
+                INFOPLIST_PREPROCESSOR_DEFINITIONS = "$(inherited) $(RUNSTATE_FIELD_FLAG)";
                 INFOPLIST_FILE = "Configuration/RunState-Info.plist";
                 INFOPLIST_KEY_CFBundleDisplayName = RunState;
                 INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;

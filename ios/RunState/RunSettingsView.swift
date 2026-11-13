@@ -5,6 +5,9 @@ import UIKit
 struct RunSettingsView: View {
     @ObservedObject var tracker: RunTracker
     @ObservedObject var spotify: SpotifyObservation
+    #if RUNSTATE_FIELD_TOOLS
+    @EnvironmentObject private var fieldRecognition: FieldRecognitionTest
+    #endif
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
     @Environment(\.scenePhase) private var scenePhase
@@ -75,6 +78,10 @@ struct RunSettingsView: View {
                     Section("Field test") {
                         NavigationLink("Sample run finish") { FieldSampleView() }
                             .accessibilityIdentifier("settings.sampleRunFinish")
+                        NavigationLink("Two-song recognition") {
+                            FieldRecognitionView(test: fieldRecognition)
+                        }
+                        .accessibilityIdentifier("settings.lockedSongTest")
                     }
                 }
                 #endif

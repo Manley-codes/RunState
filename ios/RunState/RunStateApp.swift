@@ -64,6 +64,9 @@ private struct RunScreen: View {
     @ObservedObject var tracker: RunTracker
     @ObservedObject var spotify: SpotifyObservation
     @StateObject private var countdown: RunCountIn
+    #if RUNSTATE_FIELD_TOOLS
+    @StateObject private var fieldRecognition = FieldRecognitionTest()
+    #endif
     @Environment(\.openURL) private var openURL
     @Environment(\.scenePhase) private var scenePhase
     @State private var opening: Bool
@@ -111,6 +114,9 @@ private struct RunScreen: View {
         .onAppear { spotify.setActive(scenePhase == .active) }
         .onOpenURL { url in _ = spotify.handleCallback(url) }
         .onChange(of: scenePhase) { phase in
+            #if RUNSTATE_FIELD_TOOLS
+            fieldRecognition.sceneChanged(isBackground: phase == .background)
+            #endif
             spotify.setActive(phase == .active)
             if phase == .background { tracker.checkpointForBackground() }
             if phase != .active && countdown.seconds != nil {
@@ -118,6 +124,11 @@ private struct RunScreen: View {
                 startMessage = "Countdown canceled. Start again when ready."
             }
         }
+        #if RUNSTATE_FIELD_TOOLS
+        .onChange(of: tracker.journal.active?.id) { runID in
+            if runID == nil { fieldRecognition.stop() }
+        }
+        #endif
         .onChange(of: tracker.authorization) { _ in
             startMessage = nil
             if !tracker.hasLocationPermission { countdown.cancel() }
@@ -136,7 +147,11 @@ private struct RunScreen: View {
                 }
                 .preferredColorScheme(.light)
             case .map: RunLiveMapView(tracker: tracker)
-            case .settings: RunSettingsView(tracker: tracker, spotify: spotify)
+            case .settings:
+                RunSettingsView(tracker: tracker, spotify: spotify)
+                    #if RUNSTATE_FIELD_TOOLS
+                    .environmentObject(fieldRecognition)
+                    #endif
             case .shoes: RunShoesView(tracker: tracker)
             }
         }

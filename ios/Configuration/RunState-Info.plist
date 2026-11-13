@@ -15,6 +15,10 @@
     <string>$(RUNSTATE_SPOTIFY_CLIENT_ID)</string>
     <key>NSLocationWhenInUseUsageDescription</key>
     <string>RunState uses location for the map and to measure runs, including while the screen is locked. You can also choose to save a route on this iPhone.</string>
+#ifdef RUNSTATE_FIELD_TOOLS
+    <key>NSMicrophoneUsageDescription</key>
+    <string>During the private two-song test, RunState uses audio recognition to identify the two supplied tracks on this iPhone, including while locked.</string>
+#endif
     <key>UIBackgroundModes</key>
     <array>
         <string>location</string>

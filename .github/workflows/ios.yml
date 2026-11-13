@@ -65,6 +65,9 @@ jobs:
             -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.5' \
             -parallel-testing-enabled NO RUNSTATE_FIELD_TOOLS=YES \
             -only-testing:RunStateTests/FieldSamplePlaybackTests \
+            -only-testing:RunStateTests/FieldRecognitionTests \
+            -only-testing:RunStateTests/FieldRecognitionCatalogTests \
+            -only-testing:RunStateUITests/FieldRecognitionUITests \
             -only-testing:RunStateTests/MusicReflectionResponseTests \
             -only-testing:RunStateUITests/FieldSampleUITests test
 
@@ -123,6 +126,9 @@ jobs:
           done
           cmp "$app/snippet_close.wav" ../android/app/src/main/res/raw/snippet_close.wav
           LC_ALL=C grep -aFq 'settings.sampleRunFinish' "$app/RunState"
+          LC_ALL=C grep -aFq 'settings.lockedSongTest' "$app/RunState"
+          mic_purpose="$(plutil -extract NSMicrophoneUsageDescription raw -expect string -o - "$app/Info.plist")"
+          test -n "$mic_purpose"
           test "$(plutil -extract RunStateSpotifyClientID raw -o - "$app/Info.plist")" = "$PUBLIC_SPOTIFY_ID"
           test "$(plutil -extract CFBundleSupportedPlatforms.0 raw -o - "$app/Info.plist")" = iPhoneOS
           for photo in ../android/app/src/main/assets/opening/*.webp; do
@@ -137,7 +143,7 @@ jobs:
           /usr/bin/zip -qry "$RUNNER_TEMP/RunState-field-test.ipa" Payload
           /usr/bin/unzip -tq "$RUNNER_TEMP/RunState-field-test.ipa"
 
-      - name: Check the ordinary Release build excludes the desk sample
+      - name: Check the ordinary Release build excludes private audio tests and microphone access
         run: |
           xcodebuild -project RunState.xcodeproj -scheme RunState -configuration Release \
             -destination 'generic/platform=iOS' -derivedDataPath "$RUNNER_TEMP/ordinary-build" \
@@ -147,8 +153,12 @@ jobs:
           for file in music-finish-response.json field-finish-original.mp3 field-finish-excerpt.mp3 snippet_close.wav; do
             test ! -e "$app/$file"
           done
-          if LC_ALL=C grep -aFq 'settings.sampleRunFinish' "$app/RunState"; then
-            echo "Field-only controls found in the ordinary Release build."
+          if LC_ALL=C grep -aFq -e 'settings.sampleRunFinish' -e 'settings.lockedSongTest' "$app/RunState"; then
+            echo "A field-only control was found in the ordinary Release build."
+            exit 1
+          fi
+          if plutil -extract NSMicrophoneUsageDescription raw -o /dev/null "$app/Info.plist" 2>/dev/null; then
+            echo "A private test microphone permission was found in the ordinary Release build."
             exit 1
           fi
 
