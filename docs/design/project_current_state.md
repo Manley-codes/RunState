@@ -5,6 +5,39 @@ metadata:
   type: project
 ---
 
+## November 20 background hosting and attribution follow-up
+
+Read-only Render events/app logs after the disk deployment showed successful startup, no
+recorded server failures, and one JDK warning about sending a body length for a HEAD request.
+Fixed this in `9fb8975`: `/health` accepts GET/HEAD with matching representation/capability
+headers; all HEAD responses, including errors, send no body. Protected routes retain their
+authentication and POST-only rules, and host/origin/query rejection is preserved. Four focused
+tests passed, including raw-wire no-body checks and subsequent GET behavior, with no HEAD
+warnings. Full Windows backend verification/package completed 309 tests: 307 passed, two
+POSIX-only tests skipped, zero failures/errors. JDK17 guidance and independent review support the narrow response fix.
+Accepted reflection writing/song selection are untouched. No provider calls or deployment.
+
+Commit `4b4df7d` appends the full version-pinned MapLibre Android Gestures 0.0.4 license/notice
+to the existing bundled notices. Its classes were present in the public APK but the upstream
+Almer Thie attribution was absent from that APK and the local AAR/nested JAR. The original
+notice file remains an exact prefix; added upstream text matches
+https://github.com/maplibre/maplibre-gestures-android/blob/0.0.4/LICENSE.md and is labeled Android-only
+because iOS copies the shared file. Incremental offline release assembly, packaged-byte equality
+and the public APK checker passed. No app logic, new asset file or public walkthrough design
+changed. This fixes one verified omission, not a complete license/commercial-permission review.
+
+Both changes are pushed. All four Android/backend jobs in
+[GitHub run 44795006187](https://github.com/Manley-codes/RunState/actions/runs/44795006187)
+passed: 309 backend tests with zero skips both normally and inside Docker, container checks,
+and Android build/test/lint/package checks. The automatic shared-resource
+[iPhone check 44795006180](https://github.com/Manley-codes/RunState/actions/runs/44795006180)
+also passed 15 unit tests, two UI tests and device packaging. This verifies the main-branch
+baseline/shared notice, not the separate Build 10 branch or physical recognition. Render auto-deploy is off and still
+runs `4c42dde`. Keep the backend fix for a later approved deployment; do not confuse source
+completion with live verification. The shared notice may trigger existing iOS CI, but no
+iPhone installation or resumed field test is requested. Evidence stays under
+`backend/target/nov20-head-*.log` and `android/build/nov20-dependency-notice-check/`.
+
 ## November 20 public APK packaging guard
 
 Added `android/check-public-apk.py` and a step in the existing Android release CI job. Python
