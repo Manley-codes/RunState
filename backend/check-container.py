@@ -9,8 +9,12 @@ import uuid
 
 
 def docker(*arguments, **options):
-    return subprocess.run(["docker", *arguments], check=True, text=True,
-                          capture_output=True, timeout=45, **options).stdout.strip()
+    try:
+        return subprocess.run(["docker", *arguments], check=True, text=True,
+                              capture_output=True, timeout=45, **options).stdout.strip()
+    except subprocess.CalledProcessError as failure:
+        print(failure.stdout + failure.stderr, file=sys.stderr)
+        raise
 
 
 def main(image):
@@ -21,7 +25,8 @@ def main(image):
     volume = "runstate-check-" + suffix
     server = "runstate-server-check-" + suffix
     mount = "type=volume,src=" + volume + ",dst=/var/data"
-    common = ["--network", "none", "--read-only", "--tmpfs", "/tmp:rw,nosuid,size=64m",
+    # SQLite extracts its bundled native library to /tmp; it must be loadable there.
+    common = ["--network", "none", "--read-only", "--tmpfs", "/tmp:rw,nosuid,nodev,exec,size=64m,mode=1777",
               "--cap-drop", "ALL", "--security-opt", "no-new-privileges"]
     environment = {
         "RUNSTATE_REFLECTION_PUBLIC_HOST": "runstate-ci.example",
@@ -141,8 +146,11 @@ def main(image):
         print("Container check passed. No external network, real credentials, publication or deployment.", flush=True)
     except Exception:
         if launched:
-            logs = subprocess.run(["docker", "logs", server], text=True, capture_output=True, timeout=15)
-            print(logs.stdout + logs.stderr, file=sys.stderr)
+            try:
+                logs = subprocess.run(["docker", "logs", server], text=True, capture_output=True, timeout=15)
+                print(logs.stdout + logs.stderr, file=sys.stderr)
+            except subprocess.TimeoutExpired:
+                print("Container log retrieval timed out; continuing cleanup.", file=sys.stderr)
         raise
     finally:
         # A CLI timeout can leave its container running; remove only our own unique names.
