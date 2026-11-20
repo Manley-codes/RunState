@@ -5,6 +5,33 @@ metadata:
   type: project
 ---
 
+## November 20 idle replay cleanup and native packaging checks
+
+The backend now clears expired speech/written replay rows approximately every five minutes
+while running, even without incoming requests. Seven-day speech and 24-hour writing windows,
+unexpired pending reservations, capacities and the spending ledger are preserved. Written
+request/run bindings expire with their answers. Each store's failure is isolated, logged without
+saved content and retried later; the daemon starts/stops with the server. Speech completion
+also rejects an already expired reservation. No accepted writer, song choice or phone behavior
+changed. Five new tests cover physical payload/binding removal, live/pending protection, stale
+completion, missing-store recovery and shutdown. All 89 focused tests passed; full Windows
+verification/package ran 314 tests with zero failures/errors and two POSIX-only skips.
+
+The existing public APK checker now verifies 16 KB ZIP alignment and 64-bit native LOAD/RELRO
+boundaries with installed SDK tools and llvm-readelf/readelf. It checks actual writable overlap
+after RELRO, allowing harmless linker padding. The current APK passes; twelve targeted cases
+cover real malformed/misaligned ELF/ZIP copies and safe boundary cases. No dependency upgrade,
+app rebuild or new file was needed. This follows [Android's page-size guidance](https://developer.android.com/guide/practices/page-sizes),
+but is static package evidence, not a 16 KB device or final Play-generated package test.
+Evidence: `backend/target/nov20-idle-replay-full-verify.log`,
+`backend/target/nov20-replay-cleanup-targeted.log`, and
+`android/build/nov20-native-alignment-check/`. Independent source review found no material issue.
+
+Hosted deployment remains pending with the earlier HEAD fix. Render still runs `4c42dde`
+with automatic deployment off; zero caps continue blocking new paid calls. No device action,
+provider call or public-preview change. Keep hosted restart proof, verified rates/budgets and
+the existing deferred phone review separate. GitHub results for this increment are pending.
+
 ## November 20 background hosting and attribution follow-up
 
 Read-only Render events/app logs after the disk deployment showed successful startup, no

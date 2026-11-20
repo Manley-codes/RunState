@@ -3,6 +3,7 @@
 
 Usage: python3 android/check-public-apk.py path/to/app-release-unsigned.apk
 Set ANDROID_SDK_ROOT/ANDROID_HOME, or pass --build-tools /path/to/build-tools/version.
+Native-library checks use llvm-readelf/readelf on PATH, or --readelf /path/to/readelf.
 This checks packaging, not signing, provider permissions, or device/UI behavior.
 """
 
@@ -50,16 +51,25 @@ def sdk_tools(explicit):
             key=lambda p: tuple(map(int, p.name.split("."))), reverse=True,
         )
     for directory in candidates:
-        tools = [directory / (name + suffix) for name in ("aapt2", "dexdump")]
+        tools = [directory / (name + suffix) for name in ("aapt2", "dexdump", "zipalign")]
         if all(tool.is_file() for tool in tools):
             return tools
-    raise CheckFailure("No complete SDK build-tools directory containing aapt2 and dexdump.")
+    raise CheckFailure("No complete SDK build-tools directory containing aapt2, dexdump and zipalign.")
+
+
+def elf_reader(explicit):
+    for name in ([explicit] if explicit else ["llvm-readelf", "readelf"]):
+        tool = shutil.which(name)
+        if tool:
+            return Path(tool)
+    raise CheckFailure("Native checks need llvm-readelf/readelf on PATH, or an explicit --readelf path.")
 
 
 def run_tool(command, output=None):
     result = subprocess.run(
         [str(arg) for arg in command], stdout=output or subprocess.PIPE,
         stderr=subprocess.PIPE, encoding="utf-8", errors="replace", timeout=60,
+        env={**os.environ, "LC_ALL": "C"},
     )
     require(result.returncode == 0, f"{Path(command[0]).name} failed (exit {result.returncode}).")
     return result.stdout
@@ -194,7 +204,42 @@ def check_assets(archive, demo_cover):
             "Bundled third-party notices are missing or empty.")
 
 
-def inspect(apk, aapt2, dexdump):
+def check_native_library(path, readelf, label):
+    # SDK/LLVM/binutils decode ELF; this checker only reads their documented table.
+    dump = run_tool([readelf, "--file-header", "--program-headers", "--wide", path])
+    elf_class = re.search(r"^\s*Class:\s+(ELF32|ELF64)\s*$", dump, re.MULTILINE)
+    require(elf_class, f"Cannot read ELF class for {label}.")
+    if elf_class[1] == "ELF32":
+        return False  # Android's 16 KB device requirement concerns 64-bit libraries.
+    segments = []
+    for line in dump.splitlines():
+        fields = line.split()
+        if not fields or fields[0] not in ("LOAD", "GNU_RELRO"):
+            continue
+        require(len(fields) >= 8 and all(re.fullmatch(r"0x[0-9a-fA-F]+", fields[i]) for i in (1, 2, 5, -1)),
+                f"Cannot read ELF segment alignment for {label}.")
+        segments.append((fields[0], *(int(fields[i], 16) for i in (1, 2, 5, -1)),
+                         "W" in "".join(fields[6:-1])))
+    loads = [segment for segment in segments if segment[0] == "LOAD"]
+    require(loads, f"No LOAD segments found in {label}.")
+    for _, offset, address, size, alignment, _ in loads:
+        require(alignment >= 16384 and alignment & (alignment - 1) == 0,
+                f"64-bit library {label} has LOAD alignment {alignment}; need at least 16 KB.")
+        require((offset - address) % 16384 == 0,
+                f"64-bit library {label} has incompatible 16 KB LOAD offset/address alignment.")
+    # RELRO may extend into padding past its LOAD. Check actual writable bytes (including
+    # BSS), not literal end equality: rounding protection must not cover following data.
+    # https://developer.android.com/guide/practices/page-sizes#check-relro
+    for _, _, address, size, _, _ in (segment for segment in segments if segment[0] == "GNU_RELRO"):
+        end = address + size
+        protected_end = (end + 16383) // 16384 * 16384
+        require(not any(writable and max(start, end) < min(start + length, protected_end)
+                        for _, _, start, length, _, writable in loads),
+                f"64-bit library {label} has a RELRO end sharing a 16 KB page with following data.")
+    return True
+
+
+def inspect(apk, aapt2, dexdump, zipalign, readelf):
     require(apk.is_file(), "APK does not exist.")
     application = check_manifest(xml_tree(run_tool([aapt2, "dump", "xmltree", "--file", "AndroidManifest.xml", apk])))
     print("PASS: public manifest disables debugging, test-only installation and cleartext traffic.")
@@ -205,6 +250,16 @@ def inspect(apk, aapt2, dexdump):
             check_backup(xml_tree(run_tool([aapt2, "dump", "xmltree", "--file", path, apk])), modern)
     print("PASS: database, connection and map-cache exclusions cover all three backup/transfer channels.")
     with zipfile.ZipFile(apk) as archive, tempfile.TemporaryDirectory(prefix="runstate-apk-check-") as temp:
+        # Check only: never realign or modify the supplied APK (which may be signed).
+        run_tool([zipalign, "-c", "-P", "16", "4", apk])
+        native_entries = [entry for entry in archive.infolist() if re.fullmatch(r"lib/[^/]+/[^/]+\.so", entry.filename)]
+        checked_64 = 0
+        for index, entry in enumerate(native_entries):
+            path = Path(temp) / f"native-{index}.so"
+            with archive.open(entry) as source, path.open("wb") as target:
+                shutil.copyfileobj(source, target)
+            checked_64 += check_native_library(path, readelf, entry.filename)
+        print(f"PASS: static ZIP/ELF 16 KB checks, including RELRO boundaries, for {checked_64} 64-bit libraries.")
         check_assets(archive, Path(__file__).resolve().parent / "app/src/debug/res/drawable-nodpi/demo_lizzo_cover.jpg")
         print("PASS: owner demo artwork is absent; bundled notices are present.")
         dex_entries = [entry for entry in archive.infolist() if re.fullmatch(r"classes\d*\.dex", entry.filename)]
@@ -229,10 +284,11 @@ def inspect(apk, aapt2, dexdump):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("apk", type=Path)
-    parser.add_argument("--build-tools", help="SDK directory containing aapt2 and dexdump")
+    parser.add_argument("--build-tools", help="SDK directory containing aapt2, dexdump and zipalign")
+    parser.add_argument("--readelf", help="llvm-readelf/readelf executable (default: search PATH)")
     args = parser.parse_args()
     try:
-        inspect(args.apk.resolve(), *sdk_tools(args.build_tools))
+        inspect(args.apk.resolve(), *sdk_tools(args.build_tools), elf_reader(args.readelf))
     except (CheckFailure, OSError, subprocess.TimeoutExpired, zipfile.BadZipFile) as error:
         print(f"FAIL: {error}", file=sys.stderr)
         return 1
