@@ -20,7 +20,9 @@ were rejected, including a real debug APK and a copied public APK with renamed o
 Manifest/backup/flag negative cases use altered observations from real SDK output, not rebuilt
 malicious binaries. Actionlint and independent review passed. No app rebuild, device action,
 provider call or behavior/design change was needed. Local evidence is in
-`android/build/nov20-public-apk-check/`; first GitHub execution is pending. This closes a
+`android/build/nov20-public-apk-check/`. At `241bff9`, all four jobs in
+[GitHub run 44793225634](https://github.com/Manley-codes/RunState/actions/runs/44793225634)
+passed, including the new checker against the Linux-built public APK. This closes a
 regression-check gap, not a newly discovered exploitable app flaw. Signing, field behavior,
 complete license review, future shrinking changes and release approval remain separate.
 
