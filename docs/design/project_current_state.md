@@ -5,6 +5,12 @@ metadata:
   type: project
 ---
 
+## November 20 Android bitmap efficiency
+
+The existing History trail and music-orb JPEGs now live in `drawable-nodpi`, preventing Android from enlarging decoded bitmaps merely because the device has a higher screen density. Every inspected consumer already supplies explicit size and Crop/Fit behavior. Both images are byte-identical to their earlier versions; there is no artwork, layout or reflection-logic change, so the public walkthrough needs no visual revision.
+
+The offline public APK build, including release vital lint, passed. Packaged-resource inspection found each image exactly once with the `nodpi` configuration and original SHA-256. Evidence is in `android/build/nov20-bitmap-density-check/`. No phone update or screenshot comparison was performed; add a brief Start/music/History look to the next combined-build review, not a separate run. The resource moves are the only app changes in this increment. The lower-priority owner-demo artwork still present in the public package is noted in the private roadmap; it is not an enabled public feature.
+
 ## November 20 backend process-restart verification
 
 Added one test-only file, `BackendProcessRestartTest.java`, to exercise the real HTTP server and all four temporary SQLite stores across separate Java processes. A completed written answer and selected audio replay exactly after restart, including reuse of the answer with a new request ID; the trial's remaining run count and the spending limit survive. Forced termination after a simulated writer send or voice send, before completion, leaves that work pending rather than sending again. Durable simulated-send records prove that retries add no provider sends. The test child uses loopback, fictional credentials, a fixed clock, bounded cleanup and injected simulated providers; no real provider is constructed.
