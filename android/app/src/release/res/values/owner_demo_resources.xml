@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Public builds disable the owner demo; retain its shared reference without its cover image. -->
+    <drawable name="demo_lizzo_cover">@drawable/start_music_orb</drawable>
+</resources>

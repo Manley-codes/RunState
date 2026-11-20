@@ -5,6 +5,16 @@ metadata:
   type: project
 ---
 
+## November 20 owner-demo media and contact follow-up
+
+The unchanged 9,280-byte demo album cover now belongs to the debug source set only. A new `android/app/src/release/res/values/owner_demo_resources.xml` aliases the shared resource ID to the existing music-orb artwork so public code compiles without bundling the demo cover. Existing public demo guards stay in place; no Kotlin, accepted reflection, shared instrumental, closing chime or phone data changed. The existing asset notice now distinguishes owner/debug from public builds. This is a small packaging cleanup, not a new release blocker or visual redesign, and does not require a public-preview update.
+
+Offline owner/debug, public/release and Android test APK assemblies passed, including release vital lint. The original cover bytes appear exactly once in debug and nowhere in release; packaged resource inspection confirms the release alias. Private evidence is in `android/build/nov20-owner-media-check/`. No additional user or phone test is needed.
+
+Manley supplied a temporary email for drafting only and explicitly prohibited using it for actual support. Its value stays in the private readiness record. A replacement public contact is required before release; do not publish the temporary address or treat support setup as complete. The private draft retains its public-contact placeholder.
+
+A read-only check of the live `/health` endpoint returned HTTP 200 and `status: ok`. It did not establish the deployed revision, persistent disk, provider spending settings or replay durability. Dashboard access remains unavailable from this session. The existing roadmap records the requested read-only Disk-page check; no server change, paid generation, purchase or deployment occurred.
+
 ## November 20 packaged backend and release preparation
 
 The Anthropic adapter now rejects an assembled request above 1 MiB of UTF-8 before reserving spending or sending it. The audited current hosted paths/default identifiers fit below that limit; prompts, model overrides and song selection are unchanged. A multibyte regression proves rejection sends nothing and leaves the next ordinary request's allowance available. All 64 focused tests passed. Full Windows verification and packaging completed with 307 tests, zero failures/errors and two POSIX-only skips. At `fb8279a`, [GitHub run 44746569909](https://github.com/Manley-codes/RunState/actions/runs/44746569909) passed all four jobs; all 307 backend tests passed with zero skips both normally and inside the production Docker build, followed by every container check. Independent source review found no material issue. This bounds bytes, not tokens or actual provider charges. Actual account rates and a deliberately chosen budget remain required.
