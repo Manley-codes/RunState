@@ -107,7 +107,7 @@ class AnthropicReflectionProviderTest {
         String recorded = receipts.toString(java.nio.charset.StandardCharsets.UTF_8);
         for (var step : List.of("STUDY", "WRITER", "CHOOSER")) {
             assertTrue(recorded.contains("anthropic step=" + step + " model=claude-opus-5-5 attempted=1"));
-            assertTrue(recorded.contains("anthropic step=" + step + " reply=1 input=321 output=51 cache_read=123 "
+            assertTrue(recorded.contains("anthropic step=" + step + " model=claude-opus-5-5 reply=1 input=321 output=51 cache_read=123 "
                     + "cache_write_total=8 cache_write_5m=3 cache_write_1h=5"));
         }
         assertTrue(recorded.contains("elevenlabs voice=reflection attempted=1 submitted_chars=4"));
@@ -122,14 +122,17 @@ class AnthropicReflectionProviderTest {
         var receipts = new ByteArrayOutputStream();
         var meter = LocalProviderUsage.configured(Map.of("RUNSTATE_LOCAL_USAGE_METER", "1"), false,
                 new PrintStream(receipts));
-        meter.anthropicReply(LocalProviderUsage.Step.ORDINARY, "confidential damaged content");
-        meter.anthropicReply(LocalProviderUsage.Step.WRITER, """
+        meter.anthropicReply(LocalProviderUsage.Step.ORDINARY, AnthropicReflectionProvider.DEFAULT_MODEL, "confidential damaged content");
+        meter.anthropicAttempt(LocalProviderUsage.Step.WRITER, "confidential-model-name");
+        meter.anthropicReply(LocalProviderUsage.Step.WRITER, "confidential-model-name", """
                 {"usage":{"input_tokens":"confidential","output_tokens":0,"cache_read_input_tokens":-1}}
                 """);
         meter.voiceReply(true, false, "confidential");
         String recorded = receipts.toString(java.nio.charset.StandardCharsets.UTF_8);
-        assertTrue(recorded.contains("step=ORDINARY reply=1 input=unknown output=unknown"));
-        assertTrue(recorded.contains("step=WRITER reply=1 input=unknown output=0 cache_read=unknown"));
+        assertTrue(recorded.contains("step=ORDINARY model=" + AnthropicReflectionProvider.DEFAULT_MODEL
+                + " reply=1 input=unknown output=unknown"));
+        assertTrue(recorded.contains("step=WRITER model=custom attempted=1"));
+        assertTrue(recorded.contains("step=WRITER model=custom reply=1 input=unknown output=0 cache_read=unknown"));
         assertTrue(recorded.contains("usable_audio=false provider_character_cost=unknown"));
         assertFalse(recorded.contains("confidential"));
     }

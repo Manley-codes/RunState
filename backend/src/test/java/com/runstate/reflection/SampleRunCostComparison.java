@@ -6,6 +6,7 @@ import com.google.gson.JsonParser;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.PrintStream;
+import java.math.BigInteger;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -15,13 +16,18 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.Arrays;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 /** Manual loopback comparison. Never launched by Surefire, the mobile app, or the hosted backend. */
 public final class SampleRunCostComparison {
     private record Song(String title, String artist) {}
+    private record ModelStep(String step, String model) {}
+    private static final List<String> TOKEN_FIELDS = List.of("input", "output", "cache_read",
+            "cache_write_total", "cache_write_5m", "cache_write_1h");
     // Public stand-ins. Each eligible observation represents at least one minute of this synthetic run.
     private static final List<Song> SONGS = List.of(new Song("Blinding Lights", "The Weeknd"),
             new Song("Levitating", "Dua Lipa"), new Song("Shake It Off", "Taylor Swift"),
@@ -131,43 +137,102 @@ public final class SampleRunCostComparison {
             complete = true;
         } finally {
             List<String> lines = counters.toString(StandardCharsets.UTF_8).lines().toList();
-            System.out.printf("Sample mode=%s eligible=%d studies_ready=%d complete=%s%n",
+            System.out.printf("Sample mode=%s eligible=%d studies_ready=%d flow_complete=%s%n",
                     live ? "LIVE" : "OFFLINE", songCount, ready, complete);
-            for (var step : LocalProviderUsage.Step.values()) {
-                var atStep = lines.stream().filter(line -> line.contains("anthropic step=" + step + " ")).toList();
-                var replies = atStep.stream().filter(line -> line.contains(" reply=1 ")).toList();
-                int sends = atStep.size() - replies.size();
-                if (sends > 0) {
-                    System.out.printf("  %s sends=%d replies=%d", step, sends, replies.size());
-                    if (live) for (String field : List.of("input","output","cache_read","cache_write_total","cache_write_5m","cache_write_1h"))
-                        System.out.print(" " + field + "=" + sum(replies, field));
-                    System.out.println();
-                }
-            }
-            long catalog = lines.stream().filter(line -> line.contains("musixmatch attempted=1")).count();
-            var speech = lines.stream().filter(line -> line.contains("elevenlabs voice=reflection")).toList();
-            var attempts = speech.stream().filter(line -> line.contains("attempted=1")).toList();
-            var replies = speech.stream().filter(line -> line.contains("reply=1")).toList();
-            System.out.printf("  Musixmatch attempted=%d; reflection voice attempted=%d replies=%d submitted_characters=%s%n",
-                    catalog, attempts.size(), replies.size(), sum(attempts, "submitted_chars"));
-            if (live) System.out.println("  Voice provider character cost=" + sum(replies,"provider_character_cost"));
-            if (!live && complete && (ready != songCount || catalog == 0 || attempts.size() != 1 ||
+            reportUsage(System.out, lines, live);
+            if (!live && complete && (ready != songCount ||
+                    lines.stream().noneMatch(line -> line.equals("RunStateUsage musixmatch attempted=1")) ||
+                    lines.stream().filter(line -> line.startsWith("RunStateUsage elevenlabs voice=reflection attempted=1 ")).count() != 1 ||
                     List.of("STUDY","CHOOSER","WRITER").stream().anyMatch(step -> lines.stream().noneMatch(line ->
                             line.contains("step=" + step + " ") && line.contains("attempted=1")))))
                 throw new IllegalStateException("Offline fixture missed a required provider path.");
         }
     }
 
-    private static String sum(List<String> lines, String field) {
-        if (lines.isEmpty()) return "unknown";
-        long total = 0;
-        for (String line : lines) {
-            String value = Arrays.stream(line.split(" ")).filter(part -> part.startsWith(field + "="))
-                    .map(part -> part.substring(field.length()+1)).findFirst().orElse("unknown");
-            if (!value.matches("[0-9]{1,16}")) return "unknown";
-            total += Long.parseLong(value);
+    /** The meter groups one isolated run. Only its fixed metadata fields reach the report. */
+    static void reportUsage(PrintStream output, List<String> lines, boolean live) {
+        var modelSteps = lines.stream().filter(line -> line.startsWith("RunStateUsage anthropic "))
+                .collect(Collectors.groupingBy(line -> new ModelStep(field(line, "step"), field(line, "model")),
+                        LinkedHashMap::new, Collectors.toList()));
+        boolean usageComplete = true;
+        for (var group : modelSteps.entrySet()) {
+            var modelStep = group.getKey();
+            var attempts = events(group.getValue(), "attempted");
+            var replies = events(group.getValue(), "reply");
+            output.printf("  Anthropic step=%s model=%s sends=%d replies=%d",
+                    modelStep.step(), modelStep.model(), attempts.size(), replies.size());
+            if (live) {
+                var totals = new LinkedHashMap<String, String>();
+                for (String field : TOKEN_FIELDS) {
+                    totals.put(field, replies.size() == attempts.size() ? sum(replies, field) : "unknown");
+                }
+                boolean known = !totals.containsValue("unknown") && !modelStep.model().equals("custom")
+                        && !modelStep.model().equals("unknown");
+                usageComplete &= known;
+                output.print(" usage=" + (known ? "complete" : "incomplete"));
+                totals.forEach((name, total) -> output.print(" " + name + "=" + total));
+            }
+            output.println();
         }
-        return Long.toString(total);
+        long catalog = lines.stream().filter(line -> line.equals("RunStateUsage musixmatch attempted=1")).count();
+        output.printf("  Musixmatch requests attempted=%d%n", catalog);
+        var speech = lines.stream().filter(line -> line.startsWith("RunStateUsage elevenlabs voice=reflection ")).toList();
+        var attempts = events(speech, "attempted");
+        var replies = events(speech, "reply");
+        output.printf("  Reflection voice sends=%d replies=%d submitted_characters=%s",
+                attempts.size(), replies.size(), sum(attempts, "submitted_chars"));
+        if (live) {
+            String units = attempts.size() == replies.size() ? sum(replies, "provider_character_cost") : "unknown";
+            usageComplete &= !units.equals("unknown");
+            output.print(" provider_character_cost=" + units);
+        }
+        output.println();
+        if (!live) {
+            output.println("  Simulated providers. No provider charges were incurred.");
+        } else if (usageComplete) {
+            output.println("  Usage for dispatched requests is complete. Apply your account rates separately.");
+        } else {
+            output.println("  Usage is incomplete. Reconcile missing details with provider billing before pricing.");
+        }
+    }
+
+    private static List<String> events(List<String> lines, String marker) {
+        return lines.stream().filter(line -> field(line, marker).equals("1")).toList();
+    }
+
+    private static String field(String line, String name) {
+        String prefix = name + "=";
+        return Arrays.stream(line.split(" ")).filter(part -> part.startsWith(prefix))
+                .map(part -> part.substring(prefix.length())).findFirst().orElse("unknown");
+    }
+
+    private static String sum(List<String> lines, String field) {
+        BigInteger total = BigInteger.ZERO;
+        for (String line : lines) {
+            BigInteger value = switch (field) {
+                case "cache_write_5m", "cache_write_1h" -> cacheWindow(line, field);
+                default -> number(line, field);
+            };
+            if (value == null) return "unknown";
+            total = total.add(value);
+        }
+        return total.toString();
+    }
+
+    private static BigInteger number(String line, String name) {
+        String text = field(line, name);
+        return text.matches("[0-9]{1,16}") ? new BigInteger(text) : null;
+    }
+
+    private static BigInteger cacheWindow(String line, String name) {
+        BigInteger total = number(line, "cache_write_total");
+        BigInteger fiveMinutes = number(line, "cache_write_5m");
+        BigInteger oneHour = number(line, "cache_write_1h");
+        // A reported zero aggregate covers both windows, even when the optional breakdown is absent.
+        if (BigInteger.ZERO.equals(total) && (fiveMinutes == null || fiveMinutes.signum() == 0)
+                && (oneHour == null || oneHour.signum() == 0)) return BigInteger.ZERO;
+        if (fiveMinutes == null || oneHour == null || !fiveMinutes.add(oneHour).equals(total)) return null;
+        return name.equals("cache_write_5m") ? fiveMinutes : oneHour;
     }
 
     private static JsonObject postJson(URI base, String path, JsonObject body) throws Exception {

@@ -759,7 +759,7 @@ public final class AnthropicReflectionProvider implements ReflectionProvider {
             var usage = ProviderSpendScope.beforeSend(ProviderSpendBudget.Provider.ANTHROPIC);
             if (usage != null) usage.anthropicAttempt(step, model);
             response = transport.send(request);
-            if (usage != null && response != null) usage.anthropicReply(step, response.body());
+            if (usage != null && response != null) usage.anthropicReply(step, model, response.body());
         } catch (HttpTimeoutException timedOut) {
             throw new ReflectionProviderException(
                     FailureType.TIMEOUT,
