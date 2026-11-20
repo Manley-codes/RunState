@@ -180,6 +180,26 @@ backend CI job. Linux also exercises the permission/symlink checks that Windows 
 checks do not exercise the production launcher/provider wiring, the Docker runtime identity, or
 an actual Render disk/redeployment. The hosted verification above is still required.
 
+### Packaged container check
+
+The backend CI job also builds the existing Dockerfile and runs `check-container.py` against
+that local image. It verifies the configured/runtime UID and GID, the normal production command's
+health response, authentication and zero-budget refusal, and reopening all four private stores
+from a replacement container. A marker must survive on the same disposable volume; database
+ownership/modes are checked, and read-only or publicly readable storage must fail the preflight.
+
+The runtime checks disable external networking, supply only fictional credentials, publish no
+ports and use a uniquely named temporary volume that is removed afterward. No image is pushed
+to a registry or deployed. The test image uses the same Dockerfile as the hosted backend; live
+provider authentication and actual Render storage still require their separate verification.
+
+With Docker available, run these from the repository root:
+
+```sh
+docker build --tag runstate-backend-check backend
+python3 backend/check-container.py runstate-backend-check
+```
+
 ### Measure one complete test run
 
 To rehearse the four-song and ten-song reflection samples from the repository root, run `.\backend\compare-sample-runs.ps1` in PowerShell. If Maven is outside your PATH, supply its executable with `-Maven`. The default command uses simulated provider responses. It exercises preparation, song choice, writing, one selected voice and retries. The sample excludes on-course announcements and music playback. A live comparison requires deliberate opt-in, privately configured provider keys and chosen spending limits.
