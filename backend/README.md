@@ -137,18 +137,26 @@ Prepared single-instance layout (not configured on Render by this source change)
 | --- | --- |
 | Disk mount | `/var/data` |
 | `RUNSTATE_SPEECH_REPLAY_DIR` | `/var/data/runstate/speech` |
-| Runtime owner | UID/GID `10001:10001`, matching the Dockerfile; private directory mode `700` and database files `600` |
+| Runtime owner | Dockerfile default UID/GID `10001:10001`; verify the actual backend process and shell run as UID `10001` and own the private stores. Hosting can assign different groups. Directory access must remain owner-only (`700`, including `2700` with group inheritance); database files `600`. |
 | Stored files | `written-reflections.sqlite3`, `reflection-speech.sqlite3`, `reflection-allowances.sqlite3`, `provider-spend.sqlite3` |
 | `RUNSTATE_RUNNER_MONTHLY_USD`, `RUNSTATE_GLOBAL_MONTHLY_USD` | `0` for a deliberately isolated rehearsal; this disables new paid work, so do not apply it to the live service as an incidental edit |
 | Provider per-call ceilings | Omit for the zero-budget rehearsal; choose verified amounts before enabling spending. Positive caps require the Anthropic ceiling and ceilings for configured ElevenLabs/Musixmatch keys. |
 | Existing host/access settings and provider keys | Preserve privately; never put values in source, the command line or screenshots |
 
-On the actual running container, first confirm the command runs as UID/GID `10001:10001`,
-then use:
+On the actual running container, first compare the backend process's effective UID with the
+shell UID and storage owner. They must be the expected non-root UID `10001`. Do not require
+GID `10001` or change permissions merely to make the group match: the observed Render backend
+and shell use GID `0`, while the private stores inherit GID `1000`. Group membership does not
+make UID `10001` a root user. The check below still rejects group/other access permissions.
+After confirming ownership, use:
 
 ```sh
 java -Djdk.httpclient.redirects.retrylimit=1 -cp "/app/classes:/app/lib/*" com.runstate.reflection.ReflectionBackendMain --check-config
 ```
+
+The server only initializes `reflection-allowances.sqlite3` when trial/pilot credentials need
+run allowances. Its absence in owner-only mode is not itself a storage failure. The explicit
+configuration check initializes and reopens all four stores, including that missing store.
 
 Use the service's runtime shell, not Render's build, pre-deploy or one-off-job environment:
 those cannot access its disk. Only files under the mount persist. A disk supports one service
