@@ -30,7 +30,12 @@ Evidence: `backend/target/nov20-idle-replay-full-verify.log`,
 Hosted deployment remains pending with the earlier HEAD fix. Render still runs `4c42dde`
 with automatic deployment off; zero caps continue blocking new paid calls. No device action,
 provider call or public-preview change. Keep hosted restart proof, verified rates/budgets and
-the existing deferred phone review separate. GitHub results for this increment are pending.
+the existing deferred phone review separate. Backend commit `984b4c6` and packaging commit
+`4fbb2cb` are pushed. All four jobs in [GitHub run 44803570074](https://github.com/Manley-codes/RunState/actions/runs/44803570074)
+passed: 314 backend tests with zero skips both normally and inside the production container,
+container startup/storage checks, and Android debug/release builds, tests and lint. The public
+APK step confirmed all four 64-bit native libraries passed the new static checks. No iPhone
+workflow was needed or triggered. This documentation-only receipt does not repeat the builds.
 
 ## November 20 background hosting and attribution follow-up
 
