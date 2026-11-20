@@ -25,7 +25,7 @@ All 192 focused Android unit tests passed. In the new Android check, a runner co
 
 For iPhone, reuse the Java reflection service, request formats and accepted run behavior. The first proposed native test starts a run in the foreground, locks the phone with Spotify playing, records distance and plays a local mile announcement over Bluetooth. Check that music lowers and returns naturally, that music already paused stays paused, and that pausing and resuming the run saves the correct distance once. Apple's background location and temporary music-volume controls support this approach. Spotify recommends disconnecting its remote control while the app is inactive. Implementation and listening on a physical iPhone are pending. [Apple background location](https://developer.apple.com/documentation/corelocation/cllocationmanager/allowsbackgroundlocationupdates), [Apple audio](https://developer.apple.com/documentation/avfaudio/avaudiosession/categoryoptions-swift.struct/duckothers), [Spotify app lifecycle](https://developer.spotify.com/documentation/ios/concepts/application-lifecycle).
 
-Manley has an iPhone. He still needs access to a compatible Mac with Xcode for the first device test. Xcode supports installing a personal test build with a free Apple Account. Wider beta distribution through TestFlight is a later step. [Apple account and device testing](https://developer.apple.com/help/account/basics/about-your-developer-account), [Xcode compatibility](https://developer.apple.com/xcode/system-requirements/).
+Manley used the GitHub Mac build and his Windows PC for the first personal installation. Wider beta distribution through TestFlight is a later step.
 
 ## November 11 written reflection retries
 

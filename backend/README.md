@@ -110,13 +110,65 @@ setting or the ledger is unavailable. A refusal before the first paid send allow
 later retry once capacity returns. If a written reflection has already used a paid send,
 its replay reservation stays in place for the 24-hour window to prevent a second charge.
 
+### Check hosted storage and spending configuration without paid calls
+
+`ReflectionBackendMain --check-config` is an explicit administrative check. It validates the
+remote host/access/port settings, monthly amounts, enabled provider ceilings and the JVM
+one-attempt setting, then initializes and reopens the four SQLite stores as the current user.
+It exits with code **0** on success and **1** on failure. It never starts the HTTP server,
+constructs a provider or makes an API request. Provider credentials are not needed for a
+zero-budget rehearsal. Keep the existing owner access mode; this does not introduce accounts.
+
+The check uses the configured storage directory: it creates missing databases and runs their
+normal expiry cleanup. It does not reserve spending or add reflections/audio. Back up existing
+state before a hosted maintenance session. Invalid configuration is rejected before opening
+storage. Linux checks reject group/other permission bits and symbolic links at the configured directory
+or store files. Windows rehearsal does not establish Linux ownership/permissions.
+
+Prepared single-instance layout (not configured on Render by this source change):
+
+| Setting | Prepared value or action |
+| --- | --- |
+| Disk mount | `/var/data` |
+| `RUNSTATE_SPEECH_REPLAY_DIR` | `/var/data/runstate/speech` |
+| Runtime owner | UID/GID `10001:10001`, matching the Dockerfile; private directory mode `700` and database files `600` |
+| Stored files | `written-reflections.sqlite3`, `reflection-speech.sqlite3`, `reflection-allowances.sqlite3`, `provider-spend.sqlite3` |
+| `RUNSTATE_RUNNER_MONTHLY_USD`, `RUNSTATE_GLOBAL_MONTHLY_USD` | `0` for a deliberately isolated rehearsal; this disables new paid work, so do not apply it to the live service as an incidental edit |
+| Provider per-call ceilings | Omit for the zero-budget rehearsal; choose verified amounts before enabling spending. Positive caps require the Anthropic ceiling and ceilings for configured ElevenLabs/Musixmatch keys. |
+| Existing host/access settings and provider keys | Preserve privately; never put values in source, the command line or screenshots |
+
+On the actual running container, first confirm the command runs as UID/GID `10001:10001`,
+then use:
+
+```sh
+java -Djdk.httpclient.redirects.retrylimit=1 -cp "/app/classes:/app/lib/*" com.runstate.reflection.ReflectionBackendMain --check-config
+```
+
+Use the service's runtime shell, not Render's build, pre-deploy or one-off-job environment:
+those cannot access its disk. Only files under the mount persist. A disk supports one service
+instance and introduces a brief interruption during deployments. Adding a disk itself triggers
+a deployment, so it belongs to the later approved hosting step. [Render disk guidance](https://render.com/docs/disks).
+
+A passing check proves local configuration and storage access, **not** that the directory is
+a persistent mount, that credentials are accepted, or that chosen ceilings cover real charges.
+`/health` remains a liveness check and is not a substitute for this check.
+
+Before enabling spending on the host: record a harmless unique marker/digest in the same mounted
+directory, verify it survives the approved restart and redeployment, and rerun the configuration
+check under the runtime user. Keep the marker separate from the databases and remove only that
+marker afterward. This establishes mount persistence; also complete the recorded hosted written
+and voice replay check before claiming end-to-end protection. Choose actual monthly budgets and
+provider ceilings separately. Local tests and prepared settings do not activate or deploy them.
+
 ### Measure one complete test run
 
 To rehearse the four-song and ten-song reflection samples from the repository root, run `.\backend\compare-sample-runs.ps1` in PowerShell. If Maven is outside your PATH, supply its executable with `-Maven`. The default command uses simulated provider responses. It exercises preparation, song choice, writing, one selected voice and retries. The sample excludes on-course announcements and music playback. A live comparison requires deliberate opt-in, privately configured provider keys and chosen spending limits.
 
 On an isolated loopback backend, set `$env:RUNSTATE_LOCAL_USAGE_METER = '1'` before starting the usual server. Capture the console lines beginning with `RunStateUsage` for one run at a time. Include the start, all song preparations, the selected written reflection, and speech. Repeat for an ordinary run and a music-heavy run. Record whether the six fixed voice cues were already cached. The instrument is disabled in remote mode. A sample that uses simulated providers or only tracking cannot establish the cost of a paid reflection.
 
-Price the reported input, output and cache tokens by model, then add voice usage at the account's rate and count Musixmatch requests against the plan. Include fixed fees separately. An attempted call with unknown usage needs the provider's billing record. Do not count missing usage as zero or add cache-write subtotals to their aggregate a second time. The meter emits counts and step labels only.
+The sample reports model usage separately for each step. If two requests go out and only one reply comes back, the token total for that model and step is unknown. The same rule applies to missing ElevenLabs replies. Submitted characters and the provider's reported voice units appear separately. A run can finish with incomplete usage. In that case, check the provider's billing record before estimating a price.
+
+Apply your account rates to the model tokens and voice units, count Musixmatch requests against your plan, and include fixed fees separately. The five-minute and one-hour cache-write counts are parts of the reported cache-write total. Count each token once.
 
 ## Snippet availability v2 — local implementation, October 19, 2026
 

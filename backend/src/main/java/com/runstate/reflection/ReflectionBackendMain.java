@@ -4,8 +4,12 @@ import com.runstate.reflection.ReflectionContract.CandidateReflections;
 import com.runstate.reflection.ReflectionProvider.ReflectionProviderException;
 
 import java.io.IOException;
+import java.io.PrintStream;
+import java.nio.file.Files;
 import java.nio.file.InvalidPathException;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
+import java.time.Clock;
 import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 
@@ -20,6 +24,13 @@ public final class ReflectionBackendMain {
     }
 
     public static void main(String[] args) throws Exception {
+        // This administrative check must exit before constructing providers or opening HTTP.
+        if (args.length == 1 && "--check-config".equals(args[0])) {
+            int status = checkConfiguration(System.getenv(),
+                    System.getProperty("jdk.httpclient.redirects.retrylimit"), System.out);
+            if (status != 0) System.exit(status);
+            return;
+        }
         LaunchOptions options = parseOptions(args);
         Map<String, String> environment = System.getenv();
         int port = configuredPort(environment, options.remote());
@@ -54,6 +65,108 @@ public final class ReflectionBackendMain {
                             : "http://127.0.0.1:" + server.address().getPort() + ReflectionHttpServer.CANDIDATES_PATH)
             );
             new CountDownLatch(1).await();
+        }
+    }
+
+    /** Checks remote configuration and actual SQLite access, without contacting a provider. */
+    static int checkConfiguration(Map<String, String> environment, String httpAttemptLimit, PrintStream output) {
+        boolean valid = true;
+        try {
+            configuredPort(environment, true);
+            configuredRemoteAccess(environment);
+            output.println("PASS remote host, access and port configuration.");
+        } catch (IllegalArgumentException failure) {
+            // Never print the exception: configuration parsers can contain private input.
+            output.println("FAIL remote host, access or port configuration; check the backend settings.");
+            valid = false;
+        }
+        if (!"1".equals(httpAttemptLimit)) {
+            output.println("FAIL start Java with -Djdk.httpclient.redirects.retrylimit=1.");
+            valid = false;
+        } else {
+            output.println("PASS one outbound HTTP attempt is configured.");
+        }
+
+        ProviderSpendBudget.Limits limits = null;
+        try {
+            var configured = ProviderSpendBudget.Limits.fromEnvironment(environment);
+            boolean disabled = configured.runnerMonthly() == 0 || configured.globalMonthly() == 0;
+            if (!disabled && (configured.anthropicMaxPerCall() == null
+                    || (hasSetting(environment, "ELEVENLABS_API_KEY") && configured.elevenLabsMaxPerCall() == null)
+                    || (hasSetting(environment, "MUSIXMATCH_API_KEY") && configured.musixmatchMaxPerCall() == null))) {
+                throw new IllegalArgumentException("Missing enabled provider ceiling");
+            }
+            limits = configured;
+            output.println(disabled
+                    ? "PASS spending configuration; new paid calls disabled by a zero monthly cap."
+                    : "PASS spending configuration; verify provider ceilings against actual plans before activation.");
+        } catch (IllegalArgumentException failure) {
+            output.println("FAIL monthly amounts or enabled provider ceilings; check the backend spending settings.");
+            valid = false;
+        }
+
+        Path directory = null;
+        try {
+            directory = replayDirectory(environment, true);
+        } catch (IOException | IllegalArgumentException | SecurityException failure) {
+            output.println("FAIL set RUNSTATE_SPEECH_REPLAY_DIR to an absolute private persistent directory.");
+            valid = false;
+        }
+        // A malformed configuration should not create or modify any store.
+        if (valid) {
+            try {
+                checkPrivateStorage(directory);
+                // The normal constructors commit schema/expiry work and reopen SQLite connections.
+                // They never reserve provider spending, generate a reply or synthesize speech.
+                for (int attempt = 0; attempt < 2; attempt++) {
+                    new WrittenReflectionReplayStore(directory);
+                    new SpeechReplayStore(directory);
+                    new ReflectionAllowance(directory, Clock.systemUTC());
+                    new ProviderSpendBudget(directory, limits);
+                }
+                checkPrivateStorage(directory);
+                output.println("PASS all four stores initialized and reopened under the current runtime user.");
+                if (!directory.getFileSystem().supportedFileAttributeViews().contains("posix")) {
+                    output.println("NOTE Linux file permissions still require checking on the host.");
+                }
+            } catch (IOException | IllegalArgumentException | SecurityException failure) {
+                output.println("FAIL storage access, private permissions or database integrity; check the mounted directory and runtime user.");
+                valid = false;
+            }
+        }
+        output.println("NOTE no server was started and no provider calls were made.");
+        output.println("NOTE this does not verify a persistent mount, hosted restart, provider credentials or billing rates.");
+        output.println(valid ? "Configuration check passed." : "Configuration check failed.");
+        return valid ? 0 : 1;
+    }
+
+    private static boolean hasSetting(Map<String, String> environment, String name) {
+        String value = environment.get(name);
+        return value != null && !value.isBlank();
+    }
+
+    private static void checkPrivateStorage(Path directory) throws IOException {
+        if (Files.exists(directory, LinkOption.NOFOLLOW_LINKS)) {
+            if (!Files.isDirectory(directory, LinkOption.NOFOLLOW_LINKS)) throw new IOException("Invalid storage directory");
+            checkPrivatePermissions(directory);
+        }
+        for (String filename : new String[]{"written-reflections.sqlite3", "reflection-speech.sqlite3",
+                "reflection-allowances.sqlite3", "provider-spend.sqlite3"}) {
+            for (String suffix : new String[]{"", "-journal", "-wal", "-shm"}) {
+                Path file = directory.resolve(filename + suffix);
+                if (Files.exists(file, LinkOption.NOFOLLOW_LINKS)) {
+                    if (!Files.isRegularFile(file, LinkOption.NOFOLLOW_LINKS)) throw new IOException("Invalid storage file");
+                    checkPrivatePermissions(file);
+                }
+            }
+        }
+    }
+
+    private static void checkPrivatePermissions(Path path) throws IOException {
+        if (path.getFileSystem().supportedFileAttributeViews().contains("posix")
+                && Files.getPosixFilePermissions(path, LinkOption.NOFOLLOW_LINKS).stream()
+                .anyMatch(permission -> permission.name().startsWith("GROUP_") || permission.name().startsWith("OTHERS_"))) {
+            throw new IOException("Storage is not private");
         }
     }
 
@@ -170,7 +283,7 @@ public final class ReflectionBackendMain {
             if ("--fake".equals(argument) && !fake) fake = true;
             else if ("--remote".equals(argument) && !remote) remote = true;
             else throw new IllegalArgumentException(
-                    "Unsupported arguments. Use no arguments, --fake, --remote, or --remote --fake. " +
+                    "Unsupported arguments. Use no arguments, --fake, --remote, --remote --fake, or --check-config alone. " +
                             "Keep credentials in backend environment variables."
             );
         }
