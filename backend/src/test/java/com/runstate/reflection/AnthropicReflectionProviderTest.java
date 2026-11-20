@@ -138,6 +138,39 @@ class AnthropicReflectionProviderTest {
     }
 
     @Test
+    void oversizedUtf8RequestDoesNotSendOrConsumeTheNextCallsBudget(@TempDir Path directory) throws Exception {
+        AtomicInteger sends = new AtomicInteger();
+        var provider = provider(request -> {
+            sends.incrementAndGet();
+            return new TransportResponse(200, successfulResponse(validCandidateJson()));
+        });
+        var budget = new ProviderSpendBudget(directory, new ProviderSpendBudget.Limits(1, 1, 1, 1, 1));
+        String privateDescription = "private-oversized-description "
+                + "\u4e2d".repeat(AnthropicReflectionProvider.MAX_REQUEST_BODY_BYTES / 3 + 1);
+        // A character-count-only guard would admit this text even though its UTF-8 is too large.
+        assertTrue(privateDescription.length() < AnthropicReflectionProvider.MAX_REQUEST_BODY_BYTES);
+        assertTrue(privateDescription.getBytes(java.nio.charset.StandardCharsets.UTF_8).length
+                > AnthropicReflectionProvider.MAX_REQUEST_BODY_BYTES);
+        var ordinary = knownEvidence();
+        var oversized = new CompletedRunEvidence(ordinary.officialStartEpochMillis(), ordinary.finishEpochMillis(),
+                ordinary.startTimezoneId(), ordinary.activeDurationMillis(), ordinary.metrics(), ordinary.preRunEnergy(),
+                new MusicContext(MusicState.MUSIC, "Controlled Song", "Controlled Artist", privateDescription));
+
+        try (var scope = ProviderSpendScope.open(budget, "runner-a")) {
+            var failure = assertThrows(ReflectionProviderException.class, () -> provider.generate(oversized));
+            assertEquals(FailureType.CONFIGURATION, failure.failureType());
+            assertFalse(failure.getMessage().contains("private-oversized-description"));
+            assertEquals(0, sends.get());
+
+            // There is room for exactly one send: succeeding now proves rejection made no reservation.
+            provider.generate(ordinary);
+            assertEquals(1, sends.get());
+            assertThrows(ProviderSpendScope.Denied.class, () -> provider.generate(ordinary));
+            assertEquals(1, sends.get());
+        }
+    }
+
+    @Test
     void eachSongModelExchangeReservesBudgetBeforeItsTransport(@TempDir Path directory) throws Exception {
         AtomicInteger sends = new AtomicInteger();
         var provider = new AnthropicReflectionProvider(testConfiguration(), request -> {

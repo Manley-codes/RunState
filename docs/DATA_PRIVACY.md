@@ -4,10 +4,12 @@
 
 Reviewed November 8, 2026 against Android and backend source at `3dee96d`, updated for the
 subsequent saved-run deletion, in-app Privacy & data summary, and November 11 backend
-storage for written retries and spoken reflection replays.
+storage for written retries and spoken reflection replays. The November 20 release review
+also covers the merged reflection implementation and current store-disclosure preparation.
 This is the current engineering summary for release preparation. It does not verify the
 running server's configuration or providers' retention settings, and is not the finished
-public privacy policy. Claude's separate reflection-quality branch is outside this checkpoint.
+public privacy policy. An unpublished policy draft and store checklist are kept in the existing
+private release-readiness record pending the real hosting/provider details and privacy contact.
 The dated implementation and Java console records are preserved below as historical context.
 
 ### What stays on the phone
@@ -108,6 +110,11 @@ form also covers SDKs and off-device processing; temporary processing should not
 described as no collection. See the official [User Data policy](https://support.google.com/googleplay/android-developer/answer/10144311?hl=en),
 [Data safety guidance](https://support.google.com/googleplay/android-developer/answer/10787469?hl=en)
 and [Android backup documentation](https://developer.android.com/identity/data/autobackup).
+Use the store's definitions when classifying location. Rounding weather coordinates to two
+decimal places yields roughly a 1 km grid, so it must not automatically be declared
+"approximate only": Google's precise-location category covers an area smaller than 3 km².
+Assess that optional weather request and the areas revealed by live-map requests separately
+from the GPS route that remains on the phone.
 Accounts/passwords, publication and the final store submission remain separate checkpoints.
 
 ### Implementation references

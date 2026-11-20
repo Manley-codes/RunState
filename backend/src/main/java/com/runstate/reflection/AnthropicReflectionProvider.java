@@ -62,6 +62,8 @@ public final class AnthropicReflectionProvider implements ReflectionProvider {
     static final Duration DEFAULT_CONNECTION_TIMEOUT = Duration.ofSeconds(10);
     static final Duration DEFAULT_REQUEST_TIMEOUT = Duration.ofSeconds(45);
     static final int DEFAULT_MAX_OUTPUT_TOKENS = 2_048;
+    /** Caps the fully assembled UTF-8 request, including prompts, song material and schema. */
+    static final int MAX_REQUEST_BODY_BYTES = 1024 * 1024;
 
     private static final URI MESSAGES_ENDPOINT = URI.create("https://api.anthropic.com/v1/messages");
     private static final String API_VERSION = "2023-06-01";
@@ -745,6 +747,11 @@ public final class AnthropicReflectionProvider implements ReflectionProvider {
         if (Thread.currentThread().isInterrupted()) {
             throw new ReflectionProviderException(FailureType.TRANSPORT,
                     "The Anthropic request was interrupted.");
+        }
+        if (requestBody.length() > MAX_REQUEST_BODY_BYTES
+                || requestBody.getBytes(StandardCharsets.UTF_8).length > MAX_REQUEST_BODY_BYTES) {
+            throw new ReflectionProviderException(FailureType.CONFIGURATION,
+                    "The assembled Anthropic request exceeds the supported size limit.");
         }
         TransportRequest request = new TransportRequest(
                 configuration.endpoint(),

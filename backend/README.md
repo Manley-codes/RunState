@@ -98,6 +98,12 @@ blocks calls to that provider. Verify the ceilings against the actual plans and 
 sizes before rollout. Conservative reservations can use up an allowance ahead of the
 vendor's billed usage. Fixed subscription and hosting fees are separate.
 
+Every Anthropic request also has a 1 MiB limit on its fully assembled UTF-8 body,
+including prompts and schema. Oversized bodies are rejected before a spending
+reservation or transport send. This is a byte limit, not a token or dollar ceiling;
+verify the configured model's actual rates separately. Accepted reflection prompts
+and model choices are unchanged.
+
 Use the same private persistent directory (`RUNSTATE_SPEECH_REPLAY_DIR`) across restarts
 on one hosted instance. The `provider-spend.sqlite3` file keeps totals by UTC calendar
 month. Multiple independent disks would each have their own allowance. The container
