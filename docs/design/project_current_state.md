@@ -5,6 +5,31 @@ metadata:
   type: project
 ---
 
+## November 20 hosted configuration checkpoint
+
+Manley's Render Shell output confirms `Configuration check passed`: remote configuration,
+one outbound HTTP attempt, zero-cap spending protection and initialization/reopening of all
+four private SQLite stores passed without provider calls. The backend and shell use UID 10001,
+GID 0; the storage directory is owned by UID 10001/GID 1000 with mode 2700 and the observed
+database files have mode 600. The earlier exact-GID guard was overly restrictive; setup guidance
+was corrected in `3202350`. The allowance store is optional at owner-only startup and was
+included by the explicit preflight. No ownership/permission change was needed.
+
+The newly connected Render integration independently confirms service `runstate-reflections`,
+live revision `4c42dde`, one instance, auto-deploy off, `/health` configured and a 1 GB disk
+mounted at `/var/data`. It permits background service/log/deploy work, but has no runtime-shell
+tool for creating and checking a persistence marker. There is no configured local SSH key or
+Render CLI/API connection. Hosted restart/redeployment survival and end-to-end paid replay are
+therefore still unverified; a green preflight does not establish those. New paid cloud work stays
+disabled by temporary zero caps until real ceilings and a budget are approved. GPS/local phone
+history remain independent of this restriction.
+
+Manley needs the computer for other work and explicitly permits only background/chat work:
+do not operate desktop/browser windows, request more phone tests or manufacture a new deploy
+solely to work around missing shell access. Keep the remaining hosted check in the existing
+roadmap and continue a bounded independent release task. No app/provider behavior changed at
+this checkpoint.
+
 ## November 20 owner-demo media and contact follow-up
 
 The unchanged 9,280-byte demo album cover now belongs to the debug source set only. A new `android/app/src/release/res/values/owner_demo_resources.xml` aliases the shared resource ID to the existing music-orb artwork so public code compiles without bundling the demo cover. Existing public demo guards stay in place; no Kotlin, accepted reflection, shared instrumental, closing chime or phone data changed. The existing asset notice now distinguishes owner/debug from public builds. This is a small packaging cleanup, not a new release blocker or visual redesign, and does not require a public-preview update.
