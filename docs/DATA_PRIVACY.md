@@ -71,7 +71,9 @@ paths; it would be inaccurate to claim that no song text ever reaches AI service
   song or excerpt details on private storage for 24-hour retries. The answers can mention
   run metrics, feelings, weather or music. The server matches requests using hashes and
   does not keep a separate copy of the submitted run evidence in this database. Retrying
-  leaves the expiry unchanged. Expired entries are cleared on startup or later requests.
+  leaves the expiry unchanged. Expired entries are cleared on startup, later requests and
+  approximately every five minutes while the server runs. Background cleanup is prepared
+  in source; it still needs deployment to the hosted service.
   The phone keeps the selected reflection in History independently. Deleting a run on the
   phone does not erase the server's retry record. Song preparation still uses a separate
   in-memory cache of up to 32 entries with two-hour reuse eligibility.
@@ -85,7 +87,8 @@ paths; it would be inaccurate to claim that no song text ever reaches AI service
   contain spoken run details. SQLite keeps a hash derived from the authenticated identity,
   exact text and voice, a reservation identifier, and an expiry time. It does not store a
   separate copy of the text or the access code. Replaying leaves the expiry unchanged.
-  Expired entries are removed on startup or later speech requests. Deleting a run on the phone
+  Expired entries are removed on startup, later speech requests and the same five-minute
+  background cleanup. Deleting a run on the phone
   does not delete the server recording. Run announcement audio remains request-scoped.
   Hosting backups, logs and provider retention settings require separate live verification.
 

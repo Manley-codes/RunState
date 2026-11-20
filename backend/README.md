@@ -503,8 +503,14 @@ If the server stops after the provider may have charged but before it saves the 
 receive HTTP 503 for that reservation's seven-day window. A duplicate request arriving while
 the first call is in progress can retry after it finishes. The store holds 128 entries total,
 including unfinished reservations. When full, existing audio stays available and new speech
-requests receive HTTP 503 until space opens. Expired entries are cleared on startup or later
-requests. These limits apply only to selected reflection speech.
+requests receive HTTP 503 until space opens. Expired entries are cleared on startup, later
+requests and approximately every five minutes while the server runs, even without traffic.
+The same maintenance removes expired written answers and their request/run bindings. It
+preserves unexpired results and pending reservations, and never calls a paid provider. A
+failed cleanup is logged without saved content and retried on the next pass. Closing the
+server stops maintenance. The spending ledger has its own lifecycle and is not swept here.
+These speech limits apply only to selected reflection speech. This background cleanup is
+prepared in source; the hosted service still needs the corresponding deployment.
 
 `ElevenLabsReflectionSpeech` uses the fixed official HTTPS conversion endpoint, an API-key header,
 MP3 44.1 kHz/128 kbps, a three-second connect timeout and a twenty-second complete-response budget.
@@ -791,7 +797,8 @@ that point without saving a usable answer, it withholds another paid generation 
 reservation's 24-hour window. A request rejected before admission can be retried when the
 service is available. The response and request limits remain 64 KiB each. The written store
 holds up to 256 operations and remembers up to 64 accepted request IDs per operation.
-It clears expired entries on startup or subsequent requests.
+It clears expired entries on startup, subsequent requests and the five-minute maintenance
+described in the reflection voice setup above.
 This protection covers the generation of the written answers. Song preparation and cumulative
 provider spending have separate lifecycles.
 

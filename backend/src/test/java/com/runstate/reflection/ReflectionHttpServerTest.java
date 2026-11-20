@@ -32,6 +32,7 @@ import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.sql.DriverManager;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
@@ -52,6 +53,76 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ReflectionHttpServerTest {
+    @Test void idleReplayMaintenanceSurvivesOneUnavailableStoreAndStopsWithServer(@TempDir Path directory) throws Exception {
+        var now = new AtomicReference<>(java.time.Instant.parse("2026-11-20T12:00:00Z"));
+        var maintenanceThread = new AtomicReference<Thread>();
+        var clock = new java.time.Clock() {
+            @Override public java.time.ZoneId getZone() { return java.time.ZoneOffset.UTC; }
+            @Override public java.time.Clock withZone(java.time.ZoneId zone) { return this; }
+            @Override public java.time.Instant instant() {
+                if (Thread.currentThread().getName().equals("runstate-replay-cleanup")) {
+                    maintenanceThread.set(Thread.currentThread());
+                }
+                return now.get();
+            }
+        };
+        var speech = new SpeechReplayStore(directory, clock, 2);
+        speech.complete(speech.claim("runner", "old audio", true), new byte[]{1, 2});
+        var written = new WrittenReflectionReplayStore(directory, clock, 2);
+        written.complete(written.claim("runner", "old request", "old evidence", true),
+                "old answer".getBytes(StandardCharsets.UTF_8), false, "runner", "old run");
+        Path speechFile = directory.resolve("reflection-speech.sqlite3");
+        Path temporarilyUnavailable = directory.resolve("temporarily-unavailable.sqlite3");
+        Files.move(speechFile, temporarilyUnavailable);
+        now.set(now.get().plus(Duration.ofDays(8)));
+        var providerCalls = new AtomicInteger();
+        ReflectionProvider provider = evidence -> { providerCalls.incrementAndGet(); return exactCandidates(); };
+        ReflectionHttpServer.SpeechProvider voice = text -> { providerCalls.incrementAndGet(); return new byte[]{1}; };
+        try (var server = new ReflectionHttpServer(provider, 0, ReflectionHttpServer.GenerationMode.FAKE, null,
+                2, 8, voice, null, speech, written, null, null, null, 25)) {
+            assertNull(maintenanceThread.get());
+            server.start();
+            // No HTTP request or store reopen: failure in speech must not suppress written cleanup.
+            awaitReplayRowCount(directory.resolve("written-reflections.sqlite3"), "written_replays", 0);
+            assertFalse(Files.exists(speechFile), "Missing storage must not be silently replaced");
+            assertNotNull(maintenanceThread.get());
+            assertTrue(maintenanceThread.get().isDaemon());
+            Files.move(temporarilyUnavailable, speechFile);
+            // A subsequent scheduled pass must still run after the earlier storage failure.
+            awaitReplayRowCount(speechFile, "speech_replays", 0);
+            assertEquals(0, providerCalls.get());
+        }
+        Thread worker = maintenanceThread.get();
+        assertNotNull(worker);
+        worker.join(3_000);
+        assertFalse(worker.isAlive(), "Closing the server must stop its maintenance worker");
+    }
+
+    @Test void replayMaintenanceCanBeClosedBeforeServerStarts(@TempDir Path directory) throws Exception {
+        try (var server = new ReflectionHttpServer(evidence -> exactCandidates(), 0,
+                ReflectionHttpServer.GenerationMode.FAKE, null, 2, 8, null, null,
+                new SpeechReplayStore(directory), null, null, null, null, 25)) {
+            server.close();
+            server.close();
+            assertThrows(IllegalStateException.class, server::start);
+        }
+    }
+
+    private static void awaitReplayRowCount(Path file, String table, int expected) throws Exception {
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(3);
+        int actual;
+        do {
+            try (var db = DriverManager.getConnection("jdbc:sqlite:" + file.toUri() + "?mode=rw");
+                 var sql = db.createStatement(); var rows = sql.executeQuery("SELECT count(*) FROM " + table)) {
+                assertTrue(rows.next());
+                actual = rows.getInt(1);
+            }
+            if (actual == expected) return;
+            Thread.sleep(10);
+        } while (System.nanoTime() < deadline);
+        assertEquals(expected, actual, "Scheduled cleanup did not reach " + table);
+    }
+
     @Test void v2ObservedEndingIsExplicitIdempotentAndSeparateFromCreativeCue() throws Exception {
         AtomicInteger calls = new AtomicInteger();
         var provider = new ReflectionProvider() {

@@ -7,10 +7,12 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.sql.DriverManager;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static com.runstate.reflection.SpeechReplayStore.State.*;
 import static org.junit.jupiter.api.Assertions.*;
@@ -22,6 +24,53 @@ final class SpeechReplayStoreTest {
 
     private SpeechReplayStore storeAt(Instant time, int capacity) throws IOException {
         return new SpeechReplayStore(directory, Clock.fixed(time, ZoneOffset.UTC), capacity);
+    }
+
+    @Test void idleCleanupDeletesExpiredAudioButPreservesLiveAudioAndPendingProtection() throws Exception {
+        var now = new AtomicReference<>(START);
+        var store = new SpeechReplayStore(directory, movingClock(now), 4);
+        byte[] privateAudio = "expired-private-audio-fixture".getBytes(StandardCharsets.UTF_8);
+        store.complete(store.claim("runner", "old audio", true), privateAudio);
+        store.claim("runner", "old pending", true);
+        now.set(START.plus(Duration.ofDays(6)));
+        store.complete(store.claim("runner", "live audio", true), AUDIO);
+        store.claim("runner", "live pending", true);
+        now.set(START.plus(Duration.ofDays(7)));
+
+        store.purgeExpired(); // No claim or restart is needed to physically remove expired rows.
+
+        Path file = directory.resolve("reflection-speech.sqlite3");
+        try (var db = DriverManager.getConnection("jdbc:sqlite:" + file.toUri() + "?mode=rw");
+             var sql = db.createStatement(); var rows = sql.executeQuery("SELECT count(*) FROM speech_replays")) {
+            assertTrue(rows.next());
+            assertEquals(2, rows.getInt(1));
+        }
+        assertFalse(Files.readString(file, StandardCharsets.ISO_8859_1).contains("expired-private-audio-fixture"));
+        assertArrayEquals(AUDIO, store.claim("runner", "live audio", false).audio());
+        assertEquals(PENDING, store.claim("runner", "live pending", true).state());
+        assertEquals(BUSY, store.claim("runner", "old audio", false).state());
+    }
+
+    @Test void expiredSpeechCompletionCannotReviveReservationBeforeCleanup() throws Exception {
+        var now = new AtomicReference<>(START);
+        var store = new SpeechReplayStore(directory, movingClock(now), 1);
+        var original = store.claim("runner", "reflection", true);
+        now.set(START.plus(Duration.ofDays(7)));
+        assertThrows(IOException.class, () -> store.complete(original, AUDIO));
+        store.purgeExpired();
+        var replacement = store.claim("runner", "reflection", true);
+        assertEquals(CLAIMED, replacement.state());
+        assertThrows(IOException.class, () -> store.complete(original, AUDIO));
+        store.complete(replacement, new byte[]{4, 5});
+        assertArrayEquals(new byte[]{4, 5}, store.claim("runner", "reflection", false).audio());
+    }
+
+    private static Clock movingClock(AtomicReference<Instant> now) {
+        return new Clock() {
+            @Override public java.time.ZoneId getZone() { return ZoneOffset.UTC; }
+            @Override public Clock withZone(java.time.ZoneId zone) { return this; }
+            @Override public Instant instant() { return now.get(); }
+        };
     }
 
     @Test void entriesRemainReplayableAtCapacityUntilExactlySevenDays() throws IOException {

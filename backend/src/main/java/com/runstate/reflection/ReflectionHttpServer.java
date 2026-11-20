@@ -30,6 +30,8 @@ import java.util.UUID;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.ThreadPoolExecutor;
@@ -85,6 +87,7 @@ public final class ReflectionHttpServer implements AutoCloseable {
     private static final String JSON_CONTENT_TYPE = "application/json; charset=utf-8";
     private static final int SERVER_THREADS = 8;
     private static final int HTTP_QUEUE_CAPACITY = 32;
+    private static final long REPLAY_CLEANUP_INTERVAL_MILLIS = TimeUnit.MINUTES.toMillis(5);
     private static final Set<String> ALLOWED_HOST_NAMES = Set.of(
             "127.0.0.1",
             "localhost",
@@ -102,6 +105,8 @@ public final class ReflectionHttpServer implements AutoCloseable {
     private final GenerationMode generationMode;
     private final HttpServer server;
     private final ExecutorService executor;
+    private final ScheduledExecutorService replayCleanup;
+    private final long replayCleanupIntervalMillis;
     private final RemoteAccess remoteAccess;
     private final Semaphore providerSlots;
     private final Semaphore songPreparationSlots;
@@ -135,6 +140,16 @@ public final class ReflectionHttpServer implements AutoCloseable {
             int maxConcurrentProviderCalls, int maxCachedRequests, SpeechProvider speechProvider, SpeechProvider runVoiceProvider,
             SpeechReplayStore speechReplayStore, WrittenReflectionReplayStore writtenReplayStore, ProviderSpendBudget spendBudget,
             ReflectionAllowance allowance, LocalProviderUsage usage) throws IOException {
+        this(provider, port, generationMode, remoteAccess, maxConcurrentProviderCalls, maxCachedRequests,
+                speechProvider, runVoiceProvider, speechReplayStore, writtenReplayStore, spendBudget, allowance,
+                usage, REPLAY_CLEANUP_INTERVAL_MILLIS);
+    }
+
+    /** Short intervals let local tests check the real maintenance lifecycle without waiting five minutes. */
+    ReflectionHttpServer(ReflectionProvider provider, int port, GenerationMode generationMode, RemoteAccess remoteAccess,
+            int maxConcurrentProviderCalls, int maxCachedRequests, SpeechProvider speechProvider, SpeechProvider runVoiceProvider,
+            SpeechReplayStore speechReplayStore, WrittenReflectionReplayStore writtenReplayStore, ProviderSpendBudget spendBudget,
+            ReflectionAllowance allowance, LocalProviderUsage usage, long replayCleanupIntervalMillis) throws IOException {
         this.provider = Objects.requireNonNull(provider, "provider");
         this.speechProvider = speechProvider;
         this.speechReplayStore = speechReplayStore;
@@ -146,7 +161,8 @@ public final class ReflectionHttpServer implements AutoCloseable {
         this.generationMode = Objects.requireNonNull(generationMode, "generationMode");
         requirePort(port);
         if (maxConcurrentProviderCalls < 1 || maxConcurrentProviderCalls >= SERVER_THREADS ||
-                maxCachedRequests < maxConcurrentProviderCalls || maxCachedRequests > MAX_CACHED_REQUESTS) {
+                maxCachedRequests < maxConcurrentProviderCalls || maxCachedRequests > MAX_CACHED_REQUESTS ||
+                replayCleanupIntervalMillis < 1) {
             throw new IllegalArgumentException("Invalid reflection server resource limits.");
         }
         this.remoteAccess = remoteAccess;
@@ -164,6 +180,13 @@ public final class ReflectionHttpServer implements AutoCloseable {
         );
         server.setExecutor(executor);
         server.createContext("/", this::handle);
+        this.replayCleanupIntervalMillis = replayCleanupIntervalMillis;
+        this.replayCleanup = speechReplayStore == null && writtenReplayStore == null ? null
+                : Executors.newSingleThreadScheduledExecutor(task -> {
+                    Thread thread = new Thread(task, "runstate-replay-cleanup");
+                    thread.setDaemon(true);
+                    return thread;
+                });
     }
 
     /** Creates a FAKE-mode server for local tests and injected fake providers. */
@@ -316,11 +339,15 @@ public final class ReflectionHttpServer implements AutoCloseable {
         }
     }
 
-    public void start() {
+    public synchronized void start() {
         if (closed.get()) {
             throw new IllegalStateException("server is closed");
         }
         server.start();
+        if (replayCleanup != null) {
+            replayCleanup.scheduleWithFixedDelay(this::purgeExpiredReplays,
+                    replayCleanupIntervalMillis, replayCleanupIntervalMillis, TimeUnit.MILLISECONDS);
+        }
     }
 
     public InetSocketAddress address() {
@@ -328,10 +355,29 @@ public final class ReflectionHttpServer implements AutoCloseable {
     }
 
     @Override
-    public void close() {
+    public synchronized void close() {
         if (closed.compareAndSet(false, true)) {
+            if (replayCleanup != null) replayCleanup.shutdownNow();
             server.stop(0);
             executor.shutdownNow();
+        }
+    }
+
+    private void purgeExpiredReplays() {
+        if (closed.get()) return;
+        if (speechReplayStore != null) {
+            try {
+                speechReplayStore.purgeExpired();
+            } catch (IOException | RuntimeException failure) {
+                System.err.println("Expired speech replay cleanup failed; will retry.");
+            }
+        }
+        if (writtenReplayStore != null && !closed.get()) {
+            try {
+                writtenReplayStore.purgeExpired();
+            } catch (IOException | RuntimeException failure) {
+                System.err.println("Expired written replay cleanup failed; will retry.");
+            }
         }
     }
 
