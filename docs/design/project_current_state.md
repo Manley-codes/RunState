@@ -5,6 +5,25 @@ metadata:
   type: project
 ---
 
+## November 20 public APK packaging guard
+
+Added `android/check-public-apk.py` and a step in the existing Android release CI job. Python
+and installed Android SDK tools inspect the actual APK offline: release BuildConfig has DEBUG
+and OWNER_TOOLS_ENABLED false, the merged manifest disables debugging/test-only/cleartext and
+has no unreviewed network-policy override, all three backup/transfer channels exclude private
+databases/connection settings/map cache, bundled notices exist, and original owner-only cover
+bytes are absent even if renamed. SDK tools decode XML/DEX; the script does not interpret
+bytecode or require new dependencies. CI retains its log on failure and propagates failures.
+
+The existing unsigned public APK passed in about three seconds; 15 deliberate negative cases
+were rejected, including a real debug APK and a copied public APK with renamed owner artwork.
+Manifest/backup/flag negative cases use altered observations from real SDK output, not rebuilt
+malicious binaries. Actionlint and independent review passed. No app rebuild, device action,
+provider call or behavior/design change was needed. Local evidence is in
+`android/build/nov20-public-apk-check/`; first GitHub execution is pending. This closes a
+regression-check gap, not a newly discovered exploitable app flaw. Signing, field behavior,
+complete license review, future shrinking changes and release approval remain separate.
+
 ## November 20 hosted configuration checkpoint
 
 Manley's Render Shell output confirms `Configuration check passed`: remote configuration,

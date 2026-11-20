@@ -133,6 +133,10 @@ jobs:
         working-directory: android
         run: bash ./gradlew --no-daemon ':app:testReleaseUnitTest' ':app:lintRelease' ':app:assembleRelease'
 
+      - name: Verify public APK packaging
+        shell: bash
+        run: python3 android/check-public-apk.py android/app/build/outputs/apk/release/app-release-unsigned.apk 2>&1 | tee android/app/build/reports/public-apk-check.log
+
       - name: Upload Android release reports on failure
         if: failure()
         uses: actions/upload-artifact@v4
@@ -142,4 +146,5 @@ jobs:
             android/app/build/reports/lint-results-release.*
             android/app/build/reports/tests/testReleaseUnitTest/
             android/app/build/test-results/testReleaseUnitTest/
+            android/app/build/reports/public-apk-check.log
           retention-days: 7
