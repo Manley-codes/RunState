@@ -160,6 +160,26 @@ marker afterward. This establishes mount persistence; also complete the recorded
 and voice replay check before claiming end-to-end protection. Choose actual monthly budgets and
 provider ceilings separately. Local tests and prepared settings do not activate or deploy them.
 
+### Local restart rehearsal without paid calls
+
+The normal backend test suite includes `BackendProcessRestartTest`. It starts a separate Java
+process with the real HTTP server and all four temporary SQLite stores, but simulated writer and
+voice providers. After that process exits, a fresh process must replay identical saved writing
+and audio, retain the trial allowance and spending limit, and make no additional simulated sends.
+It also kills the process after a simulated writer or voice send, before a result is saved:
+the replacement must keep that work pending instead of automatically repeating the paid attempt.
+
+To run just the storage/configuration and process-restart checks from `backend/`:
+
+```sh
+mvn -B --no-transfer-progress "-Dtest=BackendConfigurationCheckTest,BackendProcessRestartTest" test
+```
+
+The tests use loopback and temporary data, require no provider credentials and run in the existing
+backend CI job. Linux also exercises the permission/symlink checks that Windows skips. These
+checks do not exercise the production launcher/provider wiring, the Docker runtime identity, or
+an actual Render disk/redeployment. The hosted verification above is still required.
+
 ### Measure one complete test run
 
 To rehearse the four-song and ten-song reflection samples from the repository root, run `.\backend\compare-sample-runs.ps1` in PowerShell. If Maven is outside your PATH, supply its executable with `-Maven`. The default command uses simulated provider responses. It exercises preparation, song choice, writing, one selected voice and retries. The sample excludes on-course announcements and music playback. A live comparison requires deliberate opt-in, privately configured provider keys and chosen spending limits.
