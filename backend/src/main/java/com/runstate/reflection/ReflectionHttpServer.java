@@ -383,9 +383,9 @@ public final class ReflectionHttpServer implements AutoCloseable {
             if (exchange.getRequestURI().getRawQuery() != null) {
                 return error(400, "invalid_request", "This endpoint does not accept query parameters.");
             }
-            if (!"GET".equals(exchange.getRequestMethod())) {
-                exchange.getResponseHeaders().set("Allow", "GET");
-                return error(405, "method_not_allowed", "Only GET is supported for this endpoint.");
+            if (!"GET".equals(exchange.getRequestMethod()) && !"HEAD".equals(exchange.getRequestMethod())) {
+                exchange.getResponseHeaders().set("Allow", "GET, HEAD");
+                return error(405, "method_not_allowed", "Only GET and HEAD are supported for this endpoint.");
             }
             // Liveness only: no provider call, credentials, run data, or configuration disclosure.
             exchange.getResponseHeaders().set(ACCESS_HEADER, "1");
@@ -1132,8 +1132,14 @@ public final class ReflectionHttpServer implements AutoCloseable {
         exchange.getResponseHeaders().set("Cache-Control", "no-store");
         exchange.getResponseHeaders().set("X-Content-Type-Options", "nosniff");
         try {
-            exchange.sendResponseHeaders(response.status(), body.length);
-            exchange.getResponseBody().write(body);
+            if ("HEAD".equals(exchange.getRequestMethod())) {
+                // Describe the equivalent response, but -1 tells HttpExchange that no body follows.
+                exchange.getResponseHeaders().set("Content-Length", Integer.toString(body.length));
+                exchange.sendResponseHeaders(response.status(), -1);
+            } else {
+                exchange.sendResponseHeaders(response.status(), body.length);
+                exchange.getResponseBody().write(body);
+            }
         } finally {
             exchange.close();
         }

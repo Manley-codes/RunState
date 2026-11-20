@@ -2445,6 +2445,67 @@ class ReflectionHttpServerTest {
     }
 
     @Test
+    void healthHeadPreservesGetHeadersWithoutBodyOrProviderCalls() throws Exception {
+        AtomicInteger calls = new AtomicInteger();
+        try (ReflectionHttpServer server = start(evidence -> {
+            calls.incrementAndGet();
+            return exactCandidates();
+        })) {
+            URI health = URI.create("http://127.0.0.1:" + server.address().getPort() + ReflectionHttpServer.HEALTH_PATH);
+            var head = client.send(HttpRequest.newBuilder(health).timeout(Duration.ofSeconds(5))
+                    .method("HEAD", HttpRequest.BodyPublishers.noBody()).build(), HttpResponse.BodyHandlers.ofString());
+            var get = client.send(HttpRequest.newBuilder(health).timeout(Duration.ofSeconds(5))
+                    .GET().build(), HttpResponse.BodyHandlers.ofString());
+            assertEquals(200, head.statusCode());
+            assertEquals("", head.body());
+            assertEquals(200, get.statusCode());
+            assertEquals("{\"status\":\"ok\"}", get.body());
+            assertEquals(Integer.toString(get.body().getBytes(StandardCharsets.UTF_8).length),
+                    get.headers().firstValue("Content-Length").orElseThrow());
+            for (String header : List.of("Content-Type", "Content-Length", "Cache-Control", "X-Content-Type-Options",
+                    ReflectionHttpServer.ACCESS_HEADER, ReflectionHttpServer.SONG_CUE_CAPABILITY_HEADER,
+                    ReflectionHttpServer.SONG_STUDY_CAPABILITY_HEADER, ReflectionHttpServer.SONG_PREPARATION_CAPABILITY_HEADER,
+                    ReflectionHttpServer.SONG_SELECTION_CAPABILITY_HEADER, ReflectionHttpServer.SONG_LOADED_AT_FINISH_CAPABILITY_HEADER,
+                    ReflectionHttpServer.SONG_SNIPPETS_CAPABILITY_HEADER, ReflectionHttpServer.SONG_SNIPPET_FALLBACKS_CAPABILITY_HEADER,
+                    ReflectionHttpServer.REFLECTION_VOICE_CAPABILITY_HEADER, ReflectionHttpServer.RUN_VOICE_CAPABILITY_HEADER)) {
+                assertEquals(get.headers().allValues(header), head.headers().allValues(header), header);
+            }
+            var wrongMethod = client.send(HttpRequest.newBuilder(health).timeout(Duration.ofSeconds(5))
+                    .POST(HttpRequest.BodyPublishers.noBody()).build(), HttpResponse.BodyHandlers.ofString());
+            assertError(wrongMethod, 405, "method_not_allowed");
+            assertEquals("GET, HEAD", wrongMethod.headers().firstValue("Allow").orElseThrow());
+            assertEquals(0, calls.get());
+        }
+    }
+
+    @Test
+    void remoteHeadRetainsHostOriginQueryAndPostAuthorizationGuards() throws Exception {
+        AtomicInteger calls = new AtomicInteger();
+        try (ReflectionHttpServer server = startRemote(evidence -> {
+            calls.incrementAndGet();
+            return exactCandidates();
+        }, 1, 2)) {
+            var publicHeaders = List.of("Host: " + DEMO_HOST);
+            rawHead(server, ReflectionHttpServer.HEALTH_PATH, publicHeaders, 200);
+            rawHead(server, ReflectionHttpServer.HEALTH_PATH,
+                    List.of("Host: " + DEMO_HOST, "Origin: null"), 403);
+            rawHead(server, ReflectionHttpServer.HEALTH_PATH, List.of("Host: foreign.example"), 403);
+            rawHead(server, ReflectionHttpServer.HEALTH_PATH + "?unexpected=1", publicHeaders, 400);
+            for (String path : List.of(ReflectionHttpServer.CANDIDATES_PATH, ReflectionHttpServer.SPEECH_PATH,
+                    ReflectionHttpServer.RUN_VOICE_PATH, ReflectionHttpServer.SONG_PREPARATION_PATH,
+                    ReflectionHttpServer.TRIAL_PATH, ReflectionHttpServer.RUN_ACCESS_PATH)) {
+                String unauthorized = rawHead(server, path, publicHeaders, 401);
+                assertTrue(unauthorized.toLowerCase(java.util.Locale.ROOT).contains("\r\nwww-authenticate: bearer\r\n"));
+                String wrongMethod = rawHead(server, path, remoteHeaders(), 405);
+                assertTrue(wrongMethod.toLowerCase(java.util.Locale.ROOT).contains("\r\nallow: post\r\n"));
+            }
+            assertEquals(new RawHttpResponse(200, "{\"status\":\"ok\"}"),
+                    rawRequest(server, "GET", ReflectionHttpServer.HEALTH_PATH, publicHeaders, ""));
+            assertEquals(0, calls.get());
+        }
+    }
+
+    @Test
     void remoteHealthIsLivenessOnlyAndRetainsHostOriginGuards() throws Exception {
         AtomicInteger calls = new AtomicInteger();
         try (ReflectionHttpServer server = startRemote(evidence -> {
@@ -2638,7 +2699,27 @@ class ReflectionHttpServerTest {
         }
     }
 
-    /** The server sends fixed-length responses; TCP EOF is not part of their HTTP framing. */
+    /** A HEAD response may advertise the GET length, but must send no bytes after its headers. */
+    private static String rawHead(ReflectionHttpServer server, String path, List<String> headers, int expectedStatus)
+            throws Exception {
+        String request = "HEAD " + path + " HTTP/1.1\r\n" + String.join("\r\n", headers)
+                + "\r\nConnection: close\r\n\r\n";
+        try (Socket socket = new Socket()) {
+            socket.connect(server.address(), 2_000);
+            socket.setSoTimeout(5_000);
+            socket.getOutputStream().write(request.getBytes(StandardCharsets.US_ASCII));
+            socket.getOutputStream().flush();
+            byte[] bytes = socket.getInputStream().readNBytes(16 * 1024 + 1);
+            assertTrue(bytes.length <= 16 * 1024, "HEAD response exceeded the header limit");
+            String response = new String(bytes, StandardCharsets.US_ASCII);
+            assertTrue(response.startsWith("HTTP/1.1 " + expectedStatus + " "), response);
+            assertTrue(response.indexOf("\r\n\r\n") >= 0, "HEAD response lacks complete headers");
+            assertEquals(response.length() - 4, response.indexOf("\r\n\r\n"), "HEAD response included body bytes");
+            return response;
+        }
+    }
+
+    /** Non-HEAD responses have fixed-length bodies; TCP EOF is not part of their HTTP framing. */
     private static RawHttpResponse readFramedResponse(InputStream input) throws IOException {
         ByteArrayOutputStream headers = new ByteArrayOutputStream();
         int delimiterBytes = 0;

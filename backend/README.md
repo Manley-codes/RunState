@@ -899,8 +899,11 @@ tokens, request evidence or underlying provider exceptions. Any supplied browser
 rejected, so this API has no browser/CORS client path. Untrusted `X-Forwarded-*` headers establish
 neither HTTPS, an allowed Host nor authentication.
 
-Remote-only `GET /health` returns `{"status":"ok"}` without authentication or provider work,
-but still requires the configured public Host and no Origin. It proves process liveness only;
+`GET /health` returns `{"status":"ok"}` without authentication or provider work. `HEAD /health`
+returns the same status and representation/capability headers with no response body. In remote
+mode both still require the configured public Host and no Origin. Unsupported methods advertise
+`Allow: GET, HEAD`; protected generation endpoints retain their existing authentication and
+POST-only rules. Every HEAD response, including an error, omits its body. Health proves process liveness only;
 it does not prove that the demo code, Anthropic key, billing, generated text or phone connection
 works. Configure a TCP liveness probe if a host cannot preserve the expected Host for its HTTP
 probe. Validate authentication and exact `FAKE` delivery through the candidate endpoint before
