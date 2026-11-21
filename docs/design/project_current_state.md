@@ -5,6 +5,27 @@ metadata:
   type: project
 ---
 
+## November 20 Android dependency advisory review
+
+Queried OSV for all 93 exact Maven package/version pairs in the current release's generated
+runtime `<package>` inventory, plus three multiplatform parent coordinates. No advisory matches
+or additional result pages were returned. A separate known-vulnerable Gson 2.8.8 control returned
+its expected advisory; that version is not shipped. Independent review confirmed the inventory,
+current APK hash and resolved AndroidX versions. Evidence is retained locally under
+`android/build/nov20-dependency-security-check/`; the APK remains SHA-256
+`670d8476c472f909b2413d13b0d1f59483e98081b076544bab08de5c8875df34`.
+
+This is known-advisory matching, not complete binary/native coverage or a security guarantee.
+The local Spotify App Remote 0.8.0 AAR and MapLibre's embedded native dependencies require
+separate upstream review. MapLibre includes its own SQLite copy; Room's platform SQLite does
+not account for that copy. Bounded native findings and limitations are in the existing private
+release-readiness record. No dependency change, app rebuild, provider call or device action.
+The targeted source review did not establish a reachable reported native defect in the current
+map path; that does not clear every native component or replace later upstream monitoring.
+The installed 16 KB emulator image can support a later runtime check, but it was not launched
+with only about 3.1 GB free host RAM while Manley is using the computer. Static checks already
+passed; keep runtime evidence separate. No new hands-on test or public-preview change.
+
 ## November 20 independent iPhone collaboration
 
 Manley approved using Claude for independent iPhone implementation and automated verification
