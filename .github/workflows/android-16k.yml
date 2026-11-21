@@ -1,0 +1,162 @@
+name: Android 16 KB native runtime
+
+# Separate, bounded debug/x86_64 proof; not a Play release or a physical-device test.
+on:
+  workflow_dispatch:
+  push:
+    branches: [master]
+    paths: ['.github/workflows/android-16k.yml']
+
+permissions:
+  contents: read
+
+jobs:
+  native-map:
+    name: Offline native map on a strict 16 KB emulator
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        shell: bash
+    env:
+      RUNSTATE_LIVE_SONG_TRIAL: '0'
+      ANDROID_SERIAL: emulator-5584
+      AVD_NAME: RunState16k-${{ github.run_id }}-${{ github.run_attempt }}
+      SYSTEM_IMAGE: system-images;android-37.1;google_apis_playstore_ps16k;x86_64
+
+    steps:
+      - name: Set isolated runtime directories
+        run: |
+          echo "ANDROID_AVD_HOME=$RUNNER_TEMP/runstate-16k-avd" >> "$GITHUB_ENV"
+          echo "REPORTS=$RUNNER_TEMP/runstate-16k-reports" >> "$GITHUB_ENV"
+
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-java@v6
+        with:
+          java-version: '17'
+          distribution: temurin
+
+      - uses: gradle/actions/setup-gradle@v6
+        with:
+          cache-provider: basic
+
+      - name: Build only the isolated debug test packages
+        working-directory: android
+        run: |
+          mkdir -p "$REPORTS"
+          timeout 600 bash ./gradlew --no-daemon --max-workers=2 \
+            ':app:assembleDebug' ':app:assembleDebugAndroidTest' \
+            2>&1 | tee "$REPORTS/build.log"
+
+      - name: Prepare the official 16 KB image
+        run: |
+          mkdir -p "$ANDROID_AVD_HOME" "$REPORTS"
+          sdkmanager="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          # Finite input avoids yes/SIGPIPE hiding the sdkmanager result under pipefail.
+          printf 'y\ny\ny\ny\ny\ny\ny\ny\ny\ny\n' | timeout 120 "$sdkmanager" --licenses \
+            > "$REPORTS/licenses.log" 2>&1
+          timeout 600 "$sdkmanager" 'platform-tools' 'emulator' "$SYSTEM_IMAGE" \
+            2>&1 | tee "$REPORTS/sdk-install.log"
+          test -e /dev/kvm
+          sudo chmod 666 /dev/kvm
+          "$ANDROID_HOME/emulator/emulator" -accel-check 2>&1 | tee "$REPORTS/acceleration.log"
+          printf 'no\n' | timeout 60 "$ANDROID_HOME/cmdline-tools/latest/bin/avdmanager" \
+            create avd --name "$AVD_NAME" --device pixel_6 --package "$SYSTEM_IMAGE" \
+            > "$REPORTS/avd-create.log" 2>&1
+
+      - name: Boot and verify the dedicated emulator
+        run: |
+          adb="$ANDROID_HOME/platform-tools/adb"
+          timeout 15 "$adb" start-server
+          if timeout 10 "$adb" -s "$ANDROID_SERIAL" get-state > /dev/null 2>&1; then
+            echo 'Reserved emulator serial is already in use.' >&2
+            exit 1
+          fi
+          nohup "$ANDROID_HOME/emulator/emulator" -avd "$AVD_NAME" -port 5584 \
+            -no-window -no-audio -no-boot-anim -no-snapshot -gpu swiftshader \
+            -accel on -memory 2048 -cores 2 \
+            > "$REPORTS/emulator.log" 2>&1 < /dev/null &
+          echo "$!" > "$REPORTS/emulator.pid"
+          timeout 300 "$adb" -s "$ANDROID_SERIAL" wait-for-device
+          deadline=$((SECONDS + 300))
+          until [[ "$(timeout 10 "$adb" -s "$ANDROID_SERIAL" shell getprop sys.boot_completed | tr -d '\r')" == 1 ]]; do
+            if (( SECONDS >= deadline )); then echo 'Emulator boot timed out.' >&2; exit 1; fi
+            sleep 2
+          done
+          test "$(timeout 10 "$adb" -s "$ANDROID_SERIAL" emu avd name | tr -d '\r' | head -n 1)" = "$AVD_NAME"
+          test "$(timeout 10 "$adb" -s "$ANDROID_SERIAL" shell getprop ro.kernel.qemu | tr -d '\r')" = 1
+          test "$(timeout 10 "$adb" -s "$ANDROID_SERIAL" shell getconf PAGE_SIZE | tr -d '\r')" = 16384
+          test "$(timeout 10 "$adb" -s "$ANDROID_SERIAL" shell getprop ro.product.cpu.abi | tr -d '\r')" = x86_64
+          # Android 17: incompatible binaries must abort, rather than use compatibility mode.
+          # https://developer.android.com/guide/practices/page-sizes#16-kb-backcompat-mode
+          timeout 10 "$adb" -s "$ANDROID_SERIAL" shell setprop bionic.linker.16kb.app_compat.enabled fatal
+          timeout 10 "$adb" -s "$ANDROID_SERIAL" shell setprop pm.16kb.app_compat.disabled true
+          test "$(timeout 10 "$adb" -s "$ANDROID_SERIAL" shell getprop bionic.linker.16kb.app_compat.enabled | tr -d '\r')" = fatal
+          test "$(timeout 10 "$adb" -s "$ANDROID_SERIAL" shell getprop pm.16kb.app_compat.disabled | tr -d '\r')" = true
+          {
+            echo "Commit: $GITHUB_SHA"
+            echo "AVD: $AVD_NAME; serial: $ANDROID_SERIAL"
+            echo 'Verified: emulator, x86_64, PAGE_SIZE=16384, linker=fatal, package compatibility disabled'
+          } | tee "$REPORTS/runtime-conditions.log"
+
+      - name: Run the one offline native-map fixture
+        run: |
+          adb="$ANDROID_HOME/platform-tools/adb"
+          timeout 10 "$adb" -s "$ANDROID_SERIAL" shell cmd connectivity airplane-mode enable
+          timeout 10 "$adb" -s "$ANDROID_SERIAL" shell svc wifi disable
+          timeout 10 "$adb" -s "$ANDROID_SERIAL" shell svc data disable
+          test "$(timeout 10 "$adb" -s "$ANDROID_SERIAL" shell settings get global airplane_mode_on | tr -d '\r')" = 1
+          timeout 10 "$adb" -s "$ANDROID_SERIAL" shell settings put global window_animation_scale 0
+          timeout 10 "$adb" -s "$ANDROID_SERIAL" shell settings put global transition_animation_scale 0
+          timeout 10 "$adb" -s "$ANDROID_SERIAL" shell settings put global animator_duration_scale 0
+          timeout 10 "$adb" -s "$ANDROID_SERIAL" shell input keyevent 82
+          timeout 90 "$adb" -s "$ANDROID_SERIAL" install --no-streaming android/app/build/outputs/apk/debug/app-debug.apk
+          timeout 90 "$adb" -s "$ANDROID_SERIAL" install --no-streaming android/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
+          timeout 10 "$adb" -s "$ANDROID_SERIAL" logcat -c
+          timeout 180 "$adb" -s "$ANDROID_SERIAL" shell am instrument -w -r \
+            -e class 'com.runstate.mobile.ui.RunStateScreenTest#nativeMapsOpenOnlyOnRequestAndActiveMapUsesItsOwnEvidence' \
+            com.runstate.mobile.test/androidx.test.runner.AndroidJUnitRunner \
+            2>&1 | tee "$REPORTS/instrumentation.log"
+          # adb can exit zero for a failed/crashed test; require the real one-test result.
+          tr -d '\r' < "$REPORTS/instrumentation.log" > "$REPORTS/instrumentation-normalized.log"
+          grep -Eq '^OK \(1 test\)[[:space:]]*$' "$REPORTS/instrumentation-normalized.log"
+          grep -Eq '^INSTRUMENTATION_CODE: -1[[:space:]]*$' "$REPORTS/instrumentation-normalized.log"
+          if grep -Eiq 'FAILURES!!!|INSTRUMENTATION_FAILED|Process crashed|INSTRUMENTATION_RESULT: (shortMsg|longMsg)=' "$REPORTS/instrumentation-normalized.log"; then
+            echo 'Instrumentation reported a failure or crash.' >&2
+            exit 1
+          fi
+          echo 'PASS: one synthetic native-map fixture on strict 16 KB debug/x86_64 runtime.'
+
+      - name: Collect logs and stop only this emulator
+        if: always()
+        run: |
+          mkdir -p "$REPORTS"
+          adb="$ANDROID_HOME/platform-tools/adb"
+          if [[ -x "$adb" && -f "$REPORTS/emulator.pid" ]]; then
+            actual=$(timeout 10 "$adb" -s "$ANDROID_SERIAL" emu avd name 2>/dev/null | tr -d '\r' | head -n 1) || actual=''
+            if [[ "$actual" == "$AVD_NAME" ]]; then
+              timeout 20 "$adb" -s "$ANDROID_SERIAL" logcat -d -v threadtime > "$REPORTS/logcat.log" 2>&1 || true
+              timeout 15 "$adb" -s "$ANDROID_SERIAL" emu kill > "$REPORTS/emulator-stop.log" 2>&1 || true
+            fi
+          fi
+          # If adb never came up, target only our recorded process after checking its exact AVD argument.
+          if [[ -f "$REPORTS/emulator.pid" ]]; then
+            pid=$(cat "$REPORTS/emulator.pid")
+            if [[ "$pid" =~ ^[0-9]+$ && -r "/proc/$pid/cmdline" ]] && \
+                tr '\0' '\n' < "/proc/$pid/cmdline" | grep -Fxq "$AVD_NAME"; then
+              kill "$pid" 2>/dev/null || true
+            fi
+          fi
+
+      - name: Retain runtime evidence only
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-16k-runtime-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/runstate-16k-reports/*.log
+          if-no-files-found: warn
+          retention-days: 7

@@ -15,7 +15,9 @@ no private upload/debug key is read, and temporary signing/generated-package fil
 CI retains textual failure reports only. Local fresh bundle assembly and the full checker passed;
 six negative cases rejected (including a valid 4 KB bundle and the old owner-artwork bundle),
 with original inputs unchanged and no temporary keys left. Actionlint and independent review
-passed. Evidence: `android/build/nov20-bundle-check/`. GitHub execution is pending this push.
+passed. Evidence: `android/build/nov20-bundle-check/`. Commit `44a6fe6` passed all four jobs in
+[GitHub run 44862725295](https://github.com/Manley-codes/RunState/actions/runs/44862725295),
+including the verified download, fresh AAB and generated-APK guard on Linux.
 
 This is a packaging rehearsal, not a Play upload, final signing, every split-APK check or device
 runtime proof. The older signed November 11 bundle predates the latest fixes and should not be
