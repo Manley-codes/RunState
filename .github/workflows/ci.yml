@@ -128,14 +128,31 @@ jobs:
         with:
           cache-provider: basic
 
-      # The release APK is unsigned and stays on the runner; this does not publish it.
+      # Release APK/AAB outputs stay unsigned on the runner; this does not publish them.
       - name: Test, inspect and build the release app
         working-directory: android
-        run: bash ./gradlew --no-daemon ':app:testReleaseUnitTest' ':app:lintRelease' ':app:assembleRelease'
+        run: bash ./gradlew --no-daemon ':app:testReleaseUnitTest' ':app:lintRelease' ':app:assembleRelease' ':app:bundleRelease'
 
       - name: Verify public APK packaging
         shell: bash
         run: python3 android/check-public-apk.py android/app/build/outputs/apk/release/app-release-unsigned.apk 2>&1 | tee android/app/build/reports/public-apk-check.log
+
+      - name: Download verified bundletool
+        shell: bash
+        env:
+          BUNDLETOOL_SHA256: a099cfa1543f55593bc2ed16a70a7c67fe54b1747bb7301f37fdfd6d91028e29
+        run: |
+          curl --fail --location --retry 2 --max-time 120 \
+            https://github.com/google/bundletool/releases/download/1.18.3/bundletool-all-1.18.3.jar \
+            --output "$RUNNER_TEMP/bundletool-all-1.18.3.jar"
+          echo "$BUNDLETOOL_SHA256  $RUNNER_TEMP/bundletool-all-1.18.3.jar" | sha256sum --check --strict
+
+      - name: Verify public App Bundle packaging
+        shell: bash
+        run: |
+          python3 android/check-public-bundle.py android/app/build/outputs/bundle/release/app-release.aab \
+            --bundletool "$RUNNER_TEMP/bundletool-all-1.18.3.jar" \
+            2>&1 | tee android/app/build/reports/public-bundle-check.log
 
       - name: Upload Android release reports on failure
         if: failure()
@@ -147,4 +164,5 @@ jobs:
             android/app/build/reports/tests/testReleaseUnitTest/
             android/app/build/test-results/testReleaseUnitTest/
             android/app/build/reports/public-apk-check.log
+            android/app/build/reports/public-bundle-check.log
           retention-days: 7

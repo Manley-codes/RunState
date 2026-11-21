@@ -94,8 +94,12 @@ mvn -f backend/pom.xml test
 
 [GitHub Actions](https://github.com/Manley-codes/RunState/actions/workflows/ci.yml) runs the
 console tests, backend tests/build, and Android debug and release unit-test/build checks.
-Release checks also run Android Lint. These checks do not replace real-run testing or certify
-a signed production release.
+Release checks also run Android Lint and inspect both the public APK and the App Bundle intended
+for Play upload. A pinned, checksum-verified [bundletool](https://developer.android.com/tools/bundletool)
+validates the bundle and its 16 KB packaging setting, generates a universal APK with a disposable
+test key, and runs the same public-package checks on it. Android signing material and packages are
+not uploaded as CI artifacts. These checks do not replace real-run testing, test every Play split,
+or certify the final Google-signed release.
 
 <details>
 <summary>Preparing a signed Android package</summary>

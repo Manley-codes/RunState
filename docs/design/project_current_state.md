@@ -5,6 +5,23 @@ metadata:
   type: project
 ---
 
+## November 20 Play bundle packaging guard
+
+The existing Android release CI job now builds the unsigned AAB as well as the APK.
+New `android/check-public-bundle.py` validates the single-base bundle, requires 16 KB native
+packaging, creates a universal APK with an explicit disposable test key, and applies the existing
+public APK checks. The official standalone bundletool 1.18.3 download is pinned by SHA-256;
+no private upload/debug key is read, and temporary signing/generated-package files are removed.
+CI retains textual failure reports only. Local fresh bundle assembly and the full checker passed;
+six negative cases rejected (including a valid 4 KB bundle and the old owner-artwork bundle),
+with original inputs unchanged and no temporary keys left. Actionlint and independent review
+passed. Evidence: `android/build/nov20-bundle-check/`. GitHub execution is pending this push.
+
+This is a packaging rehearsal, not a Play upload, final signing, every split-APK check or device
+runtime proof. The older signed November 11 bundle predates the latest fixes and should not be
+distributed as the final candidate. No app behavior, accepted reflection, phone or public preview
+changed. Final signed candidate, hosted verification and existing field checks remain separate.
+
 ## November 20 Android dependency advisory review
 
 Queried OSV for all 93 exact Maven package/version pairs in the current release's generated
