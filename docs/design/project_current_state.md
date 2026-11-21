@@ -5,6 +5,42 @@ metadata:
   type: project
 ---
 
+## November 21 iPhone Build 12 checkpoint
+
+Codex fast-forwarded the clean Windows iPhone worktree from `80c24cb` to Claude's pushed
+`fd052ef6d457d8255b2b4093ef3a4a8c10c4c6e3`. Four commits add the accepted Android foreground
+music panel/controls, same-format saved-history encoding reuse, screenshot export and Build 12.
+Independent focused music/storage reviews found no material blocker: explicit player commands
+do not pause the run, stale state/artwork is rejected, and atomic saved-data writes/cache
+invalidation remain intact. The complete journal still writes synchronously; startup and
+physical-phone timings remain separate limits, not an urgent new product decision.
+
+[Mac run 44875141977](https://github.com/Manley-codes/RunState/actions/runs/44875141977) passed
+111 unit and ten UI tests, both packages/exclusions and Java contracts; all four
+[shared jobs](https://github.com/Manley-codes/RunState/actions/runs/44875141909) passed.
+Build 12 is retained in the iPhone worktree's `docs/local/ios-field-test/build-12/` beside its
+updated receipt/checklist. Archive SHA-256 matches GitHub; IPA SHA-256 is
+`8874f3fc406dd734643a59ba825accef72f347cb9acc85aa16097af33993ae22`; bundle ID
+`com.runstate.mobile.fieldtest`, version 0.1/build 12 verified. No merge to master or installation.
+Use this combined candidate instead of separately installing Build 11. Later real Spotify,
+album artwork, lock/return, layout and saved-History checks remain batched. The private sample
+does not establish real music-linked reflection/snippet completion. The public walkthrough
+decision stays with acceptance of any new visible flow; no preview publication occurred here.
+Two empty probe files remain harmless: automatic approval review blocked deletion without a
+detailed reason; no user cleanup action is required. Canonical handoff updated directly.
+
+## November 21 hosted restart verification
+
+Manley's final Shell screenshot from replacement instance `jjnmf` confirms the original marker
+matched its externally saved digest after the observed Render restarts. All four configuration
+checks passed, including reopening all four private stores and zero-cap refusal of new paid
+calls. The exact marker was then removed; no provider request or saved-run deletion occurred.
+Render events at 06:46:49Z and 06:47:15Z plus new-instance startup logs establish the actual
+restart; the live commit remains `4c42dde`. This closes the scoped hosted mount/restart proof.
+It does not prove live paid-provider replay or redeployment of newer source. Direct external
+health probing was intercepted by a browser-verification page; do not call it a health pass or
+an application failure. The private roadmap retains the nonsecret receipt/event evidence.
+
 ## November 20 coordination reset
 
 Manley requested a pause to organize work around school and reduce interruptions. The canonical
