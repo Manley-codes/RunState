@@ -5,6 +5,29 @@ metadata:
   type: project
 ---
 
+## November 20 independent iPhone collaboration
+
+Manley approved using Claude for independent iPhone implementation and automated verification
+while Codex continues Android/backend release work. This reopens computer-side iPhone work,
+not the deferred phone tests or unresolved Shazam experiment. Use the existing clean
+`RunState-iphone-journey` worktree and `ios/run-completion-and-history` branch; preserve the
+Build 10 work at `23e95b8`, the accepted Build 9 sample ending and all saved-data compatibility.
+Codex is preparing a merge of current master and checking the combined branch before handoff.
+
+Claude owns `ios/**`, necessary iOS workflow changes and its private rolling handoff; Codex
+owns Android, backend/contracts, shared assets/general CI, canonical project records and
+master integration. Claude can implement/test/commit/push within that branch independently;
+essential product, credential, spending/deployment and device decisions remain separate.
+Updated `CLAUDE.md` removes obsolete per-edit approval and legacy-only stack instructions.
+
+One canonical handoff/progress file (intentionally ignored, not copied between worktrees):
+`C:/Users/Owner/IdeaProjects/RunState-iphone-journey/docs/local/claude-ios-handoff-2026-11-20.md`.
+Claude records completed changes, exact commits/checks, requests for Codex and later user
+review/test items there. Codex can inspect the file and branch directly; Manley should not
+relay long responses. No automatic agent-to-agent messaging connection is assumed. Codex
+consolidates later test items into the existing main roadmap. Initial branch verification
+is pending; no phone installation, live provider call or deployment is part of preparation.
+
 ## November 20 idle replay cleanup and native packaging checks
 
 The backend now clears expired speech/written replay rows approximately every five minutes
