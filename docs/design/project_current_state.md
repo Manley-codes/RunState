@@ -12,7 +12,12 @@ while Codex continues Android/backend release work. This reopens computer-side i
 not the deferred phone tests or unresolved Shazam experiment. Use the existing clean
 `RunState-iphone-journey` worktree and `ios/run-completion-and-history` branch; preserve the
 Build 10 work at `23e95b8`, the accepted Build 9 sample ending and all saved-data compatibility.
-Codex is preparing a merge of current master and checking the combined branch before handoff.
+Codex merged current master `3d415ed` into the iPhone branch as `c5a7445` and verified the
+combined result. The only conflict was an additive Java test insertion; both the iPhone
+fixture and newer cleanup/HEAD tests were retained. Build 10's iOS app/tests/config/resources
+are unchanged apart from the intended Xcode artwork-path repair. Both workflow trigger
+paths now match, and all nine shared resource references exist. Actionlint and independent
+source review passed.
 
 Claude owns `ios/**`, necessary iOS workflow changes and its private rolling handoff; Codex
 owns Android, backend/contracts, shared assets/general CI, canonical project records and
@@ -25,8 +30,16 @@ One canonical handoff/progress file (intentionally ignored, not copied between w
 Claude records completed changes, exact commits/checks, requests for Codex and later user
 review/test items there. Codex can inspect the file and branch directly; Manley should not
 relay long responses. No automatic agent-to-agent messaging connection is assumed. Codex
-consolidates later test items into the existing main roadmap. Initial branch verification
-is pending; no phone installation, live provider call or deployment is part of preparation.
+consolidates later test items into the existing main roadmap. The [Mac workflow](https://github.com/Manley-codes/RunState/actions/runs/44852073756)
+passed 96 unit tests, ten UI tests, private-field and ordinary-release packaging/exclusions,
+the Swift request example and two Java voice/music contract tests. All four [shared checks](https://github.com/Manley-codes/RunState/actions/runs/44852073692)
+passed, including 315 backend tests with zero skips normally and in Docker. The local full
+Java command was blocked by automatic approval review; these execution results are from
+GitHub, not a claimed Windows pass. The existing draft PR 1 is conflict-free; keep it draft
+for ongoing work and Codex integration. Final documentation sync does not change the tested
+source or repeat CI. The canonical handoff is ready with independent milestones, exact
+ownership, branch commit/push authorization and one deferred-review list. No phone install,
+paid provider call, enrollment or Render deployment; retained original Build 10 IPA untouched.
 
 ## November 20 idle replay cleanup and native packaging checks
 
