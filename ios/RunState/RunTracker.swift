@@ -22,6 +22,8 @@ final class RunTracker: NSObject, ObservableObject, CLLocationManagerDelegate {
     let speechService: any ReflectionSpeechServing
     private let suppliedPlayer: (any ReflectionVoicePlaying)?
     @MainActor lazy var reflectionPlayer: any ReflectionVoicePlaying = suppliedPlayer ?? ReflectionVoicePlayer()
+    private let suppliedBackgroundTime: (any ReflectionBackgroundTime)?
+    @MainActor lazy var backgroundTime: any ReflectionBackgroundTime = suppliedBackgroundTime ?? ApplicationBackgroundTime()
     @Published var spokenWork = SpokenReflectionWork()
     private var connectionChanges: AnyCancellable?
 
@@ -70,13 +72,15 @@ final class RunTracker: NSObject, ObservableObject, CLLocationManagerDelegate {
     init(preferences: UserDefaults, journalURL: URL, reflectionConnection: ReflectionConnection? = nil,
          reflectionService: any WrittenReflectionServing = ReflectionService(),
          speechService: any ReflectionSpeechServing = ReflectionSpeechService(),
-         reflectionPlayer: (any ReflectionVoicePlaying)? = nil) {
+         reflectionPlayer: (any ReflectionVoicePlaying)? = nil,
+         backgroundTime: (any ReflectionBackgroundTime)? = nil) {
         self.preferences = preferences
         self.journalURL = journalURL
         self.reflectionConnection = reflectionConnection ?? ReflectionConnection(preferences: preferences)
         self.reflectionService = reflectionService
         self.speechService = speechService
         self.suppliedPlayer = reflectionPlayer
+        self.suppliedBackgroundTime = backgroundTime
         mileAnnouncementsEnabled = preferences.object(forKey: Self.mileAnnouncementsKey) as? Bool ?? true
         saveRoutes = preferences.bool(forKey: Self.saveRoutesKey)
         super.init()

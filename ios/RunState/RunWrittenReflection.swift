@@ -103,7 +103,10 @@ extension RunTracker {
         let token = UUID()
         let revision = reflectionConnection.revision
         let task = Task { @MainActor in
+            // Locking the iPhone right after the tap must not suspend a request mid-flight.
+            let extraTime = backgroundTime.begin("RunState written reflection")
             defer {
+                backgroundTime.end(extraTime)
                 if reflectionWork.jobs[id]?.token == token { reflectionWork.jobs.removeValue(forKey: id) }
             }
             guard !Task.isCancelled, reflectionConnection.revision == revision,

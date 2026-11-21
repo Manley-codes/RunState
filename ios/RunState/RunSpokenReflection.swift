@@ -89,7 +89,10 @@ extension RunTracker {
             spokenWork.issue = nil
             spokenWork.request = .init(runID: id, token: token, revision: revision)
             spokenWork.intent = .init(runID: id, token: token)
+            // Held until the request ends. Audio that has started keeps RunState running itself.
+            let extraTime = backgroundTime.begin("RunState voice reflection")
             defer {
+                backgroundTime.end(extraTime)
                 if spokenWork.request?.token == token { spokenWork.request = nil }
                 if spokenWork.intent?.token == token && spokenWork.intent?.playing == nil { spokenWork.intent = nil }
             }

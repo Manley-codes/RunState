@@ -32,6 +32,19 @@ final class RunSpokenReflectionTests: XCTestCase {
         }
     }
 
+    /// Records the background time a request asks iOS for, without touching UIApplication.
+    @MainActor private final class BackgroundTime: ReflectionBackgroundTime {
+        private(set) var active: [UUID: String] = [:]
+        private(set) var names: [String] = []
+        func begin(_ name: String) -> UUID {
+            let token = UUID()
+            active[token] = name
+            names.append(name)
+            return token
+        }
+        func end(_ token: UUID) { active.removeValue(forKey: token) }
+    }
+
     private actor Service: ReflectionSpeechServing {
         enum WaitPoint: Equatable { case beforeSend, afterSend }
         let pause: WaitPoint?
@@ -75,7 +88,8 @@ final class RunSpokenReflectionTests: XCTestCase {
         let service: Service
         let id: UUID
         let tracker: RunTracker
-        init(service: Service = Service(), sample: Bool = false, legacy: Bool = false) throws {
+        init(service: Service = Service(), sample: Bool = false, legacy: Bool = false,
+             backgroundTime: (any ReflectionBackgroundTime)? = nil) throws {
             self.service = service
             connection = ReflectionConnection(preferences: preferences, vault: Vault())
             try connection.save(code: RunSpokenReflectionTests.code)
@@ -90,7 +104,7 @@ final class RunSpokenReflectionTests: XCTestCase {
             let file = folder.appending(path: "journal.json")
             try journal.save(to: file)
             tracker = RunTracker(preferences: preferences, journalURL: file, reflectionConnection: connection,
-                                 speechService: service, reflectionPlayer: player)
+                                 speechService: service, reflectionPlayer: player, backgroundTime: backgroundTime)
         }
         var state: SpokenReflectionState? { tracker.spokenReflectionState(for: tracker.journal.history[0]) }
         func relaunch() -> RunTracker {
@@ -246,6 +260,61 @@ final class RunSpokenReflectionTests: XCTestCase {
         await job.value
         XCTAssertNil(f.tracker.spokenWork.audio)
         XCTAssertTrue(f.relaunch().journal.history.isEmpty)
+        XCTAssertTrue(f.player.recordings.isEmpty)
+    }
+
+    @MainActor
+    func testVoiceRequestHoldsBackgroundTimeOnlyUntilTheAudioArrives() async throws {
+        let gate = expectation(description: "request delivered")
+        let service = Service(pause: .afterSend, reached: gate)
+        let time = BackgroundTime()
+        let f = try Fixture(service: service, backgroundTime: time)
+        defer { f.cleanup() }
+        let job = Task { await f.tracker.playSpokenReflection(for: f.id) }
+        await fulfillment(of: [gate], timeout: 3)
+        // Locking the iPhone now must not suspend a request the service already received.
+        XCTAssertEqual(Array(time.active.values), ["RunState voice reflection"])
+        await service.release()
+        await job.value
+        XCTAssertTrue(time.active.isEmpty)
+        XCTAssertEqual(f.state?.playing, .recorded)
+        // Replaying the saved audio and the iPhone voice never need network time.
+        f.player.ended?(.finished)
+        await f.tracker.playSpokenReflection(for: f.id)
+        f.tracker.speakOnDevice(for: f.id)
+        XCTAssertEqual(f.player.recordings.count, 2)
+        XCTAssertEqual(f.player.readings, [Self.text])
+        XCTAssertEqual(time.names, ["RunState voice reflection"])
+        XCTAssertTrue(time.active.isEmpty)
+    }
+
+    @MainActor
+    func testCanceledVoiceRequestKeepsBackgroundTimeUntilItsQuietFinish() async throws {
+        let gate = expectation(description: "request delivered")
+        let service = Service(pause: .afterSend, reached: gate)
+        let time = BackgroundTime()
+        let f = try Fixture(service: service, backgroundTime: time)
+        defer { f.cleanup() }
+        let job = Task { await f.tracker.playSpokenReflection(for: f.id) }
+        await fulfillment(of: [gate], timeout: 3)
+        f.tracker.stopSpokenReflection(for: f.id)
+        // The provider may already be working. Its audio stays available for a later replay.
+        XCTAssertEqual(time.active.count, 1)
+        await service.release()
+        await job.value
+        XCTAssertTrue(time.active.isEmpty)
+        XCTAssertEqual(f.state?.hosted, .replay)
+        XCTAssertTrue(f.player.recordings.isEmpty)
+    }
+
+    @MainActor
+    func testFailedVoiceRequestReleasesItsBackgroundTime() async throws {
+        let time = BackgroundTime()
+        let f = try Fixture(service: Service(failure: .voiceUnavailable), backgroundTime: time)
+        defer { f.cleanup() }
+        await f.tracker.playSpokenReflection(for: f.id)
+        XCTAssertEqual(time.names, ["RunState voice reflection"])
+        XCTAssertTrue(time.active.isEmpty)
         XCTAssertTrue(f.player.recordings.isEmpty)
     }
 }

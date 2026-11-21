@@ -48,6 +48,19 @@ final class RunWrittenReflectionTests: XCTestCase {
         func remove() { stored = nil }
     }
 
+    /// Records the background time a request asks iOS for, without touching UIApplication.
+    @MainActor private final class BackgroundTime: ReflectionBackgroundTime {
+        private(set) var active: [UUID: String] = [:]
+        private(set) var names: [String] = []
+        func begin(_ name: String) -> UUID {
+            let token = UUID()
+            active[token] = name
+            names.append(name)
+            return token
+        }
+        func end(_ token: UUID) { active.removeValue(forKey: token) }
+    }
+
     @MainActor
     private final class Fixture {
         let directory: URL
@@ -61,7 +74,7 @@ final class RunWrittenReflectionTests: XCTestCase {
         let originalCode = String(repeating: "a", count: 43)
         let otherCode = String(repeating: "b", count: 43)
 
-        init(service: Service, legacy: Bool = false) throws {
+        init(service: Service, legacy: Bool = false, backgroundTime: (any ReflectionBackgroundTime)? = nil) throws {
             directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
             file = directory.appending(path: "runs.json")
             let suiteName = UUID().uuidString
@@ -79,7 +92,8 @@ final class RunWrittenReflectionTests: XCTestCase {
             journal.finish(at: start.addingTimeInterval(300))
             try journal.save(to: file)
             tracker = RunTracker(preferences: preferences, journalURL: file,
-                                 reflectionConnection: connection, reflectionService: service)
+                                 reflectionConnection: connection, reflectionService: service,
+                                 backgroundTime: backgroundTime)
         }
         func relaunch() -> RunTracker {
             RunTracker(preferences: preferences, journalURL: file, reflectionConnection: connection, reflectionService: service)
@@ -328,5 +342,42 @@ final class RunWrittenReflectionTests: XCTestCase {
         let calls = await service.calls
         XCTAssertEqual(calls.count, 1)
         XCTAssertEqual(f.relaunch().journal.history[0].writtenReflection?.saved?.text, "Open ending.")
+    }
+
+    @MainActor
+    func testWrittenRequestHoldsBackgroundTimeUntilTheAnswerIsSaved() async throws {
+        let entered = expectation(description: "Request reached the writer")
+        let service = Service(started: entered)
+        let time = BackgroundTime()
+        let f = try Fixture(service: service, backgroundTime: time)
+        defer { f.cleanup() }
+        try f.connection.save(code: f.originalCode)
+        let first = Task { await f.tracker.requestWrittenReflection(for: f.runID) }
+        await fulfillment(of: [entered], timeout: 5)
+        // Locking the iPhone now must not suspend the request before its answer is saved.
+        XCTAssertEqual(Array(time.active.values), ["RunState written reflection"])
+        // A second tap joins the same request without asking iOS for more time.
+        let second = Task { await f.tracker.requestWrittenReflection(for: f.runID) }
+        await Task.yield()
+        await service.release()
+        await first.value
+        await second.value
+        XCTAssertTrue(time.active.isEmpty)
+        XCTAssertEqual(time.names, ["RunState written reflection"])
+        XCTAssertEqual(f.relaunch().journal.history[0].writtenReflection?.saved?.text, "Open ending.")
+    }
+
+    @MainActor
+    func testFailedWrittenRequestReleasesItsBackgroundTime() async throws {
+        let time = BackgroundTime()
+        let f = try Fixture(service: Service(failures: [.deliveryFailed(503)]), backgroundTime: time)
+        defer { f.cleanup() }
+        try f.connection.save(code: f.originalCode)
+        await f.tracker.requestWrittenReflection(for: f.runID)
+        XCTAssertEqual(time.names, ["RunState written reflection"])
+        XCTAssertTrue(time.active.isEmpty)
+        guard case .retry = f.tracker.writtenReflectionState(for: f.tracker.journal.history[0]) else {
+            return XCTFail("A failed delivery should offer to check for the saved answer.")
+        }
     }
 }
