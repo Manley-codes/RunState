@@ -174,6 +174,72 @@ marker afterward. This establishes mount persistence; also complete the recorded
 and voice replay check before claiming end-to-end protection. Choose actual monthly budgets and
 provider ceilings separately. Local tests and prepared settings do not activate or deploy them.
 
+Use these two commands in **Render → runstate-reflections → Shell**, after the ownership and
+configuration checks above. They do not restart, deploy or call providers. Keep spending disabled
+for this rehearsal. Save the first command's two receipt lines **outside Render**, for example in
+a private local note. Do not store the expected checksum beside the marker and later trust it.
+
+**Before the approved restart/redeployment:**
+
+```sh
+bash <<'CHECK'
+set -euo pipefail
+umask 077
+dir=/var/data/runstate/speech
+test "$(id -u)" = 10001 || { echo 'STOP: unexpected runtime user'; exit 1; }
+test "$(realpath -e -- "$dir")" = "$dir" || { echo 'STOP: storage path changed or uses a symlink'; exit 1; }
+case "$(stat -c '%u:%a' -- "$dir")" in
+  10001:700|10001:2700) ;;
+  *) echo 'STOP: storage owner or permissions need review'; exit 1 ;;
+esac
+token=$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')
+[[ "$token" =~ ^[0-9a-f]{32}$ ]] || exit 1
+marker="$dir/.runstate-persistence-$token"
+(set -o noclobber; printf 'RunState persistence probe %s\n' "$token" > "$marker")
+test "$(stat -c '%u:%a' -- "$marker")" = 10001:600
+digest=$(sha256sum -- "$marker")
+printf 'RUNSTATE_MARKER=%s\nRUNSTATE_MARKER_SHA256=%s\n' "$token" "${digest%% *}"
+echo 'Save both receipt lines locally before the separately approved restart/redeployment.'
+CHECK
+```
+
+Confirm the intended restart/deployment actually completed using Render's event/deployment
+record (including its ID and time). Marker survival alone does not prove a restart happened.
+Reconnect to the new runtime Shell, paste the original receipt values into the two quoted fields
+below, then run it. Do not rerun the first command as a substitute for verification.
+
+**After the confirmed restart/redeployment:**
+
+```sh
+bash <<'CHECK'
+set -euo pipefail
+token='PASTE_32_HEX_MARKER_VALUE'
+expected='PASTE_64_HEX_SHA256_VALUE'
+dir=/var/data/runstate/speech
+[[ "$token" =~ ^[0-9a-f]{32}$ && "$expected" =~ ^[0-9a-f]{64}$ ]] || { echo 'STOP: paste the original local receipt'; exit 1; }
+test "$(id -u)" = 10001 || { echo 'STOP: unexpected runtime user'; exit 1; }
+test "$(realpath -e -- "$dir")" = "$dir" || { echo 'STOP: storage path changed or uses a symlink'; exit 1; }
+case "$(stat -c '%u:%a' -- "$dir")" in
+  10001:700|10001:2700) ;;
+  *) echo 'STOP: storage owner or permissions need review'; exit 1 ;;
+esac
+marker="$dir/.runstate-persistence-$token"
+test -f "$marker" && test ! -L "$marker" || { echo 'STOP: original marker missing or not a regular file'; exit 1; }
+test "$(stat -c '%u:%a' -- "$marker")" = 10001:600 || { echo 'STOP: marker permissions changed'; exit 1; }
+digest=$(sha256sum -- "$marker")
+test "${digest%% *}" = "$expected" || { echo 'STOP: marker content changed'; exit 1; }
+java -Djdk.httpclient.redirects.retrylimit=1 -cp "/app/classes:/app/lib/*" com.runstate.reflection.ReflectionBackendMain --check-config
+rm -- "$marker"
+echo 'PASS: original marker survived and configuration passed; only that marker was removed.'
+CHECK
+```
+
+This proves that test file survived the recorded operation, not hosted provider replay. The
+configuration check may initialize/expire normal store records as described above; it makes no
+provider call. For separate restart and redeployment proofs, repeat the pair with a fresh receipt
+for each approved operation. A failed check leaves any existing marker for inspection; never
+delete the database directory or use a wildcard cleanup.
+
 ### Local restart rehearsal without paid calls
 
 The normal backend test suite includes `BackendProcessRestartTest`. It starts a separate Java

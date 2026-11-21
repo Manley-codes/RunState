@@ -18,6 +18,16 @@ push still to verify. Preserve branch ownership, batch later user tests/decision
 promise live messaging or continuous work after a session ends. Organization only at this
 checkpoint; no app implementation, device action, provider call, deployment or release.
 
+Manley subsequently resumed approved tasks and explicitly allowed preparation while the iPhone
+is disconnected. The canonical handoff records continued source/testing/package work without
+repeated connection requests. The backend README now provides the two exact before/after hosted
+marker commands: external digest receipt, private-path/user/mode checks, no-clobber creation and
+exact-marker cleanup. Eleven disposable Linux fixture cases passed (real UID 10001, substituted
+temporary path/receipt and fake Java preflight); evidence is in
+`backend/target/hosted-marker-snippet-results.json`. Render still reports one instance, a 1 GB
+disk at `/var/data` and automatic deploy off. This is preparation, not an actual restart or
+hosted replay proof; runtime-shell access and restart/deployment authorization remain necessary.
+
 ## November 20 strict 16 KB native-map runtime verification
 
 The new `.github/workflows/android-16k.yml` runs one existing offline native-map fixture on a
