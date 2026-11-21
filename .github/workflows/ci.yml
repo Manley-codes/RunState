@@ -63,12 +63,22 @@ jobs:
         working-directory: backend
         run: mvn -B --no-transfer-progress verify
 
+      # Build locally on the runner only; no registry push or deployment.
+      - name: Build the backend container
+        run: docker build --tag "runstate-backend-ci:${GITHUB_SHA}" backend
+
+      - name: Verify container startup and private storage
+        shell: bash
+        run: python3 backend/check-container.py "runstate-backend-ci:${GITHUB_SHA}" 2>&1 | tee backend/target/container-check.log
+
       - name: Upload backend test reports on failure
         if: failure()
         uses: actions/upload-artifact@v4
         with:
           name: backend-surefire-reports
-          path: backend/target/surefire-reports/
+          path: |
+            backend/target/surefire-reports/
+            backend/target/container-check.log
           retention-days: 7
 
   android:
@@ -123,6 +133,10 @@ jobs:
         working-directory: android
         run: bash ./gradlew --no-daemon ':app:testReleaseUnitTest' ':app:lintRelease' ':app:assembleRelease'
 
+      - name: Verify public APK packaging
+        shell: bash
+        run: python3 android/check-public-apk.py android/app/build/outputs/apk/release/app-release-unsigned.apk 2>&1 | tee android/app/build/reports/public-apk-check.log
+
       - name: Upload Android release reports on failure
         if: failure()
         uses: actions/upload-artifact@v4
@@ -132,4 +146,5 @@ jobs:
             android/app/build/reports/lint-results-release.*
             android/app/build/reports/tests/testReleaseUnitTest/
             android/app/build/test-results/testReleaseUnitTest/
+            android/app/build/reports/public-apk-check.log
           retention-days: 7

@@ -5,17 +5,213 @@ metadata:
   type: project
 ---
 
+## November 20 independent iPhone collaboration
+
+Manley approved using Claude for independent iPhone implementation and automated verification
+while Codex continues Android/backend release work. This reopens computer-side iPhone work,
+not the deferred phone tests or unresolved Shazam experiment. Use the existing clean
+`RunState-iphone-journey` worktree and `ios/run-completion-and-history` branch; preserve the
+Build 10 work at `23e95b8`, the accepted Build 9 sample ending and all saved-data compatibility.
+Codex is preparing a merge of current master and checking the combined branch before handoff.
+
+Claude owns `ios/**`, necessary iOS workflow changes and its private rolling handoff; Codex
+owns Android, backend/contracts, shared assets/general CI, canonical project records and
+master integration. Claude can implement/test/commit/push within that branch independently;
+essential product, credential, spending/deployment and device decisions remain separate.
+Updated `CLAUDE.md` removes obsolete per-edit approval and legacy-only stack instructions.
+
+One canonical handoff/progress file (intentionally ignored, not copied between worktrees):
+`C:/Users/Owner/IdeaProjects/RunState-iphone-journey/docs/local/claude-ios-handoff-2026-11-20.md`.
+Claude records completed changes, exact commits/checks, requests for Codex and later user
+review/test items there. Codex can inspect the file and branch directly; Manley should not
+relay long responses. No automatic agent-to-agent messaging connection is assumed. Codex
+consolidates later test items into the existing main roadmap. Initial branch verification
+is pending; no phone installation, live provider call or deployment is part of preparation.
+
+## November 20 idle replay cleanup and native packaging checks
+
+The backend now clears expired speech/written replay rows approximately every five minutes
+while running, even without incoming requests. Seven-day speech and 24-hour writing windows,
+unexpired pending reservations, capacities and the spending ledger are preserved. Written
+request/run bindings expire with their answers. Each store's failure is isolated, logged without
+saved content and retried later; the daemon starts/stops with the server. Speech completion
+also rejects an already expired reservation. No accepted writer, song choice or phone behavior
+changed. Five new tests cover physical payload/binding removal, live/pending protection, stale
+completion, missing-store recovery and shutdown. All 89 focused tests passed; full Windows
+verification/package ran 314 tests with zero failures/errors and two POSIX-only skips.
+
+The existing public APK checker now verifies 16 KB ZIP alignment and 64-bit native LOAD/RELRO
+boundaries with installed SDK tools and llvm-readelf/readelf. It checks actual writable overlap
+after RELRO, allowing harmless linker padding. The current APK passes; twelve targeted cases
+cover real malformed/misaligned ELF/ZIP copies and safe boundary cases. No dependency upgrade,
+app rebuild or new file was needed. This follows [Android's page-size guidance](https://developer.android.com/guide/practices/page-sizes),
+but is static package evidence, not a 16 KB device or final Play-generated package test.
+Evidence: `backend/target/nov20-idle-replay-full-verify.log`,
+`backend/target/nov20-replay-cleanup-targeted.log`, and
+`android/build/nov20-native-alignment-check/`. Independent source review found no material issue.
+
+Hosted deployment remains pending with the earlier HEAD fix. Render still runs `4c42dde`
+with automatic deployment off; zero caps continue blocking new paid calls. No device action,
+provider call or public-preview change. Keep hosted restart proof, verified rates/budgets and
+the existing deferred phone review separate. Backend commit `984b4c6` and packaging commit
+`4fbb2cb` are pushed. All four jobs in [GitHub run 44803570074](https://github.com/Manley-codes/RunState/actions/runs/44803570074)
+passed: 314 backend tests with zero skips both normally and inside the production container,
+container startup/storage checks, and Android debug/release builds, tests and lint. The public
+APK step confirmed all four 64-bit native libraries passed the new static checks. No iPhone
+workflow was needed or triggered. This documentation-only receipt does not repeat the builds.
+
+## November 20 background hosting and attribution follow-up
+
+Read-only Render events/app logs after the disk deployment showed successful startup, no
+recorded server failures, and one JDK warning about sending a body length for a HEAD request.
+Fixed this in `9fb8975`: `/health` accepts GET/HEAD with matching representation/capability
+headers; all HEAD responses, including errors, send no body. Protected routes retain their
+authentication and POST-only rules, and host/origin/query rejection is preserved. Four focused
+tests passed, including raw-wire no-body checks and subsequent GET behavior, with no HEAD
+warnings. Full Windows backend verification/package completed 309 tests: 307 passed, two
+POSIX-only tests skipped, zero failures/errors. JDK17 guidance and independent review support the narrow response fix.
+Accepted reflection writing/song selection are untouched. No provider calls or deployment.
+
+Commit `4b4df7d` appends the full version-pinned MapLibre Android Gestures 0.0.4 license/notice
+to the existing bundled notices. Its classes were present in the public APK but the upstream
+Almer Thie attribution was absent from that APK and the local AAR/nested JAR. The original
+notice file remains an exact prefix; added upstream text matches
+https://github.com/maplibre/maplibre-gestures-android/blob/0.0.4/LICENSE.md and is labeled Android-only
+because iOS copies the shared file. Incremental offline release assembly, packaged-byte equality
+and the public APK checker passed. No app logic, new asset file or public walkthrough design
+changed. This fixes one verified omission, not a complete license/commercial-permission review.
+
+Both changes are pushed. All four Android/backend jobs in
+[GitHub run 44795006187](https://github.com/Manley-codes/RunState/actions/runs/44795006187)
+passed: 309 backend tests with zero skips both normally and inside Docker, container checks,
+and Android build/test/lint/package checks. The automatic shared-resource
+[iPhone check 44795006180](https://github.com/Manley-codes/RunState/actions/runs/44795006180)
+also passed 15 unit tests, two UI tests and device packaging. This verifies the main-branch
+baseline/shared notice, not the separate Build 10 branch or physical recognition. Render auto-deploy is off and still
+runs `4c42dde`. Keep the backend fix for a later approved deployment; do not confuse source
+completion with live verification. The shared notice may trigger existing iOS CI, but no
+iPhone installation or resumed field test is requested. Evidence stays under
+`backend/target/nov20-head-*.log` and `android/build/nov20-dependency-notice-check/`.
+
+## November 20 public APK packaging guard
+
+Added `android/check-public-apk.py` and a step in the existing Android release CI job. Python
+and installed Android SDK tools inspect the actual APK offline: release BuildConfig has DEBUG
+and OWNER_TOOLS_ENABLED false, the merged manifest disables debugging/test-only/cleartext and
+has no unreviewed network-policy override, all three backup/transfer channels exclude private
+databases/connection settings/map cache, bundled notices exist, and original owner-only cover
+bytes are absent even if renamed. SDK tools decode XML/DEX; the script does not interpret
+bytecode or require new dependencies. CI retains its log on failure and propagates failures.
+
+The existing unsigned public APK passed in about three seconds; 15 deliberate negative cases
+were rejected, including a real debug APK and a copied public APK with renamed owner artwork.
+Manifest/backup/flag negative cases use altered observations from real SDK output, not rebuilt
+malicious binaries. Actionlint and independent review passed. No app rebuild, device action,
+provider call or behavior/design change was needed. Local evidence is in
+`android/build/nov20-public-apk-check/`. At `241bff9`, all four jobs in
+[GitHub run 44793225634](https://github.com/Manley-codes/RunState/actions/runs/44793225634)
+passed, including the new checker against the Linux-built public APK. This closes a
+regression-check gap, not a newly discovered exploitable app flaw. Signing, field behavior,
+complete license review, future shrinking changes and release approval remain separate.
+
+## November 20 hosted configuration checkpoint
+
+Manley's Render Shell output confirms `Configuration check passed`: remote configuration,
+one outbound HTTP attempt, zero-cap spending protection and initialization/reopening of all
+four private SQLite stores passed without provider calls. The backend and shell use UID 10001,
+GID 0; the storage directory is owned by UID 10001/GID 1000 with mode 2700 and the observed
+database files have mode 600. The earlier exact-GID guard was overly restrictive; setup guidance
+was corrected in `3202350`. The allowance store is optional at owner-only startup and was
+included by the explicit preflight. No ownership/permission change was needed.
+
+The newly connected Render integration independently confirms service `runstate-reflections`,
+live revision `4c42dde`, one instance, auto-deploy off, `/health` configured and a 1 GB disk
+mounted at `/var/data`. It permits background service/log/deploy work, but has no runtime-shell
+tool for creating and checking a persistence marker. There is no configured local SSH key or
+Render CLI/API connection. Hosted restart/redeployment survival and end-to-end paid replay are
+therefore still unverified; a green preflight does not establish those. New paid cloud work stays
+disabled by temporary zero caps until real ceilings and a budget are approved. GPS/local phone
+history remain independent of this restriction.
+
+Manley needs the computer for other work and explicitly permits only background/chat work:
+do not operate desktop/browser windows, request more phone tests or manufacture a new deploy
+solely to work around missing shell access. Keep the remaining hosted check in the existing
+roadmap and continue a bounded independent release task. No app/provider behavior changed at
+this checkpoint.
+
+## November 20 owner-demo media and contact follow-up
+
+The unchanged 9,280-byte demo album cover now belongs to the debug source set only. A new `android/app/src/release/res/values/owner_demo_resources.xml` aliases the shared resource ID to the existing music-orb artwork so public code compiles without bundling the demo cover. Existing public demo guards stay in place; no Kotlin, accepted reflection, shared instrumental, closing chime or phone data changed. The existing asset notice now distinguishes owner/debug from public builds. This is a small packaging cleanup, not a new release blocker or visual redesign, and does not require a public-preview update.
+
+Offline owner/debug, public/release and Android test APK assemblies passed, including release vital lint. The original cover bytes appear exactly once in debug and nowhere in release; packaged resource inspection confirms the release alias. Private evidence is in `android/build/nov20-owner-media-check/`. No additional user or phone test is needed.
+
+Manley supplied a temporary email for drafting only and explicitly prohibited using it for actual support. Its value stays in the private readiness record. A replacement public contact is required before release; do not publish the temporary address or treat support setup as complete. The private draft retains its public-contact placeholder.
+
+A read-only check of the live `/health` endpoint returned HTTP 200 and `status: ok`. It did not establish the deployed revision, persistent disk, provider spending settings or replay durability. Dashboard access remains unavailable from this session. The existing roadmap records the requested read-only Disk-page check; no server change, paid generation, purchase or deployment occurred.
+
+The notice update triggered the existing iPhone workflow, which exposed a stale shared-artwork path left by the earlier Android bitmap move: Xcode still referenced `res/drawable/start_music_orb.jpg`. Corrected its reference and both iPhone workflow path filters to `drawable-nodpi`; the unchanged file retains its original name/content in the iPhone bundle. This is a shared-build repair, not resumed iPhone feature development. The existing simulator/resource tests and device-package build provide the Mac verification; no new phone test is needed. Preserve this path when eventually integrating the separate iPhone branch.
+
+## November 20 packaged backend and release preparation
+
+The Anthropic adapter now rejects an assembled request above 1 MiB of UTF-8 before reserving spending or sending it. The audited current hosted paths/default identifiers fit below that limit; prompts, model overrides and song selection are unchanged. A multibyte regression proves rejection sends nothing and leaves the next ordinary request's allowance available. All 64 focused tests passed. Full Windows verification and packaging completed with 307 tests, zero failures/errors and two POSIX-only skips. At `fb8279a`, [GitHub run 44746569909](https://github.com/Manley-codes/RunState/actions/runs/44746569909) passed all four jobs; all 307 backend tests passed with zero skips both normally and inside the production Docker build, followed by every container check. Independent source review found no material issue. This bounds bytes, not tokens or actual provider charges. Actual account rates and a deliberately chosen budget remain required.
+
+Manley authorized ongoing commits and pushes until he takes over again, and asked Codex to continue independent release work without routine checkpoint stops. The prior four local commits were pushed through `49212f0`; its GitHub checks passed. The container verification was added at `931db01`, the bitmap efficiency change at `dc42442`, and the isolated container test's native-library temporary-mount correction at `627932d`.
+
+The existing backend CI job now builds the actual Dockerfile and runs the new `backend/check-container.py`. In disposable containers with external networking disabled, it confirms UID/GID 10001:10001, the unchanged production startup command, HTTP health/authentication, zero-budget refusal before provider work, and reopening four databases from a replacement container. A marker survives on the shared test volume; files retain private ownership/modes. Read-only and publicly readable storage are deliberately rejected. The test uses fictional credentials and removes only its uniquely named containers/volume; it neither pushes an image nor deploys. The initial CI fixture could not load SQLite with its restricted temporary mount; explicit native-library loading support and diagnostic output corrected the test without changing the production Dockerfile or app.
+
+[GitHub run 44743950923](https://github.com/Manley-codes/RunState/actions/runs/44743950923) passed all four jobs at `627932d`: legacy Java, backend, Android debug and Android release. The backend's 306 tests passed both normally and inside the container build, followed by every packaged-runtime check. Workflow syntax was also checked locally with checksum-verified actionlint. This establishes packaged runtime behavior, not the current Render settings, a persistent hosted mount/redeployment or real provider authentication. No phone update or paid call occurred.
+
+The existing private release-readiness record now includes an unpublished privacy-policy draft, Play Data safety checklist and conditional provider-cost calculations. Public contact, actual host/provider retention/deletion, audience, provider eligibility and real rates remain unverified; no subscription price, live budget or permission was assumed. The engineering privacy guide now distinguishes Play's location classification from the app's rounded weather coordinates. Browser account inspection was unavailable in this desktop session, so private provider rates were not inferred from public marketing prices. Later user reviews/tests remain consolidated in the roadmap; accounts/passwords and iPhone recognition remain parked.
+
+## November 20 Android bitmap efficiency
+
+The existing History trail and music-orb JPEGs now live in `drawable-nodpi`, preventing Android from enlarging decoded bitmaps merely because the device has a higher screen density. Every inspected consumer already supplies explicit size and Crop/Fit behavior. Both images are byte-identical to their earlier versions; there is no artwork, layout or reflection-logic change, so the public walkthrough needs no visual revision.
+
+The offline public APK build, including release vital lint, passed. Packaged-resource inspection found each image exactly once with the `nodpi` configuration and original SHA-256. Evidence is in `android/build/nov20-bitmap-density-check/`. No phone update or screenshot comparison was performed; add a brief Start/music/History look to the next combined-build review, not a separate run. The resource moves are the only app changes in this increment. The lower-priority owner-demo artwork still present in the public package is noted in the private roadmap; it is not an enabled public feature.
+
+## November 20 backend process-restart verification
+
+Added one test-only file, `BackendProcessRestartTest.java`, to exercise the real HTTP server and all four temporary SQLite stores across separate Java processes. A completed written answer and selected audio replay exactly after restart, including reuse of the answer with a new request ID; the trial's remaining run count and the spending limit survive. Forced termination after a simulated writer send or voice send, before completion, leaves that work pending rather than sending again. Durable simulated-send records prove that retries add no provider sends. The test child uses loopback, fictional credentials, a fixed clock, bounded cleanup and injected simulated providers; no real provider is constructed.
+
+Both new tests passed on Windows. The complete backend suite and JAR packaging then passed in an isolated native Ubuntu workspace with Temurin 17.0.21.1, running as an ordinary non-root user: 306 tests, zero failures/errors/skips. This includes the two POSIX permission/symlink checks skipped in the November 19 Windows pass. Dependencies were reused offline and provider credentials were excluded. Evidence: `backend/target/nov20-process-restart-targeted.log` and `backend/target/nov20-linux-check/` (verification log, reports, source hashes and verified Java archive metadata). The existing backend CI job automatically includes the new tests; no workflow change is needed.
+
+These are local process and Linux filesystem results, not proof of the production launcher/provider wiring, Docker UID/GID, or Render's mounted disk and redeployment behavior. Those hosted checks, real cost measurements/budgets and public-release decisions remain open. The phone, saved runs, accepted reflection writer, iPhone branch and live service were untouched. No paid calls or deployment occurred. Manley subsequently authorized Codex to commit and push this checkpoint and continue approved release work, handling Git until he takes over again. Keep later reviews/tests in the existing roadmap rather than stopping at routine checkpoints; no additional hands-on test is requested.
+
+## November 19 backend configuration preflight
+
+The existing launcher now accepts `--check-config` alone and exits before constructing providers or starting HTTP. It validates remote host/access/port, the one-attempt JVM setting, monthly amounts and enabled provider ceilings, then initializes/reopens the four real SQLite stores under the runtime identity. Normal store expiry cleanup applies; no reflections, audio or paid reservations are created. Zero monthly caps are reported as intentional suppression of new paid calls. Invalid configuration fails before touching storage, and output excludes private values and exceptions. Linux checks reject non-private permission bits and direct directory/store symlinks. Normal server startup, the accepted reflection writer and app API behavior are unchanged.
+
+Prepared hosting steps live in the existing backend README: one disk/subdirectory, the Docker UID/GID, a deliberately isolated zero-budget rehearsal, runtime-shell check and subsequent mount/restart proof. These are not applied hosting settings. A successful preflight cannot prove mount durability, real provider authentication/rates or hosted replay. Render build/pre-deploy/one-off environments cannot access the runtime disk; adding a disk is a later approved deployment step. No hosting account, spending limit, deployment, provider call, phone installation or Git operation changed.
+
+Verification: 304 backend tests discovered, 302 passed, zero failures/errors and two POSIX-only permission/symlink tests skipped on Windows; JAR packaging passed. The new child-JVM check exited successfully with no provider credentials while its configured HTTP port was already occupied. Seeded written replies, audio, allowance and spent-budget records survived repeated checks. Corrupt stores and malformed settings failed safely. The new test file is `backend/src/test/java/com/runstate/reflection/BackendConfigurationCheckTest.java`; no new production source file was needed. Evidence: `backend/target/nov19-config-check-verify.log` and Surefire reports. Linux CI and the actual container-user/mounted-disk checks remain. This is a commit checkpoint; earlier uncommitted cost-report changes remain separate.
+
+## November 19 Android-first release focus
+
+Manley approved finishing a bounded Android release candidate first because testing both platforms at once is difficult to sustain. The current sequence and single next field test are at the top of `docs/local/november_2026_demo_roadmap.md`; that sequence supersedes older next-test suggestions below. Preserve the accepted written music reflection and song selection. Keep iPhone Build 10 and its branch, but park the unresolved locked-screen recognition experiment and further iPhone device requests. Shared backend behavior, response examples and accepted assets remain reusable when iPhone work resumes.
+
+Manley then connected the Moto and asked for assistant-run work/testing while he is busy, with hands-on tests documented for later. The tracking-only outdoor run is deferred, not a prerequisite for independent release work. Keep one consolidated deferred-test list in the existing roadmap. Do not request repeated installs, listening exercises or iPhone recognition trials.
+
+The connected Moto retained the verified November 11 APK. Its 73 completed runs passed database integrity and foreign-key checks. Cloud reflections was on and was left on. Ten existing silent instrumented checks passed on the idle Moto using isolated records/preferences: tracking-only choice and saving without song sharing, mile-setting persistence, public owner-tool exclusion, readable privacy at double text size, sample-draft public policy, simulated GPS pace recovery and saved splits, Effort preservation, and explicit public History replay. The temporary test package was removed. Before/after receipts confirmed all 12 production tables, 73 runs, five preference files and the main APK were unchanged. No real GPS run or audible Bluetooth playback was exercised.
+
+Both Android unit suites were executed afresh: 926 tests each, zero failures/errors/skips. Owner/test/public builds passed; release lint had zero errors, 72 warnings and eight hints. The compiled public APK had DEBUG=false and OWNER_TOOLS_ENABLED=false. The emulator did not become usable promptly, so the focused device checks ran on the backed-up, idle Moto; both attempted emulators were stopped. Private evidence is in `android/build/nov19-release-check/`, with build/unit logs in `android/build/nov19-release-*.log`.
+
+The Java backend passed all 292 tests and JAR packaging with provider credentials removed and live trials disabled. The four- and ten-song offline samples returned identical written/audio retries with zero extra simulated provider sends. Tests cover stored replay, duplicate/concurrent requests, uncertain paid attempts, expiry and spending-ledger failures; they do not establish actual charges or hosted disk durability. Logs are `backend/target/nov19-release-verify.log` and `backend/target/nov19-offline-samples.log`. A bounded source review found no material contradiction between the current privacy explanation and local deletion/backup/retention behavior. Public policy/contact and actual hosted/provider retention remain unverified. No app/backend source change, real provider call, deployment or Git mutation was needed for this checkpoint.
+
+Hosted persistent storage/restart checks, real spending limits and complete cost measurements, public provider access/privacy, and eventual Play testing remain release gates. Accounts/password work and registration spending remain deferred. Further backend preparation can proceed without a phone test; activation still needs the applicable storage, budget and deployment decisions.
+
 ## November 11 free-running and iPhone field tests
 
 Android Settings can turn off cloud reflections while keeping the saved connection. Use that switch for Manley's outdoor free-version test. Check pace and distance while locked, mile announcements over music, Energy and Effort at the finish, and the saved History entry. Decide which free features to keep after listening to that run. The accepted reflection writing and song selection stay as they are. Studying only the winning song is parked.
 
 The server supports a deliberately started seven-day preview with two personalized runs and a manually assigned eight-run monthly pilot. Run IDs bind early song studies and one spoken choice to the same allowance. The pricing hypothesis is US$3.99/month for eight complete reflections. Validate provider usage on an ordinary run and a music-heavy run before setting a store price. No checkout or automatic renewal is configured. Android reuses six fixed voice recordings across restarts from its private cache. A returning runner can hear already-cached cues when cloud reflections are off. A fresh tracking-only installation uses the phone's voice.
 
-The first native iPhone field prototype is in `ios/`. On a push to master that touches its files, or a manual run, the **iPhone field test** workflow tests it on a GitHub-hosted Mac and builds an unsigned IPA. Download the artifact **RunState-iPhone-unsigned** after it passes. Personal signing and an outdoor iPhone test are still required. Start music and a run, lock the screen, cross a mile, check the spoken announcement and music volume, then pause, resume, finish and reopen History. The prototype stores run totals locally.
+The first native iPhone field prototype is in `ios/`. The **iPhone field test** workflow tests it on a GitHub-hosted Mac and builds an unsigned IPA. Manley signed and installed the field build from Windows with iloader and confirmed it opened on his iPhone 14. The initial screen offers location access and Start run. During a run it shows distance and active time. The pending outdoor check is to play music over headphones, start a run, lock the screen, cross a mile, listen for the announcement and the return of music volume, then pause, resume, finish and reopen the saved run list.
 
-Both Android variants passed all 926 unit tests and built locally. Release lint completed with zero errors. Two emulator tests verified that switching off cloud reflections survives reopening and that a simulated tracking-only run can keep local music observation on, withhold song-sharing permission and save the activity. The Moto still needs the verified build for its outdoor test.
+Both Android variants passed all 926 unit tests and built locally. Release lint completed with zero errors. Two emulator tests verified that switching off cloud reflections survives reopening and that a simulated tracking-only run can keep local music observation on, withhold song-sharing permission and save the activity. The verified tracking-only field build is installed on the Moto. The outdoor test is pending.
 
 The zero-charge four-song and ten-song sample comparisons both completed on loopback using simulated providers. Each selected one song, wrote one family of answers and requested one selected voice. Four songs triggered four detailed studies and 12 catalog requests. Ten songs triggered ten studies and 30 catalog requests. In both cases retrying the written response and selected voice returned identical results with no additional provider sends. These counts apply to the controlled fixtures. Account pricing, cache hits and catalog results affect the cost of a live run. See `backend/README.md` for the sample command and usage meter.
+
+The sample report now identifies the model used for each step and flags incomplete usage if a provider reply or billing detail is missing. Both sample sizes passed again at zero charge, and all 292 backend tests passed. The ordinary and music-heavy costs in dollars still need live measurements. The unsigned iPhone artifact from `b6fccc9` was also saved privately and verified as a physical-device build for iOS 16 or later.
 
 ## November 11 provider spending limits and iPhone feasibility
 
@@ -25,7 +221,7 @@ All 192 focused Android unit tests passed. In the new Android check, a runner co
 
 For iPhone, reuse the Java reflection service, request formats and accepted run behavior. The first proposed native test starts a run in the foreground, locks the phone with Spotify playing, records distance and plays a local mile announcement over Bluetooth. Check that music lowers and returns naturally, that music already paused stays paused, and that pausing and resuming the run saves the correct distance once. Apple's background location and temporary music-volume controls support this approach. Spotify recommends disconnecting its remote control while the app is inactive. Implementation and listening on a physical iPhone are pending. [Apple background location](https://developer.apple.com/documentation/corelocation/cllocationmanager/allowsbackgroundlocationupdates), [Apple audio](https://developer.apple.com/documentation/avfaudio/avaudiosession/categoryoptions-swift.struct/duckothers), [Spotify app lifecycle](https://developer.spotify.com/documentation/ios/concepts/application-lifecycle).
 
-Manley has an iPhone. He still needs access to a compatible Mac with Xcode for the first device test. Xcode supports installing a personal test build with a free Apple Account. Wider beta distribution through TestFlight is a later step. [Apple account and device testing](https://developer.apple.com/help/account/basics/about-your-developer-account), [Xcode compatibility](https://developer.apple.com/xcode/system-requirements/).
+Manley used the GitHub Mac build and his Windows PC for the first personal installation. Wider beta distribution through TestFlight is a later step.
 
 ## November 11 written reflection retries
 

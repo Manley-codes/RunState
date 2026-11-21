@@ -7,9 +7,11 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.sql.DriverManager;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static com.runstate.reflection.WrittenReflectionReplayStore.State.*;
 import static org.junit.jupiter.api.Assertions.*;
@@ -21,6 +23,43 @@ final class WrittenReflectionReplayStoreTest {
 
     private WrittenReflectionReplayStore storeAt(long seconds, int capacity) throws IOException {
         return new WrittenReflectionReplayStore(directory, Clock.fixed(START.plusSeconds(seconds), ZoneOffset.UTC), capacity);
+    }
+
+    @Test void idleCleanupRemovesExpiredResultsAndBindingsButKeepsLiveReservations() throws Exception {
+        var now = new AtomicReference<>(START);
+        var clock = new Clock() {
+            @Override public java.time.ZoneId getZone() { return ZoneOffset.UTC; }
+            @Override public Clock withZone(java.time.ZoneId zone) { return this; }
+            @Override public Instant instant() { return now.get(); }
+        };
+        var store = new WrittenReflectionReplayStore(directory, clock, 4);
+        var expired = store.claim("runner", "old request", "old evidence", true);
+        store.complete(expired, "expired-private-answer-fixture".getBytes(StandardCharsets.UTF_8), true, "runner", "old run");
+        assertEquals(CACHED, store.claim("runner", "old retry", "old evidence", false).state());
+        var expiredPending = store.claim("runner", "old pending", "old pending evidence", true);
+        now.set(START.plusSeconds(23 * 3600));
+        store.complete(store.claim("runner", "live request", "live evidence", true), RESULT, true, "runner", "live run");
+        store.claim("runner", "live pending", "live pending evidence", true);
+        now.set(START.plusSeconds(24 * 3600));
+
+        store.purgeExpired(); // Inspect rows directly, without a request or store reopen causing cleanup.
+
+        Path file = directory.resolve("written-reflections.sqlite3");
+        try (var db = DriverManager.getConnection("jdbc:sqlite:" + file.toUri() + "?mode=rw");
+             var sql = db.createStatement()) {
+            for (String table : new String[]{"written_replays", "written_requests", "written_runs"}) {
+                try (var rows = sql.executeQuery("SELECT count(*) FROM " + table)) {
+                    assertTrue(rows.next());
+                    assertEquals(table.equals("written_runs") ? 1 : 2, rows.getInt(1), table);
+                }
+            }
+        }
+        assertFalse(Files.readString(file, StandardCharsets.ISO_8859_1).contains("expired-private-answer-fixture"));
+        assertFalse(store.hasSavedRun("runner", "old run"));
+        assertTrue(store.hasSavedRun("runner", "live run"));
+        assertArrayEquals(RESULT, store.claim("runner", "live request", "live evidence", false).body());
+        assertEquals(PENDING, store.claim("runner", "live pending", "live pending evidence", true).state());
+        assertThrows(IOException.class, () -> store.complete(expiredPending, RESULT, false));
     }
 
     @Test void resultsAndRequestIdBindingsExpire24HoursAfterCompletion() throws IOException {

@@ -98,6 +98,12 @@ blocks calls to that provider. Verify the ceilings against the actual plans and 
 sizes before rollout. Conservative reservations can use up an allowance ahead of the
 vendor's billed usage. Fixed subscription and hosting fees are separate.
 
+Every Anthropic request also has a 1 MiB limit on its fully assembled UTF-8 body,
+including prompts and schema. Oversized bodies are rejected before a spending
+reservation or transport send. This is a byte limit, not a token or dollar ceiling;
+verify the configured model's actual rates separately. Accepted reflection prompts
+and model choices are unchanged.
+
 Use the same private persistent directory (`RUNSTATE_SPEECH_REPLAY_DIR`) across restarts
 on one hosted instance. The `provider-spend.sqlite3` file keeps totals by UTC calendar
 month. Multiple independent disks would each have their own allowance. The container
@@ -110,13 +116,113 @@ setting or the ledger is unavailable. A refusal before the first paid send allow
 later retry once capacity returns. If a written reflection has already used a paid send,
 its replay reservation stays in place for the 24-hour window to prevent a second charge.
 
+### Check hosted storage and spending configuration without paid calls
+
+`ReflectionBackendMain --check-config` is an explicit administrative check. It validates the
+remote host/access/port settings, monthly amounts, enabled provider ceilings and the JVM
+one-attempt setting, then initializes and reopens the four SQLite stores as the current user.
+It exits with code **0** on success and **1** on failure. It never starts the HTTP server,
+constructs a provider or makes an API request. Provider credentials are not needed for a
+zero-budget rehearsal. Keep the existing owner access mode; this does not introduce accounts.
+
+The check uses the configured storage directory: it creates missing databases and runs their
+normal expiry cleanup. It does not reserve spending or add reflections/audio. Back up existing
+state before a hosted maintenance session. Invalid configuration is rejected before opening
+storage. Linux checks reject group/other permission bits and symbolic links at the configured directory
+or store files. Windows rehearsal does not establish Linux ownership/permissions.
+
+Prepared single-instance layout (not configured on Render by this source change):
+
+| Setting | Prepared value or action |
+| --- | --- |
+| Disk mount | `/var/data` |
+| `RUNSTATE_SPEECH_REPLAY_DIR` | `/var/data/runstate/speech` |
+| Runtime owner | Dockerfile default UID/GID `10001:10001`; verify the actual backend process and shell run as UID `10001` and own the private stores. Hosting can assign different groups. Directory access must remain owner-only (`700`, including `2700` with group inheritance); database files `600`. |
+| Stored files | `written-reflections.sqlite3`, `reflection-speech.sqlite3`, `reflection-allowances.sqlite3`, `provider-spend.sqlite3` |
+| `RUNSTATE_RUNNER_MONTHLY_USD`, `RUNSTATE_GLOBAL_MONTHLY_USD` | `0` for a deliberately isolated rehearsal; this disables new paid work, so do not apply it to the live service as an incidental edit |
+| Provider per-call ceilings | Omit for the zero-budget rehearsal; choose verified amounts before enabling spending. Positive caps require the Anthropic ceiling and ceilings for configured ElevenLabs/Musixmatch keys. |
+| Existing host/access settings and provider keys | Preserve privately; never put values in source, the command line or screenshots |
+
+On the actual running container, first compare the backend process's effective UID with the
+shell UID and storage owner. They must be the expected non-root UID `10001`. Do not require
+GID `10001` or change permissions merely to make the group match: the observed Render backend
+and shell use GID `0`, while the private stores inherit GID `1000`. Group membership does not
+make UID `10001` a root user. The check below still rejects group/other access permissions.
+After confirming ownership, use:
+
+```sh
+java -Djdk.httpclient.redirects.retrylimit=1 -cp "/app/classes:/app/lib/*" com.runstate.reflection.ReflectionBackendMain --check-config
+```
+
+The server only initializes `reflection-allowances.sqlite3` when trial/pilot credentials need
+run allowances. Its absence in owner-only mode is not itself a storage failure. The explicit
+configuration check initializes and reopens all four stores, including that missing store.
+
+Use the service's runtime shell, not Render's build, pre-deploy or one-off-job environment:
+those cannot access its disk. Only files under the mount persist. A disk supports one service
+instance and introduces a brief interruption during deployments. Adding a disk itself triggers
+a deployment, so it belongs to the later approved hosting step. [Render disk guidance](https://render.com/docs/disks).
+
+A passing check proves local configuration and storage access, **not** that the directory is
+a persistent mount, that credentials are accepted, or that chosen ceilings cover real charges.
+`/health` remains a liveness check and is not a substitute for this check.
+
+Before enabling spending on the host: record a harmless unique marker/digest in the same mounted
+directory, verify it survives the approved restart and redeployment, and rerun the configuration
+check under the runtime user. Keep the marker separate from the databases and remove only that
+marker afterward. This establishes mount persistence; also complete the recorded hosted written
+and voice replay check before claiming end-to-end protection. Choose actual monthly budgets and
+provider ceilings separately. Local tests and prepared settings do not activate or deploy them.
+
+### Local restart rehearsal without paid calls
+
+The normal backend test suite includes `BackendProcessRestartTest`. It starts a separate Java
+process with the real HTTP server and all four temporary SQLite stores, but simulated writer and
+voice providers. After that process exits, a fresh process must replay identical saved writing
+and audio, retain the trial allowance and spending limit, and make no additional simulated sends.
+It also kills the process after a simulated writer or voice send, before a result is saved:
+the replacement must keep that work pending instead of automatically repeating the paid attempt.
+
+To run just the storage/configuration and process-restart checks from `backend/`:
+
+```sh
+mvn -B --no-transfer-progress "-Dtest=BackendConfigurationCheckTest,BackendProcessRestartTest" test
+```
+
+The tests use loopback and temporary data, require no provider credentials and run in the existing
+backend CI job. Linux also exercises the permission/symlink checks that Windows skips. These
+checks do not exercise the production launcher/provider wiring, the Docker runtime identity, or
+an actual Render disk/redeployment. The hosted verification above is still required.
+
+### Packaged container check
+
+The backend CI job also builds the existing Dockerfile and runs `check-container.py` against
+that local image. It verifies the configured/runtime UID and GID, the normal production command's
+health response, authentication and zero-budget refusal, and reopening all four private stores
+from a replacement container. A marker must survive on the same disposable volume; database
+ownership/modes are checked, and read-only or publicly readable storage must fail the preflight.
+
+The runtime checks disable external networking, supply only fictional credentials, publish no
+ports and use a uniquely named temporary volume that is removed afterward. No image is pushed
+to a registry or deployed. The test image uses the same Dockerfile as the hosted backend; live
+provider authentication and actual Render storage still require their separate verification.
+
+With Docker available, run these from the repository root:
+
+```sh
+docker build --tag runstate-backend-check backend
+python3 backend/check-container.py runstate-backend-check
+```
+
 ### Measure one complete test run
 
 To rehearse the four-song and ten-song reflection samples from the repository root, run `.\backend\compare-sample-runs.ps1` in PowerShell. If Maven is outside your PATH, supply its executable with `-Maven`. The default command uses simulated provider responses. It exercises preparation, song choice, writing, one selected voice and retries. The sample excludes on-course announcements and music playback. A live comparison requires deliberate opt-in, privately configured provider keys and chosen spending limits.
 
 On an isolated loopback backend, set `$env:RUNSTATE_LOCAL_USAGE_METER = '1'` before starting the usual server. Capture the console lines beginning with `RunStateUsage` for one run at a time. Include the start, all song preparations, the selected written reflection, and speech. Repeat for an ordinary run and a music-heavy run. Record whether the six fixed voice cues were already cached. The instrument is disabled in remote mode. A sample that uses simulated providers or only tracking cannot establish the cost of a paid reflection.
 
-Price the reported input, output and cache tokens by model, then add voice usage at the account's rate and count Musixmatch requests against the plan. Include fixed fees separately. An attempted call with unknown usage needs the provider's billing record. Do not count missing usage as zero or add cache-write subtotals to their aggregate a second time. The meter emits counts and step labels only.
+The sample reports model usage separately for each step. If two requests go out and only one reply comes back, the token total for that model and step is unknown. The same rule applies to missing ElevenLabs replies. Submitted characters and the provider's reported voice units appear separately. A run can finish with incomplete usage. In that case, check the provider's billing record before estimating a price.
+
+Apply your account rates to the model tokens and voice units, count Musixmatch requests against your plan, and include fixed fees separately. The five-minute and one-hour cache-write counts are parts of the reported cache-write total. Count each token once.
 
 ## Snippet availability v2 — local implementation, October 19, 2026
 
@@ -397,8 +503,14 @@ If the server stops after the provider may have charged but before it saves the 
 receive HTTP 503 for that reservation's seven-day window. A duplicate request arriving while
 the first call is in progress can retry after it finishes. The store holds 128 entries total,
 including unfinished reservations. When full, existing audio stays available and new speech
-requests receive HTTP 503 until space opens. Expired entries are cleared on startup or later
-requests. These limits apply only to selected reflection speech.
+requests receive HTTP 503 until space opens. Expired entries are cleared on startup, later
+requests and approximately every five minutes while the server runs, even without traffic.
+The same maintenance removes expired written answers and their request/run bindings. It
+preserves unexpired results and pending reservations, and never calls a paid provider. A
+failed cleanup is logged without saved content and retried on the next pass. Closing the
+server stops maintenance. The spending ledger has its own lifecycle and is not swept here.
+These speech limits apply only to selected reflection speech. This background cleanup is
+prepared in source; the hosted service still needs the corresponding deployment.
 
 `ElevenLabsReflectionSpeech` uses the fixed official HTTPS conversion endpoint, an API-key header,
 MP3 44.1 kHz/128 kbps, a three-second connect timeout and a twenty-second complete-response budget.
@@ -685,7 +797,8 @@ that point without saving a usable answer, it withholds another paid generation 
 reservation's 24-hour window. A request rejected before admission can be retried when the
 service is available. The response and request limits remain 64 KiB each. The written store
 holds up to 256 operations and remembers up to 64 accepted request IDs per operation.
-It clears expired entries on startup or subsequent requests.
+It clears expired entries on startup, subsequent requests and the five-minute maintenance
+described in the reflection voice setup above.
 This protection covers the generation of the written answers. Song preparation and cumulative
 provider spending have separate lifecycles.
 
@@ -793,8 +906,11 @@ tokens, request evidence or underlying provider exceptions. Any supplied browser
 rejected, so this API has no browser/CORS client path. Untrusted `X-Forwarded-*` headers establish
 neither HTTPS, an allowed Host nor authentication.
 
-Remote-only `GET /health` returns `{"status":"ok"}` without authentication or provider work,
-but still requires the configured public Host and no Origin. It proves process liveness only;
+`GET /health` returns `{"status":"ok"}` without authentication or provider work. `HEAD /health`
+returns the same status and representation/capability headers with no response body. In remote
+mode both still require the configured public Host and no Origin. Unsupported methods advertise
+`Allow: GET, HEAD`; protected generation endpoints retain their existing authentication and
+POST-only rules. Every HEAD response, including an error, omits its body. Health proves process liveness only;
 it does not prove that the demo code, Anthropic key, billing, generated text or phone connection
 works. Configure a TCP liveness probe if a host cannot preserve the expected Host for its HTTP
 probe. Validate authentication and exact `FAKE` delivery through the candidate endpoint before

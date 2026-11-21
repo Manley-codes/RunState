@@ -71,6 +71,16 @@ final class SpeechReplayStore {
         }
     }
 
+    void purgeExpired() throws IOException {
+        try (Connection db = database.open()) {
+            db.setAutoCommit(false);
+            database.purgeExpired(db, clock.millis());
+            db.commit();
+        } catch (SQLException failure) {
+            throw new IOException("Cannot clear expired reflection speech", failure);
+        }
+    }
+
     private Claim reserve(Connection db, String key, long now, boolean allowNew) throws SQLException {
         if (!allowNew) return new Claim(State.BUSY, key, null, null);
         try (Statement sql = db.createStatement();
@@ -106,11 +116,13 @@ final class SpeechReplayStore {
         }
         // A stale provider result must never overwrite a newer reservation for the same input.
         try (Connection db = database.open(); PreparedStatement update = db.prepareStatement(
-                "UPDATE speech_replays SET audio=?, expires_at=? WHERE replay_key=? AND reservation=? AND audio IS NULL")) {
+                "UPDATE speech_replays SET audio=?, expires_at=? WHERE replay_key=? AND reservation=? AND audio IS NULL AND expires_at>?")) {
+            long now = clock.millis();
             update.setBytes(1, audio);
-            update.setLong(2, clock.millis() + RETENTION_MILLIS);
+            update.setLong(2, now + RETENTION_MILLIS);
             update.setString(3, claim.key());
             update.setString(4, claim.reservation());
+            update.setLong(5, now);
             if (update.executeUpdate() != 1) throw new IOException("Speech reservation is no longer current");
         } catch (SQLException e) {
             throw new IOException("Cannot save reflection speech", e);

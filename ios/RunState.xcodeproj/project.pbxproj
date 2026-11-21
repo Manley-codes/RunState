@@ -40,7 +40,7 @@
         120000000000000000000034 /* Anton */ = {isa = PBXFileReference; lastKnownFileType = file; path = "res/font/anton_regular.ttf"; sourceTree = "<group>"; };
         120000000000000000000035 /* Photograph sources */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "assets/opening-photo-sources.json"; sourceTree = "<group>"; };
         120000000000000000000036 /* Third-party notices */ = {isa = PBXFileReference; lastKnownFileType = text; path = "assets/third_party_notices.txt"; sourceTree = "<group>"; };
-        120000000000000000000038 /* Spotify shortcut artwork */ = {isa = PBXFileReference; lastKnownFileType = image.jpeg; path = "res/drawable/start_music_orb.jpg"; sourceTree = "<group>"; };
+        120000000000000000000038 /* Spotify shortcut artwork */ = {isa = PBXFileReference; lastKnownFileType = image.jpeg; path = "res/drawable-nodpi/start_music_orb.jpg"; sourceTree = "<group>"; };
         120000000000000000000005 = {isa = PBXFileReference; explicitFileType = wrapper.application; path = RunState.app; sourceTree = BUILT_PRODUCTS_DIR; };
         120000000000000000000006 = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; path = RunStateTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
         120000000000000000000051 = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; path = RunStateUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };

@@ -23,10 +23,14 @@ final class LocalProviderUsage {
     }
 
     void anthropicAttempt(Step step, String model) {
-        line("anthropic step=" + step + " model=" + (KNOWN_MODELS.contains(model) ? model : "custom") + " attempted=1");
+        line(anthropicFields(step, model) + " attempted=1");
     }
 
-    void anthropicReply(Step step, String body) {
+    private static String anthropicFields(Step step, String model) {
+        return "anthropic step=" + step + " model=" + (KNOWN_MODELS.contains(model) ? model : "custom");
+    }
+
+    void anthropicReply(Step step, String model, String body) {
         JsonObject usage = null;
         try {
             usage = JsonParser.parseString(body).getAsJsonObject().getAsJsonObject("usage");
@@ -34,7 +38,7 @@ final class LocalProviderUsage {
             // An incomplete or non-JSON provider response has no confirmed token count.
         }
         JsonObject cache = usage != null && usage.get("cache_creation") instanceof JsonObject fields ? fields : null;
-        line("anthropic step=" + step + " reply=1 input=" + tokens(usage, "input_tokens")
+        line(anthropicFields(step, model) + " reply=1 input=" + tokens(usage, "input_tokens")
                 + " output=" + tokens(usage, "output_tokens")
                 + " cache_read=" + tokens(usage, "cache_read_input_tokens")
                 + " cache_write_total=" + tokens(usage, "cache_creation_input_tokens")

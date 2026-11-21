@@ -67,6 +67,16 @@ final class WrittenReflectionReplayStore {
         }
     }
 
+    void purgeExpired() throws IOException {
+        try (Connection db = database.open()) {
+            db.setAutoCommit(false);
+            database.purgeExpired(db, clock.millis());
+            db.commit();
+        } catch (SQLException failure) {
+            throw new IOException("Cannot clear expired written reflections", failure);
+        }
+    }
+
     boolean hasSavedRun(String principalId, String runId) throws IOException {
         try (Connection db = database.open(); PreparedStatement lookup = db.prepareStatement("""
                 SELECT 1 FROM written_runs JOIN written_replays USING(replay_key)
