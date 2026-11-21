@@ -162,4 +162,77 @@ final class SavedRunTests: XCTestCase {
         XCTAssertNotNil(journal.active?.route)
         XCTAssertNil(journal.history.first?.route)
     }
+
+    func testBuildTenJournalKeepsEverySavedDetailThroughAnotherSave() throws {
+        // The shape Builds 5–10 write: check-in originals, route sections, splits, a saved
+        // reflection with its voice receipt, an interrupted request and an archived pair.
+        let saved = """
+            {"history":[
+              {"id":"8D5B2C64-31C8-4C5E-9E0A-6F1D2B3C4A51","startedAt":816202800,"finishedAt":816204100,
+               "meters":3300,"activeSeconds":1250,"pausedWithCompleteTime":true,"preRunEnergy":"High",
+               "shoePairID":"1A2B3C4D-5E6F-4A7B-8C9D-0E1F2A3B4C5D","postRunEnergy":"poweredUp","postRunEffort":7,
+               "firstPostRunEnergy":"feelingGood","firstPostRunEffort":6,"startTimezoneID":"America/Chicago",
+               "route":{"points":[{"latitude":29.76043,"longitude":-95.36981,"beginsSegment":true},
+                                  {"latitude":29.76143,"longitude":-95.36881,"beginsSegment":false},
+                                  {"latitude":29.76243,"longitude":-95.36781,"beginsSegment":true}],
+                        "isTruncated":false,"needsAnchor":false,"samplingStride":1,"stepsSinceSample":0},
+               "splitProgress":{"mileEnds":[600,1200],"distance":3300,"closedAt":1250,"uncovered":4,
+                                "interrupted":false,"reliable":true},
+               "writtenReflection":{"saved":{"text":"Saved words.","isTestData":false,
+                                             "credentialID":"6C7D8E9F-0A1B-4C2D-8E3F-4A5B6C7D8E9F"}},
+               "spokenRequest":{"credentialID":"6C7D8E9F-0A1B-4C2D-8E3F-4A5B6C7D8E9F","outcome":"received"}},
+              {"id":"2F3E4D5C-6B7A-4988-A7B6-C5D4E3F2A1B0","startedAt":816289200,"finishedAt":816289800,
+               "meters":1609.344,"activeSeconds":590,"pausedWithCompleteTime":true,
+               "shoePairID":"7E8F9A0B-1C2D-4E3F-9A4B-5C6D7E8F9A0B","startTimezoneID":"America/Chicago",
+               "splitProgress":{"mileEnds":[590],"distance":1609.344,"closedAt":590,"uncovered":2,
+                                "interrupted":false,"reliable":true},
+               "writtenReflection":{"pending":{
+                 "request":{"requestId":"0d9c8b7a-6f5e-4d3c-8b2a-1f0e9d8c7b6a","runId":"2f3e4d5c-6b7a-4988-a7b6-c5d4e3f2a1b0",
+                   "evidence":{"officialStartEpochMillis":1794596400000,"finishEpochMillis":1794597000000,
+                     "startTimezoneId":"America/Chicago","activeDurationMillis":590000,
+                     "metrics":{"distanceMeters":1609.344,"source":"GPS","coverage":"COMPLETE","displayUnit":"MILES"},
+                     "preRunEnergy":"UNKNOWN"}},
+                 "credentialID":"6C7D8E9F-0A1B-4C2D-8E3F-4A5B6C7D8E9F","replayOnly":true,"firstAttemptAt":816289900}}}],
+             "active":{"id":"9A8B7C6D-5E4F-4A3B-8C2D-1E0F9A8B7C6D","startedAt":816300000,"meters":40,"activeSeconds":12,
+                       "pausedWithCompleteTime":true,"shoePairID":"7E8F9A0B-1C2D-4E3F-9A4B-5C6D7E8F9A0B",
+                       "startTimezoneID":"America/Chicago",
+                       "splitProgress":{"mileEnds":[],"distance":40,"closedAt":12,"uncovered":1,"interrupted":false,"reliable":true}},
+             "shoePairs":[{"id":"7E8F9A0B-1C2D-4E3F-9A4B-5C6D7E8F9A0B","brand":"Hoka","model":"Clifton"},
+                          {"id":"1A2B3C4D-5E6F-4A7B-8C9D-0E1F2A3B4C5D","brand":"Brooks","model":"Ghost","nickname":"Daily",
+                           "archiveID":"3B4C5D6E-7F8A-4B9C-8D0E-1F2A3B4C5D6E"}],
+             "selectedShoeID":"7E8F9A0B-1C2D-4E3F-9A4B-5C6D7E8F9A0B",
+             "selectionRevision":"4C5D6E7F-8A9B-4C0D-9E1F-2A3B4C5D6E7F"}
+            """
+        let journal = try JSONDecoder().decode(RunJournal.self, from: Data(saved.utf8))
+        XCTAssertEqual(journal.history.count, 2)
+        let first = journal.history[0]
+        let second = journal.history[1]
+        // Corrections keep the first reported answers beside the current ones.
+        XCTAssertEqual(first.postRunEnergy, .poweredUp)
+        XCTAssertEqual(first.firstPostRunEnergy, .feelingGood)
+        XCTAssertEqual(first.firstPostRunEffort, 6)
+        XCTAssertEqual(first.route?.points.count, 3)
+        XCTAssertEqual(first.route?.points.filter(\.beginsSegment).count, 2)
+        XCTAssertEqual(first.mileSplits.map(\.activeSeconds), [600, 600, 50])
+        XCTAssertEqual(first.mileSplits.map(\.isPartial), [false, false, true])
+        XCTAssertNotNil(ActiveRunView.averagePaceText(for: first, at: first.activeSeconds))
+        XCTAssertEqual(first.writtenReflection?.saved?.text, "Saved words.")
+        XCTAssertEqual(first.spokenRequest?.outcome, .received)
+        // The interrupted request keeps its frozen facts, credential binding and replay-only state.
+        let pending = try XCTUnwrap(second.writtenReflection?.pending)
+        XCTAssertTrue(pending.replayOnly)
+        XCTAssertNil(pending.selectedEnergy)
+        XCTAssertEqual(pending.request.runId, second.id.uuidString.lowercased())
+        XCTAssertEqual(pending.credentialID, first.writtenReflection?.saved?.credentialID)
+        // An archived pair still names its run and keeps its miles. Active runs never count.
+        let archived = try XCTUnwrap(journal.shoe(for: first.shoePairID))
+        let selected = try XCTUnwrap(journal.selectedShoe)
+        XCTAssertTrue(archived.isArchived)
+        XCTAssertEqual(selected.model, "Clifton")
+        XCTAssertEqual(journal.miles(for: archived.id), 3300 / RunDistance.metersPerMile, accuracy: 0.000_001)
+        XCTAssertEqual(journal.miles(for: selected.id), 1, accuracy: 0.000_001)
+        XCTAssertEqual(journal.active?.canDiscardAsShortRun, true)
+        // Saving with this build writes the same values, so an update cannot drop older details.
+        XCTAssertEqual(try JSONDecoder().decode(RunJournal.self, from: JSONEncoder().encode(journal)), journal)
+    }
 }
