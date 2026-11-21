@@ -17,6 +17,8 @@ final class SpotifyAppRemoteSource: NSObject, SpotifyNowPlayingSource,
     private var expiration: Timer?
     private var remote: SPTAppRemote?
     private var listener: PlayerUpdates?
+    /// The song in the latest state from the current connection, for its cover.
+    private var currentTrack: (any SPTAppRemoteTrack)?
 
     func authorize(clientID: String) {
         forget()
@@ -90,6 +92,7 @@ final class SpotifyAppRemoteSource: NSObject, SpotifyNowPlayingSource,
         previous?.delegate = nil
         previous?.playerAPI?.delegate = nil
         listener = nil
+        currentTrack = nil
         previous?.disconnect()
     }
 
@@ -115,7 +118,7 @@ final class SpotifyAppRemoteSource: NSObject, SpotifyNowPlayingSource,
         // connection a delegate so late updates cannot appear on the next visit.
         let updates = PlayerUpdates { [weak self, weak appRemote] state in
             guard let self, let appRemote, self.remote === appRemote else { return }
-            self.onEvent?(Self.event(for: state))
+            self.deliver(state)
         }
         listener = updates
         api.delegate = updates
@@ -134,10 +137,67 @@ final class SpotifyAppRemoteSource: NSObject, SpotifyNowPlayingSource,
                   updates.revision == revision else { return }
             // A newer subscription event always wins over an older snapshot.
             if error == nil, let state = result as? SPTAppRemotePlayerState {
-                self.onEvent?(Self.event(for: state))
+                self.deliver(state)
             } else {
                 self.onEvent?(.unavailable("Waiting for a track from Spotify."))
             }
+        }
+    }
+
+    private func deliver(_ state: SPTAppRemotePlayerState) {
+        currentTrack = state.track
+        onEvent?(Self.event(for: state))
+    }
+
+    /// Explicit in-run controls. Each refreshes the player before reporting success, so the next
+    /// tap never decides pause versus resume from an older state.
+    func perform(_ command: SpotifyPlayerCommand, completion: @escaping (Bool) -> Void) {
+        guard let remote, remote.isConnected, let api = remote.playerAPI, let listener else {
+            completion(false)
+            return
+        }
+        let acknowledged: SPTAppRemoteCallback = { [weak self, weak remote, weak listener] _, error in
+            guard let self, let remote, let listener, self.remote === remote, error == nil else {
+                completion(false)
+                return
+            }
+            let revision = listener.nextRevision()
+            remote.playerAPI?.getPlayerState { [weak self, weak remote, weak listener] result, error in
+                guard let self, let remote, self.remote === remote, let listener else {
+                    completion(false)
+                    return
+                }
+                guard error == nil, let state = result as? SPTAppRemotePlayerState else {
+                    // Spotify accepted the command, but its result is unknown. Reconnect before
+                    // another control instead of guessing from the old state.
+                    self.loseConnection(remote)
+                    completion(false)
+                    return
+                }
+                if listener.revision == revision { self.deliver(state) }
+                completion(true)
+            }
+        }
+        switch command {
+        case .previous: api.skip(toPrevious: acknowledged)
+        case .next: api.skip(toNext: acknowledged)
+        case .pause: api.pause(acknowledged)
+        case .resume: api.resume(acknowledged)
+        }
+    }
+
+    func artwork(forTrack uri: String, completion: @escaping (UIImage?) -> Void) {
+        guard let remote, remote.isConnected, let images = remote.imageAPI,
+              let track = currentTrack, track.uri == uri else {
+            completion(nil)
+            return
+        }
+        images.fetchImage(forItem: track, with: CGSize(width: 320, height: 320)) { [weak self, weak remote] result, error in
+            guard let self, let remote, self.remote === remote, error == nil else {
+                completion(nil)
+                return
+            }
+            completion(result as? UIImage)
         }
     }
 
@@ -166,8 +226,16 @@ final class SpotifyAppRemoteSource: NSObject, SpotifyNowPlayingSource,
               !track.artist.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             return .unavailable("No Spotify track to show.")
         }
-        return state.isPaused ? .paused(title: track.name, artist: track.artist.name, trackURL: link)
-                              : .playing(title: track.name, artist: track.artist.name, trackURL: link)
+        let album = track.album.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let restrictions = state.playbackRestrictions
+        let playback = SpotifyPlayback(trackURI: track.uri, album: album.isEmpty ? nil : album,
+                                       durationMillis: Int(clamping: track.duration),
+                                       positionMillis: max(0, state.playbackPosition),
+                                       receivedAt: .now, playbackSpeed: Double(state.playbackSpeed),
+                                       canSkipPrevious: restrictions.canSkipPrevious,
+                                       canSkipNext: restrictions.canSkipNext)
+        return state.isPaused ? .paused(title: track.name, artist: track.artist.name, trackURL: link, playback: playback)
+                              : .playing(title: track.name, artist: track.artist.name, trackURL: link, playback: playback)
     }
 
     @MainActor

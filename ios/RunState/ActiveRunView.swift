@@ -6,12 +6,16 @@ struct ActiveRunView: View {
     @ObservedObject var spotify: SpotifyObservation
     let onResume: () -> Void
     let onFinish: () -> Void
+    let onOpenSpotify: () -> Void
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.dynamicTypeSize) private var typeSize
     @Environment(\.scenePhase) private var scenePhase
     @State private var confirmingFinish = false
     @State private var shortRunID: UUID?
+    /// The Android music player replaces the distance ring while open; distance and pace stay below.
+    @State private var musicOpen = false
+    @AppStorage(MusicPlayerLayout.preferenceKey) private var musicLayout: MusicPlayerLayout = .headphones
 
     private static let ink = Color(red: 245/255, green: 245/255, blue: 247/255)
     private static let label = Color(red: 167/255, green: 170/255, blue: 183/255)
@@ -19,13 +23,21 @@ struct ActiveRunView: View {
     private static let violet = Color(red: 115/255, green: 83/255, blue: 239/255)
     private static let stopFace = Color(red: 220/255, green: 231/255, blue: 207/255)
     private static let stopIcon = Color(red: 37/255, green: 58/255, blue: 44/255)
+    private static let musicPanel = Color(red: 191/255, green: 194/255, blue: 194/255)
+    private static let musicInk = Color(red: 25/255, green: 29/255, blue: 30/255)
 
-    init(tracker: RunTracker, spotify: SpotifyObservation, onResume: @escaping () -> Void, onFinish: @escaping () -> Void) {
+    init(tracker: RunTracker, spotify: SpotifyObservation, onResume: @escaping () -> Void,
+         onFinish: @escaping () -> Void, onOpenSpotify: @escaping () -> Void) {
         self.tracker = tracker
         self.spotify = spotify
         self.onResume = onResume
         self.onFinish = onFinish
+        self.onOpenSpotify = onOpenSpotify
     }
+
+    /// Text too large for the fixed circle opens the same controls in a scrollable sheet.
+    private var musicCompact: Bool { typeSize > .xxLarge }
+
 
     private var resumeLabel: String {
         if tracker.hasLocationPermission { return "Resume" }
@@ -61,17 +73,6 @@ struct ActiveRunView: View {
                             finishControl(unit: unit)
                                 .padding(.top, 14 * unit)
                         }
-                        switch spotify.state {
-                        case .playing, .paused:
-                            SpotifyTrackLink(state: spotify.state)
-                                .padding(.horizontal, 13)
-                                .padding(.vertical, 8)
-                                .frame(width: 344 * unit)
-                                .background(Self.panel, in: RoundedRectangle(cornerRadius: 10 * unit))
-                                .padding(.top, 8)
-                        default:
-                            EmptyView()
-                        }
                     }
                     .frame(width: width)
                     .padding(.bottom, 18)
@@ -80,6 +81,10 @@ struct ActiveRunView: View {
             }
         }
         .foregroundStyle(Self.ink)
+        .sheet(isPresented: Binding(get: { musicOpen && musicCompact }, set: { if !$0 { musicOpen = false } })) {
+            RunMusicPlayerDetails(spotify: spotify, layout: musicLayout, onClose: { musicOpen = false },
+                                  onConnect: connectMusic, onOpenSpotify: onOpenSpotify)
+        }
         .confirmationDialog("Finish and save this run?", isPresented: $confirmingFinish, titleVisibility: .visible) {
             Button("Save run", action: onFinish)
             Button("Cancel", role: .cancel) {}
@@ -151,23 +156,35 @@ struct ActiveRunView: View {
         return ZStack {
             TimelineView(.animation(minimumInterval: 1.0 / 30, paused: !tracker.running || reduceMotion || scenePhase != .active)) { _ in
                 let time = reduceMotion ? 1.19 : tracker.activeSeconds
-                InstrumentRing(time: tracker.running ? time : max(1.19, time))
+                let ringTime = tracker.running ? time : max(1.19, time)
+                ZStack {
+                    InstrumentRing(time: ringTime)
+                        .accessibilityHidden(true)
+                    if musicOpen {
+                        // Android's player box is 309 of the ring's 336 units, centred inside the bars.
+                        RunMusicPlayer(spotify: spotify, layout: musicLayout, ringTime: ringTime, compact: musicCompact,
+                                       onClose: { musicOpen = false }, onConnect: connectMusic, onOpenSpotify: onOpenSpotify)
+                            .frame(width: diameter * 309 / 336, height: diameter * 309 / 336)
+                    }
+                }
             }
-            .accessibilityHidden(true)
-            VStack(spacing: 0) {
-                Text(miles, format: .number.precision(.fractionLength(2)))
-                    .font(.system(size: 98 * unit, weight: .semibold))
-                    .monospacedDigit().lineLimit(1).minimumScaleFactor(0.4)
-                    .frame(width: diameter * 0.70)
-                Text("mi").font(.title2)
-                Text("DISTANCE").font(.caption2).tracking(3.3)
-                    .foregroundStyle(Self.label).padding(.top, 11 * unit)
+            if !musicOpen {
+                VStack(spacing: 0) {
+                    Text(miles, format: .number.precision(.fractionLength(2)))
+                        .font(.system(size: 98 * unit, weight: .semibold))
+                        .monospacedDigit().lineLimit(1).minimumScaleFactor(0.4)
+                        .frame(width: diameter * 0.70)
+                    Text("mi").font(.title2)
+                    Text("DISTANCE").font(.caption2).tracking(3.3)
+                        .foregroundStyle(Self.label).padding(.top, 11 * unit)
+                }
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("Distance")
+                .accessibilityValue("\(miles.formatted(.number.precision(.fractionLength(2)))) miles")
+                .accessibilityIdentifier("activeRunDistanceRing")
             }
         }
         .frame(width: diameter, height: diameter)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Distance")
-        .accessibilityValue("\(miles.formatted(.number.precision(.fractionLength(2)))) miles")
     }
 
     private func pacePanel(unit: CGFloat) -> some View {
@@ -177,33 +194,113 @@ struct ActiveRunView: View {
             let meters = run?.meters ?? 0
             let pace = run.flatMap { Self.averagePaceText(for: $0, at: elapsed) }
             let mile = run?.splitProgress?.currentMile(meters: meters, activeSeconds: elapsed)
+            let mileText = mile.flatMap { Self.paceText(meters: $0.meters, activeSeconds: $0.activeSeconds) }
+            let miles = (meters / RunDistance.metersPerMile).formatted(.number.precision(.fractionLength(2)))
             let layout = typeSize.isAccessibilitySize ? AnyLayout(VStackLayout(spacing: 6)) :
                 AnyLayout(HStackLayout(spacing: 8 * unit))
-            layout {
-                paceCard("Average pace", pace: pace, unit: unit, primary: true)
-                if run?.splitProgress != nil {
-                    paceCard("Current mile", pace: mile.flatMap { Self.paceText(meters: $0.meters, activeSeconds: $0.activeSeconds) },
-                             unit: unit, primary: false)
+            VStack(spacing: 8 * unit) {
+                layout {
+                    if musicOpen {
+                        // Android's order: the player covers the ring, so Distance leads and pace sits beside it.
+                        paceCard("Distance", pace: miles + " mi", unit: unit, width: 224, large: true,
+                                 spoken: miles + " miles")
+                        paceCard("Average pace", pace: pace, unit: unit, width: 113, large: false)
+                    } else {
+                        paceCard("Average pace", pace: pace, unit: unit, width: 224, large: true)
+                    }
                 }
+                lowerPanel(showsMile: run?.splitProgress != nil, mileText: mileText, unit: unit)
             }
         }
     }
 
-    private func paceCard(_ title: String, pace: String?, unit: CGFloat, primary: Bool) -> some View {
+    /// Android's lower panel: the current mile beside the Spotify Music tile. The tile keeps its
+    /// place and label when the player opens, so the same spot closes it again.
+    private func lowerPanel(showsMile: Bool, mileText: String?, unit: CGFloat) -> some View {
+        let stacked = typeSize.isAccessibilitySize
+        let height = (tracker.running ? 92 : 76) * unit
+        let layout = stacked ? AnyLayout(VStackLayout(spacing: 0)) : AnyLayout(HStackLayout(spacing: 0))
+        return layout {
+            if showsMile {
+                paceCard("Current mile", pace: mileText, unit: unit, width: stacked ? 344 : 170, large: false,
+                         minHeight: height, panel: false)
+            }
+            musicTile(unit: unit, width: (stacked || !showsMile ? 344 : 174) * unit, height: height)
+        }
+        .background(Self.panel)
+        .clipShape(RoundedRectangle(cornerRadius: 10 * unit))
+    }
+
+    private var trackSummary: String? {
+        switch spotify.state {
+        case let .playing(title, artist, _): return "Playing on Spotify, \(title), \(artist)"
+        case let .paused(title, artist, _): return "Paused on Spotify, \(title), \(artist)"
+        default: return nil
+        }
+    }
+
+    /// Android's Spotify Music tile: the headphones art and a fixed label. It opens and closes the player.
+    private func musicTile(unit: CGFloat, width: CGFloat, height: CGFloat) -> some View {
+        let art = (typeSize >= .xxxLarge ? 36 : 52) * unit
+        return Button(action: toggleMusic) {
+            HStack(spacing: 10 * unit) {
+                Group {
+                    if let orb = musicHeadphonesArt {
+                        Image(uiImage: orb).resizable().scaledToFit()
+                    } else {
+                        Image(systemName: "headphones").font(.title2)
+                    }
+                }
+                .frame(width: art, height: art)
+                .clipShape(Circle())
+                .accessibilityHidden(true)
+                Text("Spotify\nMusic")
+                    .font(.system(size: 14 * unit, weight: .medium))
+                    .lineLimit(2).minimumScaleFactor(0.7)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .foregroundStyle(Self.musicInk)
+            .padding(.horizontal, 16 * unit)
+            .frame(width: width)
+            .frame(minHeight: height)
+            .background(Self.musicPanel)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(musicOpen ? "Close music player" : "Open Spotify Music")
+        .accessibilityValue(trackSummary ?? "")
+        .accessibilityIdentifier("activeRunMusic")
+    }
+
+    private func toggleMusic() {
+        musicOpen.toggle()
+        guard musicOpen else { return }
+        // Opening reconnects an existing authorization quietly. It never starts music.
+        if spotify.isAuthorized, case .unavailable = spotify.state { spotify.retry() }
+    }
+
+    private func connectMusic() {
+        if spotify.isAuthorized { spotify.retry() } else { spotify.connect() }
+    }
+
+    private func paceCard(_ title: String, pace: String?, unit: CGFloat, width: CGFloat, large: Bool,
+                          spoken: String? = nil, minHeight: CGFloat? = nil, panel: Bool = true) -> some View {
         VStack(spacing: 3) {
             Text(title).font(.subheadline.weight(.medium)).foregroundStyle(Self.label)
+                .lineLimit(1).minimumScaleFactor(0.7)
             Text(verbatim: pace ?? "—")
-                .font(.custom("BarlowCondensed-Medium", size: (primary ? 47 : 36) * unit, relativeTo: .title))
+                .font(.custom("BarlowCondensed-Medium", size: (large ? 47 : 36) * unit, relativeTo: .title))
                 .lineLimit(1).minimumScaleFactor(0.5)
         }
         .padding(.vertical, 10 * unit)
         .padding(.horizontal, 8)
-        .frame(width: (typeSize.isAccessibilitySize ? 344 : (primary ? 195 : 141)) * unit)
-        .frame(minHeight: (tracker.running ? 104 : 82) * unit)
-        .background(Self.panel, in: RoundedRectangle(cornerRadius: 10 * unit))
+        .frame(width: (typeSize.isAccessibilitySize ? 344 : width) * unit)
+        .frame(minHeight: minHeight ?? (tracker.running ? 104 : 82) * unit)
+        .background(panel ? Self.panel : .clear, in: RoundedRectangle(cornerRadius: 10 * unit))
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(title)
-        .accessibilityValue(pace?.replacingOccurrences(of: " /mi", with: " per mile") ?? "Unavailable")
+        .accessibilityValue(spoken ?? pace?.replacingOccurrences(of: " /mi", with: " per mile") ?? "Unavailable")
+        .accessibilityIdentifier("activeRun" + title.capitalized.replacingOccurrences(of: " ", with: ""))
     }
 
     private func finishControl(unit: CGFloat) -> some View {

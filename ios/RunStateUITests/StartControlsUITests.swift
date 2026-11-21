@@ -50,15 +50,72 @@ final class StartControlsUITests: XCTestCase {
         let pause = app.buttons["Pause run"]
         let resume = app.buttons["Resume run"]
         XCTAssertTrue(pause.waitForExistence(timeout: 60))
-        XCTAssertTrue(track.waitForExistence(timeout: 10))
-        XCTAssertEqual(track.label, expectedTrack)
-        if !track.isHittable { app.scrollViews.firstMatch.swipeUp() }
-        XCTAssertTrue(track.isHittable)
-        let screenshot = XCTAttachment(data: app.screenshot().pngRepresentation, uniformTypeIdentifier: "public.png")
-        screenshot.name = "RunState-NowPlaying"
-        screenshot.lifetime = .keepAlways
-        add(screenshot)
-        if !pause.isHittable { app.scrollViews.firstMatch.swipeDown() }
+        func element(_ identifier: String) -> XCUIElement {
+            app.descendants(matching: .any).matching(identifier: identifier).firstMatch
+        }
+        func reveal(_ element: XCUIElement) {
+            let window = app.windows.firstMatch.frame
+            for _ in 0..<4 where !element.isHittable {
+                if element.frame.midY < window.midY { app.scrollViews.firstMatch.swipeDown() }
+                else { app.scrollViews.firstMatch.swipeUp() }
+            }
+            XCTAssertTrue(element.isHittable, element.identifier)
+        }
+        func capture(_ name: String) {
+            let screenshot = XCTAttachment(data: app.screenshot().pngRepresentation, uniformTypeIdentifier: "public.png")
+            screenshot.name = name
+            screenshot.lifetime = .keepAlways
+            add(screenshot)
+        }
+        // Android's Spotify Music tile replaces the older song card; its value names the fresh song.
+        let music = app.buttons["activeRunMusic"]
+        XCTAssertTrue(music.waitForExistence(timeout: 10))
+        let fresh = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == %@", expectedTrack), object: music)
+        XCTAssertEqual(XCTWaiter.wait(for: [fresh], timeout: 10), .completed)
+        XCTAssertEqual(music.label, "Open Spotify Music")
+        XCTAssertFalse(track.exists)
+        XCTAssertTrue(element("activeRunDistanceRing").exists)
+        XCTAssertTrue(element("activeRunAveragePace").exists)
+        reveal(music)
+        capture("RunState-NowPlaying")
+        music.tap()
+        // Opening the player swaps it for distance, keeps distance and pace visible and sends nothing.
+        let song = element("musicTrack")
+        XCTAssertTrue(song.waitForExistence(timeout: 10))
+        XCTAssertEqual(song.label, "Morning Circuit, RunState Test Artist. Open in Spotify")
+        XCTAssertEqual(music.label, "Close music player")
+        XCTAssertFalse(element("activeRunDistanceRing").exists)
+        XCTAssertTrue(element("activeRunDistance").exists)
+        XCTAssertTrue(element("activeRunAveragePace").exists)
+        let playPause = app.buttons["musicPlayPause"]
+        XCTAssertTrue(playPause.waitForExistence(timeout: 10))
+        XCTAssertEqual(playPause.label, "Pause music")
+        XCTAssertFalse(app.buttons["musicPrevious"].isEnabled)
+        reveal(playPause)
+        playPause.tap()
+        let musicPaused = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label == %@", "Play music"),
+                                                    object: playPause)
+        XCTAssertEqual(XCTWaiter.wait(for: [musicPaused], timeout: 10), .completed)
+        XCTAssertTrue(pause.exists, "Song controls never pause the run")
+        let next = app.buttons["musicNext"]
+        XCTAssertTrue(next.isEnabled)
+        reveal(next)
+        next.tap()
+        let skipped = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label BEGINSWITH %@", "Second Wind,"),
+                                                object: song)
+        XCTAssertEqual(XCTWaiter.wait(for: [skipped], timeout: 10), .completed)
+        XCTAssertEqual(playPause.label, "Play music")
+        XCTAssertTrue(app.buttons["musicPrevious"].isEnabled)
+        XCTAssertFalse(next.isEnabled)
+        XCTAssertTrue(pause.exists)
+        capture("RunState-MusicPlayer")
+        let close = app.buttons["musicClose"]
+        reveal(close)
+        close.tap()
+        XCTAssertTrue(element("activeRunDistanceRing").waitForExistence(timeout: 10))
+        XCTAssertFalse(song.exists)
+        XCTAssertEqual(music.label, "Open Spotify Music")
+        reveal(pause)
         pause.tap()
         XCTAssertTrue(resume.waitForExistence(timeout: 15))
         resume.tap()

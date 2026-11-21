@@ -42,11 +42,45 @@ private final class SimulatorSpotifySource: SpotifyNowPlayingSource {
         onEvent?(.authorized)
     }
 
+    /// Fictional songs only, so UI tests exercise the real controls without Spotify.
+    private let songs = [("Morning Circuit", "0123456789ABCDEFGHIJKL"), ("Second Wind", "1123456789ABCDEFGHIJKL")]
+    private var song = 0
+    private var paused = false
+
     func resume() {
         guard authorized else { return }
-        onEvent?(.playing(title: "Morning Circuit", artist: "RunState Test Artist",
-                          trackURL: URL(string: "https://open.spotify.com/track/0123456789ABCDEFGHIJKL")!))
+        send()
     }
+
+    private func send() {
+        let (title, id) = songs[song]
+        let url = URL(string: "https://open.spotify.com/track/" + id)!
+        let playback = SpotifyPlayback(trackURI: "spotify:track:" + id, album: "RunState Test Album",
+                                       durationMillis: 200_000, positionMillis: 30_000, receivedAt: .now,
+                                       playbackSpeed: 1, canSkipPrevious: song > 0, canSkipNext: song + 1 < songs.count)
+        onEvent?(paused ? .paused(title: title, artist: "RunState Test Artist", trackURL: url, playback: playback)
+                        : .playing(title: title, artist: "RunState Test Artist", trackURL: url, playback: playback))
+    }
+
+    func perform(_ command: SpotifyPlayerCommand, completion: @escaping (Bool) -> Void) {
+        switch command {
+        case .previous: song = max(0, song - 1)
+        case .next: song = min(songs.count - 1, song + 1)
+        case .pause: paused = true
+        case .resume: paused = false
+        }
+        send()
+        completion(true)
+    }
+
+    func artwork(forTrack uri: String, completion: @escaping (UIImage?) -> Void) {
+        let shade = uri.hasSuffix(songs[0].1) ? UIColor.systemTeal : UIColor.systemOrange
+        completion(UIGraphicsImageRenderer(size: CGSize(width: 64, height: 64)).image { context in
+            shade.setFill()
+            context.fill(CGRect(x: 0, y: 0, width: 64, height: 64))
+        })
+    }
+
     func suspend() {}
     func forget() { authorized = false }
     func handleCallback(_ url: URL) -> Bool { false }
@@ -92,7 +126,8 @@ private struct RunScreen: View {
         ZStack {
             Color.black.ignoresSafeArea()
             if tracker.journal.active != nil {
-                ActiveRunView(tracker: tracker, spotify: spotify, onResume: resume, onFinish: finish)
+                ActiveRunView(tracker: tracker, spotify: spotify, onResume: resume, onFinish: finish,
+                              onOpenSpotify: openSpotify)
             } else if opening {
                 RunOpeningView { opening = false }
             } else if let seconds = countdown.seconds {

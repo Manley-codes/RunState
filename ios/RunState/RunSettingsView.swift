@@ -11,6 +11,7 @@ struct RunSettingsView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
     @Environment(\.scenePhase) private var scenePhase
+    @AppStorage(MusicPlayerLayout.preferenceKey) private var musicLayout: MusicPlayerLayout = .headphones
 
     var body: some View {
         NavigationStack {
@@ -22,6 +23,10 @@ struct RunSettingsView: View {
                         SpotifyObservationSettings(observation: spotify)
                     }
                     .accessibilityIdentifier("spotify.settings")
+                    Picker("Player artwork", selection: $musicLayout) {
+                        ForEach(MusicPlayerLayout.allCases, id: \.self) { Text($0.label).tag($0) }
+                    }
+                    .accessibilityIdentifier("musicPlayerArtwork")
                 }
                 Section {
                     Toggle("Save route in History", isOn: $tracker.saveRoutes)
@@ -59,6 +64,7 @@ struct RunSettingsView: View {
                             Section("Maps and music") {
                                 Text("History draws saved routes on this iPhone. The live street map uses Apple Maps to load the area you view.")
                                 Text("The Spotify shortcut opens the Spotify app. If you connect in Run Settings, RunState can display the current track while open. Leaving RunState clears the displayed song. Listening activity is never saved in your run history or sent to the reflection service.")
+                                Text("The music player in a run sends a command to Spotify only when you tap play, pause, previous or next. With Album cover chosen, the current song’s cover comes from the Spotify app and stays in memory only.")
                             }
                             Section("Written reflections") {
                                 Text("With a private access code, you can choose to send a run summary to RunState for a written reflection. RunState uses Anthropic to generate the answers. Your access code stays in this iPhone’s Keychain and is sent only to authenticate with RunState.")
