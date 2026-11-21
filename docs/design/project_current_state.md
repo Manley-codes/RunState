@@ -5,6 +5,41 @@ metadata:
   type: project
 ---
 
+## November 20 strict 16 KB native-map runtime verification
+
+The new `.github/workflows/android-16k.yml` runs one existing offline native-map fixture on a
+fresh GitHub-hosted Android 17 x86_64 emulator. It verifies the dedicated emulator identity,
+`PAGE_SIZE=16384`, fatal linker compatibility mode and disabled package compatibility fallback.
+The fixture creates real MapLibre maps with synthetic coordinates/local style and verifies
+markers, routes, closing/recreation, separate active-run evidence and pause/resume lifecycle.
+No remote map tiles, physical GPS, music or provider requests are used.
+
+The first run passed boot/strictness checks but failed before map creation in optional Compose
+preview-image capture. Commit `8c317b4` makes only this fixture's two preview captures optional
+(default remains enabled), and CI disables those PNG captures while preserving all assertions.
+[Runtime run 44866814218](https://github.com/Manley-codes/RunState/actions/runs/44866814218)
+passed with `OK (1 test)` and instrumentation result `-1`; cleanup/log retention also passed.
+All four [shared jobs at the same commit](https://github.com/Manley-codes/RunState/actions/runs/44866814182)
+passed, including backend container checks and the public APK/AAB guards. Actionlint passed.
+Verified log archive: `android/build/nov20-native-runtime-check/passed-run.zip`, SHA-256
+`7b544aad911c8af807bc3105785065f78a8f034df8946fbb1a9eb2b17a56c0e6`.
+
+This closes the scoped debug/x86_64 native runtime check without using Manley's desktop RAM
+or phone. It does not certify ARM64 hardware, every library path, Play-generated splits, final
+signing or real GPS/audio behavior. Existing deferred field checks and account/hosted release
+gates remain; no new immediate hands-on test, app behavior or accepted reflection change.
+
+## November 20 independent iPhone checkpoint verification
+
+During Android release work, Codex reviewed Claude's four completed commits and pushed exact
+`80c24cb` to the existing iPhone branch using its already-authorized Git connection. No new cloud
+credential or main-branch merge. [Mac run 44863215488](https://github.com/Manley-codes/RunState/actions/runs/44863215488)
+passed 103 unit tests, ten UI tests, both package configurations and Java contracts; all four
+[shared jobs](https://github.com/Manley-codes/RunState/actions/runs/44863215608) passed. Build 11
+and its verified digest/identity receipt are retained privately in `docs/local/ios-field-test/build-11/`.
+The canonical handoff records the result without a user relay. No install; real lock/background
+behavior stays deferred. iPhone voice-retry policy remains an unapproved product decision.
+
 ## November 20 Play bundle packaging guard
 
 The existing Android release CI job now builds the unsigned AAB as well as the APK.

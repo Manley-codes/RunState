@@ -101,6 +101,12 @@ test key, and runs the same public-package checks on it. Android signing materia
 not uploaded as CI artifacts. These checks do not replace real-run testing, test every Play split,
 or certify the final Google-signed release.
 
+The separate **Android 16 KB native runtime** workflow runs one offline native-map test on a
+headless x86_64 emulator with compatibility fallback disabled. It runs manually or when its
+workflow/test fixture changes, and keeps logs for seven days. It uses synthetic coordinates and
+debug test packages; it does not install anything on a personal phone or replace ARM64 field
+testing. Optional preview PNG capture is disabled there; all map/lifecycle assertions remain.
+
 <details>
 <summary>Preparing a signed Android package</summary>
 
