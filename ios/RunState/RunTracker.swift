@@ -26,6 +26,8 @@ final class RunTracker: NSObject, ObservableObject, CLLocationManagerDelegate {
     @MainActor lazy var backgroundTime: any ReflectionBackgroundTime = suppliedBackgroundTime ?? ApplicationBackgroundTime()
     @Published var spokenWork = SpokenReflectionWork()
     private var connectionChanges: AnyCancellable?
+    /// The finished runs' JSON from the last save, reused while they are unchanged.
+    private var encodedHistory: RunJournal.EncodedHistory?
 
     private static let mileAnnouncementsKey = "run.mileAnnouncementsEnabled"
     private static let saveRoutesKey = "run.saveRoutes"
@@ -190,7 +192,7 @@ final class RunTracker: NSObject, ObservableObject, CLLocationManagerDelegate {
         var next = journal
         let result = try change(&next)
         do {
-            try next.save(to: journalURL)
+            try next.save(to: journalURL, reusing: &encodedHistory)
         } catch {
             throw SavedRunError.storage
         }
@@ -317,7 +319,7 @@ final class RunTracker: NSObject, ObservableObject, CLLocationManagerDelegate {
 
     private func store(_ next: RunJournal) -> Bool {
         do {
-            try next.save(to: journalURL)
+            try next.save(to: journalURL, reusing: &encodedHistory)
             return true
         } catch {
             errorMessage = "RunState could not save this run. Check device storage and try again."

@@ -213,12 +213,57 @@ struct RunJournal: Codable, Equatable {
     }
 
     func save(to url: URL) throws {
+        var unused: EncodedHistory?
+        try save(to: url, reusing: &unused)
+    }
+
+    /// Saves exactly what `save(to:)` saves. The finished-run history is by far the largest part
+    /// once routes are kept, and it does not change during a run, so its JSON is reused until it
+    /// does. A checkpoint then encodes only the run in progress and the few small settings.
+    func save(to url: URL, reusing cache: inout EncodedHistory?) throws {
+        let data = try encoded(reusing: &cache)
         var folder = url.deletingLastPathComponent()
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         var values = URLResourceValues()
         values.isExcludedFromBackup = true
         try folder.setResourceValues(values)
-        try JSONEncoder().encode(self).write(to: url, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
+        try data.write(to: url, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
+    }
+
+    /// The saved history and its JSON. Equal histories always encode to the same JSON.
+    struct EncodedHistory {
+        fileprivate let history: [RecordedRun]
+        fileprivate let json: Data
+    }
+
+    /// The journal's JSON, built by the normal encoder with the saved history's JSON in its place.
+    func encoded(reusing cache: inout EncodedHistory?) throws -> Data {
+        let encoder = JSONEncoder()
+        let historyJSON: Data
+        if let cache, cache.history == history {
+            historyJSON = cache.json
+        } else if let cache, history.count == cache.history.count + 1, history.dropLast().elementsEqual(cache.history),
+                  let last = history.last, cache.json.last == UInt8(ascii: "]") {
+            // Finishing a run appends one entry. Add it instead of encoding every saved run again.
+            var appended = cache.json.dropLast()
+            if !cache.history.isEmpty { appended.append(UInt8(ascii: ",")) }
+            appended.append(try encoder.encode(last))
+            appended.append(UInt8(ascii: "]"))
+            historyJSON = Data(appended)
+        } else {
+            historyJSON = try encoder.encode(history)
+        }
+        cache = EncodedHistory(history: history, json: historyJSON)
+        var shell = self
+        shell.history = []
+        var data = try encoder.encode(shell)
+        // An empty history appears exactly once: quotes inside saved text are always escaped.
+        let slot = Data(#""history":[]"#.utf8)
+        guard let found = data.range(of: slot), data.range(of: slot, in: found.upperBound..<data.endIndex) == nil else {
+            return try encoder.encode(self)
+        }
+        data.replaceSubrange(found.upperBound - 2 ..< found.upperBound, with: historyJSON)
+        return data
     }
 }
 
