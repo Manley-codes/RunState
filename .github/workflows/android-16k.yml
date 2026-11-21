@@ -5,7 +5,9 @@ on:
   workflow_dispatch:
   push:
     branches: [master]
-    paths: ['.github/workflows/android-16k.yml']
+    paths:
+      - '.github/workflows/android-16k.yml'
+      - 'android/app/src/androidTest/java/com/runstate/mobile/ui/RunStateScreenTest.kt'
 
 permissions:
   contents: read
@@ -117,6 +119,7 @@ jobs:
           timeout 90 "$adb" -s "$ANDROID_SERIAL" install --no-streaming android/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
           timeout 10 "$adb" -s "$ANDROID_SERIAL" logcat -c
           timeout 180 "$adb" -s "$ANDROID_SERIAL" shell am instrument -w -r \
+            -e runstate.capturePreviewImages false \
             -e class 'com.runstate.mobile.ui.RunStateScreenTest#nativeMapsOpenOnlyOnRequestAndActiveMapUsesItsOwnEvidence' \
             com.runstate.mobile.test/androidx.test.runner.AndroidJUnitRunner \
             2>&1 | tee "$REPORTS/instrumentation.log"

@@ -5790,6 +5790,10 @@ class RunStateScreenTest {
     fun nativeMapsOpenOnlyOnRequestAndActiveMapUsesItsOwnEvidence() {
         // Deliberately synthetic public-park coordinates. No Room run, device location engine,
         // community map tiles, reflection provider or audio is used by this integrated check.
+        // Preview PNGs are optional review artifacts. Headless runtime CI keeps every native-map
+        // assertion below, but avoids Compose's separate window-capture redraw timeout.
+        val capturePreviewImages = (InstrumentationRegistry.getArguments()
+            .getString("runstate.capturePreviewImages") ?: "true").toBooleanStrict()
         val previewPoint = GpsMapCoordinate(29.7174, -95.3905)
         val runStart = GpsMapCoordinate(29.7180, -95.3900)
         val runPoint = GpsMapCoordinate(29.7185, -95.3897)
@@ -5832,7 +5836,7 @@ class RunStateScreenTest {
         composeTestRule.onNodeWithTag(ACTIVE_RUN_MAP_DIALOG_TAG).assertDoesNotExist()
         composeTestRule.onNodeWithText("© OpenStreetMap contributors").assertDoesNotExist()
         assertTrue(nativeMapViewsInActivity().isEmpty())
-        saveNativePreview("syntheticLiveMapJourney", "start-live-map-preview.png")
+        if (capturePreviewImages) saveNativePreview("syntheticLiveMapJourney", "start-live-map-preview.png")
         composeTestRule.onNodeWithTag("startExpandMap").performScrollTo().performClick()
         composeTestRule.waitUntil(15_000L) { nativeMapViewsInActivity().size == 1 }
         val firstView = nativeMapViewsInActivity().single()
@@ -5896,7 +5900,7 @@ class RunStateScreenTest {
         composeTestRule.onNodeWithText(PAUSE).assertIsEnabled()
         composeTestRule.onNodeWithTag(ACTIVE_RUN_MAP_DIALOG_TAG).assertDoesNotExist()
         assertTrue(nativeMapViewsInActivity().isEmpty())
-        saveNativePreview("syntheticLiveMapJourney", "active-live-map-preview.png")
+        if (capturePreviewImages) saveNativePreview("syntheticLiveMapJourney", "active-live-map-preview.png")
         composeTestRule.onNodeWithTag(ACTIVE_RUN_MAP_BUTTON_TAG).performScrollTo().performClick()
         composeTestRule.onNodeWithTag(ACTIVE_RUN_MAP_DIALOG_TAG).assertIsDisplayed()
         composeTestRule.onNodeWithText(PAUSE).assertIsEnabled()
