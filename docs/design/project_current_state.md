@@ -5,6 +5,19 @@ metadata:
   type: project
 ---
 
+## November 20 coordination reset
+
+Manley requested a pause to organize work around school and reduce interruptions. The canonical
+Claude handoff now parks the optional spoken-reflection retry decision and prioritizes accepted
+Android foreground music UI/control parity plus measured History persistence efficiency within
+the existing saved format. Core iPhone running/saving/maps/shoes/ordinary reflections exist;
+live run-long music evidence, music-linked reflection/snippets and Android's full music controls
+are not complete. The bundled field sample is not live-music verification. Routine review and
+Git stay with the assistants; user reports installing the Claude GitHub App, with its next branch
+push still to verify. Preserve branch ownership, batch later user tests/decisions, and do not
+promise live messaging or continuous work after a session ends. Organization only at this
+checkpoint; no app implementation, device action, provider call, deployment or release.
+
 ## November 20 strict 16 KB native-map runtime verification
 
 The new `.github/workflows/android-16k.yml` runs one existing offline native-map fixture on a
