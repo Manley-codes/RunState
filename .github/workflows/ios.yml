@@ -184,7 +184,7 @@ jobs:
           target = temp / "run-screens"
           target.mkdir()
           manifest = json.loads((source / "manifest.json").read_text())
-          screens = ("RunState-PostRun", "RunState-HistoryDetail", "RunState-WrittenReflection", "RunState-NowPlaying", "RunState-SpokenReflection", "RunState-SampleFinish")
+          screens = ("RunState-PostRun", "RunState-HistoryDetail", "RunState-WrittenReflection", "RunState-NowPlaying", "RunState-MusicPlayer", "RunState-SpokenReflection", "RunState-SampleFinish")
           for test in manifest:
               for item in test["attachments"]:
                   if "RunState-ReflectionRequest" in item.get("suggestedHumanReadableName", ""):
@@ -253,3 +253,14 @@ jobs:
           path: ${{ runner.temp }}/run-screens/*.png
           if-no-files-found: error
           retention-days: 7
+
+      # Small previews in the log for reviewers who cannot download artifacts. Never fails the job.
+      - name: Print small run-screen previews
+        continue-on-error: true
+        run: |
+          for name in RunState-NowPlaying RunState-MusicPlayer; do
+            sips -s format jpeg -s formatOptions 55 -Z 640 "$RUNNER_TEMP/run-screens/$name.png" --out "$RUNNER_TEMP/$name-preview.jpg" >/dev/null || continue
+            echo "PREVIEW-BEGIN $name"
+            base64 -i "$RUNNER_TEMP/$name-preview.jpg" | fold -w 160
+            echo "PREVIEW-END $name"
+          done
