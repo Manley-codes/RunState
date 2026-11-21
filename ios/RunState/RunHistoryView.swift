@@ -15,7 +15,7 @@ struct RunHistoryView: View {
                 ForEach(tracker.journal.history.reversed()) { run in
                     NavigationLink(value: run.id) {
                         VStack(alignment: .leading, spacing: 5) {
-                            Text(run.startedAt.formatted(date: .abbreviated, time: .shortened))
+                            Text(run.startText(date: .abbreviated, time: .shortened))
                                 .font(.subheadline)
                                 .foregroundStyle(.secondary)
                             Text("\(distanceText(run)) · \(ActiveRunView.clockText(run.activeSeconds))")
@@ -68,7 +68,7 @@ private struct SavedRunDetail: View {
                     let pace = ActiveRunView.averagePaceText(for: run, at: run.activeSeconds)
                     LabeledContent("Average pace", value: pace ?? "Unavailable")
                 } header: {
-                    Text(run.startedAt.formatted(date: .complete, time: .shortened))
+                    Text(run.startText(date: .complete, time: .shortened))
                         .textCase(nil)
                 } footer: {
                     if let note = run.partialDistanceNote { Text(note) }
@@ -123,7 +123,7 @@ private struct SavedRunDetail: View {
                     Button("Cancel", role: .cancel) {}
                     Button("Delete run", role: .destructive) { delete(item) }
                 } message: { item in
-                    let date = item.startedAt.formatted(date: .abbreviated, time: .shortened)
+                    let date = item.startText(date: .abbreviated, time: .shortened)
                     Text("This permanently removes the \(distanceText(item)) run from \(date) and its saved details from this iPhone.")
                 }
             }
@@ -145,6 +145,16 @@ private struct SavedRunDetail: View {
         } catch {
             deletionError = error.localizedDescription
         }
+    }
+}
+
+extension RecordedRun {
+    /// The start as the runner saw it: in the time zone saved when the run began, as Android
+    /// shows History. Runs saved before the zone was recorded use the iPhone's current zone.
+    func startText(date: Date.FormatStyle.DateStyle, time: Date.FormatStyle.TimeStyle) -> String {
+        var format = Date.FormatStyle(date: date, time: time)
+        if let zone = startTimezoneID.flatMap(TimeZone.init(identifier:)) { format.timeZone = zone }
+        return startedAt.formatted(format)
     }
 }
 

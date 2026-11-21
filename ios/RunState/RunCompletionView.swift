@@ -55,7 +55,7 @@ struct RunCompletionView: View {
 
     private func recap(_ run: RecordedRun) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(run.startedAt.formatted(date: .abbreviated, time: .shortened))
+            Text(run.startText(date: .abbreviated, time: .shortened))
                 .font(.subheadline).foregroundStyle(Self.muted)
             HStack(alignment: .lastTextBaseline, spacing: 6) {
                 Text(run.meters / RunDistance.metersPerMile, format: .number.precision(.fractionLength(2)))

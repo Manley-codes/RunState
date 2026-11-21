@@ -235,4 +235,25 @@ final class SavedRunTests: XCTestCase {
         // Saving with this build writes the same values, so an update cannot drop older details.
         XCTAssertEqual(try JSONDecoder().decode(RunJournal.self, from: JSONEncoder().encode(journal)), journal)
     }
+
+    func testSavedStartIsShownInTheTimeZoneWhereTheRunBegan() throws {
+        var run = RecordedRun(id: UUID(), startedAt: start)
+        let tokyo = try XCTUnwrap(TimeZone(identifier: "Asia/Tokyo"))
+        let chicago = try XCTUnwrap(TimeZone(identifier: "America/Chicago"))
+        func text(in zone: TimeZone, date: Date.FormatStyle.DateStyle = .abbreviated) -> String {
+            var format = Date.FormatStyle(date: date, time: .shortened)
+            format.timeZone = zone
+            return start.formatted(format)
+        }
+        XCTAssertNotEqual(text(in: tokyo), text(in: chicago))
+        run.startTimezoneID = "Asia/Tokyo"
+        XCTAssertEqual(run.startText(date: .abbreviated, time: .shortened), text(in: tokyo))
+        XCTAssertEqual(run.startText(date: .complete, time: .shortened), text(in: tokyo, date: .complete))
+        // Runs saved before the zone was recorded, or with an unreadable zone, use the iPhone's zone.
+        for legacy in [nil, "Not/AZone"] as [String?] {
+            run.startTimezoneID = legacy
+            XCTAssertEqual(run.startText(date: .abbreviated, time: .shortened),
+                           start.formatted(date: .abbreviated, time: .shortened))
+        }
+    }
 }
