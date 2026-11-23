@@ -8,6 +8,13 @@ status: CURRENT NATIVE DECISIONS plus dated prototype history; verification live
 
 # Start Run — where this screen actually is
 
+**November 23 Houston trails access retained independently:** Manley likes the latest result but
+is not certain he will keep the moving background. He explicitly wants the upper-right Houston
+trails pill kept, including on the original full Hermann Park Start background. The same finite
+trail browser/details/explicit plan-name action is available from either background. The pill's
+placement is retained; moving-map attribution remains specific to the trail background. This
+does not change the full live-GPS-map experience or authorize public-preview publication.
+
 **November 23 continuous faded trail background — approved follow-up:** Manley likes the larger
 Nike-reference sizing but rejects the fixed enlarged top/bottom maps and their rectangular cutoff.
 Keep every band 112 dp tall with a 72 dp square photo, 12 dp left inset, 20 dp vertical space,

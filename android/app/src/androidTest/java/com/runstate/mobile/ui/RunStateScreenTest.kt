@@ -637,6 +637,7 @@ class RunStateScreenTest {
     @Test
     fun houstonTrailBrowseAndDismissDoNotChangeRunAndOriginalBackgroundStaysAvailable() {
         var background by mutableStateOf(StartBackground.HOUSTON_TRAILS)
+        var route by mutableStateOf<String?>("Existing loop")
         var starts = 0
         var energyChanges = 0
         var planChanges = 0
@@ -645,8 +646,12 @@ class RunStateScreenTest {
                 selectedPreRunEnergy = PreRunEnergy.LOW, onSelectPreRunEnergy = { energyChanges++ },
                 onStart = { starts++ }, actionsEnabled = true, onViewHistory = {}, showHistory = false,
                 modifier = Modifier.fillMaxSize().systemBarsPadding(), startBackground = background,
-                selectedRunIntention = RunIntention.KEEP_EASY, routeLabel = "Existing loop",
-                onRunContextChanged = { _, _ -> planChanges++ }
+                selectedRunIntention = RunIntention.KEEP_EASY, routeLabel = route,
+                onRunContextChanged = { intention, label ->
+                    assertEquals(RunIntention.KEEP_EASY, intention)
+                    route = label
+                    planChanges++
+                }
             )
         }
         composeTestRule.onNodeWithTag(START_TRAILS_BROWSE_TAG).assertIsDisplayed().performClick()
@@ -665,7 +670,7 @@ class RunStateScreenTest {
         composeTestRule.onNodeWithTag(START_TRAILS_LIST_TAG).assertDoesNotExist()
         composeTestRule.runOnIdle { background = StartBackground.HERMANN_PARK }
         composeTestRule.onNodeWithTag(START_TRAILS_BACKGROUND_TAG).assertDoesNotExist()
-        composeTestRule.onNodeWithTag(START_TRAILS_BROWSE_TAG).assertDoesNotExist()
+        composeTestRule.onNodeWithTag(START_TRAILS_BROWSE_TAG).assertIsDisplayed().assertIsEnabled()
         composeTestRule.onNodeWithTag(START_TRAIL_BAND_TAG_PREFIX + "memorial").assertDoesNotExist()
         composeTestRule.onNodeWithTag(START_RUN_BUTTON_TAG).assertIsDisplayed().assertIsEnabled()
         composeTestRule.onNodeWithTag(START_ENERGY_SELECTED_TAG).assertIsDisplayed()
@@ -674,11 +679,30 @@ class RunStateScreenTest {
             assertEquals(0, energyChanges)
             assertEquals(0, planChanges)
         }
+        saveNativePreview(START_RUN_SCREEN_TAG, "start-hermann-trails-pill.png")
+        composeTestRule.onNodeWithTag(START_TRAILS_BROWSE_TAG).performClick()
+        composeTestRule.onNodeWithTag(START_TRAILS_LIST_TAG).assertIsDisplayed()
+        composeTestRule.onNodeWithTag(START_TRAIL_LIST_ITEM_TAG_PREFIX + "hermann")
+            .performScrollTo().performClick()
+        composeTestRule.onNodeWithTag(START_TRAIL_SHEET_TAG).assertIsDisplayed()
+        val useTrail = composeTestRule.onNodeWithTag(START_TRAIL_USE_TAG)
+        if (!useTrail.isDisplayed()) useTrail.performScrollTo()
+        useTrail.performClick()
+        composeTestRule.onNodeWithTag(START_TRAIL_SHEET_TAG).assertDoesNotExist()
+        composeTestRule.onNodeWithTag(START_TRAILS_BACKGROUND_TAG).assertDoesNotExist()
+        composeTestRule.runOnIdle {
+            assertEquals(StartBackground.HERMANN_PARK, background)
+            assertEquals("Hermann Park", route)
+            assertEquals(1, planChanges)
+            assertEquals(0, starts)
+            assertEquals(0, energyChanges)
+        }
     }
 
     @Test
     fun shortLargeTextHoustonTrailBrowseAndRunControlsRemainReachable() {
         var fontScale by mutableStateOf(1.5f)
+        var background by mutableStateOf(StartBackground.HOUSTON_TRAILS)
         var starts = 0
         var energyChanges = 0
         var planChanges = 0
@@ -688,13 +712,14 @@ class RunStateScreenTest {
                 StartRunScreen(
                     selectedPreRunEnergy = null, onSelectPreRunEnergy = { energyChanges++ },
                     onStart = { starts++ }, actionsEnabled = true, onViewHistory = {}, showHistory = false,
-                    modifier = Modifier.size(320.dp, 480.dp), startBackground = StartBackground.HOUSTON_TRAILS,
+                    modifier = Modifier.size(320.dp, 480.dp), startBackground = background,
                     onRunContextChanged = { _, _ -> planChanges++ }
                 )
             }
         }
+        for (choice in listOf(StartBackground.HOUSTON_TRAILS, StartBackground.HERMANN_PARK)) {
         for (scale in listOf(1.5f, 2f)) {
-            composeTestRule.runOnIdle { fontScale = scale }
+            composeTestRule.runOnIdle { background = choice; fontScale = scale }
             composeTestRule.onNodeWithTag(START_RUN_FALLBACK_SCROLL_TAG).assertIsDisplayed()
             composeTestRule.onNodeWithTag(START_TRAILS_BROWSE_TAG).performScrollTo()
                 .assertIsDisplayed().assertIsEnabled().performClick()
@@ -711,6 +736,7 @@ class RunStateScreenTest {
                 START_ENERGY_HIGH_TAG, START_RUN_BUTTON_TAG, START_RUN_PLAN_TAG)) {
                 composeTestRule.onNodeWithTag(tag).performScrollTo().assertIsDisplayed().assertIsEnabled()
             }
+        }
         }
         composeTestRule.runOnIdle {
             assertEquals(0, starts)

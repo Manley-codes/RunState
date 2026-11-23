@@ -236,7 +236,8 @@ internal fun StartRunScreen(
     var exploredTrailId by rememberSaveable { mutableStateOf<String?>(null) }
     var agentBottomPx by remember { mutableFloatStateOf(0f) }
     var controlsTopPx by remember { mutableFloatStateOf(0f) }
-    val trailsBackground = startBackground == StartBackground.HOUSTON_TRAILS && !liveMapBackground
+    val trailBrowserAvailable = !liveMapBackground
+    val trailsBackground = startBackground == StartBackground.HOUSTON_TRAILS && trailBrowserAvailable
     val intakeTime = remember { Animatable(0f) }
     var energyEntryPlayed by rememberSaveable { mutableStateOf(false) }
     val energyEntryTime = remember {
@@ -298,7 +299,7 @@ internal fun StartRunScreen(
         val energyEntryDistancePx = with(LocalDensity.current) { maxWidth.toPx() }
         // A short window cannot keep the controls, navigation and upper details visible.
         // In that case use one continuous flow; regular phone heights retain the anchored layout.
-        val fallbackHeight = 564.dp + (if (trailsBackground) 72.dp else 0.dp) +
+        val fallbackHeight = 564.dp + (if (trailBrowserAvailable) 72.dp else 0.dp) +
             116.dp * (LocalDensity.current.fontScale - 1f).coerceAtLeast(0f)
         val scrollWholeStack = maxHeight < fallbackHeight
         val wholeStackScroll = rememberScrollState()
@@ -369,10 +370,10 @@ internal fun StartRunScreen(
                     }
                 )
                 }
-                if (trailsBackground) {
-                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween) {
-                    StartTrailMapCredit()
+                if (trailBrowserAvailable) {
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    if (trailsBackground) StartTrailMapCredit()
+                    Spacer(Modifier.weight(1f))
                     TextButton(onClick = { exploredTrailId = null; trailsOpen = true },
                         enabled = actionsEnabled && !setupLoading,
                         modifier = Modifier.heightIn(min = 48.dp)
@@ -481,7 +482,7 @@ internal fun StartRunScreen(
             EnergyIntakeOverlay(current, time = { intakeTime.value })
         }
     }
-    if (trailsOpen && trailsBackground) {
+    if (trailsOpen && trailBrowserAvailable) {
         StartTrailsSheet(
             trail = HoustonStartTrails.firstOrNull { it.id == exploredTrailId },
             enabled = actionsEnabled && !setupLoading,

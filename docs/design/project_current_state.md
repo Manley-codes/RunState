@@ -5,6 +5,25 @@ metadata:
   type: project
 ---
 
+## November 23 Houston trails access on original background
+
+Manley likes the current result but is not certain he will retain the moving trail background.
+He explicitly wants the upper-right Houston trails pill kept independently. It now opens the same
+finite browser/details from both the moving background and original full Hermann Park Start image.
+Choosing a trail name changes only the explicit plan draft, preserving intention and background;
+browsing/dismissing never starts a run or changes Energy. Live GPS map behavior is unchanged.
+The pill remains right-aligned, trail-map attribution stays conditional, and short-screen fallback
+reserves room for the pill on either background. No new source, test or asset files.
+
+Owner/public/test builds and vital lint passed. Five focused Moto checks passed, covering browser
+and plan selection on original Hermann Park, retained moving-band interaction, fixed foreground
+layout and short-window/large-text access on both backgrounds. Native original-image preview:
+`android/build/nov23-trails-pill/moto/start-hermann-trails-pill.png`.
+Matching-signature in-place update preserved 74 completed runs, two pairs and all 12 table hashes;
+only the usual opening counter changed. Temporary test package removed; selected background retained.
+APK SHA-256: `28b3efd0166417d9087d46faca8f1674029dccd5a2969ed7a145f18f72732ff6`.
+Private evidence: `android/build/nov23-trails-pill/`. Public preview and release return queue unchanged.
+
 ## November 23 continuous faded trail background
 
 **Latest motion correction:** Manley reported slight jumps/staggering. Installed Compose's lazy
