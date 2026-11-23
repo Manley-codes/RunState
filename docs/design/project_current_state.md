@@ -7,6 +7,15 @@ metadata:
 
 ## November 23 animated Energy invitation
 
+**Borderless follow-up installed:** Manley clarified that he wants no outline, like Nike's Set a
+Goal pill. Removed the stroke completely and raised the soft white fill from 35% to 60%, leaving
+shape, spacing, text, fade timing and behavior unchanged. Owner/public builds and vital lint
+passed; actual phone capture inspected. The existing 18 checks remain the behavior baseline and
+were not repeated for this paint-only change. All 74 runs/12 table hashes and preferences survived,
+apart from the normal opening counter. Private evidence: `android/build/nov23-energy-outline/moto/`.
+Current APK `ad0866e5a04d2b7b7e60e31a054e604b89769c0cfa4da5656e8241cad0e724fa`.
+No new tracked files or public-preview change; this supersedes the outlined styling below.
+
 Manley approved trying a translucent outlined pill between Energy choices and bottom navigation.
 It alternates **Choose → Energy**, one word at a time, on a 4.4-second loop. Each word fades in
 for 350 ms, holds, then fades out; the pill stays still. It begins after the existing tile entrance,

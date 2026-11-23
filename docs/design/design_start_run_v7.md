@@ -8,8 +8,10 @@ status: CURRENT NATIVE DECISIONS plus dated prototype history; verification live
 
 # Start Run — where this screen actually is
 
-**November 23 animated Energy invitation — installed trial:** a translucent, thin-outlined pill
+**November 23 animated Energy invitation — installed trial:** a borderless, translucent pill
 in the gap below Energy alternates Choose and Energy, one word at a time with gentle fades.
+Manley's clarified style direction removes the outline and uses soft white fill at 60% opacity
+to define the shape, like the Nike Set a Goal reference; this supersedes the earlier outline.
 The pill remains still; its footprint remains after the selection fade so no controls move.
 It starts after tile entrance, loops only while foreground/visible, and shows the whole phrase
 statically when Android animations are disabled. Accessibility reads one stable optional prompt.

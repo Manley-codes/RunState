@@ -971,8 +971,7 @@ private fun EnergyChoicePrompt(
                 .testTag(START_ENERGY_PROMPT_PILL_TAG)
                 .graphicsLayer { alpha = opacity }
                 .clip(RoundedCornerShape(50))
-                .background(Color.White.copy(alpha = 0.35f))
-                .border(1.dp, StartForestDeep.copy(alpha = 0.18f), RoundedCornerShape(50))
+                .background(Color.White.copy(alpha = 0.60f))
                 .clearAndSetSemantics {
                     // One quiet, complete instruction; word changes are decorative, not announcements.
                     if (unanswered) contentDescription = "Choose energy, optional"
