@@ -204,10 +204,11 @@ class RunSettingsScreenTest {
             .fetchSemanticsNode().config[SemanticsProperties.StateDescription])
         compose.onNodeWithText("Music observation on").assertDoesNotExist()
         compose.onNodeWithText("Map artwork").assertDoesNotExist()
-        val card = compose.onNodeWithTag(START_AGENT_CARD_TAG).fetchSemanticsNode().boundsInRoot
-        for (tag in listOf("startExpandMap", START_HISTORY_TAG, START_RUN_SETTINGS_TAG)) {
+        val choices = compose.onNodeWithTag(START_ENERGY_CHOICES_TAG).fetchSemanticsNode().boundsInRoot
+        for (tag in listOf("startExpandMap", START_RUN_PLAN_TAG, START_RUN_TAB_TAG,
+            START_RUN_SETTINGS_TAG, START_HISTORY_TAG)) {
             val control = compose.onNodeWithTag(tag).assertIsDisplayed().fetchSemanticsNode().boundsInRoot
-            assertTrue("The utility stays below the compact Run State panel", control.top >= card.bottom)
+            assertTrue("Navigation stays below Energy", control.top >= choices.bottom)
             val minimum = with(compose.density) { androidx.compose.ui.unit.Dp(48f).toPx() }
             assertTrue("The utility retains an accessible touch target",
                 control.width >= minimum - 1f && control.height >= minimum - 1f)
@@ -219,6 +220,9 @@ class RunSettingsScreenTest {
         savePreview(START_RUN_SCREEN_TAG, "demo-start-clean.png")
         savePreview(START_ENERGY_CHOICES_TAG, "start-energy-clean.png")
         compose.mainClock.autoAdvance = true
+        compose.onNodeWithTag(START_RUN_TAB_TAG).assertIsSelected().performClick()
+        assertEquals("Run is the current screen, not the recording button", 0, starts)
+        assertEquals(null, energy)
         compose.onNodeWithTag("startExpandMap").performClick()
         compose.onNodeWithTag(START_HISTORY_TAG).performClick()
         compose.onNodeWithTag(START_RUN_SETTINGS_TAG).performClick()
@@ -618,14 +622,14 @@ class RunSettingsScreenTest {
         val fixture = fixture(original)
         val restoration = renderRoot(fixture)
         waitForTag(START_RUN_SCREEN_TAG)
-        compose.onNodeWithTag(START_RUN_SETTINGS_TAG).performScrollTo().performClick()
+        compose.onNodeWithTag(START_RUN_SETTINGS_TAG).assertIsDisplayed().performClick()
         compose.onNodeWithTag("runSettingsCloudReflections").performScrollTo().assertIsOn().performClick()
         compose.waitUntil(5_000L) { fixture.preferenceWrites == 1 }
         assertEquals(original.copy(cloudReflectionsEnabled = false), fixture.loadPreferences())
         compose.onNodeWithTag(SETTINGS_DONE_TAG).performClick()
         restoration.emulateSavedInstanceStateRestore()
         waitForTag(START_RUN_SCREEN_TAG)
-        compose.onNodeWithTag(START_RUN_SETTINGS_TAG).performScrollTo().performClick()
+        compose.onNodeWithTag(START_RUN_SETTINGS_TAG).assertIsDisplayed().performClick()
         compose.onNodeWithTag("runSettingsCloudReflections").performScrollTo().assertIsOff()
         compose.onNodeWithTag(SETTINGS_MUSIC_OBSERVATION_TAG).performScrollTo().assertIsOn()
     }
@@ -637,7 +641,7 @@ class RunSettingsScreenTest {
         val fixture = fixture(original)
         val restoration = renderRoot(fixture)
         waitForTag(START_RUN_SCREEN_TAG)
-        compose.onNodeWithTag(START_RUN_SETTINGS_TAG).performScrollTo().performClick()
+        compose.onNodeWithTag(START_RUN_SETTINGS_TAG).assertIsDisplayed().performClick()
         waitForTag(SETTINGS_DIALOG_TAG)
         compose.onNodeWithTag(SETTINGS_DISTANCE_ANNOUNCEMENTS_TAG)
             .performScrollTo().assertIsOn().performClick()
@@ -651,7 +655,7 @@ class RunSettingsScreenTest {
         }
         restoration.emulateSavedInstanceStateRestore()
         waitForTag(START_RUN_SCREEN_TAG)
-        compose.onNodeWithTag(START_RUN_SETTINGS_TAG).performScrollTo().performClick()
+        compose.onNodeWithTag(START_RUN_SETTINGS_TAG).assertIsDisplayed().performClick()
         waitForTag(SETTINGS_DIALOG_TAG)
         compose.onNodeWithTag(SETTINGS_DISTANCE_ANNOUNCEMENTS_TAG)
             .performScrollTo().assertIsOff().performClick()
@@ -683,7 +687,7 @@ class RunSettingsScreenTest {
         }
         renderRoot(fixture)
         waitForTag(START_RUN_SCREEN_TAG)
-        compose.onNodeWithTag(START_RUN_SETTINGS_TAG).performScrollTo().performClick()
+        compose.onNodeWithTag(START_RUN_SETTINGS_TAG).assertIsDisplayed().performClick()
         waitForTag(SETTINGS_DIALOG_TAG)
         compose.onNodeWithTag(SETTINGS_RECORDING_SOURCES_TAG).performScrollTo().assertIsEnabled().performClick()
         waitForTag(RUN_HISTORY_SCREEN_TAG)
@@ -701,7 +705,7 @@ class RunSettingsScreenTest {
         compose.waitUntil(5_000L) {
             compose.onAllNodesWithTag(SETTINGS_DIALOG_TAG).fetchSemanticsNodes().isEmpty()
         }
-        compose.onNodeWithContentDescription("Log History").performScrollTo().performClick()
+        compose.onNodeWithContentDescription("Log History").assertIsDisplayed().performClick()
         waitForTag(RUN_HISTORY_SCREEN_TAG)
         waitForTag(RUN_HISTORY_ROW_TAG_PREFIX + gps.runId)
         compose.onNodeWithText("LOG HISTORY").assertIsDisplayed()
@@ -741,7 +745,7 @@ class RunSettingsScreenTest {
         }
         val restoration = renderRoot(fixture)
         waitForTag(START_RUN_SCREEN_TAG)
-        compose.onNodeWithTag(START_RUN_SETTINGS_TAG).performScrollTo().performClick()
+        compose.onNodeWithTag(START_RUN_SETTINGS_TAG).assertIsDisplayed().performClick()
         waitForTag(SETTINGS_DIALOG_TAG)
         compose.onNodeWithTag(SETTINGS_RECORDING_SOURCES_TAG).performScrollTo().performClick()
         waitForTag(RUN_HISTORY_SCREEN_TAG)
@@ -952,7 +956,7 @@ class RunSettingsScreenTest {
         restoration.emulateSavedInstanceStateRestore()
         waitForTag(START_RUN_SCREEN_TAG)
         assertNormalGpsAndPreferences(fixture, preferences)
-        compose.onNodeWithTag(START_RUN_SETTINGS_TAG).performScrollTo().performClick()
+        compose.onNodeWithTag(START_RUN_SETTINGS_TAG).assertIsDisplayed().performClick()
         waitForTag(SETTINGS_DIALOG_TAG)
         assertOwnerToolsHidden()
         compose.onNodeWithTag(SETTINGS_MUSIC_OBSERVATION_TAG).performScrollTo().assertIsOff()
@@ -1125,7 +1129,7 @@ class RunSettingsScreenTest {
         Log.d("RunStateDemoTest", "entry: waiting for Start")
         waitForTag(START_RUN_SCREEN_TAG)
         Log.d("RunStateDemoTest", "entry: open Settings")
-        compose.onNodeWithTag(START_RUN_SETTINGS_TAG).performScrollTo().performClick()
+        compose.onNodeWithTag(START_RUN_SETTINGS_TAG).assertIsDisplayed().performClick()
         waitForTag(SETTINGS_DIALOG_TAG)
         Log.d("RunStateDemoTest", "entry: scroll to Music Reflection Demo")
         compose.onNodeWithTag(SETTINGS_MUSIC_REFLECTION_DEMO_TAG).performScrollTo()

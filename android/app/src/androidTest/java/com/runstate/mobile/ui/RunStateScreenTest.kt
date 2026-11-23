@@ -33,6 +33,7 @@ import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.isDisplayed
 import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.captureToImage
+import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.junit4.AndroidComposeTestRule
@@ -631,26 +632,29 @@ class RunStateScreenTest {
         assertEquals("AGENT and GPS must begin on the same row",
             composeTestRule.onNodeWithText("AGENT  •  READY").fetchSemanticsNode().boundsInRoot.top, gps.top, opticalRowTolerance)
         val utilities = boundsBefore.getValue(START_UTILITY_ACTIONS_TAG)
-        assertTrue("The utility stack must sit outside and below the Agent panel", utilities.top >= card.bottom)
-        val utilityTags = listOf("startExpandMap", START_HISTORY_TAG, START_RUN_SETTINGS_TAG)
-        val descriptions = listOf("Open live map", "Log History", "Run settings")
+        assertTrue("Bottom navigation belongs below Energy", utilities.top >= boundsBefore.getValue(START_ENERGY_CHOICES_TAG).bottom)
+        val utilityTags = listOf("startExpandMap", START_RUN_PLAN_TAG, START_RUN_TAB_TAG,
+            START_RUN_SETTINGS_TAG, START_HISTORY_TAG)
+        val descriptions = listOf("Open live map", "Plan this run", "Run", "Run settings", "Log History")
         val utilityBounds = utilityTags.mapIndexed { index, tag ->
             val node = composeTestRule.onNodeWithTag(tag).assertIsDisplayed().assertIsEnabled()
                 .fetchSemanticsNode()
-            assertEquals(Role.Button, node.config[SemanticsProperties.Role])
+            assertEquals(if (tag == START_RUN_TAB_TAG) Role.Tab else Role.Button, node.config[SemanticsProperties.Role])
             assertEquals(listOf(descriptions[index]), node.config[SemanticsProperties.ContentDescription])
-            assertTrue("Utility actions use icons without visible text", !node.config.contains(SemanticsProperties.Text))
             node.boundsInRoot.also { bounds ->
                 assertTrue("Each utility target must remain at least 48 dp wide", bounds.width + 1f >= 48f * densityValue)
                 assertTrue("Each utility target must remain at least 48 dp tall", bounds.height + 1f >= 48f * densityValue)
-                assertTrue("Utilities cannot overlap the Agent panel", bounds.top >= card.bottom)
+                assertTrue("Navigation stays within its bar", bounds.top >= utilities.top && bounds.bottom <= utilities.bottom)
             }
         }
-        utilityBounds.zipWithNext().forEach { (above, below) ->
-            assertTrue("Map, History and Settings must form one vertical stack", above.bottom <= below.top)
-            assertEquals("Utility icons share a horizontal center", above.center.x, below.center.x, 1f)
+        utilityBounds.zipWithNext().forEach { (left, right) ->
+            assertTrue("Navigation tabs form one horizontal row without overlap", left.right <= right.left + 1f)
+            assertEquals("Navigation tabs share a vertical center", left.center.y, right.center.y, 1f)
+            assertEquals("Navigation tabs divide the bar evenly", left.width, right.width, 1f)
         }
-        for (label in listOf("Ready when you are", "Map artwork", "Map", "History", "Settings",
+        assertTrue(composeTestRule.onNodeWithTag(START_RUN_TAB_TAG)
+            .fetchSemanticsNode().config[SemanticsProperties.Selected])
+        for (label in listOf("Ready when you are", "Map artwork", "History", "Plan this run",
             "Physical energy now · Optional", "SHOES", "ADD PAIR", "Start", "GPS run", "MUSIC", "SPOTIFY")) {
             composeTestRule.onNodeWithText(label, useUnmergedTree = true).assertDoesNotExist()
         }
@@ -658,7 +662,7 @@ class RunStateScreenTest {
         assertEquals(listOf("Start run"), startNode.config[SemanticsProperties.ContentDescription])
         assertEquals("GPS run", startNode.config[SemanticsProperties.StateDescription])
         composeTestRule.onNodeWithTag(START_MAP_STATUS_TAG).assertDoesNotExist()
-        saveNativePreview(START_RUN_SCREEN_TAG, "start-compact-agent-external-icons-preview.png")
+        saveNativePreview(START_RUN_SCREEN_TAG, "start-bottom-navigation-preview.png")
         fun assertFixed() {
             fixedTags.forEach { tag ->
                 assertEquals("A swipe must not move $tag on the normal Start screen",
@@ -722,11 +726,12 @@ class RunStateScreenTest {
     }
 
     @Test
-    fun shortLargeTextStartKeepsEnergyAndStartFixedWhileUpperActionsRemainReachable() {
+    fun shortLargeTextStartKeepsAllControlsReachable() {
         var selected by mutableStateOf<PreRunEnergy?>(null)
         var fontScale by mutableStateOf(1.5f)
         var settingsOpens = 0
         var historyOpens = 0
+        var starts = 0
         var selectedAtStart: PreRunEnergy? = null
         var densityValue = 1f
         composeTestRule.setContent {
@@ -735,7 +740,7 @@ class RunStateScreenTest {
             CompositionLocalProvider(LocalDensity provides Density(density.density, fontScale)) {
                 StartRunScreen(
                     selectedPreRunEnergy = selected, onSelectPreRunEnergy = { selected = it },
-                    onStart = { selectedAtStart = selected }, actionsEnabled = true,
+                    onStart = { starts++; selectedAtStart = selected }, actionsEnabled = true,
                     onViewHistory = { historyOpens++ }, showHistory = true,
                     onOpenRunSettings = { settingsOpens++ },
                     onOpenMap = {}, modifier = Modifier.size(320.dp, 480.dp)
@@ -743,35 +748,42 @@ class RunStateScreenTest {
             }
         }
         for (scale in listOf(1.5f, 2f)) {
-            // Each font-scale scenario starts from a fresh test-owned draft.
+            // This short viewport scrolls as one flow, including the full Agent card.
             composeTestRule.runOnIdle { fontScale = scale; selected = null }
-            listOf(START_ENERGY_LOW_TAG, START_ENERGY_MODERATE_TAG, START_ENERGY_HIGH_TAG)
-                .forEach { composeTestRule.onNodeWithTag(it).assertIsDisplayed().assertIsEnabled() }
-            composeTestRule.onNodeWithTag(START_RUN_BUTTON_TAG).assertIsDisplayed().assertIsEnabled()
-            listOf(START_OPEN_SHOES_TAG, START_OPEN_SPOTIFY_TAG).forEach { tag ->
-                val bounds = composeTestRule.onNodeWithTag(tag).assertIsDisplayed().assertIsEnabled()
-                    .fetchSemanticsNode().boundsInRoot
+            composeTestRule.onNodeWithTag(START_RUN_FALLBACK_SCROLL_TAG).assertIsDisplayed()
+            fun reachable(tag: String): SemanticsNodeInteraction {
+                val node = composeTestRule.onNodeWithTag(tag)
+                node.performScrollTo()
+                return node.assertIsDisplayed().assertIsEnabled()
+            }
+            val viewport = composeTestRule.onNodeWithTag(START_RUN_SCREEN_TAG).getUnclippedBoundsInRoot()
+            val card = composeTestRule.onNodeWithTag(START_AGENT_CARD_TAG).performScrollTo()
+                .assertIsDisplayed().getUnclippedBoundsInRoot()
+            assertTrue("The entire Agent card is reachable at $scale text",
+                card.top >= viewport.top - 0.5.dp && card.bottom <= viewport.bottom + 0.5.dp &&
+                    card.left >= viewport.left - 0.5.dp && card.right <= viewport.right + 0.5.dp)
+            saveNativePreview(START_RUN_SCREEN_TAG, "start-bottom-navigation-upper-font-$scale.png")
+            listOf(START_ENERGY_LOW_TAG, START_ENERGY_MODERATE_TAG, START_ENERGY_HIGH_TAG,
+                START_RUN_BUTTON_TAG, START_OPEN_SHOES_TAG, START_OPEN_SPOTIFY_TAG).forEach { tag ->
+                val bounds = reachable(tag).fetchSemanticsNode().boundsInRoot
                 assertTrue("Each lower action stays at least 48 dp wide at large text", bounds.width + 1f >= 48f * densityValue)
                 assertTrue("Each lower action stays at least 48 dp tall at large text", bounds.height + 1f >= 48f * densityValue)
             }
-            val footer = composeTestRule.onNodeWithTag(START_FOOTER_TAG).fetchSemanticsNode().boundsInRoot
-            val start = composeTestRule.onNodeWithTag(START_RUN_BUTTON_TAG).fetchSemanticsNode().boundsInRoot
-            val choices = composeTestRule.onNodeWithTag(START_ENERGY_CHOICES_TAG).fetchSemanticsNode().boundsInRoot
-            val moderate = composeTestRule.onNodeWithTag(START_ENERGY_MODERATE_TAG).fetchSemanticsNode().boundsInRoot
-            assertTrue("Large-text Energy must remain below the measured footer without overlap",
-                moderate.top >= footer.bottom)
-
-            composeTestRule.onNodeWithTag(START_RUN_PLAN_TAG).performScrollTo().assertIsDisplayed()
-            composeTestRule.onNodeWithTag(START_RUN_SETTINGS_TAG).performScrollTo()
-                .assertIsDisplayed().performClick()
-            composeTestRule.onNodeWithTag(START_HISTORY_TAG).performScrollTo()
-                .assertIsDisplayed().performClick()
-            assertEquals(footer, composeTestRule.onNodeWithTag(START_FOOTER_TAG).fetchSemanticsNode().boundsInRoot)
-            assertEquals(start, composeTestRule.onNodeWithTag(START_RUN_BUTTON_TAG).fetchSemanticsNode().boundsInRoot)
-            assertEquals(choices, composeTestRule.onNodeWithTag(START_ENERGY_CHOICES_TAG).fetchSemanticsNode().boundsInRoot)
-
-            composeTestRule.onNodeWithTag(START_ENERGY_MODERATE_TAG).performClick()
-            composeTestRule.onNodeWithTag(START_RUN_BUTTON_TAG).performClick()
+            reachable(START_RUN_PLAN_TAG)
+            reachable(START_RUN_SETTINGS_TAG).performClick()
+            reachable(START_HISTORY_TAG).performClick()
+            reachable(START_RUN_TAB_TAG).performClick()
+            composeTestRule.runOnIdle { assertEquals("Run navigation must never start recording", if (scale == 1.5f) 0 else 1, starts) }
+            val bar = composeTestRule.onNodeWithTag(START_UTILITY_ACTIONS_TAG).fetchSemanticsNode().boundsInRoot
+            listOf("startExpandMap", START_RUN_PLAN_TAG, START_RUN_TAB_TAG, START_RUN_SETTINGS_TAG, START_HISTORY_TAG)
+                .forEach { tag ->
+                    val bounds = reachable(tag).fetchSemanticsNode().boundsInRoot
+                    assertTrue("Navigation target stays inside the viewport at $scale text", bounds.left >= 0f && bounds.right <= bar.right + 1f)
+                    assertTrue("Navigation keeps a 48 dp target at $scale text", bounds.width + 1f >= 48f * densityValue && bounds.height + 1f >= 48f * densityValue)
+                }
+            saveNativePreview(START_RUN_SCREEN_TAG, "start-bottom-navigation-font-$scale.png")
+            reachable(START_ENERGY_MODERATE_TAG).performClick()
+            reachable(START_RUN_BUTTON_TAG).performClick()
             composeTestRule.runOnIdle { assertEquals(PreRunEnergy.MODERATE, selectedAtStart) }
             composeTestRule.onNodeWithTag("startEnergyUndo").assertDoesNotExist()
             composeTestRule.runOnIdle { assertEquals(PreRunEnergy.MODERATE, selected) }
@@ -779,6 +791,7 @@ class RunStateScreenTest {
         composeTestRule.runOnIdle {
             assertEquals(2, settingsOpens)
             assertEquals(2, historyOpens)
+            assertEquals(2, starts)
         }
     }
 
@@ -806,6 +819,10 @@ class RunStateScreenTest {
             .assertIsDisplayed().performTouchInput { click() }
         composeTestRule.onNodeWithTag(START_HISTORY_TAG).performScrollTo()
             .assertIsDisplayed().performTouchInput { click() }
+        composeTestRule.onNodeWithTag(START_RUN_PLAN_TAG).performScrollTo().assertIsDisplayed()
+        composeTestRule.onNodeWithTag(START_RUN_TAB_TAG).performScrollTo()
+            .assertIsDisplayed().performTouchInput { click() }
+        composeTestRule.runOnIdle { assertEquals(0, starts) }
         composeTestRule.onNodeWithTag(START_ENERGY_MODERATE_TAG).performScrollTo()
             .assertIsDisplayed().performTouchInput { click() }
         composeTestRule.runOnIdle { assertEquals(PreRunEnergy.MODERATE, selected) }
@@ -3690,6 +3707,10 @@ class RunStateScreenTest {
                 selectedRunIntention = intention, routeLabel = route,
                 onRunContextChanged = { choice, label -> intention = choice; route = label })
         }
+        composeTestRule.onNodeWithText("Plan this run", useUnmergedTree = true).assertDoesNotExist()
+        composeTestRule.onNodeWithTag(START_RUN_TAB_TAG).assertIsDisplayed().performClick()
+        composeTestRule.onNodeWithTag(START_HISTORY_TAG).assertIsDisplayed().assertIsNotEnabled()
+        composeTestRule.runOnIdle { assertEquals(0, starts); assertEquals(0, answers) }
         composeTestRule.onNodeWithTag(START_RUN_PLAN_TAG).performClick()
         composeTestRule.onNodeWithTag(START_RUN_INTENTION_TAG_PREFIX + "KEEP_EASY").performClick()
         composeTestRule.onNodeWithTag(START_RUN_ROUTE_LABEL_TAG).performTextInput("  Park loop  ")
@@ -3700,6 +3721,9 @@ class RunStateScreenTest {
             assertEquals("Park loop", route)
             assertEquals(0, starts); assertEquals(0, answers)
         }
+        assertTrue("The plan remains accessible without restoring the old text link",
+            composeTestRule.onNodeWithTag(START_RUN_PLAN_TAG).fetchSemanticsNode()
+                .config[SemanticsProperties.StateDescription].contains("Keep it easy"))
         saveNativePreview(START_RUN_SCREEN_TAG, "energy-foundation-start.png")
         composeTestRule.onNodeWithTag(START_RUN_PLAN_TAG).performClick()
         composeTestRule.onNodeWithTag(START_RUN_INTENTION_TAG_PREFIX + "NONE").performClick()
@@ -4989,6 +5013,9 @@ class RunStateScreenTest {
         composeTestRule.onNodeWithTag(START_REFLECTION_SETUP_TAG).assertDoesNotExist()
         composeTestRule.onNodeWithTag(START_RUN_SETTINGS_TAG).assertIsNotEnabled()
             .performTouchInput { click() }
+        composeTestRule.onNodeWithTag(START_RUN_PLAN_TAG).assertIsNotEnabled()
+            .performTouchInput { click() }
+        composeTestRule.onNodeWithTag(START_RUN_PLAN_SHEET_TAG).assertDoesNotExist()
         composeTestRule.runOnIdle { assertEquals(0, opens) }
         composeTestRule.runOnIdle { loading = false }
         composeTestRule.onNodeWithTag(START_RUN_SETTINGS_TAG).performClick()
@@ -4998,9 +5025,11 @@ class RunStateScreenTest {
             assertEquals(1, opens); assertEquals(1, maps); assertEquals(1, histories)
             actionsEnabled = false
         }
-        for (tag in listOf(START_RUN_SETTINGS_TAG, "startExpandMap", START_HISTORY_TAG)) {
+        for (tag in listOf(START_RUN_SETTINGS_TAG, "startExpandMap", START_HISTORY_TAG,
+            START_RUN_PLAN_TAG, START_RUN_TAB_TAG)) {
             composeTestRule.onNodeWithTag(tag).assertIsNotEnabled().performTouchInput { click() }
         }
+        composeTestRule.onNodeWithTag(START_RUN_PLAN_SHEET_TAG).assertDoesNotExist()
         composeTestRule.runOnIdle { assertEquals(1, opens); assertEquals(1, maps); assertEquals(1, histories) }
     }
 
@@ -5772,7 +5801,7 @@ class RunStateScreenTest {
         composeTestRule.onNodeWithText("© OpenStreetMap contributors").assertDoesNotExist()
         assertTrue(nativeMapViewsInActivity().isEmpty())
 
-        composeTestRule.onNodeWithTag("startExpandMap").performScrollTo().performClick()
+        composeTestRule.onNodeWithTag("startExpandMap").assertIsDisplayed().performClick()
         composeTestRule.onNodeWithTag(ACTIVE_RUN_MAP_DIALOG_TAG).assertIsDisplayed()
         composeTestRule.onNodeWithText("Enable precise location to show your position.").assertIsDisplayed()
         composeTestRule.onNodeWithText("© OpenStreetMap contributors").assertIsDisplayed()
@@ -5792,7 +5821,7 @@ class RunStateScreenTest {
             assertEquals(0, starts)
             gpsSelected = false
         }
-        composeTestRule.onNodeWithTag("startExpandMap").assertDoesNotExist()
+        composeTestRule.onNodeWithTag("startExpandMap").assertIsDisplayed().assertIsNotEnabled()
         assertTrue(nativeMapViewsInActivity().isEmpty())
         composeTestRule.runOnIdle { gpsSelected = true; open = true }
         composeTestRule.onNodeWithTag(START_RUN_MAP_START_TAG).assertIsDisplayed().performClick()
@@ -5855,7 +5884,7 @@ class RunStateScreenTest {
         composeTestRule.onNodeWithText("© OpenStreetMap contributors").assertDoesNotExist()
         assertTrue(nativeMapViewsInActivity().isEmpty())
         if (capturePreviewImages) saveNativePreview("syntheticLiveMapJourney", "start-live-map-preview.png")
-        composeTestRule.onNodeWithTag("startExpandMap").performScrollTo().performClick()
+        composeTestRule.onNodeWithTag("startExpandMap").assertIsDisplayed().performClick()
         composeTestRule.waitUntil(15_000L) { nativeMapViewsInActivity().size == 1 }
         val firstView = nativeMapViewsInActivity().single()
         val map = AtomicReference<MapLibreMap?>(null)

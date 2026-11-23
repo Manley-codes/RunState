@@ -8,6 +8,17 @@ status: CURRENT NATIVE DECISIONS plus dated prototype history; verification live
 
 # Start Run — where this screen actually is
 
+**November 23 bottom navigation — installed for review:** below Energy, a full-width off-white
+bar contains Map, Plan, Run, Settings and Activity. Existing Map/Settings/History actions move
+from the upper stack; Activity is labelled beneath ascending bars. Plan opens the same sheet
+and replaces the standalone Plan this run link. Run is the selected current screen, never the
+recording action. Manley explicitly rejected a lime accent; selection uses dark forest and bold
+Run text. Triangle controls/map remain. Short/large-text windows scroll the complete page.
+At 320 dp/200% text, substantial word wrapping remains a later typography review item.
+Seventeen focused phone checks and all three builds passed; 74 saved runs preserved.
+No public-preview changes; visual acceptance remains Manley's. This supersedes the upper utility
+stack and standalone Plan link described below, without changing the release return queue.
+
 **November 22 sketch arrangement — installed for review:** Shoes and Music sit on one row
 above the centered Start dial, aligned with the outer Energy columns; Start is above Moderate.
 The group is anchored near the bottom with stable Energy space, while compact/landscape scrolling

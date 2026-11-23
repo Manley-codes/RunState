@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -140,6 +141,7 @@ internal const val START_UTILITY_ACTIONS_TAG = "startUtilityActions"
 internal const val START_ENERGY_CHOICES_TAG = "startEnergyChoices"
 internal const val START_ENERGY_CUE_TAG = "startEnergyCue"
 internal const val START_RUN_PLAN_TAG = "startRunPlan"
+internal const val START_RUN_TAB_TAG = "startRunTab"
 internal const val START_RUN_PLAN_SHEET_TAG = "startRunPlanSheet"
 internal const val START_RUN_INTENTION_TAG_PREFIX = "startRunIntention:"
 internal const val START_RUN_ROUTE_LABEL_TAG = "startRunRouteLabel"
@@ -273,14 +275,10 @@ internal fun StartRunScreen(
     ) {
         val agentRingSize = if (maxWidth < 400.dp) 108.dp else 128.dp
         val energyEntryDistancePx = with(LocalDensity.current) { maxWidth.toPx() }
-        // A very short landscape window cannot keep both controls and upper details visible.
+        // A short window cannot keep the controls, navigation and upper details visible.
         // In that case use one continuous flow; regular phone heights retain the anchored layout.
-        val fallbackHeight = 400.dp + 60.dp * (LocalDensity.current.fontScale - 1f).coerceAtLeast(0f)
+        val fallbackHeight = 520.dp + 100.dp * (LocalDensity.current.fontScale - 1f).coerceAtLeast(0f)
         val scrollWholeStack = maxHeight < fallbackHeight
-        // On compact/large-text screens the optional plan scrolls with secondary actions,
-        // leaving the Energy tiles and Start button anchored and reachable.
-        val planInUpper = !scrollWholeStack &&
-            (maxHeight < 580.dp || LocalDensity.current.fontScale > 1.4f)
         val wholeStackScroll = rememberScrollState()
         val upperDetailsScroll = rememberScrollState()
         if (!liveMapBackground) {
@@ -337,33 +335,14 @@ internal fun StartRunScreen(
                         ringBounds = bounds
                     }
                 )
-                StartUtilityActions(
-                    mapStatus = if (liveMapBackground) liveMapStatus else null,
-                    onMapClick = if (liveMapBackground && onRequestMapLocation != null)
-                        onRequestMapLocation else onOpenMap,
-                    mapNeedsLocation = liveMapBackground && onRequestMapLocation != null,
-                    onViewHistory = onViewHistory,
-                    showHistory = showHistory,
+                StartSetupNotices(
                     onOpenRunSettings = onOpenRunSettings,
                     actionsEnabled = actionsEnabled,
                     setupLoading = setupLoading,
-                    musicStatus = when {
-                        !musicSelected -> "Music observation off"
-                        !musicAccessGranted -> "Music observation needs access"
-                        else -> "Music observation on"
-                    },
                     musicAccessNeeded = musicSelected && !musicAccessGranted,
                     reflectionSetupRequired = reflectionSetupRequired,
                     gpsMessage = gpsMessage
                 )
-                if (planInUpper) {
-                    RunPlanControl(selectedRunIntention, routeLabel, actionsEnabled && !setupLoading,
-                        onOpen = { runPlanOpen = true })
-                }
-            }
-            if (!planInUpper) {
-                RunPlanControl(selectedRunIntention, routeLabel, actionsEnabled && !setupLoading,
-                    onOpen = { runPlanOpen = true })
             }
             StartFooter(
                 onStart = onStart,
@@ -416,6 +395,26 @@ internal fun StartRunScreen(
                     }
                 )
             }
+            StartBottomNavigation(
+                mapStatus = if (liveMapBackground) liveMapStatus else null,
+                onMapClick = if (liveMapBackground && onRequestMapLocation != null)
+                    onRequestMapLocation else onOpenMap,
+                mapNeedsLocation = liveMapBackground && onRequestMapLocation != null,
+                onViewHistory = onViewHistory,
+                showHistory = showHistory,
+                onOpenRunSettings = onOpenRunSettings,
+                onOpenPlan = { runPlanOpen = true },
+                planState = selectedRunIntention?.startLabel()
+                    ?: if (routeLabel != null) "Route added" else "No plan selected",
+                actionsEnabled = actionsEnabled,
+                setupLoading = setupLoading,
+                musicStatus = when {
+                    !musicSelected -> "Music observation off"
+                    !musicAccessGranted -> "Music observation needs access"
+                    else -> "Music observation on"
+                },
+                reflectionSetupRequired = reflectionSetupRequired
+            )
         }
 
         intake?.let { current ->
@@ -440,18 +439,6 @@ private fun RunIntention.startLabel(): String = when (this) {
     RunIntention.KEEP_EASY -> "Keep it easy"
     RunIntention.STEADY -> "Steady"
     RunIntention.HARD_EFFORT -> "Hard effort"
-}
-
-@Composable
-private fun RunPlanControl(intention: RunIntention?, routeLabel: String?, enabled: Boolean,
-    onOpen: () -> Unit, modifier: Modifier = Modifier) {
-    TextButton(onClick = onOpen, enabled = enabled,
-        colors = ButtonDefaults.textButtonColors(contentColor = StartForestDeep),
-        modifier = modifier.heightIn(min = 48.dp).testTag(START_RUN_PLAN_TAG)) {
-        Text(intention?.startLabel()?.let { "$it · Edit plan" }
-            ?: if (routeLabel != null) "Route added · Edit plan" else "Plan this run",
-            fontSize = 12.sp, fontWeight = FontWeight.Medium)
-    }
 }
 
 /** This run's optional plan is an explicit choice, never inferred from pace or the map. */
@@ -513,51 +500,69 @@ private fun RunPlanSheet(
 }
 
 @Composable
-private fun StartUtilityActions(
+private fun StartBottomNavigation(
     mapStatus: String?,
     onMapClick: (() -> Unit)?,
     mapNeedsLocation: Boolean,
     onViewHistory: () -> Unit,
     showHistory: Boolean,
     onOpenRunSettings: () -> Unit,
+    onOpenPlan: () -> Unit,
+    planState: String,
     actionsEnabled: Boolean,
     setupLoading: Boolean,
     musicStatus: String,
-    musicAccessNeeded: Boolean,
-    reflectionSetupRequired: Boolean,
-    gpsMessage: String?
+    reflectionSetupRequired: Boolean
 ) {
-    Column(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalAlignment = Alignment.End) {
+    Column(Modifier.fillMaxWidth().background(StartCream.copy(alpha = 0.98f))) {
+        Spacer(Modifier.fillMaxWidth().height(1.dp).background(StartInk.copy(alpha = 0.10f)))
         val settingsState = buildList {
             add(musicStatus)
             if (setupLoading) add("Loading run preferences")
             if (reflectionSetupRequired) add("Reflection setup required")
         }.joinToString(". ")
-        Column(
-            modifier = Modifier.testTag(START_UTILITY_ACTIONS_TAG),
-            verticalArrangement = Arrangement.spacedBy(4.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
+        Row(
+            modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min)
+                .padding(horizontal = 6.dp).testTag(START_UTILITY_ACTIONS_TAG),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            val actionModifier = Modifier.size(48.dp)
-            if (onMapClick != null) {
-                StartUtilityButton("Map", StartUtilityIcon.MAP, onMapClick,
-                    enabled = actionsEnabled && (!mapNeedsLocation || !setupLoading),
+            val actionModifier = Modifier.weight(1f).fillMaxHeight()
+            StartUtilityButton("Map", StartUtilityIcon.MAP, { onMapClick?.invoke() },
+                    enabled = onMapClick != null && actionsEnabled && (!mapNeedsLocation || !setupLoading),
                     modifier = actionModifier.testTag(if (mapNeedsLocation)
                         START_MAP_LOCATION_ACCESS_TAG else "startExpandMap"),
                     accessibilityLabel = if (mapNeedsLocation) "Enable location" else "Open live map",
                     actionState = if (mapNeedsLocation) "Location access needed" else mapStatus)
-            }
-            if (showHistory) {
-                StartUtilityButton("History", StartUtilityIcon.HISTORY, onViewHistory,
-                    enabled = actionsEnabled,
-                    modifier = actionModifier.testTag(START_HISTORY_TAG),
-                    accessibilityLabel = "Log History")
-            }
+            StartUtilityButton("Plan", StartUtilityIcon.PLAN, onOpenPlan,
+                enabled = actionsEnabled && !setupLoading,
+                modifier = actionModifier.testTag(START_RUN_PLAN_TAG),
+                accessibilityLabel = "Plan this run", actionState = planState)
+            // This identifies the current screen. Only the large Start dial can start a run.
+            StartUtilityButton("Run", StartUtilityIcon.RUN, {}, enabled = actionsEnabled,
+                modifier = actionModifier.testTag(START_RUN_TAB_TAG),
+                accessibilityLabel = "Run", currentScreen = true)
             StartUtilityButton("Settings", StartUtilityIcon.SETTINGS, onOpenRunSettings,
                 enabled = actionsEnabled && !setupLoading,
                 modifier = actionModifier.testTag(START_RUN_SETTINGS_TAG),
                 accessibilityLabel = "Run settings", actionState = settingsState)
+            StartUtilityButton("Activity", StartUtilityIcon.ACTIVITY, onViewHistory,
+                enabled = actionsEnabled && showHistory,
+                modifier = actionModifier.testTag(START_HISTORY_TAG),
+                accessibilityLabel = "Log History")
         }
+    }
+}
+
+@Composable
+private fun StartSetupNotices(
+    onOpenRunSettings: () -> Unit,
+    actionsEnabled: Boolean,
+    setupLoading: Boolean,
+    musicAccessNeeded: Boolean,
+    reflectionSetupRequired: Boolean,
+    gpsMessage: String?
+) {
+    Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.End) {
         if (!setupLoading) {
             // Keep exceptional setup actions reachable outside the clean Agent card.
             if (musicAccessNeeded) {
@@ -582,7 +587,7 @@ private fun StartSetupNotice(text: String, onClick: () -> Unit, enabled: Boolean
     }
 }
 
-// Unmodified Google Material Design outlined 24px icon paths.
+// Map and Settings use unmodified Google Material Design outlined 24px icon paths.
 // Copyright 2014 Google Inc. All Rights Reserved.
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use these icon paths except in compliance with the License.
@@ -592,11 +597,10 @@ private fun StartSetupNotice(text: String, onClick: () -> Unit, enabled: Boolean
 // either express or implied. See the License for the specific language governing
 // permissions and limitations under the License.
 // https://github.com/google/material-design-icons/blob/master/src/maps/map/materialiconsoutlined/24px.svg
-// https://github.com/google/material-design-icons/blob/master/src/action/history/materialiconsoutlined/24px.svg
 // https://github.com/google/material-design-icons/blob/master/src/action/settings/materialiconsoutlined/24px.svg
-private enum class StartUtilityIcon(val pathData: String) {
+private enum class StartUtilityIcon(val pathData: String? = null) {
     MAP("M20.5 3l-.16.03L15 5.1 9 3 3.36 4.9c-.21.07-.36.25-.36.48V20.5c0 .28.22.5.5.5l.16-.03L9 18.9l6 2.1 5.64-1.9c.21-.07.36-.25.36-.48V3.5c0-.28-.22-.5-.5-.5zM10 5.47l4 1.4v11.66l-4-1.4V5.47zm-5 .99l3-1.01v11.7l-3 1.16V6.46zm14 11.08l-3 1.01V6.86l3-1.16v11.84z"),
-    HISTORY("M13 3c-4.97 0-9 4.03-9 9H1l3.89 3.89.07.14L9 12H6c0-3.87 3.13-7 7-7s7 3.13 7 7-3.13 7-7 7c-1.93 0-3.68-.79-4.94-2.06l-1.42 1.42C8.27 19.99 10.51 21 13 21c4.97 0 9-4.03 9-9s-4.03-9-9-9zm-1 5v5l4.25 2.52.77-1.28-3.52-2.09V8z"),
+    PLAN, RUN, ACTIVITY,
     SETTINGS("M19.43 12.98c.04-.32.07-.64.07-.98 0-.34-.03-.66-.07-.98l2.11-1.65c.19-.15.24-.42.12-.64l-2-3.46c-.09-.16-.26-.25-.44-.25-.06 0-.12.01-.17.03l-2.49 1c-.52-.4-1.08-.73-1.69-.98l-.38-2.65C14.46 2.18 14.25 2 14 2h-4c-.25 0-.46.18-.49.42l-.38 2.65c-.61.25-1.17.59-1.69.98l-2.49-1c-.06-.02-.12-.03-.18-.03-.17 0-.34.09-.43.25l-2 3.46c-.13.22-.07.49.12.64l2.11 1.65c-.04.32-.07.65-.07.98 0 .33.03.66.07.98l-2.11 1.65c-.19.15-.24.42-.12.64l2 3.46c.09.16.26.25.44.25.06 0 .12-.01.17-.03l2.49-1c.52.4 1.08.73 1.69.98l.38 2.65c.03.24.24.42.49.42h4c.25 0 .46-.18.49-.42l.38-2.65c.61-.25 1.17-.59 1.69-.98l2.49 1c.06.02.12.03.18.03.17 0 .34-.09.43-.25l2-3.46c.12-.22.07-.49-.12-.64l-2.11-1.65zm-1.98-1.71c.04.31.05.52.05.73 0 .21-.02.43-.05.73l-.14 1.13.89.7 1.08.84-.7 1.21-1.27-.51-1.04-.42-.9.68c-.43.32-.84.56-1.25.73l-1.06.43-.16 1.13-.2 1.35h-1.4l-.19-1.35-.16-1.13-1.06-.43c-.43-.18-.83-.41-1.23-.71l-.91-.7-1.06.43-1.27.51-.7-1.21 1.08-.84.89-.7-.14-1.13c-.03-.31-.05-.54-.05-.74s.02-.43.05-.73l.14-1.13-.89-.7-1.08-.84.7-1.21 1.27.51 1.04.42.9-.68c.43-.32.84-.56 1.25-.73l1.06-.43.16-1.13.2-1.35h1.39l.19 1.35.16 1.13 1.06.43c.43.18.83.41 1.23.71l.91.7 1.06-.43 1.27-.51.7 1.21-1.07.85-.89.7.14 1.13zM12 8c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4-1.79-4-4-4zm0 6c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2z")
 }
 
@@ -608,26 +612,85 @@ private fun StartUtilityButton(
     enabled: Boolean,
     modifier: Modifier = Modifier,
     accessibilityLabel: String = label,
-    actionState: String? = null
+    actionState: String? = null,
+    currentScreen: Boolean = false
 ) {
-    val ink = StartInk.copy(alpha = if (enabled) 1f else 0.5f)
+    val ink = StartForestDeep.copy(alpha = when {
+        !enabled -> 0.38f
+        currentScreen -> 1f
+        else -> 0.66f
+    })
     val image = remember(icon) {
-        ImageVector.Builder(name = "Material${icon.name}", defaultWidth = 24.dp, defaultHeight = 24.dp,
-            viewportWidth = 24f, viewportHeight = 24f)
-            .addPath(pathData = PathParser().parsePathString(icon.pathData).toNodes(), fill = SolidColor(Color.Black))
-            .build()
+        icon.pathData?.let { data ->
+            ImageVector.Builder(name = "Material${icon.name}", defaultWidth = 24.dp, defaultHeight = 24.dp,
+                viewportWidth = 24f, viewportHeight = 24f)
+                .addPath(pathData = PathParser().parsePathString(data).toNodes(), fill = SolidColor(Color.Black))
+                .build()
+        }
     }
-    Box(modifier.widthIn(min = 48.dp).heightIn(min = 48.dp)
+    Column(modifier.widthIn(min = 48.dp).heightIn(min = 68.dp)
         .clip(RoundedCornerShape(8.dp))
-        .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
+        .clickable(enabled = enabled, role = if (currentScreen) Role.Tab else Role.Button, onClick = onClick)
         .semantics(mergeDescendants = true) {
             contentDescription = accessibilityLabel
             if (actionState != null) stateDescription = actionState
+            if (currentScreen) selected = true
         }
-        .padding(4.dp),
-        contentAlignment = Alignment.Center) {
-        Image(imageVector = image, contentDescription = null, colorFilter = ColorFilter.tint(ink),
-            modifier = Modifier.size(25.dp))
+        .padding(horizontal = 2.dp, vertical = 9.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(4.dp, Alignment.CenterVertically)) {
+        if (image != null) {
+            Image(imageVector = image, contentDescription = null, colorFilter = ColorFilter.tint(ink),
+                modifier = Modifier.size(25.dp))
+        } else {
+            StartNavigationSymbol(icon, ink, Modifier.size(25.dp))
+        }
+        Text(label, color = ink, fontSize = 11.sp, lineHeight = 14.sp,
+            fontWeight = if (currentScreen) FontWeight.Bold else FontWeight.Normal,
+            textAlign = TextAlign.Center, maxLines = 2,
+            modifier = Modifier.clearAndSetSemantics { })
+    }
+}
+
+/** Original line drawings for the three new navigation actions. */
+@Composable
+private fun StartNavigationSymbol(icon: StartUtilityIcon, ink: Color, modifier: Modifier) {
+    Canvas(modifier) {
+        val unit = size.minDimension / 24f
+        val stroke = 1.7f * unit
+        fun line(x1: Float, y1: Float, x2: Float, y2: Float) =
+            drawLine(ink, Offset(x1 * unit, y1 * unit), Offset(x2 * unit, y2 * unit),
+                strokeWidth = stroke, cap = StrokeCap.Round)
+        fun box(x: Float, y: Float, width: Float, height: Float) =
+            drawRect(ink, Offset(x * unit, y * unit), Size(width * unit, height * unit),
+                style = Stroke(stroke))
+        when (icon) {
+            StartUtilityIcon.PLAN -> {
+                box(5f, 5f, 14f, 16f)
+                drawRect(StartCream, Offset(8f * unit, 3f * unit), Size(8f * unit, 4f * unit))
+                box(8f, 3f, 8f, 4f)
+                line(8f, 13f, 11f, 16f)
+                line(11f, 16f, 16f, 11f)
+            }
+            StartUtilityIcon.RUN -> {
+                drawCircle(ink, 2.1f * unit, Offset(15.5f * unit, 3.5f * unit))
+                line(13f, 7f, 10.5f, 13f)
+                line(13f, 7f, 8.5f, 8f)
+                line(8.5f, 8f, 6f, 11f)
+                line(13f, 7f, 16f, 10.5f)
+                line(16f, 10.5f, 20f, 10.5f)
+                line(10.5f, 13f, 15f, 16f)
+                line(15f, 16f, 14f, 21f)
+                line(10.5f, 13f, 7f, 18f)
+                line(7f, 18f, 3f, 20f)
+            }
+            StartUtilityIcon.ACTIVITY -> {
+                box(3f, 14f, 5f, 7f)
+                box(8f, 9f, 5f, 12f)
+                box(13f, 3f, 5f, 18f)
+            }
+            else -> Unit
+        }
     }
 }
 

@@ -5,6 +5,34 @@ metadata:
   type: project
 ---
 
+## November 23 Start bottom navigation
+
+Manley requested a bottom bar below Energy, using the Nike screenshot as a placement reference.
+The five actions are Map, Plan, Run, Settings and Activity, using existing RunState destinations.
+Activity uses ascending bars and opens the existing History screen. Plan opens the unchanged
+optional planning sheet; its old standalone link is removed. Map/Settings/History move from the
+upper utility stack. Run identifies this screen and cannot start recording; the large dial still
+does that. Setup warnings remain reachable above. Existing action names/state, disabled guards,
+48 dp minimum targets and explicit plan saving remain. **No lime navigation accent:** Manley
+rejected that suggestion; the selected Run icon/label use dark forest on an off-white bar.
+The previous triangle layout, captions removal, map and existing artwork remain.
+
+Owner/public/test builds and vital lint passed. All 17 focused Moto checks passed in one run,
+covering tab geometry/actions, Plan, History/Settings routing, permission/map paths, disabled
+actions, Energy entrance/intake, shoes and GPS/Sample restoration. Short/large-text and landscape
+views use whole-page scrolling so the upper card and lower controls remain reachable. At the
+extreme 320 dp/200% text fixture, existing card/Energy wording and new Settings/Activity labels
+wrap heavily; reachability passed, but typography polish remains a later design review item.
+Normal installed layout and compact captures inspected. APK SHA-256:
+`509534f15eee976a2abff28dcdbd2974544085a11c2fc3d8af94c7328d856f81`.
+
+Private evidence/backup: `android/build/nov22-start-navigation/moto/` (work crossed midnight).
+Matching-signature in-place update preserved all 74 completed runs and all 12 table hashes.
+All five preferences matched on install; only the usual opening counter changed after launch.
+Temporary test app removed. No new tracked files, real run, provider call or schema change.
+Public preview remains untouched at its restored design; publication still requires explicit
+approval. User visual acceptance is pending; release return queue remains in the private roadmap.
+
 ## November 22 Start sketch layout
 
 Manley supplied a rough placement sketch, explicitly not literal sizing, then approved trying it:
