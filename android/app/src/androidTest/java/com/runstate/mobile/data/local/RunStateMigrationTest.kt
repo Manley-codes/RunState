@@ -60,6 +60,38 @@ class RunStateMigrationTest {
     private val context = InstrumentationRegistry.getInstrumentation().targetContext
 
     @Test
+    fun versionTwentyAddsUnknownShoeGoalsAndPreservesPairsMileageAndSelection() {
+        val name = "runstate-v20-shoe-goal-test.db"
+        val old = helper.createDatabase(name, 20)
+        val shoeId = "4ca0ea04-a703-40a1-a014-47f08a67c127"
+        val finish = OFFICIAL_START + 1_920_000L
+        old.insertVersionTwoRun(state = "COMPLETED", lastCheckpointEpochMillis = finish, finishEpochMillis = finish)
+        old.execSQL("INSERT INTO shoe_pairs (shoe_pair_id,brand,model,nickname,created_at_epoch_millis,archived) " +
+            "VALUES (?,'Brooks','Ghost','Blue pair',?,0)", arrayOf<Any>(shoeId, OFFICIAL_START))
+        old.execSQL("INSERT INTO shoe_selection (selection_id,shoe_pair_id,revision) VALUES (1,?,4)", arrayOf(shoeId))
+        old.execSQL("UPDATE runs SET shoe_pair_id=?,tracking_mode='GPS',metric_source='GPS'," +
+            "telemetry_coverage='COMPLETE',display_distance_unit='MILES',final_distance_meters=5000,activity_finalized=1", arrayOf(shoeId))
+        old.close()
+        helper.runMigrationsAndValidate(name, 21, true, MIGRATION_20_21).use { migrated ->
+            migrated.query("SELECT goal_distance_meters FROM shoe_pairs").use {
+                assertTrue(it.moveToFirst()); assertTrue(it.isNull(0))
+            }
+            migrated.query("PRAGMA foreign_key_check").use { assertEquals(0, it.count) }
+        }
+        val reopened = openDatabaseThroughFactory(name)
+        runBlocking {
+            val row = reopened.shoeDao().observeShoes().first().single()
+            assertEquals(shoeId, row.pair.shoePairId)
+            assertEquals("Blue pair", row.pair.nickname)
+            assertNull(row.pair.goalDistanceMeters)
+            assertEquals(5000.0, row.totalDistanceMeters, 0.0)
+            assertEquals(shoeId, reopened.shoeDao().selectedActivePairId())
+            assertEquals(shoeId, reopened.runDao().findById(RUN_ID)?.shoePairId)
+        }
+        reopened.close()
+    }
+
+    @Test
     fun versionNineteenAddsUnknownEnergyProvenanceWithoutRelabelingOrLosingHistory() {
         val name = "runstate-v19-energy-foundation-test.db"
         val old = helper.createDatabase(name, 19)

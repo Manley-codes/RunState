@@ -379,6 +379,36 @@ class RunStateDatabaseTest {
     }
 
     @Test
+    fun shoeGoalSaveSurvivesReopenAndRollsBackWithSelectionFailure() = runBlocking {
+        val pair = ShoePairEntity(UUID.randomUUID().toString(), "Nike", "Pegasus", null, OFFICIAL_START,
+            goalDistanceMeters = 400 * 1609.344)
+        database.shoeDao().addAndSelect(pair)
+        // Simulate a committed save whose confirmation was lost, then an edited-goal retry.
+        database.shoeDao().addAndSelect(pair.copy(goalDistanceMeters = 425 * 1609.344))
+        assertEquals(1, database.shoeDao().observeShoes().first().size)
+        database.shoeDao().setGoalAndSelect(pair.shoePairId, 450 * 1609.344)
+        database.close()
+        database = openDatabase()
+        assertEquals(450 * 1609.344, database.shoeDao().findPair(pair.shoePairId)!!.goalDistanceMeters!!, 0.0)
+        assertEquals(1, database.shoeDao().observeShoes().first().size)
+        assertEquals(0.0, database.shoeDao().observeShoes().first().single().totalDistanceMeters, 0.0)
+        listOf(0.0, -1.0, Double.NaN, Double.POSITIVE_INFINITY, ShoePairEntity.MAX_GOAL_METERS + 1).forEach { invalid ->
+            assertTrue(runCatching { database.shoeDao().setGoalAndSelect(pair.shoePairId, invalid) }.isFailure)
+        }
+        database.openHelper.writableDatabase.execSQL("""
+            CREATE TRIGGER block_test_shoe_goal_selection BEFORE INSERT ON shoe_selection
+            BEGIN SELECT RAISE(ABORT, 'test storage failure'); END
+        """.trimIndent())
+        assertTrue(runCatching { database.shoeDao().setGoalAndSelect(pair.shoePairId, 500 * 1609.344) }.isFailure)
+        assertEquals(450 * 1609.344, database.shoeDao().findPair(pair.shoePairId)!!.goalDistanceMeters!!, 0.0)
+        database.openHelper.writableDatabase.execSQL("DROP TRIGGER block_test_shoe_goal_selection")
+        val receipt = requireNotNull(database.shoeDao().archivePair(pair.shoePairId))
+        assertTrue(runCatching { database.shoeDao().setGoalAndSelect(pair.shoePairId, 500 * 1609.344) }.isFailure)
+        database.shoeDao().undoArchive(receipt)
+        assertEquals(450 * 1609.344, database.shoeDao().findPair(pair.shoePairId)!!.goalDistanceMeters!!, 0.0)
+    }
+
+    @Test
     fun shoeMileageCountsOnlyFinalizedKnownGpsDistanceOnceAndKeepsArchivedHistory() = runBlocking {
         val pair = ShoePairEntity(UUID.randomUUID().toString(), "ASICS", "Novablast", null, OFFICIAL_START)
         database.shoeDao().addAndSelect(pair)

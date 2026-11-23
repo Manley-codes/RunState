@@ -30,6 +30,7 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertTextEquals
+import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.isDisplayed
 import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.captureToImage
@@ -2226,51 +2227,57 @@ class RunStateScreenTest {
     }
 
     @Test
-    fun shoeSearchFiltersSavedPairsAndCatalogWithoutSelectingAnything() {
-        val selections = mutableListOf<String?>()
-        val additions = mutableListOf<Triple<String, String, String?>>()
-        val shoes = listOf(
-            ShoePairDisplay("road", "ASICS", "Novablast 6", "Morning pair", "12.4 MI"),
-            ShoePairDisplay("easy", "HOKA", "Clifton 11", mileageLabel = "8.0 MI")
-        )
+    fun shoeBrandsSearchAndModelGoalRequireAnExplicitSave() {
+        val additions = mutableListOf<List<Any?>>()
+        var selections = 0
         composeTestRule.setContent {
-            ShoeSelectionSheet(shoes, "road", true, onDismiss = {},
-                onSelect = { selections += it }, onAdd = { brand, model, nickname ->
-                    additions += Triple(brand, model, nickname)
+            ShoeSelectionSheet(emptyList(), null, true, onDismiss = {},
+                onSelect = { _, _ -> selections++ }, onAdd = { brand, model, nickname, goal ->
+                    additions += listOf(brand, model, nickname, goal)
                 }, onArchive = {}, onRestore = {}, onUndoArchive = {})
         }
-        saveNativePreview("shoeSheet", "shoe-picker-saved-preview.png")
-        val search = composeTestRule.onNodeWithTag("shoeSearch")
-        search.performTextReplacement("  nOvAbLaSt  ")
-        composeTestRule.onNodeWithTag("shoeSelect:road").assertIsDisplayed()
-        composeTestRule.onNodeWithTag("shoeSelect:easy").assertDoesNotExist()
-        assertEquals(1, composeTestRule.onAllNodesWithText("Novablast 6").fetchSemanticsNodes().size)
-        composeTestRule.runOnIdle { assertTrue(selections.isEmpty()); assertTrue(additions.isEmpty()) }
-
-        search.performTextReplacement("  bRoOkS  ")
-        composeTestRule.onNodeWithTag("shoeSelect:road").assertDoesNotExist()
-        composeTestRule.onNodeWithTag("shoeList").performScrollToNode(hasText("Ghost 18"))
-        composeTestRule.onNodeWithText("Ghost 18").assertIsDisplayed().performClick()
-        composeTestRule.runOnIdle {
-            assertEquals(listOf(Triple("Brooks", "Ghost 18", null)), additions)
-            assertTrue(selections.isEmpty())
+        composeTestRule.onNodeWithText("Select Your Brand").assertIsDisplayed()
+        composeTestRule.onNodeWithText("YOUR SHOES").assertDoesNotExist()
+        composeTestRule.onNodeWithText("Run without tracking shoes").assertDoesNotExist()
+        saveNativePreview("shoeSheet", "shoe-brands-preview.png")
+        composeTestRule.onNodeWithTag("shoeBrand:Nike").performClick()
+        val firstPhoto = ShoeCatalog.load(InstrumentationRegistry.getInstrumentation().targetContext)
+            .firstOrNull { it.brand == "Nike" }?.imageAsset
+        if (firstPhoto != null) composeTestRule.waitUntil(10_000) {
+            composeTestRule.onAllNodesWithTag("shoePhoto:$firstPhoto", useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
         }
-        search.performTextReplacement("No such model")
-        composeTestRule.onNodeWithTag("shoeList").performScrollToIndex(0)
-        composeTestRule.onNodeWithText("No saved shoes match your search.").assertExists()
-        composeTestRule.onNodeWithTag("shoeList")
-            .performScrollToNode(hasText("No catalog match. Add your pair below."))
-        composeTestRule.onNodeWithText("No catalog match. Add your pair below.").assertIsDisplayed()
-        composeTestRule.runOnIdle { assertEquals(1, additions.size); assertTrue(selections.isEmpty()) }
+        saveNativePreview("shoeSheet", "shoe-models-preview.png")
+        composeTestRule.onNodeWithTag("shoeBack").performClick()
+        composeTestRule.onNodeWithTag("shoeSearch").performTextReplacement("bRoOkS")
+        composeTestRule.onNodeWithTag("shoeBrand:Nike").assertDoesNotExist()
+        composeTestRule.onNodeWithTag("shoeBrand:Brooks").performClick()
+        composeTestRule.onNodeWithTag("shoeSearch").performTextReplacement("Ghost 18")
+        composeTestRule.onNodeWithTag("shoeModel:Ghost 18").assertIsDisplayed().performClick()
+        val add = composeTestRule.onNodeWithTag("shoeAddCustom")
+        add.performScrollTo().assertIsNotEnabled()
+        listOf("0", "-1", "NaN", "Infinity", "100001", "abc").forEach { invalid ->
+            composeTestRule.onNodeWithTag("shoeGoal").performScrollTo().performTextReplacement(invalid)
+            add.performScrollTo().assertIsNotEnabled()
+        }
+        composeTestRule.onNodeWithTag("shoeGoal").performScrollTo().performTextReplacement("400")
+        composeTestRule.onNodeWithTag("shoeCustomNickname").performScrollTo().performTextReplacement("  Road pair  ")
+        composeTestRule.runOnIdle { assertTrue(additions.isEmpty()); assertEquals(0, selections) }
+        add.performScrollTo().assertIsEnabled().performClick()
+        composeTestRule.runOnIdle { assertEquals(listOf(listOf("Brooks", "Ghost 18", "Road pair", 400 * 1609.344)), additions) }
+        saveNativePreview("shoeSheet", "shoe-goal-preview.png")
+        composeTestRule.onNodeWithTag("shoeBack").performClick()
+        composeTestRule.onNodeWithTag("shoeBack").performClick()
+        composeTestRule.onNodeWithTag("shoeSearch").performTextReplacement("No such model")
+        composeTestRule.onNodeWithText("No matching brands or shoes.").assertIsDisplayed()
     }
 
     @Test
-    fun shoeCustomPairRequiresNamesTrimsFieldsAndWaitsForEnabledSave() {
+    fun shoeCustomPairRequiresNamesAndGoalTrimsFieldsAndWaitsForEnabledSave() {
         var enabled by mutableStateOf(true)
-        val additions = mutableListOf<Triple<String, String, String?>>()
+        val additions = mutableListOf<List<Any?>>()
         composeTestRule.setContent {
-            ShoeSelectionSheet(emptyList(), null, enabled, onDismiss = {}, onSelect = {},
-                onAdd = { brand, model, nickname -> additions += Triple(brand, model, nickname) },
+            ShoeSelectionSheet(emptyList(), null, enabled, onDismiss = {}, onSelect = { _, _ -> },
+                onAdd = { brand, model, nickname, goal -> additions += listOf(brand, model, nickname, goal) },
                 onArchive = {}, onRestore = {}, onUndoArchive = {})
         }
         composeTestRule.onNodeWithTag("shoeSearch").performTextReplacement("My custom shoes")
@@ -2280,6 +2287,7 @@ class RunStateScreenTest {
         add.performScrollTo().assertIsNotEnabled()
         composeTestRule.onNodeWithTag("shoeCustomBrand").performScrollTo().performTextInput("   ")
         composeTestRule.onNodeWithTag("shoeCustomModel").performScrollTo().performTextInput("  Daily Trainer  ")
+        composeTestRule.onNodeWithTag("shoeGoal").performScrollTo().performTextInput("350,5")
         add.performScrollTo().assertIsNotEnabled()
         composeTestRule.onNodeWithTag("shoeCustomBrand").performScrollTo().performTextReplacement("  Acme  ")
         composeTestRule.onNodeWithTag("shoeCustomNickname").performScrollTo().performTextInput("  Park pair  ")
@@ -2289,85 +2297,64 @@ class RunStateScreenTest {
         composeTestRule.runOnIdle { assertTrue(additions.isEmpty()); enabled = true }
         add.assertIsEnabled().performClick()
         composeTestRule.runOnIdle {
-            assertEquals(listOf(Triple("Acme", "Daily Trainer", "Park pair")), additions)
-        }
-        composeTestRule.onNodeWithTag("shoeCustomNickname").performScrollTo().performTextReplacement("   ")
-        add.performScrollTo().performClick()
-        composeTestRule.runOnIdle {
-            assertEquals(2, additions.size)
-            assertEquals(Triple("Acme", "Daily Trainer", null), additions.last())
+            assertEquals(listOf(listOf("Acme", "Daily Trainer", "Park pair", 350.5 * 1609.344)), additions)
         }
     }
 
     @Test
-    fun shoeSavedPairAndNoShoesAreExplicitSelectionsAndClosingDoesNotChangeThem() {
-        val selections = mutableListOf<String?>()
+    fun shoeExistingPairGoalDoesNotCreateADuplicateAndClosingDoesNotSelect() {
+        val selections = mutableListOf<Pair<String, Double>>()
         var closed = 0
         var otherWrites = 0
         val pair = ShoePairDisplay("road", "ASICS", "Novablast 6", mileageLabel = "12.4 MI")
         composeTestRule.setContent {
             ShoeSelectionSheet(listOf(pair), null, true, onDismiss = { closed++ },
-                onSelect = { selections += it }, onAdd = { _, _, _ -> otherWrites++ },
-                onArchive = { otherWrites++ }, onRestore = { otherWrites++ },
-                onUndoArchive = { otherWrites++ })
+                onSelect = { id, goal -> selections += id to goal }, onAdd = { _, _, _, _ -> otherWrites++ },
+                onArchive = { otherWrites++ }, onRestore = { otherWrites++ }, onUndoArchive = { otherWrites++ })
         }
+        composeTestRule.onNodeWithTag("shoeBrand:ASICS").performClick()
         composeTestRule.onNodeWithTag("shoeSelect:road").assertIsDisplayed().performClick()
-        composeTestRule.onNodeWithTag("shoeNoSelection").performScrollTo().performClick()
+        composeTestRule.onNodeWithTag("shoeAddCustom").performScrollTo().assertIsNotEnabled()
+        composeTestRule.onNodeWithTag("shoeGoal").performScrollTo().performTextReplacement("450")
+        composeTestRule.onNodeWithTag("shoeAddCustom").performScrollTo().performClick()
         composeTestRule.onNodeWithText("Close").performClick()
         composeTestRule.runOnIdle {
-            assertEquals(listOf("road", null), selections)
-            assertEquals(1, closed)
-            assertEquals(0, otherWrites)
+            assertEquals(listOf("road" to 450 * 1609.344), selections)
+            assertEquals(1, closed); assertEquals(0, otherWrites)
         }
     }
 
     @Test
     fun shoeArchiveUndoAndRestoreDoNotAlsoInvokeTheSelectionCallback() {
-        val original = ShoePairDisplay("road", "ASICS", "Novablast 6", "Park pair", "12.4 MI")
+        val original = ShoePairDisplay("road", "ASICS", "Novablast 6", "Park pair", "12.4 MI", goalDistanceMeters = 400 * 1609.344)
         var shoes by mutableStateOf(listOf(original))
         var undoLabel by mutableStateOf<String?>(null)
-        var archives = 0
-        var undos = 0
-        var restores = 0
-        var selections = 0
-        var additions = 0
+        var archives = 0; var undos = 0; var restores = 0; var selections = 0; var additions = 0
         composeTestRule.setContent {
-            ShoeSelectionSheet(shoes, "road", true, onDismiss = {}, onSelect = { selections++ },
-                onAdd = { _, _, _ -> additions++ },
+            ShoeSelectionSheet(shoes, "road", true, onDismiss = {}, onSelect = { _, _ -> selections++ },
+                onAdd = { _, _, _, _ -> additions++ },
                 onArchive = { id ->
-                    assertEquals("road", id)
-                    archives++
-                    shoes = listOf(original.copy(archived = true))
-                    undoLabel = "Park pair removed"
-                },
-                onRestore = { id ->
-                    assertEquals("road", id)
-                    restores++
-                    shoes = listOf(original)
-                    undoLabel = null
-                },
-                onUndoArchive = {
-                    undos++
-                    shoes = listOf(original)
-                    undoLabel = null
-                }, undoLabel = undoLabel)
+                    assertEquals("road", id); archives++; shoes = listOf(original.copy(archived = true)); undoLabel = "Park pair removed"
+                }, onRestore = { id ->
+                    assertEquals("road", id); restores++; shoes = listOf(original); undoLabel = null
+                }, onUndoArchive = { undos++; shoes = listOf(original); undoLabel = null }, undoLabel = undoLabel)
         }
-        composeTestRule.onNodeWithTag("shoeSearch").performTextReplacement("ASICS")
-        // A real pointer tap checks that the nested Archive button does not select its row.
+        composeTestRule.onNodeWithTag("shoeBrand:ASICS").performClick()
+        composeTestRule.onNodeWithTag("shoeSearch").performTextReplacement("Novablast 6")
+        saveNativePreview("shoeSheet", "shoe-owned-preview.png")
         composeTestRule.onNodeWithTag("shoeArchive:road").performTouchInput { click() }
         composeTestRule.onNodeWithTag("shoeSelect:road").assertDoesNotExist()
         composeTestRule.onNodeWithTag("shoeUndo").assertIsDisplayed().performClick()
         composeTestRule.onNodeWithTag("shoeSelect:road").assertExists()
-        composeTestRule.runOnIdle {
-            assertEquals(1, archives); assertEquals(1, undos); assertEquals(0, selections)
-        }
+        composeTestRule.runOnIdle { assertEquals(1, archives); assertEquals(1, undos); assertEquals(0, selections) }
         composeTestRule.onNodeWithTag("shoeArchive:road").performTouchInput { click() }
-        // Archived models must not reappear as a new catalog pair.
-        composeTestRule.onNodeWithText("Novablast 6").assertDoesNotExist()
+        composeTestRule.onNodeWithTag("shoeModel:Novablast 6").assertDoesNotExist()
         composeTestRule.onNodeWithTag("shoeList").performScrollToNode(hasTestTag("shoeArchivedToggle"))
         composeTestRule.onNodeWithTag("shoeArchivedToggle").performClick()
         composeTestRule.onNodeWithTag("shoeList").performScrollToNode(hasTestTag("shoeRestore:road"))
         composeTestRule.onNodeWithTag("shoeRestore:road").assertIsDisplayed().performClick()
+        composeTestRule.onNodeWithTag("shoeSelect:road").performScrollTo().performClick()
+        composeTestRule.onNodeWithTag("shoeGoal").assertTextContains("400")
         composeTestRule.runOnIdle {
             assertEquals(2, archives); assertEquals(1, undos); assertEquals(1, restores)
             assertEquals(0, selections); assertEquals(0, additions)
@@ -2377,47 +2364,65 @@ class RunStateScreenTest {
     @Test
     fun shoeLoadingDisablesWritesAndLoadErrorOffersRetryWithoutSelection() {
         var loading by mutableStateOf(true)
-        var retries = 0
-        var writes = 0
-        val pair = ShoePairDisplay("road", "ASICS", "Novablast 6", mileageLabel = "12.4 MI")
+        var retries = 0; var writes = 0
         composeTestRule.setContent {
-            ShoeSelectionSheet(listOf(pair), "road", false, onDismiss = {},
-                onSelect = { writes++ }, onAdd = { _, _, _ -> writes++ },
+            ShoeSelectionSheet(emptyList(), null, false, onDismiss = {},
+                onSelect = { _, _ -> writes++ }, onAdd = { _, _, _, _ -> writes++ },
                 onArchive = { writes++ }, onRestore = { writes++ }, onUndoArchive = { writes++ },
                 loading = loading, error = "Your shoes could not be loaded.", onRetryLoad = { retries++ })
         }
         composeTestRule.onNodeWithText("Loading your shoes…").assertIsDisplayed()
-        composeTestRule.onNodeWithTag("shoeSelect:road").assertIsNotEnabled().performTouchInput { click() }
-        composeTestRule.onNodeWithTag("shoeArchive:road").assertIsNotEnabled().performTouchInput { click() }
-        composeTestRule.onNodeWithTag("shoeNoSelection").performScrollTo().assertIsNotEnabled()
-            .performTouchInput { click() }
+        composeTestRule.onNodeWithTag("shoeBrand:Nike").assertIsNotEnabled().performTouchInput { click() }
         composeTestRule.onNodeWithText("Retry").assertIsNotEnabled().performTouchInput { click() }
         composeTestRule.runOnIdle { assertEquals(0, writes); assertEquals(0, retries); loading = false }
-        composeTestRule.onNodeWithText("Loading your shoes…").assertDoesNotExist()
         composeTestRule.onNodeWithText("Retry").assertIsEnabled().performClick()
-        composeTestRule.onNodeWithTag("shoeSelect:road").assertIsNotEnabled()
+        composeTestRule.onNodeWithTag("shoeBrand:Nike").assertIsNotEnabled()
         composeTestRule.runOnIdle { assertEquals(0, writes); assertEquals(1, retries) }
     }
 
     @Test
     fun shoeCustomFormRemainsReachableWithLargeTextInACompactSheet() {
-        val additions = mutableListOf<Triple<String, String, String?>>()
+        var additions = 0
         composeTestRule.setContent {
             val density = LocalDensity.current
             CompositionLocalProvider(LocalDensity provides Density(density.density, 1.6f)) {
-                ShoeSelectionSheet(emptyList(), null, true, onDismiss = {}, onSelect = {},
-                    onAdd = { brand, model, nickname -> additions += Triple(brand, model, nickname) },
-                    onArchive = {}, onRestore = {}, onUndoArchive = {},
+                ShoeSelectionSheet(emptyList(), null, true, onDismiss = {}, onSelect = { _, _ -> },
+                    onAdd = { _, _, _, _ -> additions++ }, onArchive = {}, onRestore = {}, onUndoArchive = {},
                     modifier = Modifier.size(360.dp, 480.dp))
             }
         }
         composeTestRule.onNodeWithTag("shoeSearch").performTextReplacement("Personal pair")
         composeTestRule.onNodeWithTag("shoeList").performScrollToNode(hasTestTag("shoeCustomToggle"))
         composeTestRule.onNodeWithTag("shoeCustomToggle").assertIsDisplayed().performClick()
-        composeTestRule.onNodeWithTag("shoeCustomBrand").performScrollTo().assertIsDisplayed().performTextInput("Acme")
-        composeTestRule.onNodeWithTag("shoeCustomModel").performScrollTo().assertIsDisplayed().performTextInput("Runner")
+        composeTestRule.onNodeWithTag("shoeCustomBrand").performScrollTo().performTextInput("Acme")
+        composeTestRule.onNodeWithTag("shoeCustomModel").performScrollTo().performTextInput("Runner")
+        composeTestRule.onNodeWithTag("shoeGoal").performScrollTo().performTextInput("400")
         composeTestRule.onNodeWithTag("shoeAddCustom").performScrollTo().assertIsDisplayed().performClick()
-        composeTestRule.runOnIdle { assertEquals(listOf(Triple("Acme", "Runner", null)), additions) }
+        composeTestRule.runOnIdle { assertEquals(1, additions) }
+    }
+
+    @Test
+    fun shoeCatalogHasAllBrandsUniqueModelsAndDecodableLocalPhotos() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val choices = ShoeCatalog.load(context)
+        assertEquals(26, ShoeCatalog.brands.size)
+        assertTrue(choices.size >= 150)
+        assertEquals(choices.size, choices.distinctBy { ShoeCatalog.brandKey(it.brand) + ":" + it.model.lowercase() }.size)
+        ShoeCatalog.brands.forEach { brand -> assertTrue(brand, choices.any { it.brand == brand }) }
+        val photos = choices.mapNotNull { it.imageAsset }.distinct()
+        // Private photo assets are optional on clean CI checkouts; public builds are text-only.
+        photos.forEach { photo ->
+            context.assets.open(photo).use { stream ->
+                val options = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                android.graphics.BitmapFactory.decodeStream(stream, null, options)
+                assertTrue(photo, options.outWidth > 0 && options.outHeight > 0)
+            }
+        }
+        assertEquals("on", ShoeCatalog.brandKey("On Cloud"))
+        assertEquals("hoka", ShoeCatalog.brandKey("Hoka One One"))
+        listOf(0.01, 350.55, 400.0, 99999.99).forEach { miles ->
+            assertEquals(miles, shoeGoalInput(miles * 1609.344).toDouble(), 0.00000001)
+        }
     }
 
     @Test

@@ -419,3 +419,10 @@ val MIGRATION_19_20 = object : Migration(19, 20) {
         }
     }
 }
+
+/** An existing runner has not chosen a target yet; never invent one or reset their mileage. */
+val MIGRATION_20_21 = object : Migration(20, 21) {
+    override fun migrate(connection: SQLiteConnection) {
+        connection.execSQL("ALTER TABLE `shoe_pairs` ADD COLUMN `goal_distance_meters` REAL")
+    }
+}

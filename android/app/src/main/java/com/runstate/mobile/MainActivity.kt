@@ -580,7 +580,8 @@ internal fun RunJourneyRoot(
     val shoeDisplays = remember(shoeRows) {
         shoeRows.map { row ->
             ShoePairDisplay(row.pair.shoePairId, row.pair.brand, row.pair.model, row.pair.nickname,
-                String.format(Locale.US, "%.1f MI", row.totalDistanceMeters / 1609.344), row.pair.archived)
+                String.format(Locale.US, "%.1f MI", row.totalDistanceMeters / 1609.344), row.pair.archived,
+                row.pair.goalDistanceMeters)
         }
     }
     val shoesById = remember(shoeDisplays) { shoeDisplays.associateBy { it.id } }
@@ -2094,8 +2095,8 @@ internal fun RunJourneyRoot(
             loading = shoeLoading,
             onRetryLoad = { shoeReload++ },
             onDismiss = { if (!shoeWritePending) shoesVisible = false },
-            onSelect = { id -> changeShoes(closeAfterSave = true) { database.shoeDao().selectPair(id) } },
-            onAdd = { brand, shoeModel, nickname ->
+            onSelect = { id, goal -> changeShoes(closeAfterSave = true) { database.shoeDao().setGoalAndSelect(id, goal) } },
+            onAdd = { brand, shoeModel, nickname, goal ->
                 val key = listOf(brand.trim(), shoeModel.trim(), nickname.orEmpty().trim()).joinToString("\u0000")
                 if (pendingShoeAddKey != key || pendingShoeAddId == null) {
                     pendingShoeAddKey = key
@@ -2108,7 +2109,8 @@ internal fun RunJourneyRoot(
                     pendingShoeAddId = null
                 }) {
                     database.shoeDao().addAndSelect(ShoePairEntity(id, brand.trim(), shoeModel.trim(),
-                        nickname?.trim()?.takeIf { it.isNotEmpty() }, pendingShoeAddCreatedAt))
+                        nickname?.trim()?.takeIf { it.isNotEmpty() }, pendingShoeAddCreatedAt,
+                        goalDistanceMeters = goal))
                 }
             },
             onArchive = { id -> changeShoes {
@@ -2119,8 +2121,8 @@ internal fun RunJourneyRoot(
                     archivedShoeLabel = shoesById[id]?.displayName
                 }
             } },
-            onRestore = { id -> changeShoes(closeAfterSave = true) {
-                database.shoeDao().restorePair(id)
+            onRestore = { id -> changeShoes {
+                database.shoeDao().restorePair(id, select = false)
                 archivedShoeId = null
                 archivedShoeLabel = null
             } },

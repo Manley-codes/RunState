@@ -22,12 +22,16 @@ data class ShoePairEntity(
     @ColumnInfo(name = "model") val model: String,
     @ColumnInfo(name = "nickname") val nickname: String? = null,
     @ColumnInfo(name = "created_at_epoch_millis") val createdAtEpochMillis: Long,
-    @ColumnInfo(name = "archived", defaultValue = "0") val archived: Boolean = false
+    @ColumnInfo(name = "archived", defaultValue = "0") val archived: Boolean = false,
+    @ColumnInfo(name = "goal_distance_meters") val goalDistanceMeters: Double? = null
 ) {
     companion object {
         const val BRAND_MAX_LENGTH = 60
         const val MODEL_MAX_LENGTH = 80
         const val NICKNAME_MAX_LENGTH = 40
+        const val MAX_GOAL_METERS = 160_934_400.0
+
+        fun validGoal(meters: Double) = meters.isFinite() && meters > 0.0 && meters <= MAX_GOAL_METERS
     }
 
     init {
@@ -45,6 +49,7 @@ data class ShoePairEntity(
             "A pair nickname must contain 1–$NICKNAME_MAX_LENGTH characters, or be absent."
         }
         require(createdAtEpochMillis >= 0L) { "A shoe pair's creation time cannot be negative." }
+        require(goalDistanceMeters == null || validGoal(goalDistanceMeters)) { "Enter a positive mileage goal." }
     }
 }
 
@@ -121,7 +126,16 @@ abstract class ShoeDao {
         require(!pair.archived) { "Add an active pair, or restore its existing archived entry." }
         val existing = findPair(pair.shoePairId)
         if (existing == null) insertPair(pair)
-        else check(existing == pair) { "This pair identity already belongs to a different saved entry." }
+        else {
+            check(existing.copy(goalDistanceMeters = pair.goalDistanceMeters) == pair) {
+                "This pair identity already belongs to a different saved entry."
+            }
+            // A retry may carry an edited target after the first commit's confirmation was lost.
+            // Keep the same physical pair rather than inserting another zero-mile entry.
+            if (existing.goalDistanceMeters != pair.goalDistanceMeters) {
+                check(updateGoal(pair.shoePairId, requireNotNull(pair.goalDistanceMeters)) == 1)
+            }
+        }
         writeSelection(pair.shoePairId)
     }
 
@@ -130,6 +144,15 @@ abstract class ShoeDao {
         if (shoePairId != null) check(findPair(shoePairId)?.archived == false) {
             "Select an active saved shoe pair."
         }
+        writeSelection(shoePairId)
+    }
+
+    /** Updating a personal target never changes measured mileage or the physical pair's identity. */
+    @Transaction
+    open suspend fun setGoalAndSelect(shoePairId: String, goalDistanceMeters: Double) {
+        require(ShoePairEntity.validGoal(goalDistanceMeters)) { "Enter a positive mileage goal." }
+        check(findPair(shoePairId)?.archived == false) { "Select an active saved shoe pair." }
+        check(updateGoal(shoePairId, goalDistanceMeters) == 1)
         writeSelection(shoePairId)
     }
 
@@ -182,4 +205,7 @@ abstract class ShoeDao {
 
     @Query("UPDATE shoe_pairs SET archived = :archived WHERE shoe_pair_id = :shoePairId")
     protected abstract suspend fun setArchived(shoePairId: String, archived: Boolean): Int
+
+    @Query("UPDATE shoe_pairs SET goal_distance_meters = :meters WHERE shoe_pair_id = :shoePairId")
+    protected abstract suspend fun updateGoal(shoePairId: String, meters: Double): Int
 }

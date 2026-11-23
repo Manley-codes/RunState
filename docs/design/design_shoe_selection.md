@@ -1,12 +1,54 @@
 ---
 name: design-shoe-selection
-description: "Current shoe selection and mileage direction as of August 14 2026 — the first resolved slice of the progressive-input ladder"
+description: "Android brand-first shoe selection, personal mileage goals, catalog provenance and preserved physical-pair mileage"
 metadata:
   type: project
-status: READY TO TEST — October 22 native feature installed and software/device checks passed; user visual and real-run review remain
+status: READY FOR VISUAL REVIEW — November 23 brand-first picker/required goals installed; focused phone checks and data preservation passed
 ---
 
 # Shoe selection and mileage
+
+## November 23, 2026 — brand-first selection and personal mileage goals
+
+Manley approved the reference-led flow **Select Your Brand → model → mileage goal**. This
+supersedes the earlier text-only catalog and no-required-target decisions below. The separate
+Your Shoes/Browse Shoes sections, tracking explanation, and Run without tracking shoes action
+are removed. Brand rows are white, spacious and divided; model rows use exact product photos
+when available. The simple **Add different shoes** action opens manual brand/model entry and an
+optional nickname, without the promotional footer in the reference. Start's shoe artwork stays as-is.
+
+All 26 requested brands are included (HOKA, On and Topo Athletic use their current brand names;
+search recognizes the reference names). The sourced offline catalog contains **338 distinct
+models**, including the original six, with no gender/color duplicates. Older models can remain
+useful for shoes a runner already owns; the catalog is not a claim of current sale or completeness.
+Per-model source URLs and image provenance are in `android/app/src/main/assets/shoes/catalog.json`.
+
+**Personal target:** Manley explicitly confirmed a required total-mileage goal for the physical
+pair, not starting mileage. It is entered in miles, separately from actual run-derived mileage;
+there are no wear/safety claims, automatic retirement, alerts, or invented starting miles.
+Existing pairs remain within their brands and retain IDs, nicknames, run associations and mileage.
+Selecting a model opens its goal form; saved pairs can revise their goal without creating another
+pair. Unchanged goals retain the exact stored value, and an edited-goal retry after uncertain save
+confirmation retains the same pair ID. Archive/Undo/restore remain; restoring returns the pair to
+its brand list for an explicit goal/selection confirmation. Dismissal never saves a draft.
+
+**Storage:** Room 21 adds nullable `goal_distance_meters` to `shoe_pairs`. Version-20 pairs migrate
+with no invented goal; all existing fields and current selection remain. New picker additions and
+selection confirmations require a finite positive goal (maximum 100,000 miles). Goal/selection
+writes are transactional. The existing finalized-GPS distance calculation is unchanged.
+
+**Photo boundary:** 222 model-matched original photographs were fetched from official sources;
+116 models have no verified photo and use clean text rows. Photos are kept only in gitignored
+`android/app/src/debug/assets/shoes/photos/` for the requested owner trial. Public redistribution
+permission has not been established; these are not licensed/public-release assets. The release
+APK contains the complete text catalog and no product-photo files. `android/tools/prepare-shoe-photos.py`
+recreates the private collection with HTTPS, size/type checks and a local SHA-256 receipt. The app
+makes no catalog/photo network calls. Native thumbnail decoding happens off the main thread,
+subsamples original photos, and retains a bounded 32-image cache.
+
+Verification receipts and installed status are recorded in current-state notes. Public GitHub
+preview remains unchanged. Public photo rights/coverage and the eventual owner visual review are
+tracked in the existing private roadmap, alongside the unchanged release return queue.
 
 ## November 23, 2026 — simplified Android shoe styling
 

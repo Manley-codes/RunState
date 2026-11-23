@@ -5,6 +5,38 @@ metadata:
   type: project
 ---
 
+## November 23 brand-first shoes and mileage goals
+
+Manley's requested shoe-panel redesign is installed: Select Your Brand → model → required personal
+mileage goal. All 26 requested brands, 338 sourced models and 222 exact product photos in the private
+owner build. Models without a verified photo use text. Search, plain Add different shoes, optional
+new-pair nickname, saved pairs within their brands, Archive/Undo/restore remain. Removed the separate
+Your Shoes/Browse Shoes sections, tracking explanation and Run without tracking shoes action.
+The existing Start shoe illustration and all reflection work are unchanged.
+
+Room 21 adds only nullable goal_distance_meters. Old pairs retain all fields, IDs, selection and
+mileage with no invented target. New choices require a positive personal total-mileage target;
+actual mileage still comes only from finalized measured GPS runs. Goal updates/select are atomic,
+unchanged values retain exact precision, and a goal-only edited retry reuses its physical-pair ID.
+
+Three APK assemblies/vital lint passed. Fifteen focused Moto checks passed across the run and the
+single corrected migration-fixture rerun: all eight picker/catalog/Start checks, three migration
+checks, and four storage/goal/archive/mileage checks. The initial migration fixture omitted its
+required display unit; correcting only that test sample made it pass. Actual native brand/model/
+goal/saved-pair renders were inspected. All 222 photo assets decode; debug APK has 222, release has
+zero. Photos remain gitignored/debug-only pending public reuse rights; app browsing is entirely
+offline. Source/provenance is in the catalog JSON; preparation script saves original bytes with
+HTTPS, size/type guards and a SHA-256 receipt. No public-preview publication.
+
+Matching-signature in-place update and final Room upgrade preserved 74 completed runs and two
+pairs. All non-shoe table hashes match; every original shoe column/row matches and both new goals
+are null. Only normal opening counter changed; integrity OK/foreign-key violations zero. Test
+package removed, main app reopened, no real run created. APK SHA-256: `acc898a6237ca222e2d753acd2c061bc3034225f68667653948b022fbfa1a8ef`.
+Evidence: `android/build/nov23-shoe-brands/`; research: `docs/local/shoe-catalog-research/`.
+New tracked files are ShoeCatalog.kt, catalog.json, exported Room 21.json and the photo preparation
+script. Owner visual review and public-photo rights/remaining coverage are queued in the existing
+private roadmap; release return queue and iPhone work remain unchanged.
+
 ## November 23 Houston trails access on original background
 
 Manley likes the current result but is not certain he will retain the moving trail background.
