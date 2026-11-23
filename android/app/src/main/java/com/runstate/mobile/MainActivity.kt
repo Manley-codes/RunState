@@ -95,6 +95,7 @@ import com.runstate.mobile.ui.HistoryRouteDisplay
 import com.runstate.mobile.ui.HistorySplitDisplay
 import com.runstate.mobile.ui.RunStateScreen
 import com.runstate.mobile.ui.OpeningScreen
+import com.runstate.mobile.ui.OpeningRecoveryBackdrop
 import com.runstate.mobile.ui.ShoeSelectionSheet
 import com.runstate.mobile.ui.ShoePairDisplay
 import com.runstate.mobile.ui.ShortRunDecisionDialog
@@ -1524,6 +1525,11 @@ internal fun RunJourneyRoot(
             onExit = { musicReflectionDemoRequested = false },
             modifier = modifier
         )
+        return
+    }
+    if (openingPending && model.state == RunUiState.Initializing && !openingBlockedByNavigation) {
+        // Hide the generic loading screen without starting or skipping the entrance before recovery.
+        OpeningRecoveryBackdrop()
         return
     }
     if (openingPending && model.state == RunUiState.ReadyToStart && !openingBlockedByNavigation) {

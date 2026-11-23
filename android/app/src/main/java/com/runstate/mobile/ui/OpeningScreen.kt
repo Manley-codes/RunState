@@ -89,6 +89,7 @@ import kotlinx.coroutines.withTimeoutOrNull
 private const val OPENING_VISIBLE_MILLIS = 4_800L
 internal const val OPENING_SCREEN_TAG = "openingScreen"
 internal const val OPENING_FIRST_FRAME_TAG = "openingFirstFrame"
+internal const val OPENING_RECOVERY_BACKDROP_TAG = "openingRecoveryBackdrop"
 private const val OPENING_GAP_DP = 6f
 private val OpeningFont = FontFamily(Font(R.font.barlow_condensed_medium, FontWeight.Medium))
 private val OpeningArrival = CubicBezierEasing(.19f, 1f, .22f, 1f)
@@ -128,6 +129,19 @@ private fun nextOpeningStartSeconds(context: Context): Double {
     val entrance = if (previous < 1_000_000L) previous + 1L else 1L
     preferences.edit().putLong("entrance", entrance).apply()
     return entrance * OPENING_START_STEP_SECONDS
+}
+
+/** Static launch artwork while recovery decides which screen owns the journey. No timer or actions. */
+@Composable
+internal fun OpeningRecoveryBackdrop() {
+    OpeningSystemBars()
+    Image(
+        painter = painterResource(R.drawable.opening_first_frame),
+        contentDescription = null,
+        contentScale = ContentScale.Crop,
+        modifier = Modifier.fillMaxSize().background(Color(0xFF17201B))
+            .testTag(OPENING_RECOVERY_BACKDROP_TAG)
+    )
 }
 
 /**

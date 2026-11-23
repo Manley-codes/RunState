@@ -6,6 +6,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertHasNoClickAction
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.hasText
@@ -32,6 +33,7 @@ import com.runstate.mobile.run.RunActionKind
 import com.runstate.mobile.run.RunSessionCoordinator
 import com.runstate.mobile.ui.ACTIVE_RUN_SCREEN_TAG
 import com.runstate.mobile.ui.OPENING_SCREEN_TAG
+import com.runstate.mobile.ui.OPENING_RECOVERY_BACKDROP_TAG
 import com.runstate.mobile.ui.RUN_COMPLETE_SCREEN_TAG
 import com.runstate.mobile.ui.RUN_HISTORY_SCREEN_TAG
 import com.runstate.mobile.ui.SETTINGS_DIALOG_TAG
@@ -59,6 +61,10 @@ import java.time.Clock
 import java.time.Instant
 import java.time.ZoneOffset
 import java.util.UUID
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.Executor
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 
 /** Isolated Room and silent speech; no phone runs, playback or location requests. */
 class OpeningJourneyTest {
@@ -124,6 +130,34 @@ class OpeningJourneyTest {
             assertNull(runBlocking { fixture.database.shoeDao().selectedActivePairId() })
             assertEquals(1, runBlocking { fixture.database.shoeDao().observeShoes().first().size })
             assertEquals(0, runBlocking { fixture.database.runDao().countRuns() })
+        }
+    }
+
+    @Test fun slowRecoveryShowsCollageWithoutLoadingTextOrPrematureEntrance() {
+        val releaseRecovery = CountDownLatch(1)
+        val executor = Executors.newSingleThreadExecutor()
+        executor.execute { releaseRecovery.await(20, TimeUnit.SECONDS) }
+        try {
+            Fixture(queryExecutor = executor).use { fixture ->
+                try {
+                    fixture.render()
+                    awaitTag(OPENING_RECOVERY_BACKDROP_TAG)
+                    compose.onNodeWithText("Getting things ready").assertDoesNotExist()
+                    compose.onNodeWithTag(OPENING_SCREEN_TAG).assertDoesNotExist()
+                    compose.onNodeWithTag(START_RUN_BUTTON_TAG).assertDoesNotExist()
+                    compose.onNodeWithTag(OPENING_RECOVERY_BACKDROP_TAG).assertHasNoClickAction()
+                } finally {
+                    releaseRecovery.countDown()
+                }
+                awaitTag(OPENING_SCREEN_TAG)
+                compose.onNodeWithTag(OPENING_RECOVERY_BACKDROP_TAG).assertDoesNotExist()
+                compose.onNodeWithTag(OPENING_SCREEN_TAG).performClick()
+                awaitTag(START_RUN_BUTTON_TAG)
+                assertEquals(0, runBlocking { fixture.database.runDao().countRuns() })
+            }
+        } finally {
+            releaseRecovery.countDown()
+            executor.shutdownNow()
         }
     }
 
@@ -263,10 +297,12 @@ class OpeningJourneyTest {
         }
     }
 
-    private inner class Fixture : AutoCloseable {
+    private inner class Fixture(queryExecutor: Executor? = null) : AutoCloseable {
         private var requestId by mutableIntStateOf(0)
         val database = Room.inMemoryDatabaseBuilder(ApplicationProvider.getApplicationContext(),
-            RunStateDatabase::class.java).build()
+            RunStateDatabase::class.java).apply {
+                if (queryExecutor != null) setQueryExecutor(queryExecutor)
+            }.build()
         private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
         private val silent = object : ReflectionSpeaker {
             override fun speak(text: String) = Unit

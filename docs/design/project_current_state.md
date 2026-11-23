@@ -5,6 +5,32 @@ metadata:
   type: project
 ---
 
+## November 22 startup loading flash
+
+Manley accepted the updated Start artwork, then asked to remove the intermittent white
+“Getting things ready” screen before the collage. It was the generic initialization surface
+shown while the coordinator recovered stored run state. A pending launcher entrance now shows
+the existing bundled collage still during that check, without a timer, skip action or phase
+allocation. The timed opening still starts only after recovery reports ReadyToStart; active or
+pending runs, navigation and recovery errors keep their existing precedence. Existing collage
+photos, animation length, typography and Start design are unchanged.
+
+The delayed-recovery regression failed against the prior installed APK and passed with the fix.
+All ten focused Moto tests passed: delayed initialization, skip/restoration, warm launch,
+non-launcher entry, ordinary background return, running/paused/pending recovery, photo loading
+and foreground-only timing. Fresh debug, instrumentation and public release builds passed.
+Independent source review found no material issue. The owner update was installed in place
+after signature and idle checks; SHA-256
+`60c9201c4ca7c78757fe0f6b8a5929ce91891bd11bfe17bb08165c8cc2b41674`.
+All 73 runs and all 12 table hashes survived the update and tests. Only the expected opening
+appearance counter changed during entrance tests; other settings were unchanged. The temporary
+test package was removed. A normal cold-launch capture showed the system splash, collage and
+Start in sequence; the Android system icon splash is separate and unchanged. Private evidence
+is in `android/build/nov22-opening-fix/`. The public browser preview already displays this same
+still immediately and contains no recovery/loading page, so no preview change is required.
+No new tracked file, run, provider request, iPhone change or hosted deployment. User reopening
+feedback and the brief History artwork review remain next; accepted written reflections stay intact.
+
 ## November 22 Android owner review
 
 Manley is available for Android review/testing and connected the Moto. The installed November 11
