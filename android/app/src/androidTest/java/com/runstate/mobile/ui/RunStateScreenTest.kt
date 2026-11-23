@@ -587,6 +587,73 @@ class RunStateScreenTest {
     }
 
     @Test
+    fun energyPromptAlternatesWithoutMovingControlsAndDisappearsAfterSelection() {
+        composeTestRule.mainClock.autoAdvance = false
+        var selected by mutableStateOf<PreRunEnergy?>(null)
+        var starts = 0
+        var selectedAtStart: PreRunEnergy? = null
+        composeTestRule.setContent {
+            StartRunScreen(selected, { selected = it }, { starts++; selectedAtStart = selected },
+                true, {}, true, onOpenMap = {},
+                modifier = Modifier.fillMaxSize().systemBarsPadding())
+        }
+        composeTestRule.mainClock.advanceTimeByFrame()
+        settleStartEnergyEntrance()
+        composeTestRule.mainClock.advanceTimeBy(700L)
+        val fixedTags = listOf(START_ENERGY_CUE_TAG, START_ENERGY_PROMPT_TAG,
+            START_RUN_BUTTON_TAG, START_FOOTER_TAG, START_UTILITY_ACTIONS_TAG)
+        val fixedBounds = fixedTags.associateWith {
+            composeTestRule.onNodeWithTag(it).assertIsDisplayed().fetchSemanticsNode().boundsInRoot
+        }
+        val pill = composeTestRule.onNodeWithTag(START_ENERGY_PROMPT_PILL_TAG)
+            .assertIsDisplayed().fetchSemanticsNode()
+        val pillBounds = pill.boundsInRoot
+        assertTrue("The prompt sits below the Energy choices", pillBounds.top >= fixedBounds.getValue(START_ENERGY_CUE_TAG).bottom)
+        assertTrue("The prompt remains above bottom navigation", pillBounds.bottom <= fixedBounds.getValue(START_UTILITY_ACTIONS_TAG).top)
+        assertFalse("The invitation is not another button", pill.config.contains(SemanticsActions.OnClick))
+        assertFalse("The invitation must not pretend to be a control", pill.config.contains(SemanticsProperties.Role))
+        fun assertStablePrompt() {
+            val node = composeTestRule.onNodeWithTag(START_ENERGY_PROMPT_PILL_TAG).fetchSemanticsNode()
+            assertEquals(listOf("Choose energy, optional"), node.config[SemanticsProperties.ContentDescription])
+            assertEquals("Changing words must not resize the pill", pillBounds, node.boundsInRoot)
+            fixedTags.forEach { tag ->
+                assertEquals("Prompt animation must not move $tag", fixedBounds.getValue(tag),
+                    composeTestRule.onNodeWithTag(tag).fetchSemanticsNode().boundsInRoot)
+            }
+        }
+        val observedWords = mutableSetOf<String>()
+        for (frame in 0 until 40) {
+            val word = composeTestRule.onAllNodesWithTag(START_ENERGY_PROMPT_WORD_TAG, useUnmergedTree = true)
+                .fetchSemanticsNodes().single().config[SemanticsProperties.Text].single().text
+            assertTrue("Only one invitation word is shown at a time", word == "Choose" || word == "Energy")
+            if (observedWords.add(word)) {
+                // Allow this word's fade-in to settle before retaining the visual example.
+                composeTestRule.mainClock.advanceTimeBy(450L)
+                composeTestRule.onNodeWithTag(START_ENERGY_PROMPT_WORD_TAG, useUnmergedTree = true)
+                    .assertTextEquals(word)
+                saveNativePreview(START_RUN_SCREEN_TAG, "start-energy-prompt-${word.lowercase()}.png")
+            }
+            assertStablePrompt()
+            if (observedWords.size == 2) break
+            composeTestRule.mainClock.advanceTimeBy(200L)
+        }
+        assertEquals(setOf("Choose", "Energy"), observedWords)
+        assertEquals("The prompt cannot start a run", 0, starts)
+        composeTestRule.onNodeWithTag(START_ENERGY_MODERATE_TAG).performClick()
+        composeTestRule.mainClock.advanceTimeBy(1_000L)
+        composeTestRule.onNodeWithTag(START_ENERGY_PROMPT_PILL_TAG).assertDoesNotExist()
+        fixedTags.forEach { tag ->
+            assertEquals("Dismissing the prompt must preserve $tag", fixedBounds.getValue(tag),
+                composeTestRule.onNodeWithTag(tag).fetchSemanticsNode().boundsInRoot)
+        }
+        composeTestRule.onNodeWithTag(START_RUN_BUTTON_TAG).assertIsEnabled().performClick()
+        composeTestRule.runOnIdle {
+            assertEquals(1, starts)
+            assertEquals(PreRunEnergy.MODERATE, selectedAtStart)
+        }
+    }
+
+    @Test
     fun startBlankAndEnergySwipesKeepNormalPhoneLayoutFixedAndSelectionPersists() {
         composeTestRule.mainClock.autoAdvance = false
         var selected by mutableStateOf<PreRunEnergy?>(null)

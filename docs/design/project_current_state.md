@@ -5,6 +5,29 @@ metadata:
   type: project
 ---
 
+## November 23 animated Energy invitation
+
+Manley approved trying a translucent outlined pill between Energy choices and bottom navigation.
+It alternates **Choose → Energy**, one word at a time, on a 4.4-second loop. Each word fades in
+for 350 ms, holds, then fades out; the pill stays still. It begins after the existing tile entrance,
+uses dark forest text/no lime, and fades away over 280 ms after selection. Its space remains
+reserved so Start, Energy and navigation never jump. Normal pill size is 132 x 32 dp with an
+8 dp upper/12 dp lower gap; text scaling enlarges it and compact windows retain full scrolling.
+The loop runs only while visible/foreground. With Android animations disabled it shows the full
+static phrase Choose energy. Accessibility exposes one steady optional instruction, not repeated
+word announcements; the pill is not a button. Existing Energy answers/Start behavior are unchanged.
+
+Owner/public/test builds and vital lint passed. Eighteen focused Moto checks passed in one run,
+including a new fake-clock check for both words, stable bounds, selection dismissal and immediate
+Start, alongside existing small/large-text/landscape, navigation, shoes and restoration checks.
+Actual installed Start and both word-state captures inspected; independent source review found
+no material issue. Reduced-motion handling was source-reviewed; no device accessibility setting
+was changed. APK SHA-256 `011e78874ffb3b9b148ebedaa695988a02bb41e42dbdfb1faf96d99e7d7edff9`.
+Private backups/receipts/captures: `android/build/nov23-energy-prompt/moto/`. All 74 completed runs,
+12 table hashes and preferences preserved except the usual opening counter after launch.
+Temporary test app removed. No new tracked source/test/asset file, paid call, real run or public
+preview change. This remains a design trial awaiting Manley's visual feedback; release queue retained.
+
 ## November 23 Start bottom navigation
 
 **Continuous white-panel follow-up:** Manley superseded the initial question about hiding Android

@@ -8,6 +8,15 @@ status: CURRENT NATIVE DECISIONS plus dated prototype history; verification live
 
 # Start Run — where this screen actually is
 
+**November 23 animated Energy invitation — installed trial:** a translucent, thin-outlined pill
+in the gap below Energy alternates Choose and Energy, one word at a time with gentle fades.
+The pill remains still; its footprint remains after the selection fade so no controls move.
+It starts after tile entrance, loops only while foreground/visible, and shows the whole phrase
+statically when Android animations are disabled. Accessibility reads one stable optional prompt.
+Dark forest text, no lime; 132 x 32 dp normal pill, 8 dp above/12 dp below, scales for larger text.
+Existing white bottom panel and other layout decisions remain. Three builds/18 focused checks
+passed and all 74 runs preserved. Visual acceptance is pending; public preview remains unchanged.
+
 **November 23 bottom navigation — installed for review:** below Energy, a full-width clean-white
 bar contains Map, Plan, Run, Settings and Activity. Existing Map/Settings/History actions move
 from the upper stack; Activity is labelled beneath ascending bars. Plan opens the same sheet

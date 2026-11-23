@@ -5,6 +5,9 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
@@ -52,7 +55,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -140,6 +145,9 @@ internal const val START_AGENT_CARD_TAG = "startAgentCard"
 internal const val START_UTILITY_ACTIONS_TAG = "startUtilityActions"
 internal const val START_ENERGY_CHOICES_TAG = "startEnergyChoices"
 internal const val START_ENERGY_CUE_TAG = "startEnergyCue"
+internal const val START_ENERGY_PROMPT_TAG = "startEnergyPrompt"
+internal const val START_ENERGY_PROMPT_PILL_TAG = "startEnergyPromptPill"
+internal const val START_ENERGY_PROMPT_WORD_TAG = "startEnergyPromptWord"
 internal const val START_RUN_PLAN_TAG = "startRunPlan"
 internal const val START_RUN_TAB_TAG = "startRunTab"
 internal const val START_RUN_PLAN_SHEET_TAG = "startRunPlanSheet"
@@ -218,6 +226,7 @@ internal fun StartRunScreen(
     var animationsEnabled by remember(view) { mutableStateOf(ValueAnimator.areAnimatorsEnabled()) }
     var rootBounds by remember { mutableStateOf<Rect?>(null) }
     var ringBounds by remember { mutableStateOf<Rect?>(null) }
+    var promptBounds by remember { mutableStateOf<Rect?>(null) }
     val tileBounds = remember { mutableStateMapOf<PreRunEnergy, Rect>() }
     var intake by remember { mutableStateOf<EnergyIntake?>(null) }
     var runPlanOpen by rememberSaveable { mutableStateOf(false) }
@@ -263,6 +272,10 @@ internal fun StartRunScreen(
     }
     val ringVisible = rootBounds?.let { viewport -> ringBounds?.overlaps(viewport) } == true
     val ringPhase = rememberRunAgentPhase(lifecycleStarted && animationsEnabled && ringVisible)
+    val energyEntrySettled by remember {
+        derivedStateOf { energyEntryTime.value >= START_ENERGY_ENTRY_DURATION_MS }
+    }
+    val promptVisible = rootBounds?.let { viewport -> promptBounds?.overlaps(viewport) } == true
 
     BoxWithConstraints(
         modifier = modifier
@@ -278,7 +291,7 @@ internal fun StartRunScreen(
         val energyEntryDistancePx = with(LocalDensity.current) { maxWidth.toPx() }
         // A short window cannot keep the controls, navigation and upper details visible.
         // In that case use one continuous flow; regular phone heights retain the anchored layout.
-        val fallbackHeight = 520.dp + 100.dp * (LocalDensity.current.fontScale - 1f).coerceAtLeast(0f)
+        val fallbackHeight = 556.dp + 116.dp * (LocalDensity.current.fontScale - 1f).coerceAtLeast(0f)
         val scrollWholeStack = maxHeight < fallbackHeight
         val wholeStackScroll = rememberScrollState()
         val upperDetailsScroll = rememberScrollState()
@@ -357,7 +370,7 @@ internal fun StartRunScreen(
                 onOpenShoes = onOpenShoes
             )
             Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp)
-                .padding(top = 12.dp, bottom = 16.dp)) {
+                .padding(top = 12.dp)) {
                 PreRunEnergyChoices(
                     selected = selectedPreRunEnergy,
                     onSelect = selection@{ energy ->
@@ -396,6 +409,13 @@ internal fun StartRunScreen(
                     }
                 )
             }
+            EnergyChoicePrompt(
+                unanswered = selectedPreRunEnergy == null,
+                entranceSettled = energyEntrySettled,
+                animationsEnabled = animationsEnabled,
+                active = lifecycleStarted && promptVisible,
+                modifier = Modifier.onGloballyPositioned { promptBounds = it.boundsInRoot() }
+            )
             StartBottomNavigation(
                 mapStatus = if (liveMapBackground) liveMapStatus else null,
                 onMapClick = if (liveMapBackground && onRequestMapLocation != null)
@@ -912,6 +932,62 @@ private fun AgentReadyCard(
                     textAlign = TextAlign.End,
                     modifier = Modifier.fillMaxWidth().testTag(START_RUN_STATUS_TAG)
                 )
+            }
+        }
+    }
+}
+
+@Composable
+private fun EnergyChoicePrompt(
+    unanswered: Boolean,
+    entranceSettled: Boolean,
+    animationsEnabled: Boolean,
+    active: Boolean,
+    modifier: Modifier = Modifier
+) {
+    val textGrowth = (LocalDensity.current.fontScale - 1f).coerceAtLeast(0f)
+    val shown = unanswered && entranceSettled
+    val opacity by animateFloatAsState(if (shown) 1f else 0f,
+        animationSpec = tween(if (animationsEnabled) 280 else 0), label = "energyPromptVisibility")
+    // Keep the gap even after an answer, so the tiles/dial/navigation never jump.
+    Box(modifier.fillMaxWidth().padding(top = 8.dp, bottom = 12.dp)
+        .height(32.dp + 16.dp * textGrowth).testTag(START_ENERGY_PROMPT_TAG),
+        contentAlignment = Alignment.Center) {
+        if (shown || opacity > 0f) {
+            val animateWords = active && animationsEnabled && entranceSettled
+            val phase: State<Float> = if (animateWords) {
+                rememberInfiniteTransition(label = "energyPromptWords").animateFloat(
+                    initialValue = 0f, targetValue = 4400f,
+                    animationSpec = infiniteRepeatable(tween(4400, easing = LinearEasing)),
+                    label = "energyPromptWordFade")
+            } else remember { mutableFloatStateOf(0f) }
+            val word by remember(phase, animationsEnabled) {
+                derivedStateOf {
+                    if (!animationsEnabled) "Choose energy"
+                    else if (phase.value < 2200f) "Choose" else "Energy"
+                }
+            }
+            Box(Modifier.width(132.dp + 76.dp * textGrowth).fillMaxHeight()
+                .testTag(START_ENERGY_PROMPT_PILL_TAG)
+                .graphicsLayer { alpha = opacity }
+                .clip(RoundedCornerShape(50))
+                .background(Color.White.copy(alpha = 0.35f))
+                .border(1.dp, StartForestDeep.copy(alpha = 0.18f), RoundedCornerShape(50))
+                .clearAndSetSemantics {
+                    // One quiet, complete instruction; word changes are decorative, not announcements.
+                    if (unanswered) contentDescription = "Choose energy, optional"
+                }, contentAlignment = Alignment.Center) {
+                Text(word, color = StartForestDeep.copy(alpha = 0.82f),
+                    fontSize = 12.sp, lineHeight = 16.sp, fontWeight = FontWeight.Medium,
+                    letterSpacing = 0.3.sp, textAlign = TextAlign.Center, maxLines = 1,
+                    modifier = Modifier.testTag(START_ENERGY_PROMPT_WORD_TAG).graphicsLayer {
+                        val wordTime = phase.value % 2200f
+                        alpha = if (!animateWords) 1f else when {
+                            wordTime < 350f -> wordTime / 350f
+                            wordTime <= 1800f -> 1f
+                            else -> ((2150f - wordTime) / 350f).coerceIn(0f, 1f)
+                        }
+                    })
             }
         }
     }
