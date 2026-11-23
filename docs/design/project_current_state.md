@@ -7,6 +7,31 @@ metadata:
 
 ## November 22 startup loading flash
 
+**Follow-up after reopening feedback:** Manley still saw white before the collage. A native
+launch recording confirmed Android's default light/icon system splash, before Compose exists.
+MainActivity alone now uses `Theme.RunState.Launch`: the collage's `#17201B` base and matching
+initial system bars, with an explicit transparent splash icon on Android 12+. The native splash
+exit callback removes the overlay immediately when the first app frame is ready. The application
+and Spotify callback keep their previous theme. No extra timer, dependency, new tracked file or
+recovery change. Android's supported system splash only permits an opaque background color, so
+this removes the white/icon flash but does not promise an instant full-screen collage on a cold
+start: the observed sequence includes a short dark system phase before the collage.
+
+Fresh owner, instrumentation and public-release assemblies/vital lint passed. All opening and
+recovery cases passed in the 22-case device run; the first, unrelated shoe-screen test failed
+before finding a Compose hierarchy and passed alone on recheck without any code change
+(21 initial passes plus that recheck; do not report a clean 22-case first attempt). Independent
+review found no material issue. Before/after native recordings verify the white/icon splash is
+gone; a subsequent launch screenshot confirms normal arrival at Start. In-place APK SHA-256:
+`ddb597fdec0aea94e1844cef9d04f2b732c2d735ffca03d9e6e9a471ae525a5d`.
+All 73 runs and 12 table hashes preserved; only the normal opening appearance counter changed
+after tests/launches, with other preferences intact. Private APK/data backups and recordings are
+in `android/build/nov22-launch-theme/`; temporary test package removed. Browser preview has no
+Android system splash and already opens on this collage, so no preview publication is needed.
+User reopening feedback and History artwork review remain; no paid call or hosted/iPhone change.
+
+**Earlier recovery-page fix:**
+
 Manley accepted the updated Start artwork, then asked to remove the intermittent white
 “Getting things ready” screen before the collage. It was the generic initialization surface
 shown while the coordinator recovered stored run state. A pending launcher entrance now shows

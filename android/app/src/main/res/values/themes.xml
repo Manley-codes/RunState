@@ -1,5 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
-<resources>
+<resources xmlns:tools="http://schemas.android.com/tools">
 
     <style name="Theme.RunState" parent="android:Theme.Material.Light.NoActionBar" />
+
+    <!-- Match the collage before Compose draws; keep Spotify's callback theme unchanged. -->
+    <style name="Theme.RunState.Launch" parent="Theme.RunState">
+        <item name="android:windowBackground">#17201B</item>
+        <item name="android:statusBarColor">#17201B</item>
+        <item name="android:navigationBarColor">#17201B</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar">false</item>
+        <!-- Android 12+ requires a solid system splash before the app's first frame. -->
+        <item name="android:windowSplashScreenBackground" tools:targetApi="31">#17201B</item>
+        <item name="android:windowSplashScreenAnimatedIcon" tools:targetApi="31">@android:color/transparent</item>
+    </style>
 </resources>

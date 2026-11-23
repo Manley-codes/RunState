@@ -171,6 +171,11 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+            // Reveal the first Compose frame immediately instead of fading the system splash over it.
+            splashScreen.setOnExitAnimationListener { it.remove() }
+        }
+
         enableEdgeToEdge()
 
         // The existing process-scoped instance. Nothing new is constructed, and no second
