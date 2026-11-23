@@ -5,6 +5,27 @@ metadata:
   type: project
 ---
 
+## November 23 Houston trail inset follow-up
+
+Installed Manley's Nike-reference refinement: full-width bands now have 12 dp corners and retain
+4 dp separators. Equal-size square photos have 10 dp corners, 12 dp left inset and at least 8 dp
+vertical clearance. Hermann and Buffalo Bayou gain up to 8 dp height each by redistributing space
+from the outer photo/name rows; the gallery boundaries and foreground controls stay fixed.
+The increase backs off in cramped layouts. Native inspection confirms all photos/names stay clear
+of the browse row and launch controls. No new source, asset or test files were needed.
+
+Owner/public/test builds and vital lint passed. All three existing Moto trail checks passed,
+covering real band taps/explicit plan choice, dismiss/original-background behavior and short-window
+large-text reachability. Matching-signature in-place update retained all 74 completed runs, two
+shoe pairs, 12 table hashes and preferences except the ordinary opening counter. Integrity/FK
+checks passed. Temporary test package removed; main app reopened with Houston trails selected.
+APK SHA-256: `0f39084212445fe2bdbc0c2dcf66a56496f2e40d41909d13bd8331482b0a8287`.
+Private build, backup, test and native screenshot evidence: `android/build/nov23-trail-insets/`.
+
+Manley especially likes Terry Hershey's map contrast behind the controls/shoe; recorded as a
+design reference. He does not see the subtle drift and explicitly deferred motion changes.
+Visual acceptance remains his next review. Public preview and release return queue stay unchanged.
+
 ## November 23 Houston trail-background trial
 
 Manley approved a reversible Android trial of the continuous, divided trail-background concept,

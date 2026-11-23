@@ -109,14 +109,21 @@ internal fun StartTrailsBackground(
         val upper = upperContentBottom.coerceIn(0.dp, available * .46f)
         val galleryBottom = if (controlsTop > upper + 160.dp) controlsTop.coerceAtMost(available) else available
         val bandHeight = ((galleryBottom - upper - 12.dp) / 4).coerceIn(40.dp, 104.dp)
+        // Give the middle maps more room within the same gallery, keeping Terry above the controls.
+        val middleExpansion = (bandHeight - 48.dp).coerceIn(0.dp, 8.dp)
+        val outerRowHeight = bandHeight - middleExpansion
+        val middleRowHeight = bandHeight + middleExpansion
+        val photoSize = (outerRowHeight - 16.dp).coerceAtMost(88.dp)
         Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             HoustonStartTrails.forEachIndexed { index, trail ->
+                val rowHeight = if (index == 0 || index == 3) outerRowHeight else middleRowHeight
                 val height = when (index) {
-                    0 -> upper + bandHeight
-                    3 -> (available - upper - bandHeight * 3 - 12.dp).coerceAtLeast(bandHeight)
-                    else -> bandHeight
+                    0 -> upper + outerRowHeight
+                    3 -> (available - upper - outerRowHeight - middleRowHeight * 2 - 12.dp)
+                        .coerceAtLeast(outerRowHeight)
+                    else -> middleRowHeight
                 }
-                Box(Modifier.fillMaxWidth().height(height).clipToBounds()
+                Box(Modifier.fillMaxWidth().height(height).clip(RoundedCornerShape(12.dp))
                     .clickable(enabled = enabled, role = Role.Button, onClick = { onExplore(trail) })
                     .testTag(START_TRAIL_BAND_TAG_PREFIX + trail.id)
                     .semantics { contentDescription = "Explore ${trail.name}" }) {
@@ -127,9 +134,10 @@ internal fun StartTrailsBackground(
                         })
                     Box(Modifier.fillMaxSize().background(Color.White.copy(alpha = .35f)))
                     Row(Modifier.align(if (index == 3) Alignment.TopStart else Alignment.BottomStart)
-                        .fillMaxWidth().height(bandHeight),
+                        .fillMaxWidth().height(rowHeight).padding(horizontal = 12.dp, vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically) {
-                        Box(Modifier.size(bandHeight.coerceAtMost(104.dp)).clipToBounds()) {
+                        Box(Modifier.size(photoSize)
+                            .clip(RoundedCornerShape(10.dp))) {
                             Image(painterResource(trail.photo), null, contentScale = ContentScale.Crop,
                                 modifier = Modifier.fillMaxSize().graphicsLayer {
                                     scaleX = 1.08f; scaleY = 1.08f
