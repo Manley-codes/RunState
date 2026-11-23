@@ -5,6 +5,28 @@ metadata:
   type: project
 ---
 
+## November 23 shoe-list boundary motion fix
+
+Manley accepted the shoe redesign and reported jumping on another upward swipe at the bottom
+of the brand list. The shoe LazyColumn now consumes only unused upward fling velocity before
+the parent ModalBottomSheet can animate its expanded anchor with that velocity. This avoids the
+bounce/inset/measurement feedback while preserving normal scroll and downward dismissal. No
+catalog, layout, goal, data-schema, Start-art or reflection change; no new source/assets.
+
+A focused pre-fix regression reached the reported boundary and failed with continuing pending
+recomposition/measurement; an earlier outer-bounds probe was stopped because it could not measure
+internal sheet motion. The corrected test caches the visible Add Shoes title and samples its root
+position on every frame without waiting for idle mid-animation. After the fix, two fast upward
+flings at both brand and model boundaries stay within 2 pixels, and the panel settles normally.
+Six targeted Moto checks pass, including ordinary scrolling, downward dismissal, Close, goal
+selection, custom entry at large text and unchanged Start behavior. Owner/public/test builds and
+vital lint passed. Evidence: `android/build/nov23-shoe-scroll/`.
+
+Matching-signature in-place install preserved all 74 completed runs, both pairs, all 12 table hashes
+and saved preference values except the normal opening counter. Integrity OK/foreign keys zero;
+test package removed and main app reopened. APK SHA-256: `741b532e96da740d7f23b2f0a0ee7e33d6bc812cc72a2d9161876e291b3aaa3a`.
+Public GitHub preview, private-photo boundary and release return queue are unchanged.
+
 ## November 23 brand-first shoes and mileage goals
 
 Manley's requested shoe-panel redesign is installed: Select Your Brand → model → required personal

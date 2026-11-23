@@ -21,6 +21,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.withTransform
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.LiveRegionMode
@@ -31,6 +33,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.unit.Velocity
 
 /** Presentation only; identity, targets and measured mileage belong to the saved physical pair. */
 internal data class ShoePairDisplay(
@@ -152,7 +155,17 @@ internal fun ShoeSelectionSheet(
             // Each destination gets its own scroll position; opening a brand never starts mid-list.
             key(selectedBrand, editing) {
                 val listState = rememberLazyListState()
-                LazyColumn(state = listState, modifier = Modifier.weight(1f).fillMaxWidth().testTag("shoeList")) {
+                val listBoundary = remember {
+                    object : NestedScrollConnection {
+                        override suspend fun onPostFling(consumed: Velocity, available: Velocity): Velocity {
+                            // At the list's end, don't fling the expanded sheet upward into a bounce.
+                            // Downward motion still reaches the sheet for normal drag-to-dismiss.
+                            return Velocity(0f, minOf(0f, available.y))
+                        }
+                    }
+                }
+                LazyColumn(state = listState, modifier = Modifier.weight(1f).fillMaxWidth()
+                    .nestedScroll(listBoundary).testTag("shoeList")) {
                     when {
                         editing -> {
                             item {

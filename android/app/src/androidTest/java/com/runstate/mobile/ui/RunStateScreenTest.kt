@@ -2227,6 +2227,77 @@ class RunStateScreenTest {
     }
 
     @Test
+    fun shoeBrandAndModelListEndFlingsKeepPanelStill() {
+        var writes = 0
+        var dismissals = 0
+        composeTestRule.setContent {
+            ShoeSelectionSheet(emptyList(), null, true, onDismiss = { dismissals++ },
+                onSelect = { _, _ -> writes++ }, onAdd = { _, _, _, _ -> writes++ },
+                onArchive = { writes++ }, onRestore = { writes++ }, onUndoArchive = { writes++ })
+        }
+        val catalog = ShoeCatalog.load(InstrumentationRegistry.getInstrumentation().targetContext)
+        for (models in listOf(false, true)) {
+            val list = composeTestRule.onNodeWithTag("shoeList")
+            if (models) {
+                list.performScrollToIndex(0)
+                composeTestRule.onNodeWithTag("shoeBrand:Nike").performClick()
+            }
+            // Include the final spacer so this is the actual scroll boundary, not merely a visible last row.
+            list.performScrollToIndex(if (models) catalog.count { it.brand == "Nike" } + 2 else ShoeCatalog.brands.size + 2)
+            composeTestRule.waitForIdle()
+            val header = composeTestRule.onNodeWithText("Add Shoes").fetchSemanticsNode()
+            var baseline = 0f
+            var largestShift = 0f
+            composeTestRule.runOnUiThread { baseline = header.positionInRoot.y }
+            repeat(2) {
+                composeTestRule.mainClock.autoAdvance = false
+                try {
+                    list.performTouchInput {
+                        swipe(Offset(width * .5f, height * .80f), Offset(width * .5f, height * .12f), 100)
+                    }
+                    repeat(80) {
+                        composeTestRule.mainClock.advanceTimeByFrame()
+                        // Do not wait for idle while sampling an animation with its clock paused.
+                        composeTestRule.runOnUiThread {
+                            largestShift = maxOf(largestShift, kotlin.math.abs(header.positionInRoot.y - baseline))
+                        }
+                    }
+                } finally { composeTestRule.mainClock.autoAdvance = true }
+                assertTrue("${if (models) "Model" else "Brand"} list end moved the panel by $largestShift px", largestShift <= 2f)
+                composeTestRule.waitForIdle()
+            }
+            assertTrue("${if (models) "Model" else "Brand"} list end moved the panel by $largestShift px", largestShift <= 2f)
+        }
+        composeTestRule.runOnIdle { assertEquals(0, writes); assertEquals(0, dismissals) }
+        composeTestRule.onNodeWithText("Close").performClick()
+        composeTestRule.runOnIdle { assertEquals(1, dismissals) }
+    }
+
+    @Test
+    fun shoeListStillScrollsNormallyAndPullingDownAtTopDismisses() {
+        var shown by mutableStateOf(true)
+        var dismissals = 0
+        composeTestRule.setContent {
+            if (shown) ShoeSelectionSheet(emptyList(), null, true,
+                onDismiss = { shown = false; dismissals++ }, onSelect = { _, _ -> },
+                onAdd = { _, _, _, _ -> }, onArchive = {}, onRestore = {}, onUndoArchive = {})
+        }
+        val list = composeTestRule.onNodeWithTag("shoeList")
+        list.performTouchInput {
+            swipe(Offset(width * .5f, height * .8f), Offset(width * .5f, height * .2f), 600)
+        }
+        composeTestRule.onNodeWithTag("shoeBrand:Nike").assertDoesNotExist()
+        composeTestRule.runOnIdle { assertEquals(0, dismissals) }
+        list.performScrollToIndex(0)
+        list.performTouchInput {
+            swipe(Offset(width * .5f, height * .12f), Offset(width * .5f, height * .9f), 150)
+        }
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithTag("shoeSheet").assertDoesNotExist()
+        composeTestRule.runOnIdle { assertEquals(1, dismissals) }
+    }
+
+    @Test
     fun shoeBrandsSearchAndModelGoalRequireAnExplicitSave() {
         val additions = mutableListOf<List<Any?>>()
         var selections = 0

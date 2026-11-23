@@ -8,6 +8,18 @@ status: READY FOR VISUAL REVIEW — November 23 brand-first picker/required goal
 
 # Shoe selection and mileage
 
+## November 23, 2026 — list-boundary jumping fix
+
+Manley accepted the new shoe panel but reported upward swipes at the bottom of the brand list
+made the screen jump. The sheet's list now consumes only leftover upward fling velocity before
+it reaches the already-expanded bottom sheet. Normal list motion and downward drag-to-dismiss
+remain. This also applies to model lists and the form; layout, catalog, goal storage and pair
+behavior are unchanged. A regression observes the inner title every animation frame (not the
+outer sheet bounds, which do not track its internal anchor placement). The old version failed
+with repeated pending measurement/recomposition; the fixed version stays within 2 pixels through
+two fast end-of-list flings in both brand/model lists. Ordinary scrolling/downward dismissal and
+four existing selection/large-text/Start checks also pass. See current-state notes for receipts.
+
 ## November 23, 2026 — brand-first selection and personal mileage goals
 
 Manley approved the reference-led flow **Select Your Brand → model → mileage goal**. This
