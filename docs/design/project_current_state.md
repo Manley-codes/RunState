@@ -7,6 +7,23 @@ metadata:
 
 ## November 23 Start bottom navigation
 
+**Continuous white-panel follow-up:** Manley superseded the initial question about hiding Android
+buttons with the Adidas reference: keep them visible, visually join their background to the app
+tabs, and slightly tighten the gap. He then explicitly chose the same clean white as the Agent
+visualizer card. One shared white color now paints the card, opaque tab bar and Start's reserved
+bottom system inset. Tab minimum height reduces 68 to 64 dp and lower padding 9 to 5 dp; system
+button area/insets remain unchanged. Dark system-navigation icons are used on Start; original
+window contrast/color/icon behavior is restored on leaving that surface. No immersive hiding or
+device setting change. Side navigation in landscape is outside this bottom-only treatment.
+
+Fresh owner/public/test builds passed. Seventeen focused navigation/layout checks passed before
+the final color-only adjustment; that adjustment was rebuilt and visually verified on the Moto.
+Captured pixels in the visualizer, tab background and Android-button background all read exactly
+RGB 255/255/255. Matching-signature in-place updates preserve all 74 runs/12 table hashes; only
+normal opening counters changed. APK `586a99b83837062721659e8c29d75c38fec47f6ab2daaa925c4be92a315a4e35`.
+Private evidence: `android/build/nov23-start-panel/moto/white-start.png` and its backup/check receipts.
+No new tracked file or public-preview update; final visual acceptance remains Manley's.
+
 Manley requested a bottom bar below Energy, using the Nike screenshot as a placement reference.
 The five actions are Map, Plan, Run, Settings and Activity, using existing RunState destinations.
 Activity uses ascending bars and opens the existing History screen. Plan opens the unchanged

@@ -20,6 +20,8 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -37,7 +39,11 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.core.content.ContextCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.lifecycle.Lifecycle
@@ -94,6 +100,7 @@ import com.runstate.mobile.ui.RunActivityRecapScreen
 import com.runstate.mobile.ui.HistoryRouteDisplay
 import com.runstate.mobile.ui.HistorySplitDisplay
 import com.runstate.mobile.ui.RunStateScreen
+import com.runstate.mobile.ui.StartNavigationBackground
 import com.runstate.mobile.ui.OpeningScreen
 import com.runstate.mobile.ui.OpeningRecoveryBackdrop
 import com.runstate.mobile.ui.ShoeSelectionSheet
@@ -202,11 +209,28 @@ class MainActivity : ComponentActivity() {
                 val spotify by spotifyConnection.state.collectAsState()
                 val spotifyPlayer by spotifyConnection.livePlayer.collectAsState()
                 var runSurfaceDay by remember { mutableStateOf<Boolean?>(null) }
+                var startNavigationVisible by remember { mutableStateOf(false) }
                 val ordinaryDark = androidx.compose.foundation.isSystemInDarkTheme()
+                val navigationBottom = WindowInsets.navigationBars.getBottom(LocalDensity.current).toFloat()
+                val ordinaryNavigationContrast = remember {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) window.isNavigationBarContrastEnforced else false
+                }
+                @Suppress("DEPRECATION")
+                val ordinaryNavigationColor = remember {
+                    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) window.navigationBarColor else 0
+                }
                 SideEffect {
                     androidx.core.view.WindowCompat.getInsetsController(window, window.decorView).apply {
                         isAppearanceLightStatusBars = runSurfaceDay ?: !ordinaryDark
-                        isAppearanceLightNavigationBars = runSurfaceDay ?: !ordinaryDark
+                        isAppearanceLightNavigationBars = if (startNavigationVisible) true else runSurfaceDay ?: !ordinaryDark
+                    }
+                    // Start supplies an opaque, light background beneath the system buttons.
+                    // Remove Android's extra tint there; restore normal protection on other screens.
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                        window.isNavigationBarContrastEnforced = if (startNavigationVisible) false else ordinaryNavigationContrast
+                    } else {
+                        @Suppress("DEPRECATION")
+                        window.navigationBarColor = if (startNavigationVisible) android.graphics.Color.TRANSPARENT else ordinaryNavigationColor
                     }
                 }
                 // Only an explicit Connect Spotify action may open account authorization.
@@ -227,13 +251,22 @@ class MainActivity : ComponentActivity() {
                         spotifyConnection.onBackground()
                     }
                 }
-                Scaffold(modifier = Modifier.fillMaxSize(), containerColor = when (runSurfaceDay) {
+                Scaffold(modifier = Modifier.fillMaxSize().drawWithContent {
+                    drawContent()
+                    // Paint only the reserved system-button area; controls retain their safe padding.
+                    if (startNavigationVisible && navigationBottom > 0f) {
+                        drawRect(StartNavigationBackground,
+                            topLeft = Offset(0f, size.height - navigationBottom),
+                            size = Size(size.width, navigationBottom))
+                    }
+                }, containerColor = when (runSurfaceDay) {
                     true -> androidx.compose.ui.graphics.Color(0xFFF5FCFF)
                     false -> androidx.compose.ui.graphics.Color(0xFF101113)
                     null -> androidx.compose.material3.MaterialTheme.colorScheme.background
                 }) { innerPadding ->
                     RunJourneyRoot(
                         onRunSurfaceChanged = { runSurfaceDay = it },
+                        onStartNavigationVisible = { startNavigationVisible = it },
                         coordinator = coordinator,
                         reflectionCoordinator = reflectionCoordinator,
                         database = database,
@@ -371,6 +404,7 @@ internal fun RunJourneyRoot(
     dispatchGpsCountdown: (Context, Long, PreRunEnergy?, Boolean, Boolean, Boolean,
         RunIntention?, String?, Long?) -> Unit = RunTrackingService::startCountdown,
     onRunSurfaceChanged: (Boolean?) -> Unit = {},
+    onStartNavigationVisible: (Boolean) -> Unit = {},
     musicReflectionDemoAudioFactory: (Context) -> MusicReflectionDemoAudio = { AndroidMusicReflectionDemoAudio(it) },
     ownerToolsEnabled: Boolean = BuildConfig.OWNER_TOOLS_ENABLED
 ) {
@@ -1502,6 +1536,11 @@ internal fun RunJourneyRoot(
     // Only presentation is held; saved runs and the recording service are untouched.
     val openingBlockedByNavigation = musicReflectionDemoVisible || historyVisible || recapRunId != null || runSettingsVisible || shoesVisible ||
         connectionDialogVisible || mapVisible || gpsStartRequested || actionInFlight
+    val startNavigationVisible = model.state == RunUiState.ReadyToStart &&
+        !musicReflectionDemoVisible && !historyVisible && recapRunId == null && !mapVisible &&
+        !runSettingsVisible && !shoesVisible && !connectionDialogVisible &&
+        !(openingPending && !openingBlockedByNavigation)
+    SideEffect { onStartNavigationVisible(startNavigationVisible) }
     LaunchedEffect(openingRequestId, openingBlockedByNavigation) {
         // Consume an ineligible launcher tap now; never defer it until the runner closes a sheet.
         if (openingBlockedByNavigation) openingPending = false

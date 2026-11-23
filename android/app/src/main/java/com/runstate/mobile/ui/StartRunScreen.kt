@@ -158,6 +158,7 @@ private val StartInk = Color(0xFF293326)
 private val StartForest = Color(0xFF2D3827)
 private val StartForestDeep = Color(0xFF1D261B)
 private val StartLime = Color(0xFFB8D442)
+internal val StartNavigationBackground = Color.White
 private val StartCream = Color(0xFFF9FAF5)
 
 /** A visual hand-off only: the actual draft choice is owned by the parent immediately on tap. */
@@ -514,7 +515,7 @@ private fun StartBottomNavigation(
     musicStatus: String,
     reflectionSetupRequired: Boolean
 ) {
-    Column(Modifier.fillMaxWidth().background(StartCream.copy(alpha = 0.98f))) {
+    Column(Modifier.fillMaxWidth().background(StartNavigationBackground)) {
         Spacer(Modifier.fillMaxWidth().height(1.dp).background(StartInk.copy(alpha = 0.10f)))
         val settingsState = buildList {
             add(musicStatus)
@@ -628,7 +629,7 @@ private fun StartUtilityButton(
                 .build()
         }
     }
-    Column(modifier.widthIn(min = 48.dp).heightIn(min = 68.dp)
+    Column(modifier.widthIn(min = 48.dp).heightIn(min = 64.dp)
         .clip(RoundedCornerShape(8.dp))
         .clickable(enabled = enabled, role = if (currentScreen) Role.Tab else Role.Button, onClick = onClick)
         .semantics(mergeDescendants = true) {
@@ -636,7 +637,7 @@ private fun StartUtilityButton(
             if (actionState != null) stateDescription = actionState
             if (currentScreen) selected = true
         }
-        .padding(horizontal = 2.dp, vertical = 9.dp),
+        .padding(horizontal = 2.dp).padding(top = 9.dp, bottom = 5.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(4.dp, Alignment.CenterVertically)) {
         if (image != null) {
@@ -667,7 +668,7 @@ private fun StartNavigationSymbol(icon: StartUtilityIcon, ink: Color, modifier: 
         when (icon) {
             StartUtilityIcon.PLAN -> {
                 box(5f, 5f, 14f, 16f)
-                drawRect(StartCream, Offset(8f * unit, 3f * unit), Size(8f * unit, 4f * unit))
+                drawRect(StartNavigationBackground, Offset(8f * unit, 3f * unit), Size(8f * unit, 4f * unit))
                 box(8f, 3f, 8f, 4f)
                 line(8f, 13f, 11f, 16f)
                 line(11f, 16f, 16f, 11f)
@@ -827,7 +828,7 @@ private fun AgentReadyCard(
                 ambientColor = Color(0xFF49645C).copy(alpha = 0.16f),
                 spotColor = Color(0xFF49645C).copy(alpha = 0.22f))
             .clip(RoundedCornerShape(24.dp))
-            .background(Color.White)
+            .background(StartNavigationBackground)
             .border(1.dp, Color(0xFFDDE7E2), RoundedCornerShape(24.dp))
             .padding(horizontal = 12.dp, vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,

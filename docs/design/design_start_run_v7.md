@@ -8,12 +8,16 @@ status: CURRENT NATIVE DECISIONS plus dated prototype history; verification live
 
 # Start Run — where this screen actually is
 
-**November 23 bottom navigation — installed for review:** below Energy, a full-width off-white
+**November 23 bottom navigation — installed for review:** below Energy, a full-width clean-white
 bar contains Map, Plan, Run, Settings and Activity. Existing Map/Settings/History actions move
 from the upper stack; Activity is labelled beneath ascending bars. Plan opens the same sheet
 and replaces the standalone Plan this run link. Run is the selected current screen, never the
 recording action. Manley explicitly rejected a lime accent; selection uses dark forest and bold
-Run text. Triangle controls/map remain. Short/large-text windows scroll the complete page.
+Run text. Follow-up explicitly keeps Android's buttons visible and paints their bottom inset the
+same white as the bar and Agent visualizer panel (one shared color, native pixels confirmed).
+Lower tab padding is 5 dp instead of 9 dp, minimum bar target height 64 dp instead of 68 dp;
+system-button space remains intact. This supersedes the off-white first pass and the earlier
+question about hiding system navigation. Triangle controls/map remain. Short/large-text windows scroll the complete page.
 At 320 dp/200% text, substantial word wrapping remains a later typography review item.
 Seventeen focused phone checks and all three builds passed; 74 saved runs preserved.
 No public-preview changes; visual acceptance remains Manley's. This supersedes the upper utility
