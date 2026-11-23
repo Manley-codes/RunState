@@ -9,13 +9,14 @@ status: CURRENT NATIVE DECISIONS plus dated prototype history; verification live
 # Start Run — where this screen actually is
 
 **November 23 simpler shoe artwork:** the existing irregular circle becomes flat near-white,
-with its green decoration removed. The latest follow-up thickens the muted ocean-blue (`#789FAB`)
-ring to roughly 6–7 dp and adds a rugged rounded contour; its near-white center uses 74% scale,
-superseding 87%. The shoe scales to 90% to preserve clearance. A left-facing gray sneaker has a white sole,
+with its green decoration removed. Manley rejected the rugged contour: the latest correction
+restores a smooth, slightly irregular outline around the thick ocean-blue (`#789FAB`) ring and
+74%-scale near-white center, adding a much thinner white outside rim at 104% scale.
+The shoe stays at 90% scale for clearance. A left-facing gray sneaker has a white sole,
 pale-gray outsole and three light laces, with clear margins inside the circle. The 56 dp artwork
 footprint, 72 dp tap target and compact placement remain unchanged. Shoe picker choices now use
-text without adjacent illustrations; their names, mileage and actions remain. Builds and vital
-lint passed; phone verification is recorded separately in current-state notes.
+text without adjacent illustrations; their names, mileage and actions remain. Build and phone
+verification for each revision are recorded separately in current-state notes.
 
 **November 23 compact Start cluster — installed for review:** Shoes and Music artwork shrink
 from 64 to 56 dp while retaining their 72 dp touch targets. Their row is centered and capped at

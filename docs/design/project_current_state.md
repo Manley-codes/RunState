@@ -7,12 +7,21 @@ metadata:
 
 ## November 23 simplified shoe artwork and lists
 
+**Smoother rim correction installed:** Manley found the last contour too rugged. Restored the
+original smooth, slightly irregular curves, retained the thick blue ring/74% inner fill, and added
+a thin white outside rim at 104% scale. Shoe remains at 90%; footprint and actions unchanged.
+Owner/public builds and vital lint passed; installed screenshot inspected. All 74 runs, both pairs,
+selection and table hashes preserved, with only normal opening-counter changes after launch.
+Current APK `949c70ad60238a1d66a1beb6c60590765c7eb0e2d909a3cd5cb17006333e2fed`;
+private evidence `android/build/nov23-shoe-soft-rim/moto/`. No new files/behavior tests or public
+preview changes. This supersedes the rugged contour below; visual feedback remains pending.
+
 **Thicker/rugged follow-up installed:** the same blue ring now has uneven rounded segments and
 a 74%-scale inner fill, producing roughly 6–7 dp thickness like Music's outer ring. Shoe art
 scales to 90% for clearance; the 56 dp footprint, 72 dp target and all actions remain unchanged.
 Owner/public builds and vital lint passed, actual phone appearance inspected. All 74 runs, both
 pairs, selection and 12 table hashes preserved; only the normal opening counter changed.
-Current APK `f3cddaa58ab8b27176f6590abdfdb25ffa78ec7df13f1404c836888bc2464350`;
+Earlier rugged APK `f3cddaa58ab8b27176f6590abdfdb25ffa78ec7df13f1404c836888bc2464350`;
 private evidence `android/build/nov23-shoe-rugged/moto/`. Existing five checks remain the behavior
 baseline; no new test/source/asset files or public-preview changes. Visual feedback pending.
 
