@@ -8,6 +8,16 @@ status: CURRENT NATIVE DECISIONS plus dated prototype history; verification live
 
 # Start Run — where this screen actually is
 
+**November 22 sketch arrangement — installed for review:** Shoes and Music sit on one row
+above the centered Start dial, aligned with the outer Energy columns; Start is above Moderate.
+The group is anchored near the bottom with stable Energy space, while compact/landscape scrolling
+remains supported. All captions beneath those three controls are hidden (explicit confirmation),
+as is the Physical energy heading pill. Screen-reader names, mode and selected-shoe state remain.
+Plan this run is retained above the controls on normal phones; artwork sizes, upper panel/utilities,
+map, animations and behavior are unchanged. This supersedes the old footer/caption arrangement
+below. Public preview stays on its original design until separately approved. See current-state
+notes for the 15 passed checks and retained-data receipt; user visual feedback is pending.
+
 **November 22 scoped design adjustment — installed:** remove only the irregular green footer
 backing and its decorative lines. The existing map/wash shows behind Shoes, Start and Music.
 Their layout, dimensions, labels, colors and actions are unchanged. In particular, white labels

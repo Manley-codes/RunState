@@ -920,6 +920,9 @@ class RunSettingsScreenTest {
         waitForTag(START_RUN_SCREEN_TAG)
         chooseSampleDemo()
         compose.onNodeWithText("Sample demo · simulated distance").assertIsDisplayed()
+        assertEquals("Sample run", compose.onNodeWithTag(START_RUN_BUTTON_TAG).assertIsDisplayed()
+            .fetchSemanticsNode().config[SemanticsProperties.StateDescription])
+        compose.onNodeWithText("Sample run", useUnmergedTree = true).assertDoesNotExist()
         restoration.emulateSavedInstanceStateRestore()
         waitForTag(START_RUN_SCREEN_TAG)
         compose.onNodeWithText("Sample demo · simulated distance").assertIsDisplayed()
@@ -929,7 +932,8 @@ class RunSettingsScreenTest {
         restoration.emulateSavedInstanceStateRestore()
         waitForTag(START_RUN_SCREEN_TAG)
         compose.onNodeWithText("Sample demo · simulated distance").assertDoesNotExist()
-        compose.onNodeWithText("GPS run").assertIsDisplayed()
+        assertEquals("GPS run", compose.onNodeWithTag(START_RUN_BUTTON_TAG).assertIsDisplayed()
+            .fetchSemanticsNode().config[SemanticsProperties.StateDescription])
         assertEquals(0, runBlocking { fixture.database.runDao().countRuns() })
     }
 
@@ -1221,7 +1225,8 @@ class RunSettingsScreenTest {
 
     private fun assertNormalGpsAndPreferences(fixture: Fixture, expected: RunPreferences) {
         compose.onNodeWithText("Sample demo · simulated distance").assertDoesNotExist()
-        compose.onNodeWithText("GPS run").assertIsDisplayed()
+        assertEquals("GPS run", compose.onNodeWithTag(START_RUN_BUTTON_TAG).assertIsDisplayed()
+            .fetchSemanticsNode().config[SemanticsProperties.StateDescription])
         assertEquals(expected, fixture.loadPreferences())
         assertEquals(expected, fixture.preferences)
     }

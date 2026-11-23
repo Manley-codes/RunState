@@ -5,6 +5,35 @@ metadata:
   type: project
 ---
 
+## November 22 Start sketch layout
+
+Manley supplied a rough placement sketch, explicitly not literal sizing, then approved trying it:
+Shoes upper-left and Music upper-right of centered Start, with Energy below and the group near
+the bottom. He also confirmed hiding **all** text beneath the three controls, including GPS/Sample
+mode, selected-shoe details and Spotify, and removing the Physical energy rounded heading.
+Side controls align with the Low/High centers; Start aligns with Moderate. Existing artwork
+sizes, map/wash, top panel, utility stack and Energy motion remain. Plan this run sits just above
+the controls on ordinary phones and keeps its existing upper-scroll placement in compact views.
+Energy's reserved space remains stable after selection. No green backing was reintroduced.
+
+Accessible button names remain Start run, Choose shoes and Open Spotify; mode/selected-shoe
+details remain in accessibility state and the existing status/picker surfaces. The optional
+Energy prompt remains accessible while unanswered. Callback, disabled-action, GPS/Sample,
+selection/intake and saved-data behavior are unchanged. Hidden labels are a design trial, not
+permission to remove unrelated information or change other screens.
+
+Fresh owner, public and instrumentation builds/vital lint passed. Fifteen isolated Moto checks
+passed, covering normal alignment, 320 dp width at 1.5x/2x text, landscape scrolling, entrance/
+intake/selection timing, enabled/disabled actions, mode restoration and selected-shoe restoration.
+Independent source review found no material issue; actual installed Start screenshot inspected.
+In-place APK SHA-256 `a2ce524e0cce47941057d92420fb66dec577ff6cf5b8a6e4ab828dfe6b0cfe9e`.
+All 73 completed runs and all 12 table hashes survived; five preferences matched on installation
+and only the normal opening appearance counter changed during the final launcher check. Private
+backup/evidence: `android/build/nov22-start-triangle/moto/`. Temporary test package removed.
+No new tracked files, schema/provider change, paid call or real run. **Public preview remains
+unchanged at restored `e8c1772`**; no preview edits/publication. Visual acceptance remains Manley's.
+The private roadmap preserves the paused release/tests return queue.
+
 ## November 22 Start footer removal
 
 Manley accepted the startup fix and chose to review Android design while taking a UI/UX course.

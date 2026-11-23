@@ -301,7 +301,7 @@ internal fun StartRunScreen(
             )
         }
 
-        // Energy and the measured footer own separate space, so neither can slide over the other.
+        // The launch controls and Energy own separate space, so neither can slide over the other.
         // Upper details handle ordinary overflow; only very short windows scroll the entire flow.
         Column(
             modifier = Modifier.fillMaxSize().then(if (scrollWholeStack) Modifier
@@ -361,8 +361,23 @@ internal fun StartRunScreen(
                         onOpen = { runPlanOpen = true })
                 }
             }
+            if (!planInUpper) {
+                RunPlanControl(selectedRunIntention, routeLabel, actionsEnabled && !setupLoading,
+                    onOpen = { runPlanOpen = true })
+            }
+            StartFooter(
+                onStart = onStart,
+                enabled = actionsEnabled && !setupLoading,
+                gpsSelected = gpsSelected,
+                energySelected = selectedPreRunEnergy != null,
+                phase = ringPhase,
+                onOpenSpotify = onOpenSpotify,
+                musicEnabled = actionsEnabled,
+                selectedShoe = selectedShoe,
+                onOpenShoes = onOpenShoes
+            )
             Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp)
-                .padding(top = 12.dp, bottom = 12.dp)) {
+                .padding(top = 12.dp, bottom = 16.dp)) {
                 PreRunEnergyChoices(
                     selected = selectedPreRunEnergy,
                     onSelect = selection@{ energy ->
@@ -400,23 +415,7 @@ internal fun StartRunScreen(
                         tileBounds[energy] = bounds
                     }
                 )
-                if (!planInUpper) {
-                    RunPlanControl(selectedRunIntention, routeLabel, actionsEnabled && !setupLoading,
-                        onOpen = { runPlanOpen = true }, modifier = Modifier.align(Alignment.CenterHorizontally))
-                }
             }
-
-            StartFooter(
-                onStart = onStart,
-                enabled = actionsEnabled && !setupLoading,
-                gpsSelected = gpsSelected,
-                energySelected = selectedPreRunEnergy != null,
-                phase = ringPhase,
-                onOpenSpotify = onOpenSpotify,
-                musicEnabled = actionsEnabled,
-                selectedShoe = selectedShoe,
-                onOpenShoes = onOpenShoes
-            )
         }
 
         intake?.let { current ->
@@ -866,29 +865,11 @@ private fun PreRunEnergyChoices(
     onTileBounds: (PreRunEnergy, Rect) -> Unit
 ) {
     val tileHeight = 82.dp + 40.dp * (LocalDensity.current.fontScale - 1f).coerceAtLeast(0f)
-    Column(modifier = Modifier.testTag(START_ENERGY_CHOICES_TAG),
+    Column(modifier = Modifier.testTag(START_ENERGY_CHOICES_TAG)
+        .then(if (selected == null) Modifier.semantics {
+            contentDescription = "Physical energy now, optional"
+        } else Modifier),
         horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(
-            text = "Physical energy now · Optional",
-            color = Color.White,
-            fontSize = 12.sp,
-            fontWeight = FontWeight.SemiBold,
-            letterSpacing = 0.3.sp,
-            modifier = Modifier
-                .graphicsLayer {
-                    alpha = when {
-                        selected == null -> 1f
-                        intake != null -> 1f - ((intakeTime() - 470f) / 200f).coerceIn(0f, 1f)
-                        else -> 0f
-                    }
-                }
-                .clip(RoundedCornerShape(12.dp))
-                .background(StartForest.copy(alpha = 0.96f))
-                .border(1.dp, Color.White.copy(alpha = 0.22f), RoundedCornerShape(12.dp))
-                .padding(horizontal = 16.dp, vertical = 8.dp)
-                .then(if (selected != null) Modifier.clearAndSetSemantics {} else Modifier)
-        )
-        Spacer(Modifier.height(10.dp))
         // Keep the reserved Energy space stable while the tiles leave for the agent.
         Box(Modifier.fillMaxWidth().height(tileHeight).testTag(START_ENERGY_CUE_TAG),
             contentAlignment = Alignment.Center) {
@@ -1102,152 +1083,65 @@ private fun StartFooter(
         animationSpec = tween(500, easing = IntakeMarkEase),
         label = "startReadyGlow"
     )
-    Box(modifier = modifier.fillMaxWidth().heightIn(min = 184.dp).testTag(START_FOOTER_TAG)) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .align(Alignment.BottomCenter)
-                .padding(horizontal = 20.dp)
-                .padding(top = 18.dp, bottom = 13.dp),
-            verticalAlignment = Alignment.Bottom,
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            ShoeFooterControl(selectedShoe, enabled, onOpenShoes)
-            Column(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(24.dp))
-                    .clickable(enabled = enabled, role = Role.Button, onClick = onStart)
-                    .testTag(START_RUN_BUTTON_TAG)
-                    .padding(horizontal = 4.dp, vertical = 2.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                StartDial(
-                    modifier = Modifier.size(102.dp),
-                    glow = { readyGlow * (0.9f + 0.1f * sin(phase.value)) }
-                )
-                Spacer(Modifier.height(3.dp))
-                Text(
-                    text = "Start",
-                    color = if (enabled) Color.White else Color.White.copy(alpha = 0.48f),
-                    fontSize = 19.sp,
-                    fontWeight = FontWeight.ExtraBold,
-                    letterSpacing = 3.sp
-                )
-                Text(
-                    text = if (gpsSelected) "GPS run" else "Sample run",
-                    color = Color.White.copy(alpha = if (enabled) 0.8f else 0.48f),
-                    fontSize = 10.sp,
-                    lineHeight = 12.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    maxLines = 1,
-                    modifier = Modifier.padding(top = 2.dp)
-                )
+    Column(
+        modifier = modifier.fillMaxWidth().padding(horizontal = 20.dp)
+            .padding(top = 8.dp).testTag(START_FOOTER_TAG),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        // Match the Energy row's three equal columns; Start shares the middle column's center.
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
+                ShoeFooterControl(selectedShoe, enabled, onOpenShoes)
             }
-            FooterLabel("MUSIC", "SPOTIFY", R.drawable.start_music_orb, artwork = true,
-                modifier = Modifier
-                    .clickable(enabled = musicEnabled, role = Role.Button,
-                        onClickLabel = "Open Spotify", onClick = onOpenSpotify)
-                    .testTag(START_OPEN_SPOTIFY_TAG))
+            Spacer(Modifier.weight(1f))
+            Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
+                Box(
+                    modifier = Modifier.size(72.dp).clip(CircleShape)
+                        .clickable(enabled = musicEnabled, role = Role.Button,
+                            onClickLabel = "Open Spotify", onClick = onOpenSpotify)
+                        .semantics { contentDescription = "Open Spotify" }
+                        .testTag(START_OPEN_SPOTIFY_TAG),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Image(painter = painterResource(R.drawable.start_music_orb),
+                        contentDescription = null, contentScale = ContentScale.Fit,
+                        modifier = Modifier.size(64.dp).clip(CircleShape))
+                }
+            }
+        }
+        Box(
+            modifier = Modifier.size(110.dp).clip(CircleShape)
+                .clickable(enabled = enabled, role = Role.Button, onClick = onStart)
+                .semantics {
+                    contentDescription = "Start run"
+                    stateDescription = if (gpsSelected) "GPS run" else "Sample run"
+                }
+                .testTag(START_RUN_BUTTON_TAG),
+            contentAlignment = Alignment.Center
+        ) {
+            StartDial(
+                modifier = Modifier.size(102.dp),
+                glow = { readyGlow * (0.9f + 0.1f * sin(phase.value)) }
+            )
         }
     }
 }
 
 @Composable
 private fun ShoeFooterControl(shoe: ShoePairDisplay?, enabled: Boolean, onClick: () -> Unit) {
-    Column(
-        modifier = Modifier.width(72.dp).padding(bottom = 6.dp)
-            .clip(RoundedCornerShape(14.dp))
+    Box(
+        modifier = Modifier.size(72.dp).clip(CircleShape)
             .clickable(enabled = enabled, role = Role.Button, onClickLabel = "Choose shoes", onClick = onClick)
-            .semantics { stateDescription = shoe?.let { "${it.fullName}, ${it.mileageLabel}" } ?: "No shoes selected" }
+            .semantics {
+                contentDescription = "Choose shoes"
+                stateDescription = shoe?.let { "${it.fullName}, ${it.mileageLabel}" } ?: "No shoes selected"
+            }
             .testTag(START_OPEN_SHOES_TAG),
-        horizontalAlignment = Alignment.CenterHorizontally
+        contentAlignment = Alignment.Center
     ) {
         ShoeIllustration(Modifier.size(64.dp))
-        Spacer(Modifier.height(7.dp))
-        Text("SHOES", color = Color.White.copy(alpha = 0.78f), fontSize = 10.sp,
-            fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
-        if (shoe == null) {
-            Text("ADD PAIR", color = Color.White.copy(alpha = 0.6f), fontSize = 8.sp,
-                fontWeight = FontWeight.SemiBold, letterSpacing = 1.sp)
-        } else {
-            Text(shoe.displayName, color = Color.White.copy(alpha = 0.86f), fontSize = 10.sp,
-                lineHeight = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis,
-                textAlign = TextAlign.Center, modifier = Modifier.padding(top = 2.dp))
-            Text(shoe.mileageLabel, color = Color.White.copy(alpha = 0.62f), fontSize = 9.sp,
-                lineHeight = 11.sp, fontWeight = FontWeight.Medium, maxLines = 1,
-                modifier = Modifier.padding(top = 2.dp))
-        }
-    }
-}
-
-@Composable
-private fun FooterLabel(
-    label: String,
-    sublabel: String,
-    icon: Int,
-    artwork: Boolean = false,
-    modifier: Modifier = Modifier
-) {
-    Column(
-        modifier = modifier
-            .width(72.dp)
-            .padding(bottom = 6.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Box(
-            modifier = Modifier.size(if (artwork) 64.dp else 52.dp)
-                .then(if (artwork) Modifier.clip(CircleShape) else Modifier),
-            contentAlignment = Alignment.Center
-        ) {
-            if (!artwork) {
-                Canvas(Modifier.matchParentSize()) {
-                    val w = size.width
-                    val h = size.height
-                    drawOval(
-                        brush = Brush.radialGradient(
-                            listOf(Color.Black.copy(alpha = 0.24f), Color.Transparent),
-                            center = Offset(w * 0.5f, h * 0.72f), radius = w * 0.48f
-                        ),
-                        topLeft = Offset(w * 0.02f, h * 0.43f),
-                        size = Size(w * 0.96f, h * 0.55f)
-                    )
-                    val pebble = Path().apply {
-                        moveTo(w * 0.46f, h * 0.06f)
-                        cubicTo(w * 0.68f, h * 0.01f, w * 0.91f, h * 0.17f, w * 0.92f, h * 0.40f)
-                        cubicTo(w * 0.98f, h * 0.63f, w * 0.79f, h * 0.85f, w * 0.55f, h * 0.89f)
-                        cubicTo(w * 0.32f, h * 0.97f, w * 0.08f, h * 0.79f, w * 0.07f, h * 0.55f)
-                        cubicTo(w * 0.02f, h * 0.32f, w * 0.22f, h * 0.10f, w * 0.46f, h * 0.06f)
-                        close()
-                    }
-                    drawPath(pebble, Brush.linearGradient(
-                        0f to Color(0xFF4A5535),
-                        0.48f to Color(0xFF303D24),
-                        1f to Color(0xFF192416),
-                        start = Offset(w * 0.2f, 0f), end = Offset(w * 0.72f, h)
-                    ))
-                    // Light catches only the upper shoulder; there is no enclosing outline.
-                    val shoulder = Path().apply {
-                        moveTo(w * 0.15f, h * 0.28f)
-                        cubicTo(w * 0.31f, h * 0.06f, w * 0.65f, h * 0.02f, w * 0.82f, h * 0.22f)
-                    }
-                    drawPath(shoulder, Brush.horizontalGradient(listOf(
-                        Color.Transparent, Color(0xFFDCE5BE).copy(alpha = 0.20f), Color.Transparent
-                    )), style = Stroke(0.8.dp.toPx(), cap = StrokeCap.Round))
-                }
-            }
-            Image(
-                painter = painterResource(icon),
-                contentDescription = null,
-                colorFilter = if (artwork) null else ColorFilter.tint(Color(0xFFDCE5BE)),
-                contentScale = ContentScale.Fit,
-                modifier = if (artwork) Modifier.fillMaxSize() else Modifier.size(29.dp)
-            )
-        }
-        Spacer(Modifier.height(7.dp))
-        Text(label, color = Color.White.copy(alpha = 0.78f),
-            fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
-        Text(sublabel, color = Color.White.copy(alpha = 0.5f),
-            fontSize = 8.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 1.sp)
     }
 }
 

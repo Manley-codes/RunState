@@ -155,7 +155,6 @@ class RunStateScreenTest {
         const val SAVED = "RUN SAVED"
         const val FAILED = "RunState couldn't get ready."
 
-        const val START = "Start"
         const val CANCEL = "Cancel"
         const val TRY_AGAIN = "Try again"
         const val PAUSE = "Pause"
@@ -355,11 +354,12 @@ class RunStateScreenTest {
 
     private fun renderScreen(state: RunUiState) = renderScreen(RunUiModel(state))
 
-    /** Fails unless none of the action labels, nor the hold control, is on screen. */
+    /** Fails unless none of the actions is on screen. */
     private fun assertNoActionsOffered() {
-        listOf(START, CANCEL, TRY_AGAIN, PAUSE, RESUME, START_ANOTHER).forEach {
+        listOf(CANCEL, TRY_AGAIN, PAUSE, RESUME, START_ANOTHER).forEach {
             composeTestRule.onNodeWithText(it).assertDoesNotExist()
         }
+        composeTestRule.onNodeWithTag(START_RUN_BUTTON_TAG).assertDoesNotExist()
         composeTestRule.onNodeWithTag(HOLD_TO_STOP_TAG).assertDoesNotExist()
     }
 
@@ -403,7 +403,7 @@ class RunStateScreenTest {
         composeTestRule.onNodeWithText(TRY_AGAIN).assertDoesNotExist()
 
         // Act
-        composeTestRule.onNodeWithText(START).performClick()
+        composeTestRule.onNodeWithContentDescription("Start run").assertIsDisplayed().performClick()
 
         // Assert: exactly one Start, and nothing else fired.
         assertEquals(1, actions.starts)
@@ -607,7 +607,8 @@ class RunStateScreenTest {
         settleStartEnergyEntrance()
         val fixedTags = listOf(START_AGENT_CARD_TAG, START_AGENT_VISUALIZER_TAG, START_UTILITY_ACTIONS_TAG,
             START_ENERGY_CHOICES_TAG, START_ENERGY_LOW_TAG, START_ENERGY_MODERATE_TAG,
-            START_ENERGY_HIGH_TAG, START_FOOTER_TAG, START_RUN_BUTTON_TAG)
+            START_ENERGY_HIGH_TAG, START_FOOTER_TAG, START_RUN_BUTTON_TAG,
+            START_OPEN_SHOES_TAG, START_OPEN_SPOTIFY_TAG)
         val boundsBefore = fixedTags.associateWith { tag ->
             composeTestRule.onNodeWithTag(tag).assertIsDisplayed().fetchSemanticsNode().boundsInRoot
         }
@@ -649,9 +650,13 @@ class RunStateScreenTest {
             assertTrue("Map, History and Settings must form one vertical stack", above.bottom <= below.top)
             assertEquals("Utility icons share a horizontal center", above.center.x, below.center.x, 1f)
         }
-        for (label in listOf("Ready when you are", "Map artwork", "Map", "History", "Settings")) {
+        for (label in listOf("Ready when you are", "Map artwork", "Map", "History", "Settings",
+            "Physical energy now · Optional", "SHOES", "ADD PAIR", "Start", "GPS run", "MUSIC", "SPOTIFY")) {
             composeTestRule.onNodeWithText(label, useUnmergedTree = true).assertDoesNotExist()
         }
+        val startNode = composeTestRule.onNodeWithTag(START_RUN_BUTTON_TAG).fetchSemanticsNode()
+        assertEquals(listOf("Start run"), startNode.config[SemanticsProperties.ContentDescription])
+        assertEquals("GPS run", startNode.config[SemanticsProperties.StateDescription])
         composeTestRule.onNodeWithTag(START_MAP_STATUS_TAG).assertDoesNotExist()
         saveNativePreview(START_RUN_SCREEN_TAG, "start-compact-agent-external-icons-preview.png")
         fun assertFixed() {
@@ -664,9 +669,15 @@ class RunStateScreenTest {
                 .fetchSemanticsNode().boundsInRoot
             val footer = composeTestRule.onNodeWithTag(START_FOOTER_TAG).fetchSemanticsNode().boundsInRoot
             val start = composeTestRule.onNodeWithTag(START_RUN_BUTTON_TAG).fetchSemanticsNode().boundsInRoot
-            assertTrue("Moderate must clear the entire footer, including its crest, by 12 dp",
-                moderate.bottom + 12f * densityValue <= footer.top + 1f)
-            assertTrue("The Start action must remain inside its own footer", start.top >= footer.top)
+            val shoes = composeTestRule.onNodeWithTag(START_OPEN_SHOES_TAG).fetchSemanticsNode().boundsInRoot
+            val music = composeTestRule.onNodeWithTag(START_OPEN_SPOTIFY_TAG).fetchSemanticsNode().boundsInRoot
+            assertTrue("The Energy row must stay below the controls without overlap", moderate.top >= footer.bottom)
+            assertTrue("Shoes and Music must sit above Start", shoes.bottom <= start.top && music.bottom <= start.top)
+            assertEquals("Shoes and Music share one row", shoes.center.y, music.center.y, 1f)
+            assertTrue("Shoes stays left and Music stays right", shoes.center.x < start.center.x && music.center.x > start.center.x)
+            assertEquals("Start is centered under Shoes and Music", (shoes.center.x + music.center.x) / 2f, start.center.x, 1f)
+            assertEquals("Start stays centered above Moderate", moderate.center.x, start.center.x, 1f)
+            assertTrue("The Start action must remain inside its own footer", start.top >= footer.top && start.bottom <= footer.bottom)
         }
         assertFixed()
 
@@ -727,7 +738,7 @@ class RunStateScreenTest {
                     onStart = { selectedAtStart = selected }, actionsEnabled = true,
                     onViewHistory = { historyOpens++ }, showHistory = true,
                     onOpenRunSettings = { settingsOpens++ },
-                    onOpenMap = {}, modifier = Modifier.size(360.dp, 480.dp)
+                    onOpenMap = {}, modifier = Modifier.size(320.dp, 480.dp)
                 )
             }
         }
@@ -737,13 +748,20 @@ class RunStateScreenTest {
             listOf(START_ENERGY_LOW_TAG, START_ENERGY_MODERATE_TAG, START_ENERGY_HIGH_TAG)
                 .forEach { composeTestRule.onNodeWithTag(it).assertIsDisplayed().assertIsEnabled() }
             composeTestRule.onNodeWithTag(START_RUN_BUTTON_TAG).assertIsDisplayed().assertIsEnabled()
+            listOf(START_OPEN_SHOES_TAG, START_OPEN_SPOTIFY_TAG).forEach { tag ->
+                val bounds = composeTestRule.onNodeWithTag(tag).assertIsDisplayed().assertIsEnabled()
+                    .fetchSemanticsNode().boundsInRoot
+                assertTrue("Each lower action stays at least 48 dp wide at large text", bounds.width + 1f >= 48f * densityValue)
+                assertTrue("Each lower action stays at least 48 dp tall at large text", bounds.height + 1f >= 48f * densityValue)
+            }
             val footer = composeTestRule.onNodeWithTag(START_FOOTER_TAG).fetchSemanticsNode().boundsInRoot
             val start = composeTestRule.onNodeWithTag(START_RUN_BUTTON_TAG).fetchSemanticsNode().boundsInRoot
             val choices = composeTestRule.onNodeWithTag(START_ENERGY_CHOICES_TAG).fetchSemanticsNode().boundsInRoot
             val moderate = composeTestRule.onNodeWithTag(START_ENERGY_MODERATE_TAG).fetchSemanticsNode().boundsInRoot
-            assertTrue("Large-text Energy must remain above the measured footer",
-                moderate.bottom + 12f * densityValue <= footer.top + 1f)
+            assertTrue("Large-text Energy must remain below the measured footer without overlap",
+                moderate.top >= footer.bottom)
 
+            composeTestRule.onNodeWithTag(START_RUN_PLAN_TAG).performScrollTo().assertIsDisplayed()
             composeTestRule.onNodeWithTag(START_RUN_SETTINGS_TAG).performScrollTo()
                 .assertIsDisplayed().performClick()
             composeTestRule.onNodeWithTag(START_HISTORY_TAG).performScrollTo()
@@ -793,16 +811,10 @@ class RunStateScreenTest {
         composeTestRule.runOnIdle { assertEquals(PreRunEnergy.MODERATE, selected) }
         composeTestRule.onNodeWithTag("startEnergyUndo").assertDoesNotExist()
 
-        composeTestRule.onNodeWithTag(START_FOOTER_TAG).performScrollTo().assertIsDisplayed()
-        val energySlot = composeTestRule.onNodeWithTag(START_ENERGY_CUE_TAG)
-            .assertIsDisplayed().fetchSemanticsNode().boundsInRoot
-        val footer = composeTestRule.onNodeWithTag(START_FOOTER_TAG).fetchSemanticsNode().boundsInRoot
-        val start = composeTestRule.onNodeWithTag(START_RUN_BUTTON_TAG)
-            .assertIsDisplayed().fetchSemanticsNode().boundsInRoot
-        assertTrue("The scrolling landscape stack preserves the Energy/footer gap",
-            energySlot.bottom + 12f <= footer.top + 1f)
-        assertTrue("The Start control remains inside the same measured footer", start.top >= footer.top)
-        composeTestRule.onNodeWithTag(START_RUN_BUTTON_TAG).performTouchInput { click() }
+        composeTestRule.onNodeWithTag(START_OPEN_SHOES_TAG).performScrollTo().assertIsDisplayed()
+        composeTestRule.onNodeWithTag(START_OPEN_SPOTIFY_TAG).performScrollTo().assertIsDisplayed()
+        composeTestRule.onNodeWithTag(START_RUN_BUTTON_TAG).performScrollTo()
+            .assertIsDisplayed().performTouchInput { click() }
         composeTestRule.runOnIdle {
             assertEquals(PreRunEnergy.MODERATE, selectedAtStart)
             assertEquals(1, starts)
@@ -1699,8 +1711,10 @@ class RunStateScreenTest {
         }
 
         val music = composeTestRule.onNodeWithTag(START_OPEN_SPOTIFY_TAG)
-            .assertIsDisplayed().assertIsEnabled().assertTextEquals("MUSIC", "SPOTIFY")
+            .assertIsDisplayed().assertIsEnabled()
         assertEquals(Role.Button, music.fetchSemanticsNode().config[SemanticsProperties.Role])
+        assertEquals(listOf("Open Spotify"), music.fetchSemanticsNode().config[SemanticsProperties.ContentDescription])
+        assertFalse("The music artwork has no visible caption", music.fetchSemanticsNode().config.contains(SemanticsProperties.Text))
         composeTestRule.runOnIdle { assertEquals(0, spotifyOpens) }
         music.performTouchInput { click() }
         composeTestRule.runOnIdle {
@@ -1985,7 +1999,7 @@ class RunStateScreenTest {
     }
 
     @Test
-    fun startShoesControlOpensOnlyShoesAndSelectedLabelPreservesStartBounds() {
+    fun startShoesControlOpensOnlyShoesAndSelectedStatePreservesStartBounds() {
         var shoe by mutableStateOf<ShoePairDisplay?>(null)
         var enabled by mutableStateOf(true)
         var shoeOpens = 0
@@ -2000,8 +2014,10 @@ class RunStateScreenTest {
         }
         composeTestRule.mainClock.advanceTimeByFrame()
         val control = composeTestRule.onNodeWithTag(START_OPEN_SHOES_TAG)
-            .assertIsDisplayed().assertIsEnabled().assertTextEquals("SHOES", "ADD PAIR")
+            .assertIsDisplayed().assertIsEnabled()
         assertEquals(Role.Button, control.fetchSemanticsNode().config[SemanticsProperties.Role])
+        assertEquals(listOf("Choose shoes"), control.fetchSemanticsNode().config[SemanticsProperties.ContentDescription])
+        assertFalse("The shoes artwork has no visible caption", control.fetchSemanticsNode().config.contains(SemanticsProperties.Text))
         assertEquals("No shoes selected", control.fetchSemanticsNode().config[SemanticsProperties.StateDescription])
         val stableTags = listOf(START_RUN_BUTTON_TAG, START_ENERGY_CHOICES_TAG, START_FOOTER_TAG)
         val before = stableTags.associateWith { composeTestRule.onNodeWithTag(it).fetchSemanticsNode().boundsInRoot }
@@ -2011,7 +2027,9 @@ class RunStateScreenTest {
             shoe = ShoePairDisplay("road", "ASICS", "Novablast 6", "My longer daily road pair", "123.4 MI")
         }
         composeTestRule.mainClock.advanceTimeByFrame()
-        control.assertTextEquals("SHOES", "My longer daily road pair", "123.4 MI")
+        assertFalse("Selecting shoes does not add a visible caption", control.fetchSemanticsNode().config.contains(SemanticsProperties.Text))
+        composeTestRule.onNodeWithText("My longer daily road pair", useUnmergedTree = true).assertDoesNotExist()
+        composeTestRule.onNodeWithText("123.4 MI", useUnmergedTree = true).assertDoesNotExist()
         assertEquals("ASICS · Novablast 6 · My longer daily road pair, 123.4 MI",
             control.fetchSemanticsNode().config[SemanticsProperties.StateDescription])
         saveNativePreview("shoeStartPreview", "shoe-selected-start-preview.png")
@@ -2033,7 +2051,7 @@ class RunStateScreenTest {
 
         composeTestRule.onNodeWithText(COUNTDOWN).assertIsDisplayed()
         composeTestRule.onNodeWithText("2").assertIsDisplayed()
-        composeTestRule.onNodeWithText(START).assertDoesNotExist()
+        composeTestRule.onNodeWithTag(START_RUN_BUTTON_TAG).assertDoesNotExist()
         saveNativePreview(COUNTDOWN_SCREEN_TAG, "countdown-frosted-drift.png")
 
         // Act
@@ -2168,7 +2186,7 @@ class RunStateScreenTest {
         val actions = renderScreen(RunUiState.StartFailed)
 
         composeTestRule.onNodeWithText(START_FAILED).assertIsDisplayed()
-        composeTestRule.onNodeWithText(START).assertDoesNotExist()
+        composeTestRule.onNodeWithTag(START_RUN_BUTTON_TAG).assertDoesNotExist()
 
         // Act and Assert: Try again is the start retry, not the initialization retry.
         composeTestRule.onNodeWithText(TRY_AGAIN).performClick()
@@ -6298,7 +6316,7 @@ class RunStateScreenTest {
         val actions = renderScreen(RunUiState.InitializationFailed)
 
         composeTestRule.onNodeWithText(FAILED).assertIsDisplayed()
-        composeTestRule.onNodeWithText(START).assertDoesNotExist()
+        composeTestRule.onNodeWithTag(START_RUN_BUTTON_TAG).assertDoesNotExist()
         composeTestRule.onNodeWithText(CANCEL).assertDoesNotExist()
 
         // Act

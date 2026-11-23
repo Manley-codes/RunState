@@ -5,6 +5,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertHasNoClickAction
 import androidx.compose.ui.test.assertIsEnabled
@@ -90,10 +91,14 @@ class OpeningJourneyTest {
             assertEquals("Blue pair", pair.pair.nickname)
             assertEquals(0.0, pair.totalDistanceMeters, 0.0)
             assertEquals(pair.pair.shoePairId, runBlocking { fixture.database.shoeDao().selectedActivePairId() })
-            compose.onNodeWithText("Blue pair").assertIsDisplayed()
+            assertEquals("Test Brand · Everyday Runner · Blue pair, 0.0 MI",
+                compose.onNodeWithTag(START_OPEN_SHOES_TAG).assertIsDisplayed()
+                    .fetchSemanticsNode().config[SemanticsProperties.StateDescription])
             restoration.emulateSavedInstanceStateRestore()
             awaitEnabledTag(START_OPEN_SHOES_TAG)
-            compose.onNodeWithText("Blue pair").assertIsDisplayed()
+            assertEquals("Test Brand · Everyday Runner · Blue pair, 0.0 MI",
+                compose.onNodeWithTag(START_OPEN_SHOES_TAG).assertIsDisplayed()
+                    .fetchSemanticsNode().config[SemanticsProperties.StateDescription])
             compose.onNodeWithTag(START_OPEN_SHOES_TAG).performClick()
             awaitEnabledTag("shoeSelect:${pair.pair.shoePairId}")
             compose.onNodeWithTag("shoeSelect:${pair.pair.shoePairId}").assertIsSelected()
