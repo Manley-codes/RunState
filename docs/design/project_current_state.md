@@ -5,6 +5,23 @@ metadata:
   type: project
 ---
 
+## November 23 compact Start controls
+
+Manley requested slightly smaller Shoe/Music objects much closer to Start. Their artwork is now
+56 dp instead of 64 dp (12.5% smaller), with the existing separate 72 dp touch targets preserved.
+Their centered row is capped at 224 dp instead of spanning the screen's outer Energy columns;
+the row-to-Start gap is 0 dp instead of 8 dp. Controls remain symmetrically above Start without
+overlapping its target. Start's size, Energy/prompt/navigation, actions and saved-state behavior
+are unchanged. This supersedes the outer-column alignment in the earlier sketch.
+
+Owner/public/test builds and vital lint passed. Seven focused Moto checks passed, covering compact
+geometry, large text/landscape reachability, Shoe/Spotify actions, prompt stability/selection and
+shoe restoration. Actual installed screenshot inspected. All 74 completed runs/12 table hashes
+and five preferences survived the update; only the normal opening counter changed after launch.
+APK `9351ef7e7ab76ce7db7b68d05a18e20a18bcf5a72e2085ae5f4468fbfd7e3488`.
+Private evidence/backup: `android/build/nov23-start-cluster/moto/`. Temporary test app removed.
+No new tracked files, real run or provider call. Public preview unchanged; visual feedback pending.
+
 ## November 23 animated Energy invitation
 
 **Borderless follow-up installed:** Manley clarified that he wants no outline, like Nike's Set a

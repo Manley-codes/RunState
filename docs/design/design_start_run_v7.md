@@ -8,6 +8,14 @@ status: CURRENT NATIVE DECISIONS plus dated prototype history; verification live
 
 # Start Run — where this screen actually is
 
+**November 23 compact Start cluster — installed for review:** Shoes and Music artwork shrink
+from 64 to 56 dp while retaining their 72 dp touch targets. Their row is centered and capped at
+224 dp, bringing both controls much closer to Start instead of aligning them with the outer
+Energy columns. The row-to-Start gap changes from 8 to 0 dp; the targets remain above Start
+without overlap. Start's 102 dp artwork, callbacks and accessible names remain unchanged.
+This supersedes the wider side-control placement in the November 22 sketch below. Three builds
+and seven focused phone checks passed, with 74 runs preserved; current-state notes retain receipts.
+
 **November 23 animated Energy invitation — installed trial:** a borderless, translucent pill
 in the gap below Energy alternates Choose and Energy, one word at a time with gentle fades.
 Manley's clarified style direction removes the outline and uses soft white fill at 60% opacity

@@ -746,6 +746,10 @@ class RunStateScreenTest {
             assertTrue("Shoes and Music must sit above Start", shoes.bottom <= start.top && music.bottom <= start.top)
             assertEquals("Shoes and Music share one row", shoes.center.y, music.center.y, 1f)
             assertTrue("Shoes stays left and Music stays right", shoes.center.x < start.center.x && music.center.x > start.center.x)
+            assertTrue("The side controls form a compact cluster around Start instead of spanning the screen",
+                music.right - shoes.left <= start.width * 2.1f)
+            assertTrue("The side controls stay close above Start without overlapping its touch area",
+                start.top - shoes.bottom <= 4f * densityValue + 1f)
             assertEquals("Start is centered under Shoes and Music", (shoes.center.x + music.center.x) / 2f, start.center.x, 1f)
             assertEquals("Start stays centered above Moderate", moderate.center.x, start.center.x, 1f)
             assertTrue("The Start action must remain inside its own footer", start.top >= footer.top && start.bottom <= footer.bottom)

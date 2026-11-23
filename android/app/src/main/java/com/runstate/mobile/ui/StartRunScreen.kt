@@ -1226,28 +1226,23 @@ private fun StartFooter(
         modifier = modifier.fillMaxWidth().padding(horizontal = 20.dp)
             .padding(top = 8.dp).testTag(START_FOOTER_TAG),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(8.dp)
+        verticalArrangement = Arrangement.Top
     ) {
-        // Match the Energy row's three equal columns; Start shares the middle column's center.
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp),
+        // Keep both secondary controls tucked above Start, with separate 72 dp tap areas.
+        Row(Modifier.widthIn(max = 224.dp).fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
-                ShoeFooterControl(selectedShoe, enabled, onOpenShoes)
-            }
-            Spacer(Modifier.weight(1f))
-            Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
-                Box(
-                    modifier = Modifier.size(72.dp).clip(CircleShape)
-                        .clickable(enabled = musicEnabled, role = Role.Button,
-                            onClickLabel = "Open Spotify", onClick = onOpenSpotify)
-                        .semantics { contentDescription = "Open Spotify" }
-                        .testTag(START_OPEN_SPOTIFY_TAG),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Image(painter = painterResource(R.drawable.start_music_orb),
-                        contentDescription = null, contentScale = ContentScale.Fit,
-                        modifier = Modifier.size(64.dp).clip(CircleShape))
-                }
+            ShoeFooterControl(selectedShoe, enabled, onOpenShoes)
+            Box(
+                modifier = Modifier.size(72.dp).clip(CircleShape)
+                    .clickable(enabled = musicEnabled, role = Role.Button,
+                        onClickLabel = "Open Spotify", onClick = onOpenSpotify)
+                    .semantics { contentDescription = "Open Spotify" }
+                    .testTag(START_OPEN_SPOTIFY_TAG),
+                contentAlignment = Alignment.Center
+            ) {
+                Image(painter = painterResource(R.drawable.start_music_orb),
+                    contentDescription = null, contentScale = ContentScale.Fit,
+                    modifier = Modifier.size(56.dp).clip(CircleShape))
             }
         }
         Box(
@@ -1280,7 +1275,7 @@ private fun ShoeFooterControl(shoe: ShoePairDisplay?, enabled: Boolean, onClick:
             .testTag(START_OPEN_SHOES_TAG),
         contentAlignment = Alignment.Center
     ) {
-        ShoeIllustration(Modifier.size(64.dp))
+        ShoeIllustration(Modifier.size(56.dp))
     }
 }
 
