@@ -8,6 +8,14 @@ status: LIVE — accepted connected browser preview; mobile phone framing confir
 
 # RunState interactive preview
 
+**November 22 publication hold:** Manley is experimenting with Android designs and is not ready
+to change the public preview. The scoped Start footer removal was published as `1bbd02f`, then
+restored at his request with `e8c1772`. The live site serves the original `index-BYAo8HzC.js` and
+green footer again; phone/desktop verification passed and the tree matches `42b6d0a` exactly.
+Do not publish further preview design changes without his explicit approval. This supersedes
+automatic same-milestone preview sync; Android implementation/acceptance is not that approval.
+Proof is private in the preview checkout's `.local/footer-removal/*-restored-live.*`.
+
 **November 1 local fix:** the opening retains a complete photo collage while all moving photos
 decode, then reveals them together. The original native still is embedded to avoid a separate
 loading-image request. Photos, motion and4.8-second exit remain unchanged; slow/failed loading and

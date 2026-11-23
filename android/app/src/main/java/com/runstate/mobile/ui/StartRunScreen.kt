@@ -1103,41 +1103,6 @@ private fun StartFooter(
         label = "startReadyGlow"
     )
     Box(modifier = modifier.fillMaxWidth().heightIn(min = 184.dp).testTag(START_FOOTER_TAG)) {
-        Canvas(Modifier.matchParentSize()) {
-            val boundary = Path().apply {
-                // Lift the side shoulders, not the controls: the music keeps its size and gains
-                // clear space below the crest without changing the measured Energy/footer gap.
-                moveTo(0f, size.height * 0.16f)
-                cubicTo(
-                    size.width * 0.21f, size.height * 0.24f,
-                    size.width * 0.37f, size.height * 0.06f,
-                    size.width * 0.5f, size.height * 0.06f
-                )
-                cubicTo(
-                    size.width * 0.63f, size.height * 0.06f,
-                    size.width * 0.82f, size.height * 0.23f,
-                    size.width, size.height * 0.16f
-                )
-                lineTo(size.width, size.height)
-                lineTo(0f, size.height)
-                close()
-            }
-            drawPath(boundary, Brush.horizontalGradient(listOf(StartForest, StartForestDeep)))
-            repeat(4) { index ->
-                val curve = Path().apply {
-                    moveTo(size.width * (0.68f + index * 0.09f), size.height)
-                    cubicTo(
-                        size.width * 0.76f,
-                        size.height * (0.60f + index * 0.02f),
-                        size.width * 0.92f,
-                        size.height * (0.44f + index * 0.02f),
-                        size.width,
-                        size.height * (0.40f + index * 0.06f)
-                    )
-                }
-                drawPath(curve, Color.White.copy(alpha = 0.07f), style = androidx.compose.ui.graphics.drawscope.Stroke(width = 1.dp.toPx()))
-            }
-        }
         Row(
             modifier = Modifier
                 .fillMaxWidth()

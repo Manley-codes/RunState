@@ -5,7 +5,34 @@ metadata:
   type: project
 ---
 
+## November 22 Start footer removal
+
+Manley accepted the startup fix and chose to review Android design while taking a UI/UX course.
+Discussion is the default; he then explicitly authorized just removing the irregular green
+bottom container from Start and showing the map in its place. Only the footer's decorative
+Canvas was removed. The existing full-screen map and wash already extend behind it. Footer
+height, spacing, Shoes/Start/Music artwork, labels, colors, actions and all other screens remain
+unchanged. White labels are consequently low contrast on the pale map; this was reported, not
+silently restyled. Further design changes await his direction.
+
+Fresh debug/public builds and release vital lint passed. The matching-signature owner build
+was installed in place on the idle Moto and the actual Start screenshot inspected. APK SHA-256:
+`ca0dc31b69ee0af3039c7df32b776e5f5fca89cec96a41b3a66769c1c906825d`.
+All 73 completed runs, 12 table hashes and five preference hashes matched immediately after
+installation. Private backups and screenshot are in `android/build/nov22-start-footer/moto/`.
+No new tracked source/test/asset file, schema, behavior, provider call or iPhone change.
+
+The same SVG removal was initially published to the separate browser preview at `1bbd02f`,
+following the older automatic-sync instruction. Manley explicitly requested restoring GitHub's
+previous look while retaining the Android experiment. Revert `e8c1772` restores the exact prior
+preview tree; live phone/desktop checks confirm the green footer and original bundle are back.
+Future preview design publication requires his explicit approval, superseding automatic sync.
+The private roadmap retains the release/tests queue while design review is the current focus.
+
 ## November 22 startup loading flash
+
+**Acceptance:** Manley reopened the app and said "Ok looks good" before shifting to screen design.
+The reopening check is complete; do not repeatedly request it.
 
 **Follow-up after reopening feedback:** Manley still saw white before the collage. A native
 launch recording confirmed Android's default light/icon system splash, before Compose exists.

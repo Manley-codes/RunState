@@ -8,6 +8,13 @@ status: CURRENT NATIVE DECISIONS plus dated prototype history; verification live
 
 # Start Run — where this screen actually is
 
+**November 22 scoped design adjustment — installed:** remove only the irregular green footer
+backing and its decorative lines. The existing map/wash shows behind Shoes, Start and Music.
+Their layout, dimensions, labels, colors and actions are unchanged. In particular, white labels
+remain low contrast until Manley chooses a separate adjustment; do not infer redesign approval.
+All broader design work remains discussion-only unless explicitly requested. Current source and
+verification supersede historical descriptions of the green footer below; see current-state notes.
+
 **October 31 Start symbol polish — corrected and installed:** orange strip remains attached to
 the white polygon's base and stops well before its point, with4dp thickness and flat caps.
 Manley rejected the first floating/inset treatment; the base connection is intentional. All other
