@@ -26,6 +26,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -130,6 +131,9 @@ internal fun StartTrailsBackground(
     var initialized by remember { mutableStateOf(false) }
     var touching by remember { mutableStateOf(false) }
     var resumeAfter by remember { mutableLongStateOf(0L) }
+    // Lazy-list placement is integer-pixel based. Retain the fraction in a drawing layer so
+    // this intentionally slow motion still advances every frame, including across pauses.
+    var fractionalScrollPx by remember { mutableFloatStateOf(0f) }
     BoxWithConstraints(modifier.fillMaxSize().background(Color(0xFFF6F8F6))
         .testTag(START_TRAILS_BACKGROUND_TAG).clipToBounds()) {
         val available = (maxHeight - 64.dp).coerceAtLeast(200.dp)
@@ -170,7 +174,10 @@ internal fun StartTrailsBackground(
                 val seconds = if (previous == 0L) 0f else ((now - previous) / 1_000_000_000f).coerceAtMost(.05f)
                 previous = now
                 if (!touching && !flow.isScrollInProgress && SystemClock.uptimeMillis() >= resumeAfter) {
-                    flow.scrollBy(speedPx * seconds)
+                    val next = fractionalScrollPx + speedPx * seconds
+                    val wholePixels = next.toInt()
+                    val consumed = if (wholePixels > 0) flow.scrollBy(wholePixels.toFloat()) else 0f
+                    fractionalScrollPx = (next - consumed).coerceIn(0f, 1f)
                 }
             }
         }
@@ -179,14 +186,16 @@ internal fun StartTrailsBackground(
         val selectable by remember(flow, upperPx, bottomPx, insetPx, photoPx) {
             derivedStateOf {
                 flow.layoutInfo.visibleItemsInfo
-                    .filter { it.offset + insetPx >= upperPx && it.offset + insetPx + photoPx <= bottomPx }
+                    .filter { it.offset - fractionalScrollPx + insetPx >= upperPx &&
+                        it.offset - fractionalScrollPx + insetPx + photoPx <= bottomPx }
                     .groupBy { it.index % cycleSize }
                     .values.map { copies -> copies.minBy { abs(it.offset + 56f * density.density - (upperPx + bottomPx) / 2) }.index }
                     .toSet()
             }
         }
         LazyColumn(state = flow, userScrollEnabled = enabled && !touchExploration,
-            modifier = Modifier.fillMaxWidth().height(available)
+            modifier = Modifier.fillMaxWidth().height(available + 1.dp)
+                .graphicsLayer { translationY = -fractionalScrollPx }
                 .then(if (touchExploration) Modifier.clearAndSetSemantics { } else Modifier)
                 .pointerInput(enabled) {
                     if (enabled) awaitEachGesture {

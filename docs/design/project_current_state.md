@@ -7,6 +7,13 @@ metadata:
 
 ## November 23 continuous faded trail background
 
+**Latest motion correction:** Manley reported slight jumps/staggering. Installed Compose's lazy
+list rounds placement to whole pixels; the old build held position on 21 of 24 measured frames,
+then moved one pixel on three. The fix retains fractional movement in a graphics layer and
+commits only whole pixels to list placement. The frame-cadence regression now passes, including
+small monotonic steps and the same 4 dp/second speed. Fractional position survives pause/recenter,
+selectable bounds track it, and slight overscan covers the lower edge. Fade/controls stay fixed.
+
 Manley accepted the larger sizing but rejected fixed enlarged maps and the rectangular cutoff.
 Installed equal 112 dp bands/72 dp photos across the entire background, with the existing rounded
 corners/insets/4 dp gaps. A screen-anchored gradient progressively fades bands behind the upper
@@ -20,7 +27,8 @@ Lifecycle, disabled animations, open sheets and touch exploration stop automatic
 Faded copies are decorative/non-selectable; clear photos still open details. The finite Houston
 trails sheet preserves access to all four destinations for assistive navigation.
 
-Owner/public/test builds and vital lint passed. All five focused Moto checks passed: automatic
+Owner/public/test builds and vital lint passed. All six focused Moto checks passed: frame cadence;
+automatic
 upward motion and pause/resume continuity; ignored faded-area taps and successful clear-photo
 taps; manual swipes with fixed controls/no accidental actions; explicit plan choice, dismiss and
 original-background behavior; short-window/large-text reachability. Native initial/scrolled and
@@ -28,10 +36,10 @@ installed screenshots confirm equal-size coverage and fading. Matching-signature
 all 74 completed runs, two
 shoe pairs, 12 table hashes and preferences except the ordinary opening counter. Integrity/FK
 checks passed. Temporary test package removed; main app reopened with Houston trails selected.
-APK SHA-256: `29d0c458163d0693c3703597a4f8ece5081e6644370408d4ce5f1241c25c2cb5`.
-Private build, backup, test and native screenshot evidence: `android/build/nov23-trail-flow/`.
+APK SHA-256: `52feb1be6141cb702d925d33bc08d09d8254630e7b382a49fe26959c330b744b`.
+Private build, backup, before/after cadence test and screenshot evidence: `android/build/nov23-trail-smooth/`.
 The extended isolated scenery test also passed the real 12-second touch cooldown and resumed
-movement afterward; it contains no run controls/database. Evidence: `moto/cooldown-fixture.txt`.
+movement afterward; it contains no run controls/database. It is included in the latest six-check run.
 
 This supersedes the fixed Terry Hershey extension and prior automatic-drift deferral. Manley's
 visual/motion acceptance is next; additional trails can follow later. Public preview/release queue unchanged.

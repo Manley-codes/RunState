@@ -26,6 +26,12 @@ sheet remains the accessible route to all four parks. This supersedes both the p
 deferral and fixed Terry Hershey map. Build/device evidence belongs in current-state notes;
 public-preview publication remains on hold.
 
+**November 23 motion smoothness follow-up:** Manley described the accepted stream as slightly
+jumpy/staggered. Keep its speed, sizes, fade and interaction; retain fractional motion in a
+graphics layer while committing whole pixels to lazy-list placement. Preserve that fraction
+across touch, lifecycle pauses and repeated-list recentering. The fade and foreground remain
+stationary; clear-photo hit eligibility follows the same visual offset.
+
 **November 23 optional Houston trail background — installed trial:** Manley approved actual trail
 photos beside static area maps, small separators and an easy return to the current background.
 He chose continuous slow motion, superseding the earlier suggestion of entrance-only motion.

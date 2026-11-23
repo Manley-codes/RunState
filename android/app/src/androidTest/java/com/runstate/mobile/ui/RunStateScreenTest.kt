@@ -518,6 +518,46 @@ class RunStateScreenTest {
     }
 
     @Test
+    fun houstonTrailFlowAdvancesSmoothlyBetweenAnimationFrames() {
+        var moving by mutableStateOf(false)
+        var opens = 0
+        composeTestRule.mainClock.autoAdvance = false
+        composeTestRule.setContent {
+            StartTrailsBackground(
+                upperContentBottom = 120.dp, controlsTop = 400.dp,
+                moving = moving, enabled = true, onExplore = { opens++ },
+                modifier = Modifier.fillMaxSize().systemBarsPadding()
+            )
+        }
+        repeat(4) { composeTestRule.mainClock.advanceTimeByFrame() }
+        fun photoTop() = composeTestRule
+            .onNodeWithTag(START_TRAIL_PHOTO_TAG_PREFIX + "memorial", useUnmergedTree = true)
+            .assertIsDisplayed().getUnclippedBoundsInRoot().top.value
+
+        composeTestRule.runOnIdle { moving = true }
+        repeat(4) { composeTestRule.mainClock.advanceTimeByFrame() }
+        val positions = mutableListOf(photoTop())
+        val startedAt = composeTestRule.mainClock.currentTime
+        repeat(24) {
+            composeTestRule.mainClock.advanceTimeByFrame()
+            positions += photoTop()
+        }
+        val elapsedSeconds = (composeTestRule.mainClock.currentTime - startedAt) / 1_000f
+        val advances = positions.zipWithNext { before, after -> before - after }
+        assertTrue("Slow scenery must advance on most frames instead of holding then jumping: $advances",
+            advances.count { it > .001f } >= 20)
+        assertTrue("Scenery must move steadily upward without reverse or large steps: $advances",
+            advances.all { it >= -.001f && it < .25f })
+        assertEquals("Smoother rendering must retain the accepted slow movement speed",
+            4f, (positions.first() - positions.last()) / elapsedSeconds, .8f)
+        composeTestRule.runOnIdle {
+            moving = false
+            assertEquals(0, opens)
+        }
+        composeTestRule.mainClock.advanceTimeByFrame()
+    }
+
+    @Test
     fun houstonTrailFlowMovesUpAndPausesWithoutResettingPosition() {
         var moving by mutableStateOf(false)
         var opens = 0
