@@ -8,17 +8,23 @@ status: CURRENT NATIVE DECISIONS plus dated prototype history; verification live
 
 # Start Run — where this screen actually is
 
-**November 23 larger Houston trail photos and swipe gallery — approved follow-up:** Manley wants
-bands/photos much closer to the Nike reference. The first modest-height refinement is superseded:
-bands are now 112 dp tall with 72 dp square photos, 12 dp left inset, 20 dp vertical space,
-10 dp photo corners, 12 dp band corners and the existing 4 dp gaps. All bands remain full-width.
-Since four rows at this size cannot fit above Start, he explicitly chose a manually swipeable
-trail section with fixed run controls. About two full rows and part of the next show on the Moto;
-swiping reaches the other parks. The upper Memorial map and lower Terry Hershey map stay fixed;
-the latter preserves the contrast he likes behind the controls/shoe. Foreground positions,
-trail details, explicit plan-name choice and original-background switch are retained.
-Automatic scenery-drift refinement remains deferred; this change adds manual gallery scrolling.
-Build/device evidence lives in current-state notes. Public-preview publication remains on hold.
+**November 23 continuous faded trail background — approved follow-up:** Manley likes the larger
+Nike-reference sizing but rejects the fixed enlarged top/bottom maps and their rectangular cutoff.
+Keep every band 112 dp tall with a 72 dp square photo, 12 dp left inset, 20 dp vertical space,
+10 dp photo corners, 12 dp band corners and 4 dp gaps. Equal-size, full-width bands now continue
+through the whole background. Repeat the existing four parks in a bounded LazyColumn buffer;
+no additional trails or assets are needed for this pass. A smooth, screen-anchored fade keeps the
+browsing area clear and softens the same moving bands behind the upper card and run controls.
+Foreground controls keep their positions; clear photos open details, while faded repeats are
+decorative. Existing explicit plan-name choice and the original-background switch are retained.
+
+The stream moves slowly upward at 4 dp/second and supports manual swiping, pausing automatic
+movement during touch/scrolling and for 12 seconds after touch. Automatic motion respects inactive
+lifecycle, disabled animations and the trail/plan sheets. With touch exploration enabled, motion
+stops and the decorative repeated list is hidden from accessibility; the finite Houston trails
+sheet remains the accessible route to all four parks. This supersedes both the previous motion
+deferral and fixed Terry Hershey map. Build/device evidence belongs in current-state notes;
+public-preview publication remains on hold.
 
 **November 23 optional Houston trail background — installed trial:** Manley approved actual trail
 photos beside static area maps, small separators and an easy return to the current background.

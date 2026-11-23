@@ -518,6 +518,83 @@ class RunStateScreenTest {
     }
 
     @Test
+    fun houstonTrailFlowMovesUpAndPausesWithoutResettingPosition() {
+        var moving by mutableStateOf(false)
+        var opens = 0
+        composeTestRule.mainClock.autoAdvance = false
+        composeTestRule.setContent {
+            StartTrailsBackground(
+                upperContentBottom = 120.dp, controlsTop = 400.dp,
+                moving = moving, enabled = true, onExplore = { opens++ },
+                modifier = Modifier.fillMaxSize().systemBarsPadding()
+            )
+        }
+        repeat(4) { composeTestRule.mainClock.advanceTimeByFrame() }
+        fun photoTop() = composeTestRule
+            .onNodeWithTag(START_TRAIL_PHOTO_TAG_PREFIX + "memorial", useUnmergedTree = true)
+            .assertIsDisplayed().getUnclippedBoundsInRoot().top
+
+        val initial = photoTop()
+        composeTestRule.runOnIdle { moving = true }
+        composeTestRule.mainClock.advanceTimeBy(1_200L)
+        val advanced = photoTop()
+        assertTrue("Automatic movement must carry the same photo upward", advanced < initial - 1.dp)
+
+        composeTestRule.runOnIdle { moving = false }
+        composeTestRule.mainClock.advanceTimeByFrame()
+        val paused = photoTop()
+        composeTestRule.mainClock.advanceTimeBy(1_200L)
+        assertEquals("Pausing must preserve the current position", paused, photoTop())
+
+        composeTestRule.runOnIdle { moving = true }
+        composeTestRule.mainClock.advanceTimeByFrame()
+        assertEquals("Resuming must keep the paused position", paused.value, photoTop().value, 1f)
+        composeTestRule.mainClock.advanceTimeBy(1_200L)
+        assertTrue("Resuming must continue upward from the paused position", photoTop() < paused - 1.dp)
+
+        // This isolated scenery fixture has no run controls or database. A real touch on its
+        // faded area must pause automatic movement without opening anything, then resume later.
+        composeTestRule.onNodeWithTag(START_TRAILS_BACKGROUND_TAG).performTouchInput {
+            click(Offset(width * .5f, height * .85f))
+        }
+        composeTestRule.mainClock.advanceTimeByFrame()
+        val touchPaused = photoTop()
+        composeTestRule.mainClock.advanceTimeBy(1_200L)
+        assertEquals("Touch must suspend automatic movement during the quiet period", touchPaused, photoTop())
+        composeTestRule.runOnIdle { assertEquals("Touching faded scenery must not select a trail", 0, opens) }
+        // The user-idle delay deliberately uses real monotonic time rather than animation time.
+        SystemClock.sleep(12_250L)
+        composeTestRule.mainClock.advanceTimeBy(1_200L)
+        assertTrue("Automatic movement must resume after the touch quiet period", photoTop() < touchPaused - 1.dp)
+        composeTestRule.runOnIdle {
+            moving = false
+            assertEquals("Automatic scenery must never select a trail", 0, opens)
+        }
+        composeTestRule.mainClock.advanceTimeByFrame()
+    }
+
+    @Test
+    fun houstonTrailFlowOnlyOpensClearPhotos() {
+        val opened = mutableListOf<String>()
+        composeTestRule.setContent {
+            StartTrailsBackground(
+                upperContentBottom = 120.dp, controlsTop = 400.dp,
+                moving = false, enabled = true, onExplore = { opened += it.id },
+                modifier = Modifier.fillMaxSize().systemBarsPadding()
+            )
+        }
+        val background = composeTestRule.onNodeWithTag(START_TRAILS_BACKGROUND_TAG).assertIsDisplayed()
+        background.performTouchInput { click(Offset(width * .5f, height * .05f)) }
+        background.performTouchInput { click(Offset(width * .5f, height * .85f)) }
+        composeTestRule.runOnIdle {
+            assertTrue("Faded background rows must not open details", opened.isEmpty())
+        }
+        composeTestRule.onNodeWithTag(START_TRAIL_PHOTO_TAG_PREFIX + "memorial", useUnmergedTree = true)
+            .assertIsDisplayed().performTouchInput { click() }
+        composeTestRule.runOnIdle { assertEquals(listOf("memorial"), opened) }
+    }
+
+    @Test
     fun houstonTrailBrowseAndDismissDoNotChangeRunAndOriginalBackgroundStaysAvailable() {
         var background by mutableStateOf(StartBackground.HOUSTON_TRAILS)
         var starts = 0

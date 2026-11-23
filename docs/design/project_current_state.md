@@ -5,29 +5,36 @@ metadata:
   type: project
 ---
 
-## November 23 larger Houston trail gallery
+## November 23 continuous faded trail background
 
-Installed Manley's stronger Nike-reference sizing request: all trail bands are 112 dp tall and
-photos are 72 dp square, with 12 dp left/20 dp vertical inset. Band/photo corners remain 12/10 dp,
-with 4 dp separators. Four larger rows do not fit simultaneously above Start, so he explicitly
-approved manually swiping the trail section while keeping all foreground controls fixed.
-The gallery sits between the browse row and footer; Memorial's upper map and Terry Hershey's
-lower map stay fixed. Two full trails and part of the next show initially on Moto. Swiping reaches
-the remaining trails without moving controls or selecting a route. No new source/asset/test files.
+Manley accepted the larger sizing but rejected fixed enlarged maps and the rectangular cutoff.
+Installed equal 112 dp bands/72 dp photos across the entire background, with the existing rounded
+corners/insets/4 dp gaps. A screen-anchored gradient progressively fades bands behind the upper
+card and run controls; the same bands become clearer in the browsing area. The four current parks
+repeat in a bounded lazy list with pixel-aligned recentering; no new trails, assets or files.
+Foreground controls stay fixed and the original-background switch remains available.
 
-Owner/public/test builds and vital lint passed. All three Moto trail checks passed, including
-actual swipes in both directions, whole-photo/name containment, unchanged foreground positions and
-no accidental actions. Direct enlarged-photo tapping passed after refining that existing test;
-explicit plan choice, dismiss/original-background behavior and short-window large-text checks passed.
-Matching-signature in-place update retained all 74 completed runs, two
+The strip moves upward at 4 dp/second and accepts manual swipes. Touch/scroll pauses automatic
+movement, with a 12-second quiet period after touch; position is retained on pause/resume.
+Lifecycle, disabled animations, open sheets and touch exploration stop automatic motion.
+Faded copies are decorative/non-selectable; clear photos still open details. The finite Houston
+trails sheet preserves access to all four destinations for assistive navigation.
+
+Owner/public/test builds and vital lint passed. All five focused Moto checks passed: automatic
+upward motion and pause/resume continuity; ignored faded-area taps and successful clear-photo
+taps; manual swipes with fixed controls/no accidental actions; explicit plan choice, dismiss and
+original-background behavior; short-window/large-text reachability. Native initial/scrolled and
+installed screenshots confirm equal-size coverage and fading. Matching-signature update retained
+all 74 completed runs, two
 shoe pairs, 12 table hashes and preferences except the ordinary opening counter. Integrity/FK
 checks passed. Temporary test package removed; main app reopened with Houston trails selected.
-APK SHA-256: `4351c54574dfacde61c3a2a6a4b4039bf75e39004fd76eb74b6d701d67246d03`.
-Private build, backup, test and initial/scrolled screenshot evidence: `android/build/nov23-trail-large/`.
+APK SHA-256: `29d0c458163d0693c3703597a4f8ece5081e6644370408d4ce5f1241c25c2cb5`.
+Private build, backup, test and native screenshot evidence: `android/build/nov23-trail-flow/`.
+The extended isolated scenery test also passed the real 12-second touch cooldown and resumed
+movement afterward; it contains no run controls/database. Evidence: `moto/cooldown-fixture.txt`.
 
-Manley especially likes Terry Hershey's map contrast behind the controls/shoe; recorded as a
-design reference. Automatic scenery-drift refinement remains deferred; manual gallery scrolling
-is the newly approved interaction. Visual/scroll acceptance is next. Public preview/release queue unchanged.
+This supersedes the fixed Terry Hershey extension and prior automatic-drift deferral. Manley's
+visual/motion acceptance is next; additional trails can follow later. Public preview/release queue unchanged.
 
 ## November 23 Houston trail-background trial
 

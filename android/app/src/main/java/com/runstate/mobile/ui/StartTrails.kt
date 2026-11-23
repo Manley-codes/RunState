@@ -1,25 +1,32 @@
 package com.runstate.mobile.ui
 
 import androidx.annotation.DrawableRes
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.core.LinearEasing
+import android.os.SystemClock
+import android.view.accessibility.AccessibilityManager
+import androidx.compose.animation.core.withInfiniteAnimationFrameNanos
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.State
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -27,12 +34,16 @@ import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -40,6 +51,12 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.runstate.mobile.R
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.flow.collect
+import androidx.compose.runtime.snapshotFlow
+import kotlin.math.ceil
+import kotlin.math.abs
+import kotlin.math.roundToInt
 
 internal const val START_TRAILS_BACKGROUND_TAG = "startTrailsBackground"
 internal const val START_TRAILS_GALLERY_TAG = "startTrailsGallery"
@@ -98,50 +115,118 @@ internal fun StartTrailsBackground(
     onExplore: (StartTrail) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    // Keep boundaries and hit targets stationary while each photo/map scene drifts inside them.
-    val drift = if (moving) {
-        val transition = rememberInfiniteTransition(label = "trail scenery")
-        transition.animateFloat(-1f, 1f,
-            infiniteRepeatable(tween(28_000, easing = LinearEasing), RepeatMode.Reverse),
-            label = "slow horizontal drift")
-    } else remember { mutableStateOf(0f) }
-    val driftPx = with(LocalDensity.current) { 7.dp.toPx() }
+    val accessibility = LocalContext.current.getSystemService(AccessibilityManager::class.java)
+    var touchExploration by remember(accessibility) {
+        mutableStateOf(accessibility?.isTouchExplorationEnabled == true)
+    }
+    DisposableEffect(accessibility) {
+        val listener = AccessibilityManager.TouchExplorationStateChangeListener { touchExploration = it }
+        accessibility?.addTouchExplorationStateChangeListener(listener)
+        onDispose { accessibility?.removeTouchExplorationStateChangeListener(listener) }
+    }
+    val cycleSize = HoustonStartTrails.size
+    val centerCycle = cycleSize * 3
+    val flow = rememberLazyListState(initialFirstVisibleItemIndex = centerCycle)
+    var initialized by remember { mutableStateOf(false) }
+    var touching by remember { mutableStateOf(false) }
+    var resumeAfter by remember { mutableLongStateOf(0L) }
     BoxWithConstraints(modifier.fillMaxSize().background(Color(0xFFF6F8F6))
         .testTag(START_TRAILS_BACKGROUND_TAG).clipToBounds()) {
         val available = (maxHeight - 64.dp).coerceAtLeast(200.dp)
         val upper = upperContentBottom.coerceIn(0.dp, available * .46f)
         val galleryBottom = if (controlsTop > upper) controlsTop.coerceAtMost(available) else available
-        // Only the trail gallery scrolls. The two map extensions and the run controls stay put.
-        StartTrailMap(HoustonStartTrails.first(), drift, driftPx,
-            Modifier.fillMaxWidth().height(upper))
-        StartTrailMap(HoustonStartTrails.last(), drift, -driftPx,
-            Modifier.offset(y = galleryBottom).fillMaxWidth().height(available - galleryBottom))
-        Column(Modifier.offset(y = upper).fillMaxWidth().height(galleryBottom - upper)
-            .clipToBounds().testTag(START_TRAILS_GALLERY_TAG)
-            .verticalScroll(rememberScrollState(), enabled = enabled),
+        val density = LocalDensity.current
+        val upperPx = with(density) { upper.toPx() }
+        val bottomPx = with(density) { galleryBottom.toPx() }
+        val pitchPx = with(density) { 116.dp.toPx() }
+        val insetPx = with(density) { 20.dp.toPx() }
+        val photoPx = with(density) { 72.dp.toPx() }
+        val speedPx = with(density) { 4.dp.toPx() }
+        val itemCount = ceil(available.value / 116f).toInt() + cycleSize * 6
+        // Keep a finite buffer on both sides; recenter only at rest, preserving pixel alignment.
+        LaunchedEffect(upperPx, controlsTop) {
+            if (!initialized && controlsTop > 0.dp) {
+                val before = ceil(upperPx / pitchPx).toInt()
+                flow.scrollToItem(centerCycle + Math.floorMod(-before, cycleSize),
+                    (before * pitchPx - upperPx).roundToInt())
+                initialized = true
+            }
+        }
+        LaunchedEffect(flow) {
+            snapshotFlow { Triple(flow.isScrollInProgress || touching,
+                flow.firstVisibleItemIndex, flow.firstVisibleItemScrollOffset) }
+                .collect { (busy, index, offset) ->
+                if (!busy && initialized &&
+                    index !in (centerCycle - cycleSize) until (centerCycle + cycleSize)) {
+                    flow.requestScrollToItem(centerCycle + index % cycleSize, offset)
+                }
+            }
+        }
+        LaunchedEffect(moving, enabled, touchExploration, initialized) {
+            if (!moving || !enabled || touchExploration || !initialized) return@LaunchedEffect
+            var previous = 0L
+            while (isActive) {
+                val now = withInfiniteAnimationFrameNanos { it }
+                val seconds = if (previous == 0L) 0f else ((now - previous) / 1_000_000_000f).coerceAtMost(.05f)
+                previous = now
+                if (!touching && !flow.isScrollInProgress && SystemClock.uptimeMillis() >= resumeAfter) {
+                    flow.scrollBy(speedPx * seconds)
+                }
+            }
+        }
+        // Only clear photos can open details. Repeated/faded rows are decorative, and the finite
+        // Houston trails sheet remains the accessible route to all four places.
+        val selectable by remember(flow, upperPx, bottomPx, insetPx, photoPx) {
+            derivedStateOf {
+                flow.layoutInfo.visibleItemsInfo
+                    .filter { it.offset + insetPx >= upperPx && it.offset + insetPx + photoPx <= bottomPx }
+                    .groupBy { it.index % cycleSize }
+                    .values.map { copies -> copies.minBy { abs(it.offset + 56f * density.density - (upperPx + bottomPx) / 2) }.index }
+                    .toSet()
+            }
+        }
+        LazyColumn(state = flow, userScrollEnabled = enabled && !touchExploration,
+            modifier = Modifier.fillMaxWidth().height(available)
+                .then(if (touchExploration) Modifier.clearAndSetSemantics { } else Modifier)
+                .pointerInput(enabled) {
+                    if (enabled) awaitEachGesture {
+                        awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+                        touching = true
+                        try {
+                            do { val event = awaitPointerEvent(PointerEventPass.Initial) }
+                            while (event.changes.any { it.pressed })
+                        } finally {
+                            touching = false
+                            resumeAfter = SystemClock.uptimeMillis() + 12_000L
+                        }
+                    }
+                },
             verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            HoustonStartTrails.forEachIndexed { index, trail ->
+            items(itemCount, key = { it }) { index ->
+                val trail = HoustonStartTrails[index % cycleSize]
+                val clear = index in selectable && !touchExploration
                 Box(Modifier.fillMaxWidth().height(112.dp).clip(RoundedCornerShape(12.dp))
-                    .clickable(enabled = enabled, role = Role.Button, onClick = { onExplore(trail) })
-                    .testTag(START_TRAIL_BAND_TAG_PREFIX + trail.id)
-                    .semantics { contentDescription = "Explore ${trail.name}" }) {
-                    StartTrailMap(trail, drift, driftPx * if (index % 2 == 0) 1f else -1f,
-                        Modifier.fillMaxSize())
+                    .then(if (clear) Modifier
+                        .clickable(enabled = enabled, role = Role.Button, onClick = { onExplore(trail) })
+                        .testTag(START_TRAIL_BAND_TAG_PREFIX + trail.id)
+                        .semantics { contentDescription = "Explore ${trail.name}" }
+                    else Modifier.clearAndSetSemantics { })) {
+                    StartTrailMap(trail, Modifier.fillMaxSize())
                     Row(Modifier.fillMaxSize().padding(horizontal = 12.dp, vertical = 20.dp),
                         verticalAlignment = Alignment.CenterVertically) {
-                        Box(Modifier.size(72.dp).testTag(START_TRAIL_PHOTO_TAG_PREFIX + trail.id)
+                        Box(Modifier.size(72.dp)
+                            .then(if (clear) Modifier.testTag(START_TRAIL_PHOTO_TAG_PREFIX + trail.id) else Modifier)
                             .clip(RoundedCornerShape(10.dp))) {
                             Image(painterResource(trail.photo), null, contentScale = ContentScale.Crop,
                                 modifier = Modifier.fillMaxSize().graphicsLayer {
                                     scaleX = 1.08f; scaleY = 1.08f
-                                    translationX = drift.value * driftPx * .35f
                                 })
                             Box(Modifier.fillMaxSize().background(Brush.horizontalGradient(
                                 listOf(Color.Transparent, Color.White.copy(alpha = .16f)))))
                         }
                         Text(trail.name, color = TrailInk, fontSize = 12.sp, lineHeight = 15.sp,
                             fontWeight = FontWeight.SemiBold,
-                            modifier = Modifier.testTag("startTrailLabel:" + trail.id)
+                            modifier = Modifier.then(if (clear) Modifier.testTag("startTrailLabel:" + trail.id) else Modifier)
                                 .padding(start = 8.dp, end = 12.dp)
                                 .background(Color.White.copy(alpha = .84f), RoundedCornerShape(5.dp))
                                 .padding(horizontal = 7.dp, vertical = 4.dp))
@@ -149,16 +234,28 @@ internal fun StartTrailsBackground(
                 }
             }
         }
+        // One screen-anchored fade softens the same stream behind controls without a hard edge.
+        val topFade = (upper.value / available.value).coerceIn(0f, 1f)
+        val bottomFade = (galleryBottom.value / available.value).coerceIn(topFade, 1f)
+        Box(Modifier.fillMaxWidth().height(available).background(Brush.verticalGradient(
+            0f to Color(0xFFF6F8F6).copy(alpha = .88f),
+            (topFade - .04f).coerceAtLeast(0f) to Color(0xFFF6F8F6).copy(alpha = .88f),
+            topFade to Color.Transparent,
+            (bottomFade - .03f).coerceAtLeast(topFade) to Color.Transparent,
+            (bottomFade + .07f).coerceAtMost(1f) to Color(0xFFF6F8F6).copy(alpha = .88f),
+            1f to Color(0xFFF6F8F6).copy(alpha = .92f)
+        )))
+        Box(Modifier.offset(y = upper).fillMaxWidth().height(galleryBottom - upper)
+            .testTag(START_TRAILS_GALLERY_TAG))
     }
 }
 
 @Composable
-private fun StartTrailMap(trail: StartTrail, drift: State<Float>, driftPx: Float, modifier: Modifier) {
+private fun StartTrailMap(trail: StartTrail, modifier: Modifier) {
     Box(modifier.clipToBounds()) {
         Image(painterResource(trail.map), null, contentScale = ContentScale.Crop,
             modifier = Modifier.fillMaxSize().graphicsLayer {
                 scaleX = 1.07f; scaleY = 1.07f
-                translationX = drift.value * driftPx
             })
         Box(Modifier.fillMaxSize().background(Color.White.copy(alpha = .35f)))
     }
