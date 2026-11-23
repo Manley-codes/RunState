@@ -7,12 +7,21 @@ metadata:
 
 ## November 23 simplified shoe artwork and lists
 
+**Thicker/rugged follow-up installed:** the same blue ring now has uneven rounded segments and
+a 74%-scale inner fill, producing roughly 6–7 dp thickness like Music's outer ring. Shoe art
+scales to 90% for clearance; the 56 dp footprint, 72 dp target and all actions remain unchanged.
+Owner/public builds and vital lint passed, actual phone appearance inspected. All 74 runs, both
+pairs, selection and 12 table hashes preserved; only the normal opening counter changed.
+Current APK `f3cddaa58ab8b27176f6590abdfdb25ffa78ec7df13f1404c836888bc2464350`;
+private evidence `android/build/nov23-shoe-rugged/moto/`. Existing five checks remain the behavior
+baseline; no new test/source/asset files or public-preview changes. Visual feedback pending.
+
 **Border follow-up:** added a muted ocean-blue `#789FAB` ring using the same irregular outline
 and a near-white inner fill scaled to 87%, following the Music object's border. Shoe art and
 all layout/actions remain unchanged. Owner/public builds and vital lint passed; installed native
 screenshot confirms visible ring and shoe clearance. Existing five behavior checks remain the
 baseline and were not repeated for this paint-only edit. Private backup/evidence:
-`android/build/nov23-shoe-border/moto/`. Current APK
+`android/build/nov23-shoe-border/moto/`. Earlier thin-ring APK
 `d01662d002299bdfd3f9b6e4ab461af8f3c1b3b50cd06006e0e5dae476939ea0`.
 
 Manley requested names instead of shoe pictures in the picker, and a simpler white/gray Start

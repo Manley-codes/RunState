@@ -10,9 +10,10 @@ status: READY TO TEST — October 22 native feature installed and software/devic
 
 ## November 23, 2026 — simplified Android shoe styling
 
-**Border follow-up:** the original irregular outline now forms a muted ocean-blue ring
-(`#789FAB`), with the near-white center inset to 87% scale. This follows Music's ring treatment;
-shoe art, clearance, footprint and actions remain unchanged. No public-preview publication.
+**Latest border follow-up:** the muted ocean-blue ring (`#789FAB`) is now roughly 6–7 dp thick,
+closer to Music's outer border, with an uneven rounded contour. The near-white center is inset
+to 74% scale (superseding 87%). Shoe art scales to 90% around its center to keep clear margins;
+the 56 dp footprint, 72 dp target and actions remain unchanged. No public-preview publication.
 
 Saved and catalog choices now use text without adjacent shoe illustrations. Their text aligns at
 24 dp from the sheet edge; brand/model, nickname, mileage, selection and Archive remain intact.

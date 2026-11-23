@@ -306,55 +306,80 @@ internal fun ShoeIllustration(modifier: Modifier = Modifier) {
         val h = size.height
         fun path(block: Path.() -> Unit) = Path().apply(block)
         val outline = path {
-            moveTo(w * .47f, h * .045f)
-            cubicTo(w * .72f, h * .00f, w * .97f, h * .22f, w * .94f, h * .47f)
-            cubicTo(w * .98f, h * .75f, w * .72f, h * .96f, w * .48f, h * .94f)
-            cubicTo(w * .20f, h * .97f, w * .025f, h * .74f, w * .05f, h * .48f)
-            cubicTo(w * .02f, h * .22f, w * .22f, h * .07f, w * .47f, h * .045f)
+            moveTo(w * .47f, h * .035f)
+            quadraticTo(w * .55f, h * .01f, w * .62f, h * .035f)
+            lineTo(w * .67f, h * .045f)
+            quadraticTo(w * .75f, h * .05f, w * .80f, h * .12f)
+            lineTo(w * .85f, h * .15f)
+            quadraticTo(w * .91f, h * .22f, w * .93f, h * .28f)
+            lineTo(w * .925f, h * .32f)
+            quadraticTo(w * .985f, h * .40f, w * .96f, h * .48f)
+            lineTo(w * .97f, h * .56f)
+            quadraticTo(w * .96f, h * .65f, w * .91f, h * .70f)
+            lineTo(w * .89f, h * .75f)
+            quadraticTo(w * .84f, h * .84f, w * .76f, h * .87f)
+            lineTo(w * .70f, h * .91f)
+            quadraticTo(w * .62f, h * .96f, w * .54f, h * .95f)
+            lineTo(w * .46f, h * .965f)
+            quadraticTo(w * .36f, h * .95f, w * .30f, h * .93f)
+            lineTo(w * .25f, h * .90f)
+            quadraticTo(w * .17f, h * .88f, w * .13f, h * .80f)
+            lineTo(w * .095f, h * .76f)
+            quadraticTo(w * .055f, h * .70f, w * .05f, h * .62f)
+            lineTo(w * .03f, h * .56f)
+            quadraticTo(w * .025f, h * .47f, w * .05f, h * .41f)
+            lineTo(w * .055f, h * .34f)
+            quadraticTo(w * .07f, h * .25f, w * .12f, h * .21f)
+            lineTo(w * .15f, h * .16f)
+            quadraticTo(w * .22f, h * .09f, w * .29f, h * .08f)
+            lineTo(w * .36f, h * .05f)
+            quadraticTo(w * .40f, h * .03f, w * .47f, h * .035f)
             close()
         }
         drawPath(outline, Color(0xFF789FAB))
-        withTransform({ scale(.87f, .87f, Offset(w * .5f, h * .5f)) }) {
+        withTransform({ scale(.74f, .74f, Offset(w * .5f, h * .5f)) }) {
             drawPath(outline, Color(0xFFF7F7F7))
         }
 
-        // Left-facing silhouette stays inset from the original irregular backing on every side.
-        val upper = path {
-            moveTo(w * .18f, h * .56f)
-            cubicTo(w * .20f, h * .52f, w * .28f, h * .52f, w * .35f, h * .49f)
-            cubicTo(w * .43f, h * .46f, w * .49f, h * .39f, w * .53f, h * .33f)
-            lineTo(w * .59f, h * .34f)
-            cubicTo(w * .62f, h * .38f, w * .63f, h * .44f, w * .69f, h * .44f)
-            cubicTo(w * .74f, h * .45f, w * .77f, h * .40f, w * .80f, h * .39f)
-            lineTo(w * .82f, h * .58f)
-            cubicTo(w * .65f, h * .63f, w * .38f, h * .63f, w * .21f, h * .61f)
-            cubicTo(w * .18f, h * .61f, w * .16f, h * .59f, w * .18f, h * .56f)
-            close()
-        }
-        drawPath(upper, Color(0xFFA9A9A9))
-        val sole = path {
-            moveTo(w * .17f, h * .58f)
-            cubicTo(w * .34f, h * .62f, w * .63f, h * .63f, w * .82f, h * .58f)
-            lineTo(w * .82f, h * .64f)
-            cubicTo(w * .65f, h * .69f, w * .35f, h * .68f, w * .21f, h * .65f)
-            cubicTo(w * .18f, h * .64f, w * .17f, h * .61f, w * .17f, h * .58f)
-            close()
-        }
-        drawPath(sole, Color.White)
-        val outsole = path {
-            moveTo(w * .18f, h * .62f)
-            cubicTo(w * .35f, h * .66f, w * .64f, h * .67f, w * .82f, h * .62f)
-            lineTo(w * .82f, h * .65f)
-            cubicTo(w * .64f, h * .70f, w * .35f, h * .69f, w * .21f, h * .66f)
-            cubicTo(w * .19f, h * .65f, w * .18f, h * .64f, w * .18f, h * .62f)
-            close()
-        }
-        drawPath(outsole, Color(0xFFD3D3D3))
-        repeat(3) { n ->
-            val x = w * (.53f - n * .045f)
-            val y = h * (.39f + n * .045f)
-            drawLine(Color(0xFFF2F2F2), Offset(x, y), Offset(x + w * .055f, y + h * .025f),
-                w * .016f, StrokeCap.Round)
+        // Preserve breathing room inside the thicker ring without changing the control's target.
+        withTransform({ scale(.90f, .90f, Offset(w * .5f, h * .5f)) }) {
+            val upper = path {
+                moveTo(w * .18f, h * .56f)
+                cubicTo(w * .20f, h * .52f, w * .28f, h * .52f, w * .35f, h * .49f)
+                cubicTo(w * .43f, h * .46f, w * .49f, h * .39f, w * .53f, h * .33f)
+                lineTo(w * .59f, h * .34f)
+                cubicTo(w * .62f, h * .38f, w * .63f, h * .44f, w * .69f, h * .44f)
+                cubicTo(w * .74f, h * .45f, w * .77f, h * .40f, w * .80f, h * .39f)
+                lineTo(w * .82f, h * .58f)
+                cubicTo(w * .65f, h * .63f, w * .38f, h * .63f, w * .21f, h * .61f)
+                cubicTo(w * .18f, h * .61f, w * .16f, h * .59f, w * .18f, h * .56f)
+                close()
+            }
+            drawPath(upper, Color(0xFFA9A9A9))
+            val sole = path {
+                moveTo(w * .17f, h * .58f)
+                cubicTo(w * .34f, h * .62f, w * .63f, h * .63f, w * .82f, h * .58f)
+                lineTo(w * .82f, h * .64f)
+                cubicTo(w * .65f, h * .69f, w * .35f, h * .68f, w * .21f, h * .65f)
+                cubicTo(w * .18f, h * .64f, w * .17f, h * .61f, w * .17f, h * .58f)
+                close()
+            }
+            drawPath(sole, Color.White)
+            val outsole = path {
+                moveTo(w * .18f, h * .62f)
+                cubicTo(w * .35f, h * .66f, w * .64f, h * .67f, w * .82f, h * .62f)
+                lineTo(w * .82f, h * .65f)
+                cubicTo(w * .64f, h * .70f, w * .35f, h * .69f, w * .21f, h * .66f)
+                cubicTo(w * .19f, h * .65f, w * .18f, h * .64f, w * .18f, h * .62f)
+                close()
+            }
+            drawPath(outsole, Color(0xFFD3D3D3))
+            repeat(3) { n ->
+                val x = w * (.53f - n * .045f)
+                val y = h * (.39f + n * .045f)
+                drawLine(Color(0xFFF2F2F2), Offset(x, y), Offset(x + w * .055f, y + h * .025f),
+                    w * .016f, StrokeCap.Round)
+            }
         }
     }
 }
