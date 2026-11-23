@@ -5,6 +5,23 @@ metadata:
   type: project
 ---
 
+## November 23 public preview album artwork
+
+Manley noticed missing album images and explicitly authorized the scoped fix/publication. The
+preview had rendered only headphones art; Album cover deliberately showed its plain fallback.
+Restored the three matching locally bundled covers for Good as Hell, Lovely Day and No Role
+Modelz from the existing design studies, with source credits. Cover changes with track; a failed
+image retains the usable background and changing track/layout retries normally. Default Headphones,
+silent controls, fictional runs and the original green Start footer remain unchanged. This is not
+approval to publish the current Android Start redesign; the broader preview hold remains active.
+
+Preview commit `d988a1b` is pushed/live (`index-TP4ONEwW.js`). Type-check/build, six export checks
+and five interaction checks passed; three focused live cases passed at phone/desktop widths,
+including actual image decoding, next/previous, saved layout and failed-cover recovery. Live dark
+player visually inspected; captured light phone/desktop covers also inspected. Receipts are private
+in the preview checkout's `.local/album-art-restoration/{local,live}/`. Three necessary cover assets
+were added to source and generated export. No Android/backend/phone change or paid provider call.
+
 ## November 23 Energy prompt readability
 
 Manley requested a small upward shift of Shoe/Music/Start and the three Energy choices to make

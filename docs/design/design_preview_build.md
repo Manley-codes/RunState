@@ -8,6 +8,16 @@ status: LIVE — accepted connected browser preview; mobile phone framing confir
 
 # RunState interactive preview
 
+**November 23 scoped artwork fix — live:** Manley explicitly approved restoring the preview's
+missing sample album images. Preview commit `d988a1b` bundles the three existing study covers and
+displays the correct one for each sample track, with a safe missing-image background. Default
+Headphones, controls, Start's original green footer and every other screen design stay unchanged.
+The live bundle is `index-TP4ONEwW.js`; type-check/build, six export checks, five local interaction
+checks and three focused live phone/desktop cases passed. Cover decoding, next/previous, preference
+reload and failure recovery are checked. Screenshots are private under
+`.local/album-art-restoration/{local,live}/` in the preview checkout. The broader design-publication
+hold below remains; this approval covers only the album-art fix.
+
 **November 22 publication hold:** Manley is experimenting with Android designs and is not ready
 to change the public preview. The scoped Start footer removal was published as `1bbd02f`, then
 restored at his request with `e8c1772`. The live site serves the original `index-BYAo8HzC.js` and
@@ -86,8 +96,9 @@ server first because both use port 5194. The build type-checks the source, creat
 runs `scripts/export-pages.mjs` to prepare the repository-root HTML, assets, media and history
 entry used by GitHub Pages. Edit source files rather than generated exports.
 
-**Manley handles all Git commands.** Building does not publish. After reviewing the result,
-he commits and pushes the preview repository's source and generated files together. Main-project
+Building does not publish. Manley's November 20 standing authorization lets Codex handle commits
+and pushes for approved work; the November 22 preview hold additionally requires explicit approval
+for preview design publication. Commit approved source and generated files together. Main-project
 documentation belongs to its separate repository.
 
 ## Stable links and design history
