@@ -291,7 +291,7 @@ internal fun StartRunScreen(
         val energyEntryDistancePx = with(LocalDensity.current) { maxWidth.toPx() }
         // A short window cannot keep the controls, navigation and upper details visible.
         // In that case use one continuous flow; regular phone heights retain the anchored layout.
-        val fallbackHeight = 556.dp + 116.dp * (LocalDensity.current.fontScale - 1f).coerceAtLeast(0f)
+        val fallbackHeight = 564.dp + 116.dp * (LocalDensity.current.fontScale - 1f).coerceAtLeast(0f)
         val scrollWholeStack = maxHeight < fallbackHeight
         val wholeStackScroll = rememberScrollState()
         val upperDetailsScroll = rememberScrollState()
@@ -950,8 +950,8 @@ private fun EnergyChoicePrompt(
     val opacity by animateFloatAsState(if (shown) 1f else 0f,
         animationSpec = tween(if (animationsEnabled) 280 else 0), label = "energyPromptVisibility")
     // Keep the gap even after an answer, so the tiles/dial/navigation never jump.
-    Box(modifier.fillMaxWidth().padding(top = 8.dp, bottom = 12.dp)
-        .height(32.dp + 16.dp * textGrowth).testTag(START_ENERGY_PROMPT_TAG),
+    Box(modifier.fillMaxWidth().padding(top = 12.dp, bottom = 12.dp)
+        .height(36.dp + 16.dp * textGrowth).testTag(START_ENERGY_PROMPT_TAG),
         contentAlignment = Alignment.Center) {
         if (shown || opacity > 0f) {
             val animateWords = active && animationsEnabled && entranceSettled
@@ -967,7 +967,7 @@ private fun EnergyChoicePrompt(
                     else if (phase.value < 2200f) "Choose" else "Energy"
                 }
             }
-            Box(Modifier.width(132.dp + 76.dp * textGrowth).fillMaxHeight()
+            Box(Modifier.width(144.dp + 76.dp * textGrowth).fillMaxHeight()
                 .testTag(START_ENERGY_PROMPT_PILL_TAG)
                 .graphicsLayer { alpha = opacity }
                 .clip(RoundedCornerShape(50))
@@ -977,7 +977,7 @@ private fun EnergyChoicePrompt(
                     if (unanswered) contentDescription = "Choose energy, optional"
                 }, contentAlignment = Alignment.Center) {
                 Text(word, color = StartForestDeep.copy(alpha = 0.82f),
-                    fontSize = 12.sp, lineHeight = 16.sp, fontWeight = FontWeight.Medium,
+                    fontSize = 14.sp, lineHeight = 18.sp, fontWeight = FontWeight.Medium,
                     letterSpacing = 0.3.sp, textAlign = TextAlign.Center, maxLines = 1,
                     modifier = Modifier.testTag(START_ENERGY_PROMPT_WORD_TAG).graphicsLayer {
                         val wordTime = phase.value % 2200f

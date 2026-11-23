@@ -10,6 +10,9 @@ status: READY TO TEST — October 22 native feature installed and software/devic
 
 ## November 23, 2026 — simplified Android shoe styling
 
+Manley likes the revised Start screen more but remains unsatisfied with the shoe illustration.
+He explicitly parked further shoe artwork changes for later; retain the current version meanwhile.
+
 **Latest border correction:** Manley found the rugged contour too uneven. Restore the original
 smooth, slightly irregular four-curve outline, retaining the thick ocean-blue ring (`#789FAB`)
 and 74%-scale near-white center. A very thin white outside rim uses the outline at 104% scale.

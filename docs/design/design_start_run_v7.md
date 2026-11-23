@@ -33,9 +33,14 @@ to define the shape, like the Nike Set a Goal reference; this supersedes the ear
 The pill remains still; its footprint remains after the selection fade so no controls move.
 It starts after tile entrance, loops only while foreground/visible, and shows the whole phrase
 statically when Android animations are disabled. Accessibility reads one stable optional prompt.
-Dark forest text, no lime; 132 x 32 dp normal pill, 8 dp above/12 dp below, scales for larger text.
-Existing white bottom panel and other layout decisions remain. Three builds/18 focused checks
-passed and all 74 runs preserved. Visual acceptance is pending; public preview remains unchanged.
+Readability follow-up: 144 x 36 dp normal pill (previously 132 x 32), with 14 sp words/18 sp
+line height (previously 12/16), 12 dp above and below. The extra 8 dp of reserved space moves
+Shoes, Music, Start and all three Energy choices up 8 dp on the anchored phone layout, keeping
+their relative spacing and bottom navigation fixed. Short windows retain full-page scrolling.
+Dark forest text, no lime; pill still scales for larger text. Animation and selection are unchanged.
+Existing white bottom panel and other layout decisions remain. Readability follow-up passed three
+builds/four focused phone checks and native inspection; all 74 runs preserved. Original prompt
+behavior retains its earlier 18-check baseline. Visual feedback pending; public preview unchanged.
 
 **November 23 bottom navigation — installed for review:** below Energy, a full-width clean-white
 bar contains Map, Plan, Run, Settings and Activity. Existing Map/Settings/History actions move

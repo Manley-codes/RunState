@@ -5,6 +5,25 @@ metadata:
   type: project
 ---
 
+## November 23 Energy prompt readability
+
+Manley requested a small upward shift of Shoe/Music/Start and the three Energy choices to make
+the prompt easier to read. The pill is now 144 x 36 dp (from 132 x 32), with 14 sp text/18 sp line
+height (from 12/16), and 12 dp padding above/below (top formerly 8). Its extra 8 dp of reserved
+height moves all six objects up 8 dp on the anchored layout, keeping their relative spacing and
+bottom navigation fixed. The compact scrolling threshold increases by the same amount. Fade,
+optional semantics, selection, colors and all other artwork remain unchanged. Manley likes the
+Start screen more but has parked further shoe-illustration changes for later.
+
+Owner/public/test builds and vital lint passed. Four existing Moto checks passed for normal
+layout/selection, prompt animation without movement, large text and landscape reachability.
+Actual installed screen and native prompt previews inspected. Matching-signature update preserved
+all 74 completed runs, both pairs, selection and 12 table hashes; only normal opening counter
+changed after launch. Temporary test app removed/main reopened. APK
+`9b116ea38fe204e14e3a455f3995f2c995555bc13abe2d9641e9b266c1d12269`;
+private evidence/backup `android/build/nov23-energy-readable/moto/`. No new tracked files,
+provider calls or public-preview changes. Visual feedback next; release return queue preserved.
+
 ## November 23 simplified shoe artwork and lists
 
 **Smoother rim correction installed:** Manley found the last contour too rugged. Restored the
