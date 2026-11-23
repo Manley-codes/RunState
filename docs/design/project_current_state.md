@@ -5,6 +5,25 @@ metadata:
   type: project
 ---
 
+## November 22 Android owner review
+
+Manley is available for Android review/testing and connected the Moto. The installed November 11
+APK matched the recorded `b1071230...c48949` baseline; all 73 runs were completed, with database
+integrity passing and no foreign-key violations. Private backups retained the previous APK,
+database and preferences before the update. A fresh `assembleDebug` passed against `3a24a17`.
+The matching owner certificate was verified before installing in place, without uninstalling.
+Installed APK SHA-256 is `f18c821dfed1dab96f288f71625e8635a7b3686bc7dac35db1f7cb1b0cc914d4`.
+All 12 logical table hashes, all 73 runs and all five preference files matched immediately after
+installation. Evidence is ignored under `android/build/nov22-device-review/moto/`.
+
+Compared with `b6fccc9`, production Android changes are byte-identical History/music images moved
+to `drawable-nodpi`, the existing demo cover separated into owner resources, and bundled notices.
+No production Kotlin, database schema, dependency, GPS, audio or reflection behavior changed.
+Existing automated coverage remains applicable; the remaining review is human inspection of
+Start/music/History artwork. Start-screen review requested first; acceptance is not yet recorded.
+No real or sample run, paid provider request, hosted setting change or iPhone action occurred.
+The free outdoor GPS/Bluetooth check and later cloud-enabled excerpt/chime check remain separate.
+
 ## November 21 iPhone Build 12 checkpoint
 
 Codex fast-forwarded the clean Windows iPhone worktree from `80c24cb` to Claude's pushed
