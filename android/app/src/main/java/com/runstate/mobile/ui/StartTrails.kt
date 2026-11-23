@@ -16,6 +16,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.State
 import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.mutableStateOf
@@ -41,6 +42,8 @@ import androidx.compose.ui.unit.sp
 import com.runstate.mobile.R
 
 internal const val START_TRAILS_BACKGROUND_TAG = "startTrailsBackground"
+internal const val START_TRAILS_GALLERY_TAG = "startTrailsGallery"
+internal const val START_TRAIL_PHOTO_TAG_PREFIX = "startTrailPhoto:"
 internal const val START_TRAIL_BAND_TAG_PREFIX = "startTrailBand:"
 internal const val START_TRAILS_BROWSE_TAG = "startTrailsBrowse"
 internal const val START_TRAIL_SHEET_TAG = "startTrailSheet"
@@ -107,36 +110,26 @@ internal fun StartTrailsBackground(
         .testTag(START_TRAILS_BACKGROUND_TAG).clipToBounds()) {
         val available = (maxHeight - 64.dp).coerceAtLeast(200.dp)
         val upper = upperContentBottom.coerceIn(0.dp, available * .46f)
-        val galleryBottom = if (controlsTop > upper + 160.dp) controlsTop.coerceAtMost(available) else available
-        val bandHeight = ((galleryBottom - upper - 12.dp) / 4).coerceIn(40.dp, 104.dp)
-        // Give the middle maps more room within the same gallery, keeping Terry above the controls.
-        val middleExpansion = (bandHeight - 48.dp).coerceIn(0.dp, 8.dp)
-        val outerRowHeight = bandHeight - middleExpansion
-        val middleRowHeight = bandHeight + middleExpansion
-        val photoSize = (outerRowHeight - 16.dp).coerceAtMost(88.dp)
-        Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        val galleryBottom = if (controlsTop > upper) controlsTop.coerceAtMost(available) else available
+        // Only the trail gallery scrolls. The two map extensions and the run controls stay put.
+        StartTrailMap(HoustonStartTrails.first(), drift, driftPx,
+            Modifier.fillMaxWidth().height(upper))
+        StartTrailMap(HoustonStartTrails.last(), drift, -driftPx,
+            Modifier.offset(y = galleryBottom).fillMaxWidth().height(available - galleryBottom))
+        Column(Modifier.offset(y = upper).fillMaxWidth().height(galleryBottom - upper)
+            .clipToBounds().testTag(START_TRAILS_GALLERY_TAG)
+            .verticalScroll(rememberScrollState(), enabled = enabled),
+            verticalArrangement = Arrangement.spacedBy(4.dp)) {
             HoustonStartTrails.forEachIndexed { index, trail ->
-                val rowHeight = if (index == 0 || index == 3) outerRowHeight else middleRowHeight
-                val height = when (index) {
-                    0 -> upper + outerRowHeight
-                    3 -> (available - upper - outerRowHeight - middleRowHeight * 2 - 12.dp)
-                        .coerceAtLeast(outerRowHeight)
-                    else -> middleRowHeight
-                }
-                Box(Modifier.fillMaxWidth().height(height).clip(RoundedCornerShape(12.dp))
+                Box(Modifier.fillMaxWidth().height(112.dp).clip(RoundedCornerShape(12.dp))
                     .clickable(enabled = enabled, role = Role.Button, onClick = { onExplore(trail) })
                     .testTag(START_TRAIL_BAND_TAG_PREFIX + trail.id)
                     .semantics { contentDescription = "Explore ${trail.name}" }) {
-                    Image(painterResource(trail.map), null, contentScale = ContentScale.Crop,
-                        modifier = Modifier.fillMaxSize().graphicsLayer {
-                            scaleX = 1.07f; scaleY = 1.07f
-                            translationX = drift.value * driftPx * if (index % 2 == 0) 1f else -1f
-                        })
-                    Box(Modifier.fillMaxSize().background(Color.White.copy(alpha = .35f)))
-                    Row(Modifier.align(if (index == 3) Alignment.TopStart else Alignment.BottomStart)
-                        .fillMaxWidth().height(rowHeight).padding(horizontal = 12.dp, vertical = 8.dp),
+                    StartTrailMap(trail, drift, driftPx * if (index % 2 == 0) 1f else -1f,
+                        Modifier.fillMaxSize())
+                    Row(Modifier.fillMaxSize().padding(horizontal = 12.dp, vertical = 20.dp),
                         verticalAlignment = Alignment.CenterVertically) {
-                        Box(Modifier.size(photoSize)
+                        Box(Modifier.size(72.dp).testTag(START_TRAIL_PHOTO_TAG_PREFIX + trail.id)
                             .clip(RoundedCornerShape(10.dp))) {
                             Image(painterResource(trail.photo), null, contentScale = ContentScale.Crop,
                                 modifier = Modifier.fillMaxSize().graphicsLayer {
@@ -156,6 +149,18 @@ internal fun StartTrailsBackground(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun StartTrailMap(trail: StartTrail, drift: State<Float>, driftPx: Float, modifier: Modifier) {
+    Box(modifier.clipToBounds()) {
+        Image(painterResource(trail.map), null, contentScale = ContentScale.Crop,
+            modifier = Modifier.fillMaxSize().graphicsLayer {
+                scaleX = 1.07f; scaleY = 1.07f
+                translationX = drift.value * driftPx
+            })
+        Box(Modifier.fillMaxSize().background(Color.White.copy(alpha = .35f)))
     }
 }
 

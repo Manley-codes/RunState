@@ -8,19 +8,17 @@ status: CURRENT NATIVE DECISIONS plus dated prototype history; verification live
 
 # Start Run — where this screen actually is
 
-**November 23 Houston trail inset follow-up — approved visual refinement:** Manley likes the
-first trail-background version and wants the Nike-reference left square photos inset on all four
-sides, with rounded corners. Keep each band full-width to the screen edge, with 12 dp band corners
-and the existing 4 dp gaps; inset its photo 12 dp horizontally and 8 dp vertically, with 10 dp
-photo corners. His follow-up asks for taller middle bands: Hermann and Buffalo Bayou gain up to
-8 dp each, redistributed from the two outer photo/name rows within the same gallery bounds.
-All four photo squares stay equally sized with at least 8 dp vertical clearance; the increase
-backs off on cramped layouts. Foreground controls keep their positions.
-He especially likes the Terry Hershey map behind the controls and its contrast
-with the shoe: preserve this as a direction reference, not approval to restyle every map.
-He does not notice the background movement and explicitly defers motion fixes while focusing on
-visuals. This records the design decision only; new build/device evidence belongs in current-state
-notes. Public-preview publication remains on hold.
+**November 23 larger Houston trail photos and swipe gallery — approved follow-up:** Manley wants
+bands/photos much closer to the Nike reference. The first modest-height refinement is superseded:
+bands are now 112 dp tall with 72 dp square photos, 12 dp left inset, 20 dp vertical space,
+10 dp photo corners, 12 dp band corners and the existing 4 dp gaps. All bands remain full-width.
+Since four rows at this size cannot fit above Start, he explicitly chose a manually swipeable
+trail section with fixed run controls. About two full rows and part of the next show on the Moto;
+swiping reaches the other parks. The upper Memorial map and lower Terry Hershey map stay fixed;
+the latter preserves the contrast he likes behind the controls/shoe. Foreground positions,
+trail details, explicit plan-name choice and original-background switch are retained.
+Automatic scenery-drift refinement remains deferred; this change adds manual gallery scrolling.
+Build/device evidence lives in current-state notes. Public-preview publication remains on hold.
 
 **November 23 optional Houston trail background — installed trial:** Manley approved actual trail
 photos beside static area maps, small separators and an easy return to the current background.

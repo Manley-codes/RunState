@@ -5,26 +5,29 @@ metadata:
   type: project
 ---
 
-## November 23 Houston trail inset follow-up
+## November 23 larger Houston trail gallery
 
-Installed Manley's Nike-reference refinement: full-width bands now have 12 dp corners and retain
-4 dp separators. Equal-size square photos have 10 dp corners, 12 dp left inset and at least 8 dp
-vertical clearance. Hermann and Buffalo Bayou gain up to 8 dp height each by redistributing space
-from the outer photo/name rows; the gallery boundaries and foreground controls stay fixed.
-The increase backs off in cramped layouts. Native inspection confirms all photos/names stay clear
-of the browse row and launch controls. No new source, asset or test files were needed.
+Installed Manley's stronger Nike-reference sizing request: all trail bands are 112 dp tall and
+photos are 72 dp square, with 12 dp left/20 dp vertical inset. Band/photo corners remain 12/10 dp,
+with 4 dp separators. Four larger rows do not fit simultaneously above Start, so he explicitly
+approved manually swiping the trail section while keeping all foreground controls fixed.
+The gallery sits between the browse row and footer; Memorial's upper map and Terry Hershey's
+lower map stay fixed. Two full trails and part of the next show initially on Moto. Swiping reaches
+the remaining trails without moving controls or selecting a route. No new source/asset/test files.
 
-Owner/public/test builds and vital lint passed. All three existing Moto trail checks passed,
-covering real band taps/explicit plan choice, dismiss/original-background behavior and short-window
-large-text reachability. Matching-signature in-place update retained all 74 completed runs, two
+Owner/public/test builds and vital lint passed. All three Moto trail checks passed, including
+actual swipes in both directions, whole-photo/name containment, unchanged foreground positions and
+no accidental actions. Direct enlarged-photo tapping passed after refining that existing test;
+explicit plan choice, dismiss/original-background behavior and short-window large-text checks passed.
+Matching-signature in-place update retained all 74 completed runs, two
 shoe pairs, 12 table hashes and preferences except the ordinary opening counter. Integrity/FK
 checks passed. Temporary test package removed; main app reopened with Houston trails selected.
-APK SHA-256: `0f39084212445fe2bdbc0c2dcf66a56496f2e40d41909d13bd8331482b0a8287`.
-Private build, backup, test and native screenshot evidence: `android/build/nov23-trail-insets/`.
+APK SHA-256: `4351c54574dfacde61c3a2a6a4b4039bf75e39004fd76eb74b6d701d67246d03`.
+Private build, backup, test and initial/scrolled screenshot evidence: `android/build/nov23-trail-large/`.
 
 Manley especially likes Terry Hershey's map contrast behind the controls/shoe; recorded as a
-design reference. He does not see the subtle drift and explicitly deferred motion changes.
-Visual acceptance remains his next review. Public preview and release return queue stay unchanged.
+design reference. Automatic scenery-drift refinement remains deferred; manual gallery scrolling
+is the newly approved interaction. Visual/scroll acceptance is next. Public preview/release queue unchanged.
 
 ## November 23 Houston trail-background trial
 

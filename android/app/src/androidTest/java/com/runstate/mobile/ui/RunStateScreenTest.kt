@@ -440,16 +440,52 @@ class RunStateScreenTest {
         settleStartEnergyEntrance()
         composeTestRule.onNodeWithTag(START_TRAILS_BACKGROUND_TAG).assertIsDisplayed()
         composeTestRule.onNodeWithTag(START_TRAILS_BROWSE_TAG).assertIsDisplayed().assertIsEnabled()
-        val controlsTop = composeTestRule.onNodeWithTag(START_FOOTER_TAG).fetchSemanticsNode().boundsInRoot.top
-        for (trailId in listOf("memorial", "hermann", "buffalo_bayou", "terry_hershey")) {
-            val label = composeTestRule.onNodeWithTag("startTrailLabel:" + trailId, useUnmergedTree = true)
-                .assertIsDisplayed().fetchSemanticsNode().boundsInRoot
-            assertTrue("Trail names must stay above the run controls", label.bottom <= controlsTop)
+        val fixedTags = listOf(START_AGENT_CARD_TAG, START_UTILITY_ACTIONS_TAG, START_ENERGY_CHOICES_TAG,
+            START_FOOTER_TAG, START_RUN_BUTTON_TAG, START_OPEN_SHOES_TAG, START_OPEN_SPOTIFY_TAG)
+        val fixedBounds = fixedTags.associateWith {
+            composeTestRule.onNodeWithTag(it).assertIsDisplayed().getUnclippedBoundsInRoot()
         }
+        val gallery = composeTestRule.onNodeWithTag(START_TRAILS_GALLERY_TAG).assertIsDisplayed()
+        val galleryBounds = gallery.getUnclippedBoundsInRoot()
+        fun assertWholeTrailVisible(id: String) {
+            for (tag in listOf(START_TRAIL_PHOTO_TAG_PREFIX + id, "startTrailLabel:" + id)) {
+                val bounds = composeTestRule.onNodeWithTag(tag, useUnmergedTree = true)
+                    .assertIsDisplayed().getUnclippedBoundsInRoot()
+                assertTrue("The whole photo/name must fit inside the gallery",
+                    bounds.top >= galleryBounds.top && bounds.bottom <= galleryBounds.bottom &&
+                        bounds.left >= galleryBounds.left && bounds.right <= galleryBounds.right)
+                assertTrue("Photos and names must stay above run controls",
+                    bounds.bottom <= fixedBounds.getValue(START_FOOTER_TAG).top)
+            }
+        }
+        fun swipeGallery(upward: Boolean) {
+            gallery.performTouchInput {
+                val high = Offset(width * .9f, height * .1f)
+                val low = Offset(width * .9f, height * .9f)
+                swipe(if (upward) low else high, if (upward) high else low, durationMillis = 350)
+            }
+            composeTestRule.mainClock.advanceTimeBy(600L)
+            fixedTags.forEach { tag ->
+                assertEquals("Trail swipes must leave $tag fixed", fixedBounds.getValue(tag),
+                    composeTestRule.onNodeWithTag(tag).getUnclippedBoundsInRoot())
+            }
+            composeTestRule.onNodeWithTag(START_TRAIL_SHEET_TAG).assertDoesNotExist()
+            composeTestRule.runOnIdle {
+                assertEquals(0, starts)
+                assertEquals(0, energyChanges)
+                assertEquals(0, planChanges)
+            }
+        }
+        assertWholeTrailVisible("memorial")
         saveNativePreview(START_RUN_SCREEN_TAG, "start-houston-trails-trial.png")
+        swipeGallery(upward = true)
+        assertWholeTrailVisible("terry_hershey")
+        saveNativePreview(START_RUN_SCREEN_TAG, "start-houston-trails-scrolled.png")
+        swipeGallery(upward = false)
+        assertWholeTrailVisible("memorial")
         composeTestRule.mainClock.autoAdvance = true
-        composeTestRule.onNodeWithTag(START_TRAIL_BAND_TAG_PREFIX + "memorial")
-            .assertIsDisplayed().performTouchInput { click(Offset(24f, height - 24f)) }
+        composeTestRule.onNodeWithTag(START_TRAIL_PHOTO_TAG_PREFIX + "memorial", useUnmergedTree = true)
+            .assertIsDisplayed().performTouchInput { click() }
         composeTestRule.onNodeWithTag(START_TRAIL_SHEET_TAG).assertIsDisplayed()
         composeTestRule.runOnIdle {
             assertEquals("Existing loop", route)
