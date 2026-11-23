@@ -8,6 +8,17 @@ status: READY TO TEST — October 22 native feature installed and software/devic
 
 # Shoe selection and mileage
 
+## November 23, 2026 — simplified Android shoe styling
+
+Saved and catalog choices now use text without adjacent shoe illustrations. Their text aligns at
+24 dp from the sheet edge; brand/model, nickname, mileage, selection and Archive remain intact.
+The Start control retains its 56 dp illustration footprint and 72 dp tap target. Its original
+irregular circle is now flat near-white (`#F7F7F7`), without the former green or inset decoration.
+A smaller gray sneaker faces left, spans about 65% of the canvas width, and has clear space around
+it, a white sole, pale-gray outsole and three light laces. This supersedes the October artwork
+description below. Selection, storage and mileage behavior are unchanged. Owner/public/test
+builds and vital lint passed; phone checks and visual review are recorded in current-state notes.
+
 ## November 11, 2026 — iPhone build 4
 
 The iPhone Start screen uses the illustrated shoe beside the Start dial. The picker offers the same six catalog models, custom pairs, optional nicknames, and archive, Undo, and restore. The phone saves the selected pair with the run at its start. History keeps the association after archiving, and the displayed mileage comes from finished GPS runs. Upgrading from build 3 leaves earlier runs unassigned. Local syntax and project checks passed. Native tests and the on-device check are pending.

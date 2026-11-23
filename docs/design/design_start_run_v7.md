@@ -8,6 +8,13 @@ status: CURRENT NATIVE DECISIONS plus dated prototype history; verification live
 
 # Start Run — where this screen actually is
 
+**November 23 simpler shoe artwork:** the existing irregular circle becomes flat near-white,
+with its green/inset decoration removed. A smaller, left-facing gray sneaker has a white sole,
+pale-gray outsole and three light laces, with clear margins inside the circle. The 56 dp artwork
+footprint, 72 dp tap target and compact placement remain unchanged. Shoe picker choices now use
+text without adjacent illustrations; their names, mileage and actions remain. Builds and vital
+lint passed; phone verification is recorded separately in current-state notes.
+
 **November 23 compact Start cluster — installed for review:** Shoes and Music artwork shrink
 from 64 to 56 dp while retaining their 72 dp touch targets. Their row is centered and capped at
 224 dp, bringing both controls much closer to Start instead of aligning them with the outer

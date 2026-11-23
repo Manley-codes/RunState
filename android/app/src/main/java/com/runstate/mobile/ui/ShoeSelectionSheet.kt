@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.selection.selectable
@@ -38,12 +37,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
@@ -195,8 +191,7 @@ internal fun ShoeSelectionSheet(
                             onClick = { onAdd(choice.brand, choice.model, null) })
                         .heightIn(min = 72.dp).padding(horizontal = 8.dp, vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically) {
-                        ShoeIllustration(Modifier.size(58.dp), withBacking = false)
-                        Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
+                        Column(Modifier.weight(1f).padding(end = 12.dp)) {
                             Text(choice.brand, color = ShoeMuted, fontSize = 11.sp)
                             Text(choice.model, color = ShoeInk, fontSize = 17.sp, fontWeight = FontWeight.Medium)
                         }
@@ -289,8 +284,7 @@ private fun SavedShoeRow(shoe: ShoePairDisplay, selected: Boolean, enabled: Bool
         .selectable(selected = selected, enabled = enabled, role = Role.RadioButton, onClick = onSelect)
         .testTag("shoeSelect:${shoe.id}").heightIn(min = 78.dp).padding(start = 8.dp, end = 2.dp, top = 6.dp, bottom = 6.dp),
         verticalAlignment = Alignment.CenterVertically) {
-        ShoeIllustration(Modifier.size(58.dp), withBacking = false)
-        Column(Modifier.weight(1f).padding(start = 12.dp, end = 4.dp)) {
+        Column(Modifier.weight(1f).padding(end = 4.dp)) {
             Text(shoe.brand, color = ShoeMuted, fontSize = 11.sp)
             Text(shoe.model, color = ShoeInk, fontSize = 17.sp, fontWeight = FontWeight.Medium)
             shoe.nickname?.takeIf { it.isNotBlank() }?.let { Text(it, color = ShoeMuted, fontSize = 12.sp) }
@@ -305,76 +299,58 @@ private fun SavedShoeRow(shoe: ShoePairDisplay, selected: Boolean, enabled: Bool
 
 /** Original neutral sneaker artwork, not a photograph of any catalog model. */
 @Composable
-internal fun ShoeIllustration(modifier: Modifier = Modifier, withBacking: Boolean = true) {
+internal fun ShoeIllustration(modifier: Modifier = Modifier) {
     Canvas(modifier) {
         val w = size.width
         val h = size.height
         fun path(block: Path.() -> Unit) = Path().apply(block)
-        if (withBacking) {
-            val outline = path {
-                moveTo(w * .47f, h * .045f)
-                cubicTo(w * .72f, h * .00f, w * .97f, h * .22f, w * .94f, h * .47f)
-                cubicTo(w * .98f, h * .75f, w * .72f, h * .96f, w * .48f, h * .94f)
-                cubicTo(w * .20f, h * .97f, w * .025f, h * .74f, w * .05f, h * .48f)
-                cubicTo(w * .02f, h * .22f, w * .22f, h * .07f, w * .47f, h * .045f)
-                close()
-            }
-            drawPath(outline, Brush.linearGradient(listOf(Color(0xFFB7CE72), Color(0xFF718A48)),
-                start = Offset(w * .15f, 0f), end = Offset(w * .85f, h)))
-            val inset = path {
-                moveTo(w * .49f, h * .15f)
-                cubicTo(w * .70f, h * .11f, w * .86f, h * .29f, w * .85f, h * .49f)
-                cubicTo(w * .87f, h * .69f, w * .67f, h * .86f, w * .46f, h * .84f)
-                cubicTo(w * .24f, h * .86f, w * .13f, h * .66f, w * .15f, h * .46f)
-                cubicTo(w * .16f, h * .27f, w * .29f, h * .17f, w * .49f, h * .15f)
-                close()
-            }
-            drawPath(inset, Color(0xFFD7E2AC).copy(alpha = .55f))
+        val outline = path {
+            moveTo(w * .47f, h * .045f)
+            cubicTo(w * .72f, h * .00f, w * .97f, h * .22f, w * .94f, h * .47f)
+            cubicTo(w * .98f, h * .75f, w * .72f, h * .96f, w * .48f, h * .94f)
+            cubicTo(w * .20f, h * .97f, w * .025f, h * .74f, w * .05f, h * .48f)
+            cubicTo(w * .02f, h * .22f, w * .22f, h * .07f, w * .47f, h * .045f)
+            close()
         }
-        withTransform({ rotate(-12f, Offset(w * .5f, h * .54f)) }) {
-            val sole = path {
-                moveTo(w * .13f, h * .63f)
-                cubicTo(w * .30f, h * .63f, w * .64f, h * .69f, w * .88f, h * .63f)
-                cubicTo(w * .91f, h * .69f, w * .84f, h * .76f, w * .72f, h * .76f)
-                lineTo(w * .21f, h * .73f)
-                cubicTo(w * .14f, h * .72f, w * .12f, h * .68f, w * .13f, h * .63f)
-                close()
-            }
-            drawPath(sole, Color(0xFFE9EDD8))
-            val upper = path {
-                moveTo(w * .14f, h * .63f)
-                lineTo(w * .17f, h * .39f)
-                cubicTo(w * .22f, h * .34f, w * .24f, h * .48f, w * .31f, h * .46f)
-                lineTo(w * .40f, h * .32f)
-                lineTo(w * .46f, h * .34f)
-                cubicTo(w * .48f, h * .43f, w * .58f, h * .53f, w * .69f, h * .55f)
-                cubicTo(w * .81f, h * .56f, w * .87f, h * .57f, w * .88f, h * .63f)
-                cubicTo(w * .66f, h * .69f, w * .30f, h * .63f, w * .14f, h * .63f)
-                close()
-            }
-            drawPath(upper, Color(0xFFFAFBF1))
-            val panel = path {
-                moveTo(w * .22f, h * .48f)
-                lineTo(w * .33f, h * .51f)
-                lineTo(w * .45f, h * .41f)
-                lineTo(w * .58f, h * .55f)
-                cubicTo(w * .47f, h * .56f, w * .39f, h * .62f, w * .23f, h * .60f)
-                close()
-            }
-            drawPath(panel, Color(0xFF95A67A))
-            drawLine(Color(0xFFB7D948), Offset(w * .17f, h * .64f), Offset(w * .56f, h * .67f), w * .045f, StrokeCap.Round)
-            drawLine(Color(0xFF53673B), Offset(w * .19f, h * .72f), Offset(w * .72f, h * .75f), w * .026f, StrokeCap.Round)
-            repeat(3) { n ->
-                val x = w * (.39f + n * .045f)
-                val y = h * (.40f + n * .045f)
-                drawLine(Color(0xFF59684B), Offset(x, y), Offset(x - w * .07f, y + h * .035f), w * .017f, StrokeCap.Round)
-            }
-            val toeStitch = path {
-                moveTo(w * .62f, h * .58f)
-                cubicTo(w * .72f, h * .59f, w * .79f, h * .59f, w * .83f, h * .62f)
-            }
-            drawPath(toeStitch, Color(0xFFB6C1A5), style = Stroke(w * .012f, cap = StrokeCap.Round))
-            drawLine(Color(0xFF53673B), Offset(w * .18f, h * .39f), Offset(w * .17f, h * .32f), w * .027f, StrokeCap.Round)
+        drawPath(outline, Color(0xFFF7F7F7))
+
+        // Left-facing silhouette stays inset from the original irregular backing on every side.
+        val upper = path {
+            moveTo(w * .18f, h * .56f)
+            cubicTo(w * .20f, h * .52f, w * .28f, h * .52f, w * .35f, h * .49f)
+            cubicTo(w * .43f, h * .46f, w * .49f, h * .39f, w * .53f, h * .33f)
+            lineTo(w * .59f, h * .34f)
+            cubicTo(w * .62f, h * .38f, w * .63f, h * .44f, w * .69f, h * .44f)
+            cubicTo(w * .74f, h * .45f, w * .77f, h * .40f, w * .80f, h * .39f)
+            lineTo(w * .82f, h * .58f)
+            cubicTo(w * .65f, h * .63f, w * .38f, h * .63f, w * .21f, h * .61f)
+            cubicTo(w * .18f, h * .61f, w * .16f, h * .59f, w * .18f, h * .56f)
+            close()
+        }
+        drawPath(upper, Color(0xFFA9A9A9))
+        val sole = path {
+            moveTo(w * .17f, h * .58f)
+            cubicTo(w * .34f, h * .62f, w * .63f, h * .63f, w * .82f, h * .58f)
+            lineTo(w * .82f, h * .64f)
+            cubicTo(w * .65f, h * .69f, w * .35f, h * .68f, w * .21f, h * .65f)
+            cubicTo(w * .18f, h * .64f, w * .17f, h * .61f, w * .17f, h * .58f)
+            close()
+        }
+        drawPath(sole, Color.White)
+        val outsole = path {
+            moveTo(w * .18f, h * .62f)
+            cubicTo(w * .35f, h * .66f, w * .64f, h * .67f, w * .82f, h * .62f)
+            lineTo(w * .82f, h * .65f)
+            cubicTo(w * .64f, h * .70f, w * .35f, h * .69f, w * .21f, h * .66f)
+            cubicTo(w * .19f, h * .65f, w * .18f, h * .64f, w * .18f, h * .62f)
+            close()
+        }
+        drawPath(outsole, Color(0xFFD3D3D3))
+        repeat(3) { n ->
+            val x = w * (.53f - n * .045f)
+            val y = h * (.39f + n * .045f)
+            drawLine(Color(0xFFF2F2F2), Offset(x, y), Offset(x + w * .055f, y + h * .025f),
+                w * .016f, StrokeCap.Round)
         }
     }
 }

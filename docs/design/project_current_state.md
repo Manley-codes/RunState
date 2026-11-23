@@ -5,6 +5,26 @@ metadata:
   type: project
 ---
 
+## November 23 simplified shoe artwork and lists
+
+Manley requested names instead of shoe pictures in the picker, and a simpler white/gray Start
+shoe facing the opposite direction with more space inside its irregular circle. Saved/catalog
+row illustrations are removed; text aligns at 24 dp. Brand/model, nickname, mileage, selection
+and existing actions remain. The original irregular outline is retained as flat near-white;
+green/inset decoration is removed. A new left-facing gray silhouette spans about 65% of the
+canvas, with white sole, pale-gray outsole and three light laces. The 56 dp footprint, 72 dp
+target and compact Start placement are unchanged. No storage, mileage or provider logic changed.
+
+Owner/public/test builds and vital lint passed. Five existing Moto checks passed: search/catalog
+add, saved/cleared selection/dismissal, archive/Undo/restore targeting, Start shoe action/bounds,
+and large-text custom entry. Installed Start screenshot and native picker preview inspected.
+Matching-signature in-place update preserved all 74 completed runs, both saved pairs, selection,
+12 table hashes and five preferences; only the normal opening counter changed after launch.
+APK `8cb77fa8145b3922e57f6e1a5475f9aeb0099b951b5f7cc944716baccc5e7286`;
+private evidence/backup `android/build/nov23-shoe/moto/`. Temporary test app removed/main reopened.
+No new tracked source/test/asset files, real run or provider call. Public preview unchanged;
+Manley's visual feedback remains next, with the existing release return queue preserved.
+
 ## November 23 compact Start controls
 
 Manley requested slightly smaller Shoe/Music objects much closer to Start. Their artwork is now
