@@ -9,7 +9,8 @@ status: CURRENT NATIVE DECISIONS plus dated prototype history; verification live
 # Start Run — where this screen actually is
 
 **November 23 simpler shoe artwork:** the existing irregular circle becomes flat near-white,
-with its green/inset decoration removed. A smaller, left-facing gray sneaker has a white sole,
+with its green decoration removed. A follow-up adds a muted ocean-blue (`#789FAB`) outer ring
+around the 87%-scale near-white center, keeping the original silhouette. A smaller, left-facing gray sneaker has a white sole,
 pale-gray outsole and three light laces, with clear margins inside the circle. The 56 dp artwork
 footprint, 72 dp tap target and compact placement remain unchanged. Shoe picker choices now use
 text without adjacent illustrations; their names, mileage and actions remain. Builds and vital

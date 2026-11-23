@@ -40,6 +40,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
@@ -312,7 +313,10 @@ internal fun ShoeIllustration(modifier: Modifier = Modifier) {
             cubicTo(w * .02f, h * .22f, w * .22f, h * .07f, w * .47f, h * .045f)
             close()
         }
-        drawPath(outline, Color(0xFFF7F7F7))
+        drawPath(outline, Color(0xFF789FAB))
+        withTransform({ scale(.87f, .87f, Offset(w * .5f, h * .5f)) }) {
+            drawPath(outline, Color(0xFFF7F7F7))
+        }
 
         // Left-facing silhouette stays inset from the original irregular backing on every side.
         val upper = path {

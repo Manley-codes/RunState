@@ -10,6 +10,10 @@ status: READY TO TEST — October 22 native feature installed and software/devic
 
 ## November 23, 2026 — simplified Android shoe styling
 
+**Border follow-up:** the original irregular outline now forms a muted ocean-blue ring
+(`#789FAB`), with the near-white center inset to 87% scale. This follows Music's ring treatment;
+shoe art, clearance, footprint and actions remain unchanged. No public-preview publication.
+
 Saved and catalog choices now use text without adjacent shoe illustrations. Their text aligns at
 24 dp from the sheet edge; brand/model, nickname, mileage, selection and Archive remain intact.
 The Start control retains its 56 dp illustration footprint and 72 dp tap target. Its original

@@ -7,6 +7,14 @@ metadata:
 
 ## November 23 simplified shoe artwork and lists
 
+**Border follow-up:** added a muted ocean-blue `#789FAB` ring using the same irregular outline
+and a near-white inner fill scaled to 87%, following the Music object's border. Shoe art and
+all layout/actions remain unchanged. Owner/public builds and vital lint passed; installed native
+screenshot confirms visible ring and shoe clearance. Existing five behavior checks remain the
+baseline and were not repeated for this paint-only edit. Private backup/evidence:
+`android/build/nov23-shoe-border/moto/`. Current APK
+`d01662d002299bdfd3f9b6e4ab461af8f3c1b3b50cd06006e0e5dae476939ea0`.
+
 Manley requested names instead of shoe pictures in the picker, and a simpler white/gray Start
 shoe facing the opposite direction with more space inside its irregular circle. Saved/catalog
 row illustrations are removed; text aligns at 24 dp. Brand/model, nickname, mileage, selection
