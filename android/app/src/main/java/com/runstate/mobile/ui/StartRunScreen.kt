@@ -113,6 +113,7 @@ import androidx.compose.ui.unit.sp
 import com.runstate.mobile.R
 import com.runstate.mobile.data.local.PreRunEnergy
 import com.runstate.mobile.data.local.RunIntention
+import com.runstate.mobile.settings.StartBackground
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -216,7 +217,8 @@ internal fun StartRunScreen(
     onOpenShoes: () -> Unit = {},
     selectedRunIntention: RunIntention? = null,
     routeLabel: String? = null,
-    onRunContextChanged: (RunIntention?, String?) -> Unit = { _, _ -> }
+    onRunContextChanged: (RunIntention?, String?) -> Unit = { _, _ -> },
+    startBackground: StartBackground = StartBackground.HERMANN_PARK
 ) {
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     val view = LocalView.current
@@ -230,6 +232,11 @@ internal fun StartRunScreen(
     val tileBounds = remember { mutableStateMapOf<PreRunEnergy, Rect>() }
     var intake by remember { mutableStateOf<EnergyIntake?>(null) }
     var runPlanOpen by rememberSaveable { mutableStateOf(false) }
+    var trailsOpen by rememberSaveable { mutableStateOf(false) }
+    var exploredTrailId by rememberSaveable { mutableStateOf<String?>(null) }
+    var agentBottomPx by remember { mutableFloatStateOf(0f) }
+    var controlsTopPx by remember { mutableFloatStateOf(0f) }
+    val trailsBackground = startBackground == StartBackground.HOUSTON_TRAILS && !liveMapBackground
     val intakeTime = remember { Animatable(0f) }
     var energyEntryPlayed by rememberSaveable { mutableStateOf(false) }
     val energyEntryTime = remember {
@@ -291,11 +298,20 @@ internal fun StartRunScreen(
         val energyEntryDistancePx = with(LocalDensity.current) { maxWidth.toPx() }
         // A short window cannot keep the controls, navigation and upper details visible.
         // In that case use one continuous flow; regular phone heights retain the anchored layout.
-        val fallbackHeight = 564.dp + 116.dp * (LocalDensity.current.fontScale - 1f).coerceAtLeast(0f)
+        val fallbackHeight = 564.dp + (if (trailsBackground) 72.dp else 0.dp) +
+            116.dp * (LocalDensity.current.fontScale - 1f).coerceAtLeast(0f)
         val scrollWholeStack = maxHeight < fallbackHeight
         val wholeStackScroll = rememberScrollState()
         val upperDetailsScroll = rememberScrollState()
-        if (!liveMapBackground) {
+        if (trailsBackground) {
+            StartTrailsBackground(
+                upperContentBottom = with(LocalDensity.current) { agentBottomPx.toDp() } + 42.dp,
+                controlsTop = with(LocalDensity.current) { controlsTopPx.toDp() },
+                moving = lifecycleStarted && animationsEnabled && !trailsOpen && !runPlanOpen,
+                enabled = actionsEnabled && !setupLoading,
+                onExplore = { exploredTrailId = it.id; trailsOpen = true }
+            )
+        } else if (!liveMapBackground) {
             Image(
                 painter = painterResource(R.drawable.start_map_reference),
                 contentDescription = null,
@@ -325,11 +341,14 @@ internal fun StartRunScreen(
                     .then(if (scrollWholeStack) Modifier else Modifier.weight(1f))
                     .fillMaxWidth()
                     .testTag(START_RUN_UPPER_CONTENT_TAG)
-                    .then(if (scrollWholeStack) Modifier else Modifier.verticalScroll(upperDetailsScroll))
+                    .then(if (scrollWholeStack || trailsBackground) Modifier else Modifier.verticalScroll(upperDetailsScroll))
                     .padding(horizontal = 20.dp)
                     .padding(top = 26.dp, bottom = 12.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
+                Box(Modifier.onGloballyPositioned {
+                    agentBottomPx = it.boundsInRoot().bottom - (rootBounds?.top ?: 0f)
+                }) {
                 AgentReadyCard(
                     selectedEnergy = selectedPreRunEnergy,
                     gpsStatus = when {
@@ -349,6 +368,22 @@ internal fun StartRunScreen(
                         ringBounds = bounds
                     }
                 )
+                }
+                if (trailsBackground) {
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween) {
+                    StartTrailMapCredit()
+                    TextButton(onClick = { exploredTrailId = null; trailsOpen = true },
+                        enabled = actionsEnabled && !setupLoading,
+                        modifier = Modifier.heightIn(min = 48.dp)
+                            .testTag(START_TRAILS_BROWSE_TAG)) {
+                        Text("Houston trails  ›", color = StartInk, fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.background(Color.White.copy(alpha = .86f), RoundedCornerShape(16.dp))
+                                .padding(horizontal = 12.dp, vertical = 7.dp))
+                    }
+                    }
+                }
                 StartSetupNotices(
                     onOpenRunSettings = onOpenRunSettings,
                     actionsEnabled = actionsEnabled,
@@ -358,6 +393,9 @@ internal fun StartRunScreen(
                     gpsMessage = gpsMessage
                 )
             }
+            Box(Modifier.onGloballyPositioned {
+                controlsTopPx = it.boundsInRoot().top - (rootBounds?.top ?: 0f)
+            }) {
             StartFooter(
                 onStart = onStart,
                 enabled = actionsEnabled && !setupLoading,
@@ -369,6 +407,7 @@ internal fun StartRunScreen(
                 selectedShoe = selectedShoe,
                 onOpenShoes = onOpenShoes
             )
+            }
             Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp)
                 .padding(top = 12.dp)) {
                 PreRunEnergyChoices(
@@ -441,6 +480,15 @@ internal fun StartRunScreen(
         intake?.let { current ->
             EnergyIntakeOverlay(current, time = { intakeTime.value })
         }
+    }
+    if (trailsOpen && trailsBackground) {
+        StartTrailsSheet(
+            trail = HoustonStartTrails.firstOrNull { it.id == exploredTrailId },
+            enabled = actionsEnabled && !setupLoading,
+            onExplore = { exploredTrailId = it.id },
+            onUse = { onRunContextChanged(selectedRunIntention, it.planLabel); trailsOpen = false },
+            onDismiss = { trailsOpen = false }
+        )
     }
     if (runPlanOpen) {
         RunPlanSheet(

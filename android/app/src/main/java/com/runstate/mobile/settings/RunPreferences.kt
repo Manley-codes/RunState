@@ -21,6 +21,9 @@ internal enum class RunAppearance {
 /** Temporary, runner-selectable Active Run player treatments. Neither grants music consent. */
 internal enum class RunMusicPlayerLayout { HEADPHONES, ALBUM }
 
+/** Static Start artwork only; changing it does not change location or recording behavior. */
+internal enum class StartBackground { HERMANN_PARK, HOUSTON_TRAILS }
+
 /** Choices made by the runner, separate from Android permission grants and individual runs. */
 internal data class RunPreferences(
     val observeMusic: Boolean = false,
@@ -31,7 +34,8 @@ internal data class RunPreferences(
     val distanceAnnouncements: Boolean = true,
     val appearance: RunAppearance = RunAppearance.NIGHT,
     val musicPlayerLayout: RunMusicPlayerLayout = RunMusicPlayerLayout.HEADPHONES,
-    val cloudReflectionsEnabled: Boolean = true
+    val cloudReflectionsEnabled: Boolean = true,
+    val startBackground: StartBackground = StartBackground.HERMANN_PARK
 ) {
     init {
         require(!shareMusicInReflection || observeMusic) {
@@ -77,7 +81,10 @@ internal class StoredRunPreferences(
             musicPlayerLayout = values.readString(MUSIC_PLAYER_LAYOUT)?.let { stored ->
                 RunMusicPlayerLayout.entries.firstOrNull { it.name == stored }
             } ?: RunMusicPlayerLayout.HEADPHONES,
-            cloudReflectionsEnabled = values.readBoolean(CLOUD_REFLECTIONS) ?: true
+            cloudReflectionsEnabled = values.readBoolean(CLOUD_REFLECTIONS) ?: true,
+            startBackground = values.readString(START_BACKGROUND)?.let { stored ->
+                StartBackground.entries.firstOrNull { it.name == stored }
+            } ?: StartBackground.HERMANN_PARK
         )
     }
 
@@ -91,7 +98,8 @@ internal class StoredRunPreferences(
             DISTANCE_ANNOUNCEMENTS to preferences.distanceAnnouncements,
             CLOUD_REFLECTIONS to preferences.cloudReflectionsEnabled
         ), mapOf(RUN_APPEARANCE to preferences.appearance.name,
-            MUSIC_PLAYER_LAYOUT to preferences.musicPlayerLayout.name)))
+            MUSIC_PLAYER_LAYOUT to preferences.musicPlayerLayout.name,
+            START_BACKGROUND to preferences.startBackground.name)))
     }
 
     private inline fun <T> storageOperation(operation: () -> T): T = try {
@@ -110,6 +118,7 @@ internal class StoredRunPreferences(
         const val CLOUD_REFLECTIONS = "cloud_reflections_enabled"
         const val RUN_APPEARANCE = "run_appearance"
         const val MUSIC_PLAYER_LAYOUT = "music_player_layout"
+        const val START_BACKGROUND = "start_background"
     }
 }
 

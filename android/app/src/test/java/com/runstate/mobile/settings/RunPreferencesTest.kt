@@ -7,6 +7,49 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class RunPreferencesTest {
+    @Test
+    fun startBackgroundDefaultsToHermannParkForMissingOrUnknownValuesWithoutWriting() {
+        val values = FakeValues(mutableMapOf("observe_music" to true))
+        assertEquals(StartBackground.HERMANN_PARK, RunPreferences().startBackground)
+        assertEquals(StartBackground.HERMANN_PARK, StoredRunPreferences(values).load().startBackground)
+        values.savedStrings["start_background"] = "retired-background"
+        assertEquals(StartBackground.HERMANN_PARK, StoredRunPreferences(values).load().startBackground)
+        assertTrue(StoredRunPreferences(values).load().observeMusic)
+        assertEquals(0, values.commits)
+    }
+
+    @Test
+    fun startBackgroundCanSwitchAndReturnAfterReopeningWithoutChangingOtherPreferences() {
+        val values = FakeValues()
+        val before = RunPreferences(observeMusic = true, shareMusicInReflection = true,
+            musicSetupComplete = true, captureWeather = true, findSongSnippets = true,
+            distanceAnnouncements = false, appearance = RunAppearance.DAY,
+            musicPlayerLayout = RunMusicPlayerLayout.ALBUM, cloudReflectionsEnabled = false)
+        StoredRunPreferences(values).save(before)
+        val booleansBefore = values.saved.toMap()
+        for (background in listOf(StartBackground.HOUSTON_TRAILS, StartBackground.HERMANN_PARK)) {
+            StoredRunPreferences(values).save(before.copy(startBackground = background))
+            assertEquals(background.name, values.savedStrings["start_background"])
+            assertEquals(before.copy(startBackground = background), StoredRunPreferences(values).load())
+            assertEquals(booleansBefore, values.saved)
+        }
+        assertEquals(3, values.commits)
+    }
+
+    @Test
+    fun failedStartBackgroundSaveRetainsPreviousBackgroundAndPreferences() {
+        val values = FakeValues()
+        val store = StoredRunPreferences(values)
+        val before = RunPreferences(startBackground = StartBackground.HOUSTON_TRAILS,
+            observeMusic = true, captureWeather = true)
+        store.save(before)
+        values.acceptCommit = false
+        assertThrows(IllegalStateException::class.java) {
+            store.save(before.copy(startBackground = StartBackground.HERMANN_PARK))
+        }
+        assertEquals(before, StoredRunPreferences(values).load())
+    }
+
     @Test fun trackingOnlyChoicePersistsWithoutChangingMusicConsent() {
         val values = FakeValues()
         val store = StoredRunPreferences(values)

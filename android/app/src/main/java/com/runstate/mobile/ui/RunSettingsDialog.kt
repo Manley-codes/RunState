@@ -45,6 +45,7 @@ import com.runstate.mobile.reflection.HostedReflectionAccess
 import com.runstate.mobile.reflection.ReflectionTier
 import kotlinx.coroutines.launch
 import com.runstate.mobile.settings.RunMusicPlayerLayout
+import com.runstate.mobile.settings.StartBackground
 
 internal const val SETTINGS_DIALOG_TAG = "runSettingsDialog"
 internal const val SETTINGS_LOCATION_TAG = "runSettingsLocation"
@@ -61,6 +62,7 @@ internal const val SETTINGS_SPOTIFY_CONNECT_TAG = "runSettingsSpotifyConnect"
 internal const val SETTINGS_SPOTIFY_DISCONNECT_TAG = "runSettingsSpotifyDisconnect"
 internal const val SETTINGS_DISTANCE_ANNOUNCEMENTS_TAG = "runSettingsDistanceAnnouncements"
 internal const val SETTINGS_APPEARANCE_TAG = "runSettingsAppearance"
+internal const val SETTINGS_START_BACKGROUND_TAG = "runSettingsStartBackground"
 internal const val SETTINGS_RECORDING_SOURCES_TAG = "runSettingsRecordingSources"
 internal const val SETTINGS_MUSIC_REFLECTION_DEMO_TAG = "runSettingsMusicReflectionDemo"
 internal const val SETTINGS_PRIVACY_TAG = "runSettingsPrivacy"
@@ -70,6 +72,8 @@ internal fun appearanceOptionTag(appearance: RunAppearance): String =
     "runSettingsAppearance${appearance.name}"
 internal fun musicPlayerOptionTag(layout: RunMusicPlayerLayout): String =
     "runSettingsMusicPlayer${layout.name}"
+internal fun startBackgroundOptionTag(background: StartBackground): String =
+    "runSettingsStartBackground${background.name}"
 
 private val SettingsInk = Color(0xFF293326)
 private val SettingsCream = Color(0xFFF9FAF5)
@@ -117,7 +121,9 @@ internal fun RunSettingsDialog(
     ownerToolsEnabled: Boolean = com.runstate.mobile.BuildConfig.OWNER_TOOLS_ENABLED,
     hostedAccess: HostedReflectionAccess? = null,
     cloudReflectionsEnabled: Boolean? = null,
-    onSetCloudReflections: (Boolean) -> Unit = {}
+    onSetCloudReflections: (Boolean) -> Unit = {},
+    startBackground: StartBackground = StartBackground.HERMANN_PARK,
+    onSetStartBackground: (StartBackground) -> Unit = {}
 ) {
     val controlsEnabled = actionsEnabled && !settingsLoading
     val preferenceControlsEnabled = controlsEnabled && preferencesAvailable
@@ -197,6 +203,40 @@ internal fun RunSettingsDialog(
                     }
                 }
                 SettingsDescription("Auto uses Light from 7 AM to 7 PM. Your run keeps its starting look.")
+                Text("Start background", color = SettingsInk, fontSize = 14.sp,
+                    fontWeight = FontWeight.SemiBold)
+                Row(
+                    Modifier.fillMaxWidth().selectableGroup().testTag(SETTINGS_START_BACKGROUND_TAG),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    StartBackground.entries.forEach { choice ->
+                        val selected = startBackground == choice
+                        val label = when (choice) {
+                            StartBackground.HERMANN_PARK -> "Hermann Park"
+                            StartBackground.HOUSTON_TRAILS -> "Houston trails"
+                        }
+                        Surface(
+                            modifier = Modifier.weight(1f).heightIn(min = 48.dp)
+                                .selectable(selected = selected, enabled = preferenceControlsEnabled,
+                                    role = Role.RadioButton, onClick = { onSetStartBackground(choice) })
+                                .testTag(startBackgroundOptionTag(choice))
+                                .semantics { contentDescription = "$label Start background" },
+                            shape = RoundedCornerShape(12.dp),
+                            color = if (selected) SettingsInk else Color.Transparent,
+                            border = BorderStroke(1.dp, SettingsInk.copy(alpha = 0.2f))
+                        ) {
+                            androidx.compose.foundation.layout.Box(
+                                Modifier.padding(horizontal = 8.dp, vertical = 12.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(label, fontSize = 14.sp, fontWeight = FontWeight.SemiBold,
+                                    color = (if (selected) SettingsCream else SettingsInk)
+                                        .copy(alpha = if (preferenceControlsEnabled) 1f else 0.5f))
+                            }
+                        }
+                    }
+                }
+                SettingsDescription("Change the artwork behind Start. You can switch back at any time.")
                 SettingsDivider()
                 SettingsSectionTitle("LOCATION")
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {

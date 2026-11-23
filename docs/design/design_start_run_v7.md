@@ -8,6 +8,29 @@ status: CURRENT NATIVE DECISIONS plus dated prototype history; verification live
 
 # Start Run — where this screen actually is
 
+**November 23 optional Houston trail background — installed trial:** Manley approved actual trail
+photos beside static area maps, small separators and an easy return to the current background.
+He chose continuous slow motion, superseding the earlier suggestion of entrance-only motion.
+Settings → Start background offers Hermann Park (original/default) and Houston trails, persisted
+independently of run/consent settings. Trial areas: Memorial Park, Hermann Park, Buffalo Bayou Park
+and Terry Hershey Park (fourth destination supported by Visit Houston's running recommendations).
+Four full-width bands use 4 dp gaps. Photo/name rows fit above Shoe/Music/Start; first/last map
+areas extend behind the current controls, maintaining a full background. Foreground controls,
+Energy prompt, navigation and original-image path are retained. Motion is a subtle 28-second
+reversing pan within stable bounds; it respects lifecycle/disabled animations and stops in the
+trail/plan sheets. Viewing/selecting scenery never starts recording or answers Energy.
+
+Tap a visible trail or Houston trails to browse. Detail shows actual photo and static area map,
+park/source/license links, and an explicit Use trail name in plan action that preserves intention.
+More places around Houston opens the tourism site's running-place article. Difficulty, busyness,
+weather, directions and current trail status remain deferred. Real source credits are also in
+`android/app/src/main/assets/third_party_notices.txt`; local OSM cartography uses actual vectors,
+no fabricated route. Private asset sources/renderer: `docs/local/nov23-trail-assets/`.
+The original background remains selected after installation so Manley can compare by switching
+Settings. Phone screenshot/layout behavior verified; aesthetic and continuous-motion acceptance
+remain his next review. Public preview design hold remains. Current-state notes retain test/data
+receipts; the release return queue and deferred shoe illustration are unchanged.
+
 **November 23 simpler shoe artwork:** the existing irregular circle becomes flat near-white,
 with its green decoration removed. Manley rejected the rugged contour: the latest correction
 restores a smooth, slightly irregular outline around the thick ocean-blue (`#789FAB`) ring and

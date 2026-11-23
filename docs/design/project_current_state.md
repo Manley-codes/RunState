@@ -5,6 +5,41 @@ metadata:
   type: project
 ---
 
+## November 23 Houston trail-background trial
+
+Manley approved a reversible Android trial of the continuous, divided trail-background concept,
+adding small gaps, real photos and a fourth popular Houston option. He explicitly selected slow
+continuous motion. Settings → Start background now persists Hermann Park (unchanged default) or
+Houston trails. The trial bundles Memorial/Seymour Lieberman, Hermann/Marvin Taylor, Buffalo Bayou
+Park and Terry Hershey Park imagery. Four edge-to-edge areas have 4 dp gaps; actual photos sit at
+left, with locally rendered OSM area maps filling each band. Photo/name rows fit above the launch
+controls; the first/last maps extend behind the upper/lower controls. The initial equal-band draft
+hid lower names behind Start/Energy and was corrected after native screenshot inspection.
+
+Motion gently pans scenery inside fixed bounds over a 28-second reversing cycle. It stops outside
+the active Start lifecycle, when animations are disabled, or while trail/plan sheets are open;
+per-frame values are read in graphics layers. Tapping a band or Houston trails opens details/list.
+Only “Use trail name in plan” changes the existing route-label draft, preserving intention. The
+list links to Visit Houston for more places; detail links to each park, photo source/license and
+OSM credits. No difficulty, crowd/weather data, directions, current closures or GPS matching added.
+Static maps and photos need no network at runtime; external links open only when selected.
+
+Photos are actual verified Commons sources with public-domain/CC BY/CC BY-SA attribution in the
+detail and bundled notices. Maps are original cartography from bounded unmodified OSM vector
+extracts, not offline copies of restricted raster tiles. Sources, raw extracts, verification and
+renderer remain private in `docs/local/nov23-trail-assets/`. Added one necessary UI file and eight
+image resources; existing settings/preferences/tests were extended. No schema/backend/voice change.
+
+22 preference unit tests passed. Owner/public/test APK builds and vital lint passed; five focused
+Moto cases passed after the overlap fix: stored choice/save guard, original layout regression,
+real photo tap/details/explicit plan selection, safe dismissal/reversion and short 1.5×/2× text.
+Native trial screenshot inspected. In-place matching-signature update preserved all 74 completed
+runs, both pairs, all 12 table hashes and run preferences; only the normal opening counter changed.
+Temporary test app removed; main app reopened with the original background still selected.
+APK `79422976e890eb2d5cd10c3aea57c935dbf488048bb3cfcb0fa311ba5c65a37a`.
+Private backup/checks: `android/build/nov23-trails/`. User visual/motion review is next. The public
+preview remains untouched, its broader design-publication hold and release return queue retained.
+
 ## November 23 public preview album artwork
 
 Manley noticed missing album images and explicitly authorized the scoped fix/publication. The

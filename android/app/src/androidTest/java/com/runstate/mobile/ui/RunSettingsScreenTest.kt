@@ -64,6 +64,7 @@ import com.runstate.mobile.run.RunSessionCoordinator
 import com.runstate.mobile.settings.AndroidRunPreferencesStore
 import com.runstate.mobile.settings.RunAppearance
 import com.runstate.mobile.settings.RunPreferences
+import com.runstate.mobile.settings.StartBackground
 import java.io.File
 import java.time.Clock
 import java.time.Instant
@@ -110,6 +111,61 @@ class RunSettingsScreenTest {
             fixture.database.close()
             check(fixture.preferencesName.startsWith("run-settings-ui-"))
             fixture.context.deleteSharedPreferences(fixture.preferencesName)
+        }
+    }
+
+    @Test
+    fun startBackgroundChoicesCanRevertAndWaitForSavedPreferences() {
+        var background by mutableStateOf(RunPreferences().startBackground)
+        var saving by mutableStateOf(false)
+        var available by mutableStateOf(true)
+        val choices = mutableListOf<StartBackground>()
+        var otherActions = 0
+        compose.setContent {
+            RunSettingsDialog(
+                gpsReady = true, gpsMessage = null,
+                musicObservationEnabled = false, musicAccessGranted = true,
+                musicReflectionSharingEnabled = false, musicReflectionSharingAvailable = true,
+                reflectionConnectionLabel = null, demoMode = false,
+                onDismiss = { otherActions++ }, onRequestLocationSetup = { otherActions++ },
+                onSetMusicObservation = { otherActions++ }, onRequestMusicAccess = { otherActions++ },
+                onSetMusicReflectionSharing = { otherActions++ }, onSetDemoMode = { otherActions++ },
+                onOpenReflectionSetup = { otherActions++ }, onSetAppearance = { otherActions++ },
+                onSetWeather = { otherActions++ }, onSetCloudReflections = { otherActions++ },
+                settingsLoading = saving, preferencesAvailable = available,
+                startBackground = background,
+                onSetStartBackground = { choices += it; saving = true }
+            )
+        }
+        compose.onNodeWithText("Start background").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithTag(startBackgroundOptionTag(StartBackground.HERMANN_PARK))
+            .performScrollTo().assertIsSelected()
+        compose.onNodeWithText("Hermann Park").assertIsDisplayed()
+        compose.onNodeWithText("Houston trails").assertIsDisplayed()
+        for (choice in listOf(StartBackground.HOUSTON_TRAILS, StartBackground.HERMANN_PARK)) {
+            val previous = background
+            compose.onNodeWithTag(startBackgroundOptionTag(choice)).performScrollTo()
+                .assertIsEnabled().performClick()
+            compose.onNodeWithTag(startBackgroundOptionTag(previous)).assertIsSelected()
+            StartBackground.entries.forEach {
+                compose.onNodeWithTag(startBackgroundOptionTag(it)).assertIsNotEnabled()
+            }
+            val calls = choices.size
+            compose.onNodeWithTag(startBackgroundOptionTag(choice)).performTouchInput { click() }
+            compose.runOnIdle {
+                assertEquals(calls, choices.size)
+                background = choice
+                saving = false
+            }
+            compose.onNodeWithTag(startBackgroundOptionTag(choice)).assertIsSelected().assertIsEnabled()
+        }
+        compose.runOnIdle { available = false }
+        StartBackground.entries.forEach {
+            compose.onNodeWithTag(startBackgroundOptionTag(it)).performScrollTo().assertIsNotEnabled()
+        }
+        compose.runOnIdle {
+            assertEquals(listOf(StartBackground.HOUSTON_TRAILS, StartBackground.HERMANN_PARK), choices)
+            assertEquals(0, otherActions)
         }
     }
 

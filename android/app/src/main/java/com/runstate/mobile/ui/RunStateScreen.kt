@@ -44,6 +44,7 @@ import com.runstate.mobile.location.GpsSignalStatus
 import com.runstate.mobile.location.GpsMapEvidence
 import com.runstate.mobile.music.SpotifyLivePlayerState
 import com.runstate.mobile.settings.RunMusicPlayerLayout
+import com.runstate.mobile.settings.StartBackground
 import com.runstate.mobile.ui.theme.RunStateTheme
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
@@ -168,7 +169,8 @@ internal fun RunStateScreen(
     onOpenMusicTrack: (String?) -> Unit = {},
     onMusicVisibilityChange: (Boolean) -> Unit = {},
     completionActionLabel: String? = null,
-    resumeAllowed: Boolean = true
+    resumeAllowed: Boolean = true,
+    startBackground: StartBackground = StartBackground.HERMANN_PARK
 ) {
     val state = model.state
 
@@ -373,6 +375,7 @@ internal fun RunStateScreen(
             setupLoading = setupLoading,
             reflectionSetupRequired = reflectionSetupRequired,
             modifier = Modifier,
+            startBackground = startBackground,
             liveMapBackground = false,
             onOpenMap = if (mapAvailable) onOpenRunMap else null
         )

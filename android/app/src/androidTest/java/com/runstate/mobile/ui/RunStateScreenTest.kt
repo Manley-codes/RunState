@@ -98,6 +98,7 @@ import com.runstate.mobile.data.local.RunSplitStatus
 import com.runstate.mobile.data.local.TelemetryCoverage
 import com.runstate.mobile.reflection.RunReflectionState
 import com.runstate.mobile.reflection.ReflectionVoicePreparation
+import com.runstate.mobile.settings.StartBackground
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -409,6 +410,160 @@ class RunStateScreenTest {
         // Assert: exactly one Start, and nothing else fired.
         assertEquals(1, actions.starts)
         assertEquals(1, actions.total)
+    }
+
+    @Test
+    fun houstonTrailBandOnlyAddsItsNameToPlanAfterExplicitChoice() {
+        var selected by mutableStateOf<PreRunEnergy?>(null)
+        var intention by mutableStateOf<RunIntention?>(RunIntention.KEEP_EASY)
+        var route by mutableStateOf<String?>("Existing loop")
+        var starts = 0
+        var energyChanges = 0
+        var planChanges = 0
+        var selectedAtStart: PreRunEnergy? = null
+        composeTestRule.mainClock.autoAdvance = false
+        composeTestRule.setContent {
+            StartRunScreen(
+                selectedPreRunEnergy = selected,
+                onSelectPreRunEnergy = { selected = it; energyChanges++ },
+                onStart = { starts++; selectedAtStart = selected }, actionsEnabled = true,
+                onViewHistory = {}, showHistory = true,
+                modifier = Modifier.fillMaxSize().systemBarsPadding(),
+                startBackground = StartBackground.HOUSTON_TRAILS,
+                selectedRunIntention = intention, routeLabel = route,
+                onRunContextChanged = { choice, label ->
+                    intention = choice; route = label; planChanges++
+                }
+            )
+        }
+        composeTestRule.mainClock.advanceTimeByFrame()
+        settleStartEnergyEntrance()
+        composeTestRule.onNodeWithTag(START_TRAILS_BACKGROUND_TAG).assertIsDisplayed()
+        composeTestRule.onNodeWithTag(START_TRAILS_BROWSE_TAG).assertIsDisplayed().assertIsEnabled()
+        val controlsTop = composeTestRule.onNodeWithTag(START_FOOTER_TAG).fetchSemanticsNode().boundsInRoot.top
+        for (trailId in listOf("memorial", "hermann", "buffalo_bayou", "terry_hershey")) {
+            val label = composeTestRule.onNodeWithTag("startTrailLabel:" + trailId, useUnmergedTree = true)
+                .assertIsDisplayed().fetchSemanticsNode().boundsInRoot
+            assertTrue("Trail names must stay above the run controls", label.bottom <= controlsTop)
+        }
+        saveNativePreview(START_RUN_SCREEN_TAG, "start-houston-trails-trial.png")
+        composeTestRule.mainClock.autoAdvance = true
+        composeTestRule.onNodeWithTag(START_TRAIL_BAND_TAG_PREFIX + "memorial")
+            .assertIsDisplayed().performTouchInput { click(Offset(24f, height - 24f)) }
+        composeTestRule.onNodeWithTag(START_TRAIL_SHEET_TAG).assertIsDisplayed()
+        composeTestRule.runOnIdle {
+            assertEquals("Existing loop", route)
+            assertEquals(0, planChanges)
+            assertEquals(0, starts)
+            assertEquals(0, energyChanges)
+        }
+        composeTestRule.onNodeWithText("Close").assertIsDisplayed().performClick()
+        composeTestRule.onNodeWithTag(START_TRAIL_SHEET_TAG).assertDoesNotExist()
+        composeTestRule.onNodeWithTag(START_TRAIL_BAND_TAG_PREFIX + "memorial").performClick()
+        val useTrail = composeTestRule.onNodeWithTag(START_TRAIL_USE_TAG)
+        if (!useTrail.isDisplayed()) useTrail.performScrollTo()
+        useTrail.assertIsDisplayed().assertIsEnabled().performClick()
+        composeTestRule.onNodeWithTag(START_TRAIL_SHEET_TAG).assertDoesNotExist()
+        composeTestRule.runOnIdle {
+            assertEquals("Memorial Park", route)
+            assertEquals(RunIntention.KEEP_EASY, intention)
+            assertEquals(1, planChanges)
+            assertEquals(0, starts)
+            assertEquals(0, energyChanges)
+        }
+        composeTestRule.onNodeWithTag(START_ENERGY_MODERATE_TAG).assertIsDisplayed().performClick()
+        composeTestRule.onNodeWithTag(START_RUN_BUTTON_TAG).assertIsDisplayed().performClick()
+        composeTestRule.runOnIdle {
+            assertEquals(1, starts)
+            assertEquals(1, energyChanges)
+            assertEquals(PreRunEnergy.MODERATE, selectedAtStart)
+            assertEquals(1, planChanges)
+        }
+    }
+
+    @Test
+    fun houstonTrailBrowseAndDismissDoNotChangeRunAndOriginalBackgroundStaysAvailable() {
+        var background by mutableStateOf(StartBackground.HOUSTON_TRAILS)
+        var starts = 0
+        var energyChanges = 0
+        var planChanges = 0
+        composeTestRule.setContent {
+            StartRunScreen(
+                selectedPreRunEnergy = PreRunEnergy.LOW, onSelectPreRunEnergy = { energyChanges++ },
+                onStart = { starts++ }, actionsEnabled = true, onViewHistory = {}, showHistory = false,
+                modifier = Modifier.fillMaxSize().systemBarsPadding(), startBackground = background,
+                selectedRunIntention = RunIntention.KEEP_EASY, routeLabel = "Existing loop",
+                onRunContextChanged = { _, _ -> planChanges++ }
+            )
+        }
+        composeTestRule.onNodeWithTag(START_TRAILS_BROWSE_TAG).assertIsDisplayed().performClick()
+        composeTestRule.onNodeWithTag(START_TRAILS_LIST_TAG).assertIsDisplayed()
+        for (id in listOf("memorial", "hermann", "buffalo_bayou", "terry_hershey")) {
+            composeTestRule.onNodeWithTag(START_TRAIL_LIST_ITEM_TAG_PREFIX + id)
+                .performScrollTo().assertIsDisplayed().assertIsEnabled()
+        }
+        composeTestRule.onNodeWithTag(START_TRAIL_LIST_ITEM_TAG_PREFIX + "terry_hershey").performClick()
+        composeTestRule.onNodeWithTag(START_TRAIL_SHEET_TAG).assertIsDisplayed()
+        composeTestRule.onNodeWithText("Close").assertIsDisplayed().performClick()
+        composeTestRule.onNodeWithTag(START_TRAIL_SHEET_TAG).assertDoesNotExist()
+        composeTestRule.onNodeWithTag(START_TRAILS_BROWSE_TAG).performClick()
+        composeTestRule.onNodeWithTag(START_TRAILS_LIST_TAG).assertIsDisplayed()
+        composeTestRule.onNodeWithText("Close").assertIsDisplayed().performClick()
+        composeTestRule.onNodeWithTag(START_TRAILS_LIST_TAG).assertDoesNotExist()
+        composeTestRule.runOnIdle { background = StartBackground.HERMANN_PARK }
+        composeTestRule.onNodeWithTag(START_TRAILS_BACKGROUND_TAG).assertDoesNotExist()
+        composeTestRule.onNodeWithTag(START_TRAILS_BROWSE_TAG).assertDoesNotExist()
+        composeTestRule.onNodeWithTag(START_TRAIL_BAND_TAG_PREFIX + "memorial").assertDoesNotExist()
+        composeTestRule.onNodeWithTag(START_RUN_BUTTON_TAG).assertIsDisplayed().assertIsEnabled()
+        composeTestRule.onNodeWithTag(START_ENERGY_SELECTED_TAG).assertIsDisplayed()
+        composeTestRule.runOnIdle {
+            assertEquals(0, starts)
+            assertEquals(0, energyChanges)
+            assertEquals(0, planChanges)
+        }
+    }
+
+    @Test
+    fun shortLargeTextHoustonTrailBrowseAndRunControlsRemainReachable() {
+        var fontScale by mutableStateOf(1.5f)
+        var starts = 0
+        var energyChanges = 0
+        var planChanges = 0
+        composeTestRule.setContent {
+            val density = LocalDensity.current
+            CompositionLocalProvider(LocalDensity provides Density(density.density, fontScale)) {
+                StartRunScreen(
+                    selectedPreRunEnergy = null, onSelectPreRunEnergy = { energyChanges++ },
+                    onStart = { starts++ }, actionsEnabled = true, onViewHistory = {}, showHistory = false,
+                    modifier = Modifier.size(320.dp, 480.dp), startBackground = StartBackground.HOUSTON_TRAILS,
+                    onRunContextChanged = { _, _ -> planChanges++ }
+                )
+            }
+        }
+        for (scale in listOf(1.5f, 2f)) {
+            composeTestRule.runOnIdle { fontScale = scale }
+            composeTestRule.onNodeWithTag(START_RUN_FALLBACK_SCROLL_TAG).assertIsDisplayed()
+            composeTestRule.onNodeWithTag(START_TRAILS_BROWSE_TAG).performScrollTo()
+                .assertIsDisplayed().assertIsEnabled().performClick()
+            composeTestRule.onNodeWithTag(START_TRAILS_LIST_TAG).assertIsDisplayed()
+            composeTestRule.onNodeWithTag(START_TRAIL_LIST_ITEM_TAG_PREFIX + "terry_hershey")
+                .performScrollTo().assertIsDisplayed().assertIsEnabled().performClick()
+            composeTestRule.onNodeWithTag(START_TRAIL_SHEET_TAG).assertIsDisplayed()
+            val useTrail = composeTestRule.onNodeWithTag(START_TRAIL_USE_TAG)
+            if (!useTrail.isDisplayed()) useTrail.performScrollTo()
+            useTrail.assertIsDisplayed().assertIsEnabled()
+            composeTestRule.onNodeWithText("Close").assertIsDisplayed().performClick()
+            composeTestRule.onNodeWithTag(START_TRAIL_SHEET_TAG).assertDoesNotExist()
+            for (tag in listOf(START_ENERGY_LOW_TAG, START_ENERGY_MODERATE_TAG,
+                START_ENERGY_HIGH_TAG, START_RUN_BUTTON_TAG, START_RUN_PLAN_TAG)) {
+                composeTestRule.onNodeWithTag(tag).performScrollTo().assertIsDisplayed().assertIsEnabled()
+            }
+        }
+        composeTestRule.runOnIdle {
+            assertEquals(0, starts)
+            assertEquals(0, energyChanges)
+            assertEquals(0, planChanges)
+        }
     }
 
     @Test

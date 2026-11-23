@@ -1,6 +1,22 @@
 RunState bundled visual assets and map dependencies
 Reviewed October 16, 2026
 
+Houston trail-background trial (added November 23, 2026)
+The photos are real source photographs, resized by their source and cropped to fit by the app.
+Memorial / Seymour Lieberman Trail: Beverly Moseley, USDA NRCS Texas, CC BY 2.0 (also identified as US federal public-domain work).
+Source: https://commons.wikimedia.org/wiki/File:Joggers_along_the_Seymour_Lieberman_Exer-Trail_at_Memorial_Park_in_Houston.NRCS_photo_by_Beverly_Moseley._(25116673655).jpg
+License: https://creativecommons.org/licenses/by/2.0/
+Hermann / Marvin Taylor Trail: WhisperToMe, public domain.
+Source: https://commons.wikimedia.org/wiki/File:MarvinTaylorTrailHoustonTX.JPG
+Buffalo Bayou Park and skyline: Michael Barera, CC BY-SA 4.0. The photograph and its display crop remain under CC BY-SA 4.0.
+Source: https://commons.wikimedia.org/wiki/File:Houston_May_2022_13_(Buffalo_Bayou_Park_and_skyline).jpg
+License: https://creativecommons.org/licenses/by-sa/4.0/
+Terry Hershey Park trail: Scott Ehardt, public domain.
+Source: https://commons.wikimedia.org/wiki/File:Terry_Hershey_Park_trail.jpg
+Static maps: original RunState cartography rendered from unmodified OpenStreetMap vector extracts, November 23, 2026.
+Map data copyright OpenStreetMap contributors, Open Database License 1.0: https://www.openstreetmap.org/copyright
+Fixed park-area overviews; not recorded routes or navigation. No hosted OpenStreetMap raster tiles are bundled.
+
 Music Reflection Demo artwork (owner/debug builds only; added October 29, 2026): Lizzo, Good as Hell.
 Source recording: https://open.spotify.com/track/6KgBpzTuTRPebChN0VTyzV
 demo_lizzo_cover.jpg copies the user's selected trailer reference unchanged.

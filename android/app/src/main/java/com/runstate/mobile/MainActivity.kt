@@ -108,6 +108,7 @@ import com.runstate.mobile.ui.ShoePairDisplay
 import com.runstate.mobile.ui.ShortRunDecisionDialog
 import com.runstate.mobile.ui.RunSettingsDialog
 import com.runstate.mobile.settings.RunPreferences
+import com.runstate.mobile.settings.StartBackground
 import com.runstate.mobile.ui.ReflectionConnectionDialog
 import com.runstate.mobile.ui.RunUiModel
 import com.runstate.mobile.ui.RunUiState
@@ -1771,6 +1772,7 @@ internal fun RunJourneyRoot(
         countdownTickKey = countdownTickKey,
         countdownCadenceActive = countdownCadenceActive,
         runAppearanceDay = resolvedRunDay,
+        startBackground = runPreferences?.startBackground ?: StartBackground.HERMANN_PARK,
         onStart = {
             startNowRequested = false
             when {
@@ -2177,6 +2179,10 @@ internal fun RunJourneyRoot(
                 runPreferences?.let { saved -> savePreferences(saved.copy(musicPlayerLayout = layout)) }
             },
             appearance = runPreferences?.appearance ?: com.runstate.mobile.settings.RunAppearance.NIGHT,
+            startBackground = runPreferences?.startBackground ?: StartBackground.HERMANN_PARK,
+            onSetStartBackground = { background ->
+                runPreferences?.let { saved -> savePreferences(saved.copy(startBackground = background)) }
+            },
             onSetAppearance = { appearance ->
                 runPreferences?.let { saved -> savePreferences(saved.copy(appearance = appearance)) }
             },
