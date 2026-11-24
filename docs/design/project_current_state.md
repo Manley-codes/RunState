@@ -5,6 +5,35 @@ metadata:
   type: project
 ---
 
+## November 24 Start dial entrance
+
+Manley requested one countdown-style inner-line twist simultaneous with Energy tile entrance.
+Start's ticks now rotate up to 12 degrees and pull inward with a single sine cycle over the existing
+920 ms entrance clock. Resting geometry/opacity are exact; play symbol, face, glow, layout and taps
+remain unchanged. No independent timer, loop, countdown change, new source/assets or public preview.
+
+Owner/public/test assemblies and vital lint passed. Six focused Moto checks passed across the
+initial run and corrected restoration rerun: actual tick pixels change during entry, center/play
+pixels stay fixed, original resting pixels return, no loop, stable layout/insets, early Start taps,
+Energy glow, background behavior and saved-state no-replay. The new restoration fixture initially
+sampled before its entrance had settled; adding the first layout frame and a stability assertion
+fixed that setup. The final fixture also proves actual disposal/recreation with the restoration
+harness clock enabled during that operation. Native early/middle/settled renders were inspected.
+Evidence: `android/build/nov24-start-twist/`.
+
+Matching-signature in-place installation preserved all 74 completed runs, two shoe pairs and all
+12 logical table hashes; integrity OK, foreign-key violations zero. Test package removed; main app
+reopened. All preferences matched immediately after installation. Final reopening changed the normal
+opening counter and Spotify's connection metadata: existing handler received UserNotAuthorizedException,
+removed authorized_client and updated its bounded failure category (previously SpotifyConnectionTerminatedException).
+Other preferences match. This explains the strict final preference-check assertion; no saved run or
+shoe data changed. Do not restore a rejected authorization flag; reconnect Spotify through its normal
+flow if needed. No Spotify code was changed in this task.
+
+Installed APK SHA-256: `79e1af7c4bc950eb0fa93700233070a7f62f61ebafc368a85111590c25b0aad3`.
+Later owner review is only the entrance's feel; no new outdoor run required. Existing release queue,
+public-preview hold and separate iPhone work remain.
+
 ## November 23 shoe-list boundary motion fix
 
 Manley accepted the shoe redesign and reported jumping on another upward swipe at the bottom

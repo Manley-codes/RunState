@@ -8,6 +8,13 @@ status: CURRENT NATIVE DECISIONS plus dated prototype history; verification live
 
 # Start Run — where this screen actually is
 
+**November 24 Start dial entrance:** Manley requested the countdown dial's inner-line twist once,
+simultaneously with the Energy squares arriving. Start's 12 tick marks rotate up to 12 degrees and
+pull inward, then return exactly to their existing resting positions. The single smooth cycle spans
+the existing 920 ms Energy entrance; the circle, play symbol, colors, layout and actions stay fixed.
+It uses the same entrance clock and saved/lifecycle/reduced-motion behavior, with no independent
+timer or loop. Countdown itself is unchanged. Public-preview publication remains on hold.
+
 **November 23 Houston trails access retained independently:** Manley likes the latest result but
 is not certain he will keep the moving background. He explicitly wants the upper-right Houston
 trails pill kept, including on the original full Hermann Park Start background. The same finite

@@ -78,6 +78,7 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.PathParser
@@ -403,6 +404,7 @@ internal fun StartRunScreen(
                 gpsSelected = gpsSelected,
                 energySelected = selectedPreRunEnergy != null,
                 phase = ringPhase,
+                entryTime = { energyEntryTime.value },
                 onOpenSpotify = onOpenSpotify,
                 musicEnabled = actionsEnabled,
                 selectedShoe = selectedShoe,
@@ -1260,6 +1262,7 @@ private fun StartFooter(
     gpsSelected: Boolean,
     energySelected: Boolean,
     phase: State<Float>,
+    entryTime: () -> Float,
     onOpenSpotify: () -> Unit,
     musicEnabled: Boolean,
     selectedShoe: ShoePairDisplay?,
@@ -1306,7 +1309,8 @@ private fun StartFooter(
         ) {
             StartDial(
                 modifier = Modifier.size(102.dp),
-                glow = { readyGlow * (0.9f + 0.1f * sin(phase.value)) }
+                glow = { readyGlow * (0.9f + 0.1f * sin(phase.value)) },
+                entryTime = entryTime
             )
         }
     }
@@ -1329,7 +1333,11 @@ private fun ShoeFooterControl(shoe: ShoePairDisplay?, enabled: Boolean, onClick:
 }
 
 @Composable
-private fun StartDial(modifier: Modifier = Modifier, glow: () -> Float = { 0f }) {
+private fun StartDial(
+    modifier: Modifier = Modifier,
+    glow: () -> Float = { 0f },
+    entryTime: () -> Float
+) {
     Canvas(modifier) {
         val outerRadius = size.minDimension * 0.49f
         val r = outerRadius * 0.9f
@@ -1376,16 +1384,23 @@ private fun StartDial(modifier: Modifier = Modifier, glow: () -> Float = { 0f })
             topLeft = center - Offset(r, r), size = Size(r * 2f, r * 2f),
             style = Stroke(1.dp.toPx(), cap = StrokeCap.Round)
         )
-        repeat(12) { index ->
-            val angle = index * PI / 6.0 - PI / 2.0
-            val direction = Offset(cos(angle).toFloat(), sin(angle).toFloat())
-            drawLine(
-                Color.White.copy(alpha = if (index % 3 == 0) 0.78f else 0.42f),
-                center + direction * r * 0.68f,
-                center + direction * r * (if (index % 3 == 0) 0.88f else 0.83f),
-                strokeWidth = if (index % 3 == 0) 1.8.dp.toPx() else 1.dp.toPx(),
-                cap = StrokeCap.Round
-            )
+        // Countdown's small tick twist/inward pull, once over the shared Energy entrance.
+        // Reading its clock here keeps the motion in drawing and inherits no-replay/reduced motion.
+        val entryProgress = (entryTime() / START_ENERGY_ENTRY_DURATION_MS).coerceIn(0f, 1f)
+        val twist = if (entryProgress > 0f && entryProgress < 1f) sin(PI * entryProgress).toFloat() else 0f
+        rotate(twist * 12f) {
+            repeat(12) { index ->
+                val major = index % 3 == 0
+                val angle = index * PI / 6.0 - PI / 2.0
+                val direction = Offset(cos(angle).toFloat(), sin(angle).toFloat())
+                drawLine(
+                    Color.White.copy(alpha = if (major) 0.78f else 0.42f),
+                    center + direction * r * (0.68f - twist * 0.10f),
+                    center + direction * r * ((if (major) 0.88f else 0.83f) - twist * 0.035f),
+                    strokeWidth = if (major) 1.8.dp.toPx() else 1.dp.toPx(),
+                    cap = StrokeCap.Round
+                )
+            }
         }
         val triangle = Path().apply {
             fillType = PathFillType.EvenOdd

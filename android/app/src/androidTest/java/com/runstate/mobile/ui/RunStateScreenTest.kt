@@ -806,11 +806,25 @@ class RunStateScreenTest {
             }
         }
 
+        val restingDial = composeTestRule.onNodeWithTag(START_RUN_BUTTON_TAG).captureToImage()
+        val restingPixels = startDialPixels()
         composeTestRule.mainClock.advanceTimeBy(100L)
+        assertFalse("Start ticks must move as the Energy entrance begins",
+            restingPixels.contentEquals(startDialPixels()))
         saveNativePreview(START_RUN_SCREEN_TAG, "qa-energy-entry-early.png")
         // Observe the actual transformed tiles once all three have entered the viewport.
         composeTestRule.mainClock.advanceTimeBy(400L)
         val entering = tileBounds()
+        val twistingPixels = startDialPixels()
+        assertFalse("Start ticks must twist during the Energy entrance",
+            restingPixels.contentEquals(twistingPixels))
+        // The central play symbol and face stay still; only the surrounding tick marks articulate.
+        for (y in restingDial.height * 35 / 100 until restingDial.height * 65 / 100) {
+            for (x in restingDial.width * 35 / 100 until restingDial.width * 65 / 100) {
+                val pixel = y * restingDial.width + x
+                assertEquals("The play symbol must not twist", restingPixels[pixel], twistingPixels[pixel])
+            }
+        }
         assertSurroundingsFixed()
         saveNativePreview(START_RUN_SCREEN_TAG, "qa-energy-entry-middle.png")
         composeTestRule.mainClock.advanceTimeBy(200L)
@@ -828,9 +842,52 @@ class RunStateScreenTest {
             assertEquals("Settled Energy choices retain equal widths", settled[0].width, settled[index].width, 1f)
         }
         assertSurroundingsFixed()
+        assertTrue("The ticks must return to their exact resting appearance",
+            restingPixels.contentEquals(startDialPixels()))
         saveNativePreview(START_RUN_SCREEN_TAG, "qa-energy-entry-settled.png")
         composeTestRule.mainClock.advanceTimeBy(300L)
         assertEquals("The entrance must finish rather than loop", settled, tileBounds())
+        assertTrue("The tick twist must finish rather than loop",
+            restingPixels.contentEquals(startDialPixels()))
+        composeTestRule.onNodeWithTag(START_RUN_BUTTON_TAG).assertIsEnabled()
+    }
+
+    @Test
+    fun restoredStartEntranceKeepsDialStill() {
+        composeTestRule.mainClock.autoAdvance = false
+        val restoration = StateRestorationTester(composeTestRule)
+        var entries = 0
+        var disposals = 0
+        restoration.setContent {
+            DisposableEffect(Unit) {
+                entries++
+                onDispose { disposals++ }
+            }
+            StartRunScreen(null, {}, {}, true, {}, false)
+        }
+        // Let the initial layout start the entrance before advancing its full duration.
+        composeTestRule.mainClock.advanceTimeByFrame()
+        settleStartEnergyEntrance()
+        val resting = startDialPixels()
+        composeTestRule.mainClock.advanceTimeBy(450L)
+        assertTrue("The original entrance must settle before restoration", resting.contentEquals(startDialPixels()))
+        saveNativePreview(START_RUN_BUTTON_TAG, "qa-start-dial-before-restore.png")
+        // Let the restoration harness actually dispose/recreate, rather than coalesce both states.
+        composeTestRule.mainClock.autoAdvance = true
+        try {
+            restoration.emulateSavedInstanceStateRestore()
+        } finally {
+            composeTestRule.mainClock.autoAdvance = false
+        }
+        composeTestRule.mainClock.advanceTimeByFrame()
+        composeTestRule.runOnIdle {
+            assertEquals("Restoration must create a fresh screen", 2, entries)
+            assertEquals("Restoration must dispose the previous screen", 1, disposals)
+        }
+        saveNativePreview(START_RUN_BUTTON_TAG, "qa-start-dial-after-restore.png")
+        assertTrue("Restoring Start must not restart its tick twist", resting.contentEquals(startDialPixels()))
+        composeTestRule.mainClock.advanceTimeBy(450L)
+        assertTrue("Restored Start remains still during the old entrance window", resting.contentEquals(startDialPixels()))
         composeTestRule.onNodeWithTag(START_RUN_BUTTON_TAG).assertIsEnabled()
     }
 
@@ -919,6 +976,11 @@ class RunStateScreenTest {
         composeTestRule.mainClock.advanceTimeBy(START_ENERGY_ENTRY_DURATION_MS.toLong())
         composeTestRule.mainClock.advanceTimeByFrame()
         composeTestRule.waitForIdle()
+    }
+
+    private fun startDialPixels(): IntArray {
+        val image = composeTestRule.onNodeWithTag(START_RUN_BUTTON_TAG).captureToImage()
+        return IntArray(image.width * image.height).also { image.readPixels(it) }
     }
 
     @Test
