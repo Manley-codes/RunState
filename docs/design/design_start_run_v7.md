@@ -8,6 +8,33 @@ status: CURRENT NATIVE DECISIONS plus dated prototype history; verification live
 
 # Start Run — where this screen actually is
 
+**November 24 guided run goals — approved direction, not implemented:** Manley wants distance or
+run-time goals in place of the visible Plan feature, retaining Plan in the app but hidden until he
+decides its future. He explicitly wants to practice Kotlin and Android Studio through this change;
+guide small coding steps and review them rather than implementing the whole feature in advance.
+Next task after goals: review and implement the agreed personal-record announcement behavior.
+
+Proposed first version (recommendations, not yet separate product approvals): an optional single
+distance or active-time target; pausing does not advance a time target, and reaching either target
+does not auto-finish a run. Save the chosen goal with that run, preserve it through recovery, and
+use verified achievement in local completion facts. Keep accepted AI writing/song selection intact.
+Start with a dedicated `run/RunGoal.kt` model distinguishing meters from active milliseconds; do not
+reuse shoe mileage goals or runIntention. UI, startup/service handoff, Room migration, History and
+facts integration remain later guided increments. Old rows have no goal, never an invented target.
+
+Dependency audit: RunPlanSheet records KEEP_EASY/STEADY/HARD_EFFORT and a familiar-route label.
+RunnerStateInsight uses those for Planned-versus-reported Effort and similar-easy-run grouping;
+hiding selection stops new intention evidence, but preserve existing data/insights. Current reflection
+requests explicitly exclude these local-only fields. Houston trails' Use trail name in plan action
+also writes routeLabel: address that visible action while keeping the accepted browser, not an
+invisible plan change. Do not let a restored hidden draft silently apply old intention/route choices;
+preserve context on already-started and saved runs.
+
+PR audit checkpoint: the legacy Java console has PR handling, while the current Android completion
+facts contain distance, active time and average pace, and its reflection contract carries no PR/history
+evidence. Verify/agree categories and real-versus-sample eligibility in the subsequent PR task before
+making claims. Existing console tests are not proof of a phone announcement.
+
 **November 24 Start dial entrance:** Manley requested the countdown dial's inner-line twist once,
 simultaneously with the Energy squares arriving. Start's 12 tick marks rotate up to 12 degrees and
 pull inward, then return exactly to their existing resting positions. The single smooth cycle spans
