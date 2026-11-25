@@ -5,6 +5,23 @@ metadata:
   type: project
 ---
 
+## November 25 Goal panel static review
+
+Manley requested a simpler panel and a static image before installation: vertical Distance/Time
+choices the same width/height as the entry, rounded edges and selected black; editable default
+3 miles and 00:30 (confirmed hours:minutes). Removed helper paragraphs and the separate unit chip row;
+miles/km remains an inline selector. Save goal label is consistent; Remove stays for selected goals.
+Defaults remain drafts until Save. Precise existing targets are retained; seconds/millis are visible
+only when needed for a saved time goal. Accessibility errors remain available without helper clutter.
+
+Debug app/test builds and 59 focused JVM tests pass; 13 isolated emulator checks cover optional
+selection/save/remove, validation, old precision, units, restoration, equal geometry, large text,
+countdown handoff and native previews. Captures use the real Compose component: compact screenshots
+run-goal-distance-panel.png and run-goal-time-panel.png under android/build/nov25-goal-panel/.
+No changes to backend/storage/music reflection, no physical-phone update or public preview publication.
+No new source files/assets. Previous APK remains on Moto pending owner's image review; lessons and PR
+follow-up stay in the roadmap. This checkpoint's source is ready for an eventual approved phone update.
+
 ## November 25 run goals installed
 
 Manley asked Codex to take over implementation/install and postpone Kotlin lessons. Start's Goal

@@ -5,14 +5,20 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBarsPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Surface
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.StateRestorationTester
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
@@ -44,8 +50,10 @@ class RunGoalPanelTest {
                     selectedGoal = selected, onSave = { selected = it; changes += it })
             }
         }
-        rule.onNodeWithTag(RUN_GOAL_SAVE_TAG).assertIsNotEnabled()
+        rule.onNodeWithTag(RUN_GOAL_SAVE_TAG).assertIsEnabled().assertTextContains("Save goal")
         rule.onNodeWithTag(RUN_GOAL_REMOVE_TAG).assertDoesNotExist()
+        rule.onNodeWithTag(RUN_GOAL_INPUT_TAG).assertTextContains("3")
+        rule.runOnIdle { assertTrue(changes.isEmpty()); assertNull(selected) }
         rule.onNodeWithTag(RUN_GOAL_INPUT_TAG).performTextReplacement("2")
         rule.runOnIdle { assertTrue(changes.isEmpty()); assertNull(selected) }
         rule.onNodeWithTag(RUN_GOAL_SAVE_TAG).performScrollTo().assertIsEnabled().performClick()
@@ -58,7 +66,7 @@ class RunGoalPanelTest {
     }
 
     @Test
-    fun invalidDraftsCannotSaveAndTimeUsesActiveMinutes() {
+    fun invalidDraftsCannotSaveAndTimeUsesHoursAndMinutes() {
         val changes = mutableListOf<RunGoal?>()
         rule.setContent {
             RunStateTheme(darkTheme = false, dynamicColor = false) {
@@ -71,12 +79,17 @@ class RunGoalPanelTest {
             rule.onNodeWithTag(RUN_GOAL_SAVE_TAG).assertIsNotEnabled()
         }
         rule.onNodeWithTag(RUN_GOAL_TIME_TAG).performScrollTo().performClick()
-        rule.onNodeWithTag(RUN_GOAL_INPUT_TAG).performTextReplacement("30.5")
-        rule.onNodeWithText("Active running time. Pauses do not count.").assertExists()
-        rule.onNodeWithText("Your run keeps going until you finish it.").assertExists()
+        rule.onNodeWithTag(RUN_GOAL_INPUT_TAG).assertTextContains("00:30")
+        listOf("00:00", "00:60", "30", "30.5", "168:01").forEach { input ->
+            rule.onNodeWithTag(RUN_GOAL_INPUT_TAG).performScrollTo().performTextReplacement(input)
+            rule.onNodeWithTag(RUN_GOAL_SAVE_TAG).assertIsNotEnabled()
+        }
+        rule.onNodeWithTag(RUN_GOAL_INPUT_TAG).performTextReplacement("01:15")
+        rule.onNodeWithText("Active running time. Pauses do not count.").assertDoesNotExist()
+        rule.onNodeWithText("Your run keeps going until you finish it.").assertDoesNotExist()
         rule.runOnIdle { assertTrue(changes.isEmpty()) }
         rule.onNodeWithTag(RUN_GOAL_SAVE_TAG).performScrollTo().performClick()
-        rule.runOnIdle { assertEquals(listOf(RunGoal.Time(1_830_000L)), changes) }
+        rule.runOnIdle { assertEquals(listOf(RunGoal.Time(4_500_000L)), changes) }
     }
 
     @Test
@@ -90,8 +103,8 @@ class RunGoalPanelTest {
                     selectedGoal = selected, onSave = { saved = it })
             }
         }
-        rule.onNodeWithTag(RUN_GOAL_KILOMETERS_TAG).performClick()
-        rule.onNodeWithTag(RUN_GOAL_MILES_TAG).performClick()
+        chooseUnit(RUN_GOAL_KILOMETERS_TAG)
+        chooseUnit(RUN_GOAL_MILES_TAG)
         rule.onNodeWithTag(RUN_GOAL_SAVE_TAG).performScrollTo().performClick()
         rule.runOnIdle { assertSame(original, saved) }
         // A maximum-distance target rounded for the miles field must not become invalid.
@@ -99,6 +112,24 @@ class RunGoalPanelTest {
         rule.runOnIdle { selected = maximum }
         rule.onNodeWithTag(RUN_GOAL_SAVE_TAG).performScrollTo().assertIsEnabled().performClick()
         rule.runOnIdle { assertSame(maximum, saved) }
+    }
+
+    @Test
+    fun savingAnUnchangedClockPreservesExistingSecondsAndMillis() {
+        val original = RunGoal.Time(1_830_123L)
+        var saved: RunGoal? = null
+        rule.setContent {
+            RunStateTheme(darkTheme = false, dynamicColor = false) {
+                RunGoalPanel(Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
+                    selectedGoal = original, onSave = { saved = it })
+            }
+        }
+        rule.onNodeWithTag(RUN_GOAL_INPUT_TAG).assertTextContains("00:30:30.123")
+        rule.onNodeWithTag(RUN_GOAL_SAVE_TAG).performScrollTo().performClick()
+        rule.runOnIdle { assertSame(original, saved) }
+        rule.onNodeWithTag(RUN_GOAL_INPUT_TAG).performScrollTo().performTextReplacement("00:31")
+        rule.onNodeWithTag(RUN_GOAL_SAVE_TAG).performScrollTo().performClick()
+        rule.runOnIdle { assertEquals(RunGoal.Time(1_860_000L), saved) }
     }
 
     @Test
@@ -112,7 +143,7 @@ class RunGoalPanelTest {
                     selectedGoal = original, onDismiss = { closes++ }, onSave = { writes++ })
             }
         }
-        rule.onNodeWithTag(RUN_GOAL_INPUT_TAG).performTextReplacement("45")
+        rule.onNodeWithTag(RUN_GOAL_INPUT_TAG).performTextReplacement("00:45")
         rule.onNodeWithTag(RUN_GOAL_CLOSE_TAG).performScrollTo().performClick()
         rule.runOnIdle { assertEquals(1, closes); assertEquals(0, writes) }
     }
@@ -128,13 +159,13 @@ class RunGoalPanelTest {
             }
         }
         rule.onNodeWithTag(RUN_GOAL_TIME_TAG).performClick()
-        rule.onNodeWithTag(RUN_GOAL_INPUT_TAG).performTextReplacement("12.5")
+        rule.onNodeWithTag(RUN_GOAL_INPUT_TAG).performTextReplacement("00:45")
         restoration.emulateSavedInstanceStateRestore()
         rule.onNodeWithTag(RUN_GOAL_TIME_TAG).assertIsSelected()
-        rule.onNodeWithTag(RUN_GOAL_INPUT_TAG).assertTextContains("12.5")
+        rule.onNodeWithTag(RUN_GOAL_INPUT_TAG).assertTextContains("00:45")
         rule.runOnIdle { assertTrue(changes.isEmpty()) }
         rule.onNodeWithTag(RUN_GOAL_SAVE_TAG).performScrollTo().performClick()
-        rule.runOnIdle { assertEquals(listOf(RunGoal.Time(750_000L)), changes) }
+        rule.runOnIdle { assertEquals(listOf(RunGoal.Time(2_700_000L)), changes) }
     }
 
     @Test
@@ -173,33 +204,77 @@ class RunGoalPanelTest {
             }
         }
         rule.onNodeWithTag(START_RUN_GOAL_TAG).performClick()
-        rule.onNodeWithTag(RUN_GOAL_KILOMETERS_TAG).performClick()
+        chooseUnit(RUN_GOAL_KILOMETERS_TAG)
         rule.onNodeWithTag(RUN_GOAL_INPUT_TAG).performTextReplacement("5")
         rule.onNodeWithTag(RUN_GOAL_SAVE_TAG).performScrollTo().performClick()
         rule.onNodeWithTag(RUN_GOAL_SHEET_TAG).assertDoesNotExist()
         rule.onNodeWithTag(START_RUN_GOAL_TAG).performClick()
-        rule.onNodeWithTag(RUN_GOAL_KILOMETERS_TAG).assertIsSelected()
         rule.onNodeWithTag(RUN_GOAL_INPUT_TAG).assertTextContains("5")
+        rule.onNodeWithTag(RUN_GOAL_UNIT_TAG).performClick()
+        rule.onNodeWithTag(RUN_GOAL_KILOMETERS_TAG).assertIsSelected().performClick()
         rule.onNodeWithTag(RUN_GOAL_CLOSE_TAG).performScrollTo().performClick()
         rule.runOnIdle { assertEquals(RunGoal.Distance(5_000.0), selected); assertEquals(1, writes) }
     }
 
     @Test
-    fun distanceAndTimeSheetPreviewsUseTheSelectedGoalWithoutWriting() {
-        var selected by mutableStateOf<RunGoal>(RunGoal.Distance(3_218.688))
+    fun distanceAndTimeSheetPreviewsShowUnsavedDefaultsWithoutWriting() {
         var writes = 0
         rule.setContent {
             RunStateTheme(darkTheme = false, dynamicColor = false) {
-                RunGoalSheet(selected, DistanceUnit.MILES, true, {}, { writes++ })
+                RunGoalSheet(null, DistanceUnit.MILES, true, {}, { writes++ })
             }
         }
-        rule.onNodeWithTag(RUN_GOAL_INPUT_TAG).assertTextContains("2")
+        rule.onNodeWithTag(RUN_GOAL_INPUT_TAG).assertTextContains("3")
+        val inputBounds = rule.onNodeWithTag(RUN_GOAL_INPUT_TAG).fetchSemanticsNode().boundsInRoot
+        val distanceBounds = rule.onNodeWithTag(RUN_GOAL_DISTANCE_TAG).fetchSemanticsNode().boundsInRoot
+        val timeBounds = rule.onNodeWithTag(RUN_GOAL_TIME_TAG).fetchSemanticsNode().boundsInRoot
+        assertEquals(inputBounds.width, distanceBounds.width, .5f)
+        assertEquals(inputBounds.height, distanceBounds.height, .5f)
+        assertEquals(inputBounds.width, timeBounds.width, .5f)
+        assertEquals(inputBounds.height, timeBounds.height, .5f)
+        assertTrue(distanceBounds.bottom < timeBounds.top)
         savePreview("run-goal-distance.png")
-        rule.runOnIdle { selected = RunGoal.Time(1_800_000L) }
+        rule.onNodeWithTag(RUN_GOAL_TIME_TAG).performClick()
         rule.onNodeWithTag(RUN_GOAL_TIME_TAG).assertIsSelected()
-        rule.onNodeWithTag(RUN_GOAL_INPUT_TAG).assertTextContains("30")
+        rule.onNodeWithTag(RUN_GOAL_INPUT_TAG).assertTextContains("00:30")
         savePreview("run-goal-time.png")
         rule.runOnIdle { assertEquals(0, writes) }
+    }
+
+    @Test
+    fun compactNativeGoalPanelsShowDistanceAndTimeWithRemoveAction() {
+        var selected by mutableStateOf<RunGoal>(RunGoal.Distance(3.0 * 1_609.344))
+        var writes = 0
+        rule.setContent {
+            RunStateTheme(darkTheme = false, dynamicColor = false) {
+                Surface(modifier = Modifier.width(360.dp).testTag("compactGoalPreview"),
+                    shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+                    color = Color(0xFFF9FAF5)) {
+                    RunGoalPanel(selectedGoal = selected, onSave = { writes++ })
+                }
+            }
+        }
+        rule.onNodeWithTag(RUN_GOAL_INPUT_TAG).assertTextContains("3")
+        savePanelPreview("run-goal-distance-panel.png")
+        rule.runOnIdle { selected = RunGoal.Time(1_800_000L) }
+        rule.onNodeWithTag(RUN_GOAL_INPUT_TAG).assertTextContains("00:30")
+        savePanelPreview("run-goal-time-panel.png")
+        rule.runOnIdle { assertEquals(0, writes) }
+    }
+
+    private fun savePanelPreview(name: String) {
+        rule.waitForIdle()
+        rule.onNodeWithTag(RUN_GOAL_REMOVE_TAG).assertIsDisplayed()
+        val bitmap = rule.onNodeWithTag("compactGoalPreview").captureToImage().asAndroidBitmap()
+        File(InstrumentationRegistry.getInstrumentation().targetContext.cacheDir, name)
+            .outputStream().use {
+                assertTrue(bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it))
+            }
+    }
+
+    private fun chooseUnit(tag: String) {
+        rule.onNodeWithTag(RUN_GOAL_UNIT_TAG).performScrollTo().performClick()
+        rule.onNodeWithTag(tag).performClick()
     }
 
     private fun savePreview(name: String) {
@@ -207,7 +282,7 @@ class RunGoalPanelTest {
         rule.waitForIdle()
         rule.onNodeWithTag(RUN_GOAL_CLOSE_TAG).assertIsDisplayed()
         rule.onNodeWithTag(RUN_GOAL_INPUT_TAG).assertIsDisplayed()
-        rule.onNodeWithTag(RUN_GOAL_REMOVE_TAG).assertIsDisplayed()
+        rule.onNodeWithTag(RUN_GOAL_SAVE_TAG).assertIsDisplayed()
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         // Capture the final window, since capturing a translated modal node can crop its bottom.
         val bitmap = requireNotNull(instrumentation.uiAutomation.takeScreenshot()) {

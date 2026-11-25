@@ -1941,6 +1941,7 @@ class RunStateScreenTest {
         GpsStartRootHarness(managedCountdown = true).use { root ->
             composeTestRule.mainClock.autoAdvance = true
             composeTestRule.onNodeWithTag(START_RUN_GOAL_TAG).performClick()
+            composeTestRule.onNodeWithTag(RUN_GOAL_UNIT_TAG).performClick()
             composeTestRule.onNodeWithTag(RUN_GOAL_KILOMETERS_TAG).performClick()
             composeTestRule.onNodeWithTag(RUN_GOAL_INPUT_TAG).performTextReplacement("5")
             composeTestRule.onNodeWithTag(RUN_GOAL_SAVE_TAG).performScrollTo().performClick()
@@ -1965,7 +1966,7 @@ class RunStateScreenTest {
             composeTestRule.mainClock.autoAdvance = true
             composeTestRule.onNodeWithTag(START_RUN_GOAL_TAG).performClick()
             composeTestRule.onNodeWithTag(RUN_GOAL_TIME_TAG).performClick()
-            composeTestRule.onNodeWithTag(RUN_GOAL_INPUT_TAG).performTextReplacement("30")
+            composeTestRule.onNodeWithTag(RUN_GOAL_INPUT_TAG).performTextReplacement("00:30")
             composeTestRule.onNodeWithTag(RUN_GOAL_SAVE_TAG).performScrollTo().performClick()
             // Resume the manually driven clock before the live run ticker starts.
             composeTestRule.mainClock.autoAdvance = false

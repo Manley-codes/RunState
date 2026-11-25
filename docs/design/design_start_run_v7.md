@@ -8,6 +8,18 @@ status: CURRENT NATIVE DECISIONS plus dated prototype history; verification live
 
 # Start Run — where this screen actually is
 
+**November 25 Goal panel simplification - preview before phone:** Manley requested large vertical
+Distance/Time choices, both matching the rounded entry field dimensions, selected choice black,
+editable defaults of 3 miles and 00:30, and no routine helper paragraphs. He confirmed 00:30 means
+30 minutes (hours:minutes). Keep Set a goal, Close, Save goal and Remove goal. The separate miles/km
+row becomes an inline field unit selector. Defaults stay unsaved until Save; Remove appears for an
+existing goal. Preserve original targets/precision and optional-goal behavior. Show a static native
+preview in chat before installing this revision; the earlier installed version stays on the phone.
+Public preview remains on hold. Debug app/test builds, 59 focused JVM cases and 13 emulator checks
+passed. Static native distance/time images are in android/build/nov25-goal-panel/. No phone install.
+Existing fractional-minute goals retain their visible seconds/milliseconds on reopen and unchanged
+save; normal defaults stay 00:30. No new source/assets or storage/backend changes.
+
 **November 25 run goals - autonomous implementation:** Manley asked Codex to take over and put
 this on the Android phone for visual review; Kotlin/Android Studio lessons can resume later.
 This supersedes the November 24 guided-only sequence. His Distance/Time model and four tests remain
