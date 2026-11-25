@@ -28,6 +28,7 @@ import androidx.room.RoomDatabase
  * Version 19 adds saved physical shoe pairs and a nullable run association; no historical mileage is assigned.
  * Version 20 adds optional intention/route and question provenance without reinterpreting old feedback.
  * Version 21 adds a personal shoe mileage goal; existing pairs keep an unknown goal and all mileage.
+ * Version 22 adds an optional distance or active-time run goal without assigning targets to old runs.
  * Each exported schema under `android/app/schemas` stays unchanged as the record of what
  * that version looked like. Every future version increment requires an explicitly
  * written migration; destructive migration is not configured here and must not be added
@@ -66,7 +67,7 @@ import androidx.room.RoomDatabase
         ShoePairEntity::class,
         ShoeSelectionEntity::class
     ],
-    version = 21,
+    version = 22,
     exportSchema = true
 )
 abstract class RunStateDatabase : RoomDatabase() {
@@ -123,6 +124,6 @@ internal fun buildRunStateDatabase(
             MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10,
             MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15,
             MIGRATION_15_16, MIGRATION_16_17, MIGRATION_17_18, MIGRATION_18_19, MIGRATION_19_20,
-            MIGRATION_20_21
+            MIGRATION_20_21, MIGRATION_21_22
         )
         .build()

@@ -346,7 +346,15 @@ data class RunEntity(
     val firstPostRunEnergy: ReflectionBranch? = null,
 
     @ColumnInfo(name = "first_post_run_energy_question_version")
-    val firstPostRunEnergyQuestionVersion: Int? = null
+    val firstPostRunEnergyQuestionVersion: Int? = null,
+
+    /** Optional goal frozen at official start. Old runs keep no invented target. */
+    @ColumnInfo(name = "goal_distance_meters")
+    val goalDistanceMeters: Double? = null,
+
+    /** Active running time only; mutually exclusive with the distance goal. */
+    @ColumnInfo(name = "goal_active_millis")
+    val goalActiveMillis: Long? = null
 ) {
     companion object {
         const val POST_RUN_NOTE_MAX_LENGTH = 280
@@ -356,6 +364,16 @@ data class RunEntity(
     }
 
     init {
+
+        require(goalDistanceMeters == null || goalActiveMillis == null) {
+            "A run can have either a distance or a time goal, not both."
+        }
+        require(goalDistanceMeters == null || goalDistanceMeters.isFinite() && goalDistanceMeters > 0.0) {
+            "A distance goal must be finite and positive."
+        }
+        require(goalActiveMillis == null || goalActiveMillis > 0L) {
+            "An active-time goal must be positive."
+        }
 
         require(routeLabel == null || (routeLabel.isNotBlank() && routeLabel == routeLabel.trim() &&
             routeLabel.length <= ROUTE_LABEL_MAX_LENGTH)) {

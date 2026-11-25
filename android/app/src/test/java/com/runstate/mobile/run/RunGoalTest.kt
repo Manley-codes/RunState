@@ -7,6 +7,22 @@ import org.junit.Test
 class RunGoalTest {
 
     @Test
+    fun decodesOptionalSavedOrServiceValuesAndRejectsConflictingGoals() {
+        assertEquals(null, runGoalFromValues(null, null))
+        assertEquals(RunGoal.Distance(5000.0), runGoalFromValues(5000.0, null))
+        assertEquals(RunGoal.Time(1_800_000L), runGoalFromValues(null, 1_800_000L))
+        assertThrows(IllegalArgumentException::class.java) {
+            runGoalFromValues(5000.0, 1_800_000L)
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            runGoalFromValues(Double.NaN, null)
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            runGoalFromValues(null, 0L)
+        }
+    }
+
+    @Test
     fun acceptsPositiveDistance() {
         val goal = RunGoal.Distance(5000.0)
 

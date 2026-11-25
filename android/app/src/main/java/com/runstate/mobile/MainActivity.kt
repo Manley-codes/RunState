@@ -64,6 +64,7 @@ import com.runstate.mobile.data.local.PreRunEnergy
 import com.runstate.mobile.data.local.PostRunEffort
 import com.runstate.mobile.data.local.RunEntity
 import com.runstate.mobile.data.local.RunIntention
+import com.runstate.mobile.run.RunGoal
 import com.runstate.mobile.data.local.effortScaleForEditing
 import com.runstate.mobile.data.local.RunTrackingMode
 import com.runstate.mobile.data.local.RunStateDatabase
@@ -387,7 +388,7 @@ internal fun RunJourneyRoot(
     gpsPreviewSourceOverride: ForegroundGpsPreviewSource? = null,
     gpsLocationReady: (Context) -> Boolean = ::preciseGpsLocationReady,
     startGpsRun: (Context, PreRunEnergy?, Boolean, Boolean, Boolean,
-        RunIntention?, String?, Long?) -> Unit = RunTrackingService::startNew,
+        RunIntention?, String?, Long?, RunGoal?) -> Unit = RunTrackingService::startNew,
     countdownSpeakerFactory: ((Context) -> ReflectionSpeaker)? = null,
     preparedCountdownVoice: PreparedCountdownVoice<ReflectionSpeaker>? = null,
     spotifyConnectionLabel: String? = null,
@@ -403,7 +404,7 @@ internal fun RunJourneyRoot(
     openingRequestId: Int = 0,
     runCountdown: RunCountdownOwner? = null,
     dispatchGpsCountdown: (Context, Long, PreRunEnergy?, Boolean, Boolean, Boolean,
-        RunIntention?, String?, Long?) -> Unit = RunTrackingService::startCountdown,
+        RunIntention?, String?, Long?, RunGoal?) -> Unit = RunTrackingService::startCountdown,
     onRunSurfaceChanged: (Boolean?) -> Unit = {},
     onStartNavigationVisible: (Boolean) -> Unit = {},
     musicReflectionDemoAudioFactory: (Context) -> MusicReflectionDemoAudio = { AndroidMusicReflectionDemoAudio(it) },
@@ -507,6 +508,22 @@ internal fun RunJourneyRoot(
         mutableStateOf<RunIntention?>(null)
     }
     var routeLabel by rememberSaveable { mutableStateOf<String?>(null) }
+    var goalDistanceMeters by rememberSaveable { mutableStateOf<Double?>(null) }
+    var goalActiveMillis by rememberSaveable { mutableStateOf<Long?>(null) }
+    val runGoal: RunGoal? = when {
+        goalActiveMillis == null && goalDistanceMeters?.let { it.isFinite() && it > 0.0 } == true ->
+            RunGoal.Distance(requireNotNull(goalDistanceMeters))
+        goalDistanceMeters == null && goalActiveMillis?.let { it > 0L } == true ->
+            RunGoal.Time(requireNotNull(goalActiveMillis))
+        else -> null
+    }
+    fun changeRunGoal(goal: RunGoal?) {
+        goalDistanceMeters = (goal as? RunGoal.Distance)?.meters
+        goalActiveMillis = (goal as? RunGoal.Time)?.activeMillis
+    }
+    // Plan is hidden: a restored draft must not silently apply an unseen intention/route.
+    // Context already saved on a started or completed run remains owned by Room.
+    LaunchedEffect(Unit) { runIntention = null; routeLabel = null }
     // GPS is the normal path. An explicit Sample demo is a temporary draft, never a saved default.
     val gpsModeSaver = remember(runSettingsSessionId, ownerToolsAvailable) {
         Saver<Boolean, Any>(
@@ -1098,6 +1115,7 @@ internal fun RunJourneyRoot(
                 preRunEnergyRecordedAt = null
                 runIntention = null
                 routeLabel = null
+                changeRunGoal(null)
                 gpsMessage = null
                 gpsDraftSelected = true
             }
@@ -1297,7 +1315,7 @@ internal fun RunJourneyRoot(
                             previewController.stopBeforeRun()
                             dispatchGpsCountdown(context, token, preRunEnergy, observe, share,
                                 share && runPreferences?.findSongSnippets == true,
-                                runIntention, routeLabel, preRunEnergyRecordedAt)
+                                null, null, preRunEnergyRecordedAt, runGoal)
                             gpsStartDispatched = true
                             gpsStartRequested = false
                         } catch (_: RuntimeException) {
@@ -1367,7 +1385,7 @@ internal fun RunJourneyRoot(
                         gpsStartRequested = false
                         startGpsRun(context, preRunEnergy, observeMusicForRun,
                             shareMusicForRun, shareMusicForRun && runPreferences?.findSongSnippets == true,
-                            runIntention, routeLabel, preRunEnergyRecordedAt)
+                            null, null, preRunEnergyRecordedAt, runGoal)
                     } catch (_: RuntimeException) {
                         gpsStartDispatched = false
                         gpsPreviewRestart++ // Retry even if dispatch failed within one frame.
@@ -1386,9 +1404,10 @@ internal fun RunJourneyRoot(
                             musicObservationRequested = observeMusicForRun,
                             musicReflectionSharingAllowed = shareMusicForRun,
                             songSnippetLookupAllowed = shareMusicForRun && runPreferences?.findSongSnippets == true,
-                            runIntention = runIntention,
-                            routeLabel = routeLabel,
-                            preRunEnergyRecordedAtEpochMillis = preRunEnergyRecordedAt
+                            runIntention = null,
+                            routeLabel = null,
+                            preRunEnergyRecordedAtEpochMillis = preRunEnergyRecordedAt,
+                            goal = runGoal
                         )
                     }
                 }
@@ -1678,6 +1697,7 @@ internal fun RunJourneyRoot(
                             preRunEnergyRecordedAt = null
                             runIntention = null
                             routeLabel = null
+                            changeRunGoal(null)
                             gpsMessage = null
                             gpsDraftSelected = true
                         }
@@ -1714,6 +1734,7 @@ internal fun RunJourneyRoot(
                 preRunEnergyRecordedAt = null
                 runIntention = null
                 routeLabel = null
+                changeRunGoal(null)
                 gpsMessage = null
                 gpsDraftSelected = true
                 refresh()
@@ -1844,7 +1865,7 @@ internal fun RunJourneyRoot(
                             observeMusicForRun,
                             shareMusicForRun,
                             shareMusicForRun && runPreferences?.findSongSnippets == true,
-                            runIntention, routeLabel, preRunEnergyRecordedAt
+                            null, null, preRunEnergyRecordedAt, runGoal
                         )
                     } catch (_: RuntimeException) {
                         gpsMessage = "Android could not restart GPS. Cancel and try again."
@@ -1860,9 +1881,10 @@ internal fun RunJourneyRoot(
                             musicObservationRequested = observeMusicForRun,
                             musicReflectionSharingAllowed = shareMusicForRun,
                             songSnippetLookupAllowed = shareMusicForRun && runPreferences?.findSongSnippets == true,
-                            runIntention = runIntention,
-                            routeLabel = routeLabel,
-                            preRunEnergyRecordedAtEpochMillis = preRunEnergyRecordedAt
+                            runIntention = null,
+                            routeLabel = null,
+                            preRunEnergyRecordedAtEpochMillis = preRunEnergyRecordedAt,
+                            goal = runGoal
                         )
                     }
                 }
@@ -1890,6 +1912,7 @@ internal fun RunJourneyRoot(
                 preRunEnergyRecordedAt = null
                 runIntention = null
                 routeLabel = null
+                changeRunGoal(null)
                 gpsMessage = null
                 gpsDraftSelected = true
                 refresh()
@@ -1911,6 +1934,8 @@ internal fun RunJourneyRoot(
             runIntention = intention
             routeLabel = label?.trim()?.takeIf { it.isNotEmpty() }
         },
+        selectedRunGoal = runGoal,
+        onRunGoalChanged = ::changeRunGoal,
         gpsSelected = gpsSelected,
         gpsMessage = gpsMessage,
         musicSelected = musicSelected,
@@ -2304,6 +2329,7 @@ internal fun RunJourneyRoot(
                         preRunEnergyRecordedAt = null
                         runIntention = null
                         routeLabel = null
+                        changeRunGoal(null)
                         gpsMessage = null
                         gpsDraftSelected = true
                     }) { coordinator.requestDiscard(decisionRunId) }

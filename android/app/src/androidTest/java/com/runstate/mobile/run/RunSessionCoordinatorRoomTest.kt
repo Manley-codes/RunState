@@ -124,7 +124,7 @@ class RunSessionCoordinatorRoomTest {
         )
 
     @Test
-    fun chosenPhysicalPairIsFrozenAcrossStartRetryAndRecoveryAndDoesNotCountSampleDistance() = runBlocking {
+    fun chosenPhysicalPairAndGoalAreFrozenAcrossStartRetryAndRecoveryAndDoNotCountSampleDistance() = runBlocking {
         val pair = ShoePairEntity(UUID.randomUUID().toString(), "HOKA", "Clifton", "Daily pair", OFFICIAL_START)
         val nextPair = pair.copy(shoePairId = UUID.randomUUID().toString(), nickname = "Second pair")
         database.shoeDao().addAndSelect(pair)
@@ -140,13 +140,15 @@ class RunSessionCoordinatorRoomTest {
             CREATE TRIGGER block_test_shoe_run_start BEFORE INSERT ON runs
             BEGIN SELECT RAISE(ABORT, 'test storage failure'); END
         """.trimIndent())
-        assertTrue(runCatching { first.requestStart().await() }.isFailure)
+        val selectedGoal = RunGoal.Distance(5000.0)
+        assertTrue(runCatching { first.requestStart(goal = selectedGoal).await() }.isFailure)
         database.shoeDao().addAndSelect(nextPair)
         database.shoeDao().archivePair(pair.shoePairId)
         database.openHelper.writableDatabase.execSQL("DROP TRIGGER block_test_shoe_run_start")
         clock.nowMillis += 1_000L
-        first.requestStart().await()
+        first.requestStart(goal = RunGoal.Time(1_800_000L)).await()
         assertEquals(pair.shoePairId, database.runDao().findById(RUN_ID)?.shoePairId)
+        assertEquals(selectedGoal, database.runDao().findById(RUN_ID)?.runGoal)
         assertEquals(OFFICIAL_START, database.runDao().findById(RUN_ID)?.officialStartEpochMillis)
         clock.nowMillis = FIRST_PAUSE
         first.requestAction(RunActionKind.PAUSE).await()
@@ -161,9 +163,40 @@ class RunSessionCoordinatorRoomTest {
         recovered.finalizeActivity(RUN_ID)
         recovered.finalizeActivity(RUN_ID)
         assertEquals(pair.shoePairId, database.runDao().findById(RUN_ID)?.shoePairId)
+        assertEquals(selectedGoal, database.runDao().findById(RUN_ID)?.runGoal)
         assertEquals(nextPair.shoePairId, database.shoeDao().selectedActivePairId())
         assertTrue(database.shoeDao().observeShoes().first().all { it.totalDistanceMeters == 0.0 })
         assertEquals(1, database.runDao().countRuns())
+    }
+
+    @Test
+    fun timeGoalSurvivesPauseDatabaseReopenAndManualCompletion() = runBlocking {
+        val clock = SettableClock(OFFICIAL_START)
+        val selectedGoal = RunGoal.Time(60_000L)
+        val first = coordinator(clock)
+        first.initialize()
+        first.beginCountdown()
+        first.requestStart(trackingMode = RunTrackingMode.GPS, goal = selectedGoal).await()
+        clock.nowMillis = FIRST_PAUSE
+        first.requestAction(RunActionKind.PAUSE).await()
+        val paused = requireNotNull(database.runDao().findById(RUN_ID))
+        assertEquals(StoredRunState.PAUSED, paused.state)
+        assertNull(paused.finishEpochMillis)
+        assertEquals(selectedGoal, paused.runGoal)
+
+        applicationScope.cancel()
+        database.close()
+        database = Room.databaseBuilder(context, RunStateDatabase::class.java, DATABASE_NAME).build()
+        applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+        val recovered = coordinator(clock)
+        recovered.initialize()
+        assertEquals(paused, database.runDao().findById(RUN_ID))
+        clock.nowMillis = FINISH
+        recovered.requestAction(RunActionKind.COMPLETE).await()
+        val completed = requireNotNull(database.runDao().findById(RUN_ID))
+        assertEquals(selectedGoal, completed.runGoal)
+        assertEquals(StoredRunState.COMPLETED, completed.state)
+        assertEquals(FINISH, completed.finishEpochMillis)
     }
 
     @Test

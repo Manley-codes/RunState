@@ -276,7 +276,7 @@ internal fun StartTrailsSheet(
     trail: StartTrail?,
     enabled: Boolean,
     onExplore: (StartTrail) -> Unit,
-    onUse: (StartTrail) -> Unit,
+    onUse: ((StartTrail) -> Unit)? = null,
     onDismiss: () -> Unit
 ) {
     val uri = LocalUriHandler.current
@@ -320,7 +320,7 @@ internal fun StartTrailsSheet(
                 Image(painterResource(trail.map), "Area map of ${trail.name}", contentScale = ContentScale.Fit,
                     modifier = Modifier.fillMaxWidth().aspectRatio(2f).clip(RoundedCornerShape(12.dp)))
                 Text("Area overview · not a guided route", color = TrailInk, fontSize = 12.sp)
-                Button(onClick = { onUse(trail) }, enabled = enabled,
+                if (onUse != null) Button(onClick = { onUse(trail) }, enabled = enabled,
                     colors = ButtonDefaults.buttonColors(containerColor = TrailInk),
                     modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag(START_TRAIL_USE_TAG)) {
                     Text("Use trail name in plan")

@@ -18,6 +18,24 @@ class RunEntityTest {
     private val canonicalUuid = "0f6a2c1e-9d43-4b7a-9c21-7b5e8a4d1f30"
 
     @Test
+    fun `run goals remain optional positive and mutually exclusive`() {
+        val original = runWith()
+        assertNull(original.goalDistanceMeters)
+        assertNull(original.goalActiveMillis)
+        assertEquals(5000.0, requireNotNull(original.copy(goalDistanceMeters = 5000.0).goalDistanceMeters), 0.0)
+        assertEquals(1_800_000L, original.copy(goalActiveMillis = 1_800_000L).goalActiveMillis)
+        assertThrows(IllegalArgumentException::class.java) {
+            original.copy(goalDistanceMeters = 5000.0, goalActiveMillis = 1_800_000L)
+        }
+        for (distance in listOf(0.0, -1.0, Double.NaN, Double.POSITIVE_INFINITY)) {
+            assertThrows(IllegalArgumentException::class.java) { original.copy(goalDistanceMeters = distance) }
+        }
+        for (duration in listOf(0L, -1L)) {
+            assertThrows(IllegalArgumentException::class.java) { original.copy(goalActiveMillis = duration) }
+        }
+    }
+
+    @Test
     fun `zero belongs only to the new scale and the anchors keep distinct meanings`() {
         val completed = runWith(state = StoredRunState.COMPLETED)
         assertEquals(0, completed.copy(postRunEffortRating = 0, firstPostRunEffortRating = 0,

@@ -60,6 +60,49 @@ class RunStateMigrationTest {
     private val context = InstrumentationRegistry.getInstrumentation().targetContext
 
     @Test
+    fun versionTwentyOneAddsUnknownRunGoalsWithoutChangingSavedContext() {
+        val name = "runstate-v21-run-goal-test.db"
+        val old = helper.createDatabase(name, 21)
+        val finish = OFFICIAL_START + 1_920_000L
+        old.insertVersionTwoRun(state = "COMPLETED", lastCheckpointEpochMillis = finish, finishEpochMillis = finish)
+        val activeId = "03689ffc-65d9-4907-ae77-7a17b3ad77a6"
+        old.insertVersionTwoRun(runId = activeId, state = "PAUSED",
+            lastCheckpointEpochMillis = OFFICIAL_START, finishEpochMillis = null)
+        old.execSQL("UPDATE runs SET run_intention='KEEP_EASY',route_label='Park loop',pre_run_energy='LOW'")
+        old.execSQL("UPDATE runs SET post_run_note='Keep this note' WHERE run_id=?", arrayOf(RUN_ID))
+        old.close()
+
+        helper.runMigrationsAndValidate(name, 22, true, MIGRATION_21_22).use { migrated ->
+            migrated.query("SELECT goal_distance_meters,goal_active_millis FROM runs").use { rows ->
+                assertEquals(2, rows.count)
+                while (rows.moveToNext()) {
+                    assertTrue(rows.isNull(0))
+                    assertTrue(rows.isNull(1))
+                }
+            }
+            migrated.query("PRAGMA foreign_key_check").use { assertEquals(0, it.count) }
+        }
+        val reopened = openDatabaseThroughFactory(name)
+        runBlocking {
+            val completed = requireNotNull(reopened.runDao().findById(RUN_ID))
+            val active = requireNotNull(reopened.runDao().findById(activeId))
+            for (row in listOf(completed, active)) {
+                assertNull(row.goalDistanceMeters)
+                assertNull(row.goalActiveMillis)
+                assertEquals(RunIntention.KEEP_EASY, row.runIntention)
+                assertEquals("Park loop", row.routeLabel)
+                assertEquals(PreRunEnergy.LOW, row.preRunEnergy)
+                assertEquals(OFFICIAL_START, row.officialStartEpochMillis)
+            }
+            assertEquals("Keep this note", completed.postRunNote)
+            assertEquals(finish, completed.finishEpochMillis)
+            assertEquals(StoredRunState.PAUSED, active.state)
+            assertNull(active.finishEpochMillis)
+        }
+        reopened.close()
+    }
+
+    @Test
     fun versionTwentyAddsUnknownShoeGoalsAndPreservesPairsMileageAndSelection() {
         val name = "runstate-v20-shoe-goal-test.db"
         val old = helper.createDatabase(name, 20)

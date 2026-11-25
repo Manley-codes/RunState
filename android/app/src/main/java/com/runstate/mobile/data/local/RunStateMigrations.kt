@@ -426,3 +426,11 @@ val MIGRATION_20_21 = object : Migration(20, 21) {
         connection.execSQL("ALTER TABLE `shoe_pairs` ADD COLUMN `goal_distance_meters` REAL")
     }
 }
+
+/** Past runs never acquire a goal from their result, a current draft, or a shoe's mileage target. */
+val MIGRATION_21_22 = object : Migration(21, 22) {
+    override fun migrate(connection: SQLiteConnection) {
+        connection.execSQL("ALTER TABLE `runs` ADD COLUMN `goal_distance_meters` REAL")
+        connection.execSQL("ALTER TABLE `runs` ADD COLUMN `goal_active_millis` INTEGER")
+    }
+}

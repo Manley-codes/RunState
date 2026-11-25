@@ -5,6 +5,43 @@ metadata:
   type: project
 ---
 
+## November 25 run goals installed
+
+Manley asked Codex to take over implementation/install and postpone Kotlin lessons. Start's Goal
+entry replaces Plan with a cream/forest sheet: distance in miles/km or active minutes, explicit
+save/remove/cancel, input validation and remembered editor units. Existing Start geometry remains.
+Frozen target travels through both GPS and sample startup, countdown, retries and recovery. Room 22
+adds nullable goal_distance_meters/goal_active_millis to runs only; old records acquire no target.
+Saved History/recap share target/outcome; only verified success adds a local factual completion line.
+Time excludes pauses, distance uses raw complete evidence, samples are labeled and unknown evidence
+is not success. Run still finishes manually. Accepted music writer/selection/backend unchanged.
+
+Plan source and saved intention/route fields remain. Its UI and trail-plan assignment are hidden;
+trail browsing remains. Old restored Plan drafts cannot silently apply to new starts. New runs no
+longer accumulate intention/route context for Plan-dependent local insights. Existing insights retain
+their old evidence. PR announcements are the next separate policy/implementation discussion.
+
+Validation: both Android JVM variants passed 948 tests each, three APK assemblies plus release vital
+lint passed. Nineteen distinct focused Moto checks passed across two invocations: optional goal
+editing, validation, exact target/unit preservation, restoration, compact large text, navigation,
+trail browsing, root distance/time handoff, countdown, Room migration, retry and recovery. The first
+JVM run found four new fixtures missing terminal PAUSE events; corrected fixtures, unchanged timeline
+rules. First device run passed 17/19; two added root checks incorrectly left virtual auto-advance on
+for the live ticker. Corrected the harness clock; both passed. Modal preview capture was corrected
+to whole-device capture after settling; final distance/time screens visually reviewed.
+
+In-place Moto ZT422G8FT4 update preserved all 75 completed runs, two shoe pairs and original rows/columns
+across all 12 tables. Old goal columns all null; integrity/foreign-key checks pass. Preferences exact
+except the expected opening animation counter (186 to 187). Temporary test package removed; main app
+left open. Private backups/evidence: android/build/nov25-run-goals/.
+Installed APK SHA256: a22f4d949cd44752d77c50273e09603c897ea3ec125dc549277bb3f69e8e7b36.
+
+Four new tracked files: RunGoalPanel.kt (expanded user's earlier untracked preview), its dedicated
+instrumentation test, RunGoalInputTest.kt and exported Room 22 schema. No new image/audio assets.
+No provider calls, deployment, public-preview publication or outdoor verification. Owner can review
+Start > Goal now and later try pause/resume/goal acknowledgement in one normal run. Learning can
+resume after visual review. See private roadmap for release/iPhone queues and deferred checks.
+
 ## November 24 Start dial entrance
 
 Manley requested one countdown-style inner-line twist simultaneous with Energy tile entrance.

@@ -52,6 +52,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.mutableStateOf
@@ -114,6 +115,8 @@ import androidx.compose.ui.unit.sp
 import com.runstate.mobile.R
 import com.runstate.mobile.data.local.PreRunEnergy
 import com.runstate.mobile.data.local.RunIntention
+import com.runstate.mobile.data.local.DistanceUnit
+import com.runstate.mobile.run.RunGoal
 import com.runstate.mobile.settings.StartBackground
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -151,6 +154,7 @@ internal const val START_ENERGY_PROMPT_TAG = "startEnergyPrompt"
 internal const val START_ENERGY_PROMPT_PILL_TAG = "startEnergyPromptPill"
 internal const val START_ENERGY_PROMPT_WORD_TAG = "startEnergyPromptWord"
 internal const val START_RUN_PLAN_TAG = "startRunPlan"
+internal const val START_RUN_GOAL_TAG = "startRunGoal"
 internal const val START_RUN_TAB_TAG = "startRunTab"
 internal const val START_RUN_PLAN_SHEET_TAG = "startRunPlanSheet"
 internal const val START_RUN_INTENTION_TAG_PREFIX = "startRunIntention:"
@@ -219,7 +223,10 @@ internal fun StartRunScreen(
     selectedRunIntention: RunIntention? = null,
     routeLabel: String? = null,
     onRunContextChanged: (RunIntention?, String?) -> Unit = { _, _ -> },
-    startBackground: StartBackground = StartBackground.HERMANN_PARK
+    startBackground: StartBackground = StartBackground.HERMANN_PARK,
+    selectedRunGoal: RunGoal? = null,
+    goalDistanceUnit: DistanceUnit = DistanceUnit.MILES,
+    onRunGoalChanged: (RunGoal?) -> Unit = {}
 ) {
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     val view = LocalView.current
@@ -232,7 +239,9 @@ internal fun StartRunScreen(
     var promptBounds by remember { mutableStateOf<Rect?>(null) }
     val tileBounds = remember { mutableStateMapOf<PreRunEnergy, Rect>() }
     var intake by remember { mutableStateOf<EnergyIntake?>(null) }
-    var runPlanOpen by rememberSaveable { mutableStateOf(false) }
+    // A restored former Plan sheet must not become an open Goal editor after this update.
+    var runGoalOpen by key("run-goal-editor") { rememberSaveable { mutableStateOf(false) } }
+    var goalEditorUnit by rememberSaveable(goalDistanceUnit) { mutableStateOf(goalDistanceUnit) }
     var trailsOpen by rememberSaveable { mutableStateOf(false) }
     var exploredTrailId by rememberSaveable { mutableStateOf<String?>(null) }
     var agentBottomPx by remember { mutableFloatStateOf(0f) }
@@ -309,7 +318,7 @@ internal fun StartRunScreen(
             StartTrailsBackground(
                 upperContentBottom = with(LocalDensity.current) { agentBottomPx.toDp() } + 42.dp,
                 controlsTop = with(LocalDensity.current) { controlsTopPx.toDp() },
-                moving = lifecycleStarted && animationsEnabled && !trailsOpen && !runPlanOpen,
+                moving = lifecycleStarted && animationsEnabled && !trailsOpen && !runGoalOpen,
                 enabled = actionsEnabled && !setupLoading,
                 onExplore = { exploredTrailId = it.id; trailsOpen = true }
             )
@@ -466,9 +475,8 @@ internal fun StartRunScreen(
                 onViewHistory = onViewHistory,
                 showHistory = showHistory,
                 onOpenRunSettings = onOpenRunSettings,
-                onOpenPlan = { runPlanOpen = true },
-                planState = selectedRunIntention?.startLabel()
-                    ?: if (routeLabel != null) "Route added" else "No plan selected",
+                onOpenGoal = { runGoalOpen = true },
+                goalState = selectedRunGoal?.let { runGoalLabel(it, goalEditorUnit) } ?: "No goal selected",
                 actionsEnabled = actionsEnabled,
                 setupLoading = setupLoading,
                 musicStatus = when {
@@ -489,20 +497,20 @@ internal fun StartRunScreen(
             trail = HoustonStartTrails.firstOrNull { it.id == exploredTrailId },
             enabled = actionsEnabled && !setupLoading,
             onExplore = { exploredTrailId = it.id },
-            onUse = { onRunContextChanged(selectedRunIntention, it.planLabel); trailsOpen = false },
             onDismiss = { trailsOpen = false }
         )
     }
-    if (runPlanOpen) {
-        RunPlanSheet(
-            selectedIntention = selectedRunIntention,
-            routeLabel = routeLabel,
+    if (runGoalOpen) {
+        RunGoalSheet(
+            selectedGoal = selectedRunGoal,
+            distanceUnit = goalEditorUnit,
             enabled = actionsEnabled && !setupLoading,
-            onDismiss = { runPlanOpen = false },
-            onSave = { intention, route ->
-                onRunContextChanged(intention, route)
-                runPlanOpen = false
-            }
+            onDismiss = { runGoalOpen = false },
+            onSave = { goal ->
+                onRunGoalChanged(goal)
+                runGoalOpen = false
+            },
+            onDistanceUnitChanged = { goalEditorUnit = it }
         )
     }
 }
@@ -513,7 +521,7 @@ private fun RunIntention.startLabel(): String = when (this) {
     RunIntention.HARD_EFFORT -> "Hard effort"
 }
 
-/** This run's optional plan is an explicit choice, never inferred from pace or the map. */
+/** Retained while Plan is hidden; saved historical intentions/routes remain unchanged. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun RunPlanSheet(
@@ -579,8 +587,8 @@ private fun StartBottomNavigation(
     onViewHistory: () -> Unit,
     showHistory: Boolean,
     onOpenRunSettings: () -> Unit,
-    onOpenPlan: () -> Unit,
-    planState: String,
+    onOpenGoal: () -> Unit,
+    goalState: String,
     actionsEnabled: Boolean,
     setupLoading: Boolean,
     musicStatus: String,
@@ -605,10 +613,10 @@ private fun StartBottomNavigation(
                         START_MAP_LOCATION_ACCESS_TAG else "startExpandMap"),
                     accessibilityLabel = if (mapNeedsLocation) "Enable location" else "Open live map",
                     actionState = if (mapNeedsLocation) "Location access needed" else mapStatus)
-            StartUtilityButton("Plan", StartUtilityIcon.PLAN, onOpenPlan,
+            StartUtilityButton("Goal", StartUtilityIcon.GOAL, onOpenGoal,
                 enabled = actionsEnabled && !setupLoading,
-                modifier = actionModifier.testTag(START_RUN_PLAN_TAG),
-                accessibilityLabel = "Plan this run", actionState = planState)
+                modifier = actionModifier.testTag(START_RUN_GOAL_TAG),
+                accessibilityLabel = "Set a goal", actionState = goalState)
             // This identifies the current screen. Only the large Start dial can start a run.
             StartUtilityButton("Run", StartUtilityIcon.RUN, {}, enabled = actionsEnabled,
                 modifier = actionModifier.testTag(START_RUN_TAB_TAG),
@@ -672,7 +680,7 @@ private fun StartSetupNotice(text: String, onClick: () -> Unit, enabled: Boolean
 // https://github.com/google/material-design-icons/blob/master/src/action/settings/materialiconsoutlined/24px.svg
 private enum class StartUtilityIcon(val pathData: String? = null) {
     MAP("M20.5 3l-.16.03L15 5.1 9 3 3.36 4.9c-.21.07-.36.25-.36.48V20.5c0 .28.22.5.5.5l.16-.03L9 18.9l6 2.1 5.64-1.9c.21-.07.36-.25.36-.48V3.5c0-.28-.22-.5-.5-.5zM10 5.47l4 1.4v11.66l-4-1.4V5.47zm-5 .99l3-1.01v11.7l-3 1.16V6.46zm14 11.08l-3 1.01V6.86l3-1.16v11.84z"),
-    PLAN, RUN, ACTIVITY,
+    PLAN, GOAL, RUN, ACTIVITY,
     SETTINGS("M19.43 12.98c.04-.32.07-.64.07-.98 0-.34-.03-.66-.07-.98l2.11-1.65c.19-.15.24-.42.12-.64l-2-3.46c-.09-.16-.26-.25-.44-.25-.06 0-.12.01-.17.03l-2.49 1c-.52-.4-1.08-.73-1.69-.98l-.38-2.65C14.46 2.18 14.25 2 14 2h-4c-.25 0-.46.18-.49.42l-.38 2.65c-.61.25-1.17.59-1.69.98l-2.49-1c-.06-.02-.12-.03-.18-.03-.17 0-.34.09-.43.25l-2 3.46c-.13.22-.07.49.12.64l2.11 1.65c-.04.32-.07.65-.07.98 0 .33.03.66.07.98l-2.11 1.65c-.19.15-.24.42-.12.64l2 3.46c.09.16.26.25.44.25.06 0 .12-.01.17-.03l2.49-1c.52.4 1.08.73 1.69.98l.38 2.65c.03.24.24.42.49.42h4c.25 0 .46-.18.49-.42l.38-2.65c.61-.25 1.17-.59 1.69-.98l2.49 1c.06.02.12.03.18.03.17 0 .34-.09.43-.25l2-3.46c.12-.22.07-.49-.12-.64l-2.11-1.65zm-1.98-1.71c.04.31.05.52.05.73 0 .21-.02.43-.05.73l-.14 1.13.89.7 1.08.84-.7 1.21-1.27-.51-1.04-.42-.9.68c-.43.32-.84.56-1.25.73l-1.06.43-.16 1.13-.2 1.35h-1.4l-.19-1.35-.16-1.13-1.06-.43c-.43-.18-.83-.41-1.23-.71l-.91-.7-1.06.43-1.27.51-.7-1.21 1.08-.84.89-.7-.14-1.13c-.03-.31-.05-.54-.05-.74s.02-.43.05-.73l.14-1.13-.89-.7-1.08-.84.7-1.21 1.27.51 1.04.42.9-.68c.43-.32.84-.56 1.25-.73l1.06-.43.16-1.13.2-1.35h1.39l.19 1.35.16 1.13 1.06.43c.43.18.83.41 1.23.71l.91.7 1.06-.43 1.27-.51.7 1.21-1.07.85-.89.7.14 1.13zM12 8c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4-1.79-4-4-4zm0 6c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2z")
 }
 
@@ -737,6 +745,13 @@ private fun StartNavigationSymbol(icon: StartUtilityIcon, ink: Color, modifier: 
             drawRect(ink, Offset(x * unit, y * unit), Size(width * unit, height * unit),
                 style = Stroke(stroke))
         when (icon) {
+            StartUtilityIcon.GOAL -> {
+                drawCircle(ink, 8f * unit, Offset(11f * unit, 13f * unit), style = Stroke(stroke))
+                drawCircle(ink, 4f * unit, Offset(11f * unit, 13f * unit), style = Stroke(stroke))
+                line(11f, 13f, 21f, 3f)
+                line(16f, 3f, 21f, 3f)
+                line(21f, 3f, 21f, 8f)
+            }
             StartUtilityIcon.PLAN -> {
                 box(5f, 5f, 14f, 16f)
                 drawRect(StartNavigationBackground, Offset(8f * unit, 3f * unit), Size(8f * unit, 4f * unit))

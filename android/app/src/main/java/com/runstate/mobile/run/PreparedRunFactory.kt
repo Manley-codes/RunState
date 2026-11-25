@@ -60,7 +60,8 @@ internal class PreparedRunFactory(
         shoePairId: String? = null,
         runIntention: RunIntention? = null,
         routeLabel: String? = null,
-        preRunEnergyRecordedAtEpochMillis: Long? = null
+        preRunEnergyRecordedAtEpochMillis: Long? = null,
+        goal: RunGoal? = null
     ): RunEntity {
         require(!musicReflectionSharingAllowed || musicObservationRequested) {
             "Music reflection sharing requires this run's music observation opt-in."
@@ -96,6 +97,8 @@ internal class PreparedRunFactory(
             runIntention = runIntention,
             routeLabel = routeLabel?.trim()?.takeIf { it.isNotEmpty() },
             preRunEnergyRecordedAtEpochMillis = preRunEnergyRecordedAtEpochMillis,
+            goalDistanceMeters = (goal as? RunGoal.Distance)?.meters,
+            goalActiveMillis = (goal as? RunGoal.Time)?.activeMillis,
             energyQuestionVersion = RunEntity.CURRENT_ENERGY_QUESTION_VERSION
         )
     }

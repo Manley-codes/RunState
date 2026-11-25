@@ -553,6 +553,10 @@ internal fun RunActivityRecapScreen(
                     generousSpacing = true)
                 Text(item.metrics?.sourceLabel ?: "Metrics unavailable", color = CompletionMutedInk,
                     fontSize = 12.sp)
+                item.goalSummary?.let { goal ->
+                    Text(goal, color = CompletionStrongInk, fontSize = 14.sp, lineHeight = 20.sp,
+                        modifier = Modifier.testTag("runRecapGoal"))
+                }
                 CompletionEnergySummary(item.preRunEnergy, item.energy, true, false, false, false, {})
                 if (item.hasNumericEffortHistory() || item.effort != null) {
                     Text("Effort · ${historyEffortLabel(item)}", color = CompletionStrongInk,

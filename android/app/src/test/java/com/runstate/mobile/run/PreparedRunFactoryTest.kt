@@ -27,6 +27,20 @@ import org.junit.Test
 class PreparedRunFactoryTest {
 
     @Test
+    fun `official start freezes the selected goal without inventing one`() {
+        val factory = PreparedRunFactory(
+            clock = Clock.fixed(Instant.ofEpochMilli(OFFICIAL_START), ZoneOffset.UTC),
+            zoneIdSupplier = { ZoneOffset.UTC }, uuidSupplier = { UUID.fromString(RUN_ID) }
+        )
+        assertEquals(null, factory.create().runGoal)
+        for (goal in listOf(RunGoal.Distance(3218.688), RunGoal.Time(1_800_000L))) {
+            val row = factory.create(trackingMode = RunTrackingMode.GPS, goal = goal)
+            assertEquals(goal, row.runGoal)
+            assertEquals(goal, row.copy(lastCheckpointEpochMillis = OFFICIAL_START + 1000).runGoal)
+        }
+    }
+
+    @Test
     fun `new starts retain optional intention route and genuine answer time without inventing answers`() {
         val factory = PreparedRunFactory(
             clock = Clock.fixed(Instant.ofEpochMilli(OFFICIAL_START), ZoneOffset.UTC),

@@ -86,6 +86,7 @@ import com.runstate.mobile.location.GpsPreviewAvailability
 import com.runstate.mobile.location.GpsSample
 import com.runstate.mobile.run.PreparedRunFactory
 import com.runstate.mobile.run.RunActionKind
+import com.runstate.mobile.run.RunGoal
 import com.runstate.mobile.run.RunSessionCoordinator
 import com.runstate.mobile.run.RunAdmission
 import com.runstate.mobile.run.RunCountdownOwner
@@ -414,7 +415,7 @@ class RunStateScreenTest {
     }
 
     @Test
-    fun houstonTrailBandOnlyAddsItsNameToPlanAfterExplicitChoice() {
+    fun houstonTrailBandBrowsingKeepsHiddenPlanUnchanged() {
         var selected by mutableStateOf<PreRunEnergy?>(null)
         var intention by mutableStateOf<RunIntention?>(RunIntention.KEEP_EASY)
         var route by mutableStateOf<String?>("Existing loop")
@@ -497,14 +498,13 @@ class RunStateScreenTest {
         composeTestRule.onNodeWithText("Close").assertIsDisplayed().performClick()
         composeTestRule.onNodeWithTag(START_TRAIL_SHEET_TAG).assertDoesNotExist()
         composeTestRule.onNodeWithTag(START_TRAIL_BAND_TAG_PREFIX + "memorial").performClick()
-        val useTrail = composeTestRule.onNodeWithTag(START_TRAIL_USE_TAG)
-        if (!useTrail.isDisplayed()) useTrail.performScrollTo()
-        useTrail.assertIsDisplayed().assertIsEnabled().performClick()
+        composeTestRule.onNodeWithTag(START_TRAIL_USE_TAG).assertDoesNotExist()
+        composeTestRule.onNodeWithText("Close").performClick()
         composeTestRule.onNodeWithTag(START_TRAIL_SHEET_TAG).assertDoesNotExist()
         composeTestRule.runOnIdle {
-            assertEquals("Memorial Park", route)
+            assertEquals("Existing loop", route)
             assertEquals(RunIntention.KEEP_EASY, intention)
-            assertEquals(1, planChanges)
+            assertEquals(0, planChanges)
             assertEquals(0, starts)
             assertEquals(0, energyChanges)
         }
@@ -514,7 +514,7 @@ class RunStateScreenTest {
             assertEquals(1, starts)
             assertEquals(1, energyChanges)
             assertEquals(PreRunEnergy.MODERATE, selectedAtStart)
-            assertEquals(1, planChanges)
+            assertEquals(0, planChanges)
         }
     }
 
@@ -686,15 +686,14 @@ class RunStateScreenTest {
         composeTestRule.onNodeWithTag(START_TRAIL_LIST_ITEM_TAG_PREFIX + "hermann")
             .performScrollTo().performClick()
         composeTestRule.onNodeWithTag(START_TRAIL_SHEET_TAG).assertIsDisplayed()
-        val useTrail = composeTestRule.onNodeWithTag(START_TRAIL_USE_TAG)
-        if (!useTrail.isDisplayed()) useTrail.performScrollTo()
-        useTrail.performClick()
+        composeTestRule.onNodeWithTag(START_TRAIL_USE_TAG).assertDoesNotExist()
+        composeTestRule.onNodeWithText("Close").performClick()
         composeTestRule.onNodeWithTag(START_TRAIL_SHEET_TAG).assertDoesNotExist()
         composeTestRule.onNodeWithTag(START_TRAILS_BACKGROUND_TAG).assertDoesNotExist()
         composeTestRule.runOnIdle {
             assertEquals(StartBackground.HERMANN_PARK, background)
-            assertEquals("Hermann Park", route)
-            assertEquals(1, planChanges)
+            assertEquals("Existing loop", route)
+            assertEquals(0, planChanges)
             assertEquals(0, starts)
             assertEquals(0, energyChanges)
         }
@@ -734,7 +733,7 @@ class RunStateScreenTest {
             composeTestRule.onNodeWithText("Close").assertIsDisplayed().performClick()
             composeTestRule.onNodeWithTag(START_TRAIL_SHEET_TAG).assertDoesNotExist()
             for (tag in listOf(START_ENERGY_LOW_TAG, START_ENERGY_MODERATE_TAG,
-                START_ENERGY_HIGH_TAG, START_RUN_BUTTON_TAG, START_RUN_PLAN_TAG)) {
+                START_ENERGY_HIGH_TAG, START_RUN_BUTTON_TAG, START_RUN_GOAL_TAG)) {
                 composeTestRule.onNodeWithTag(tag).performScrollTo().assertIsDisplayed().assertIsEnabled()
             }
         }
@@ -1097,9 +1096,9 @@ class RunStateScreenTest {
             composeTestRule.onNodeWithText("AGENT  •  READY").fetchSemanticsNode().boundsInRoot.top, gps.top, opticalRowTolerance)
         val utilities = boundsBefore.getValue(START_UTILITY_ACTIONS_TAG)
         assertTrue("Bottom navigation belongs below Energy", utilities.top >= boundsBefore.getValue(START_ENERGY_CHOICES_TAG).bottom)
-        val utilityTags = listOf("startExpandMap", START_RUN_PLAN_TAG, START_RUN_TAB_TAG,
+        val utilityTags = listOf("startExpandMap", START_RUN_GOAL_TAG, START_RUN_TAB_TAG,
             START_RUN_SETTINGS_TAG, START_HISTORY_TAG)
-        val descriptions = listOf("Open live map", "Plan this run", "Run", "Run settings", "Log History")
+        val descriptions = listOf("Open live map", "Set a goal", "Run", "Run settings", "Log History")
         val utilityBounds = utilityTags.mapIndexed { index, tag ->
             val node = composeTestRule.onNodeWithTag(tag).assertIsDisplayed().assertIsEnabled()
                 .fetchSemanticsNode()
@@ -1237,13 +1236,13 @@ class RunStateScreenTest {
                 assertTrue("Each lower action stays at least 48 dp wide at large text", bounds.width + 1f >= 48f * densityValue)
                 assertTrue("Each lower action stays at least 48 dp tall at large text", bounds.height + 1f >= 48f * densityValue)
             }
-            reachable(START_RUN_PLAN_TAG)
+            reachable(START_RUN_GOAL_TAG)
             reachable(START_RUN_SETTINGS_TAG).performClick()
             reachable(START_HISTORY_TAG).performClick()
             reachable(START_RUN_TAB_TAG).performClick()
             composeTestRule.runOnIdle { assertEquals("Run navigation must never start recording", if (scale == 1.5f) 0 else 1, starts) }
             val bar = composeTestRule.onNodeWithTag(START_UTILITY_ACTIONS_TAG).fetchSemanticsNode().boundsInRoot
-            listOf("startExpandMap", START_RUN_PLAN_TAG, START_RUN_TAB_TAG, START_RUN_SETTINGS_TAG, START_HISTORY_TAG)
+            listOf("startExpandMap", START_RUN_GOAL_TAG, START_RUN_TAB_TAG, START_RUN_SETTINGS_TAG, START_HISTORY_TAG)
                 .forEach { tag ->
                     val bounds = reachable(tag).fetchSemanticsNode().boundsInRoot
                     assertTrue("Navigation target stays inside the viewport at $scale text", bounds.left >= 0f && bounds.right <= bar.right + 1f)
@@ -1287,7 +1286,7 @@ class RunStateScreenTest {
             .assertIsDisplayed().performTouchInput { click() }
         composeTestRule.onNodeWithTag(START_HISTORY_TAG).performScrollTo()
             .assertIsDisplayed().performTouchInput { click() }
-        composeTestRule.onNodeWithTag(START_RUN_PLAN_TAG).performScrollTo().assertIsDisplayed()
+        composeTestRule.onNodeWithTag(START_RUN_GOAL_TAG).performScrollTo().assertIsDisplayed()
         composeTestRule.onNodeWithTag(START_RUN_TAB_TAG).performScrollTo()
             .assertIsDisplayed().performTouchInput { click() }
         composeTestRule.runOnIdle { assertEquals(0, starts) }
@@ -1938,6 +1937,49 @@ class RunStateScreenTest {
         }
     }
 
+    @Test fun gpsRootGoalSurvivesRecreationAndCountdownBeforeBeingFrozen() {
+        GpsStartRootHarness(managedCountdown = true).use { root ->
+            composeTestRule.mainClock.autoAdvance = true
+            composeTestRule.onNodeWithTag(START_RUN_GOAL_TAG).performClick()
+            composeTestRule.onNodeWithTag(RUN_GOAL_KILOMETERS_TAG).performClick()
+            composeTestRule.onNodeWithTag(RUN_GOAL_INPUT_TAG).performTextReplacement("5")
+            composeTestRule.onNodeWithTag(RUN_GOAL_SAVE_TAG).performScrollTo().performClick()
+            // Resume the manually driven clock before the live run ticker starts.
+            composeTestRule.mainClock.autoAdvance = false
+            root.restoreComposition(expectWarmup = true)
+            root.tapStart()
+            root.awaitManagedDigit(10)
+            root.restoreComposition(expectWarmup = false)
+            root.tickManaged(10)
+            root.awaitManagedRun()
+            val stored = root.storedRun()
+            assertEquals(5_000.0, requireNotNull(stored.goalDistanceMeters), 0.0)
+            assertNull(stored.goalActiveMillis)
+            assertNull(stored.runIntention)
+            assertNull(stored.routeLabel)
+        }
+    }
+
+    @Test fun gpsRootTimeGoalReachesTheSavedRunWithoutChoosingEnergy() {
+        GpsStartRootHarness(managedCountdown = true).use { root ->
+            composeTestRule.mainClock.autoAdvance = true
+            composeTestRule.onNodeWithTag(START_RUN_GOAL_TAG).performClick()
+            composeTestRule.onNodeWithTag(RUN_GOAL_TIME_TAG).performClick()
+            composeTestRule.onNodeWithTag(RUN_GOAL_INPUT_TAG).performTextReplacement("30")
+            composeTestRule.onNodeWithTag(RUN_GOAL_SAVE_TAG).performScrollTo().performClick()
+            // Resume the manually driven clock before the live run ticker starts.
+            composeTestRule.mainClock.autoAdvance = false
+            root.tapStart()
+            root.awaitManagedDigit(10)
+            root.tickManaged(10)
+            root.awaitManagedRun()
+            val stored = root.storedRun()
+            assertNull(stored.goalDistanceMeters)
+            assertEquals(1_800_000L, stored.goalActiveMillis)
+            assertNull(stored.preRunEnergy)
+        }
+    }
+
     /** Synthetic fixes and isolated Room exercise the real root without requesting device GPS. */
     private inner class GpsStartRootHarness(
         val source: ControlledGpsStartSource = ControlledGpsStartSource(),
@@ -1987,7 +2029,7 @@ class RunStateScreenTest {
                         lifecycleOwner.lifecycle, completionSpeakerFactory = { silentSpeaker },
                         countdownSpeakerFactory = if (countdownVoice == null) null else ({ countdownVoice }),
                         musicAccessProvider = { false }, gpsPreviewSourceOverride = source,
-                        gpsLocationReady = { locationReady && source.currentAvailability == GpsPreviewAvailability.READY }, startGpsRun = { _, _, _, _, _, _, _, _ ->
+                        gpsLocationReady = { locationReady && source.currentAvailability == GpsPreviewAvailability.READY }, startGpsRun = { _, _, _, _, _, _, _, _, _ ->
                             listenersAtHandoff += source.activeListeners
                             rowsAtHandoff += rowCount()
                             serviceStarts++
@@ -1996,7 +2038,7 @@ class RunStateScreenTest {
                                 throw IllegalStateException("Synthetic service launch failure")
                             }
                         }, runCountdown = managedOwner,
-                        dispatchGpsCountdown = { _, token, energy, observe, share, snippets, intention, route, energyTime ->
+                        dispatchGpsCountdown = { _, token, energy, observe, share, snippets, intention, route, energyTime, goal ->
                             val owner = requireNotNull(managedOwner)
                             serviceStarts++
                             trackingState.value = RunTrackingServiceState.Countdown
@@ -2004,7 +2046,7 @@ class RunStateScreenTest {
                                 val started = owner.execute(token, intro = managedIntroduction, cue = {}) {
                                     trackingState.value = RunTrackingServiceState.Starting
                                     val session = coordinator.requestStart(energy, RunTrackingMode.GPS,
-                                        observe, share, snippets, intention, route, energyTime).await()
+                                        observe, share, snippets, intention, route, energyTime, goal).await()
                                     durableStarts++
                                     trackingState.value = RunTrackingServiceState.Tracking(session.runId)
                                 }
@@ -2083,6 +2125,7 @@ class RunStateScreenTest {
             }
             return runBlocking { result.await() }
         }
+        fun storedRun() = runBlocking { database.runDao().findActiveRuns().single() }
         fun rowCount() = runBlocking { database.runDao().countRuns() }
         fun restoreComposition(expectWarmup: Boolean) {
             val entriesBefore = compositionEntries
@@ -4239,42 +4282,35 @@ class RunStateScreenTest {
     }
 
     @Test
-    fun optionalRunPlanSavesOnlyOnConfirmationAndDoesNotChooseEnergyOrStart() {
-        var intention by mutableStateOf<RunIntention?>(null)
-        var route by mutableStateOf<String?>(null)
+    fun optionalRunGoalSavesOnlyOnConfirmationAndDoesNotChooseEnergyOrStart() {
+        var goal by mutableStateOf<RunGoal?>(null)
         var starts = 0
         var answers = 0
         composeTestRule.setContent {
             StartRunScreen(null, { answers++ }, { starts++ }, true, {}, false,
                 modifier = Modifier.fillMaxSize().systemBarsPadding(),
-                selectedRunIntention = intention, routeLabel = route,
-                onRunContextChanged = { choice, label -> intention = choice; route = label })
+                selectedRunGoal = goal, onRunGoalChanged = { goal = it })
         }
         composeTestRule.onNodeWithText("Plan this run", useUnmergedTree = true).assertDoesNotExist()
         composeTestRule.onNodeWithTag(START_RUN_TAB_TAG).assertIsDisplayed().performClick()
         composeTestRule.onNodeWithTag(START_HISTORY_TAG).assertIsDisplayed().assertIsNotEnabled()
         composeTestRule.runOnIdle { assertEquals(0, starts); assertEquals(0, answers) }
-        composeTestRule.onNodeWithTag(START_RUN_PLAN_TAG).performClick()
-        composeTestRule.onNodeWithTag(START_RUN_INTENTION_TAG_PREFIX + "KEEP_EASY").performClick()
-        composeTestRule.onNodeWithTag(START_RUN_ROUTE_LABEL_TAG).performTextInput("  Park loop  ")
-        composeTestRule.runOnIdle { assertEquals(null, intention); assertEquals(null, route) }
-        composeTestRule.onNodeWithTag(START_RUN_PLAN_SAVE_TAG).performScrollTo().performClick()
+        composeTestRule.onNodeWithTag(START_RUN_GOAL_TAG).performClick()
+        composeTestRule.onNodeWithTag(RUN_GOAL_INPUT_TAG).performTextReplacement("2")
+        composeTestRule.runOnIdle { assertNull(goal) }
+        composeTestRule.onNodeWithTag(RUN_GOAL_SAVE_TAG).performScrollTo().performClick()
         composeTestRule.runOnIdle {
-            assertEquals(RunIntention.KEEP_EASY, intention)
-            assertEquals("Park loop", route)
+            assertEquals(RunGoal.Distance(3_218.688), goal)
             assertEquals(0, starts); assertEquals(0, answers)
         }
-        assertTrue("The plan remains accessible without restoring the old text link",
-            composeTestRule.onNodeWithTag(START_RUN_PLAN_TAG).fetchSemanticsNode()
-                .config[SemanticsProperties.StateDescription].contains("Keep it easy"))
-        saveNativePreview(START_RUN_SCREEN_TAG, "energy-foundation-start.png")
-        composeTestRule.onNodeWithTag(START_RUN_PLAN_TAG).performClick()
-        composeTestRule.onNodeWithTag(START_RUN_INTENTION_TAG_PREFIX + "NONE").performClick()
-        composeTestRule.onNodeWithTag(START_RUN_ROUTE_LABEL_TAG).performTextReplacement("")
-        composeTestRule.onNodeWithTag(START_RUN_PLAN_SAVE_TAG).performScrollTo().performClick()
+        assertTrue(composeTestRule.onNodeWithTag(START_RUN_GOAL_TAG).fetchSemanticsNode()
+            .config[SemanticsProperties.StateDescription].contains("2 mi"))
+        saveNativePreview(START_RUN_SCREEN_TAG, "run-goal-start.png")
+        composeTestRule.onNodeWithTag(START_RUN_GOAL_TAG).performClick()
+        composeTestRule.onNodeWithTag(RUN_GOAL_REMOVE_TAG).performScrollTo().performClick()
         composeTestRule.onNodeWithTag(START_RUN_BUTTON_TAG).performClick()
         composeTestRule.runOnIdle {
-            assertEquals(null, intention); assertEquals(null, route)
+            assertNull(goal)
             assertEquals(1, starts); assertEquals(0, answers)
         }
     }
@@ -5556,9 +5592,10 @@ class RunStateScreenTest {
         composeTestRule.onNodeWithTag(START_REFLECTION_SETUP_TAG).assertDoesNotExist()
         composeTestRule.onNodeWithTag(START_RUN_SETTINGS_TAG).assertIsNotEnabled()
             .performTouchInput { click() }
-        composeTestRule.onNodeWithTag(START_RUN_PLAN_TAG).assertIsNotEnabled()
+        composeTestRule.onNodeWithTag(START_RUN_GOAL_TAG).assertIsNotEnabled()
             .performTouchInput { click() }
         composeTestRule.onNodeWithTag(START_RUN_PLAN_SHEET_TAG).assertDoesNotExist()
+        composeTestRule.onNodeWithTag(RUN_GOAL_SHEET_TAG).assertDoesNotExist()
         composeTestRule.runOnIdle { assertEquals(0, opens) }
         composeTestRule.runOnIdle { loading = false }
         composeTestRule.onNodeWithTag(START_RUN_SETTINGS_TAG).performClick()
@@ -5569,10 +5606,11 @@ class RunStateScreenTest {
             actionsEnabled = false
         }
         for (tag in listOf(START_RUN_SETTINGS_TAG, "startExpandMap", START_HISTORY_TAG,
-            START_RUN_PLAN_TAG, START_RUN_TAB_TAG)) {
+            START_RUN_GOAL_TAG, START_RUN_TAB_TAG)) {
             composeTestRule.onNodeWithTag(tag).assertIsNotEnabled().performTouchInput { click() }
         }
         composeTestRule.onNodeWithTag(START_RUN_PLAN_SHEET_TAG).assertDoesNotExist()
+        composeTestRule.onNodeWithTag(RUN_GOAL_SHEET_TAG).assertDoesNotExist()
         composeTestRule.runOnIdle { assertEquals(1, opens); assertEquals(1, maps); assertEquals(1, histories) }
     }
 

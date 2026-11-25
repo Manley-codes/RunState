@@ -1402,7 +1402,8 @@ class RunSessionCoordinatorTest {
                 musicReflectionSharingAllowed = true,
                 runIntention = com.runstate.mobile.data.local.RunIntention.KEEP_EASY,
                 routeLabel = " Park loop ",
-                preRunEnergyRecordedAtEpochMillis = OFFICIAL_START - 10_000L
+                preRunEnergyRecordedAtEpochMillis = OFFICIAL_START - 10_000L,
+                goal = RunGoal.Distance(3218.688)
             )
         }
         assertTrue(failureOf(failed) is IllegalStateException)
@@ -1419,7 +1420,8 @@ class RunSessionCoordinatorTest {
                 musicReflectionSharingAllowed = false,
                 runIntention = com.runstate.mobile.data.local.RunIntention.HARD_EFFORT,
                 routeLabel = "Different route",
-                preRunEnergyRecordedAtEpochMillis = SECOND_START - 1L
+                preRunEnergyRecordedAtEpochMillis = SECOND_START - 1L,
+                goal = RunGoal.Time(1_800_000L)
             )
         }
         val session = runBlocking { retry.await() }
@@ -1435,7 +1437,8 @@ class RunSessionCoordinatorTest {
                     musicReflectionSharingAllowed = true,
                     runIntention = com.runstate.mobile.data.local.RunIntention.KEEP_EASY,
                     routeLabel = "Park loop",
-                    preRunEnergyRecordedAtEpochMillis = OFFICIAL_START - 10_000L
+                    preRunEnergyRecordedAtEpochMillis = OFFICIAL_START - 10_000L,
+                    goalDistanceMeters = 3218.688
                 )
             ),
             fixture.dao.inserted

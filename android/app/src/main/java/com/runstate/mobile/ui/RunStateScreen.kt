@@ -39,6 +39,8 @@ import com.runstate.mobile.data.local.ReflectionBranch
 import com.runstate.mobile.data.local.PostRunEffort
 import com.runstate.mobile.data.local.PreRunEnergy
 import com.runstate.mobile.data.local.RunIntention
+import com.runstate.mobile.data.local.DistanceUnit
+import com.runstate.mobile.run.RunGoal
 import com.runstate.mobile.data.local.EffortRatingScale
 import com.runstate.mobile.location.GpsSignalStatus
 import com.runstate.mobile.location.GpsMapEvidence
@@ -170,7 +172,10 @@ internal fun RunStateScreen(
     onMusicVisibilityChange: (Boolean) -> Unit = {},
     completionActionLabel: String? = null,
     resumeAllowed: Boolean = true,
-    startBackground: StartBackground = StartBackground.HERMANN_PARK
+    startBackground: StartBackground = StartBackground.HERMANN_PARK,
+    selectedRunGoal: RunGoal? = null,
+    goalDistanceUnit: DistanceUnit = DistanceUnit.MILES,
+    onRunGoalChanged: (RunGoal?) -> Unit = {}
 ) {
     val state = model.state
 
@@ -369,6 +374,9 @@ internal fun RunStateScreen(
             selectedRunIntention = selectedRunIntention,
             routeLabel = routeLabel,
             onRunContextChanged = onRunContextChanged,
+            selectedRunGoal = selectedRunGoal,
+            goalDistanceUnit = goalDistanceUnit,
+            onRunGoalChanged = onRunGoalChanged,
             onOpenRunSettings = onOpenRunSettings,
             gpsReady = gpsReady,
             gpsStatusText = gpsStatusText,

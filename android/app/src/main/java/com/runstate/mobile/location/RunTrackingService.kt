@@ -33,6 +33,8 @@ import com.runstate.mobile.run.InitializationStatus
 import com.runstate.mobile.run.RunAdmission
 import com.runstate.mobile.run.RunJourneySnapshot
 import com.runstate.mobile.run.RunMilestoneAnnouncements
+import com.runstate.mobile.run.RunGoal
+import com.runstate.mobile.run.runGoalFromValues
 import com.runstate.mobile.reflection.COUNTDOWN_INTRO_TEXT
 import com.runstate.mobile.reflection.COUNTDOWN_FINISH_TEXT
 import com.runstate.mobile.reflection.COUNTDOWN_VOICE_LINES
@@ -274,6 +276,12 @@ internal class RunTrackingService : Service() {
                     val preRunEnergyRecordedAt = intent?.takeIf {
                         it.hasExtra(EXTRA_PRE_RUN_ENERGY_RECORDED_AT)
                     }?.getLongExtra(EXTRA_PRE_RUN_ENERGY_RECORDED_AT, 0L)
+                    val goal = runGoalFromValues(
+                        intent?.takeIf { it.hasExtra(EXTRA_GOAL_DISTANCE_METERS) }
+                            ?.getDoubleExtra(EXTRA_GOAL_DISTANCE_METERS, 0.0),
+                        intent?.takeIf { it.hasExtra(EXTRA_GOAL_ACTIVE_MILLIS) }
+                            ?.getLongExtra(EXTRA_GOAL_ACTIVE_MILLIS, 0L)
+                    )
                     val snapshot = app.runSessionCoordinator.initialize()
                     check(snapshot.initializationStatus ==
                         com.runstate.mobile.run.InitializationStatus.Completed) {
@@ -296,7 +304,8 @@ internal class RunTrackingService : Service() {
                             energy, RunTrackingMode.GPS, musicObservationRequested,
                             musicReflectionSharingAllowed, songSnippetLookupAllowed,
                             runIntention = runIntention, routeLabel = routeLabel,
-                            preRunEnergyRecordedAtEpochMillis = preRunEnergyRecordedAt
+                            preRunEnergyRecordedAtEpochMillis = preRunEnergyRecordedAt,
+                            goal = goal
                         ).await().runId
                     }
                     if (token == null) commitStart() else {
@@ -1046,6 +1055,8 @@ internal class RunTrackingService : Service() {
         private const val EXTRA_RUN_INTENTION = "run_intention"
         private const val EXTRA_ROUTE_LABEL = "route_label"
         private const val EXTRA_PRE_RUN_ENERGY_RECORDED_AT = "pre_run_energy_recorded_at"
+        private const val EXTRA_GOAL_DISTANCE_METERS = "goal_distance_meters"
+        private const val EXTRA_GOAL_ACTIVE_MILLIS = "goal_active_millis"
         private const val EXTRA_MUSIC_OBSERVATION_REQUESTED = "music_observation_requested"
         private const val EXTRA_MUSIC_REFLECTION_SHARING_ALLOWED = "music_reflection_sharing_allowed"
         private const val EXTRA_SONG_SNIPPET_LOOKUP_ALLOWED = "song_snippet_lookup_allowed"
@@ -1065,11 +1076,12 @@ internal class RunTrackingService : Service() {
             songSnippetLookupAllowed: Boolean = false,
             runIntention: RunIntention? = null,
             routeLabel: String? = null,
-            preRunEnergyRecordedAtEpochMillis: Long? = null
+            preRunEnergyRecordedAtEpochMillis: Long? = null,
+            goal: RunGoal? = null
         ) {
             dispatchNew(context, null, preRunEnergy, musicObservationRequested,
                 musicReflectionSharingAllowed, songSnippetLookupAllowed, runIntention,
-                routeLabel, preRunEnergyRecordedAtEpochMillis)
+                routeLabel, preRunEnergyRecordedAtEpochMillis, goal)
         }
 
         /** The explicit visible Start tap must dispatch before the Activity goes into background. */
@@ -1082,18 +1094,20 @@ internal class RunTrackingService : Service() {
             songSnippetLookupAllowed: Boolean,
             runIntention: RunIntention?,
             routeLabel: String?,
-            preRunEnergyRecordedAtEpochMillis: Long?
+            preRunEnergyRecordedAtEpochMillis: Long?,
+            goal: RunGoal? = null
         ) {
             dispatchNew(context, token, preRunEnergy, musicObservationRequested,
                 musicReflectionSharingAllowed, songSnippetLookupAllowed, runIntention,
-                routeLabel, preRunEnergyRecordedAtEpochMillis)
+                routeLabel, preRunEnergyRecordedAtEpochMillis, goal)
         }
 
         private fun dispatchNew(
             context: Context, token: Long?, preRunEnergy: PreRunEnergy?,
             musicObservationRequested: Boolean, musicReflectionSharingAllowed: Boolean,
             songSnippetLookupAllowed: Boolean, runIntention: RunIntention?, routeLabel: String?,
-            preRunEnergyRecordedAtEpochMillis: Long?
+            preRunEnergyRecordedAtEpochMillis: Long?,
+            goal: RunGoal?
         ) {
             require(!musicReflectionSharingAllowed || musicObservationRequested) {
                 "Music reflection sharing requires this run's music observation opt-in."
@@ -1107,6 +1121,11 @@ internal class RunTrackingService : Service() {
                 .putExtra(EXTRA_MUSIC_REFLECTION_SHARING_ALLOWED, musicReflectionSharingAllowed)
                 .putExtra(EXTRA_SONG_SNIPPET_LOOKUP_ALLOWED, songSnippetLookupAllowed && musicReflectionSharingAllowed)
             preRunEnergyRecordedAtEpochMillis?.let { intent.putExtra(EXTRA_PRE_RUN_ENERGY_RECORDED_AT, it) }
+            when (goal) {
+                is RunGoal.Distance -> intent.putExtra(EXTRA_GOAL_DISTANCE_METERS, goal.meters)
+                is RunGoal.Time -> intent.putExtra(EXTRA_GOAL_ACTIVE_MILLIS, goal.activeMillis)
+                null -> Unit
+            }
             token?.let { intent.putExtra(EXTRA_COUNTDOWN_TOKEN, it) }
             ContextCompat.startForegroundService(context, intent)
         }

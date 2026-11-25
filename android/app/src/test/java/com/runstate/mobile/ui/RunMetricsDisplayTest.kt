@@ -739,6 +739,152 @@ class RunMetricsDisplayTest {
         }
     }
 
+    @Test
+    fun `saved distance goal compares raw gps meters rather than rounded distance`() {
+        val run = historyRun(historyStart + 600_000L, 1_609.343, TelemetryCoverage.COMPLETE, true)
+            .copy(metricSource = MetricSource.GPS, trackingMode = RunTrackingMode.GPS,
+                goalDistanceMeters = 1_609.344)
+        val transitions = listOf(RunTransitionEntity(historyRunId, 1, RunTransitionType.PAUSE,
+            historyStart + 600_000L))
+
+        val below = historyItemFor(run, transitions, null)
+        assertEquals("1.00 mi", below.metrics?.distance)
+        assertEquals("Goal · 1 mile · Not reached", below.goalSummary)
+        assertFalse(savedRunReceiptFor(run, emptyList()).contains("goal"))
+        listOf(1_609.344, 1_610.0).forEach { distance ->
+            val reached = run.copy(finalDistanceMeters = distance)
+            assertEquals("Goal · 1 mile · Reached", savedRunGoalSummaryFor(reached, emptyList()))
+            assertTrue(savedRunReceiptFor(reached, emptyList()).endsWith("You reached your goal of 1 mile."))
+        }
+    }
+
+    @Test
+    fun `distance goal needs complete gps evidence and known provenance`() {
+        val run = historyRun(historyStart + 600_000L, 2_000.0, TelemetryCoverage.COMPLETE, true)
+            .copy(metricSource = MetricSource.GPS, trackingMode = RunTrackingMode.GPS,
+                goalDistanceMeters = 1_609.344)
+        val unverified = listOf(
+            run.copy(telemetryCoverage = TelemetryCoverage.PARTIAL),
+            run.copy(telemetryCoverage = TelemetryCoverage.UNAVAILABLE, finalDistanceMeters = null),
+            run.copy(trackingMode = null),
+            run.copy(trackingMode = RunTrackingMode.FIXTURE)
+        )
+        unverified.forEach { uncertain ->
+            assertEquals("Goal · 1 mile · Not verified", savedRunGoalSummaryFor(uncertain, emptyList()))
+            assertFalse(savedRunReceiptFor(uncertain, emptyList()).contains("goal"))
+        }
+    }
+
+    @Test
+    fun `goal target uses frozen distance units without changing the comparison`() {
+        val run = historyRun(historyStart + 600_000L, 5_000.0, TelemetryCoverage.COMPLETE, true)
+            .copy(metricSource = MetricSource.GPS, trackingMode = RunTrackingMode.GPS,
+                displayDistanceUnit = DistanceUnit.KILOMETERS, goalDistanceMeters = 5_000.0)
+
+        assertEquals("Goal · 5 kilometers · Reached", historyItemFor(run, emptyList(), null).goalSummary)
+        assertTrue(savedRunReceiptFor(run, emptyList()).endsWith("You reached your goal of 5 kilometers."))
+        assertEquals("Goal · 5 kilometers · Not reached",
+            savedRunGoalSummaryFor(run.copy(finalDistanceMeters = 4_999.999), emptyList()))
+        val miles = run.copy(displayDistanceUnit = DistanceUnit.MILES)
+        assertEquals("Goal · 3.11 miles · Reached", savedRunGoalSummaryFor(miles, emptyList()))
+        assertTrue(savedRunReceiptFor(miles, emptyList()).endsWith("You reached your goal of 3.11 miles."))
+        assertEquals("Goal · 3.11 miles · Not reached",
+            savedRunGoalSummaryFor(miles.copy(finalDistanceMeters = 4_999.999), emptyList()))
+    }
+
+    @Test
+    fun `small positive goal targets never display as zero`() {
+        val run = historyRun(historyStart + 600_000L, 1.0, TelemetryCoverage.COMPLETE, true)
+            .copy(metricSource = MetricSource.GPS, trackingMode = RunTrackingMode.GPS,
+                goalDistanceMeters = 1.0)
+
+        assertEquals("Goal · less than 0.01 miles · Reached", savedRunGoalSummaryFor(run, emptyList()))
+        assertTrue(savedRunReceiptFor(run, emptyList())
+            .endsWith("You reached your goal of less than 0.01 miles."))
+        val time = run.copy(goalDistanceMeters = null, goalActiveMillis = 1L)
+        val transitions = listOf(RunTransitionEntity(historyRunId, 1, RunTransitionType.PAUSE,
+            historyStart + 600_000L))
+        assertEquals("Goal · less than 0.01 active minutes · Reached", savedRunGoalSummaryFor(time, transitions))
+    }
+
+    @Test
+    fun `time goal counts active time and excludes a paused finish`() {
+        val run = historyRun(historyStart + 600_000L, 1_000.0, TelemetryCoverage.COMPLETE, true)
+            .copy(metricSource = MetricSource.GPS, trackingMode = RunTrackingMode.GPS,
+                goalActiveMillis = 540_000L)
+        val transitions = listOf(RunTransitionEntity(historyRunId, 1, RunTransitionType.PAUSE,
+            historyStart + 480_000L))
+
+        assertEquals("Goal · 9 active minutes · Not reached", savedRunGoalSummaryFor(run, transitions))
+        assertFalse(savedRunReceiptFor(run, transitions).contains("goal"))
+        val reached = run.copy(goalActiveMillis = 480_000L)
+        assertEquals("Goal · 8 active minutes · Reached", historyItemFor(reached, transitions, null).goalSummary)
+        assertTrue(savedRunReceiptFor(reached, transitions).endsWith("You reached your goal of 8 active minutes."))
+        assertEquals("Goal · 8 active minutes · Not reached", savedRunGoalSummaryFor(reached,
+            listOf(transitions.single().copy(occurredAtEpochMillis = historyStart + 479_999L))))
+    }
+
+    @Test
+    fun `time goal remains unknown with absent incomplete or malformed timeline`() {
+        val run = historyRun(historyStart + 600_000L, 1_000.0, TelemetryCoverage.COMPLETE, true)
+            .copy(metricSource = MetricSource.GPS, trackingMode = RunTrackingMode.GPS,
+                goalActiveMillis = 60_000L)
+        val pause = RunTransitionEntity(historyRunId, 1, RunTransitionType.PAUSE, historyStart + 300_000L)
+        val invalidTimelines = listOf(null, listOf(pause.copy(sequenceNumber = 2)),
+            listOf(pause.copy(runId = historyRequestId)),
+            listOf(pause.copy(occurredAtEpochMillis = historyStart + 700_000L)))
+        invalidTimelines.forEach { transitions ->
+            assertEquals("Goal · 1 active minute · Not verified", savedRunGoalSummaryFor(run, transitions))
+            assertFalse(savedRunReceiptFor(run, transitions).contains("goal"))
+        }
+        assertEquals("Goal · 1 active minute · Not verified",
+            savedRunGoalSummaryFor(run.copy(transitionHistoryComplete = false), listOf(pause)))
+    }
+
+    @Test
+    fun `time goal with partial gps requires independent clock evidence`() {
+        val run = historyRun(historyStart + 600_000L, 100.0, TelemetryCoverage.PARTIAL, true)
+            .copy(metricSource = MetricSource.GPS, trackingMode = RunTrackingMode.GPS,
+                startElapsedRealtimeMillis = 20_000L, timingSessionId = historyRequestId,
+                goalActiveMillis = 300_000L)
+        val pause = RunTransitionEntity(historyRunId, 1, RunTransitionType.PAUSE, historyStart + 300_000L,
+            elapsedRealtimeMillis = 320_000L, timingSessionId = historyRequestId)
+
+        assertEquals("Goal · 5 active minutes · Reached", savedRunGoalSummaryFor(run, listOf(pause)))
+        assertTrue(savedRunReceiptFor(run, listOf(pause)).endsWith("You reached your goal of 5 active minutes."))
+        val recovered = listOf(pause.copy(timingSessionId = historyRunId))
+        assertEquals("Goal · 5 active minutes · Not verified", savedRunGoalSummaryFor(run, recovered))
+        assertFalse(savedRunReceiptFor(run, recovered).contains("goal"))
+    }
+
+    @Test
+    fun `sample goals are explicitly qualified in history and speech`() {
+        val run = historyRun(historyStart + 600_000L, 1_609.344, TelemetryCoverage.COMPLETE, true)
+            .copy(trackingMode = RunTrackingMode.FIXTURE, goalDistanceMeters = 1_609.344)
+
+        assertEquals("Sample goal · 1 mile · Reached", historyItemFor(run, emptyList(), null).goalSummary)
+        assertTrue(savedRunReceiptFor(run, emptyList()).endsWith("Sample goal reached: 1 mile."))
+        assertFalse(savedRunReceiptFor(run, emptyList()).contains("You reached"))
+        val timed = run.copy(goalDistanceMeters = null, goalActiveMillis = 600_000L)
+        val transitions = listOf(RunTransitionEntity(historyRunId, 1, RunTransitionType.PAUSE,
+            historyStart + 600_000L))
+        assertEquals("Sample goal · 10 active minutes · Reached", savedRunGoalSummaryFor(timed, transitions))
+        assertTrue(savedRunReceiptFor(timed, transitions).endsWith("Sample goal reached: 10 active minutes."))
+    }
+
+    @Test
+    fun `runs without an explicit goal preserve their receipt and history`() {
+        val run = historyRun(historyStart + 600_000L, 1_609.344, TelemetryCoverage.COMPLETE, true)
+            .copy(metricSource = MetricSource.GPS, trackingMode = RunTrackingMode.GPS)
+        val transitions = listOf(RunTransitionEntity(historyRunId, 1, RunTransitionType.PAUSE,
+            historyStart + 600_000L))
+
+        assertNull(savedRunGoalSummaryFor(run, transitions))
+        assertNull(historyItemFor(run, transitions, null).goalSummary)
+        assertEquals("Run saved. 1 mile. Active time, 10 minutes. Average pace, 10 minutes per mile.",
+            savedRunReceiptFor(run, transitions))
+    }
+
     private fun historyRun(
         finish: Long?,
         distanceMeters: Double? = null,

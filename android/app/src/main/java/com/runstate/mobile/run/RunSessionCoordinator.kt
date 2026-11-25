@@ -1091,7 +1091,8 @@ internal class RunSessionCoordinator(
         songSnippetLookupAllowed: Boolean = false,
         runIntention: RunIntention? = null,
         routeLabel: String? = null,
-        preRunEnergyRecordedAtEpochMillis: Long? = null
+        preRunEnergyRecordedAtEpochMillis: Long? = null,
+        goal: RunGoal? = null
     ): Deferred<ActiveRunSession> = coordinatorLock.withLock {
         // Enforce the build's admission policy below every UI and retry route. A cached
         // prepared row must satisfy it too; retry arguments never replace that row.
@@ -1154,7 +1155,8 @@ internal class RunSessionCoordinator(
             shoePairId = shoeDao?.selectedActivePairId(),
             runIntention = runIntention,
             routeLabel = routeLabel,
-            preRunEnergyRecordedAtEpochMillis = preRunEnergyRecordedAtEpochMillis
+            preRunEnergyRecordedAtEpochMillis = preRunEnergyRecordedAtEpochMillis,
+            goal = goal
         )
             .also { preparedRun = it }
 

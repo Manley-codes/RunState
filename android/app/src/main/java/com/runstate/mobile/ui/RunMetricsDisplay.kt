@@ -25,9 +25,11 @@ import com.runstate.mobile.data.local.RunWeatherStatus
 import com.runstate.mobile.music.SongPassageRequest
 import com.runstate.mobile.reflection.CompletedRunEvidence
 import com.runstate.mobile.reflection.pairedPassageFor
+import com.runstate.mobile.run.RunGoal
 import com.runstate.mobile.run.RunMetrics
 import com.runstate.mobile.run.RunTimeline
 import com.runstate.mobile.run.TransitionHistoryCoverage
+import com.runstate.mobile.run.runGoal
 import java.time.DateTimeException
 import java.time.Instant
 import java.time.ZoneId
@@ -86,9 +88,61 @@ internal fun savedRunReceiptFor(run: RunEntity, transitions: List<RunTransitionE
         "Active time, $words."
     }
     val pace = savedAveragePaceReceiptFor(run, transitions)
+    val goal = savedRunGoalOutcomeFor(run, transitions)?.achievement
     return listOfNotNull(if (run.activityFinalized) "Run saved." else "Run complete.",
-        distance, duration, pace).joinToString(" ")
+        distance, duration, pace, goal).joinToString(" ")
 }
+
+/** The same saved target and evidence drive History, the recap and the factual finish cue. */
+internal fun savedRunGoalSummaryFor(run: RunEntity, transitions: List<RunTransitionEntity>?): String? =
+    savedRunGoalOutcomeFor(run, transitions)?.summary
+
+private data class SavedRunGoalOutcome(val target: String, val reached: Boolean?, val isSample: Boolean) {
+    val summary: String
+        get() = "${if (isSample) "Sample goal" else "Goal"} · $target · " + when (reached) {
+            true -> "Reached"
+            false -> "Not reached"
+            null -> "Not verified"
+        }
+
+    // A missed or unverifiable target stays a neutral saved fact, never a negative announcement.
+    val achievement: String?
+        get() = if (reached != true) null else if (isSample) "Sample goal reached: $target."
+            else "You reached your goal of $target."
+}
+
+private fun savedRunGoalOutcomeFor(
+    run: RunEntity,
+    transitions: List<RunTransitionEntity>?
+): SavedRunGoalOutcome? {
+    if (run.state != StoredRunState.COMPLETED) return null
+    val goal = run.runGoal ?: return null
+    val isSample = run.trackingMode == RunTrackingMode.FIXTURE && run.metricSource == MetricSource.FIXTURE
+    val isGps = run.trackingMode == RunTrackingMode.GPS && run.metricSource == MetricSource.GPS
+    val knownSource = isSample || isGps
+    val reached = when (goal) {
+        is RunGoal.Distance -> run.finalDistanceMeters?.takeIf {
+            knownSource && run.telemetryCoverage == TelemetryCoverage.COMPLETE && it.isFinite() && it >= 0.0
+        }?.let { it >= goal.meters }
+        // This is active time from the saved pause/resume timeline, not elapsed time or rounded display text.
+        is RunGoal.Time -> if (knownSource) transitions?.let {
+            completedHistoryMetrics(run, it)?.activeMillis
+        }?.let { it >= goal.activeMillis } else null
+    }
+    val (amount, unit) = when (goal) {
+        is RunGoal.Distance -> when (run.displayDistanceUnit) {
+            DistanceUnit.MILES -> savedGoalAmount(goal.meters / 1_609.344) to "mile"
+            DistanceUnit.KILOMETERS -> savedGoalAmount(goal.meters / 1_000.0) to "kilometer"
+            null -> savedGoalAmount(goal.meters) to "meter"
+        }
+        is RunGoal.Time -> savedGoalAmount(goal.activeMillis / 60_000.0) to "active minute"
+    }
+    return SavedRunGoalOutcome("$amount $unit${if (amount == "1") "" else "s"}", reached, isSample)
+}
+
+/** Readable narration/display only; achievement always compares the original stored target above. */
+private fun savedGoalAmount(value: Double): String = if (value < 0.01) "less than 0.01" else
+    String.format(Locale.US, "%.2f", value).trimEnd('0').trimEnd('.')
 
 private fun savedAveragePaceReceiptFor(run: RunEntity, transitions: List<RunTransitionEntity>?): String? {
     if (transitions == null || run.telemetryCoverage != TelemetryCoverage.COMPLETE ||
@@ -284,7 +338,8 @@ internal fun historyItemFor(
         postRunEnergyQuestionVersion = run.postRunEnergyQuestionVersion,
         firstPostRunEnergy = run.firstPostRunEnergy,
         firstPostRunEnergyQuestionVersion = run.firstPostRunEnergyQuestionVersion,
-        paceSecondsPerMeter = storedMetrics?.paceSecondsPerMeter
+        paceSecondsPerMeter = storedMetrics?.paceSecondsPerMeter,
+        goalSummary = savedRunGoalSummaryFor(run, transitions)
     )
 }
 

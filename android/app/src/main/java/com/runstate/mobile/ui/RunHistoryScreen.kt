@@ -1644,7 +1644,8 @@ internal data class RunHistoryItem(
     val firstPostRunEnergyQuestionVersion: Int? = null,
     /** Trusted saved pace before display-unit conversion or rounding. */
     val paceSecondsPerMeter: Double? = null,
-    val reflectionSong: SavedReflectionSong? = null
+    val reflectionSong: SavedReflectionSong? = null,
+    val goalSummary: String? = null
 )
 
 internal sealed interface HistoryRouteDisplay {
@@ -2500,6 +2501,10 @@ private fun HistoryRow(
                     modifier = Modifier.padding(top = 4.dp)
                 )
                 if (item.isGpsRun) HistorySplitsPanel(splits, onRetrySplits)
+                item.goalSummary?.let { goal ->
+                    Text(goal, color = rowInk, fontSize = 13.sp, lineHeight = 20.sp,
+                        modifier = Modifier.padding(top = 12.dp).testTag("runHistoryGoal:" + item.runId))
+                }
                 item.shoeLabel?.let { shoe ->
                     Text("Shoes · $shoe", color = rowInk, fontSize = 13.sp, lineHeight = 20.sp,
                         modifier = Modifier.padding(top = 12.dp).testTag("historyShoes:" + item.runId))

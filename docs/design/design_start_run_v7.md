@@ -8,27 +8,25 @@ status: CURRENT NATIVE DECISIONS plus dated prototype history; verification live
 
 # Start Run — where this screen actually is
 
-**November 24 guided run goals — model tested, integration pending:** Manley wants distance or
-run-time goals in place of the visible Plan feature, retaining Plan in the app but hidden until he
-decides its future. He explicitly wants to practice Kotlin and Android Studio through this change;
-guide small coding steps and review them rather than implementing the whole feature in advance.
-Next task after goals: review and implement the agreed personal-record announcement behavior.
+**November 25 run goals - autonomous implementation:** Manley asked Codex to take over and put
+this on the Android phone for visual review; Kotlin/Android Studio lessons can resume later.
+This supersedes the November 24 guided-only sequence. His Distance/Time model and four tests remain
+its foundation. Start now offers Goal instead of Plan: optional distance (miles/kilometers) or active
+time (minutes), explicit save/remove, cancel preserves the previous goal. The editor remembers units
+and unfinished edits through recreation, validates positive bounded input, and retains exact saved
+values when merely reopening. The overall Start layout and accepted creative direction remain.
 
-Learning checkpoint: Manley created `run/RunGoal.kt` with sealed Distance/Time cases and positive
-finite-distance/positive-time validation. Debug Kotlin compilation passed. He then wrote
-`src/test/java/com/runstate/mobile/run/RunGoalTest.kt` and ran it in Android Studio: the saved JUnit
-report confirms four tests, zero failures/errors/skips. No repeat test run was needed. Next lesson:
-create `ui/RunGoalPanel.kt`, preview its Distance/Time selection and learn Compose state/clicks before
-numeric entry, validation and integration. No current Start/Plan, Room, backend or phone behavior
-has changed. The model and test are the only new source files at this checkpoint.
+The target freezes at run start and survives countdown, retry and recovery. Room 22 adds two nullable
+run-goal columns; legacy records keep no goal and shoe mileage targets remain separate. Goal draft
+clears when preparing another run. Reaching the target does not auto-finish or add live milestone cues.
+Saved recap/History show target and outcome; only verified achievement adds a local factual finish
+acknowledgement. Distance uses unrounded complete evidence; time excludes pauses and needs a valid
+saved timeline. Samples are explicitly qualified. Backend/accepted AI writing/song selection stay
+unchanged. See project_current_state.md and the private roadmap for verification and later review.
 
-Proposed first version (recommendations, not yet separate product approvals): an optional single
-distance or active-time target; pausing does not advance a time target, and reaching either target
-does not auto-finish a run. Save the chosen goal with that run, preserve it through recovery, and
-use verified achievement in local completion facts. Keep accepted AI writing/song selection intact.
-Start with a dedicated `run/RunGoal.kt` model distinguishing meters from active milliseconds; do not
-reuse shoe mileage goals or runIntention. UI, startup/service handoff, Room migration, History and
-facts integration remain later guided increments. Old rows have no goal, never an invented target.
+Plan source and past intention/route history remain. All visible Plan entry points and trail-plan
+assignment are hidden; Houston trails still opens normally. New starts cannot inherit an invisible
+old Plan draft. Next: review PR categories/eligibility before implementing Android PR announcements.
 
 Dependency audit: RunPlanSheet records KEEP_EASY/STEADY/HARD_EFFORT and a familiar-route label.
 RunnerStateInsight uses those for Planned-versus-reported Effort and similar-easy-run grouping;
