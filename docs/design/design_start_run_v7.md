@@ -8,15 +8,16 @@ status: CURRENT NATIVE DECISIONS plus dated prototype history; verification live
 
 # Start Run — where this screen actually is
 
-**November 25 Goal panel simplification - preview before phone:** Manley requested large vertical
+**November 25 Goal panel simplification - approved and installed:** Manley requested large vertical
 Distance/Time choices, both matching the rounded entry field dimensions, selected choice black,
 editable defaults of 3 miles and 00:30, and no routine helper paragraphs. He confirmed 00:30 means
 30 minutes (hours:minutes). Keep Set a goal, Close, Save goal and Remove goal. The separate miles/km
 row becomes an inline field unit selector. Defaults stay unsaved until Save; Remove appears for an
-existing goal. Preserve original targets/precision and optional-goal behavior. Show a static native
-preview in chat before installing this revision; the earlier installed version stays on the phone.
+existing goal. Preserve original targets/precision and optional-goal behavior. Static native
+previews were shown first; Manley then said "Ok implement it" and approved the in-place phone update.
 Public preview remains on hold. Debug app/test builds, 59 focused JVM cases and 13 emulator checks
-passed. Static native distance/time images are in android/build/nov25-goal-panel/. No phone install.
+passed. Static native distance/time images and installation evidence are in android/build/nov25-goal-panel/.
+The verified APK is now installed on Moto; all 75 runs/two shoes/full table hashes preserved.
 Existing fractional-minute goals retain their visible seconds/milliseconds on reopen and unchanged
 save; normal defaults stay 00:30. No new source/assets or storage/backend changes.
 

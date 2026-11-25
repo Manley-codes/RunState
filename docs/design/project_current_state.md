@@ -7,6 +7,17 @@ metadata:
 
 ## November 25 Goal panel static review
 
+**Approved and installed afterward:** Manley accepted the previews with "Ok implement it". The same
+checked APK (source e378c5d) was installed in place on Moto ZT422G8FT4 after a fresh idle-run check,
+private data/APK backup and signer comparison. All 75 completed runs, two shoe pairs and full hashes
+of all 12 tables stayed exact; preferences unchanged apart from the normal opening-animation counter.
+Database integrity/foreign keys passed; installed APK hash verified and app reopened. No repeated
+functional test batch was needed because source/package stayed identical to the checked preview.
+Installed SHA256: 888c5e48211484443091340b66ac792da93f4f197c5c9135a161b61cc0368d59.
+Evidence: android/build/nov25-goal-panel/moto/installation.json and private snapshots/screenshots.
+No phone data erased, no new provider calls or public preview publication. Visual phone review is
+available at Start > Goal; PR policy remains next, lessons can return later.
+
 Manley requested a simpler panel and a static image before installation: vertical Distance/Time
 choices the same width/height as the entry, rounded edges and selected black; editable default
 3 miles and 00:30 (confirmed hours:minutes). Removed helper paragraphs and the separate unit chip row;
@@ -19,8 +30,8 @@ selection/save/remove, validation, old precision, units, restoration, equal geom
 countdown handoff and native previews. Captures use the real Compose component: compact screenshots
 run-goal-distance-panel.png and run-goal-time-panel.png under android/build/nov25-goal-panel/.
 No changes to backend/storage/music reflection, no physical-phone update or public preview publication.
-No new source files/assets. Previous APK remains on Moto pending owner's image review; lessons and PR
-follow-up stay in the roadmap. This checkpoint's source is ready for an eventual approved phone update.
+No new source files/assets. At this preview checkpoint the previous APK remained on Moto; subsequent approved installation is
+recorded above. Lessons and PR follow-up stay in the roadmap. This checkpoint's source is ready for an eventual approved phone update.
 
 ## November 25 run goals installed
 
