@@ -8,11 +8,19 @@ status: CURRENT NATIVE DECISIONS plus dated prototype history; verification live
 
 # Start Run — where this screen actually is
 
-**November 24 guided run goals — approved direction, not implemented:** Manley wants distance or
+**November 24 guided run goals — model tested, integration pending:** Manley wants distance or
 run-time goals in place of the visible Plan feature, retaining Plan in the app but hidden until he
 decides its future. He explicitly wants to practice Kotlin and Android Studio through this change;
 guide small coding steps and review them rather than implementing the whole feature in advance.
 Next task after goals: review and implement the agreed personal-record announcement behavior.
+
+Learning checkpoint: Manley created `run/RunGoal.kt` with sealed Distance/Time cases and positive
+finite-distance/positive-time validation. Debug Kotlin compilation passed. He then wrote
+`src/test/java/com/runstate/mobile/run/RunGoalTest.kt` and ran it in Android Studio: the saved JUnit
+report confirms four tests, zero failures/errors/skips. No repeat test run was needed. Next lesson:
+create `ui/RunGoalPanel.kt`, preview its Distance/Time selection and learn Compose state/clicks before
+numeric entry, validation and integration. No current Start/Plan, Room, backend or phone behavior
+has changed. The model and test are the only new source files at this checkpoint.
 
 Proposed first version (recommendations, not yet separate product approvals): an optional single
 distance or active-time target; pausing does not advance a time target, and reaching either target
