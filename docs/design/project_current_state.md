@@ -5,6 +5,23 @@ metadata:
   type: project
 ---
 
+## November 26 Energy captions and shoe palette
+
+Restored Running low, Steady and Energized under the current title-case Energy labels in their original
+accent colors. Normal tile dimensions remain; larger font scales reserve more height for both lines.
+Changed shoe colors to charcoal outer disc, muted olive inset and warm-gray sneaker to harmonize with
+the music orb. All shape/position/selection/mileage behavior remains; no new source/assets/dependencies.
+Three builds/vital lint and three emulator checks passed in 38.034 seconds (normal layout, large-text
+reachability, Energy intake). Native capture checked: android/build/nov26-energy-captions/start-captions-palette.png.
+Same review branch; no phone update or public-preview publication.
+
+Owner is considering music artwork inside the visualizer and replacing bottom Map with Shoes.
+That rearrangement remains a proposal, not implementation. Recommendation: a small gap around artwork,
+preserved Energy intake, explicit live-map entry inside Trails if Map moves, and Spotify badge wired
+to Connect when disconnected / Open Spotify when connected. Current Start music action only opens
+Spotify; Trails currently browses curated trails rather than opening live GPS. Do not imply that
+connection/navigation already exists. Shoe relocation would preserve saved pairs/mileage tracking.
+
 ## November 26 circular Start controls and visualizer contrast
 
 Owner requested exact reference side-control sizing, circular exteriors, shoe thin white rim removed,

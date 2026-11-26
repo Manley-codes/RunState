@@ -8,6 +8,20 @@ status: CURRENT NATIVE DECISIONS plus dated prototype history; verification live
 
 # Start Run — where this screen actually is
 
+**November 26 captions/palette and next-direction discussion:** Restore Running low, Steady and
+Energized under the larger title-case Energy labels, in their existing pastel accents. Keep normal
+tile height/placement; allow more height at enlarged font scales so both text lines fit. Match the
+shoe to music with charcoal exterior, muted olive irregular center and warm-gray sneaker; circular
+size/position and all behavior stay. Still emulator-only; no new source/assets or data changes.
+
+Owner is also considering replacing bottom Map with Shoes and placing music artwork inside the
+visualizer, with a Spotify connect badge. This rearrangement is proposed, not yet selected/implemented.
+Recommendation: it makes music/energy the main focus and demotes equipment setup. Preserve a small gap
+between artwork and moving ring plus the existing Energy intake. Preserve live-map access explicitly
+if its tab moves: current Trails is a curated browser, not a live-map replacement. Current Start music
+tap only opens Spotify; connection requires the existing explicit authorization action. A future badge
+should connect only on tap when disconnected and open Spotify when connected. No automatic sign-in.
+
 **November 26 circular controls / stronger ring — emulator review:** Owner requested the chosen
 mockup's side-control sizes, perfectly circular outer boundaries, shoe white rim removed/blue outer
 edge circular, and a thicker/more vibrant visualizer with the same motion. Reference colored-circle

@@ -335,10 +335,10 @@ internal fun ShoeIllustration(modifier: Modifier = Modifier) {
             cubicTo(w * .02f, h * .22f, w * .22f, h * .07f, w * .47f, h * .045f)
             close()
         }
-        // The outer blue rim is circular; retain the irregular inner inset and sneaker.
-        drawCircle(Color(0xFF789FAB), radius = size.minDimension / 2f)
+        // Match the music orb's charcoal/olive palette; keep the inner shape irregular.
+        drawCircle(Color(0xFF1D1F16), radius = size.minDimension / 2f)
         withTransform({ scale(.74f, .74f, Offset(w * .5f, h * .5f)) }) {
-            drawPath(outline, Color(0xFFF7F7F7))
+            drawPath(outline, Color(0xFF7B8350))
         }
 
         // Preserve breathing room inside the thicker ring without changing the control's target.
@@ -355,7 +355,7 @@ internal fun ShoeIllustration(modifier: Modifier = Modifier) {
                 cubicTo(w * .18f, h * .61f, w * .16f, h * .59f, w * .18f, h * .56f)
                 close()
             }
-            drawPath(upper, Color(0xFFA9A9A9))
+            drawPath(upper, Color(0xFFC9CCBD))
             val sole = path {
                 moveTo(w * .17f, h * .58f)
                 cubicTo(w * .34f, h * .62f, w * .63f, h * .63f, w * .82f, h * .58f)
@@ -364,7 +364,7 @@ internal fun ShoeIllustration(modifier: Modifier = Modifier) {
                 cubicTo(w * .18f, h * .64f, w * .17f, h * .61f, w * .17f, h * .58f)
                 close()
             }
-            drawPath(sole, Color.White)
+            drawPath(sole, Color(0xFFE7E9DE))
             val outsole = path {
                 moveTo(w * .18f, h * .62f)
                 cubicTo(w * .35f, h * .66f, w * .64f, h * .67f, w * .82f, h * .62f)
@@ -373,11 +373,11 @@ internal fun ShoeIllustration(modifier: Modifier = Modifier) {
                 cubicTo(w * .19f, h * .65f, w * .18f, h * .64f, w * .18f, h * .62f)
                 close()
             }
-            drawPath(outsole, Color(0xFFD3D3D3))
+            drawPath(outsole, Color(0xFFA2AB8A))
             repeat(3) { n ->
                 val x = w * (.53f - n * .045f)
                 val y = h * (.39f + n * .045f)
-                drawLine(Color(0xFFF2F2F2), Offset(x, y), Offset(x + w * .055f, y + h * .025f),
+                drawLine(Color(0xFFF2F2E8), Offset(x, y), Offset(x + w * .055f, y + h * .025f),
                     w * .016f, StrokeCap.Round)
             }
         }

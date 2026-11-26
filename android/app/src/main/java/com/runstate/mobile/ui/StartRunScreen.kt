@@ -971,7 +971,8 @@ private fun PreRunEnergyChoices(
     entryDistancePx: Float,
     onTileBounds: (PreRunEnergy, Rect) -> Unit
 ) {
-    val tileHeight = 82.dp + 40.dp * (LocalDensity.current.fontScale - 1f).coerceAtLeast(0f)
+    // Reserve the caption plus wrapped larger text without shifting the layout after selection.
+    val tileHeight = 82.dp + 90.dp * (LocalDensity.current.fontScale - 1f).coerceAtLeast(0f)
     Column(modifier = Modifier.testTag(START_ENERGY_CHOICES_TAG)
         .then(if (selected == null) Modifier.semantics {
             contentDescription = "Physical energy now, optional"
@@ -1096,6 +1097,18 @@ private fun EnergyTile(
             fontWeight = FontWeight.Bold,
             textAlign = TextAlign.Center,
             modifier = Modifier.padding(horizontal = 3.dp).graphicsLayer { alpha = labelAlpha() }
+        )
+        Text(
+            text = when (energy) {
+                PreRunEnergy.LOW -> "Running low"
+                PreRunEnergy.MODERATE -> "Steady"
+                PreRunEnergy.HIGH -> "Energized"
+            },
+            color = accent, fontFamily = StartWelcomeFont,
+            fontSize = 11.sp, lineHeight = 14.sp,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.padding(horizontal = 3.dp).padding(top = 2.dp)
+                .graphicsLayer { alpha = labelAlpha() }
         )
     }
 }
