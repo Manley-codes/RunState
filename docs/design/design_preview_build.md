@@ -12,7 +12,7 @@ status: LIVE — accepted connected browser preview; mobile phone framing confir
 city/location-based direction. Published preview `54cc7ee`, live bundle `index-Dsc9C26T.js`;
 build/export checks and focused local/live phone/desktop checks passed. Only the pill text changed:
 Houston remains the current browser content/settings label; no location discovery was added.
-Android source matches; the installed phone app awaits its next update.
+Android source matches; the owner subsequently requested and received the in-place phone update.
 
 
 ## November 25 approved Android design synchronization — published

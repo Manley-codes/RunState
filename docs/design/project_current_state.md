@@ -5,6 +5,18 @@ metadata:
   type: project
 ---
 
+## November 25 Trails label installed
+
+Owner requested the renamed Trails pill on the connected phone. Source `49111bf` built successfully
+and installed in place on Moto ZT422G8FT4 after idle-run checks, private database/preferences/APK
+backups and signer comparison. Start screenshot visually confirms **Trails**. All 75 completed runs,
+two shoe pairs and full hashes of all 12 tables remain exact; database integrity and foreign keys
+pass. Preferences changed only for the normal opening-animation counter. No uninstall/data erase.
+Installed APK SHA256: `7bb258e108526fe948d2e8648675e3fbdc81c641e2fc4fd9c0442c1b4c1ef05a`.
+Private receipts: `android/build/nov25-trails-label/moto/installation.json` and `start-installed.png`.
+Only the label changed; existing Houston choices remain. Future city/location discovery is not
+implemented. No new tracked source/assets or repeated functional test batch for this text-only edit.
+
 ## November 25 public preview design synchronization
 
 Owner explicitly approved updating GitHub. Preview `3f70fac` is pushed and its new Pages bundle

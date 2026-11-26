@@ -11,7 +11,8 @@ status: CURRENT NATIVE DECISIONS plus dated prototype history; verification live
 **November 25 Trails pill label:** Start's pill now reads **Trails**. This is only a city-neutral
 label change; the browser heading, settings choice and four Houston trails remain unchanged.
 Location-based or city-based trail discovery is a future direction, not implemented behavior.
-The installed Android APK is unchanged; this label will reach the phone in its next update.
+Manley then requested the phone update. Installed in place and visually confirmed on Moto; all
+75 runs, two shoe pairs and full table hashes preserved. See the current-state installation receipt.
 
 **November 25 Goal panel simplification - approved and installed:** Manley requested large vertical
 Distance/Time choices, both matching the rounded entry field dimensions, selected choice black,
