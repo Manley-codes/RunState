@@ -7,6 +7,12 @@ metadata:
 
 ## November 26 light Start palette
 
+Latest follow-up: owner requested slightly larger music/visualizer and white Moderate lines. Increased
+wrapper/art together 10% (264/242 dp with previous width cap), preserving proportions, motion, Spotify
+target and Energy mechanics. All three builds/vital lint and three focused checks passed in 38.043
+seconds (normal layout, large text, Energy intake). Native portrait reviewed: all controls fit.
+Evidence: android/build/nov26-start-size/start-larger-native.png and accompanying logs. Emulator only.
+
 Owner requested the exact light active-screen background instead of the full map, reference pastel
 Energy colors with unchanged sizes/shapes/interior order, and the missing map detail in Explore trails.
 Start now shares AssemblyAtmosphere(day=true): native blue/white gradient and faint leaves. Active's

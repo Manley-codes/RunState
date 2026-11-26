@@ -323,7 +323,7 @@ internal fun StartRunScreen(
             }
     ) {
         val spacious = maxHeight >= 800.dp && maxWidth >= 360.dp
-        val agentRingSize = (if (spacious) 240.dp else 220.dp).coerceAtMost(maxWidth - 96.dp)
+        val agentRingSize = (if (spacious) 264.dp else 242.dp).coerceAtMost(maxWidth - 96.dp)
         val energyEntryDistancePx = with(LocalDensity.current) { maxWidth.toPx() }
         val wholeStackScroll = rememberScrollState()
         val gpsStatus = when {
@@ -1098,7 +1098,7 @@ private fun EnergyTile(
     }
     val accent = when (energy) {
         PreRunEnergy.LOW -> Color(0xFF70547F)
-        PreRunEnergy.MODERATE -> Color(0xFF426C55)
+        PreRunEnergy.MODERATE -> Color.White
         PreRunEnergy.HIGH -> Color(0xFF856018)
     }
     Column(

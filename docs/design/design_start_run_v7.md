@@ -8,6 +8,11 @@ status: CURRENT NATIVE DECISIONS plus dated prototype history; verification live
 
 # Start Run — where this screen actually is
 
+**November 26 size follow-up:** Increase the Start music/visualizer group together by 10% (264 dp
+wrapper on tall screens, 242 dp otherwise; retain the narrow-screen width cap and .60 artwork ratio).
+Keep ring movement/intake and Spotify's 48 dp target. Moderate's three decorative lines are now white;
+its dark labels and sage fill stay. Same emulator-only review scope.
+
 **November 26 light Start palette — emulator review:** Owner requested the exact light active-screen
 background in place of the full Hermann map. Start now reuses AssemblyAtmosphere(day=true), including
 its pale blue/white diagonal gradient and faint leaves. No change to the active screen's rendering.
