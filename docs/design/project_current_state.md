@@ -5,6 +5,20 @@ metadata:
   type: project
 ---
 
+## November 25 public preview design synchronization
+
+Owner explicitly approved updating GitHub. Preview `3f70fac` is pushed and its new Pages bundle
+`index-BJlk7IVG.js` is live. Current Start arrangement/white navigation/animated prompt/twist, compact
+shoe artwork, simplified distance/time goals, brand-first shoes and optional Houston trails now match
+the accepted Android designs. Original Hermann background and sample album covers retained.
+Private shoe product photos excluded; all 338 model names included. Fictional runs only, silent controls,
+no paid provider/live GPS calls. 26 local checks passed; live verification in progress. Details/receipts
+in design_preview_build.md. Android/iPhone/backend code and phone data unchanged.
+
+Next app task remains personal-record announcement policy/verification, then the recorded release
+return queue. Kotlin lessons can resume later; deferred shoe illustration and moving-trail design
+reviews stay deferred. This publication does not authorize future public design updates automatically.
+
 ## November 25 Goal panel static review
 
 **Approved and installed afterward:** Manley accepted the previews with "Ok implement it". The same

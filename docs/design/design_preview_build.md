@@ -1,12 +1,43 @@
 ---
 name: design-preview-build
-description: "Current public RunState browser preview, source and update workflow. Updated October 29, 2026."
+description: "Current public RunState browser preview, source and update workflow. Updated November 25, 2026."
 metadata:
   type: project
 status: LIVE — accepted connected browser preview; mobile phone framing confirmed by Manley.
 ---
 
 # RunState interactive preview
+
+## November 25 approved Android design synchronization — published
+
+Manley explicitly requested publishing the accumulated Android changes. Preview commit `3f70fac`
+replaces the old green Start footer with the approved compact Shoe/Music/Start arrangement,
+icon-only controls, one entrance twist, borderless Choose/Energy prompt and white Map/Goal/Run/
+Settings/Activity navigation. The simplified distance/time Goal editor uses 3 miles / 00:30 defaults,
+draft-only editing, validation, Save/Remove/Close; a saved target follows the fictional run into
+Completion and History. Plan entry is hidden. Native app code and real run data were not changed.
+
+Houston trails is available on the original Hermann Park background. Settings offers the optional
+same-height moving trail bands, swiping, detail browser, reduced-motion behavior and source credits;
+Hermann Park remains the default. All eight trail assets are unchanged licensed Android copies.
+Shoes use all 26 brands / 338 model names, required personal mileage goals, saved demo pairs and
+simple custom entry. Private product photos are excluded; the public picker uses text-only rows.
+The existing opening, silent music controls, three sample album covers and scripted reflections remain.
+
+Type-check/build and **26 distinct local checks** passed: six export/privacy/subpath checks, four
+opening, five existing interactions, seven Start/Goal/shoe tests and four trail tests. The added
+end-to-end goal test initially targeted the wrong accessible Start name; corrected the test and
+confirmed the goal through countdown, completion and History. Source behavior did not need a fix.
+Live bundle `index-BJlk7IVG.js` is confirmed; live phone/desktop interaction verification is in progress.
+Receipts: `.local/nov25-design-sync/{local,live}/` inside the preview checkout.
+
+Necessary new preview files: GoalPanel, ShoePicker, ShoeArt and TrailPreview components, their
+three style files, text shoe catalog, two focused browser-check scripts, trail attribution and eight
+licensed assets (also copied into the generated Pages export). Source/export were committed together.
+
+This approval resolves the prior design hold **for this synchronization only**. Future public design
+updates still require explicit approval. The earlier entries below are historical deployment receipts.
+
 
 **November 23 scoped artwork fix — live:** Manley explicitly approved restoring the preview's
 missing sample album images. Preview commit `d988a1b` bundles the three existing study covers and
