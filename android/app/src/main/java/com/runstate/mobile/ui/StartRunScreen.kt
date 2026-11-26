@@ -148,6 +148,7 @@ internal const val START_MUSIC_SHARING_TOGGLE_TAG = "startMusicSharingToggle"
 internal const val START_REFLECTION_SETUP_TAG = "startReflectionSetup"
 internal const val START_RUN_SETTINGS_TAG = "startRunSettings"
 internal const val START_RUN_STATUS_TAG = "startRunStatus"
+internal const val START_RUN_LABEL_TAG = "startRunLabel"
 internal const val START_RUN_UPPER_CONTENT_TAG = "startRunUpperContent"
 internal const val START_RUN_FALLBACK_SCROLL_TAG = "startRunFallbackScroll"
 internal const val START_AGENT_CARD_TAG = "startAgentCard"
@@ -348,14 +349,21 @@ internal fun StartRunScreen(
                         .verticalScroll(wholeStackScroll)
                         .heightIn(min = contentHeight)
                         .padding(horizontal = 20.dp)
-                        .padding(top = 16.dp, bottom = 12.dp),
+                        .padding(top = 16.dp, bottom = 4.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.Top
                 ) {
                     Column(Modifier.fillMaxWidth().testTag(START_RUN_UPPER_CONTENT_TAG)) {
-                        Image(painterResource(R.drawable.start_runstate_wordmark),
-                            contentDescription = "RunState", contentScale = ContentScale.Fit,
-                            modifier = Modifier.width(140.dp).height(30.dp))
+                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            Image(painterResource(R.drawable.start_runstate_wordmark),
+                                contentDescription = "RunState", contentScale = ContentScale.Fit,
+                                modifier = Modifier.width(140.dp).height(30.dp))
+                            Text(gpsStatus, color = StartInk.copy(alpha = .76f),
+                                fontFamily = StartWelcomeFont, fontWeight = FontWeight.SemiBold,
+                                fontSize = 13.sp, lineHeight = 17.sp, textAlign = TextAlign.End,
+                                modifier = Modifier.weight(1f).testTag(START_RUN_STATUS_TAG))
+                        }
                         if (trailBrowserAvailable) {
                             Spacer(Modifier.height(16.dp))
                             ExploreTrailsCard(
@@ -457,7 +465,6 @@ internal fun StartRunScreen(
                         onStart = onStart,
                         enabled = actionsEnabled && !setupLoading,
                         gpsSelected = gpsSelected,
-                        gpsStatus = gpsStatus,
                         energySelected = selectedPreRunEnergy != null,
                         phase = ringPhase,
                         entryTime = { energyEntryTime.value }
@@ -925,16 +932,6 @@ private fun ExploreTrailsCard(enabled: Boolean, imageSize: Dp, onClick: () -> Un
             .testTag(START_TRAILS_BROWSE_TAG)
             .semantics(mergeDescendants = true) { contentDescription = "Explore trails" }
     ) {
-        Box(Modifier.matchParentSize()) {
-            Image(painterResource(R.drawable.trail_terry_hershey_map), contentDescription = null,
-                contentScale = ContentScale.Crop, alignment = Alignment.BottomEnd,
-                modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight().fillMaxWidth(.56f))
-            Box(Modifier.fillMaxSize().background(Brush.horizontalGradient(
-                0f to Color.White, .43f to Color.White,
-                .68f to Color.White.copy(alpha = .76f),
-                1f to Color.White.copy(alpha = .10f)
-            )))
-        }
         Row(
             modifier = Modifier.fillMaxWidth().padding(14.dp),
             horizontalArrangement = Arrangement.spacedBy(16.dp),
@@ -952,10 +949,6 @@ private fun ExploreTrailsCard(enabled: Boolean, imageSize: Dp, onClick: () -> Un
             Text("›", color = StartInk, fontSize = 30.sp,
                 modifier = Modifier.clearAndSetSemantics { })
         }
-        Text("© OpenStreetMap contributors", color = StartInk.copy(alpha = .76f),
-            fontSize = 8.sp, lineHeight = 10.sp,
-            modifier = Modifier.align(Alignment.BottomEnd).padding(end = 12.dp, bottom = 3.dp)
-                .background(Color.White.copy(alpha = .88f)))
     }
 }
 
@@ -974,28 +967,13 @@ private fun StartWelcomeVisualizer(
 ) {
     Box(Modifier.fillMaxWidth().height(ringSize).padding(horizontal = 12.dp)
         .testTag(START_AGENT_CARD_TAG)) {
-        Box(ringModifier.size(ringSize).align(Alignment.TopCenter)
+        Box(Modifier.offset(y = 10.dp).then(ringModifier).size(ringSize).align(Alignment.TopCenter)
             .testTag(START_AGENT_VISUALIZER_TAG)) {
             // Fit within the ring's fixed inner radius; receiving bars swell outward.
             val artworkSize = ringSize * .60f
             Box(Modifier.size(artworkSize).align(Alignment.Center).clip(CircleShape)
                 .background(Color(0xFF17211D)).testTag(START_MUSIC_ARTWORK_TAG)) {
                 RunHeadphonesArtwork(Modifier.fillMaxSize(), verticalOffset = artworkSize * (12f / 248f))
-                val spotifyLabel = when {
-                    musicConnecting -> "Connecting to Spotify"
-                    musicConnected -> "Open Spotify"
-                    else -> "Connect Spotify"
-                }
-                Box(Modifier.align(Alignment.TopCenter)
-                    .offset(x = -artworkSize * .15f, y = artworkSize * .08f)
-                    .size(48.dp).clip(CircleShape)
-                    .clickable(enabled = musicEnabled, role = Role.Button,
-                        onClickLabel = spotifyLabel,
-                        onClick = if (musicConnected) onOpenSpotify else onConnectSpotify)
-                    .semantics { contentDescription = spotifyLabel }
-                    .testTag(START_OPEN_SPOTIFY_TAG), contentAlignment = Alignment.Center) {
-                    Image(painterResource(R.drawable.spotify_icon_white), null, Modifier.size(24.dp))
-                }
             }
             // Preserve the three-lobed movement and receiving animation with stronger map contrast.
             RunAgentRing(phase = phase, intakeTime = intakeTime, emphasized = true,
@@ -1008,6 +986,24 @@ private fun StartWelcomeVisualizer(
                         }
                     else Modifier
                 ))
+            val spotifyLabel = when {
+                musicConnecting -> "Connecting to Spotify"
+                musicConnected -> "Open Spotify"
+                else -> "Connect Spotify"
+            }
+            // Place the badge on the dark rim near ten o'clock, outside the portrait's face.
+            // Its full touch target is separate from the clipped artwork.
+            val badgeRadius = (artworkSize / 2f - 13.dp).coerceAtLeast(0.dp)
+            Box(Modifier.align(Alignment.Center)
+                .offset(x = badgeRadius * -.866f, y = badgeRadius * -.5f)
+                .size(48.dp).clip(CircleShape)
+                .clickable(enabled = musicEnabled, role = Role.Button,
+                    onClickLabel = spotifyLabel,
+                    onClick = if (musicConnected) onOpenSpotify else onConnectSpotify)
+                .semantics { contentDescription = spotifyLabel }
+                .testTag(START_OPEN_SPOTIFY_TAG), contentAlignment = Alignment.Center) {
+                Image(painterResource(R.drawable.spotify_icon_white), null, Modifier.size(24.dp))
+            }
         }
     }
 }
@@ -1241,7 +1237,6 @@ private fun StartFooter(
     onStart: () -> Unit,
     enabled: Boolean,
     gpsSelected: Boolean,
-    gpsStatus: String,
     energySelected: Boolean,
     phase: State<Float>,
     entryTime: () -> Float,
@@ -1274,9 +1269,10 @@ private fun StartFooter(
                 entryTime = entryTime
             )
         }
-        Text(gpsStatus, color = StartInk.copy(alpha = 0.64f), fontSize = 11.sp,
-            lineHeight = 16.sp, textAlign = TextAlign.Center,
-            modifier = Modifier.fillMaxWidth().testTag(START_RUN_STATUS_TAG))
+        Text("Start Run", color = StartInk, fontFamily = StartWelcomeFont,
+            fontWeight = FontWeight.Bold, fontSize = 18.sp,
+            lineHeight = 22.sp, textAlign = TextAlign.Center,
+            modifier = Modifier.fillMaxWidth().testTag(START_RUN_LABEL_TAG))
     }
 }
 

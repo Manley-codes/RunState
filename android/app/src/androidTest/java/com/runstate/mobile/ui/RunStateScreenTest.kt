@@ -1009,7 +1009,7 @@ class RunStateScreenTest {
             START_ENERGY_CHOICES_TAG, START_ENERGY_LOW_TAG, START_ENERGY_MODERATE_TAG,
             START_ENERGY_HIGH_TAG, START_FOOTER_TAG, START_RUN_BUTTON_TAG,
             START_OPEN_SHOES_TAG, START_OPEN_SPOTIFY_TAG, START_TRAILS_BROWSE_TAG,
-            START_GREETING_TAG, START_ENERGY_PROMPT_TAG)
+            START_GREETING_TAG, START_ENERGY_PROMPT_TAG, START_RUN_STATUS_TAG, START_RUN_LABEL_TAG)
         val boundsBefore = fixedTags.associateWith { tag ->
             composeTestRule.onNodeWithTag(tag).assertIsDisplayed().fetchSemanticsNode().boundsInRoot
         }
@@ -1019,10 +1019,17 @@ class RunStateScreenTest {
         composeTestRule.onNodeWithTag(START_TRAILS_GALLERY_TAG).assertDoesNotExist()
         val trailCard = boundsBefore.getValue(START_TRAILS_BROWSE_TAG)
         val ring = boundsBefore.getValue(START_AGENT_VISUALIZER_TAG)
+        val artwork = composeTestRule.onNodeWithTag(START_MUSIC_ARTWORK_TAG)
+            .fetchSemanticsNode().boundsInRoot
         val greeting = boundsBefore.getValue(START_GREETING_TAG)
         val question = boundsBefore.getValue(START_ENERGY_PROMPT_TAG)
+        val status = boundsBefore.getValue(START_RUN_STATUS_TAG)
+        val wordmark = composeTestRule.onNodeWithContentDescription("RunState")
+            .fetchSemanticsNode().boundsInRoot
+        assertTrue("Run status belongs in the header above Explore trails", status.bottom <= trailCard.top)
+        assertTrue("Run status belongs to the right of the wordmark", status.left >= wordmark.right)
         assertTrue("Explore trails belongs above the exposed visualizer", trailCard.bottom <= ring.top)
-        assertTrue("The greeting follows the visualizer", greeting.top >= ring.bottom)
+        assertTrue("The greeting remains below the music artwork", greeting.top >= artwork.bottom)
         assertTrue("The question follows the greeting", question.top >= greeting.bottom)
         assertTrue("The energy choices follow their question",
             boundsBefore.getValue(START_ENERGY_CHOICES_TAG).top >= question.bottom)
@@ -1059,6 +1066,11 @@ class RunStateScreenTest {
         val startNode = composeTestRule.onNodeWithTag(START_RUN_BUTTON_TAG).fetchSemanticsNode()
         assertEquals(listOf("Start run"), startNode.config[SemanticsProperties.ContentDescription])
         assertEquals("GPS run", startNode.config[SemanticsProperties.StateDescription])
+        composeTestRule.onNodeWithTag(START_RUN_LABEL_TAG).assertIsDisplayed().assertTextEquals("Start Run")
+        val startLabel = boundsBefore.getValue(START_RUN_LABEL_TAG)
+        assertTrue("Start Run sits below the dial", startLabel.top >= startNode.boundsInRoot.bottom)
+        assertEquals("Start Run is centered below its dial", startNode.boundsInRoot.center.x, startLabel.center.x, 1f)
+        assertTrue("Start Run stays above bottom navigation", startLabel.bottom <= utilities.top)
         composeTestRule.onNodeWithTag(START_MAP_STATUS_TAG).assertDoesNotExist()
         saveNativePreview(START_RUN_SCREEN_TAG, "start-welcome-emulator-preview.png")
         fun assertFixed() {
@@ -1088,6 +1100,8 @@ class RunStateScreenTest {
             assertTrue("The Spotify badge stays over the music artwork",
                 music.center.x >= artwork.left && music.center.x <= artwork.right &&
                     music.center.y >= artwork.top && music.center.y <= artwork.bottom)
+            assertTrue("The Spotify badge sits toward the artwork's upper-left rim",
+                music.center.x < artwork.center.x && music.center.y < artwork.center.y)
             assertEquals("Start stays centered below Moderate", moderate.center.x, start.center.x, 1f)
             assertTrue("The Start action remains inside its footer", start.top >= footer.top && start.bottom <= footer.bottom)
             assertTrue("The footer remains above navigation", footer.bottom <= utilities.top)
@@ -1170,6 +1184,7 @@ class RunStateScreenTest {
                 return node.assertIsDisplayed().assertIsEnabled()
             }
             val viewport = composeTestRule.onNodeWithTag(START_RUN_SCREEN_TAG).getUnclippedBoundsInRoot()
+            composeTestRule.onNodeWithTag(START_RUN_STATUS_TAG).performScrollTo().assertIsDisplayed()
             val card = composeTestRule.onNodeWithTag(START_AGENT_CARD_TAG).performScrollTo()
                 .assertIsDisplayed().getUnclippedBoundsInRoot()
             assertTrue("The entire music visualizer is reachable at $scale text",
@@ -1203,6 +1218,8 @@ class RunStateScreenTest {
                 navigationBefore, composeTestRule.onNodeWithTag(START_UTILITY_ACTIONS_TAG)
                     .fetchSemanticsNode().boundsInRoot)
             saveNativePreview(START_RUN_SCREEN_TAG, "start-welcome-navigation-font-$scale.png")
+            composeTestRule.onNodeWithTag(START_RUN_LABEL_TAG).performScrollTo()
+                .assertIsDisplayed().assertTextEquals("Start Run")
             reachable(START_ENERGY_MODERATE_TAG).performClick()
             reachable(START_RUN_BUTTON_TAG).performClick()
             composeTestRule.runOnIdle { assertEquals(PreRunEnergy.MODERATE, selectedAtStart) }
@@ -1475,6 +1492,7 @@ class RunStateScreenTest {
         }
 
         composeTestRule.onNodeWithText("Location setup on Start").assertExists()
+        composeTestRule.onNodeWithTag(START_RUN_LABEL_TAG).assertTextEquals("Start Run")
         composeTestRule.onNodeWithText("GPS Ready").assertDoesNotExist()
         composeTestRule.onNodeWithTag(START_GPS_TOGGLE_TAG).assertDoesNotExist()
         composeTestRule.runOnIdle { gpsReady = true }
@@ -1486,6 +1504,7 @@ class RunStateScreenTest {
             composeTestRule.runOnIdle { statusText = label }
             composeTestRule.onNodeWithTag(START_RUN_STATUS_TAG)
                 .assertTextEquals(if (label == "GPS ready") "GPS Ready" else label)
+            composeTestRule.onNodeWithTag(START_RUN_LABEL_TAG).assertTextEquals("Start Run")
             composeTestRule.onNodeWithText("GPS enabled").assertDoesNotExist()
             if (label != "GPS ready") composeTestRule.onNodeWithText("GPS Ready").assertDoesNotExist()
             composeTestRule.onNodeWithTag(START_RUN_BUTTON_TAG).assertIsEnabled()

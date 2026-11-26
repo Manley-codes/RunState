@@ -8,6 +8,16 @@ status: CURRENT NATIVE DECISIONS plus dated prototype history; verification live
 
 # Start Run — where this screen actually is
 
+**November 26 badge/status refinement:** Move Spotify down-left onto the dark music rim at ten
+o'clock, with its white 24 dp mark kept inside the circle and its independent 48 dp tap target.
+Translate the entire visualizer/artwork 10 dp down within its existing layout allocation, bringing
+it closer to the unchanged greeting; measured Energy intake target moves with it. Remove only the
+decorative map/credit from the Trails card; photo, card dimensions and browser/live-map actions stay.
+Replace the small status under the dial with a dark bold 18 sp Start Run label. Move actual GPS /
+sample / loading status to the right of the wordmark at 13 sp, preserving all existing truthful
+status values. Trim bottom body padding by 8 dp to accommodate the clearer label without a small
+unwanted scroll on normal screens. Emulator review only.
+
 **November 26 size follow-up:** Increase the Start music/visualizer group together by 10% (264 dp
 wrapper on tall screens, 242 dp otherwise; retain the narrow-screen width cap and .60 artwork ratio).
 Keep ring movement/intake and Spotify's 48 dp target. Moderate's three decorative lines are now white;

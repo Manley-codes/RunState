@@ -7,7 +7,21 @@ metadata:
 
 ## November 26 light Start palette
 
-Latest follow-up: owner requested slightly larger music/visualizer and white Moderate lines. Increased
+Latest badge/status refinement: Spotify is on the dark rim at ten o'clock, down-left of its former
+forehead position; its 24 dp mark remains inside the circle with a separate full 48 dp target. Group
+moved down 10 dp toward the unchanged greeting; measured Energy intake destination follows. Removed
+only the decorative Trails-card map and credit. Clear bold 18 sp Start Run label replaces the lower
+GPS text; actual GPS/sample/loading status is now right of the title at 13 sp. Navigation, Trails
+browser/live map, tracking and Spotify behavior stay intact. No new source/assets or data changes.
+
+Three builds/release vital lint passed. Initial six-check run passed five and caught a 5 px unwanted
+normal-screen scroll; reducing empty bottom body padding from 12 to 4 dp resolved it. Both normal and
+large-text layout checks then passed (26.213 seconds). Other verified checks: truthful GPS status,
+explicit Spotify action, Energy intake and actual ring motion. Final native screenshot visually
+reviewed: android/build/nov26-start-polish/start-polished-native.png. Logs preserve the initial failure
+and successful spacing recheck. Still emulator-only, no phone install/main merge/public preview change.
+
+Previous size follow-up: owner requested slightly larger music/visualizer and white Moderate lines. Increased
 wrapper/art together 10% (264/242 dp with previous width cap), preserving proportions, motion, Spotify
 target and Energy mechanics. All three builds/vital lint and three focused checks passed in 38.043
 seconds (normal layout, large text, Energy intake). Native portrait reviewed: all controls fit.
