@@ -388,7 +388,7 @@ internal fun StartRunScreen(
                         enabled = actionsEnabled && !setupLoading,
                         modifier = Modifier.heightIn(min = 48.dp)
                             .testTag(START_TRAILS_BROWSE_TAG)) {
-                        Text("Houston trails  ›", color = StartInk, fontSize = 12.sp,
+                        Text("Trails  ›", color = StartInk, fontSize = 12.sp,
                             fontWeight = FontWeight.SemiBold,
                             modifier = Modifier.background(Color.White.copy(alpha = .86f), RoundedCornerShape(16.dp))
                                 .padding(horizontal = 12.dp, vertical = 7.dp))

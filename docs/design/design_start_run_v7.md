@@ -8,6 +8,11 @@ status: CURRENT NATIVE DECISIONS plus dated prototype history; verification live
 
 # Start Run — where this screen actually is
 
+**November 25 Trails pill label:** Start's pill now reads **Trails**. This is only a city-neutral
+label change; the browser heading, settings choice and four Houston trails remain unchanged.
+Location-based or city-based trail discovery is a future direction, not implemented behavior.
+The installed Android APK is unchanged; this label will reach the phone in its next update.
+
 **November 25 Goal panel simplification - approved and installed:** Manley requested large vertical
 Distance/Time choices, both matching the rounded entry field dimensions, selected choice black,
 editable defaults of 3 miles and 00:30, and no routine helper paragraphs. He confirmed 00:30 means

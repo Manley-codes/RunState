@@ -8,6 +8,13 @@ status: LIVE — accepted connected browser preview; mobile phone framing confir
 
 # RunState interactive preview
 
+**November 25 title-only follow-up:** Manley requested the Start pill read **Trails** for a future
+city/location-based direction. Published preview `54cc7ee`, live bundle `index-Dsc9C26T.js`;
+build/export checks and focused local/live phone/desktop checks passed. Only the pill text changed:
+Houston remains the current browser content/settings label; no location discovery was added.
+Android source matches; the installed phone app awaits its next update.
+
+
 ## November 25 approved Android design synchronization — published
 
 Manley explicitly requested publishing the accumulated Android changes. Preview commit `3f70fac`
