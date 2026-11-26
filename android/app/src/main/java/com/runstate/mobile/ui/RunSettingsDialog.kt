@@ -203,40 +203,8 @@ internal fun RunSettingsDialog(
                     }
                 }
                 SettingsDescription("Auto uses Light from 7 AM to 7 PM. Your run keeps its starting look.")
-                Text("Start background", color = SettingsInk, fontSize = 14.sp,
-                    fontWeight = FontWeight.SemiBold)
-                Row(
-                    Modifier.fillMaxWidth().selectableGroup().testTag(SETTINGS_START_BACKGROUND_TAG),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    StartBackground.entries.forEach { choice ->
-                        val selected = startBackground == choice
-                        val label = when (choice) {
-                            StartBackground.HERMANN_PARK -> "Hermann Park"
-                            StartBackground.HOUSTON_TRAILS -> "Houston trails"
-                        }
-                        Surface(
-                            modifier = Modifier.weight(1f).heightIn(min = 48.dp)
-                                .selectable(selected = selected, enabled = preferenceControlsEnabled,
-                                    role = Role.RadioButton, onClick = { onSetStartBackground(choice) })
-                                .testTag(startBackgroundOptionTag(choice))
-                                .semantics { contentDescription = "$label Start background" },
-                            shape = RoundedCornerShape(12.dp),
-                            color = if (selected) SettingsInk else Color.Transparent,
-                            border = BorderStroke(1.dp, SettingsInk.copy(alpha = 0.2f))
-                        ) {
-                            androidx.compose.foundation.layout.Box(
-                                Modifier.padding(horizontal = 8.dp, vertical = 12.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(label, fontSize = 14.sp, fontWeight = FontWeight.SemiBold,
-                                    color = (if (selected) SettingsCream else SettingsInk)
-                                        .copy(alpha = if (preferenceControlsEnabled) 1f else 0.5f))
-                            }
-                        }
-                    }
-                }
-                SettingsDescription("Change the artwork behind Start. You can switch back at any time.")
+                // Start's plain welcome experiment supersedes artwork selection for now.
+                // Retain the stored preference and original assets for a later design decision.
                 SettingsDivider()
                 SettingsSectionTitle("LOCATION")
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {

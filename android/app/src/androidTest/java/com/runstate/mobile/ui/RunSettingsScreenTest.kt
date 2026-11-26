@@ -115,56 +115,78 @@ class RunSettingsScreenTest {
     }
 
     @Test
-    fun startBackgroundChoicesCanRevertAndWaitForSavedPreferences() {
-        var background by mutableStateOf(RunPreferences().startBackground)
+    fun plainStartHidesBackgroundChoicesAndPreservesSavedArtworkWhileOtherSettingsWork() {
+        var background by mutableStateOf(StartBackground.HOUSTON_TRAILS)
+        var appearance by mutableStateOf(RunAppearance.NIGHT)
+        var observing by mutableStateOf(false)
         var saving by mutableStateOf(false)
         var available by mutableStateOf(true)
-        val choices = mutableListOf<StartBackground>()
+        val backgroundChanges = mutableListOf<StartBackground>()
+        var appearanceChanges = 0
+        var musicChanges = 0
+        var dismissals = 0
         var otherActions = 0
         compose.setContent {
             RunSettingsDialog(
                 gpsReady = true, gpsMessage = null,
-                musicObservationEnabled = false, musicAccessGranted = true,
+                musicObservationEnabled = observing, musicAccessGranted = true,
                 musicReflectionSharingEnabled = false, musicReflectionSharingAvailable = true,
                 reflectionConnectionLabel = null, demoMode = false,
-                onDismiss = { otherActions++ }, onRequestLocationSetup = { otherActions++ },
-                onSetMusicObservation = { otherActions++ }, onRequestMusicAccess = { otherActions++ },
+                onDismiss = { dismissals++ }, onRequestLocationSetup = { otherActions++ },
+                onSetMusicObservation = { observing = it; musicChanges++ },
+                onRequestMusicAccess = { otherActions++ },
                 onSetMusicReflectionSharing = { otherActions++ }, onSetDemoMode = { otherActions++ },
-                onOpenReflectionSetup = { otherActions++ }, onSetAppearance = { otherActions++ },
+                onOpenReflectionSetup = { otherActions++ },
+                appearance = appearance, onSetAppearance = { appearance = it; appearanceChanges++ },
                 onSetWeather = { otherActions++ }, onSetCloudReflections = { otherActions++ },
                 settingsLoading = saving, preferencesAvailable = available,
                 startBackground = background,
-                onSetStartBackground = { choices += it; saving = true }
+                onSetStartBackground = { background = it; backgroundChanges += it }
             )
         }
-        compose.onNodeWithText("Start background").performScrollTo().assertIsDisplayed()
-        compose.onNodeWithTag(startBackgroundOptionTag(StartBackground.HERMANN_PARK))
-            .performScrollTo().assertIsSelected()
-        compose.onNodeWithText("Hermann Park").assertIsDisplayed()
-        compose.onNodeWithText("Houston trails").assertIsDisplayed()
-        for (choice in listOf(StartBackground.HOUSTON_TRAILS, StartBackground.HERMANN_PARK)) {
-            val previous = background
-            compose.onNodeWithTag(startBackgroundOptionTag(choice)).performScrollTo()
-                .assertIsEnabled().performClick()
-            compose.onNodeWithTag(startBackgroundOptionTag(previous)).assertIsSelected()
+        fun assertBackgroundChooserAbsent() {
+            compose.onNodeWithText("Start background").assertDoesNotExist()
+            compose.onNodeWithText("Hermann Park").assertDoesNotExist()
+            compose.onNodeWithText("Houston trails").assertDoesNotExist()
+            compose.onNodeWithTag(SETTINGS_START_BACKGROUND_TAG).assertDoesNotExist()
             StartBackground.entries.forEach {
-                compose.onNodeWithTag(startBackgroundOptionTag(it)).assertIsNotEnabled()
+                compose.onNodeWithTag(startBackgroundOptionTag(it)).assertDoesNotExist()
             }
-            val calls = choices.size
-            compose.onNodeWithTag(startBackgroundOptionTag(choice)).performTouchInput { click() }
+        }
+        for ((savedBackground, chosenAppearance) in listOf(
+            StartBackground.HOUSTON_TRAILS to RunAppearance.DAY,
+            StartBackground.HERMANN_PARK to RunAppearance.NIGHT
+        )) {
+            // Changing unrelated preferences must not reset either previously saved artwork choice.
+            compose.runOnIdle { background = savedBackground }
+            assertBackgroundChooserAbsent()
+            compose.onNodeWithTag(appearanceOptionTag(chosenAppearance))
+                .performScrollTo().assertIsDisplayed().assertIsEnabled().performClick()
+            compose.onNodeWithTag(appearanceOptionTag(chosenAppearance)).assertIsSelected()
+            compose.onNodeWithTag(SETTINGS_MUSIC_OBSERVATION_TAG)
+                .performScrollTo().assertIsDisplayed().assertIsEnabled().performClick()
             compose.runOnIdle {
-                assertEquals(calls, choices.size)
-                background = choice
-                saving = false
+                assertEquals(savedBackground, background)
+                assertTrue(backgroundChanges.isEmpty())
             }
-            compose.onNodeWithTag(startBackgroundOptionTag(choice)).assertIsSelected().assertIsEnabled()
         }
-        compose.runOnIdle { available = false }
-        StartBackground.entries.forEach {
-            compose.onNodeWithTag(startBackgroundOptionTag(it)).performScrollTo().assertIsNotEnabled()
+        for (loading in listOf(true, false)) {
+            compose.runOnIdle { saving = loading; available = loading }
+            assertBackgroundChooserAbsent()
+            compose.onNodeWithTag(appearanceOptionTag(RunAppearance.DAY))
+                .performScrollTo().assertIsNotEnabled().performTouchInput { click() }
+            compose.onNodeWithTag(SETTINGS_MUSIC_OBSERVATION_TAG)
+                .performScrollTo().assertIsNotEnabled().performTouchInput { click() }
         }
+        compose.runOnIdle { available = true }
+        compose.onNodeWithTag(SETTINGS_DONE_TAG).assertIsDisplayed().assertIsEnabled().performClick()
         compose.runOnIdle {
-            assertEquals(listOf(StartBackground.HOUSTON_TRAILS, StartBackground.HERMANN_PARK), choices)
+            assertEquals(StartBackground.HERMANN_PARK, background)
+            assertTrue(backgroundChanges.isEmpty())
+            assertEquals(2, appearanceChanges)
+            assertEquals(2, musicChanges)
+            assertFalse(observing)
+            assertEquals(1, dismissals)
             assertEquals(0, otherActions)
         }
     }

@@ -8,6 +8,26 @@ status: CURRENT NATIVE DECISIONS plus dated prototype history; verification live
 
 # Start Run — where this screen actually is
 
+**November 25 Start welcome layout — emulator review only:** Manley selected the combined mockup:
+Explore trails card above the exposed visualizer; shoe/music at its lower corners above the greeting;
+energy question and three original choices, original round Start below, then Map/Goal/Run/Settings/Activity.
+Reuse the current phone's exact visualizer rendering, shoe, music orb and Start drawing/colors/details;
+the generated mockup supplies arrangement, not replacement artwork. Sizes remain provisional for review.
+Plain white background replaces map imagery in this experiment; old backgrounds/assets/preferences remain
+in source for easy return. Hide their settings selector while it would have no visible effect here.
+The card opens the existing four-trail browser and reuses the bundled Terry Hershey photo. No new assets.
+Greeting follows local time without a hardcoded owner name because the app has no saved profile name.
+The question disappears after Energy selection without moving controls. Existing Energy entrance/flight,
+Start twist/countdown, shoe/Spotify actions, goals and five navigation actions remain connected.
+One scroll surface supports short/large-text screens, with navigation fixed below it.
+
+Built on `codex/start-welcome-layout`, not merged into the phone baseline. Debug/release/test assemblies
+and vital lint passed; 21 focused emulator checks passed, including large text/landscape and countdown.
+Real app is installed in place on Medium_Phone (emulator-5554) for interactive review. No phone update,
+public-preview publication, backend/provider change or storage migration. Spotify itself is absent from
+the emulator; its launcher wiring is tested, not live playback. Private visual/check evidence lives in
+android/build/nov25-start-welcome/. Owner reviews size/spacing next; PR-announcement work stays queued.
+
 **November 25 Trails pill label:** Start's pill now reads **Trails**. This is only a city-neutral
 label change; the browser heading, settings choice and four Houston trails remain unchanged.
 Location-based or city-based trail discovery is a future direction, not implemented behavior.

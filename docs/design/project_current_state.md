@@ -5,6 +5,34 @@ metadata:
   type: project
 ---
 
+## November 25 Start welcome emulator review
+
+Owner approved a functional native emulator trial of the selected combined mockup, explicitly retaining
+the phone's existing visualizer, shoe/music and Start artwork. Isolated branch `codex/start-welcome-layout`
+starts at `6ec2c79`; no merge, phone installation or public-preview publication is authorized by this review.
+Explore trails now sits above an exposed RunAgentRing; original side controls sit at its lower corners,
+then a time-aware generic greeting, energy question/tiles, original Start dial and full five bottom tabs.
+No runner name is hardcoded. Plain background; stored map-background preference/assets retained, obsolete
+selector temporarily hidden. Existing trail browser, shoe selection, goal editing, optional Energy,
+countdown and navigation callbacks remain. No storage/backend/provider or new asset/dependency changes.
+
+All three Android assemblies and release vital lint passed. Twenty focused emulator instrumentation
+checks passed in 93.875 seconds, covering optional/early Energy, intake/entrance/lifecycle, native ring
+animation, goals, shoes/Spotify callbacks, trails, map/countdown, disabled states, large text and landscape.
+A final settings regression passed in 12.894 seconds after rebuilding: hidden background choices retain
+either saved value while Appearance/Music, loading guards and Done still work (21 focused checks total).
+The actual debug app was updated in place on Medium_Phone (emulator-5554) after a private backup of its
+five completed sample records. Post-update comparison confirms every original column/row in all 12 data
+tables stayed exact. The old emulator moved from Room 20 to the existing Room 22 baseline (new shoe/run
+goal columns remain null); the layout adds no migration. Native screenshot review shows the portrait layout and
+reachable large-text controls. Spotify is not installed on this emulator; no live music/GPS/run proof
+is claimed. Private build/test logs, screenshots and design QA: android/build/nov25-start-welcome/.
+Only UI/layout and corresponding instrumentation expectations changed; no new production source files.
+
+Next: owner's emulator review of provisional sizes/spacing. Phone installation and public preview stay
+separate approval steps. Then resume PR-announcement policy and the retained release queue; accepted
+written reflections remain untouched. See the private roadmap for deferred field checks.
+
 ## November 25 Trails label installed
 
 Owner requested the renamed Trails pill on the connected phone. Source `49111bf` built successfully

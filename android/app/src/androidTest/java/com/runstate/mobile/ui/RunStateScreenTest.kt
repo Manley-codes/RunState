@@ -151,7 +151,6 @@ class RunStateScreenTest {
 
     private companion object {
         const val INITIALIZING = "Getting things ready"
-        const val READY = "TO RUN"
         const val COUNTDOWN = "RUNSTATE"
         const val START_FAILED = "RunState couldn't save the start of your run."
         const val RUNNING = "Running"
@@ -402,7 +401,7 @@ class RunStateScreenTest {
     fun readyOffersStartAndReportsTheTap() {
         val actions = renderScreen(RunUiState.ReadyToStart)
 
-        composeTestRule.onNodeWithText(READY).assertIsDisplayed()
+        composeTestRule.onNodeWithTag(START_AGENT_VISUALIZER_TAG).assertIsDisplayed()
         composeTestRule.onNodeWithText(CANCEL).assertDoesNotExist()
         composeTestRule.onNodeWithText(TRY_AGAIN).assertDoesNotExist()
 
@@ -415,99 +414,53 @@ class RunStateScreenTest {
     }
 
     @Test
-    fun houstonTrailBandBrowsingKeepsHiddenPlanUnchanged() {
+    fun startExploreTrailsKeepsHiddenPlanAndRunDraftUnchanged() {
         var selected by mutableStateOf<PreRunEnergy?>(null)
-        var intention by mutableStateOf<RunIntention?>(RunIntention.KEEP_EASY)
-        var route by mutableStateOf<String?>("Existing loop")
+        var enabled by mutableStateOf(true)
+        var loading by mutableStateOf(false)
         var starts = 0
         var energyChanges = 0
         var planChanges = 0
         var selectedAtStart: PreRunEnergy? = null
-        composeTestRule.mainClock.autoAdvance = false
         composeTestRule.setContent {
             StartRunScreen(
                 selectedPreRunEnergy = selected,
                 onSelectPreRunEnergy = { selected = it; energyChanges++ },
-                onStart = { starts++; selectedAtStart = selected }, actionsEnabled = true,
-                onViewHistory = {}, showHistory = true,
+                onStart = { starts++; selectedAtStart = selected }, actionsEnabled = enabled,
+                onViewHistory = {}, showHistory = true, setupLoading = loading,
                 modifier = Modifier.fillMaxSize().systemBarsPadding(),
                 startBackground = StartBackground.HOUSTON_TRAILS,
-                selectedRunIntention = intention, routeLabel = route,
-                onRunContextChanged = { choice, label ->
-                    intention = choice; route = label; planChanges++
-                }
+                selectedRunIntention = RunIntention.KEEP_EASY, routeLabel = "Existing loop",
+                onRunContextChanged = { _, _ -> planChanges++ }
             )
         }
-        composeTestRule.mainClock.advanceTimeByFrame()
-        settleStartEnergyEntrance()
-        composeTestRule.onNodeWithTag(START_TRAILS_BACKGROUND_TAG).assertIsDisplayed()
-        composeTestRule.onNodeWithTag(START_TRAILS_BROWSE_TAG).assertIsDisplayed().assertIsEnabled()
-        val fixedTags = listOf(START_AGENT_CARD_TAG, START_UTILITY_ACTIONS_TAG, START_ENERGY_CHOICES_TAG,
-            START_FOOTER_TAG, START_RUN_BUTTON_TAG, START_OPEN_SHOES_TAG, START_OPEN_SPOTIFY_TAG)
-        val fixedBounds = fixedTags.associateWith {
-            composeTestRule.onNodeWithTag(it).assertIsDisplayed().getUnclippedBoundsInRoot()
+        composeTestRule.onNodeWithTag(START_TRAILS_BACKGROUND_TAG).assertDoesNotExist()
+        composeTestRule.onNodeWithTag(START_TRAILS_GALLERY_TAG).assertDoesNotExist()
+        composeTestRule.onNodeWithText("Explore trails").assertIsDisplayed()
+        composeTestRule.onNodeWithTag(START_TRAILS_BROWSE_TAG).assertIsDisplayed().performClick()
+        composeTestRule.onNodeWithTag(START_TRAILS_LIST_TAG).assertIsDisplayed()
+        for (id in listOf("memorial", "hermann", "buffalo_bayou", "terry_hershey")) {
+            composeTestRule.onNodeWithTag(START_TRAIL_LIST_ITEM_TAG_PREFIX + id)
+                .performScrollTo().assertIsDisplayed().assertIsEnabled()
         }
-        val gallery = composeTestRule.onNodeWithTag(START_TRAILS_GALLERY_TAG).assertIsDisplayed()
-        val galleryBounds = gallery.getUnclippedBoundsInRoot()
-        fun assertWholeTrailVisible(id: String) {
-            for (tag in listOf(START_TRAIL_PHOTO_TAG_PREFIX + id, "startTrailLabel:" + id)) {
-                val bounds = composeTestRule.onNodeWithTag(tag, useUnmergedTree = true)
-                    .assertIsDisplayed().getUnclippedBoundsInRoot()
-                assertTrue("The whole photo/name must fit inside the gallery",
-                    bounds.top >= galleryBounds.top && bounds.bottom <= galleryBounds.bottom &&
-                        bounds.left >= galleryBounds.left && bounds.right <= galleryBounds.right)
-                assertTrue("Photos and names must stay above run controls",
-                    bounds.bottom <= fixedBounds.getValue(START_FOOTER_TAG).top)
-            }
-        }
-        fun swipeGallery(upward: Boolean) {
-            gallery.performTouchInput {
-                val high = Offset(width * .9f, height * .1f)
-                val low = Offset(width * .9f, height * .9f)
-                swipe(if (upward) low else high, if (upward) high else low, durationMillis = 350)
-            }
-            composeTestRule.mainClock.advanceTimeBy(600L)
-            fixedTags.forEach { tag ->
-                assertEquals("Trail swipes must leave $tag fixed", fixedBounds.getValue(tag),
-                    composeTestRule.onNodeWithTag(tag).getUnclippedBoundsInRoot())
-            }
-            composeTestRule.onNodeWithTag(START_TRAIL_SHEET_TAG).assertDoesNotExist()
-            composeTestRule.runOnIdle {
-                assertEquals(0, starts)
-                assertEquals(0, energyChanges)
-                assertEquals(0, planChanges)
-            }
-        }
-        assertWholeTrailVisible("memorial")
-        saveNativePreview(START_RUN_SCREEN_TAG, "start-houston-trails-trial.png")
-        swipeGallery(upward = true)
-        assertWholeTrailVisible("terry_hershey")
-        saveNativePreview(START_RUN_SCREEN_TAG, "start-houston-trails-scrolled.png")
-        swipeGallery(upward = false)
-        assertWholeTrailVisible("memorial")
-        composeTestRule.mainClock.autoAdvance = true
-        composeTestRule.onNodeWithTag(START_TRAIL_PHOTO_TAG_PREFIX + "memorial", useUnmergedTree = true)
-            .assertIsDisplayed().performTouchInput { click() }
+        composeTestRule.onNodeWithTag(START_TRAIL_LIST_ITEM_TAG_PREFIX + "terry_hershey").performClick()
         composeTestRule.onNodeWithTag(START_TRAIL_SHEET_TAG).assertIsDisplayed()
-        composeTestRule.runOnIdle {
-            assertEquals("Existing loop", route)
-            assertEquals(0, planChanges)
-            assertEquals(0, starts)
-            assertEquals(0, energyChanges)
-        }
+        composeTestRule.onNodeWithTag(START_TRAIL_USE_TAG).assertDoesNotExist()
         composeTestRule.onNodeWithText("Close").assertIsDisplayed().performClick()
         composeTestRule.onNodeWithTag(START_TRAIL_SHEET_TAG).assertDoesNotExist()
-        composeTestRule.onNodeWithTag(START_TRAIL_BAND_TAG_PREFIX + "memorial").performClick()
-        composeTestRule.onNodeWithTag(START_TRAIL_USE_TAG).assertDoesNotExist()
-        composeTestRule.onNodeWithText("Close").performClick()
-        composeTestRule.onNodeWithTag(START_TRAIL_SHEET_TAG).assertDoesNotExist()
         composeTestRule.runOnIdle {
-            assertEquals("Existing loop", route)
-            assertEquals(RunIntention.KEEP_EASY, intention)
-            assertEquals(0, planChanges)
-            assertEquals(0, starts)
-            assertEquals(0, energyChanges)
+            assertEquals(0, starts); assertEquals(0, energyChanges); assertEquals(0, planChanges)
+            enabled = false
         }
+        composeTestRule.onNodeWithTag(START_TRAILS_BROWSE_TAG).assertIsNotEnabled()
+            .performTouchInput { click() }
+        composeTestRule.onNodeWithTag(START_TRAILS_LIST_TAG).assertDoesNotExist()
+        composeTestRule.runOnIdle { enabled = true; loading = true }
+        composeTestRule.onNodeWithTag(START_TRAILS_BROWSE_TAG).assertIsNotEnabled()
+            .performTouchInput { click() }
+        composeTestRule.onNodeWithTag(START_TRAILS_LIST_TAG).assertDoesNotExist()
+        composeTestRule.runOnIdle { loading = false }
+        composeTestRule.onNodeWithTag(START_TRAILS_BROWSE_TAG).assertIsEnabled()
         composeTestRule.onNodeWithTag(START_ENERGY_MODERATE_TAG).assertIsDisplayed().performClick()
         composeTestRule.onNodeWithTag(START_RUN_BUTTON_TAG).assertIsDisplayed().performClick()
         composeTestRule.runOnIdle {
@@ -636,7 +589,7 @@ class RunStateScreenTest {
     }
 
     @Test
-    fun houstonTrailBrowseAndDismissDoNotChangeRunAndOriginalBackgroundStaysAvailable() {
+    fun startTrailBrowserIgnoresSavedBackgroundWithoutChangingThePreference() {
         var background by mutableStateOf(StartBackground.HOUSTON_TRAILS)
         var route by mutableStateOf<String?>("Existing loop")
         var starts = 0
@@ -680,7 +633,7 @@ class RunStateScreenTest {
             assertEquals(0, energyChanges)
             assertEquals(0, planChanges)
         }
-        saveNativePreview(START_RUN_SCREEN_TAG, "start-hermann-trails-pill.png")
+        saveNativePreview(START_RUN_SCREEN_TAG, "start-explore-trails-card.png")
         composeTestRule.onNodeWithTag(START_TRAILS_BROWSE_TAG).performClick()
         composeTestRule.onNodeWithTag(START_TRAILS_LIST_TAG).assertIsDisplayed()
         composeTestRule.onNodeWithTag(START_TRAIL_LIST_ITEM_TAG_PREFIX + "hermann")
@@ -700,7 +653,7 @@ class RunStateScreenTest {
     }
 
     @Test
-    fun shortLargeTextHoustonTrailBrowseAndRunControlsRemainReachable() {
+    fun shortLargeTextTrailBrowserAndRunControlsRemainReachable() {
         var fontScale by mutableStateOf(1.5f)
         var background by mutableStateOf(StartBackground.HOUSTON_TRAILS)
         var starts = 0
@@ -727,14 +680,14 @@ class RunStateScreenTest {
             composeTestRule.onNodeWithTag(START_TRAIL_LIST_ITEM_TAG_PREFIX + "terry_hershey")
                 .performScrollTo().assertIsDisplayed().assertIsEnabled().performClick()
             composeTestRule.onNodeWithTag(START_TRAIL_SHEET_TAG).assertIsDisplayed()
-            val useTrail = composeTestRule.onNodeWithTag(START_TRAIL_USE_TAG)
-            if (!useTrail.isDisplayed()) useTrail.performScrollTo()
-            useTrail.assertIsDisplayed().assertIsEnabled()
+            composeTestRule.onNodeWithTag(START_TRAIL_USE_TAG).assertDoesNotExist()
             composeTestRule.onNodeWithText("Close").assertIsDisplayed().performClick()
             composeTestRule.onNodeWithTag(START_TRAIL_SHEET_TAG).assertDoesNotExist()
             for (tag in listOf(START_ENERGY_LOW_TAG, START_ENERGY_MODERATE_TAG,
                 START_ENERGY_HIGH_TAG, START_RUN_BUTTON_TAG, START_RUN_GOAL_TAG)) {
-                composeTestRule.onNodeWithTag(tag).performScrollTo().assertIsDisplayed().assertIsEnabled()
+                val action = composeTestRule.onNodeWithTag(tag)
+                if (!action.isDisplayed()) action.performScrollTo()
+                action.assertIsDisplayed().assertIsEnabled()
             }
         }
         }
@@ -983,7 +936,7 @@ class RunStateScreenTest {
     }
 
     @Test
-    fun energyPromptAlternatesWithoutMovingControlsAndDisappearsAfterSelection() {
+    fun welcomeEnergyQuestionStaysStableAndSelectionNeverDelaysStart() {
         composeTestRule.mainClock.autoAdvance = false
         var selected by mutableStateOf<PreRunEnergy?>(null)
         var starts = 0
@@ -995,58 +948,40 @@ class RunStateScreenTest {
         }
         composeTestRule.mainClock.advanceTimeByFrame()
         settleStartEnergyEntrance()
-        composeTestRule.mainClock.advanceTimeBy(700L)
-        val fixedTags = listOf(START_ENERGY_CUE_TAG, START_ENERGY_PROMPT_TAG,
+        val fixedTags = listOf(START_GREETING_TAG, START_ENERGY_CUE_TAG, START_ENERGY_PROMPT_TAG,
             START_RUN_BUTTON_TAG, START_FOOTER_TAG, START_UTILITY_ACTIONS_TAG)
         val fixedBounds = fixedTags.associateWith {
             composeTestRule.onNodeWithTag(it).assertIsDisplayed().fetchSemanticsNode().boundsInRoot
         }
-        val pill = composeTestRule.onNodeWithTag(START_ENERGY_PROMPT_PILL_TAG)
+        val question = composeTestRule.onNodeWithTag(START_ENERGY_PROMPT_TAG)
             .assertIsDisplayed().fetchSemanticsNode()
-        val pillBounds = pill.boundsInRoot
-        assertTrue("The prompt sits below the Energy choices", pillBounds.top >= fixedBounds.getValue(START_ENERGY_CUE_TAG).bottom)
-        assertTrue("The prompt remains above bottom navigation", pillBounds.bottom <= fixedBounds.getValue(START_UTILITY_ACTIONS_TAG).top)
-        assertFalse("The invitation is not another button", pill.config.contains(SemanticsActions.OnClick))
-        assertFalse("The invitation must not pretend to be a control", pill.config.contains(SemanticsProperties.Role))
-        fun assertStablePrompt() {
-            val node = composeTestRule.onNodeWithTag(START_ENERGY_PROMPT_PILL_TAG).fetchSemanticsNode()
-            assertEquals(listOf("Choose energy, optional"), node.config[SemanticsProperties.ContentDescription])
-            assertEquals("Changing words must not resize the pill", pillBounds, node.boundsInRoot)
-            fixedTags.forEach { tag ->
-                assertEquals("Prompt animation must not move $tag", fixedBounds.getValue(tag),
-                    composeTestRule.onNodeWithTag(tag).fetchSemanticsNode().boundsInRoot)
-            }
-        }
-        val observedWords = mutableSetOf<String>()
-        for (frame in 0 until 40) {
-            val word = composeTestRule.onAllNodesWithTag(START_ENERGY_PROMPT_WORD_TAG, useUnmergedTree = true)
-                .fetchSemanticsNodes().single().config[SemanticsProperties.Text].single().text
-            assertTrue("Only one invitation word is shown at a time", word == "Choose" || word == "Energy")
-            if (observedWords.add(word)) {
-                // Allow this word's fade-in to settle before retaining the visual example.
-                composeTestRule.mainClock.advanceTimeBy(450L)
-                composeTestRule.onNodeWithTag(START_ENERGY_PROMPT_WORD_TAG, useUnmergedTree = true)
-                    .assertTextEquals(word)
-                saveNativePreview(START_RUN_SCREEN_TAG, "start-energy-prompt-${word.lowercase()}.png")
-            }
-            assertStablePrompt()
-            if (observedWords.size == 2) break
-            composeTestRule.mainClock.advanceTimeBy(200L)
-        }
-        assertEquals(setOf("Choose", "Energy"), observedWords)
-        assertEquals("The prompt cannot start a run", 0, starts)
-        composeTestRule.onNodeWithTag(START_ENERGY_MODERATE_TAG).performClick()
-        composeTestRule.mainClock.advanceTimeBy(1_000L)
+        assertTrue("The energy question is above the choices",
+            question.boundsInRoot.bottom <= fixedBounds.getValue(START_ENERGY_CUE_TAG).top)
+        assertFalse("The invitation is not another button", question.config.contains(SemanticsActions.OnClick))
+        assertFalse("The invitation must not pretend to be a control", question.config.contains(SemanticsProperties.Role))
+        assertTrue("Accessibility preserves optional energy selection",
+            question.config[SemanticsProperties.ContentDescription].joinToString().contains("optional", ignoreCase = true))
         composeTestRule.onNodeWithTag(START_ENERGY_PROMPT_PILL_TAG).assertDoesNotExist()
+        composeTestRule.onNodeWithTag(START_ENERGY_PROMPT_WORD_TAG).assertDoesNotExist()
+        composeTestRule.mainClock.advanceTimeBy(3_000L)
         fixedTags.forEach { tag ->
-            assertEquals("Dismissing the prompt must preserve $tag", fixedBounds.getValue(tag),
+            assertEquals("The welcome does not move $tag while waiting", fixedBounds.getValue(tag),
                 composeTestRule.onNodeWithTag(tag).fetchSemanticsNode().boundsInRoot)
         }
+        assertEquals("The question cannot start a run", 0, starts)
+        composeTestRule.onNodeWithTag(START_ENERGY_MODERATE_TAG).performClick()
         composeTestRule.onNodeWithTag(START_RUN_BUTTON_TAG).assertIsEnabled().performClick()
         composeTestRule.runOnIdle {
             assertEquals(1, starts)
             assertEquals(PreRunEnergy.MODERATE, selectedAtStart)
         }
+        composeTestRule.mainClock.advanceTimeBy(1_900L)
+        fixedTags.forEach { tag ->
+            assertEquals("Answering preserves $tag", fixedBounds.getValue(tag),
+                composeTestRule.onNodeWithTag(tag).fetchSemanticsNode().boundsInRoot)
+        }
+        composeTestRule.onNodeWithTag(START_ENERGY_INTAKE_TAG).assertDoesNotExist()
+        composeTestRule.onNodeWithTag(START_ENERGY_SELECTED_TAG).assertIsDisplayed()
     }
 
     @Test
@@ -1072,28 +1007,27 @@ class RunStateScreenTest {
         val fixedTags = listOf(START_AGENT_CARD_TAG, START_AGENT_VISUALIZER_TAG, START_UTILITY_ACTIONS_TAG,
             START_ENERGY_CHOICES_TAG, START_ENERGY_LOW_TAG, START_ENERGY_MODERATE_TAG,
             START_ENERGY_HIGH_TAG, START_FOOTER_TAG, START_RUN_BUTTON_TAG,
-            START_OPEN_SHOES_TAG, START_OPEN_SPOTIFY_TAG)
+            START_OPEN_SHOES_TAG, START_OPEN_SPOTIFY_TAG, START_TRAILS_BROWSE_TAG,
+            START_GREETING_TAG, START_ENERGY_PROMPT_TAG)
         val boundsBefore = fixedTags.associateWith { tag ->
             composeTestRule.onNodeWithTag(tag).assertIsDisplayed().fetchSemanticsNode().boundsInRoot
         }
-        val card = boundsBefore.getValue(START_AGENT_CARD_TAG)
-        val gps = composeTestRule.onNodeWithTag(START_RUN_STATUS_TAG)
-            .assertIsDisplayed().assertTextEquals("GPS Ready").fetchSemanticsNode().boundsInRoot
-        assertTrue("Current GPS status belongs inside the compact Agent panel",
-            gps.left >= card.left && gps.right <= card.right && gps.top >= card.top && gps.bottom <= card.bottom)
-        val ready = composeTestRule.onNodeWithText("READY").fetchSemanticsNode().boundsInRoot
-        val toRun = composeTestRule.onNodeWithText("TO RUN").fetchSemanticsNode().boundsInRoot
-        assertEquals("GPS must share READY's right edge", ready.right, gps.right, 1f)
-        assertEquals("The entire run-status group must share one right edge", toRun.right, gps.right, 1f)
-        // Different font sizes have slightly different text-box padding. Keep the accepted
-        // optical row alignment within 2dp while retaining exact right-edge assertions.
-        val opticalRowTolerance = 2f * densityValue
-        assertEquals("RUN and READY must begin on the same row",
-            composeTestRule.onNodeWithText("RUN").fetchSemanticsNode().boundsInRoot.top, ready.top, opticalRowTolerance)
-        assertEquals("STATE and TO RUN must begin on the same row",
-            composeTestRule.onNodeWithText("STATE").fetchSemanticsNode().boundsInRoot.top, toRun.top, opticalRowTolerance)
-        assertEquals("AGENT and GPS must begin on the same row",
-            composeTestRule.onNodeWithText("AGENT  •  READY").fetchSemanticsNode().boundsInRoot.top, gps.top, opticalRowTolerance)
+        composeTestRule.onNodeWithTag(START_RUN_STATUS_TAG)
+            .assertIsDisplayed().assertTextEquals("GPS Ready")
+        composeTestRule.onNodeWithTag(START_TRAILS_BACKGROUND_TAG).assertDoesNotExist()
+        composeTestRule.onNodeWithTag(START_TRAILS_GALLERY_TAG).assertDoesNotExist()
+        val trailCard = boundsBefore.getValue(START_TRAILS_BROWSE_TAG)
+        val ring = boundsBefore.getValue(START_AGENT_VISUALIZER_TAG)
+        val greeting = boundsBefore.getValue(START_GREETING_TAG)
+        val question = boundsBefore.getValue(START_ENERGY_PROMPT_TAG)
+        assertTrue("Explore trails belongs above the exposed visualizer", trailCard.bottom <= ring.top)
+        assertTrue("The greeting follows the visualizer", greeting.top >= ring.bottom)
+        assertTrue("The question follows the greeting", question.top >= greeting.bottom)
+        assertTrue("The energy choices follow their question",
+            boundsBefore.getValue(START_ENERGY_CHOICES_TAG).top >= question.bottom)
+        composeTestRule.onNodeWithText("READY").assertDoesNotExist()
+        composeTestRule.onNodeWithText("TO RUN").assertDoesNotExist()
+        composeTestRule.onNodeWithText("AGENT  •  READY").assertDoesNotExist()
         val utilities = boundsBefore.getValue(START_UTILITY_ACTIONS_TAG)
         assertTrue("Bottom navigation belongs below Energy", utilities.top >= boundsBefore.getValue(START_ENERGY_CHOICES_TAG).bottom)
         val utilityTags = listOf("startExpandMap", START_RUN_GOAL_TAG, START_RUN_TAB_TAG,
@@ -1125,7 +1059,7 @@ class RunStateScreenTest {
         assertEquals(listOf("Start run"), startNode.config[SemanticsProperties.ContentDescription])
         assertEquals("GPS run", startNode.config[SemanticsProperties.StateDescription])
         composeTestRule.onNodeWithTag(START_MAP_STATUS_TAG).assertDoesNotExist()
-        saveNativePreview(START_RUN_SCREEN_TAG, "start-bottom-navigation-preview.png")
+        saveNativePreview(START_RUN_SCREEN_TAG, "start-welcome-emulator-preview.png")
         fun assertFixed() {
             fixedTags.forEach { tag ->
                 assertEquals("A swipe must not move $tag on the normal Start screen",
@@ -1138,17 +1072,26 @@ class RunStateScreenTest {
             val start = composeTestRule.onNodeWithTag(START_RUN_BUTTON_TAG).fetchSemanticsNode().boundsInRoot
             val shoes = composeTestRule.onNodeWithTag(START_OPEN_SHOES_TAG).fetchSemanticsNode().boundsInRoot
             val music = composeTestRule.onNodeWithTag(START_OPEN_SPOTIFY_TAG).fetchSemanticsNode().boundsInRoot
-            assertTrue("The Energy row must stay below the controls without overlap", moderate.top >= footer.bottom)
-            assertTrue("Shoes and Music must sit above Start", shoes.bottom <= start.top && music.bottom <= start.top)
+            val ringNow = composeTestRule.onNodeWithTag(START_AGENT_VISUALIZER_TAG)
+                .fetchSemanticsNode().boundsInRoot
+            val greetingNow = composeTestRule.onNodeWithTag(START_GREETING_TAG)
+                .fetchSemanticsNode().boundsInRoot
+            assertTrue("Start follows the Energy row without overlap", start.top >= moderate.bottom)
+            assertTrue("Shoes and Music remain above the greeting",
+                shoes.bottom <= greetingNow.top && music.bottom <= greetingNow.top)
             assertEquals("Shoes and Music share one row", shoes.center.y, music.center.y, 1f)
-            assertTrue("Shoes stays left and Music stays right", shoes.center.x < start.center.x && music.center.x > start.center.x)
-            assertTrue("The side controls form a compact cluster around Start instead of spanning the screen",
-                music.right - shoes.left <= start.width * 2.1f)
-            assertTrue("The side controls stay close above Start without overlapping its touch area",
-                start.top - shoes.bottom <= 4f * densityValue + 1f)
-            assertEquals("Start is centered under Shoes and Music", (shoes.center.x + music.center.x) / 2f, start.center.x, 1f)
-            assertEquals("Start stays centered above Moderate", moderate.center.x, start.center.x, 1f)
-            assertTrue("The Start action must remain inside its own footer", start.top >= footer.top && start.bottom <= footer.bottom)
+            assertTrue("Shoes flank the visualizer on the left and Music on the right",
+                shoes.center.x < ringNow.center.x && music.center.x > ringNow.center.x)
+            assertTrue("Both side controls sit near the lower half of the visualizer",
+                shoes.center.y >= ringNow.center.y && music.center.y >= ringNow.center.y &&
+                    shoes.top <= ringNow.bottom && music.top <= ringNow.bottom)
+            assertTrue("The side controls do not overlap or cover the visualizer center",
+                !shoes.overlaps(music) && shoes.right <= ringNow.center.x && music.left >= ringNow.center.x)
+            assertEquals("The visualizer stays centered between Shoes and Music",
+                (shoes.center.x + music.center.x) / 2f, ringNow.center.x, 1f)
+            assertEquals("Start stays centered below Moderate", moderate.center.x, start.center.x, 1f)
+            assertTrue("The Start action remains inside its footer", start.top >= footer.top && start.bottom <= footer.bottom)
+            assertTrue("The footer remains above navigation", footer.bottom <= utilities.top)
         }
         assertFixed()
 
@@ -1215,21 +1158,26 @@ class RunStateScreenTest {
             }
         }
         for (scale in listOf(1.5f, 2f)) {
-            // This short viewport scrolls as one flow, including the full Agent card.
+            // The welcome body scrolls while its five navigation actions stay in place.
             composeTestRule.runOnIdle { fontScale = scale; selected = null }
             composeTestRule.onNodeWithTag(START_RUN_FALLBACK_SCROLL_TAG).assertIsDisplayed()
             fun reachable(tag: String): SemanticsNodeInteraction {
                 val node = composeTestRule.onNodeWithTag(tag)
-                node.performScrollTo()
+                if (!node.isDisplayed()) node.performScrollTo()
                 return node.assertIsDisplayed().assertIsEnabled()
             }
             val viewport = composeTestRule.onNodeWithTag(START_RUN_SCREEN_TAG).getUnclippedBoundsInRoot()
             val card = composeTestRule.onNodeWithTag(START_AGENT_CARD_TAG).performScrollTo()
                 .assertIsDisplayed().getUnclippedBoundsInRoot()
-            assertTrue("The entire Agent card is reachable at $scale text",
+            assertTrue("The entire visualizer and side controls are reachable at $scale text",
                 card.top >= viewport.top - 0.5.dp && card.bottom <= viewport.bottom + 0.5.dp &&
                     card.left >= viewport.left - 0.5.dp && card.right <= viewport.right + 0.5.dp)
-            saveNativePreview(START_RUN_SCREEN_TAG, "start-bottom-navigation-upper-font-$scale.png")
+            val navigationBefore = composeTestRule.onNodeWithTag(START_UTILITY_ACTIONS_TAG)
+                .assertIsDisplayed().fetchSemanticsNode().boundsInRoot
+            composeTestRule.onNodeWithTag(START_TRAILS_BROWSE_TAG).performScrollTo().assertIsDisplayed()
+            composeTestRule.onNodeWithTag(START_GREETING_TAG).performScrollTo().assertIsDisplayed()
+            composeTestRule.onNodeWithTag(START_ENERGY_PROMPT_TAG).performScrollTo().assertIsDisplayed()
+            saveNativePreview(START_RUN_SCREEN_TAG, "start-welcome-upper-font-$scale.png")
             listOf(START_ENERGY_LOW_TAG, START_ENERGY_MODERATE_TAG, START_ENERGY_HIGH_TAG,
                 START_RUN_BUTTON_TAG, START_OPEN_SHOES_TAG, START_OPEN_SPOTIFY_TAG).forEach { tag ->
                 val bounds = reachable(tag).fetchSemanticsNode().boundsInRoot
@@ -1248,7 +1196,10 @@ class RunStateScreenTest {
                     assertTrue("Navigation target stays inside the viewport at $scale text", bounds.left >= 0f && bounds.right <= bar.right + 1f)
                     assertTrue("Navigation keeps a 48 dp target at $scale text", bounds.width + 1f >= 48f * densityValue && bounds.height + 1f >= 48f * densityValue)
                 }
-            saveNativePreview(START_RUN_SCREEN_TAG, "start-bottom-navigation-font-$scale.png")
+            assertEquals("The navigation stays fixed when the welcome body scrolls",
+                navigationBefore, composeTestRule.onNodeWithTag(START_UTILITY_ACTIONS_TAG)
+                    .fetchSemanticsNode().boundsInRoot)
+            saveNativePreview(START_RUN_SCREEN_TAG, "start-welcome-navigation-font-$scale.png")
             reachable(START_ENERGY_MODERATE_TAG).performClick()
             reachable(START_RUN_BUTTON_TAG).performClick()
             composeTestRule.runOnIdle { assertEquals(PreRunEnergy.MODERATE, selectedAtStart) }
@@ -1282,12 +1233,14 @@ class RunStateScreenTest {
             }
         }
         composeTestRule.onNodeWithTag(START_RUN_FALLBACK_SCROLL_TAG).assertIsDisplayed()
-        composeTestRule.onNodeWithTag(START_RUN_SETTINGS_TAG).performScrollTo()
+        val navigationBefore = composeTestRule.onNodeWithTag(START_UTILITY_ACTIONS_TAG)
+            .assertIsDisplayed().fetchSemanticsNode().boundsInRoot
+        composeTestRule.onNodeWithTag(START_RUN_SETTINGS_TAG)
             .assertIsDisplayed().performTouchInput { click() }
-        composeTestRule.onNodeWithTag(START_HISTORY_TAG).performScrollTo()
+        composeTestRule.onNodeWithTag(START_HISTORY_TAG)
             .assertIsDisplayed().performTouchInput { click() }
-        composeTestRule.onNodeWithTag(START_RUN_GOAL_TAG).performScrollTo().assertIsDisplayed()
-        composeTestRule.onNodeWithTag(START_RUN_TAB_TAG).performScrollTo()
+        composeTestRule.onNodeWithTag(START_RUN_GOAL_TAG).assertIsDisplayed()
+        composeTestRule.onNodeWithTag(START_RUN_TAB_TAG)
             .assertIsDisplayed().performTouchInput { click() }
         composeTestRule.runOnIdle { assertEquals(0, starts) }
         composeTestRule.onNodeWithTag(START_ENERGY_MODERATE_TAG).performScrollTo()
@@ -1299,6 +1252,8 @@ class RunStateScreenTest {
         composeTestRule.onNodeWithTag(START_OPEN_SPOTIFY_TAG).performScrollTo().assertIsDisplayed()
         composeTestRule.onNodeWithTag(START_RUN_BUTTON_TAG).performScrollTo()
             .assertIsDisplayed().performTouchInput { click() }
+        assertEquals("Landscape body scrolling does not move navigation", navigationBefore,
+            composeTestRule.onNodeWithTag(START_UTILITY_ACTIONS_TAG).fetchSemanticsNode().boundsInRoot)
         composeTestRule.runOnIdle {
             assertEquals(PreRunEnergy.MODERATE, selectedAtStart)
             assertEquals(1, starts)
@@ -3128,7 +3083,8 @@ class RunStateScreenTest {
             }
             composeTestRule.onNodeWithText(if (save) "Save run" else "Discard run").performClick()
             composeTestRule.waitUntil(5_000L) {
-                composeTestRule.onAllNodesWithText(if (save) "RUN COMPLETE" else READY).fetchSemanticsNodes().isNotEmpty()
+                if (save) composeTestRule.onAllNodesWithText("RUN COMPLETE").fetchSemanticsNodes().isNotEmpty()
+                else composeTestRule.onAllNodesWithTag(START_RUN_SCREEN_TAG).fetchSemanticsNodes().isNotEmpty()
             }
             val stored = runBlocking { database.runDao().findById(id.toString()) }
             assertEquals(if (save) StoredRunState.COMPLETED else null, stored?.state)

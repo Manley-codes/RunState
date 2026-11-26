@@ -5,9 +5,6 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
@@ -57,8 +54,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateMapOf
-import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -99,9 +96,6 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.testTag
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.buildAnnotatedString
-import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.input.KeyboardType
@@ -125,6 +119,8 @@ import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.sin
 import kotlin.math.roundToInt
+import java.time.LocalTime
+import kotlinx.coroutines.delay
 
 internal const val START_RUN_SCREEN_TAG = "startRunScreen"
 internal const val START_RUN_BUTTON_TAG = "startRunButton"
@@ -147,6 +143,7 @@ internal const val START_RUN_STATUS_TAG = "startRunStatus"
 internal const val START_RUN_UPPER_CONTENT_TAG = "startRunUpperContent"
 internal const val START_RUN_FALLBACK_SCROLL_TAG = "startRunFallbackScroll"
 internal const val START_AGENT_CARD_TAG = "startAgentCard"
+internal const val START_GREETING_TAG = "startGreeting"
 internal const val START_UTILITY_ACTIONS_TAG = "startUtilityActions"
 internal const val START_ENERGY_CHOICES_TAG = "startEnergyChoices"
 internal const val START_ENERGY_CUE_TAG = "startEnergyCue"
@@ -236,7 +233,6 @@ internal fun StartRunScreen(
     var animationsEnabled by remember(view) { mutableStateOf(ValueAnimator.areAnimatorsEnabled()) }
     var rootBounds by remember { mutableStateOf<Rect?>(null) }
     var ringBounds by remember { mutableStateOf<Rect?>(null) }
-    var promptBounds by remember { mutableStateOf<Rect?>(null) }
     val tileBounds = remember { mutableStateMapOf<PreRunEnergy, Rect>() }
     var intake by remember { mutableStateOf<EnergyIntake?>(null) }
     // A restored former Plan sheet must not become an open Goal editor after this update.
@@ -244,10 +240,10 @@ internal fun StartRunScreen(
     var goalEditorUnit by rememberSaveable(goalDistanceUnit) { mutableStateOf(goalDistanceUnit) }
     var trailsOpen by rememberSaveable { mutableStateOf(false) }
     var exploredTrailId by rememberSaveable { mutableStateOf<String?>(null) }
-    var agentBottomPx by remember { mutableFloatStateOf(0f) }
-    var controlsTopPx by remember { mutableFloatStateOf(0f) }
     val trailBrowserAvailable = !liveMapBackground
-    val trailsBackground = startBackground == StartBackground.HOUSTON_TRAILS && trailBrowserAvailable
+    // The plain welcome layout temporarily supersedes the saved artwork preference.
+    // Keep that preference and the original assets intact for a later visual decision.
+    var greetingHour by remember { mutableIntStateOf(LocalTime.now().hour) }
     val intakeTime = remember { Animatable(0f) }
     var energyEntryPlayed by rememberSaveable { mutableStateOf(false) }
     val energyEntryTime = remember {
@@ -290,10 +286,12 @@ internal fun StartRunScreen(
     }
     val ringVisible = rootBounds?.let { viewport -> ringBounds?.overlaps(viewport) } == true
     val ringPhase = rememberRunAgentPhase(lifecycleStarted && animationsEnabled && ringVisible)
-    val energyEntrySettled by remember {
-        derivedStateOf { energyEntryTime.value >= START_ENERGY_ENTRY_DURATION_MS }
+    LaunchedEffect(lifecycleStarted) {
+        while (lifecycleStarted) {
+            greetingHour = LocalTime.now().hour
+            delay(60_000L)
+        }
     }
-    val promptVisible = rootBounds?.let { viewport -> promptBounds?.overlaps(viewport) } == true
 
     BoxWithConstraints(
         modifier = modifier
@@ -305,168 +303,142 @@ internal fun StartRunScreen(
                 rootBounds = bounds
             }
     ) {
-        val agentRingSize = if (maxWidth < 400.dp) 108.dp else 128.dp
+        val spacious = maxHeight >= 800.dp && maxWidth >= 360.dp
+        val agentRingSize = (if (spacious) 220.dp else 192.dp).coerceAtMost(maxWidth - 124.dp)
         val energyEntryDistancePx = with(LocalDensity.current) { maxWidth.toPx() }
-        // A short window cannot keep the controls, navigation and upper details visible.
-        // In that case use one continuous flow; regular phone heights retain the anchored layout.
-        val fallbackHeight = 564.dp + (if (trailBrowserAvailable) 72.dp else 0.dp) +
-            116.dp * (LocalDensity.current.fontScale - 1f).coerceAtLeast(0f)
-        val scrollWholeStack = maxHeight < fallbackHeight
         val wholeStackScroll = rememberScrollState()
-        val upperDetailsScroll = rememberScrollState()
-        if (trailsBackground) {
-            StartTrailsBackground(
-                upperContentBottom = with(LocalDensity.current) { agentBottomPx.toDp() } + 42.dp,
-                controlsTop = with(LocalDensity.current) { controlsTopPx.toDp() },
-                moving = lifecycleStarted && animationsEnabled && !trailsOpen && !runGoalOpen,
-                enabled = actionsEnabled && !setupLoading,
-                onExplore = { exploredTrailId = it.id; trailsOpen = true }
-            )
-        } else if (!liveMapBackground) {
-            Image(
-                painter = painterResource(R.drawable.start_map_reference),
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize()
-            )
-            Box(
-                Modifier
-                    .fillMaxSize()
-                    .background(Brush.verticalGradient(
-                        0f to Color.White.copy(alpha = 0.08f),
-                        0.55f to Color.White.copy(alpha = 0.02f),
-                        1f to Color.White.copy(alpha = 0.52f)
-                    ))
-            )
+        val gpsStatus = when {
+            setupLoading -> "Loading run preferences…"
+            !gpsSelected -> "Sample demo · simulated distance"
+            gpsStatusText.equals("GPS ready", ignoreCase = true) -> "GPS Ready"
+            gpsStatusText != null -> gpsStatusText
+            gpsReady -> "GPS connecting…"
+            else -> "Location setup on Start"
         }
-
-        // The launch controls and Energy own separate space, so neither can slide over the other.
-        // Upper details handle ordinary overflow; only very short windows scroll the entire flow.
-        Column(
-            modifier = Modifier.fillMaxSize().then(if (scrollWholeStack) Modifier
-                .testTag(START_RUN_FALLBACK_SCROLL_TAG).verticalScroll(wholeStackScroll) else Modifier),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Column(
-                modifier = Modifier
-                    .then(if (scrollWholeStack) Modifier else Modifier.weight(1f))
-                    .fillMaxWidth()
-                    .testTag(START_RUN_UPPER_CONTENT_TAG)
-                    .then(if (scrollWholeStack || trailsBackground) Modifier else Modifier.verticalScroll(upperDetailsScroll))
-                    .padding(horizontal = 20.dp)
-                    .padding(top = 26.dp, bottom = 12.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Box(Modifier.onGloballyPositioned {
-                    agentBottomPx = it.boundsInRoot().bottom - (rootBounds?.top ?: 0f)
-                }) {
-                AgentReadyCard(
-                    selectedEnergy = selectedPreRunEnergy,
-                    gpsStatus = when {
-                        setupLoading -> "Loading run preferences…"
-                        !gpsSelected -> "Sample demo · simulated distance"
-                        gpsStatusText.equals("GPS ready", ignoreCase = true) -> "GPS Ready"
-                        gpsStatusText != null -> gpsStatusText
-                        gpsReady -> "GPS connecting…"
-                        else -> "Location setup on Start"
-                    },
-                    ringSize = agentRingSize,
-                    phase = ringPhase,
-                    intakeTime = { if (intake != null) intakeTime.value else null },
-                    ringModifier = Modifier.onGloballyPositioned { coordinates ->
-                        val bounds = coordinates.boundsInRoot()
-                        if (ringBounds != null && ringBounds != bounds) intake = null
-                        ringBounds = bounds
-                    }
-                )
-                }
-                if (trailBrowserAvailable) {
-                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    if (trailsBackground) StartTrailMapCredit()
-                    Spacer(Modifier.weight(1f))
-                    TextButton(onClick = { exploredTrailId = null; trailsOpen = true },
-                        enabled = actionsEnabled && !setupLoading,
-                        modifier = Modifier.heightIn(min = 48.dp)
-                            .testTag(START_TRAILS_BROWSE_TAG)) {
-                        Text("Trails  ›", color = StartInk, fontSize = 12.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            modifier = Modifier.background(Color.White.copy(alpha = .86f), RoundedCornerShape(16.dp))
-                                .padding(horizontal = 12.dp, vertical = 7.dp))
-                    }
-                    }
-                }
-                StartSetupNotices(
-                    onOpenRunSettings = onOpenRunSettings,
-                    actionsEnabled = actionsEnabled,
-                    setupLoading = setupLoading,
-                    musicAccessNeeded = musicSelected && !musicAccessGranted,
-                    reflectionSetupRequired = reflectionSetupRequired,
-                    gpsMessage = gpsMessage
-                )
-            }
-            Box(Modifier.onGloballyPositioned {
-                controlsTopPx = it.boundsInRoot().top - (rootBounds?.top ?: 0f)
-            }) {
-            StartFooter(
-                onStart = onStart,
-                enabled = actionsEnabled && !setupLoading,
-                gpsSelected = gpsSelected,
-                energySelected = selectedPreRunEnergy != null,
-                phase = ringPhase,
-                entryTime = { energyEntryTime.value },
-                onOpenSpotify = onOpenSpotify,
-                musicEnabled = actionsEnabled,
-                selectedShoe = selectedShoe,
-                onOpenShoes = onOpenShoes
-            )
-            }
-            Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp)
-                .padding(top = 12.dp)) {
-                PreRunEnergyChoices(
-                    selected = selectedPreRunEnergy,
-                    onSelect = selection@{ energy ->
-                        // Keep the real value synchronous, even if Start is tapped before arrival.
-                        if (energy != null && (selectedPreRunEnergy != null || intake != null)) {
-                            return@selection
+        Column(Modifier.fillMaxSize().background(StartNavigationBackground)) {
+            // One scroll surface keeps all controls reachable at large text/short heights.
+            // The five destinations stay in their own fixed space below it.
+            BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
+                val contentHeight = maxHeight
+                Column(
+                    modifier = Modifier.fillMaxWidth()
+                        .testTag(START_RUN_FALLBACK_SCROLL_TAG)
+                        .verticalScroll(wholeStackScroll)
+                        .heightIn(min = contentHeight)
+                        .padding(horizontal = 20.dp)
+                        .padding(top = 16.dp, bottom = 12.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column(Modifier.fillMaxWidth().testTag(START_RUN_UPPER_CONTENT_TAG)) {
+                        Text("RunState", color = StartInk, fontSize = 30.sp,
+                            lineHeight = 36.sp, fontWeight = FontWeight.ExtraBold)
+                        if (trailBrowserAvailable) {
+                            Spacer(Modifier.height(16.dp))
+                            ExploreTrailsCard(
+                                enabled = actionsEnabled && !setupLoading,
+                                imageSize = if (spacious) 96.dp else 80.dp,
+                                onClick = { exploredTrailId = null; trailsOpen = true }
+                            )
                         }
-                        if (energy == null) {
-                            intake = null
-                        } else if (selectedPreRunEnergy == null && intake == null) {
-                            val root = rootBounds
-                            val ring = ringBounds
-                            val allTiles = StartEnergyLevels.associateWith { tileBounds[it] }
-                            // An early tap still answers immediately; never fly a copy from an
-                            // unsettled entrance position or hold up the runner's Start action.
-                            if (energyEntryTime.value >= START_ENERGY_ENTRY_DURATION_MS &&
-                                lifecycleStarted && animationsEnabled && ringVisible && root != null &&
-                                ring != null && allTiles.values.all { it != null && it.width > 0f && it.height > 0f }) {
-                                intake = EnergyIntake(
-                                    energy,
-                                    allTiles.mapValues { (_, bounds) -> bounds!!.translate(-root.topLeft) },
-                                    ring.center - root.topLeft
-                                )
+                        StartSetupNotices(
+                            onOpenRunSettings = onOpenRunSettings,
+                            actionsEnabled = actionsEnabled,
+                            setupLoading = setupLoading,
+                            musicAccessNeeded = musicSelected && !musicAccessGranted,
+                            reflectionSetupRequired = reflectionSetupRequired,
+                            gpsMessage = gpsMessage
+                        )
+                    }
+                    Spacer(Modifier.height(12.dp))
+                    Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+                        StartWelcomeVisualizer(
+                            selectedEnergy = selectedPreRunEnergy,
+                            ringSize = agentRingSize,
+                            phase = ringPhase,
+                            intakeTime = { if (intake != null) intakeTime.value else null },
+                            ringModifier = Modifier.onGloballyPositioned { coordinates ->
+                                val bounds = coordinates.boundsInRoot()
+                                if (ringBounds != null && ringBounds != bounds) intake = null
+                                ringBounds = bounds
+                            },
+                            selectedShoe = selectedShoe,
+                            onOpenShoes = onOpenShoes,
+                            shoesEnabled = actionsEnabled && !setupLoading,
+                            onOpenSpotify = onOpenSpotify,
+                            musicEnabled = actionsEnabled
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            text = when (greetingHour) {
+                                in 5..11 -> "Good morning"
+                                in 12..16 -> "Good afternoon"
+                                else -> "Good evening"
+                            },
+                            color = StartInk, fontSize = 25.sp, lineHeight = 30.sp,
+                            fontWeight = FontWeight.Bold, textAlign = TextAlign.Center,
+                            modifier = Modifier.fillMaxWidth().testTag(START_GREETING_TAG)
+                        )
+                        Spacer(Modifier.height(6.dp))
+                        Text("How’s your energy today?", color = StartInk.copy(alpha = 0.68f),
+                            fontSize = 17.sp, lineHeight = 23.sp, textAlign = TextAlign.Center,
+                            modifier = Modifier.fillMaxWidth().testTag(START_ENERGY_PROMPT_TAG)
+                                .graphicsLayer { alpha = if (selectedPreRunEnergy == null) 1f else 0f }
+                                .clearAndSetSemantics {
+                                    if (selectedPreRunEnergy == null)
+                                        contentDescription = "How’s your energy today? Optional"
+                                })
+                        Spacer(Modifier.height(18.dp))
+                        PreRunEnergyChoices(
+                            selected = selectedPreRunEnergy,
+                            onSelect = selection@{ energy ->
+                                // Keep the real value synchronous, even if Start is tapped before arrival.
+                                if (energy != null && (selectedPreRunEnergy != null || intake != null)) {
+                                    return@selection
+                                }
+                                if (energy == null) {
+                                    intake = null
+                                } else if (selectedPreRunEnergy == null && intake == null) {
+                                    val root = rootBounds
+                                    val ring = ringBounds
+                                    val allTiles = StartEnergyLevels.associateWith { tileBounds[it] }
+                                    // An early tap still answers immediately; never fly a copy from an
+                                    // unsettled entrance position or hold up the runner's Start action.
+                                    if (energyEntryTime.value >= START_ENERGY_ENTRY_DURATION_MS &&
+                                        lifecycleStarted && animationsEnabled && ringVisible && root != null &&
+                                        ring != null && allTiles.values.all { it != null && it.width > 0f && it.height > 0f }) {
+                                        intake = EnergyIntake(
+                                            energy,
+                                            allTiles.mapValues { (_, bounds) -> bounds!!.translate(-root.topLeft) },
+                                            ring.center - root.topLeft
+                                        )
+                                    }
+                                }
+                                onSelectPreRunEnergy(energy)
+                            },
+                            enabled = actionsEnabled,
+                            intake = intake,
+                            intakeTime = { intakeTime.value },
+                            entryTime = { energyEntryTime.value },
+                            entryDistancePx = energyEntryDistancePx,
+                            onTileBounds = { energy, bounds ->
+                                if (tileBounds[energy] != null && tileBounds[energy] != bounds) intake = null
+                                tileBounds[energy] = bounds
                             }
-                        }
-                        onSelectPreRunEnergy(energy)
-                    },
-                    enabled = actionsEnabled,
-                    intake = intake,
-                    intakeTime = { intakeTime.value },
-                    entryTime = { energyEntryTime.value },
-                    entryDistancePx = energyEntryDistancePx,
-                    onTileBounds = { energy, bounds ->
-                        if (tileBounds[energy] != null && tileBounds[energy] != bounds) intake = null
-                        tileBounds[energy] = bounds
+                        )
                     }
-                )
+                    Spacer(Modifier.height(12.dp))
+                    StartFooter(
+                        onStart = onStart,
+                        enabled = actionsEnabled && !setupLoading,
+                        gpsSelected = gpsSelected,
+                        gpsStatus = gpsStatus,
+                        energySelected = selectedPreRunEnergy != null,
+                        phase = ringPhase,
+                        entryTime = { energyEntryTime.value }
+                    )
+                }
             }
-            EnergyChoicePrompt(
-                unanswered = selectedPreRunEnergy == null,
-                entranceSettled = energyEntrySettled,
-                animationsEnabled = animationsEnabled,
-                active = lifecycleStarted && promptVisible,
-                modifier = Modifier.onGloballyPositioned { promptBounds = it.boundsInRoot() }
-            )
             StartBottomNavigation(
                 mapStatus = if (liveMapBackground) liveMapStatus else null,
                 onMapClick = if (liveMapBackground && onRequestMapLocation != null)
@@ -898,162 +870,68 @@ internal fun ReflectionConnectionDialog(
 }
 
 @Composable
-private fun AgentReadyCard(
+private fun ExploreTrailsCard(enabled: Boolean, imageSize: Dp, onClick: () -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth()
+            .shadow(8.dp, RoundedCornerShape(24.dp), clip = false,
+                ambientColor = StartInk.copy(alpha = 0.08f),
+                spotColor = StartInk.copy(alpha = 0.12f))
+            .clip(RoundedCornerShape(24.dp))
+            .background(Color.White)
+            .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
+            .testTag(START_TRAILS_BROWSE_TAG)
+            .semantics(mergeDescendants = true) { contentDescription = "Explore trails" }
+            .padding(14.dp),
+        horizontalArrangement = Arrangement.spacedBy(16.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Image(painterResource(R.drawable.trail_terry_hershey_photo), contentDescription = null,
+            contentScale = ContentScale.Crop,
+            modifier = Modifier.size(imageSize).clip(RoundedCornerShape(16.dp)))
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text("Explore trails", color = StartInk, fontSize = 21.sp, lineHeight = 25.sp,
+                fontWeight = FontWeight.Bold)
+            Text("Find your next route", color = StartInk.copy(alpha = 0.64f),
+                fontSize = 14.sp, lineHeight = 19.sp)
+        }
+        Text("›", color = StartInk, fontSize = 30.sp,
+            modifier = Modifier.clearAndSetSemantics { })
+    }
+}
+
+@Composable
+private fun StartWelcomeVisualizer(
     selectedEnergy: PreRunEnergy?,
-    gpsStatus: String,
     ringSize: Dp,
     phase: State<Float>,
     intakeTime: () -> Float?,
-    ringModifier: Modifier
+    ringModifier: Modifier,
+    selectedShoe: ShoePairDisplay?,
+    onOpenShoes: () -> Unit,
+    shoesEnabled: Boolean,
+    onOpenSpotify: () -> Unit,
+    musicEnabled: Boolean
 ) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .testTag(START_AGENT_CARD_TAG)
-            .shadow(10.dp, RoundedCornerShape(24.dp), clip = false,
-                ambientColor = Color(0xFF49645C).copy(alpha = 0.16f),
-                spotColor = Color(0xFF49645C).copy(alpha = 0.22f))
-            .clip(RoundedCornerShape(24.dp))
-            .background(StartNavigationBackground)
-            .border(1.dp, Color(0xFFDDE7E2), RoundedCornerShape(24.dp))
-            .padding(horizontal = 12.dp, vertical = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(4.dp)
-    ) {
-        Column(Modifier.weight(1f)) {
-            Text(
-                text = "RUN",
-                color = StartLime,
-                fontSize = 17.sp,
-                fontWeight = FontWeight.ExtraBold,
-                letterSpacing = 2.sp,
-                lineHeight = 22.sp
-            )
-            Text(
-                text = "STATE",
-                color = StartInk,
-                fontSize = 28.sp,
-                fontWeight = FontWeight.Black,
-                letterSpacing = 1.sp,
-                lineHeight = 32.sp
-            )
-            Text(
-                text = buildAnnotatedString {
-                    append("AGENT  ")
-                    withStyle(SpanStyle(color = StartLime)) { append("•") }
-                    withStyle(SpanStyle(color = StartInk.copy(alpha = 0.70f))) { append("  READY") }
-                },
-                color = StartInk,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Bold,
-                letterSpacing = 0.1.sp,
-                lineHeight = 16.sp
-            )
-        }
-        // Reserve the agent's size; side text can wrap instead of squeezing it at large font sizes.
-        Box(ringModifier.size(ringSize).testTag(START_AGENT_VISUALIZER_TAG)) {
-            RunAgentRing(
-                phase = phase,
-                intakeTime = intakeTime,
+    Box(Modifier.fillMaxWidth().height(ringSize).testTag(START_AGENT_CARD_TAG)) {
+        Box(ringModifier.size(ringSize).align(Alignment.TopCenter)
+            .testTag(START_AGENT_VISUALIZER_TAG)) {
+            // Reuse the phone's exact three-lobed drawing and receiving animation.
+            RunAgentRing(phase = phase, intakeTime = intakeTime,
                 modifier = Modifier.fillMaxSize().then(
-                    if (selectedEnergy != null) Modifier
-                        .testTag(START_ENERGY_SELECTED_TAG)
+                    if (selectedEnergy != null) Modifier.testTag(START_ENERGY_SELECTED_TAG)
                         .semantics {
                             selected = true
                             contentDescription = "Run agent"
                             stateDescription = "Pre-run energy: ${selectedEnergy.name}"
                         }
                     else Modifier
-                )
-            )
+                ))
         }
-        Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.CenterEnd) {
-            Column(Modifier.width(IntrinsicSize.Max), horizontalAlignment = Alignment.End) {
-                Text(
-                    text = "READY",
-                    color = StartInk.copy(alpha = 0.70f),
-                    fontSize = 17.sp,
-                    fontWeight = FontWeight.ExtraBold,
-                    letterSpacing = 2.sp,
-                    lineHeight = 22.sp,
-                    modifier = Modifier.align(Alignment.End),
-                    textAlign = TextAlign.End
-                )
-                Text(
-                    text = "TO RUN",
-                    color = StartInk,
-                    fontSize = 22.sp,
-                    fontWeight = FontWeight.Black,
-                    letterSpacing = 1.sp,
-                    lineHeight = 32.sp,
-                    textAlign = TextAlign.End
-                )
-                Text(
-                    text = gpsStatus,
-                    color = StartInk.copy(alpha = 0.72f),
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = 0.1.sp,
-                    lineHeight = 16.sp,
-                    textAlign = TextAlign.End,
-                    modifier = Modifier.fillMaxWidth().testTag(START_RUN_STATUS_TAG)
-                )
-            }
+        Box(Modifier.align(Alignment.BottomStart)) {
+            ShoeFooterControl(selectedShoe, shoesEnabled, onOpenShoes)
         }
-    }
-}
-
-@Composable
-private fun EnergyChoicePrompt(
-    unanswered: Boolean,
-    entranceSettled: Boolean,
-    animationsEnabled: Boolean,
-    active: Boolean,
-    modifier: Modifier = Modifier
-) {
-    val textGrowth = (LocalDensity.current.fontScale - 1f).coerceAtLeast(0f)
-    val shown = unanswered && entranceSettled
-    val opacity by animateFloatAsState(if (shown) 1f else 0f,
-        animationSpec = tween(if (animationsEnabled) 280 else 0), label = "energyPromptVisibility")
-    // Keep the gap even after an answer, so the tiles/dial/navigation never jump.
-    Box(modifier.fillMaxWidth().padding(top = 12.dp, bottom = 12.dp)
-        .height(36.dp + 16.dp * textGrowth).testTag(START_ENERGY_PROMPT_TAG),
-        contentAlignment = Alignment.Center) {
-        if (shown || opacity > 0f) {
-            val animateWords = active && animationsEnabled && entranceSettled
-            val phase: State<Float> = if (animateWords) {
-                rememberInfiniteTransition(label = "energyPromptWords").animateFloat(
-                    initialValue = 0f, targetValue = 4400f,
-                    animationSpec = infiniteRepeatable(tween(4400, easing = LinearEasing)),
-                    label = "energyPromptWordFade")
-            } else remember { mutableFloatStateOf(0f) }
-            val word by remember(phase, animationsEnabled) {
-                derivedStateOf {
-                    if (!animationsEnabled) "Choose energy"
-                    else if (phase.value < 2200f) "Choose" else "Energy"
-                }
-            }
-            Box(Modifier.width(144.dp + 76.dp * textGrowth).fillMaxHeight()
-                .testTag(START_ENERGY_PROMPT_PILL_TAG)
-                .graphicsLayer { alpha = opacity }
-                .clip(RoundedCornerShape(50))
-                .background(Color.White.copy(alpha = 0.60f))
-                .clearAndSetSemantics {
-                    // One quiet, complete instruction; word changes are decorative, not announcements.
-                    if (unanswered) contentDescription = "Choose energy, optional"
-                }, contentAlignment = Alignment.Center) {
-                Text(word, color = StartForestDeep.copy(alpha = 0.82f),
-                    fontSize = 14.sp, lineHeight = 18.sp, fontWeight = FontWeight.Medium,
-                    letterSpacing = 0.3.sp, textAlign = TextAlign.Center, maxLines = 1,
-                    modifier = Modifier.testTag(START_ENERGY_PROMPT_WORD_TAG).graphicsLayer {
-                        val wordTime = phase.value % 2200f
-                        alpha = if (!animateWords) 1f else when {
-                            wordTime < 350f -> wordTime / 350f
-                            wordTime <= 1800f -> 1f
-                            else -> ((2150f - wordTime) / 350f).coerceIn(0f, 1f)
-                        }
-                    })
-            }
+        Box(Modifier.align(Alignment.BottomEnd)) {
+            MusicFooterControl(musicEnabled, onOpenSpotify)
         }
     }
 }
@@ -1275,13 +1153,10 @@ private fun StartFooter(
     onStart: () -> Unit,
     enabled: Boolean,
     gpsSelected: Boolean,
+    gpsStatus: String,
     energySelected: Boolean,
     phase: State<Float>,
     entryTime: () -> Float,
-    onOpenSpotify: () -> Unit,
-    musicEnabled: Boolean,
-    selectedShoe: ShoePairDisplay?,
-    onOpenShoes: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val readyGlow by animateFloatAsState(
@@ -1295,23 +1170,6 @@ private fun StartFooter(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Top
     ) {
-        // Keep both secondary controls tucked above Start, with separate 72 dp tap areas.
-        Row(Modifier.widthIn(max = 224.dp).fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically) {
-            ShoeFooterControl(selectedShoe, enabled, onOpenShoes)
-            Box(
-                modifier = Modifier.size(72.dp).clip(CircleShape)
-                    .clickable(enabled = musicEnabled, role = Role.Button,
-                        onClickLabel = "Open Spotify", onClick = onOpenSpotify)
-                    .semantics { contentDescription = "Open Spotify" }
-                    .testTag(START_OPEN_SPOTIFY_TAG),
-                contentAlignment = Alignment.Center
-            ) {
-                Image(painter = painterResource(R.drawable.start_music_orb),
-                    contentDescription = null, contentScale = ContentScale.Fit,
-                    modifier = Modifier.size(56.dp).clip(CircleShape))
-            }
-        }
         Box(
             modifier = Modifier.size(110.dp).clip(CircleShape)
                 .clickable(enabled = enabled, role = Role.Button, onClick = onStart)
@@ -1328,6 +1186,25 @@ private fun StartFooter(
                 entryTime = entryTime
             )
         }
+        Text(gpsStatus, color = StartInk.copy(alpha = 0.64f), fontSize = 11.sp,
+            lineHeight = 16.sp, textAlign = TextAlign.Center,
+            modifier = Modifier.fillMaxWidth().testTag(START_RUN_STATUS_TAG))
+    }
+}
+
+@Composable
+private fun MusicFooterControl(enabled: Boolean, onClick: () -> Unit) {
+    Box(
+        modifier = Modifier.size(72.dp).clip(CircleShape)
+            .clickable(enabled = enabled, role = Role.Button,
+                onClickLabel = "Open Spotify", onClick = onClick)
+            .semantics { contentDescription = "Open Spotify" }
+            .testTag(START_OPEN_SPOTIFY_TAG),
+        contentAlignment = Alignment.Center
+    ) {
+        Image(painter = painterResource(R.drawable.start_music_orb),
+            contentDescription = null, contentScale = ContentScale.Fit,
+            modifier = Modifier.size(56.dp).clip(CircleShape))
     }
 }
 
