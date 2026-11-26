@@ -14,6 +14,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
@@ -38,6 +39,8 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.runstate.mobile.settings.RunAppearance
@@ -46,6 +49,8 @@ import com.runstate.mobile.reflection.ReflectionTier
 import kotlinx.coroutines.launch
 import com.runstate.mobile.settings.RunMusicPlayerLayout
 import com.runstate.mobile.settings.StartBackground
+import com.runstate.mobile.settings.RUNNER_NAME_MAX_LENGTH
+import com.runstate.mobile.settings.normalizeRunnerName
 
 internal const val SETTINGS_DIALOG_TAG = "runSettingsDialog"
 internal const val SETTINGS_LOCATION_TAG = "runSettingsLocation"
@@ -68,6 +73,11 @@ internal const val SETTINGS_MUSIC_REFLECTION_DEMO_TAG = "runSettingsMusicReflect
 internal const val SETTINGS_PRIVACY_TAG = "runSettingsPrivacy"
 internal const val SETTINGS_PRIVACY_DIALOG_TAG = "runSettingsPrivacyDialog"
 internal const val SETTINGS_PRIVACY_BACK_TAG = "runSettingsPrivacyBack"
+internal const val SETTINGS_RUNNER_NAME_TAG = "runSettingsRunnerName"
+internal const val SETTINGS_RUNNER_NAME_EDITOR_TAG = "runSettingsRunnerNameEditor"
+internal const val SETTINGS_RUNNER_NAME_INPUT_TAG = "runSettingsRunnerNameInput"
+internal const val SETTINGS_RUNNER_NAME_SAVE_TAG = "runSettingsRunnerNameSave"
+internal const val SETTINGS_RUNNER_NAME_CANCEL_TAG = "runSettingsRunnerNameCancel"
 internal fun appearanceOptionTag(appearance: RunAppearance): String =
     "runSettingsAppearance${appearance.name}"
 internal fun musicPlayerOptionTag(layout: RunMusicPlayerLayout): String =
@@ -123,13 +133,57 @@ internal fun RunSettingsDialog(
     cloudReflectionsEnabled: Boolean? = null,
     onSetCloudReflections: (Boolean) -> Unit = {},
     startBackground: StartBackground = StartBackground.HERMANN_PARK,
-    onSetStartBackground: (StartBackground) -> Unit = {}
+    onSetStartBackground: (StartBackground) -> Unit = {},
+    runnerName: String? = null,
+    onSetRunnerName: (String) -> Unit = {}
 ) {
     val controlsEnabled = actionsEnabled && !settingsLoading
     val preferenceControlsEnabled = controlsEnabled && preferencesAvailable
     var privacyVisible by rememberSaveable { mutableStateOf(false) }
+    var nameEditorVisible by rememberSaveable { mutableStateOf(false) }
+    var nameDraft by rememberSaveable { mutableStateOf("") }
     // Keep the settings position while the read-only summary replaces this dialog.
     val settingsScrollState = rememberScrollState()
+    if (nameEditorVisible) {
+        AlertDialog(
+            onDismissRequest = { if (controlsEnabled) nameEditorVisible = false },
+            modifier = Modifier.testTag(SETTINGS_RUNNER_NAME_EDITOR_TAG),
+            containerColor = SettingsCream,
+            title = { Text("Your name", color = SettingsInk) },
+            text = {
+                OutlinedTextField(
+                    value = nameDraft,
+                    onValueChange = { raw ->
+                        val singleLine = raw.replace('\n', ' ').replace('\r', ' ')
+                        val end = singleLine.offsetByCodePoints(0,
+                            singleLine.codePointCount(0, singleLine.length).coerceAtMost(RUNNER_NAME_MAX_LENGTH))
+                        nameDraft = singleLine.substring(0, end)
+                    },
+                    enabled = preferenceControlsEnabled,
+                    singleLine = true,
+                    label = { Text("Name") },
+                    supportingText = { Text("Used in your greeting. Optional.") },
+                    modifier = Modifier.fillMaxWidth().testTag(SETTINGS_RUNNER_NAME_INPUT_TAG)
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    onSetRunnerName(normalizeRunnerName(nameDraft))
+                    nameEditorVisible = false
+                }, enabled = preferenceControlsEnabled,
+                    modifier = Modifier.heightIn(min = 48.dp).testTag(SETTINGS_RUNNER_NAME_SAVE_TAG)) {
+                    Text("Save", color = SettingsInk)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { nameEditorVisible = false }, enabled = controlsEnabled,
+                    modifier = Modifier.heightIn(min = 48.dp).testTag(SETTINGS_RUNNER_NAME_CANCEL_TAG)) {
+                    Text("Cancel", color = SettingsInk)
+                }
+            }
+        )
+        return
+    }
     if (privacyVisible) {
         RunPrivacyDialog(onBack = { privacyVisible = false })
         return
@@ -169,6 +223,21 @@ internal fun RunSettingsDialog(
                     ) { Text("Retry preferences", color = SettingsInk) }
                 }
 
+                TextButton(onClick = {
+                    nameDraft = runnerName.orEmpty()
+                    nameEditorVisible = true
+                }, enabled = preferenceControlsEnabled,
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
+                        .testTag(SETTINGS_RUNNER_NAME_TAG)) {
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Text("Your name", color = SettingsInk, fontWeight = FontWeight.SemiBold)
+                        Text(runnerName?.takeIf { it.isNotBlank() } ?: "Set name", color = SettingsInk,
+                            modifier = Modifier.weight(1f), maxLines = 1,
+                            overflow = TextOverflow.Ellipsis, textAlign = TextAlign.End)
+                    }
+                }
+                SettingsDivider()
                 SettingsSectionTitle("RUN APPEARANCE")
                 Row(
                     Modifier.fillMaxWidth().selectableGroup().testTag(SETTINGS_APPEARANCE_TAG),

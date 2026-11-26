@@ -39,6 +39,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.printToString
 import androidx.compose.ui.unit.Density
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -94,6 +95,49 @@ class RunSettingsScreenTest {
     val compose = createAndroidComposeRule<ComponentActivity>()
 
     private val fixtures = mutableListOf<Fixture>()
+
+    @Test
+    fun runnerNameSaveCancelAndClearUpdateGreetingWithoutChangingRunPreferences() {
+        val original = RunPreferences(musicSetupComplete = true, captureWeather = true,
+            appearance = RunAppearance.DAY, runnerName = "Avery")
+        val fixture = fixture(original)
+        val restoration = renderRoot(fixture)
+        waitForTag(START_RUN_SCREEN_TAG)
+        fun greeting(): String = compose.onNodeWithTag(START_GREETING_TAG)
+            .fetchSemanticsNode().config[SemanticsProperties.Text].joinToString { it.text }
+        assertTrue(greeting().endsWith(", Avery"))
+        compose.onNodeWithTag(START_RUN_SETTINGS_TAG).performClick()
+        waitForTag(SETTINGS_DIALOG_TAG)
+        compose.onNodeWithTag(SETTINGS_RUNNER_NAME_TAG).performScrollTo().performClick()
+        compose.onNodeWithTag(SETTINGS_RUNNER_NAME_INPUT_TAG).performTextReplacement("Discard this")
+        compose.onNodeWithTag(SETTINGS_RUNNER_NAME_CANCEL_TAG).performClick()
+        compose.runOnIdle { assertEquals(0, fixture.preferenceWrites) }
+        assertEquals(original, fixture.loadPreferences())
+
+        compose.onNodeWithTag(SETTINGS_RUNNER_NAME_TAG).performScrollTo().performClick()
+        compose.onNodeWithTag(SETTINGS_RUNNER_NAME_INPUT_TAG).performTextReplacement("  Morgan  Lee  ")
+        compose.onNodeWithTag(SETTINGS_RUNNER_NAME_SAVE_TAG).performClick()
+        compose.waitUntil(5_000L) { fixture.preferenceWrites == 1 }
+        assertEquals(original.copy(runnerName = "Morgan Lee"), fixture.loadPreferences())
+        compose.onNodeWithTag(SETTINGS_DONE_TAG).performClick()
+        waitForTag(START_RUN_SCREEN_TAG)
+        assertTrue(greeting().endsWith(", Morgan Lee"))
+        restoration.emulateSavedInstanceStateRestore()
+        waitForTag(START_RUN_SCREEN_TAG)
+        assertTrue(greeting().endsWith(", Morgan Lee"))
+
+        compose.onNodeWithTag(START_RUN_SETTINGS_TAG).performClick()
+        waitForTag(SETTINGS_DIALOG_TAG)
+        compose.onNodeWithTag(SETTINGS_RUNNER_NAME_TAG).performScrollTo().performClick()
+        compose.onNodeWithTag(SETTINGS_RUNNER_NAME_INPUT_TAG).performTextReplacement("  ")
+        compose.onNodeWithTag(SETTINGS_RUNNER_NAME_SAVE_TAG).performClick()
+        compose.waitUntil(5_000L) { fixture.preferenceWrites == 2 }
+        assertEquals(original.copy(runnerName = ""), fixture.loadPreferences())
+        compose.onNodeWithTag(SETTINGS_DONE_TAG).performClick()
+        waitForTag(START_RUN_SCREEN_TAG)
+        assertFalse(greeting().contains(","))
+        assertEquals(0, fixture.preparedRuns)
+    }
 
     @After
     fun closeIsolatedFixtures() {

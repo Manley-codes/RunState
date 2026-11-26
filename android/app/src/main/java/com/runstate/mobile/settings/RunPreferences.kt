@@ -24,6 +24,17 @@ internal enum class RunMusicPlayerLayout { HEADPHONES, ALBUM }
 /** Static Start artwork only; changing it does not change location or recording behavior. */
 internal enum class StartBackground { HERMANN_PARK, HOUSTON_TRAILS }
 
+internal const val RUNNER_NAME_MAX_LENGTH = 40
+
+/** A local greeting name, never a provider credential or part of a reflection request. */
+internal fun normalizeRunnerName(value: String): String = value
+    .replace(Regex("[\\p{Cntrl}\\s]+"), " ").trim()
+    .let { cleaned ->
+        val end = cleaned.offsetByCodePoints(0,
+            cleaned.codePointCount(0, cleaned.length).coerceAtMost(RUNNER_NAME_MAX_LENGTH))
+        cleaned.substring(0, end)
+    }
+
 /** Choices made by the runner, separate from Android permission grants and individual runs. */
 internal data class RunPreferences(
     val observeMusic: Boolean = false,
@@ -35,7 +46,9 @@ internal data class RunPreferences(
     val appearance: RunAppearance = RunAppearance.NIGHT,
     val musicPlayerLayout: RunMusicPlayerLayout = RunMusicPlayerLayout.HEADPHONES,
     val cloudReflectionsEnabled: Boolean = true,
-    val startBackground: StartBackground = StartBackground.HERMANN_PARK
+    val startBackground: StartBackground = StartBackground.HERMANN_PARK,
+    /** null means never set; empty means the runner deliberately chose no name. */
+    val runnerName: String? = null
 ) {
     init {
         require(!shareMusicInReflection || observeMusic) {
@@ -57,7 +70,7 @@ internal interface RunPreferencesStore {
 internal interface RunPreferenceValues {
     fun readBoolean(key: String): Boolean?
     fun readString(key: String): String?
-    fun commit(values: Map<String, Boolean>, strings: Map<String, String>): Boolean
+    fun commit(values: Map<String, Boolean>, strings: Map<String, String?>): Boolean
 }
 
 internal class StoredRunPreferences(
@@ -84,7 +97,8 @@ internal class StoredRunPreferences(
             cloudReflectionsEnabled = values.readBoolean(CLOUD_REFLECTIONS) ?: true,
             startBackground = values.readString(START_BACKGROUND)?.let { stored ->
                 StartBackground.entries.firstOrNull { it.name == stored }
-            } ?: StartBackground.HERMANN_PARK
+            } ?: StartBackground.HERMANN_PARK,
+            runnerName = values.readString(RUNNER_NAME)?.let(::normalizeRunnerName)
         )
     }
 
@@ -99,7 +113,8 @@ internal class StoredRunPreferences(
             CLOUD_REFLECTIONS to preferences.cloudReflectionsEnabled
         ), mapOf(RUN_APPEARANCE to preferences.appearance.name,
             MUSIC_PLAYER_LAYOUT to preferences.musicPlayerLayout.name,
-            START_BACKGROUND to preferences.startBackground.name)))
+            START_BACKGROUND to preferences.startBackground.name,
+            RUNNER_NAME to preferences.runnerName?.let(::normalizeRunnerName))))
     }
 
     private inline fun <T> storageOperation(operation: () -> T): T = try {
@@ -119,6 +134,7 @@ internal class StoredRunPreferences(
         const val RUN_APPEARANCE = "run_appearance"
         const val MUSIC_PLAYER_LAYOUT = "music_player_layout"
         const val START_BACKGROUND = "start_background"
+        const val RUNNER_NAME = "runner_name"
     }
 }
 
@@ -141,10 +157,12 @@ private class AndroidRunPreferenceValues(
     override fun readString(key: String): String? =
         if (preferences.contains(key)) preferences.getString(key, null) else null
 
-    override fun commit(values: Map<String, Boolean>, strings: Map<String, String>): Boolean {
+    override fun commit(values: Map<String, Boolean>, strings: Map<String, String?>): Boolean {
         val editor = preferences.edit()
         values.forEach { (key, value) -> editor.putBoolean(key, value) }
-        strings.forEach { (key, value) -> editor.putString(key, value) }
+        strings.forEach { (key, value) ->
+            if (value == null) editor.remove(key) else editor.putString(key, value)
+        }
         return editor.commit()
     }
 }

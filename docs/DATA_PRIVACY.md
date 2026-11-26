@@ -19,6 +19,11 @@ route labels, intentions, shoe pairs, weather snapshots, partial music observati
 reflection text in its private Android database. There is no RunState account or cloud history
 sync in the current app. RunState does not record microphone audio or copy Spotify's music.
 
+An optional name entered in Settings → Your name is stored in local preferences and used only for
+the Start greeting. It is not sent in reflection requests or used to create an account. It can be
+edited or cleared in the same setting; like other ordinary preferences, it is eligible for Android
+backup under the existing rules.
+
 Location permission supports GPS preparation while Start is visible and recording during a
 deliberately started run. An active run uses a foreground service and can continue with the
 screen off. The music listener uses Android media sessions after notification access is granted;

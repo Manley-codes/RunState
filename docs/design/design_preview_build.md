@@ -8,6 +8,34 @@ status: LIVE — accepted connected browser preview; mobile phone framing confir
 
 # RunState interactive preview
 
+## November 26 approved welcome design synchronization — published
+
+After authorizing the Android phone installation, Manley explicitly requested updating GitHub's
+preview. Commit **3c5f666** publishes the accepted light welcome Start: native wordmark and Nunito
+font, pale blue/white leaves, plain Explore trails photo card, stronger moving ring around the
+existing headphones artwork, rim Spotify badge, time-aware greeting, pastel Energy/captions,
+original Start dial with clear Start Run label, and Shoes/Goal/Run/Settings/Activity navigation.
+Live map access is inside Trails; the obsolete Start background selector is hidden for this layout.
+Existing goal, shoe, trail, sample-album, run and History behavior remains. Controls stay silent and
+all run data stays fictional. No private shoe photos, real authentication or provider requests.
+
+The preview defaults to fictional **Alex** and uses browser-local time. Settings supports an optional
+browser-only greeting name; public Android independently uses its own local preference. Imported
+assets are only the approved wordmark, Nunito font and OFL license (source/export copies).
+
+Type-check/build and **30 local checks passed**: six export/privacy, eleven Start, four Trails,
+five existing interactions and four opening checks. One existing opening motion check timed out
+while concurrent browsers were running; isolated rerun passed all four without opening-code changes.
+**All 20 live checks passed** for phone/desktop Start, Trails and existing interactions; screenshots
+were visually reviewed against the installed Android screen. Local source/export are clean/synced.
+An unrelated remote README title cleanup was retained before pushing; no code conflict occurred.
+
+Live: https://manley-codes.github.io/runstate-preview/start.html
+Pages run: https://github.com/Manley-codes/runstate-preview/actions/runs/45807783455 (success).
+Verified live assets: index-ClalfS2t.js / index-CWA9T4bj.css.
+Receipts: .local/nov26-welcome-sync/{local,live}/ inside the private preview checkout.
+This publication approval covers this checkpoint only; future design publication still needs approval.
+
 **November 25 title-only follow-up:** Manley requested the Start pill read **Trails** for a future
 city/location-based direction. Published preview `54cc7ee`, live bundle `index-Dsc9C26T.js`;
 build/export checks and focused local/live phone/desktop checks passed. Only the pill text changed:

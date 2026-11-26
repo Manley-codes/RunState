@@ -7,6 +7,41 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class RunPreferencesTest {
+    @Test fun greetingNameDefaultsUnsetAndSurvivesReopeningWithoutChangingOtherChoices() {
+        val values = FakeValues(mutableMapOf("observe_music" to true))
+        val store = StoredRunPreferences(values)
+        assertEquals(null, RunPreferences().runnerName)
+        assertEquals(null, store.load().runnerName)
+        assertEquals(0, values.commits)
+        val before = store.load().copy(captureWeather = true, appearance = RunAppearance.DAY)
+        store.save(before.copy(runnerName = "  María\t O’Neill\n "))
+        assertEquals(before.copy(runnerName = "María O’Neill"), StoredRunPreferences(values).load())
+        store.save(store.load().copy(runnerName = "   "))
+        assertEquals(before.copy(runnerName = ""), StoredRunPreferences(values).load())
+        store.save(store.load().copy(runnerName = null))
+        assertEquals(before, StoredRunPreferences(values).load())
+        assertFalse(values.savedStrings.containsKey("runner_name"))
+    }
+
+    @Test fun greetingNameLimitDoesNotSplitUnicodeAndNormalizesStoredInput() {
+        val emoji = String(Character.toChars(0x1F3C3))
+        val longName = "A".repeat(39) + emoji + "extra"
+        assertEquals("A".repeat(39) + emoji, normalizeRunnerName(longName))
+        val values = FakeValues(savedStrings = mutableMapOf("runner_name" to "\t  Jo\n  Kim  "))
+        assertEquals("Jo Kim", StoredRunPreferences(values).load().runnerName)
+        assertEquals(0, values.commits)
+    }
+
+    @Test fun failedGreetingNameSaveKeepsPreviousNameAndChoices() {
+        val values = FakeValues()
+        val store = StoredRunPreferences(values)
+        val before = RunPreferences(runnerName = "Avery", observeMusic = true)
+        store.save(before)
+        values.acceptCommit = false
+        assertThrows(IllegalStateException::class.java) { store.save(before.copy(runnerName = "Sam")) }
+        assertEquals(before, StoredRunPreferences(values).load())
+    }
+
     @Test
     fun startBackgroundDefaultsToHermannParkForMissingOrUnknownValuesWithoutWriting() {
         val values = FakeValues(mutableMapOf("observe_music" to true))
@@ -301,12 +336,14 @@ class RunPreferencesTest {
             return savedStrings[key]
         }
 
-        override fun commit(values: Map<String, Boolean>, strings: Map<String, String>): Boolean {
+        override fun commit(values: Map<String, Boolean>, strings: Map<String, String?>): Boolean {
             commits += 1
             writeFailure?.let { throw it }
             if (acceptCommit) {
                 saved.putAll(values)
-                savedStrings.putAll(strings)
+                strings.forEach { (key, value) ->
+                    if (value == null) savedStrings.remove(key) else savedStrings[key] = value
+                }
             }
             return acceptCommit
         }

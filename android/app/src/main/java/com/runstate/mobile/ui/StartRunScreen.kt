@@ -223,6 +223,7 @@ internal fun StartRunScreen(
     musicAccessGranted: Boolean = false,
     modifier: Modifier = Modifier,
     onOpenRunSettings: () -> Unit = {},
+    runnerName: String? = null,
     gpsReady: Boolean = false,
     gpsStatusText: String? = null,
     setupLoading: Boolean = false,
@@ -262,7 +263,7 @@ internal fun StartRunScreen(
     var trailsOpen by rememberSaveable { mutableStateOf(false) }
     var exploredTrailId by rememberSaveable { mutableStateOf<String?>(null) }
     val trailBrowserAvailable = !liveMapBackground
-    // This review uses the original Hermann artwork; keep the saved background choice intact.
+    // Resolve local time again on return and each minute while Start remains visible.
     var greetingHour by remember { mutableIntStateOf(LocalTime.now().hour) }
     val intakeTime = remember { Animatable(0f) }
     var energyEntryPlayed by rememberSaveable { mutableStateOf(false) }
@@ -401,11 +402,7 @@ internal fun StartRunScreen(
                         )
                         Spacer(Modifier.height(6.dp))
                         Text(
-                            text = when (greetingHour) {
-                                in 5..11 -> "Good morning"
-                                in 12..16 -> "Good afternoon"
-                                else -> "Good evening"
-                            } + if (BuildConfig.OWNER_TOOLS_ENABLED) ", Manley" else "",
+                            text = startGreeting(greetingHour, runnerName, BuildConfig.OWNER_TOOLS_ENABLED),
                             color = StartInk, fontSize = 28.sp, lineHeight = 34.sp,
                             fontFamily = StartWelcomeFont,
                             fontWeight = FontWeight.ExtraBold, textAlign = TextAlign.Center,

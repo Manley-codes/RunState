@@ -1795,6 +1795,7 @@ internal fun RunJourneyRoot(
         countdownCadenceActive = countdownCadenceActive,
         runAppearanceDay = resolvedRunDay,
         startBackground = runPreferences?.startBackground ?: StartBackground.HERMANN_PARK,
+        runnerName = runPreferences?.runnerName,
         onStart = {
             startNowRequested = false
             when {
@@ -2171,6 +2172,10 @@ internal fun RunJourneyRoot(
         !connectionDialogVisible) {
         RunSettingsDialog(
             ownerToolsEnabled = ownerToolsAvailable,
+            runnerName = runPreferences?.runnerName,
+            onSetRunnerName = { name ->
+                runPreferences?.let { saved -> savePreferences(saved.copy(runnerName = name)) }
+            },
             hostedAccess = (reflectionConnection as? ReflectionConnectionState.Hosted)?.access,
             cloudReflectionsEnabled = runPreferences?.cloudReflectionsEnabled?.takeIf {
                 reflectionConnection is ReflectionConnectionState.Hosted || reflectionConnection == ReflectionConnectionState.Local

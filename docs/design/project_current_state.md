@@ -5,6 +5,41 @@ metadata:
   type: project
 ---
 
+## November 26 Start phone installation and personal greetings
+
+Manley approved installation of the completed welcome layout and then explicitly requested the
+GitHub preview update while away from the computer. The native design remains isolated on
+codex/start-welcome-layout. No iPhone, backend, reflection-writing or release-policy changes.
+
+Added an optional local runner name through Settings → Your name and the existing preference
+store. Saving normalizes whitespace and caps the value at 40 Unicode code points; cancel does not
+write, clearing removes the name from the greeting, and failed saves retain previous preferences.
+Public builds show the saved name or a generic greeting. Private owner builds retain Manley only
+while the name is unset. Local time selects morning (05–11), afternoon (12–16) or evening, refreshing
+on return and every minute on Start. No account/network dependency or Room migration. Two necessary
+new files: ui/StartGreeting.kt and its JVM StartGreetingTest.kt; remaining edits reuse existing files.
+
+Validation: **955 Debug JVM tests and 28 focused Release JVM tests passed**; debug/release/test APKs
+and release vital lint passed. Four emulator tests passed (72.407 seconds): name save/cancel/clear
+and recreation without changing other preferences, public-settings exclusions, normal Start layout,
+and short/large-text reachability. These meaningful behavior checks supplement the earlier visual
+and interaction checks below; no tests were run against the owner's real saved history.
+
+Moto update was installed in place on the explicitly selected physical device after checking no
+unfinished run and matching APK signers. Private previous APK/database/preferences backups were
+saved. Installed APK SHA-256: d75a43138d88c6ff5a4415edcc311836841667971b1cfa48832d727098aee03b.
+All **75 runs and two shoe pairs**, all 12 table content hashes, and all five preference files were
+unchanged immediately after installation. After opening, database integrity/foreign keys and table
+hashes still passed; only the expected opening-appearance cycle preference changed. Native screenshot
+at 05:02 local showed **Good morning, Manley** with all Start controls visible and no clipping.
+Evidence/backups: android/build/nov26-start-phone/; phone screenshot moto/start-installed.png.
+
+Later owner review can cover visual feel and a deliberate real Spotify connection; no action is
+required now. PR-announcement policy and the paused release queue remain in the private roadmap.
+Public preview 3c5f666 is published and verified: 30 local and 20 live phone/desktop checks passed.
+Live bundle index-ClalfS2t.js and successful Pages run 45807783455 confirmed. Details and receipts
+are in design_preview_build.md; real data/providers remain excluded from the browser demo.
+
 ## November 26 light Start palette
 
 Latest badge/status refinement: Spotify is on the dark rim at ten o'clock, down-left of its former

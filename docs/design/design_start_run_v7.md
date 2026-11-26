@@ -8,6 +8,20 @@ status: CURRENT NATIVE DECISIONS plus dated prototype history; verification live
 
 # Start Run — where this screen actually is
 
+**November 26 approved phone installation and greeting:** Manley approved the completed light
+welcome design for the phone, then explicitly authorized synchronizing the public GitHub preview.
+The Moto now has the latest design below (including the plain Trails card, rim Spotify badge,
+header GPS status and Start Run label). This supersedes the earlier emulator-only scope for this
+checkpoint. Saved runs, shoes and preferences were preserved by an in-place update.
+
+Greeting follows the phone's local hour: morning 05:00–11:59, afternoon 12:00–16:59, evening
+otherwise, refreshed on return and every minute while Start is visible. Settings → Your name
+saves an optional local greeting name; clearing it gives a generic greeting. Public builds never
+fall back to Manley. Private builds retain Manley only until a name is explicitly saved or cleared.
+This is a local display preference, not account registration; it is absent from reflection requests.
+Name save/cancel/clear, persistence, boundary hours and layout were verified. Details/evidence are in
+project_current_state.md; public preview uses fictional data and its own local demo name.
+
 **November 26 badge/status refinement:** Move Spotify down-left onto the dark music rim at ten
 o'clock, with its white 24 dp mark kept inside the circle and its independent 48 dp tap target.
 Translate the entire visualizer/artwork 10 dp down within its existing layout allocation, bringing
