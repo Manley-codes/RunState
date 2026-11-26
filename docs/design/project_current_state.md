@@ -5,6 +5,24 @@ metadata:
   type: project
 ---
 
+## November 26 light Start palette
+
+Owner requested the exact light active-screen background instead of the full map, reference pastel
+Energy colors with unchanged sizes/shapes/interior order, and the missing map detail in Explore trails.
+Start now shares AssemblyAtmosphere(day=true): native blue/white gradient and faint leaves. Active's
+rendering is unchanged. Existing Energy renderer uses lavender/sage/gold, dark forest labels/captions
+and darker matching icons; true crescent cutout avoids the old dark-disc artifact. All movement/intake
+and dimensions remain. Trails retains its photo/text/size/action and blends the matching Terry Hershey
+map into the right side, with visible map credit. No new assets/dependencies/schema/backend changes.
+
+Debug/release/test assemblies and release vital lint passed. Four focused emulator checks passed in
+50.565 seconds: normal layout/selection stability, short/large-text reachability, Energy intake, and
+Trails preserving the hidden plan/run draft. Native portrait reviewed for color, map blending and
+readability. Evidence: android/build/nov26-start-light/ (build/test logs, start-light-native.png and
+large-text capture). Existing extreme-font bottom-label wrapping remains a broader typography review
+item; the targets stay reachable. Same codex/start-welcome-layout branch, emulator-only; no phone
+install, main merge or public-preview publication. PR/release tasks remain queued in private roadmap.
+
 ## November 26 music-centered Start
 
 Owner approved artwork inside the Start visualizer, referring to the light active-run screen for

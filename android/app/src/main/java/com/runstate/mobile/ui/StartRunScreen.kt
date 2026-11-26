@@ -70,6 +70,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.PathOperation
 import androidx.compose.ui.graphics.PathFillType
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.StrokeCap
@@ -334,13 +335,7 @@ internal fun StartRunScreen(
             else -> "Location setup on Start"
         }
         if (!liveMapBackground) {
-            Image(painterResource(R.drawable.start_map_reference), contentDescription = null,
-                contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
-            Box(Modifier.fillMaxSize().background(Brush.verticalGradient(
-                0f to Color.White.copy(alpha = 0.08f),
-                0.55f to Color.White.copy(alpha = 0.02f),
-                1f to Color.White.copy(alpha = 0.52f)
-            )))
+            AssemblyAtmosphere(day = true, modifier = Modifier.fillMaxSize())
         }
         Column(Modifier.fillMaxSize()) {
             // One scroll surface keeps all controls reachable at large text/short heights.
@@ -919,7 +914,7 @@ internal fun ReflectionConnectionDialog(
 
 @Composable
 private fun ExploreTrailsCard(enabled: Boolean, imageSize: Dp, onClick: () -> Unit) {
-    Row(
+    Box(
         modifier = Modifier.fillMaxWidth()
             .shadow(8.dp, RoundedCornerShape(24.dp), clip = false,
                 ambientColor = StartInk.copy(alpha = 0.08f),
@@ -929,21 +924,38 @@ private fun ExploreTrailsCard(enabled: Boolean, imageSize: Dp, onClick: () -> Un
             .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
             .testTag(START_TRAILS_BROWSE_TAG)
             .semantics(mergeDescendants = true) { contentDescription = "Explore trails" }
-            .padding(14.dp),
-        horizontalArrangement = Arrangement.spacedBy(16.dp),
-        verticalAlignment = Alignment.CenterVertically
     ) {
-        Image(painterResource(R.drawable.trail_terry_hershey_photo), contentDescription = null,
-            contentScale = ContentScale.Crop,
-            modifier = Modifier.size(imageSize).clip(RoundedCornerShape(16.dp)))
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Text("Explore trails", color = StartInk, fontSize = 25.sp, lineHeight = 29.sp,
-                fontFamily = StartWelcomeFont, fontWeight = FontWeight.ExtraBold)
-            Text("Find your next route", color = StartInk.copy(alpha = 0.64f),
-                fontFamily = StartWelcomeFont, fontSize = 16.sp, lineHeight = 21.sp)
+        Box(Modifier.matchParentSize()) {
+            Image(painterResource(R.drawable.trail_terry_hershey_map), contentDescription = null,
+                contentScale = ContentScale.Crop, alignment = Alignment.BottomEnd,
+                modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight().fillMaxWidth(.56f))
+            Box(Modifier.fillMaxSize().background(Brush.horizontalGradient(
+                0f to Color.White, .43f to Color.White,
+                .68f to Color.White.copy(alpha = .76f),
+                1f to Color.White.copy(alpha = .10f)
+            )))
         }
-        Text("›", color = StartInk, fontSize = 30.sp,
-            modifier = Modifier.clearAndSetSemantics { })
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(14.dp),
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Image(painterResource(R.drawable.trail_terry_hershey_photo), contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.size(imageSize).clip(RoundedCornerShape(16.dp)))
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text("Explore trails", color = StartInk, fontSize = 25.sp, lineHeight = 29.sp,
+                    fontFamily = StartWelcomeFont, fontWeight = FontWeight.ExtraBold)
+                Text("Find your next route", color = StartInk.copy(alpha = 0.64f),
+                    fontFamily = StartWelcomeFont, fontSize = 16.sp, lineHeight = 21.sp)
+            }
+            Text("›", color = StartInk, fontSize = 30.sp,
+                modifier = Modifier.clearAndSetSemantics { })
+        }
+        Text("© OpenStreetMap contributors", color = StartInk.copy(alpha = .76f),
+            fontSize = 8.sp, lineHeight = 10.sp,
+            modifier = Modifier.align(Alignment.BottomEnd).padding(end = 12.dp, bottom = 3.dp)
+                .background(Color.White.copy(alpha = .88f)))
     }
 }
 
@@ -1079,16 +1091,21 @@ private fun EnergyTile(
         PreRunEnergy.MODERATE -> "Moderate"
         PreRunEnergy.HIGH -> "High"
     }
+    val fill = when (energy) {
+        PreRunEnergy.LOW -> Color(0xFFDCD1E4)
+        PreRunEnergy.MODERATE -> Color(0xFFCDD9CB)
+        PreRunEnergy.HIGH -> Color(0xFFF0D39A)
+    }
     val accent = when (energy) {
-        PreRunEnergy.LOW -> Color(0xFFCDB7EA)
-        PreRunEnergy.MODERATE -> Color(0xFFB8D1B7)
-        PreRunEnergy.HIGH -> Color(0xFFEED378)
+        PreRunEnergy.LOW -> Color(0xFF70547F)
+        PreRunEnergy.MODERATE -> Color(0xFF426C55)
+        PreRunEnergy.HIGH -> Color(0xFF856018)
     }
     Column(
         modifier = modifier
             .height(tileHeight)
             .clip(RoundedCornerShape(17.dp))
-            .background(StartInk.copy(alpha = if (enabled) 0.89f else 0.95f))
+            .background(fill)
             .then(if (interactive && enabled) Modifier.pointerInput(Unit) {
                 // A swipe within a stationary tile is not an Energy answer. Consuming movement
                 // only after touch slop cancels the selectable tap without changing its semantics.
@@ -1107,9 +1124,14 @@ private fun EnergyTile(
         Canvas(Modifier.size(26.dp)) {
             when (energy) {
                 PreRunEnergy.LOW -> {
-                    drawCircle(accent, radius = size.minDimension * 0.42f)
-                    drawCircle(StartInk, radius = size.minDimension * 0.39f,
-                        center = center + Offset(size.width * 0.23f, -size.height * 0.16f))
+                    val radius = size.minDimension * .42f
+                    val cutoutRadius = size.minDimension * .39f
+                    val cutoutCenter = center + Offset(size.width * .23f, -size.height * .16f)
+                    drawPath(Path.combine(PathOperation.Difference,
+                        Path().apply { addOval(Rect(center - Offset(radius, radius),
+                            center + Offset(radius, radius))) },
+                        Path().apply { addOval(Rect(cutoutCenter - Offset(cutoutRadius, cutoutRadius),
+                            cutoutCenter + Offset(cutoutRadius, cutoutRadius))) }), accent)
                 }
                 PreRunEnergy.MODERATE -> repeat(3) { index ->
                     val y = size.height * (0.29f + index * 0.22f)
@@ -1131,7 +1153,7 @@ private fun EnergyTile(
         Spacer(Modifier.height(8.dp))
         Text(
             text = label,
-            color = Color.White,
+            color = StartInk,
             fontSize = 18.sp, lineHeight = 22.sp,
             fontFamily = StartWelcomeFont,
             fontWeight = FontWeight.Bold,
@@ -1144,7 +1166,7 @@ private fun EnergyTile(
                 PreRunEnergy.MODERATE -> "Steady"
                 PreRunEnergy.HIGH -> "Energized"
             },
-            color = accent, fontFamily = StartWelcomeFont,
+            color = StartInk.copy(alpha = .82f), fontFamily = StartWelcomeFont,
             fontSize = 11.sp, lineHeight = 14.sp,
             textAlign = TextAlign.Center,
             modifier = Modifier.padding(horizontal = 3.dp).padding(top = 2.dp)

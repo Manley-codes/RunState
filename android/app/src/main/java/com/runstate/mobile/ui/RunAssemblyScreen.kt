@@ -822,7 +822,7 @@ private fun DrawScope.drawAssemblyRing(center: Offset, time: Float, reduced: Boo
 }
 
 @Composable
-private fun AssemblyAtmosphere(day: Boolean, modifier: Modifier) {
+internal fun AssemblyAtmosphere(day: Boolean, modifier: Modifier) {
     Canvas(modifier) {
         if(day) {
             drawRect(Brush.linearGradient(listOf(Color(0xFFE3F5FF),Color(0xFFF4FCFF),Color.White,Color(0xFFEDFAFF)),

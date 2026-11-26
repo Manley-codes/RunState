@@ -8,6 +8,17 @@ status: CURRENT NATIVE DECISIONS plus dated prototype history; verification live
 
 # Start Run — where this screen actually is
 
+**November 26 light Start palette — emulator review:** Owner requested the exact light active-screen
+background in place of the full Hermann map. Start now reuses AssemblyAtmosphere(day=true), including
+its pale blue/white diagonal gradient and faint leaves. No change to the active screen's rendering.
+Energy keeps its existing 17 dp corners, size, icons-before-text layout, labels/captions and animations;
+only its fills change to lavender #DCD1E4, sage #CDD9CB and gold #F0D39A. Dark forest labels/captions
+and deeper matching icons keep contrast. Crescent uses a true cutout instead of a painted dark disc.
+The same tile renderer carries these colors into Energy intake. The Trails card keeps its existing
+photo/size/text/action and adds the matching Terry Hershey map on the right with a soft white fade
+and map credit. Layout, music/Spotify, Shoes navigation, goals and Start remain unchanged. Existing
+map/background assets/preferences stay available in source; no new assets. Still emulator-only.
+
 **November 26 music-centered Start — emulator review:** Owner accepted music inside the visualizer
 and Shoes in place of bottom Map. Active screen's light screenshot supplies only the headphones art
 and Spotify detail: no song/artist, progress, playback/skip controls or close button. Reuse the actual
