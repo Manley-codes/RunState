@@ -8,14 +8,29 @@ status: CURRENT NATIVE DECISIONS plus dated prototype history; verification live
 
 # Start Run — where this screen actually is
 
+**November 26 music-centered Start — emulator review:** Owner accepted music inside the visualizer
+and Shoes in place of bottom Map. Active screen's light screenshot supplies only the headphones art
+and Spotify detail: no song/artist, progress, playback/skip controls or close button. Reuse the actual
+active artwork/crop through a shared artwork-only composable; Active's rendering/behavior stays the
+same. Start scales that art within the existing ring's fixed inner radius, with a visible gap; all
+ring movement, Energy entrance/intake, captions, greeting, Hermann map and Start dial stay.
+
+Only the official Spotify badge is interactive over the artwork (48 dp target). It explicitly connects
+when disconnected and opens Spotify when connected, using the existing callbacks. Connecting or
+unavailable disables the badge, never Start. No automatic authentication, song details or album fetch.
+The standalone shoe/music controls are removed. Bottom navigation is Shoes/Goal/Run/Settings/Activity;
+Shoes keeps its original selection and mileage mechanics, with a simple matching line icon.
+Explore trails now includes Open map (disabled when unavailable), closing Trails before opening the
+existing live map. This is still emulator-only; no physical-phone or public-preview update.
+
 **November 26 captions/palette and next-direction discussion:** Restore Running low, Steady and
 Energized under the larger title-case Energy labels, in their existing pastel accents. Keep normal
 tile height/placement; allow more height at enlarged font scales so both text lines fit. Match the
 shoe to music with charcoal exterior, muted olive irregular center and warm-gray sneaker; circular
 size/position and all behavior stay. Still emulator-only; no new source/assets or data changes.
 
-Owner is also considering replacing bottom Map with Shoes and placing music artwork inside the
-visualizer, with a Spotify connect badge. This rearrangement is proposed, not yet selected/implemented.
+Owner was also considering replacing bottom Map with Shoes and placing music artwork inside the
+visualizer, with a Spotify connect badge. This proposal was subsequently accepted above.
 Recommendation: it makes music/energy the main focus and demotes equipment setup. Preserve a small gap
 between artwork and moving ring plus the existing Energy intake. Preserve live-map access explicitly
 if its tab moves: current Trails is a curated browser, not a live-map replacement. Current Start music

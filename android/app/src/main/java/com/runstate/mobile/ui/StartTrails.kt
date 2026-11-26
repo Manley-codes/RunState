@@ -47,6 +47,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -277,6 +278,9 @@ internal fun StartTrailsSheet(
     enabled: Boolean,
     onExplore: (StartTrail) -> Unit,
     onUse: ((StartTrail) -> Unit)? = null,
+    onOpenMap: (() -> Unit)? = null,
+    mapNeedsLocation: Boolean = false,
+    mapStatus: String? = null,
     onDismiss: () -> Unit
 ) {
     val uri = LocalUriHandler.current
@@ -295,6 +299,16 @@ internal fun StartTrailsSheet(
             key(trail?.id) {
             Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                OutlinedButton(onClick = { onOpenMap?.invoke() }, enabled = enabled && onOpenMap != null,
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
+                        .testTag(if (mapNeedsLocation) START_MAP_LOCATION_ACCESS_TAG else "startExpandMap")
+                        .semantics {
+                            contentDescription = if (mapNeedsLocation) "Enable location" else "Open live map"
+                            val status = if (mapNeedsLocation) "Location access needed" else mapStatus
+                            if (status != null) stateDescription = status
+                        }) {
+                    Text(if (mapNeedsLocation) "Enable location" else "Open map", color = TrailInk)
+                }
             if (trail == null) {
                 HoustonStartTrails.forEach { place ->
                     Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))

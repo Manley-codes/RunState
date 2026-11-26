@@ -73,6 +73,7 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathFillType
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -140,6 +141,7 @@ internal const val START_ENERGY_INTAKE_TAG = "startEnergyIntake"
 internal const val START_GPS_TOGGLE_TAG = "startGpsToggle"
 internal const val START_MUSIC_TOGGLE_TAG = "startMusicToggle"
 internal const val START_OPEN_SPOTIFY_TAG = "startOpenSpotify"
+internal const val START_MUSIC_ARTWORK_TAG = "startMusicArtwork"
 internal const val START_OPEN_SHOES_TAG = "startOpenShoes"
 internal const val START_MUSIC_SHARING_TOGGLE_TAG = "startMusicSharingToggle"
 internal const val START_REFLECTION_SETUP_TAG = "startReflectionSetup"
@@ -228,6 +230,10 @@ internal fun StartRunScreen(
     onRequestMapLocation: (() -> Unit)? = null,
     onOpenMap: (() -> Unit)? = null,
     onOpenSpotify: () -> Unit = {},
+    onConnectSpotify: () -> Unit = {},
+    musicConnected: Boolean = false,
+    musicConnecting: Boolean = false,
+    musicConnectionAvailable: Boolean = true,
     selectedShoe: ShoePairDisplay? = null,
     onOpenShoes: () -> Unit = {},
     selectedRunIntention: RunIntention? = null,
@@ -383,11 +389,12 @@ internal fun StartRunScreen(
                                 if (ringBounds != null && ringBounds != bounds) intake = null
                                 ringBounds = bounds
                             },
-                            selectedShoe = selectedShoe,
-                            onOpenShoes = onOpenShoes,
-                            shoesEnabled = actionsEnabled && !setupLoading,
                             onOpenSpotify = onOpenSpotify,
-                            musicEnabled = actionsEnabled
+                            onConnectSpotify = onConnectSpotify,
+                            musicConnected = musicConnected,
+                            musicConnecting = musicConnecting,
+                            musicEnabled = actionsEnabled && !setupLoading && !musicConnecting &&
+                                (musicConnected || musicConnectionAvailable)
                         )
                         Spacer(Modifier.height(6.dp))
                         Text(
@@ -463,10 +470,8 @@ internal fun StartRunScreen(
                 }
             }
             StartBottomNavigation(
-                mapStatus = if (liveMapBackground) liveMapStatus else null,
-                onMapClick = if (liveMapBackground && onRequestMapLocation != null)
-                    onRequestMapLocation else onOpenMap,
-                mapNeedsLocation = liveMapBackground && onRequestMapLocation != null,
+                selectedShoe = selectedShoe,
+                onOpenShoes = onOpenShoes,
                 onViewHistory = onViewHistory,
                 showHistory = showHistory,
                 onOpenRunSettings = onOpenRunSettings,
@@ -492,6 +497,12 @@ internal fun StartRunScreen(
             trail = HoustonStartTrails.firstOrNull { it.id == exploredTrailId },
             enabled = actionsEnabled && !setupLoading,
             onExplore = { exploredTrailId = it.id },
+            onOpenMap = (if (liveMapBackground && onRequestMapLocation != null)
+                onRequestMapLocation else onOpenMap)?.let { openMap ->
+                { trailsOpen = false; openMap() }
+            },
+            mapNeedsLocation = liveMapBackground && onRequestMapLocation != null,
+            mapStatus = if (liveMapBackground) liveMapStatus else null,
             onDismiss = { trailsOpen = false }
         )
     }
@@ -576,9 +587,8 @@ private fun RunPlanSheet(
 
 @Composable
 private fun StartBottomNavigation(
-    mapStatus: String?,
-    onMapClick: (() -> Unit)?,
-    mapNeedsLocation: Boolean,
+    selectedShoe: ShoePairDisplay?,
+    onOpenShoes: () -> Unit,
     onViewHistory: () -> Unit,
     showHistory: Boolean,
     onOpenRunSettings: () -> Unit,
@@ -602,12 +612,11 @@ private fun StartBottomNavigation(
             verticalAlignment = Alignment.CenterVertically
         ) {
             val actionModifier = Modifier.weight(1f).fillMaxHeight()
-            StartUtilityButton("Map", StartUtilityIcon.MAP, { onMapClick?.invoke() },
-                    enabled = onMapClick != null && actionsEnabled && (!mapNeedsLocation || !setupLoading),
-                    modifier = actionModifier.testTag(if (mapNeedsLocation)
-                        START_MAP_LOCATION_ACCESS_TAG else "startExpandMap"),
-                    accessibilityLabel = if (mapNeedsLocation) "Enable location" else "Open live map",
-                    actionState = if (mapNeedsLocation) "Location access needed" else mapStatus)
+            StartUtilityButton("Shoes", StartUtilityIcon.SHOES, onOpenShoes,
+                enabled = actionsEnabled && !setupLoading,
+                modifier = actionModifier.testTag(START_OPEN_SHOES_TAG),
+                accessibilityLabel = "Choose shoes",
+                actionState = selectedShoe?.let { "${it.fullName}, ${it.mileageLabel}" } ?: "No shoes selected")
             StartUtilityButton("Goal", StartUtilityIcon.GOAL, onOpenGoal,
                 enabled = actionsEnabled && !setupLoading,
                 modifier = actionModifier.testTag(START_RUN_GOAL_TAG),
@@ -675,7 +684,7 @@ private fun StartSetupNotice(text: String, onClick: () -> Unit, enabled: Boolean
 // https://github.com/google/material-design-icons/blob/master/src/action/settings/materialiconsoutlined/24px.svg
 private enum class StartUtilityIcon(val pathData: String? = null) {
     MAP("M20.5 3l-.16.03L15 5.1 9 3 3.36 4.9c-.21.07-.36.25-.36.48V20.5c0 .28.22.5.5.5l.16-.03L9 18.9l6 2.1 5.64-1.9c.21-.07.36-.25.36-.48V3.5c0-.28-.22-.5-.5-.5zM10 5.47l4 1.4v11.66l-4-1.4V5.47zm-5 .99l3-1.01v11.7l-3 1.16V6.46zm14 11.08l-3 1.01V6.86l3-1.16v11.84z"),
-    PLAN, GOAL, RUN, ACTIVITY,
+    PLAN, GOAL, RUN, ACTIVITY, SHOES,
     SETTINGS("M19.43 12.98c.04-.32.07-.64.07-.98 0-.34-.03-.66-.07-.98l2.11-1.65c.19-.15.24-.42.12-.64l-2-3.46c-.09-.16-.26-.25-.44-.25-.06 0-.12.01-.17.03l-2.49 1c-.52-.4-1.08-.73-1.69-.98l-.38-2.65C14.46 2.18 14.25 2 14 2h-4c-.25 0-.46.18-.49.42l-.38 2.65c-.61.25-1.17.59-1.69.98l-2.49-1c-.06-.02-.12-.03-.18-.03-.17 0-.34.09-.43.25l-2 3.46c-.13.22-.07.49.12.64l2.11 1.65c-.04.32-.07.65-.07.98 0 .33.03.66.07.98l-2.11 1.65c-.19.15-.24.42-.12.64l2 3.46c.09.16.26.25.44.25.06 0 .12-.01.17-.03l2.49-1c.52.4 1.08.73 1.69.98l.38 2.65c.03.24.24.42.49.42h4c.25 0 .46-.18.49-.42l.38-2.65c.61-.25 1.17-.59 1.69-.98l2.49 1c.06.02.12.03.18.03.17 0 .34-.09.43-.25l2-3.46c.12-.22.07-.49-.12-.64l-2.11-1.65zm-1.98-1.71c.04.31.05.52.05.73 0 .21-.02.43-.05.73l-.14 1.13.89.7 1.08.84-.7 1.21-1.27-.51-1.04-.42-.9.68c-.43.32-.84.56-1.25.73l-1.06.43-.16 1.13-.2 1.35h-1.4l-.19-1.35-.16-1.13-1.06-.43c-.43-.18-.83-.41-1.23-.71l-.91-.7-1.06.43-1.27.51-.7-1.21 1.08-.84.89-.7-.14-1.13c-.03-.31-.05-.54-.05-.74s.02-.43.05-.73l.14-1.13-.89-.7-1.08-.84.7-1.21 1.27.51 1.04.42.9-.68c.43-.32.84-.56 1.25-.73l1.06-.43.16-1.13.2-1.35h1.39l.19 1.35.16 1.13 1.06.43c.43.18.83.41 1.23.71l.91.7 1.06-.43 1.27-.51.7 1.21-1.07.85-.89.7.14 1.13zM12 8c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4-1.79-4-4-4zm0 6c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2z")
 }
 
@@ -740,6 +749,22 @@ private fun StartNavigationSymbol(icon: StartUtilityIcon, ink: Color, modifier: 
             drawRect(ink, Offset(x * unit, y * unit), Size(width * unit, height * unit),
                 style = Stroke(stroke))
         when (icon) {
+            StartUtilityIcon.SHOES -> {
+                val outline = Path().apply {
+                    moveTo(3f * unit, 7f * unit)
+                    lineTo(6f * unit, 9f * unit)
+                    lineTo(10f * unit, 8f * unit)
+                    lineTo(14f * unit, 13f * unit)
+                    lineTo(20f * unit, 15f * unit)
+                    quadraticTo(22f * unit, 16f * unit, 21f * unit, 19f * unit)
+                    lineTo(3f * unit, 19f * unit)
+                    close()
+                }
+                drawPath(outline, ink, style = Stroke(stroke, cap = StrokeCap.Round, join = StrokeJoin.Round))
+                line(3f, 16f, 20f, 17f)
+                line(10f, 10f, 8f, 12f)
+                line(12f, 12f, 10f, 14f)
+            }
             StartUtilityIcon.GOAL -> {
                 drawCircle(ink, 8f * unit, Offset(11f * unit, 13f * unit), style = Stroke(stroke))
                 drawCircle(ink, 4f * unit, Offset(11f * unit, 13f * unit), style = Stroke(stroke))
@@ -929,16 +954,37 @@ private fun StartWelcomeVisualizer(
     phase: State<Float>,
     intakeTime: () -> Float?,
     ringModifier: Modifier,
-    selectedShoe: ShoePairDisplay?,
-    onOpenShoes: () -> Unit,
-    shoesEnabled: Boolean,
     onOpenSpotify: () -> Unit,
+    onConnectSpotify: () -> Unit,
+    musicConnected: Boolean,
+    musicConnecting: Boolean,
     musicEnabled: Boolean
 ) {
     Box(Modifier.fillMaxWidth().height(ringSize).padding(horizontal = 12.dp)
         .testTag(START_AGENT_CARD_TAG)) {
         Box(ringModifier.size(ringSize).align(Alignment.TopCenter)
             .testTag(START_AGENT_VISUALIZER_TAG)) {
+            // Fit within the ring's fixed inner radius; receiving bars swell outward.
+            val artworkSize = ringSize * .60f
+            Box(Modifier.size(artworkSize).align(Alignment.Center).clip(CircleShape)
+                .background(Color(0xFF17211D)).testTag(START_MUSIC_ARTWORK_TAG)) {
+                RunHeadphonesArtwork(Modifier.fillMaxSize(), verticalOffset = artworkSize * (12f / 248f))
+                val spotifyLabel = when {
+                    musicConnecting -> "Connecting to Spotify"
+                    musicConnected -> "Open Spotify"
+                    else -> "Connect Spotify"
+                }
+                Box(Modifier.align(Alignment.TopCenter)
+                    .offset(x = -artworkSize * .15f, y = artworkSize * .08f)
+                    .size(48.dp).clip(CircleShape)
+                    .clickable(enabled = musicEnabled, role = Role.Button,
+                        onClickLabel = spotifyLabel,
+                        onClick = if (musicConnected) onOpenSpotify else onConnectSpotify)
+                    .semantics { contentDescription = spotifyLabel }
+                    .testTag(START_OPEN_SPOTIFY_TAG), contentAlignment = Alignment.Center) {
+                    Image(painterResource(R.drawable.spotify_icon_white), null, Modifier.size(24.dp))
+                }
+            }
             // Preserve the three-lobed movement and receiving animation with stronger map contrast.
             RunAgentRing(phase = phase, intakeTime = intakeTime, emphasized = true,
                 modifier = Modifier.fillMaxSize().then(
@@ -950,12 +996,6 @@ private fun StartWelcomeVisualizer(
                         }
                     else Modifier
                 ))
-        }
-        Box(Modifier.align(Alignment.BottomStart)) {
-            ShoeFooterControl(selectedShoe, shoesEnabled, onOpenShoes)
-        }
-        Box(Modifier.align(Alignment.BottomEnd)) {
-            MusicFooterControl(musicEnabled, onOpenSpotify)
         }
     }
 }
@@ -1215,39 +1255,6 @@ private fun StartFooter(
         Text(gpsStatus, color = StartInk.copy(alpha = 0.64f), fontSize = 11.sp,
             lineHeight = 16.sp, textAlign = TextAlign.Center,
             modifier = Modifier.fillMaxWidth().testTag(START_RUN_STATUS_TAG))
-    }
-}
-
-@Composable
-private fun MusicFooterControl(enabled: Boolean, onClick: () -> Unit) {
-    Box(
-        modifier = Modifier.size(80.dp).clip(CircleShape)
-            .clickable(enabled = enabled, role = Role.Button,
-                onClickLabel = "Open Spotify", onClick = onClick)
-            .semantics { contentDescription = "Open Spotify" }
-            .testTag(START_OPEN_SPOTIFY_TAG),
-        contentAlignment = Alignment.Center
-    ) {
-        Image(painter = painterResource(R.drawable.start_music_orb),
-            contentDescription = null, contentScale = ContentScale.Crop,
-            modifier = Modifier.size(63.dp).clip(CircleShape)
-                .background(Color(0xFF1D1F16)))
-    }
-}
-
-@Composable
-private fun ShoeFooterControl(shoe: ShoePairDisplay?, enabled: Boolean, onClick: () -> Unit) {
-    Box(
-        modifier = Modifier.size(80.dp).clip(CircleShape)
-            .clickable(enabled = enabled, role = Role.Button, onClickLabel = "Choose shoes", onClick = onClick)
-            .semantics {
-                contentDescription = "Choose shoes"
-                stateDescription = shoe?.let { "${it.fullName}, ${it.mileageLabel}" } ?: "No shoes selected"
-            }
-            .testTag(START_OPEN_SHOES_TAG),
-        contentAlignment = Alignment.Center
-    ) {
-        ShoeIllustration(Modifier.size(63.dp))
     }
 }
 

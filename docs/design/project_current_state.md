@@ -5,6 +5,28 @@ metadata:
   type: project
 ---
 
+## November 26 music-centered Start
+
+Owner approved artwork inside the Start visualizer, referring to the light active-run screen for
+the headphones design and Spotify detail only. Reused the exact artwork/crop through a shared pure
+composable; Active's default rendering stays identical. Start has no song/artist/progress/playback/
+skip/close controls. Existing ring movement, Energy intake/captions, greeting, map and Start remain.
+Official Spotify badge has a 48 dp target: explicit Connect when disconnected, Open Spotify when
+connected, disabled during connection/unavailability. Start remains optional with respect to music.
+
+Removed standalone shoe/music circles. Shoes replaces bottom Map, preserving selection/mileage and
+accessible selected-pair details. Trails now offers Open map, closing itself before the existing
+live-map callback; unavailable map stays disabled. No schema/backend/data change or new source/assets.
+
+Debug/release/test builds and release vital lint passed. Nine focused emulator checks passed in
+95.082 seconds: normal layout/selection, large text, landscape, Spotify state/actions/no transport,
+shoe selection, map/location/countdown separation, settings, Energy intake and actual ring animation.
+Native capture reviewed at android/build/nov26-start-music/start-music-native.png; build/test logs
+are alongside it. Active artwork extraction independently reviewed as behavior-identical. Emulator
+has no Spotify installation, so real sign-in/playback is not claimed. Medium_Phone remains ready for
+owner review on codex/start-welcome-layout. No physical-phone install, main merge or public-preview
+publication. PR announcements and release queue remain parked in the private roadmap.
+
 ## November 26 Energy captions and shoe palette
 
 Restored Running low, Steady and Energized under the current title-case Energy labels in their original
@@ -15,12 +37,12 @@ Three builds/vital lint and three emulator checks passed in 38.034 seconds (norm
 reachability, Energy intake). Native capture checked: android/build/nov26-energy-captions/start-captions-palette.png.
 Same review branch; no phone update or public-preview publication.
 
-Owner is considering music artwork inside the visualizer and replacing bottom Map with Shoes.
-That rearrangement remains a proposal, not implementation. Recommendation: a small gap around artwork,
+Owner considered music artwork inside the visualizer and replacing bottom Map with Shoes.
+That proposal was subsequently accepted for the next emulator increment. Recommendation: a gap around artwork,
 preserved Energy intake, explicit live-map entry inside Trails if Map moves, and Spotify badge wired
 to Connect when disconnected / Open Spotify when connected. Current Start music action only opens
-Spotify; Trails currently browses curated trails rather than opening live GPS. Do not imply that
-connection/navigation already exists. Shoe relocation would preserve saved pairs/mileage tracking.
+Spotify at this checkpoint; Trails then browsed curated trails rather than opening live GPS.
+The later music-centered checkpoint records the new connection/navigation wiring.
 
 ## November 26 circular Start controls and visualizer contrast
 

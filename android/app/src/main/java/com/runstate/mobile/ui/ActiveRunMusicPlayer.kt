@@ -43,6 +43,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.sp
 import com.runstate.mobile.R
 import com.runstate.mobile.music.SpotifyLivePlayerState
@@ -259,15 +260,21 @@ private fun MusicArtwork(player: SpotifyLivePlayerState, layout: RunMusicPlayerL
             else -> "Album artwork unavailable"
         } }) {
         if (showHeadphones) {
-            Image(painterResource(R.drawable.start_music_orb), null,
-                contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize().graphicsLayer {
-                    scaleX = 1.16f; scaleY = 1.16f; translationY = -12.dp.toPx()
-                })
+            RunHeadphonesArtwork(Modifier.fillMaxSize())
         } else player.artwork?.let { bitmap ->
             Image(remember(bitmap) { bitmap.asImageBitmap() }, null,
                 contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
         }
     }
+}
+
+/** Shared artwork only; Start deliberately has none of the active player's transport or metadata. */
+@Composable
+internal fun RunHeadphonesArtwork(modifier: Modifier, verticalOffset: Dp = 12.dp) {
+    Image(painterResource(R.drawable.start_music_orb), null,
+        contentScale = ContentScale.Crop, modifier = modifier.graphicsLayer {
+            scaleX = 1.16f; scaleY = 1.16f; translationY = -verticalOffset.toPx()
+        })
 }
 
 @Composable

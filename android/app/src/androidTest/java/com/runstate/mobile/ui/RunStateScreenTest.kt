@@ -84,6 +84,7 @@ import com.runstate.mobile.location.ForegroundGpsPreviewFix
 import com.runstate.mobile.location.ForegroundGpsPreviewSource
 import com.runstate.mobile.location.GpsPreviewAvailability
 import com.runstate.mobile.location.GpsSample
+import com.runstate.mobile.music.SpotifyLivePlayerState
 import com.runstate.mobile.run.PreparedRunFactory
 import com.runstate.mobile.run.RunActionKind
 import com.runstate.mobile.run.RunGoal
@@ -1030,9 +1031,9 @@ class RunStateScreenTest {
         composeTestRule.onNodeWithText("AGENT  •  READY").assertDoesNotExist()
         val utilities = boundsBefore.getValue(START_UTILITY_ACTIONS_TAG)
         assertTrue("Bottom navigation belongs below Energy", utilities.top >= boundsBefore.getValue(START_ENERGY_CHOICES_TAG).bottom)
-        val utilityTags = listOf("startExpandMap", START_RUN_GOAL_TAG, START_RUN_TAB_TAG,
+        val utilityTags = listOf(START_OPEN_SHOES_TAG, START_RUN_GOAL_TAG, START_RUN_TAB_TAG,
             START_RUN_SETTINGS_TAG, START_HISTORY_TAG)
-        val descriptions = listOf("Open live map", "Set a goal", "Run", "Run settings", "Log History")
+        val descriptions = listOf("Choose shoes", "Set a goal", "Run", "Run settings", "Log History")
         val utilityBounds = utilityTags.mapIndexed { index, tag ->
             val node = composeTestRule.onNodeWithTag(tag).assertIsDisplayed().assertIsEnabled()
                 .fetchSemanticsNode()
@@ -1074,21 +1075,19 @@ class RunStateScreenTest {
             val music = composeTestRule.onNodeWithTag(START_OPEN_SPOTIFY_TAG).fetchSemanticsNode().boundsInRoot
             val ringNow = composeTestRule.onNodeWithTag(START_AGENT_VISUALIZER_TAG)
                 .fetchSemanticsNode().boundsInRoot
-            val greetingNow = composeTestRule.onNodeWithTag(START_GREETING_TAG)
+            val artwork = composeTestRule.onNodeWithTag(START_MUSIC_ARTWORK_TAG)
                 .fetchSemanticsNode().boundsInRoot
             assertTrue("Start follows the Energy row without overlap", start.top >= moderate.bottom)
-            assertTrue("Shoes and Music remain above the greeting",
-                shoes.bottom <= greetingNow.top && music.bottom <= greetingNow.top)
-            assertEquals("Shoes and Music share one row", shoes.center.y, music.center.y, 1f)
-            assertTrue("Shoes flank the visualizer on the left and Music on the right",
-                shoes.center.x < ringNow.center.x && music.center.x > ringNow.center.x)
-            assertTrue("Both side controls sit near the lower half of the visualizer",
-                shoes.center.y >= ringNow.center.y && music.center.y >= ringNow.center.y &&
-                    shoes.top <= ringNow.bottom && music.top <= ringNow.bottom)
-            assertTrue("The side controls do not overlap or cover the visualizer center",
-                !shoes.overlaps(music) && shoes.right <= ringNow.center.x && music.left >= ringNow.center.x)
-            assertEquals("The visualizer stays centered between Shoes and Music",
-                (shoes.center.x + music.center.x) / 2f, ringNow.center.x, 1f)
+            assertTrue("Shoes belongs in the fixed bottom navigation",
+                shoes.top >= utilities.top && shoes.bottom <= utilities.bottom)
+            assertEquals("Music artwork is centered in the visualizer", ringNow.center.x, artwork.center.x, 1f)
+            assertEquals("Music artwork is vertically centered in the visualizer", ringNow.center.y, artwork.center.y, 1f)
+            assertTrue("The artwork leaves room for the moving ring",
+                artwork.left > ringNow.left && artwork.right < ringNow.right &&
+                    artwork.top > ringNow.top && artwork.bottom < ringNow.bottom)
+            assertTrue("The Spotify badge stays over the music artwork",
+                music.center.x >= artwork.left && music.center.x <= artwork.right &&
+                    music.center.y >= artwork.top && music.center.y <= artwork.bottom)
             assertEquals("Start stays centered below Moderate", moderate.center.x, start.center.x, 1f)
             assertTrue("The Start action remains inside its footer", start.top >= footer.top && start.bottom <= footer.bottom)
             assertTrue("The footer remains above navigation", footer.bottom <= utilities.top)
@@ -1166,14 +1165,14 @@ class RunStateScreenTest {
                 // isDisplayed also accepts a sliver at a scroll viewport edge. Bring the
                 // whole body control into view before checking its visible touch target.
                 if (tag in listOf(START_ENERGY_LOW_TAG, START_ENERGY_MODERATE_TAG,
-                        START_ENERGY_HIGH_TAG, START_RUN_BUTTON_TAG, START_OPEN_SHOES_TAG,
+                        START_ENERGY_HIGH_TAG, START_RUN_BUTTON_TAG,
                         START_OPEN_SPOTIFY_TAG)) node.performScrollTo()
                 return node.assertIsDisplayed().assertIsEnabled()
             }
             val viewport = composeTestRule.onNodeWithTag(START_RUN_SCREEN_TAG).getUnclippedBoundsInRoot()
             val card = composeTestRule.onNodeWithTag(START_AGENT_CARD_TAG).performScrollTo()
                 .assertIsDisplayed().getUnclippedBoundsInRoot()
-            assertTrue("The entire visualizer and side controls are reachable at $scale text",
+            assertTrue("The entire music visualizer is reachable at $scale text",
                 card.top >= viewport.top - 0.5.dp && card.bottom <= viewport.bottom + 0.5.dp &&
                     card.left >= viewport.left - 0.5.dp && card.right <= viewport.right + 0.5.dp)
             val navigationBefore = composeTestRule.onNodeWithTag(START_UTILITY_ACTIONS_TAG)
@@ -1194,7 +1193,7 @@ class RunStateScreenTest {
             reachable(START_RUN_TAB_TAG).performClick()
             composeTestRule.runOnIdle { assertEquals("Run navigation must never start recording", if (scale == 1.5f) 0 else 1, starts) }
             val bar = composeTestRule.onNodeWithTag(START_UTILITY_ACTIONS_TAG).fetchSemanticsNode().boundsInRoot
-            listOf("startExpandMap", START_RUN_GOAL_TAG, START_RUN_TAB_TAG, START_RUN_SETTINGS_TAG, START_HISTORY_TAG)
+            listOf(START_OPEN_SHOES_TAG, START_RUN_GOAL_TAG, START_RUN_TAB_TAG, START_RUN_SETTINGS_TAG, START_HISTORY_TAG)
                 .forEach { tag ->
                     val bounds = reachable(tag).fetchSemanticsNode().boundsInRoot
                     assertTrue("Navigation target stays inside the viewport at $scale text", bounds.left >= 0f && bounds.right <= bar.right + 1f)
@@ -1252,7 +1251,7 @@ class RunStateScreenTest {
         composeTestRule.runOnIdle { assertEquals(PreRunEnergy.MODERATE, selected) }
         composeTestRule.onNodeWithTag("startEnergyUndo").assertDoesNotExist()
 
-        composeTestRule.onNodeWithTag(START_OPEN_SHOES_TAG).performScrollTo().assertIsDisplayed()
+        composeTestRule.onNodeWithTag(START_OPEN_SHOES_TAG).assertIsDisplayed()
         composeTestRule.onNodeWithTag(START_OPEN_SPOTIFY_TAG).performScrollTo().assertIsDisplayed()
         composeTestRule.onNodeWithTag(START_RUN_BUTTON_TAG).performScrollTo()
             .assertIsDisplayed().performTouchInput { click() }
@@ -1752,7 +1751,7 @@ class RunStateScreenTest {
     fun gpsRootMapTogglesAndMapStartKeepTheSameWarmListener() {
         GpsStartRootHarness().use { root ->
             repeat(2) {
-                composeTestRule.onNodeWithTag("startExpandMap").performClick()
+                openStartMapFromTrails()
                 composeTestRule.mainClock.advanceTimeByFrame()
                 composeTestRule.onNodeWithTag(ACTIVE_RUN_MAP_DIALOG_TAG).assertIsDisplayed()
                 assertEquals(1, root.source.registrations)
@@ -1766,7 +1765,7 @@ class RunStateScreenTest {
                 assertEquals(0, root.source.removals)
                 root.assertUnstarted()
             }
-            composeTestRule.onNodeWithTag("startExpandMap").performClick()
+            openStartMapFromTrails()
             composeTestRule.mainClock.advanceTimeByFrame()
             composeTestRule.onNodeWithTag(START_RUN_MAP_START_TAG).assertIsEnabled().performClick()
             root.awaitCountdown()
@@ -2175,13 +2174,24 @@ class RunStateScreenTest {
         composeTestRule.waitForIdle()
     }
 
+    private fun openStartMapFromTrails() {
+        composeTestRule.onNodeWithTag(START_TRAILS_BROWSE_TAG).performScrollTo()
+            .assertIsDisplayed().performClick()
+        composeTestRule.onNodeWithTag(START_TRAILS_LIST_TAG).assertIsDisplayed()
+        composeTestRule.onNodeWithTag("startExpandMap").performScrollTo()
+            .assertIsDisplayed().assertIsEnabled().performClick()
+        composeTestRule.onNodeWithTag(START_TRAILS_LIST_TAG).assertDoesNotExist()
+    }
+
     @Test
     fun startSpotifyLauncherOnlyReportsDeliberateTapAndRespectsDisabledActions() {
         val actions = RecordedActions()
         var actionsEnabled by mutableStateOf(true)
         var selected by mutableStateOf<PreRunEnergy?>(PreRunEnergy.HIGH)
+        var player by mutableStateOf(SpotifyLivePlayerState())
         var energyChanges = 0
         var spotifyOpens = 0
+        var spotifyConnections = 0
         var settingsOpens = 0
         composeTestRule.setContent {
             RunStateScreen(
@@ -2193,6 +2203,7 @@ class RunStateScreenTest {
                 onStartAnother = { actions.startAnothers++ }, actionsEnabled = actionsEnabled,
                 selectedPreRunEnergy = selected,
                 onSelectPreRunEnergy = { selected = it; energyChanges++ },
+                musicPlayer = player, onConnectMusic = { spotifyConnections++ },
                 onOpenSpotify = { spotifyOpens++ }, onOpenRunSettings = { settingsOpens++ },
                 onViewHistory = { actions.historyOpens++ }, showHistory = true
             )
@@ -2201,12 +2212,41 @@ class RunStateScreenTest {
         val music = composeTestRule.onNodeWithTag(START_OPEN_SPOTIFY_TAG)
             .assertIsDisplayed().assertIsEnabled()
         assertEquals(Role.Button, music.fetchSemanticsNode().config[SemanticsProperties.Role])
+        assertEquals(listOf("Connect Spotify"), music.fetchSemanticsNode().config[SemanticsProperties.ContentDescription])
+        assertFalse("The Spotify badge has no visible caption", music.fetchSemanticsNode().config.contains(SemanticsProperties.Text))
+        composeTestRule.onNodeWithTag(START_MUSIC_ARTWORK_TAG).assertIsDisplayed()
+        composeTestRule.runOnIdle { assertEquals(0, spotifyOpens); assertEquals(0, spotifyConnections) }
+        music.performTouchInput { click() }
+        composeTestRule.runOnIdle {
+            assertEquals(1, spotifyConnections)
+            assertEquals(0, spotifyOpens)
+            player = player.copy(connecting = true)
+        }
+        music.assertIsNotEnabled().performTouchInput { click() }
+        assertEquals(listOf("Connecting to Spotify"),
+            music.fetchSemanticsNode().config[SemanticsProperties.ContentDescription])
+        // Connecting must not trap the runner or turn music into a Start requirement.
+        composeTestRule.onNodeWithTag(START_RUN_BUTTON_TAG).assertIsEnabled()
+        composeTestRule.runOnIdle {
+            assertEquals(1, spotifyConnections)
+            assertEquals(0, spotifyOpens)
+            player = player.copy(connected = true, connecting = false,
+                title = "Fixture song", artist = "Fixture artist", trackUri = "spotify:track:fixture",
+                canSkipNext = true, canSkipPrevious = true, canTogglePlayback = true,
+                durationMillis = 180_000, positionMillis = 60_000)
+        }
+        music.assertIsEnabled()
         assertEquals(listOf("Open Spotify"), music.fetchSemanticsNode().config[SemanticsProperties.ContentDescription])
-        assertFalse("The music artwork has no visible caption", music.fetchSemanticsNode().config.contains(SemanticsProperties.Text))
-        composeTestRule.runOnIdle { assertEquals(0, spotifyOpens) }
+        composeTestRule.onNodeWithText("Fixture song").assertDoesNotExist()
+        composeTestRule.onNodeWithText("Fixture artist").assertDoesNotExist()
+        listOf(ACTIVE_RUN_PLAYER_CLOSE_TAG, ACTIVE_RUN_PLAYER_PREVIOUS_TAG, ACTIVE_RUN_PLAYER_NEXT_TAG,
+            ACTIVE_RUN_PLAYER_PLAY_TAG, ACTIVE_RUN_PLAYER_PROGRESS_TAG).forEach { tag ->
+            composeTestRule.onNodeWithTag(tag).assertDoesNotExist()
+        }
         music.performTouchInput { click() }
         composeTestRule.runOnIdle {
             assertEquals(1, spotifyOpens)
+            assertEquals(1, spotifyConnections)
             assertEquals(PreRunEnergy.HIGH, selected)
             assertEquals(0, energyChanges)
             assertEquals(0, actions.total)
@@ -2220,6 +2260,7 @@ class RunStateScreenTest {
         music.assertIsNotEnabled().performTouchInput { click() }
         composeTestRule.runOnIdle {
             assertEquals(1, spotifyOpens)
+            assertEquals(1, spotifyConnections)
             assertEquals(PreRunEnergy.HIGH, selected)
             assertEquals(0, energyChanges)
             assertEquals(0, actions.total)
@@ -2227,7 +2268,11 @@ class RunStateScreenTest {
         }
         music.assertIsEnabled()
         composeTestRule.onNodeWithTag(START_RUN_BUTTON_TAG).assertIsEnabled()
-        composeTestRule.runOnIdle { assertEquals(1, spotifyOpens) }
+        composeTestRule.runOnIdle { assertEquals(1, spotifyOpens); assertEquals(1, spotifyConnections) }
+        composeTestRule.runOnIdle { player = SpotifyLivePlayerState(canConnect = false) }
+        music.assertIsNotEnabled().performTouchInput { click() }
+        composeTestRule.onNodeWithTag(START_RUN_BUTTON_TAG).assertIsEnabled()
+        composeTestRule.runOnIdle { assertEquals(1, spotifyOpens); assertEquals(1, spotifyConnections) }
     }
 
     @Test
@@ -2580,7 +2625,7 @@ class RunStateScreenTest {
             .assertIsDisplayed().assertIsEnabled()
         assertEquals(Role.Button, control.fetchSemanticsNode().config[SemanticsProperties.Role])
         assertEquals(listOf("Choose shoes"), control.fetchSemanticsNode().config[SemanticsProperties.ContentDescription])
-        assertFalse("The shoes artwork has no visible caption", control.fetchSemanticsNode().config.contains(SemanticsProperties.Text))
+        assertFalse("The Shoes label uses its single accessible action description", control.fetchSemanticsNode().config.contains(SemanticsProperties.Text))
         assertEquals("No shoes selected", control.fetchSemanticsNode().config[SemanticsProperties.StateDescription])
         val stableTags = listOf(START_RUN_BUTTON_TAG, START_ENERGY_CHOICES_TAG, START_FOOTER_TAG)
         val before = stableTags.associateWith { composeTestRule.onNodeWithTag(it).fetchSemanticsNode().boundsInRoot }
@@ -2590,7 +2635,7 @@ class RunStateScreenTest {
             shoe = ShoePairDisplay("road", "ASICS", "Novablast 6", "My longer daily road pair", "123.4 MI")
         }
         composeTestRule.mainClock.advanceTimeByFrame()
-        assertFalse("Selecting shoes does not add a visible caption", control.fetchSemanticsNode().config.contains(SemanticsProperties.Text))
+        assertFalse("Selecting shoes does not add pair details to the footer label", control.fetchSemanticsNode().config.contains(SemanticsProperties.Text))
         composeTestRule.onNodeWithText("My longer daily road pair", useUnmergedTree = true).assertDoesNotExist()
         composeTestRule.onNodeWithText("123.4 MI", useUnmergedTree = true).assertDoesNotExist()
         assertEquals("ASICS · Novablast 6 · My longer daily road pair, 123.4 MI",
@@ -5560,13 +5605,13 @@ class RunStateScreenTest {
         composeTestRule.runOnIdle { assertEquals(0, opens) }
         composeTestRule.runOnIdle { loading = false }
         composeTestRule.onNodeWithTag(START_RUN_SETTINGS_TAG).performClick()
-        composeTestRule.onNodeWithTag("startExpandMap").performClick()
+        openStartMapFromTrails()
         composeTestRule.onNodeWithTag(START_HISTORY_TAG).performClick()
         composeTestRule.runOnIdle {
             assertEquals(1, opens); assertEquals(1, maps); assertEquals(1, histories)
             actionsEnabled = false
         }
-        for (tag in listOf(START_RUN_SETTINGS_TAG, "startExpandMap", START_HISTORY_TAG,
+        for (tag in listOf(START_RUN_SETTINGS_TAG, START_TRAILS_BROWSE_TAG, START_OPEN_SHOES_TAG, START_HISTORY_TAG,
             START_RUN_GOAL_TAG, START_RUN_TAB_TAG)) {
             composeTestRule.onNodeWithTag(tag).assertIsNotEnabled().performTouchInput { click() }
         }
@@ -6343,7 +6388,7 @@ class RunStateScreenTest {
         composeTestRule.onNodeWithText("© OpenStreetMap contributors").assertDoesNotExist()
         assertTrue(nativeMapViewsInActivity().isEmpty())
 
-        composeTestRule.onNodeWithTag("startExpandMap").assertIsDisplayed().performClick()
+        openStartMapFromTrails()
         composeTestRule.onNodeWithTag(ACTIVE_RUN_MAP_DIALOG_TAG).assertIsDisplayed()
         composeTestRule.onNodeWithText("Enable precise location to show your position.").assertIsDisplayed()
         composeTestRule.onNodeWithText("© OpenStreetMap contributors").assertIsDisplayed()
@@ -6363,7 +6408,9 @@ class RunStateScreenTest {
             assertEquals(0, starts)
             gpsSelected = false
         }
-        composeTestRule.onNodeWithTag("startExpandMap").assertIsDisplayed().assertIsNotEnabled()
+        composeTestRule.onNodeWithTag(START_TRAILS_BROWSE_TAG).assertIsDisplayed().performClick()
+        composeTestRule.onNodeWithTag("startExpandMap").performScrollTo().assertIsDisplayed().assertIsNotEnabled()
+        composeTestRule.onNodeWithText("Close").performClick()
         assertTrue(nativeMapViewsInActivity().isEmpty())
         composeTestRule.runOnIdle { gpsSelected = true; open = true }
         composeTestRule.onNodeWithTag(START_RUN_MAP_START_TAG).assertIsDisplayed().performClick()
@@ -6426,7 +6473,7 @@ class RunStateScreenTest {
         composeTestRule.onNodeWithText("© OpenStreetMap contributors").assertDoesNotExist()
         assertTrue(nativeMapViewsInActivity().isEmpty())
         if (capturePreviewImages) saveNativePreview("syntheticLiveMapJourney", "start-live-map-preview.png")
-        composeTestRule.onNodeWithTag("startExpandMap").assertIsDisplayed().performClick()
+        openStartMapFromTrails()
         composeTestRule.waitUntil(15_000L) { nativeMapViewsInActivity().size == 1 }
         val firstView = nativeMapViewsInActivity().single()
         val map = AtomicReference<MapLibreMap?>(null)
