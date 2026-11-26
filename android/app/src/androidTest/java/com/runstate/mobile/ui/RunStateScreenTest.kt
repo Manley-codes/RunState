@@ -1163,7 +1163,11 @@ class RunStateScreenTest {
             composeTestRule.onNodeWithTag(START_RUN_FALLBACK_SCROLL_TAG).assertIsDisplayed()
             fun reachable(tag: String): SemanticsNodeInteraction {
                 val node = composeTestRule.onNodeWithTag(tag)
-                if (!node.isDisplayed()) node.performScrollTo()
+                // isDisplayed also accepts a sliver at a scroll viewport edge. Bring the
+                // whole body control into view before checking its visible touch target.
+                if (tag in listOf(START_ENERGY_LOW_TAG, START_ENERGY_MODERATE_TAG,
+                        START_ENERGY_HIGH_TAG, START_RUN_BUTTON_TAG, START_OPEN_SHOES_TAG,
+                        START_OPEN_SPOTIFY_TAG)) node.performScrollTo()
                 return node.assertIsDisplayed().assertIsEnabled()
             }
             val viewport = composeTestRule.onNodeWithTag(START_RUN_SCREEN_TAG).getUnclippedBoundsInRoot()
@@ -1181,8 +1185,8 @@ class RunStateScreenTest {
             listOf(START_ENERGY_LOW_TAG, START_ENERGY_MODERATE_TAG, START_ENERGY_HIGH_TAG,
                 START_RUN_BUTTON_TAG, START_OPEN_SHOES_TAG, START_OPEN_SPOTIFY_TAG).forEach { tag ->
                 val bounds = reachable(tag).fetchSemanticsNode().boundsInRoot
-                assertTrue("Each lower action stays at least 48 dp wide at large text", bounds.width + 1f >= 48f * densityValue)
-                assertTrue("Each lower action stays at least 48 dp tall at large text", bounds.height + 1f >= 48f * densityValue)
+                assertTrue("$tag stays at least 48 dp wide at $scale text", bounds.width + 1f >= 48f * densityValue)
+                assertTrue("$tag stays at least 48 dp tall at $scale text", bounds.height + 1f >= 48f * densityValue)
             }
             reachable(START_RUN_GOAL_TAG)
             reachable(START_RUN_SETTINGS_TAG).performClick()

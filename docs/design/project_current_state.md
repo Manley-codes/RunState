@@ -5,6 +5,27 @@ metadata:
   type: project
 ---
 
+## November 26 Start welcome alignment and map refinement
+
+Owner requested closer reference alignment, its title/typography, Manley in the greeting, Start closer
+to Energy and the exact original Hermann map. Changes remain on codex/start-welcome-layout and the
+emulator only. Explicit stacked spacing replaces distributed gaps; side controls move inward/enlarge,
+original ring/Start drawings enlarge without redesign, and the original map crop/gradient is restored.
+New transparent reference-derived RunState wordmark and OFL Nunito Sans replace the generic title/font.
+Energy now uses larger title-case labels without its small subtitles. Owner/debug greeting includes
+Manley; public release remains generic. New assets/license provenance are listed in third_party_notices.
+No profile, data/schema/backend change, phone install or public-preview update.
+
+All three builds and release vital lint passed; native portrait capture/independent visual review found
+no clipping or alignment blocker. All eight focused checks passed: normal/large-text/landscape layouts,
+Energy intake/entrance, shoes, Spotify launcher and Trails. The large-text helper initially measured a
+partially visible control because isDisplayed accepts a sliver; scrolling each body target fully into
+view fixes the fixture, retaining the same visible 48 dp assertions. Seven checks passed initially;
+the corrected large-text check passed separately with no further production changes.
+Focused checks and final screenshots are in private
+android/build/nov26-start-refinement/. Review sizes/spacing in Medium_Phone before a phone update.
+Accepted reflections and the queued PR/release work remain unchanged.
+
 ## November 25 Start welcome emulator review
 
 Owner approved a functional native emulator trial of the selected combined mockup, explicitly retaining

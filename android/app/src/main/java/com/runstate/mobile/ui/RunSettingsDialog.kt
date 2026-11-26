@@ -203,7 +203,7 @@ internal fun RunSettingsDialog(
                     }
                 }
                 SettingsDescription("Auto uses Light from 7 AM to 7 PM. Your run keeps its starting look.")
-                // Start's plain welcome experiment supersedes artwork selection for now.
+                // Start's welcome review uses the original Hermann artwork for now.
                 // Retain the stored preference and original assets for a later design decision.
                 SettingsDivider()
                 SettingsSectionTitle("LOCATION")

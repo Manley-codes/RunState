@@ -8,6 +8,23 @@ status: CURRENT NATIVE DECISIONS plus dated prototype history; verification live
 
 # Start Run — where this screen actually is
 
+**November 26 welcome refinement — emulator only:** Owner asked for alignment and typography closer
+to the chosen mockup, his name in the greeting, Start closer to Energy and the exact original Hermann
+map restored. The body now follows one explicit vertical stack, leaving surplus space below the controls
+instead of distributing it between groups. Shoe/music centers are inset to about 17.5%/82.5% of width;
+their native art is 64 dp inside 80 dp targets. Original irregular ring is larger (240 dp wrapper on
+tall phones); original Start is 132 dp inside a 140 dp target, 12 dp below Energy. Artwork/animations
+and all actions remain unchanged. Restore start_map_reference with its original crop and white-gradient
+stops (.08/.02/.52); no moving-trails background preference change.
+
+The title uses a transparent wordmark isolated from the selected design (including its italic/notched
+R). Bundled OFL Nunito Sans provides larger, rounder headings and 18 sp title-case Low/Moderate/High;
+the small Energy subtitles are omitted to match the chosen reference. Greeting appends Manley only in
+owner/debug builds; public builds keep the time-based generic greeting, with no new profile feature.
+New assets: start_runstate_wordmark.png and nunito_sans_variable.ttf; provenance/license recorded in
+existing third_party_notices.txt. This remains on codex/start-welcome-layout for emulator review only.
+No phone install, public preview publication, backend/storage or accepted reflection changes.
+
 **November 25 Start welcome layout — emulator review only:** Manley selected the combined mockup:
 Explore trails card above the exposed visualizer; shoe/music at its lower corners above the greeting;
 energy question and three original choices, original round Start below, then Map/Goal/Run/Settings/Activity.

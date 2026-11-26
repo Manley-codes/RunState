@@ -96,6 +96,10 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.font.Font
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontVariation
+import androidx.compose.ui.text.ExperimentalTextApi
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.input.KeyboardType
@@ -120,6 +124,7 @@ import kotlin.math.cos
 import kotlin.math.sin
 import kotlin.math.roundToInt
 import java.time.LocalTime
+import com.runstate.mobile.BuildConfig
 import kotlinx.coroutines.delay
 
 internal const val START_RUN_SCREEN_TAG = "startRunScreen"
@@ -171,6 +176,14 @@ private val StartForestDeep = Color(0xFF1D261B)
 private val StartLime = Color(0xFFB8D442)
 internal val StartNavigationBackground = Color.White
 private val StartCream = Color(0xFFF9FAF5)
+
+@OptIn(ExperimentalTextApi::class)
+private val StartWelcomeFont = FontFamily(
+    *listOf(400, 600, 700, 800).map { weight ->
+        Font(R.font.nunito_sans_variable, weight = FontWeight(weight),
+            variationSettings = FontVariation.Settings(FontVariation.weight(weight)))
+    }.toTypedArray()
+)
 
 /** A visual hand-off only: the actual draft choice is owned by the parent immediately on tap. */
 private data class EnergyIntake(
@@ -241,8 +254,7 @@ internal fun StartRunScreen(
     var trailsOpen by rememberSaveable { mutableStateOf(false) }
     var exploredTrailId by rememberSaveable { mutableStateOf<String?>(null) }
     val trailBrowserAvailable = !liveMapBackground
-    // The plain welcome layout temporarily supersedes the saved artwork preference.
-    // Keep that preference and the original assets intact for a later visual decision.
+    // This review uses the original Hermann artwork; keep the saved background choice intact.
     var greetingHour by remember { mutableIntStateOf(LocalTime.now().hour) }
     val intakeTime = remember { Animatable(0f) }
     var energyEntryPlayed by rememberSaveable { mutableStateOf(false) }
@@ -304,7 +316,7 @@ internal fun StartRunScreen(
             }
     ) {
         val spacious = maxHeight >= 800.dp && maxWidth >= 360.dp
-        val agentRingSize = (if (spacious) 220.dp else 192.dp).coerceAtMost(maxWidth - 124.dp)
+        val agentRingSize = (if (spacious) 240.dp else 220.dp).coerceAtMost(maxWidth - 96.dp)
         val energyEntryDistancePx = with(LocalDensity.current) { maxWidth.toPx() }
         val wholeStackScroll = rememberScrollState()
         val gpsStatus = when {
@@ -315,7 +327,16 @@ internal fun StartRunScreen(
             gpsReady -> "GPS connecting…"
             else -> "Location setup on Start"
         }
-        Column(Modifier.fillMaxSize().background(StartNavigationBackground)) {
+        if (!liveMapBackground) {
+            Image(painterResource(R.drawable.start_map_reference), contentDescription = null,
+                contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+            Box(Modifier.fillMaxSize().background(Brush.verticalGradient(
+                0f to Color.White.copy(alpha = 0.08f),
+                0.55f to Color.White.copy(alpha = 0.02f),
+                1f to Color.White.copy(alpha = 0.52f)
+            )))
+        }
+        Column(Modifier.fillMaxSize()) {
             // One scroll surface keeps all controls reachable at large text/short heights.
             // The five destinations stay in their own fixed space below it.
             BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
@@ -328,11 +349,12 @@ internal fun StartRunScreen(
                         .padding(horizontal = 20.dp)
                         .padding(top = 16.dp, bottom = 12.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.SpaceBetween
+                    verticalArrangement = Arrangement.Top
                 ) {
                     Column(Modifier.fillMaxWidth().testTag(START_RUN_UPPER_CONTENT_TAG)) {
-                        Text("RunState", color = StartInk, fontSize = 30.sp,
-                            lineHeight = 36.sp, fontWeight = FontWeight.ExtraBold)
+                        Image(painterResource(R.drawable.start_runstate_wordmark),
+                            contentDescription = "RunState", contentScale = ContentScale.Fit,
+                            modifier = Modifier.width(140.dp).height(30.dp))
                         if (trailBrowserAvailable) {
                             Spacer(Modifier.height(16.dp))
                             ExploreTrailsCard(
@@ -350,7 +372,6 @@ internal fun StartRunScreen(
                             gpsMessage = gpsMessage
                         )
                     }
-                    Spacer(Modifier.height(12.dp))
                     Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
                         StartWelcomeVisualizer(
                             selectedEnergy = selectedPreRunEnergy,
@@ -368,19 +389,21 @@ internal fun StartRunScreen(
                             onOpenSpotify = onOpenSpotify,
                             musicEnabled = actionsEnabled
                         )
-                        Spacer(Modifier.height(8.dp))
+                        Spacer(Modifier.height(6.dp))
                         Text(
                             text = when (greetingHour) {
                                 in 5..11 -> "Good morning"
                                 in 12..16 -> "Good afternoon"
                                 else -> "Good evening"
-                            },
-                            color = StartInk, fontSize = 25.sp, lineHeight = 30.sp,
-                            fontWeight = FontWeight.Bold, textAlign = TextAlign.Center,
+                            } + if (BuildConfig.OWNER_TOOLS_ENABLED) ", Manley" else "",
+                            color = StartInk, fontSize = 28.sp, lineHeight = 34.sp,
+                            fontFamily = StartWelcomeFont,
+                            fontWeight = FontWeight.ExtraBold, textAlign = TextAlign.Center,
                             modifier = Modifier.fillMaxWidth().testTag(START_GREETING_TAG)
                         )
-                        Spacer(Modifier.height(6.dp))
+                        Spacer(Modifier.height(2.dp))
                         Text("How’s your energy today?", color = StartInk.copy(alpha = 0.68f),
+                            fontFamily = StartWelcomeFont,
                             fontSize = 17.sp, lineHeight = 23.sp, textAlign = TextAlign.Center,
                             modifier = Modifier.fillMaxWidth().testTag(START_ENERGY_PROMPT_TAG)
                                 .graphicsLayer { alpha = if (selectedPreRunEnergy == null) 1f else 0f }
@@ -388,7 +411,7 @@ internal fun StartRunScreen(
                                     if (selectedPreRunEnergy == null)
                                         contentDescription = "How’s your energy today? Optional"
                                 })
-                        Spacer(Modifier.height(18.dp))
+                        Spacer(Modifier.height(16.dp))
                         PreRunEnergyChoices(
                             selected = selectedPreRunEnergy,
                             onSelect = selection@{ energy ->
@@ -889,10 +912,10 @@ private fun ExploreTrailsCard(enabled: Boolean, imageSize: Dp, onClick: () -> Un
             contentScale = ContentScale.Crop,
             modifier = Modifier.size(imageSize).clip(RoundedCornerShape(16.dp)))
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Text("Explore trails", color = StartInk, fontSize = 21.sp, lineHeight = 25.sp,
-                fontWeight = FontWeight.Bold)
+            Text("Explore trails", color = StartInk, fontSize = 25.sp, lineHeight = 29.sp,
+                fontFamily = StartWelcomeFont, fontWeight = FontWeight.ExtraBold)
             Text("Find your next route", color = StartInk.copy(alpha = 0.64f),
-                fontSize = 14.sp, lineHeight = 19.sp)
+                fontFamily = StartWelcomeFont, fontSize = 16.sp, lineHeight = 21.sp)
         }
         Text("›", color = StartInk, fontSize = 30.sp,
             modifier = Modifier.clearAndSetSemantics { })
@@ -912,7 +935,8 @@ private fun StartWelcomeVisualizer(
     onOpenSpotify: () -> Unit,
     musicEnabled: Boolean
 ) {
-    Box(Modifier.fillMaxWidth().height(ringSize).testTag(START_AGENT_CARD_TAG)) {
+    Box(Modifier.fillMaxWidth().height(ringSize).padding(horizontal = 12.dp)
+        .testTag(START_AGENT_CARD_TAG)) {
         Box(ringModifier.size(ringSize).align(Alignment.TopCenter)
             .testTag(START_AGENT_VISUALIZER_TAG)) {
             // Reuse the phone's exact three-lobed drawing and receiving animation.
@@ -1010,9 +1034,9 @@ private fun EnergyTile(
     tileHeight: Dp = 82.dp
 ) {
     val label = when (energy) {
-        PreRunEnergy.LOW -> "LOW"
-        PreRunEnergy.MODERATE -> "MODERATE"
-        PreRunEnergy.HIGH -> "HIGH"
+        PreRunEnergy.LOW -> "Low"
+        PreRunEnergy.MODERATE -> "Moderate"
+        PreRunEnergy.HIGH -> "High"
     }
     val accent = when (energy) {
         PreRunEnergy.LOW -> Color(0xFFCDB7EA)
@@ -1039,7 +1063,7 @@ private fun EnergyTile(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
-        Canvas(Modifier.size(18.dp).offset(y = 4.dp)) {
+        Canvas(Modifier.size(26.dp)) {
             when (energy) {
                 PreRunEnergy.LOW -> {
                     drawCircle(accent, radius = size.minDimension * 0.42f)
@@ -1063,26 +1087,15 @@ private fun EnergyTile(
                 }
             }
         }
-        Spacer(Modifier.height(6.dp))
+        Spacer(Modifier.height(8.dp))
         Text(
             text = label,
             color = Color.White,
-            fontSize = if (energy == PreRunEnergy.MODERATE) 11.sp else 13.sp,
-            fontWeight = FontWeight.Black,
-            letterSpacing = 1.1.sp,
+            fontSize = 18.sp, lineHeight = 22.sp,
+            fontFamily = StartWelcomeFont,
+            fontWeight = FontWeight.Bold,
             textAlign = TextAlign.Center,
             modifier = Modifier.padding(horizontal = 3.dp).graphicsLayer { alpha = labelAlpha() }
-        )
-        Text(
-            text = when (energy) {
-                PreRunEnergy.LOW -> "Running low"
-                PreRunEnergy.MODERATE -> "Steady"
-                PreRunEnergy.HIGH -> "Energized"
-            },
-            color = accent,
-            fontSize = 10.sp,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.padding(top = 3.dp).graphicsLayer { alpha = labelAlpha() }
         )
     }
 }
@@ -1166,12 +1179,12 @@ private fun StartFooter(
     )
     Column(
         modifier = modifier.fillMaxWidth().padding(horizontal = 20.dp)
-            .padding(top = 8.dp).testTag(START_FOOTER_TAG),
+            .testTag(START_FOOTER_TAG),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Top
     ) {
         Box(
-            modifier = Modifier.size(110.dp).clip(CircleShape)
+            modifier = Modifier.size(140.dp).clip(CircleShape)
                 .clickable(enabled = enabled, role = Role.Button, onClick = onStart)
                 .semantics {
                     contentDescription = "Start run"
@@ -1181,7 +1194,7 @@ private fun StartFooter(
             contentAlignment = Alignment.Center
         ) {
             StartDial(
-                modifier = Modifier.size(102.dp),
+                modifier = Modifier.size(132.dp),
                 glow = { readyGlow * (0.9f + 0.1f * sin(phase.value)) },
                 entryTime = entryTime
             )
@@ -1195,7 +1208,7 @@ private fun StartFooter(
 @Composable
 private fun MusicFooterControl(enabled: Boolean, onClick: () -> Unit) {
     Box(
-        modifier = Modifier.size(72.dp).clip(CircleShape)
+        modifier = Modifier.size(80.dp).clip(CircleShape)
             .clickable(enabled = enabled, role = Role.Button,
                 onClickLabel = "Open Spotify", onClick = onClick)
             .semantics { contentDescription = "Open Spotify" }
@@ -1204,14 +1217,14 @@ private fun MusicFooterControl(enabled: Boolean, onClick: () -> Unit) {
     ) {
         Image(painter = painterResource(R.drawable.start_music_orb),
             contentDescription = null, contentScale = ContentScale.Fit,
-            modifier = Modifier.size(56.dp).clip(CircleShape))
+            modifier = Modifier.size(64.dp).clip(CircleShape))
     }
 }
 
 @Composable
 private fun ShoeFooterControl(shoe: ShoePairDisplay?, enabled: Boolean, onClick: () -> Unit) {
     Box(
-        modifier = Modifier.size(72.dp).clip(CircleShape)
+        modifier = Modifier.size(80.dp).clip(CircleShape)
             .clickable(enabled = enabled, role = Role.Button, onClickLabel = "Choose shoes", onClick = onClick)
             .semantics {
                 contentDescription = "Choose shoes"
@@ -1220,7 +1233,7 @@ private fun ShoeFooterControl(shoe: ShoePairDisplay?, enabled: Boolean, onClick:
             .testTag(START_OPEN_SHOES_TAG),
         contentAlignment = Alignment.Center
     ) {
-        ShoeIllustration(Modifier.size(56.dp))
+        ShoeIllustration(Modifier.size(64.dp))
     }
 }
 

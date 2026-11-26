@@ -1,6 +1,18 @@
 RunState bundled visual assets and map dependencies
 Reviewed October 16, 2026
 
+Start welcome typography (added November 26, 2026): Nunito Sans variable font.
+File: res/font/nunito_sans_variable.ttf, bundled unchanged from Google Fonts.
+Source: https://github.com/google/fonts/tree/main/ofl/nunitosans
+Copyright 2016 The Nunito Sans Project Authors (https://github.com/Fonthausen/NunitoSans).
+Licensed under the SIL Open Font License 1.1; full license text appears below under Barlow Condensed.
+Original license: https://github.com/google/fonts/blob/main/ofl/nunitosans/OFL.txt
+Downloaded SHA256: f934d7142fb4784bf828da485b7dcbd90c0c80d514e9d49a5da0ed3a1ae2491d.
+
+Start RunState wordmark (added November 26, 2026): isolated with the built-in image tool
+from the owner's selected RunState design mockup. Transparent canvas margins trimmed only;
+existing dark-green italic/notched-R design retained. File: start_runstate_wordmark.png.
+
 Houston trail-background trial (added November 23, 2026)
 The photos are real source photographs, resized by their source and cropped to fit by the app.
 Memorial / Seymour Lieberman Trail: Beverly Moseley, USDA NRCS Texas, CC BY 2.0 (also identified as US federal public-domain work).
