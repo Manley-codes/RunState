@@ -335,10 +335,8 @@ internal fun ShoeIllustration(modifier: Modifier = Modifier) {
             cubicTo(w * .02f, h * .22f, w * .22f, h * .07f, w * .47f, h * .045f)
             close()
         }
-        withTransform({ scale(1.04f, 1.04f, Offset(w * .5f, h * .5f)) }) {
-            drawPath(outline, Color.White)
-        }
-        drawPath(outline, Color(0xFF789FAB))
+        // The outer blue rim is circular; retain the irregular inner inset and sneaker.
+        drawCircle(Color(0xFF789FAB), radius = size.minDimension / 2f)
         withTransform({ scale(.74f, .74f, Offset(w * .5f, h * .5f)) }) {
             drawPath(outline, Color(0xFFF7F7F7))
         }

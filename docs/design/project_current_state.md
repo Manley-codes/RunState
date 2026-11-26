@@ -5,6 +5,24 @@ metadata:
   type: project
 ---
 
+## November 26 circular Start controls and visualizer contrast
+
+Owner requested exact reference side-control sizing, circular exteriors, shoe thin white rim removed,
+and more visible/vibrant moving ring. Both visible controls are now 63 dp, based on reference measured
+130 px circles at 852 px width scaled to the emulator's 411 dp width; existing 80 dp hit areas and
+positions are unchanged. Shoe blue exterior is a true circle with its irregular inner inset/sneaker
+preserved. Music crops its original art to a true circle with matching dark backing; interior stays.
+Start alone opts into stronger opaque sage/purple/gold and 2.4 dp maximum strokes (was 1.4 dp).
+All 76 bars, three-lobed wave/timing, receiving animation and lifecycle/reduced-motion behavior remain.
+The shared completion ring retains its prior default styling. No new source/assets/dependencies.
+
+Three assemblies/release vital lint passed; five focused emulator checks passed in 40.319 seconds:
+layout/selection stability, actual frame animation, Energy intake, shoes and Spotify action wiring.
+Final native/reference comparison confirms equal-sized circular side art and visible ring over the
+unchanged Hermann map. Private evidence: android/build/nov26-start-circles/ (logs, design comparison,
+start-circles-final.png). App open in emulator for owner review; separate design branch checkpoint.
+No physical-phone install, public-preview update, storage/backend or accepted reflection change.
+
 ## November 26 Start welcome alignment and map refinement
 
 Owner requested closer reference alignment, its title/typography, Manley in the greeting, Start closer

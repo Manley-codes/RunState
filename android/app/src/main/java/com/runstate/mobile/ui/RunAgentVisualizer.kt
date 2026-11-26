@@ -34,11 +34,21 @@ internal fun rememberRunAgentPhase(active: Boolean): State<Float> = if (active) 
 }
 
 @Composable
-internal fun RunAgentRing(phase: State<Float>, intakeTime: () -> Float?, modifier: Modifier = Modifier) {
+internal fun RunAgentRing(
+    phase: State<Float>,
+    intakeTime: () -> Float?,
+    modifier: Modifier = Modifier,
+    emphasized: Boolean = false
+) {
     Canvas(modifier) {
         // Fixed bar angles and a travelling three-lobed wave reproduce the prototype's
         // spinning illusion. The bar lengths, rather than the whole ring, move around it.
-        val barWidth = (size.minDimension * 0.014f).coerceIn(1.dp.toPx(), 1.4.dp.toPx())
+        // Start needs stronger contrast over the map; completion keeps its accepted treatment.
+        val barWidth = if (emphasized) {
+            (size.minDimension * 0.014f).coerceIn(1.8.dp.toPx(), 2.4.dp.toPx())
+        } else {
+            (size.minDimension * 0.014f).coerceIn(1.dp.toPx(), 1.4.dp.toPx())
+        }
         if (size.minDimension <= barWidth) return@Canvas
         // Reserve the rounded caps as well as the receiving swell inside the measured drawing.
         val units = (size.minDimension - barWidth) / (2f * (264f + 79.8f * 1.8f))
@@ -56,12 +66,13 @@ internal fun RunAgentRing(phase: State<Float>, intakeTime: () -> Float?, modifie
             val height = (9f + wave * 7.5f +
                 (sin(index * 5.31).toFloat() * 0.5f + 0.5f) * 2.5f) * 4.2f * (1f + receipt * 0.8f)
             val color = when (index * 56 / 76) {
-                in 0..17 -> Color(0xFF849B80)
-                in 18..34 -> Color(0xFFA390B3)
-                else -> Color(0xFFACA473)
+                in 0..17 -> if (emphasized) Color(0xFF72A47D) else Color(0xFF849B80)
+                in 18..34 -> if (emphasized) Color(0xFFB18BD2) else Color(0xFFA390B3)
+                else -> if (emphasized) Color(0xFFD0AE63) else Color(0xFFACA473)
             }
             drawLine(
-                color = color.copy(alpha = (0.84f + wave * 0.12f + receipt * 0.04f).coerceAtMost(1f)),
+                color = color.copy(alpha = if (emphasized) 1f else
+                    (0.84f + wave * 0.12f + receipt * 0.04f).coerceAtMost(1f)),
                 start = center + direction * radius,
                 end = center + direction * (radius + height * units),
                 strokeWidth = barWidth,

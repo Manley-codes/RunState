@@ -8,6 +8,19 @@ status: CURRENT NATIVE DECISIONS plus dated prototype history; verification live
 
 # Start Run — where this screen actually is
 
+**November 26 circular controls / stronger ring — emulator review:** Owner requested the chosen
+mockup's side-control sizes, perfectly circular outer boundaries, shoe white rim removed/blue outer
+edge circular, and a thicker/more vibrant visualizer with the same motion. Reference colored-circle
+bounds are about 130 px at 852 px width, or 63 dp at the current emulator width. Both controls now use
+63 dp visible art inside the existing 80 dp targets; positions remain. Shoe exterior is a blue disc,
+without the white outline; irregular inner inset and sneaker remain. Music uses circular cropping
+and dark backing, retaining its irregular inner art. No new images/assets.
+
+Start opts into thicker 2.4 dp maximum ring strokes (previously 1.4 dp), full-opacity stronger sage,
+purple and warm gold. Same 76 bars, three-lobed wave, 5.464-second phase, receiving swell and reduced
+motion/lifecycle behavior. Shared completion-screen ring keeps its prior default styling. Still the
+emulator-only design branch; no phone/public-preview change or reflection behavior work.
+
 **November 26 welcome refinement — emulator only:** Owner asked for alignment and typography closer
 to the chosen mockup, his name in the greeting, Start closer to Energy and the exact original Hermann
 map restored. The body now follows one explicit vertical stack, leaving surplus space below the controls

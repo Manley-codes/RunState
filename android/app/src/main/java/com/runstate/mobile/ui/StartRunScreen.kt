@@ -939,8 +939,8 @@ private fun StartWelcomeVisualizer(
         .testTag(START_AGENT_CARD_TAG)) {
         Box(ringModifier.size(ringSize).align(Alignment.TopCenter)
             .testTag(START_AGENT_VISUALIZER_TAG)) {
-            // Reuse the phone's exact three-lobed drawing and receiving animation.
-            RunAgentRing(phase = phase, intakeTime = intakeTime,
+            // Preserve the three-lobed movement and receiving animation with stronger map contrast.
+            RunAgentRing(phase = phase, intakeTime = intakeTime, emphasized = true,
                 modifier = Modifier.fillMaxSize().then(
                     if (selectedEnergy != null) Modifier.testTag(START_ENERGY_SELECTED_TAG)
                         .semantics {
@@ -1216,8 +1216,9 @@ private fun MusicFooterControl(enabled: Boolean, onClick: () -> Unit) {
         contentAlignment = Alignment.Center
     ) {
         Image(painter = painterResource(R.drawable.start_music_orb),
-            contentDescription = null, contentScale = ContentScale.Fit,
-            modifier = Modifier.size(64.dp).clip(CircleShape))
+            contentDescription = null, contentScale = ContentScale.Crop,
+            modifier = Modifier.size(63.dp).clip(CircleShape)
+                .background(Color(0xFF1D1F16)))
     }
 }
 
@@ -1233,7 +1234,7 @@ private fun ShoeFooterControl(shoe: ShoePairDisplay?, enabled: Boolean, onClick:
             .testTag(START_OPEN_SHOES_TAG),
         contentAlignment = Alignment.Center
     ) {
-        ShoeIllustration(Modifier.size(64.dp))
+        ShoeIllustration(Modifier.size(63.dp))
     }
 }
 
