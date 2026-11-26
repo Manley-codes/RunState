@@ -12,7 +12,7 @@ Owner explicitly approved updating GitHub. Preview `3f70fac` is pushed and its n
 shoe artwork, simplified distance/time goals, brand-first shoes and optional Houston trails now match
 the accepted Android designs. Original Hermann background and sample album covers retained.
 Private shoe product photos excluded; all 338 model names included. Fictional runs only, silent controls,
-no paid provider/live GPS calls. 26 local checks passed; live verification in progress. Details/receipts
+no paid provider/live GPS calls. 26 local checks and all 16 live phone/desktop checks passed. Details/receipts
 in design_preview_build.md. Android/iPhone/backend code and phone data unchanged.
 
 Next app task remains personal-record announcement policy/verification, then the recorded release
