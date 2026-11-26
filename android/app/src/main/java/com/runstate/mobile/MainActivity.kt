@@ -1446,7 +1446,12 @@ internal fun RunJourneyRoot(
                                 val transitions = try { database.runDao().transitionsFor(id) }
                                 catch (cancelled: CancellationException) { throw cancelled }
                                 catch (_: Exception) { null }
-                                savedRunReceiptFor(row, transitions)
+                                // Read durable history once, then freeze this completion's wording.
+                                // Missing history suppresses the optional record, not the run facts.
+                                val previousRuns = try { database.runDao().observeCompletedRuns().first() }
+                                catch (cancelled: CancellationException) { throw cancelled }
+                                catch (_: Exception) { null }
+                                savedRunReceiptFor(row, transitions, previousRuns)
                             }
                         } catch (cancelled: CancellationException) { throw cancelled }
                         catch (_: Exception) { null } ?: "Run complete."
@@ -1504,7 +1509,9 @@ internal fun RunJourneyRoot(
     RunCompleteReceiptEffect(
         completedRunId = completedRunId,
         receiptRunId = completionReceiptRunId,
-        receiptText = completionReceiptText ?: completedRuns?.firstOrNull {
+        // Room/service refreshes may expose completion before the local history read finishes.
+        // Wait for its frozen wording; only a restored, no-longer-owned action uses base facts.
+        receiptText = completionReceiptText ?: completedRuns?.takeUnless { actionInFlight }?.firstOrNull {
             it.runId == completionReceiptRunId
         }?.let(::savedRunReceiptFor),
         startedRunId = completionReceiptStartedRunId,

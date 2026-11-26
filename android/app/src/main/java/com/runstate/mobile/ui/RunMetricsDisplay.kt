@@ -56,7 +56,11 @@ internal data class RunMetricsDisplay(
 internal fun savedRunReceiptFor(run: RunEntity): String = savedRunReceiptFor(run, null)
 
 /** Pace needs the actual saved timeline; an omitted list must never imply the run had no pauses. */
-internal fun savedRunReceiptFor(run: RunEntity, transitions: List<RunTransitionEntity>?): String {
+internal fun savedRunReceiptFor(
+    run: RunEntity,
+    transitions: List<RunTransitionEntity>?,
+    previousRuns: List<RunEntity>? = null
+): String {
     require(run.state == StoredRunState.COMPLETED)
     val distance = run.finalDistanceMeters?.let { meters ->
         val (unitMeters, singular, plural) = when (run.displayDistanceUnit) {
@@ -89,8 +93,9 @@ internal fun savedRunReceiptFor(run: RunEntity, transitions: List<RunTransitionE
     }
     val pace = savedAveragePaceReceiptFor(run, transitions)
     val goal = savedRunGoalOutcomeFor(run, transitions)?.achievement
+    val record = previousRuns?.let { longestRunAchievementFor(run, it) }
     return listOfNotNull(if (run.activityFinalized) "Run saved." else "Run complete.",
-        distance, duration, pace, goal).joinToString(" ")
+        distance, duration, pace, goal, record).joinToString(" ")
 }
 
 /** The same saved target and evidence drive History, the recap and the factual finish cue. */

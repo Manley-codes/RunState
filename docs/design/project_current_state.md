@@ -5,6 +5,51 @@ metadata:
   type: project
 ---
 
+## November 26 longest-run finish announcement
+
+Manley asked to resume the planned PR review before an ordinary Android run, targeting 30–60 minutes,
+and approved longest-run recognition. Audit confirmed the legacy Java console's PR behavior had never
+been connected to Android: History's Longest/Fastest pace filters only sort; mile and finish cues had
+no historical comparison. Leave fastest whole-run average pace parked because unlike-distance runs
+are not comparable; standard-distance records need a separately agreed policy.
+
+The factual completion receipt now appends **Your longest recorded run.** once when the new durable
+completion strictly exceeds all eligible earlier saved GPS runs. Current/prior evidence requires
+GPS tracking and metric source, complete distance coverage, finite positive raw meters and a valid
+finish. Prior rows additionally must be finalized, distinct and finished by the current run's start.
+The first eligible run establishes a silent baseline; ties, samples, partial/unknown data and shorter
+runs remain silent. This is a record among qualifying runs retained in this installation, not an
+all-time athletic claim. Existing saved rows are not rewritten and no PR badges/schema are added.
+
+MainActivity reads durable history once after completion and freezes the full receipt, alongside
+existing totals/pace/goal achievement. A missing history read suppresses only the optional PR line.
+Independent review found that a separate Saved refresh could otherwise start the fallback too soon;
+the fallback now waits while the local action is in flight. Recovery retains its base-facts fallback.
+Existing consumed-receipt guards prevent recreation/History return from announcing it again. This
+changes neither mile cue policy nor accepted AI writing/song selection, backend requests or pricing.
+
+Two necessary new files: ui/RunPersonalRecords.kt and test/ui/RunPersonalRecordsTest.kt. **89 Debug
+and 63 Release focused JVM checks passed**, including baseline/ties/source/raw-meter eligibility,
+existing goal receipts, History rankings and mile cues. Debug/release/test APKs and vital lint passed.
+**Five distinct emulator checks passed:** actual root/Room/GPS completion delivers totals, goal and
+PR together, then stays silent across recreation/History return; existing receipt/energy/reflection
+ordering and interrupted/consumed receipt behavior also pass. The new root test first reached the
+correct speech but used a scroll action on the fixed Save Activity button; correcting only that test
+action made the full return journey pass (36.235 seconds). No real provider or audio calls were made.
+
+Matching-signer in-place update installed and reopened on Moto after a fresh private backup/idle-run
+check. **All 77 runs, two shoe pairs, 12 table hashes and five preference files were preserved**;
+DB integrity and foreign-key checks passed. Installed APK hash:
+c61df909b32dec91c71bc7a53f39ffe8ed14f41bf2538e214906f8cf241744be.
+Evidence/previous APK: android/build/nov26-pr-announcement/ and moto/. There are 11 eligible prior GPS
+runs, maximum about 3.03 miles; do not ask Manley to chase a PR. No phone database test records added.
+
+The combined latest-plus-deferred Android field checklist is at the top of the private roadmap:
+new Spotify badge/goal/shoes plus locked GPS, Bluetooth mile audio/music return, factual finish and
+saved Activity totals/route/Energy/Effort. Cloud audio remains a later separately enabled check under
+the last verified zero spending cap. Preserve the accepted writer, deferred Pause-speech decision,
+public-preview publication boundary and independent iPhone lane.
+
 ## November 26 Start phone installation and personal greetings
 
 Manley approved installation of the completed welcome layout and then explicitly requested the

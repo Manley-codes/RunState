@@ -73,6 +73,9 @@ import com.runstate.mobile.RunCompleteSpeechEffect
 import com.runstate.mobile.RunCompleteReceiptEffect
 import com.runstate.mobile.RunJourneyRoot
 import com.runstate.mobile.data.local.RunStateDatabase
+import com.runstate.mobile.data.local.RunEntity
+import com.runstate.mobile.data.local.RunLocationObservation
+import com.runstate.mobile.data.local.DistanceUnit
 import com.runstate.mobile.data.local.StoredRunState
 import com.runstate.mobile.location.RunTrackingServiceState
 import com.runstate.mobile.location.GpsSignalStatus
@@ -88,6 +91,7 @@ import com.runstate.mobile.music.SpotifyLivePlayerState
 import com.runstate.mobile.run.PreparedRunFactory
 import com.runstate.mobile.run.RunActionKind
 import com.runstate.mobile.run.RunGoal
+import com.runstate.mobile.run.RunTimingMark
 import com.runstate.mobile.run.RunSessionCoordinator
 import com.runstate.mobile.run.RunAdmission
 import com.runstate.mobile.run.RunCountdownOwner
@@ -3033,6 +3037,115 @@ class RunStateScreenTest {
     @Test
     fun historyRootRestoresDeletedRecapAsStart() =
         shortRunDecisionThroughRoot(save = true, deleteSaved = true, restoreDeletedRecap = true)
+
+    @Test
+    fun completedGpsRootAnnouncesLongestWithGoalOnceAcrossRestorationAndHistory() {
+        val database = Room.inMemoryDatabaseBuilder(
+            ApplicationProvider.getApplicationContext(), RunStateDatabase::class.java).build()
+        val appScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+        val start = 1_756_000_000_000L
+        var time = start
+        val clock = object : Clock() {
+            override fun getZone(): ZoneId = ZoneOffset.UTC
+            override fun withZone(zone: ZoneId): Clock = this
+            override fun instant(): Instant = Instant.ofEpochMilli(time)
+        }
+        val id = UUID.randomUUID()
+        val timingSession = UUID.randomUUID().toString()
+        val coordinator = RunSessionCoordinator(database.runDao(),
+            PreparedRunFactory(clock, { ZoneOffset.UTC }, { id },
+                { RunTimingMark(1_000L + time - start, timingSession) }),
+            appScope, database.locationDao())
+        val earlier = RunEntity(
+            runId = UUID.randomUUID().toString(), state = StoredRunState.COMPLETED,
+            officialStartEpochMillis = start - 120_000L, startTimezoneId = "UTC",
+            lastCheckpointEpochMillis = start - 60_000L, finishEpochMillis = start - 60_000L,
+            finalDistanceMeters = 200.0, metricSource = MetricSource.GPS,
+            telemetryCoverage = TelemetryCoverage.COMPLETE, displayDistanceUnit = DistanceUnit.MILES,
+            trackingMode = RunTrackingMode.GPS, activityFinalized = true)
+        val receipts = java.util.concurrent.CopyOnWriteArrayList<String>()
+        var shown by mutableStateOf(true)
+        val speaker = object : ReflectionSpeaker {
+            override fun speak(text: String) = error("This offline test never requests a reflection")
+            override fun speakCompletionFacts(text: String, onFinished: () -> Unit) {
+                receipts += text
+                onFinished()
+            }
+            override fun stop() = Unit
+            override fun close() = Unit
+        }
+        try {
+            runBlocking {
+                database.runDao().insert(earlier)
+                coordinator.initialize()
+                coordinator.beginCountdown()
+                coordinator.requestStart(trackingMode = RunTrackingMode.GPS,
+                    goal = RunGoal.Distance(160.9344)).await()
+                // Continuous synthetic GPS and matching clocks prove the same complete-coverage
+                // path as a real run without a device location service or the owner's database.
+                for (offset in 1_000L..59_000L step 2_000L) {
+                    database.locationDao().recordObservation(RunLocationObservation(
+                        runId = id.toString(), observationKey = "pr-$offset",
+                        observedAtEpochMillis = start + offset,
+                        elapsedRealtimeNanos = (1_000L + offset) * 1_000_000L,
+                        latitude = 29.72, longitude = -95.39, horizontalAccuracyMeters = 5f,
+                        altitudeMeters = null, speedMetersPerSecond = null, bearingDegrees = null,
+                        acceptedForDistance = true,
+                        segmentDistanceMeters = if (offset == 1_000L) null else 10.0), timingSession)
+                }
+                time = start + 60_000L
+                coordinator.requestAction(RunActionKind.PAUSE).await()
+                assertEquals(TelemetryCoverage.COMPLETE, coordinator.runMetrics()?.coverage)
+            }
+            val restoration = StateRestorationTester(composeTestRule)
+            restoration.setContent {
+                if (shown) RunJourneyRoot(coordinator, null, database,
+                    remember { MutableStateFlow(RunTrackingServiceState.Idle) },
+                    LocalLifecycleOwner.current.lifecycle, completionSpeakerFactory = { speaker },
+                    reflectionConnection = com.runstate.mobile.ReflectionConnectionState.Hosted(
+                        com.runstate.mobile.reflection.ReflectionConnectionConfig(
+                            "https://example.com/api/reflections/candidates", "x".repeat(48))))
+            }
+            composeTestRule.waitUntil(5_000L) {
+                composeTestRule.onAllNodesWithText(RESUME).fetchSemanticsNodes().isNotEmpty()
+            }
+            composeTestRule.mainClock.autoAdvance = false
+            composeTestRule.onNodeWithTag(HOLD_TO_STOP_TAG).performTouchInput { down(center) }
+            composeTestRule.mainClock.advanceTimeBy(HOLD_TO_STOP_MILLIS + 100L)
+            composeTestRule.onNodeWithTag(HOLD_TO_STOP_TAG).performTouchInput { up() }
+            composeTestRule.mainClock.autoAdvance = true
+            composeTestRule.waitUntil(5_000L) { receipts.size == 1 }
+            assertEquals("Run complete. 0.18 miles. Active time, 1 minute. " +
+                "Average pace, 5 minutes, 33 seconds per mile. " +
+                "You reached your goal of 0.1 miles. Your longest recorded run.", receipts.single())
+            val completed = runBlocking { requireNotNull(database.runDao().findById(id.toString())) }
+            assertEquals(StoredRunState.COMPLETED, completed.state)
+            assertEquals(290.0, completed.finalDistanceMeters!!, 0.0)
+            assertEquals(TelemetryCoverage.COMPLETE, completed.telemetryCoverage)
+            assertFalse(completed.activityFinalized)
+
+            restoration.emulateSavedInstanceStateRestore()
+            composeTestRule.onNodeWithTag(RUN_COMPLETE_SAVE_ACTIVITY_TAG).assertIsDisplayed().performClick()
+            composeTestRule.waitUntil(5_000L) {
+                composeTestRule.onAllNodesWithTag(RUN_ACTIVITY_RECAP_TAG).fetchSemanticsNodes().isNotEmpty()
+            }
+            composeTestRule.onNodeWithTag(RUN_COMPLETE_HISTORY_TAG).performScrollTo().performClick()
+            composeTestRule.waitUntil(5_000L) {
+                composeTestRule.onAllNodesWithTag(RUN_HISTORY_ROW_TAG_PREFIX + id).fetchSemanticsNodes().isNotEmpty()
+            }
+            composeTestRule.onNodeWithText("Back to run").performClick()
+            composeTestRule.onNodeWithTag(RUN_ACTIVITY_RECAP_TAG).assertIsDisplayed()
+            composeTestRule.runOnIdle { assertEquals(1, receipts.size) }
+            assertEquals(earlier, runBlocking { database.runDao().findById(earlier.runId) })
+            assertTrue(runBlocking { database.runDao().findById(id.toString()) }?.activityFinalized == true)
+        } finally {
+            composeTestRule.mainClock.autoAdvance = true
+            composeTestRule.runOnIdle { shown = false }
+            composeTestRule.waitForIdle()
+            appScope.cancel()
+            database.close()
+        }
+    }
 
     /** Real root + real isolated Room: these actions never touch the phone's runstate.db. */
     private fun shortRunDecisionThroughRoot(save: Boolean, restore: Boolean = false,
