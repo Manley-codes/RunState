@@ -35,7 +35,9 @@ def main(image):
         "RUNSTATE_SPEECH_REPLAY_DIR": "/var/data/runstate/speech",
         "RUNSTATE_RUNNER_MONTHLY_USD": "0",
         "RUNSTATE_GLOBAL_MONTHLY_USD": "0",
-        "RUNSTATE_ANTHROPIC_MAX_CALL_USD": "0.01",
+        # Let the bounded request estimate pass its per-call ceiling so this check
+        # reaches the zero monthly allowance, rather than an undersized-config refusal.
+        "RUNSTATE_ANTHROPIC_MAX_CALL_USD": "5.00",
         # Deliberately invalid stand-in, never inherited from the machine or CI secrets.
         "ANTHROPIC_API_KEY": "ci-placeholder-not-a-provider-key",
         "RUNSTATE_LIVE_SONG_TRIAL": "0",
