@@ -33,6 +33,27 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class MusixmatchSongAnalysisTest {
     @Test
+    void missingOptionalCeilingMakesNoLookupAndDoesNotBlockTheWriter(@TempDir Path directory) throws Exception {
+        AtomicInteger sends = new AtomicInteger();
+        var source = provider(request -> {
+            sends.incrementAndGet();
+            throw new AssertionError("Unconfigured optional provider must not be contacted");
+        });
+        var limits = new ProviderSpendBudget.Limits(10, 10, Long.valueOf(2), Long.valueOf(1), null);
+        var budget = new ProviderSpendBudget(directory, limits);
+        try (var scope = ProviderSpendScope.open(budget, "runner")) {
+            assertTrue(source.lookup("Example", "Artist").isEmpty());
+            assertTrue(source.lookupMaterial("Example", "Artist").isEmpty());
+            assertTrue(source.lookupMaterialByTrackId("Example", "Artist", "123").isEmpty());
+            assertTrue(source.lookupReflectionMaterial("Lovely Day", "Bill Withers").isEmpty());
+            ProviderSpendScope.beforeSend(ProviderSpendBudget.Provider.ANTHROPIC);
+        }
+        assertEquals(0, sends.get());
+        assertEquals(ProviderSpendBudget.Decision.ALLOWED,
+                budget.reserve("runner", ProviderSpendBudget.Provider.ANTHROPIC, 2));
+    }
+
+    @Test
     void optionalLyricRequestConsumesItsOwnAllowanceAndPropagatesDenial(@TempDir Path directory) throws Exception {
         AtomicInteger sends = new AtomicInteger();
         var source = provider(request -> {
