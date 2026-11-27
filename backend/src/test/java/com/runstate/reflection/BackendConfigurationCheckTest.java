@@ -111,7 +111,7 @@ final class BackendConfigurationCheckTest {
         assertEquals(0, check(environment, "1").status());
     }
 
-    @Test void positiveCapsRequireCeilingsForEachEnabledProvider() {
+    @Test void positiveCapsRequireCoreCeilingsAndReportUnconfiguredOptionalMusic() {
         var environment = settings(directory.resolve("enabled-providers"));
         environment.put("RUNSTATE_RUNNER_MONTHLY_USD", "1");
         environment.put("RUNSTATE_GLOBAL_MONTHLY_USD", "2");
@@ -122,7 +122,9 @@ final class BackendConfigurationCheckTest {
         assertEquals(1, check(environment, "1").status());
         environment.put("RUNSTATE_ELEVENLABS_MAX_CALL_USD", ".01");
         environment.put("MUSIXMATCH_API_KEY", "unused-song-key");
-        assertEquals(1, check(environment, "1").status());
+        Check optionalDisabled = check(environment, "1");
+        assertEquals(0, optionalDisabled.status());
+        assertTrue(optionalDisabled.output().contains("optional Musixmatch requests disabled"));
         environment.put("RUNSTATE_MUSIXMATCH_MAX_CALL_USD", "0");
         assertEquals(0, check(environment, "1").status());
     }

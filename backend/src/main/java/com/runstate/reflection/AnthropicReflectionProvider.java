@@ -763,7 +763,10 @@ public final class AnthropicReflectionProvider implements ReflectionProvider {
 
         TransportResponse response;
         try {
-            var usage = ProviderSpendScope.beforeSend(ProviderSpendBudget.Provider.ANTHROPIC);
+            Long reservation = ProviderRequestCost.anthropicMicros(model, requestBody, configuration.maxOutputTokens());
+            var usage = reservation == null
+                    ? ProviderSpendScope.beforeSend(ProviderSpendBudget.Provider.ANTHROPIC)
+                    : ProviderSpendScope.beforeSend(ProviderSpendBudget.Provider.ANTHROPIC, reservation);
             if (usage != null) usage.anthropicAttempt(step, model);
             response = transport.send(request);
             if (usage != null && response != null) usage.anthropicReply(step, model, response.body());

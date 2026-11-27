@@ -135,4 +135,108 @@ final class ProviderSpendBudgetTest {
         var disabledRunner = open(new ProviderSpendBudget.Limits(0, 1, 1, 1, 0), LAST_MINUTE);
         assertEquals(RUNNER_LIMIT, disabledRunner.reserve("runner", MUSIXMATCH));
     }
+
+    @Test void requestSizedReservationsPersistAndFailedSharedDebitDoesNotConsumeRunnerAllowance() throws IOException {
+        var caps = new ProviderSpendBudget.Limits(10, 14, 8, 8, 0);
+        var first = open(caps, LAST_MINUTE);
+        assertEquals(ALLOWED, first.reserve("runner-A", ANTHROPIC, 2));
+        assertEquals(ALLOWED, first.reserve("runner-A", ELEVENLABS, 3));
+        assertEquals(ALLOWED, first.reserve("runner-A", ELEVENLABS, 1));
+        var reopened = open(caps, LAST_MINUTE);
+        assertEquals(ALLOWED, reopened.reserve("runner-A", ANTHROPIC, 4));
+        assertEquals(RUNNER_LIMIT, reopened.reserve("runner-A", ELEVENLABS, 1));
+        assertEquals(GLOBAL_LIMIT, reopened.reserve("runner-B", ANTHROPIC, 5));
+        assertEquals(ALLOWED, reopened.reserve("runner-B", ELEVENLABS, 4));
+        assertEquals(GLOBAL_LIMIT, reopened.reserve("runner-C", ANTHROPIC, 1));
+    }
+
+    @Test void invalidOrUnconfiguredRequestAmountsNeverConsumeTheBudget() throws IOException {
+        var caps = new ProviderSpendBudget.Limits(10, 10, Long.valueOf(10), Long.valueOf(3), null);
+        var budget = open(caps, LAST_MINUTE);
+        assertTrue(budget.isConfigured(ANTHROPIC));
+        assertFalse(budget.isConfigured(MUSIXMATCH));
+        assertFalse(budget.isConfigured(null));
+        assertEquals(UNCONFIGURED, budget.reserve("runner", ANTHROPIC, -1));
+        assertEquals(UNCONFIGURED, budget.reserve("runner", ANTHROPIC, 0));
+        assertEquals(UNCONFIGURED, budget.reserve("runner", ELEVENLABS, 0));
+        assertEquals(UNCONFIGURED, budget.reserve("runner", ELEVENLABS, 4));
+        assertEquals(UNCONFIGURED, budget.reserve("runner", ANTHROPIC, Long.MAX_VALUE));
+        assertEquals(UNCONFIGURED, budget.reserve("runner", MUSIXMATCH, 0));
+        assertEquals(UNCONFIGURED, budget.reserve("runner", null, 1));
+        assertThrows(IllegalArgumentException.class, () -> budget.reserve("", ANTHROPIC, 1));
+        assertEquals(ALLOWED, budget.reserve("runner", ANTHROPIC, 10));
+        assertEquals(RUNNER_LIMIT, budget.reserve("runner", ANTHROPIC, 1));
+    }
+
+    @Test void zeroCostCatalogStillRequiresConfigurationAndNonzeroMonthlyCaps() throws IOException {
+        var enabled = open(new ProviderSpendBudget.Limits(1, 1, 1, 1, 0), LAST_MINUTE);
+        assertTrue(enabled.isConfigured(MUSIXMATCH));
+        assertEquals(ALLOWED, enabled.reserve("runner", MUSIXMATCH, 0));
+        assertEquals(UNCONFIGURED, enabled.reserve("runner", MUSIXMATCH, 1));
+        var runnerOff = open(new ProviderSpendBudget.Limits(0, 1, 1, 1, 0), LAST_MINUTE);
+        assertEquals(RUNNER_LIMIT, runnerOff.reserve("runner", MUSIXMATCH, 0));
+        var globalOff = open(new ProviderSpendBudget.Limits(1, 0, 1, 1, 0), LAST_MINUTE);
+        assertEquals(GLOBAL_LIMIT, globalOff.reserve("runner", MUSIXMATCH, 0));
+    }
+
+    @Test void concurrentUnequalReservationsCannotExceedEitherMonthlyLimit() throws Exception {
+        var caps = new ProviderSpendBudget.Limits(20, 35, 10, 10, 0);
+        var first = open(caps, LAST_MINUTE);
+        var second = open(caps, LAST_MINUTE);
+        var start = new CountDownLatch(1);
+        var pool = Executors.newFixedThreadPool(8);
+        try {
+            var results = new ArrayList<Future<ProviderSpendBudget.Decision>>();
+            for (int i = 0; i < 36; i++) {
+                var budget = i % 2 == 0 ? first : second;
+                String principal = "runner-" + i % 3;
+                long amount = 1 + (i / 3) % 3;
+                results.add(pool.submit(() -> {
+                    start.await();
+                    return budget.reserve(principal, ELEVENLABS, amount);
+                }));
+            }
+            start.countDown();
+            long[] admitted = new long[3];
+            for (int i = 0; i < results.size(); i++) {
+                if (results.get(i).get(10, TimeUnit.SECONDS) == ALLOWED) admitted[i % 3] += 1 + (i / 3) % 3;
+            }
+            long total = admitted[0] + admitted[1] + admitted[2];
+            assertTrue(total <= 35);
+            assertTrue(total >= 33);
+            for (long amount : admitted) assertTrue(amount <= 20);
+            var reopened = open(caps, LAST_MINUTE);
+            if (total < 35) assertEquals(ALLOWED, reopened.reserve("new-runner", ELEVENLABS, 35 - total));
+            assertEquals(GLOBAL_LIMIT, reopened.reserve("another-runner", ELEVENLABS, 1));
+        } finally {
+            pool.shutdownNow();
+        }
+    }
+
+    @Test void optionalProviderCheckDoesNotReserveOrLatchDenialButActualDenialStaysLatched() throws IOException {
+        var budget = open(new ProviderSpendBudget.Limits(10, 10, Long.valueOf(10), Long.valueOf(10), null), LAST_MINUTE);
+        assertTrue(ProviderSpendScope.optionalProviderConfigured(MUSIXMATCH)); // Existing local/manual path.
+        try (var scope = ProviderSpendScope.open(budget, "runner")) {
+            assertFalse(ProviderSpendScope.optionalProviderConfigured(MUSIXMATCH));
+            assertTrue(ProviderSpendScope.optionalProviderConfigured(ANTHROPIC));
+            assertNull(ProviderSpendScope.beforeSend(ANTHROPIC, 2));
+            assertNull(ProviderSpendScope.beforeSend(ELEVENLABS, 3));
+            var denied = assertThrows(ProviderSpendScope.Denied.class,
+                    () -> ProviderSpendScope.beforeSend(ELEVENLABS, 11));
+            assertTrue(denied.unavailable());
+            assertTrue(denied.attempted());
+            assertSame(denied, assertThrows(ProviderSpendScope.Denied.class,
+                    () -> ProviderSpendScope.beforeSend(ANTHROPIC, 1)));
+        }
+        assertEquals(ALLOWED, budget.reserve("runner", ANTHROPIC, 5));
+        assertEquals(RUNNER_LIMIT, budget.reserve("runner", ANTHROPIC, 1));
+        try (var scope = ProviderSpendScope.open(null, "runner")) {
+            assertFalse(ProviderSpendScope.optionalProviderConfigured(MUSIXMATCH));
+            var denied = assertThrows(ProviderSpendScope.Denied.class,
+                    () -> ProviderSpendScope.beforeSend(ANTHROPIC, 1));
+            assertTrue(denied.unavailable());
+            assertFalse(denied.attempted());
+        }
+        assertTrue(ProviderSpendScope.optionalProviderConfigured(MUSIXMATCH));
+    }
 }

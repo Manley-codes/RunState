@@ -36,17 +36,34 @@ final class ProviderSpendScope implements AutoCloseable {
     static LocalProviderUsage beforeSend(ProviderSpendBudget.Provider provider) {
         ProviderSpendScope scope = CURRENT.get();
         if (scope == null) return null;
-        scope.reserve(provider);
+        scope.reserve(provider, null);
         return scope.usage;
+    }
+
+    static LocalProviderUsage beforeSend(ProviderSpendBudget.Provider provider, long requestedMicros) {
+        ProviderSpendScope scope = CURRENT.get();
+        if (scope == null) return null;
+        scope.reserve(provider, requestedMicros);
+        return scope.usage;
+    }
+
+    /** Read-only opt-out for an optional provider; local/manual calls retain their existing behavior. */
+    static boolean optionalProviderConfigured(ProviderSpendBudget.Provider provider) {
+        if (provider == null) return false;
+        ProviderSpendScope scope = CURRENT.get();
+        return scope == null || (scope.budget != null && scope.budget.isConfigured(provider));
     }
 
     // A worker may already be in flight when another is denied. Serialize the decision and
     // attempted flag so HTTP can safely tell whether *any* outbound work was admitted.
-    private synchronized void reserve(ProviderSpendBudget.Provider provider) {
+    private synchronized void reserve(ProviderSpendBudget.Provider provider, Long requestedMicros) {
         if (denial != null) throw denial;
         if (budget == null || closed) throw deny(true);
         try {
-            switch (budget.reserve(principal, provider)) {
+            ProviderSpendBudget.Decision decision = requestedMicros == null
+                    ? budget.reserve(principal, provider)
+                    : budget.reserve(principal, provider, requestedMicros);
+            switch (decision) {
                 case ALLOWED -> attempted = true;
                 case GLOBAL_LIMIT, RUNNER_LIMIT -> throw deny(false);
                 case UNCONFIGURED -> throw deny(true);
