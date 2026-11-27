@@ -76,7 +76,8 @@ class AnthropicReflectionProviderTest {
         assertNull(LocalProviderUsage.configured(enabled, true, output));
         assertNull(LocalProviderUsage.configured(Map.of(), false, output));
         var meter = LocalProviderUsage.configured(enabled, false, output);
-        var budget = new ProviderSpendBudget(directory, new ProviderSpendBudget.Limits(100, 100, 1, 1, 1));
+        var budget = new ProviderSpendBudget(directory,
+                new ProviderSpendBudget.Limits(10_000_000, 10_000_000, 5_000_000, 400_000, 1));
         var model = new AnthropicReflectionProvider(testConfiguration(), request -> {
             var input = evidenceFrom(request);
             JsonObject generated;
@@ -144,7 +145,6 @@ class AnthropicReflectionProviderTest {
             sends.incrementAndGet();
             return new TransportResponse(200, successfulResponse(validCandidateJson()));
         });
-        var budget = new ProviderSpendBudget(directory, new ProviderSpendBudget.Limits(1, 1, 1, 1, 1));
         String privateDescription = "private-oversized-description "
                 + "\u4e2d".repeat(AnthropicReflectionProvider.MAX_REQUEST_BODY_BYTES / 3 + 1);
         // A character-count-only guard would admit this text even though its UTF-8 is too large.
@@ -152,6 +152,10 @@ class AnthropicReflectionProviderTest {
         assertTrue(privateDescription.getBytes(java.nio.charset.StandardCharsets.UTF_8).length
                 > AnthropicReflectionProvider.MAX_REQUEST_BODY_BYTES);
         var ordinary = knownEvidence();
+        long oneRequest = ProviderRequestCost.anthropicMicros(testConfiguration().model(),
+                captureRequest(ordinary).body(), testConfiguration().maxOutputTokens());
+        var budget = new ProviderSpendBudget(directory,
+                new ProviderSpendBudget.Limits(oneRequest, oneRequest, 5_000_000, 400_000, 1));
         var oversized = new CompletedRunEvidence(ordinary.officialStartEpochMillis(), ordinary.finishEpochMillis(),
                 ordinary.startTimezoneId(), ordinary.activeDurationMillis(), ordinary.metrics(), ordinary.preRunEnergy(),
                 new MusicContext(MusicState.MUSIC, "Controlled Song", "Controlled Artist", privateDescription));
@@ -173,7 +177,11 @@ class AnthropicReflectionProviderTest {
     @Test
     void eachSongModelExchangeReservesBudgetBeforeItsTransport(@TempDir Path directory) throws Exception {
         AtomicInteger sends = new AtomicInteger();
-        var provider = new AnthropicReflectionProvider(testConfiguration(), request -> {
+        // Custom model IDs retain fixed operator ceilings, so this sequence fixture stays rate-independent.
+        var config = testConfiguration();
+        var flatConfig = new ProviderConfiguration(config.endpoint(), DUMMY_API_KEY, "fake-ordinary",
+                config.connectionTimeout(), config.requestTimeout(), config.maxOutputTokens(), "fake-editor", "fake-writer");
+        var provider = new AnthropicReflectionProvider(flatConfig, request -> {
             sends.incrementAndGet();
             return songResponse(studyNotes());
         }, (title, artist) -> Optional.of(songMaterial(title, artist)));
@@ -219,7 +227,8 @@ class AnthropicReflectionProviderTest {
             assertTrue(denied.unavailable());
             assertFalse(denied.attempted());
         }
-        var budget = new ProviderSpendBudget(directory, new ProviderSpendBudget.Limits(1, 1, 1, 1, 1));
+        var budget = new ProviderSpendBudget(directory,
+                new ProviderSpendBudget.Limits(5_000_000, 5_000_000, 5_000_000, 400_000, 1));
         try (var scope = ProviderSpendScope.open(budget, "runner-a")) {
             assertEquals(ReflectionProvider.SongPreparationState.READY, provider.prepareSong(song));
         }
@@ -227,6 +236,45 @@ class AnthropicReflectionProviderTest {
             assertEquals(ReflectionProvider.SongPreparationState.READY, provider.prepareSong(song));
         }
         assertEquals(1, studies.get());
+    }
+
+    @Test void knownModelEstimateAboveOperatorCeilingNeverReachesTransport(@TempDir Path directory) throws Exception {
+        AtomicInteger sends = new AtomicInteger();
+        var provider = provider(request -> {
+            sends.incrementAndGet();
+            return new TransportResponse(200, successfulResponse(validCandidateJson()));
+        });
+        var budget = new ProviderSpendBudget(directory, new ProviderSpendBudget.Limits(5_000_000, 5_000_000, 1, 1, 1));
+        try (var scope = ProviderSpendScope.open(budget, "runner")) {
+            var denial = assertThrows(ProviderSpendScope.Denied.class, () -> provider.generate(knownEvidence()));
+            assertTrue(denial.unavailable());
+            assertFalse(denial.attempted());
+        }
+        assertEquals(0, sends.get());
+        assertEquals(ProviderSpendBudget.Decision.ALLOWED,
+                budget.reserve("runner", ProviderSpendBudget.Provider.ANTHROPIC));
+    }
+
+    @Test void customModelKeepsFullConfiguredReservationInsteadOfUsingKnownModelPrices(@TempDir Path directory)
+            throws Exception {
+        AtomicInteger sends = new AtomicInteger();
+        var config = testConfiguration();
+        var custom = new ProviderConfiguration(config.endpoint(), DUMMY_API_KEY, "custom-unpriced-model",
+                config.connectionTimeout(), config.requestTimeout(), config.maxOutputTokens());
+        var provider = new AnthropicReflectionProvider(custom, request -> {
+            sends.incrementAndGet();
+            return new TransportResponse(200, successfulResponse(validCandidateJson()));
+        });
+        var budget = new ProviderSpendBudget(directory, new ProviderSpendBudget.Limits(3, 10, 3, 1, 1));
+        try (var scope = ProviderSpendScope.open(budget, "runner")) {
+            provider.generate(knownEvidence());
+        }
+        try (var scope = ProviderSpendScope.open(budget, "runner")) {
+            var denial = assertThrows(ProviderSpendScope.Denied.class, () -> provider.generate(knownEvidence()));
+            assertFalse(denial.unavailable());
+            assertFalse(denial.attempted());
+        }
+        assertEquals(1, sends.get());
     }
 
     @Test

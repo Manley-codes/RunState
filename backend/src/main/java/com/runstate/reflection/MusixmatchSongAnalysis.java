@@ -77,6 +77,8 @@ public final class MusixmatchSongAnalysis {
 
     /** One lookup, no retry. An unavailable analysis must not prevent an ordinary reflection. */
     public Optional<Analysis> lookup(String trackTitle, String artistName) {
+        if (!ProviderSpendScope.optionalProviderConfigured(ProviderSpendBudget.Provider.MUSIXMATCH))
+            return Optional.empty();
         if (!validIdentity(trackTitle) || !validIdentity(artistName)) {
             return Optional.empty();
         }
@@ -115,6 +117,8 @@ public final class MusixmatchSongAnalysis {
      * Rich matched lookup. Song material stays only in memory for the shared song-study pipeline. Snippets are optional lyric text, not audio or passage timing.
      */
     public Optional<SongMaterial> lookupMaterial(String trackTitle, String artistName) {
+        if (!ProviderSpendScope.optionalProviderConfigured(ProviderSpendBudget.Provider.MUSIXMATCH))
+            return Optional.empty();
         if (!validIdentity(trackTitle) || !validIdentity(artistName)
                 || Thread.currentThread().isInterrupted()) {
             return Optional.empty();
@@ -143,6 +147,8 @@ public final class MusixmatchSongAnalysis {
     /** Verify a supplied catalog ID and exact recording identity before requesting its analysis. */
     public Optional<SongMaterial> lookupMaterialByTrackId(String trackTitle, String artistName,
                                                         String providerTrackId) {
+        if (!ProviderSpendScope.optionalProviderConfigured(ProviderSpendBudget.Provider.MUSIXMATCH))
+            return Optional.empty();
         if (!validIdentity(trackTitle) || !validIdentity(artistName) || providerTrackId == null
                 || !providerTrackId.matches("[1-9][0-9]{0,18}") || Thread.currentThread().isInterrupted()) {
             return Optional.empty();

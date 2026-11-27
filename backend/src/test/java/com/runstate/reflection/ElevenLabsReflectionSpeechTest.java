@@ -45,7 +45,7 @@ class ElevenLabsReflectionSpeechTest {
         };
         var runVoice = ElevenLabsReflectionSpeech.runVoice(DUMMY_KEY, transport);
         var reflection = provider(transport);
-        var budget = new ProviderSpendBudget(directory, new ProviderSpendBudget.Limits(1, 5, 1, 1, 1));
+        var budget = new ProviderSpendBudget(directory, new ProviderSpendBudget.Limits(900, 5_000, 1, 400_000, 1));
         try (var scope = ProviderSpendScope.open(budget, "runner-a")) {
             runVoice.synthesize("Mile one.");
         }
@@ -55,6 +55,42 @@ class ElevenLabsReflectionSpeechTest {
             assertFalse(denial.unavailable());
         }
         assertEquals(1, sends.get());
+    }
+
+    @Test void shortCuesReserveTheirLengthInsteadOfTheFullReflectionCeiling(@TempDir Path directory) throws Exception {
+        AtomicInteger sends = new AtomicInteger();
+        var voice = ElevenLabsReflectionSpeech.runVoice(DUMMY_KEY, request -> {
+            sends.incrementAndGet();
+            return successful();
+        });
+        var budget = new ProviderSpendBudget(directory,
+                new ProviderSpendBudget.Limits(2_500, 2_500, 1, 400_000, 1));
+        try (var scope = ProviderSpendScope.open(budget, "runner")) {
+            voice.synthesize("Mile one."); // 900 millionths.
+            voice.synthesize("Mile two."); // Another 900, not another 400,000.
+            voice.synthesize("Hi 🎵");    // 500: supplementary character counts twice conservatively.
+        }
+        var reopened = new ProviderSpendBudget(directory,
+                new ProviderSpendBudget.Limits(2_500, 2_500, 1, 400_000, 1));
+        try (var scope = ProviderSpendScope.open(reopened, "runner")) {
+            voice.synthesize("Go");
+            var denial = assertThrows(ProviderSpendScope.Denied.class, () -> voice.synthesize("X"));
+            assertFalse(denial.unavailable());
+            assertTrue(denial.attempted());
+        }
+        assertEquals(4, sends.get());
+    }
+
+    @Test void voiceEstimateAboveConfiguredCeilingDoesNotSend(@TempDir Path directory) throws Exception {
+        AtomicInteger sends = new AtomicInteger();
+        var voice = provider(request -> { sends.incrementAndGet(); return successful(); });
+        var budget = new ProviderSpendBudget(directory, new ProviderSpendBudget.Limits(5_000, 5_000, 1, 100, 1));
+        try (var scope = ProviderSpendScope.open(budget, "runner")) {
+            var denial = assertThrows(ProviderSpendScope.Denied.class, () -> voice.synthesize("Hi"));
+            assertTrue(denial.unavailable());
+            assertFalse(denial.attempted());
+        }
+        assertEquals(0, sends.get());
     }
     private static final String DUMMY_KEY = "not-a-real-elevenlabs-key";
     private static final byte[] AUDIO = new byte[]{'I', 'D', '3', 4, 0, 0};

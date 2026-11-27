@@ -104,7 +104,8 @@ public final class ElevenLabsReflectionSpeech implements ReflectionHttpServer.Sp
             settings.addProperty("speed", speed);
             body.add("voice_settings", settings);
         }
-        var usage = ProviderSpendScope.beforeSend(ProviderSpendBudget.Provider.ELEVENLABS);
+        var usage = ProviderSpendScope.beforeSend(ProviderSpendBudget.Provider.ELEVENLABS,
+                ProviderRequestCost.elevenLabsMicros(text));
         boolean runVoice = RUN_VOICE_ENDPOINT.equals(endpoint);
         if (usage != null) usage.voiceAttempt(runVoice, text.codePointCount(0, text.length()));
         try {

@@ -99,11 +99,35 @@ final class ProviderSpendBudget {
     }
 
     Decision reserve(String authenticatedPrincipal, Provider provider) throws IOException {
+        requirePrincipal(authenticatedPrincipal);
+        Long charge = provider == null ? null : limits.ceiling(provider);
+        if (charge == null) return Decision.UNCONFIGURED;
+        return reserve(authenticatedPrincipal, provider, charge);
+    }
+
+    /** A missing optional provider can be skipped without making a reservation or denying other work. */
+    boolean isConfigured(Provider provider) {
+        return provider != null && limits.ceiling(provider) != null;
+    }
+
+    /** Reserve this request's conservative estimate, bounded by the operator's per-call ceiling. */
+    Decision reserve(String authenticatedPrincipal, Provider provider, long requestedMicros) throws IOException {
+        requirePrincipal(authenticatedPrincipal);
+        Long ceiling = provider == null ? null : limits.ceiling(provider);
+        if (ceiling == null || requestedMicros < 0
+                || (requestedMicros == 0 && provider != Provider.MUSIXMATCH)
+                || requestedMicros > ceiling) return Decision.UNCONFIGURED;
+        long charge = requestedMicros;
+        return reserveAmount(authenticatedPrincipal, charge);
+    }
+
+    private static void requirePrincipal(String authenticatedPrincipal) {
         if (authenticatedPrincipal == null || authenticatedPrincipal.isBlank()) {
             throw new IllegalArgumentException("Authenticated provider spending identity is required");
         }
-        Long charge = limits.ceiling(provider);
-        if (charge == null) return Decision.UNCONFIGURED;
+    }
+
+    private Decision reserveAmount(String authenticatedPrincipal, long charge) throws IOException {
         if (limits.runnerMonthly() == 0) return Decision.RUNNER_LIMIT;
         if (limits.globalMonthly() == 0) return Decision.GLOBAL_LIMIT;
         String runnerScope = ReplayDatabase.scopedKey("provider-spend-v1\0", authenticatedPrincipal, "");

@@ -92,14 +92,16 @@ public final class ReflectionBackendMain {
             var configured = ProviderSpendBudget.Limits.fromEnvironment(environment);
             boolean disabled = configured.runnerMonthly() == 0 || configured.globalMonthly() == 0;
             if (!disabled && (configured.anthropicMaxPerCall() == null
-                    || (hasSetting(environment, "ELEVENLABS_API_KEY") && configured.elevenLabsMaxPerCall() == null)
-                    || (hasSetting(environment, "MUSIXMATCH_API_KEY") && configured.musixmatchMaxPerCall() == null))) {
+                    || (hasSetting(environment, "ELEVENLABS_API_KEY") && configured.elevenLabsMaxPerCall() == null))) {
                 throw new IllegalArgumentException("Missing enabled provider ceiling");
             }
             limits = configured;
             output.println(disabled
                     ? "PASS spending configuration; new paid calls disabled by a zero monthly cap."
                     : "PASS spending configuration; verify provider ceilings against actual plans before activation.");
+            if (hasSetting(environment, "MUSIXMATCH_API_KEY") && configured.musixmatchMaxPerCall() == null) {
+                output.println("NOTE optional Musixmatch requests disabled until its per-call ceiling is configured.");
+            }
         } catch (IllegalArgumentException failure) {
             output.println("FAIL monthly amounts or enabled provider ceilings; check the backend spending settings.");
             valid = false;

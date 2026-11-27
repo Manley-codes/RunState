@@ -77,7 +77,7 @@ A `replayOnly: true` request to run-access checks the authenticated runner's sav
 
 The private file `reflection-allowances.sqlite3` belongs alongside the replay databases. All replicas serving one allowance must share the same consistent store. The implemented setup supports a single service instance with a persistent disk.
 
-The HTTP backend reserves the maximum cost of each outbound Anthropic, ElevenLabs or
+The HTTP backend reserves a conservative cost for each outbound Anthropic, ElevenLabs or
 Musixmatch request before sending it. Each reservation must fit both the authenticated
 runner's remaining allowance and the app's remaining allowance. A song lookup, study and
 final reflection can each use part of the budget. A timed-out send keeps its reservation
@@ -94,9 +94,30 @@ no allowance. Separately launched manual trial programs are outside these HTTP l
 
 Set both monthly caps and the ceilings for the providers you enable. Amounts accept up
 to six decimal places. A zero monthly cap stops new calls. A missing provider ceiling
-blocks calls to that provider. Verify the ceilings against the actual plans and request
+blocks calls to that provider. An unconfigured optional Musixmatch source is skipped without
+an outbound request; ordinary reflection generation remains available. A configured source
+still propagates exhausted-budget/storage failures. Verify ceilings against actual plans and request
 sizes before rollout. Conservative reservations can use up an allowance ahead of the
 vendor's billed usage. Fixed subscription and hosting fees are separate.
+
+Known Anthropic models now reserve by assembled UTF-8 bytes plus an 8,192-token framing
+allowance and the full output-token limit, using the highest verified standard rates among
+the three accepted models. Unknown/custom models retain the entire operator-set ceiling.
+ElevenLabs reserves by actual UTF-16 text length, so a short mile announcement no longer
+uses the reservation for a 4,000-character reflection. These are conservative estimates,
+not measured bills; timeouts retain reservations and existing reservations are not refunded.
+Reverify pricing when changing models, plans or voices (especially premium library voices).
+Current references: [Anthropic pricing](https://platform.claude.com/docs/en/about-claude/pricing)
+and [ElevenLabs API pricing](https://elevenlabs.io/pricing/api), checked November 26, 2026.
+
+For the owner's approved November 26 private-testing activation, both monthly settings are
+`10` (one overlapping $10 allowance, not $20). The reviewed per-call ceilings are `5` for
+Anthropic and `0.40` for ElevenLabs; those ceilings are not a charge per request. The maximum
+accepted known-model request reserves $4.268032, while ordinary requests reserve substantially
+less. The two existing generated/non-library voices remain unchanged. Musixmatch's ceiling
+stays absent until its account terms are verified, so no new catalog requests are made.
+Apply only with this request-sized-reservation code deployed. A $0 rehearsal on the live
+service disables its key cloud features; it is not a normal running configuration.
 
 Every Anthropic request also has a 1 MiB limit on its fully assembled UTF-8 body,
 including prompts and schema. Oversized bodies are rejected before a spending
