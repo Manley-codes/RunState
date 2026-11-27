@@ -9,7 +9,7 @@
         <item name="android:statusBarColor">#17201B</item>
         <item name="android:navigationBarColor">#17201B</item>
         <item name="android:windowLightStatusBar">false</item>
-        <item name="android:windowLightNavigationBar">false</item>
+        <item name="android:windowLightNavigationBar" tools:targetApi="27">false</item>
         <!-- Android 12+ requires a solid system splash before the app's first frame. -->
         <item name="android:windowSplashScreenBackground" tools:targetApi="31">#17201B</item>
         <item name="android:windowSplashScreenAnimatedIcon" tools:targetApi="31">@android:color/transparent</item>
