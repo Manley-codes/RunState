@@ -5,6 +5,72 @@ metadata:
   type: project
 ---
 
+## November 27 cloud repair deployed and verified
+
+Manley confirmed both Render monthly caps were zero after an outdoor run and home-Wi-Fi Sample
+failed to generate reflections. The existing private connection, health endpoint and authenticated
+OWNER access were healthy. Missing provider ceilings and zero allowances left the newer spending
+guard in its rehearsal configuration; this was not caused by the longest-run announcement change.
+Earlier versions sent provider calls without this guard. These are RunState's internal protection
+settings, not new requirements imposed by Anthropic or ElevenLabs. Fixed cached voice cues could
+still play while fresh dynamic speech fell back to phone speech.
+
+Manley explicitly approved $10/month total and then PR #2 merge, deployment, reviewed ceilings and
+one controlled reflection/two-voice verification. Original direct-master push was blocked by automatic
+approval review before execution; the approved rollout used the reviewed PR instead. Preserve this
+authorization/result; do not ask for the same rollout approval again or silently restore zero caps.
+
+Repair adds conservative request-sized Anthropic/ElevenLabs reservations under the configured
+maximums, preserving atomic persistent monthly accounting and uncertain-request/replay behavior.
+Short cues reserve their text length instead of the full reflection maximum. Unconfigured optional
+Musixmatch enrichment is skipped without network calls or poisoning ordinary reflection generation.
+Actual configured spending denials still propagate. Prompts, models, original voices and accepted
+song-selection rules were not retuned. New backend source/test: ProviderRequestCost.java and
+ProviderRequestCostTest.java. The request estimates are conservative allowances, not measured bills.
+
+PR https://github.com/Manley-codes/RunState/pull/2 used isolated codex/cloud-spending-repair, head
+c5cd8a591feaa3fff449af803c4804d61b1e3992, and merged as
+e3f3bfb643a2d0fe8ac7fc5da28a4ab0e32a8671. GitHub run45954059319 passed all four jobs, including
+328 Linux backend tests, Docker startup/private storage/zero-budget checks, Android debug and release
+tests/build/lint/APK/AAB packaging, and legacy Java tests. The container fixture ceiling was updated
+to let its zero-monthly-limit assertion reach that gate. An existing Android release lint error was
+fixed by adding tools:targetApi=27 to the existing false windowLightNavigationBar item, with no
+runtime style change. Local Java17 backend328 passed/two POSIX skips; Android JBR25 initially failed
+three oversized HTTP-body tests, so production-Java17/CI are the relevant final evidence.
+
+Render runstate-reflections remains on master with Auto-Deploy OFF, same one-instance/disk setup.
+Code deploy dep-dc4ij6bl550s739f8k80 became live. Merging four nonsecret environment settings
+automatically triggered dep-dc4il6eq1p3s73e6455g, live2026-11-27T07:01:38Z on the exact merge SHA:
+RUNSTATE_GLOBAL_MONTHLY_USD=10; RUNSTATE_RUNNER_MONTHLY_USD=10;
+RUNSTATE_ANTHROPIC_MAX_CALL_USD=5; RUNSTATE_ELEVENLABS_MAX_CALL_USD=0.40.
+The monthly caps overlap ($10 total, not $20). Other variables/credentials were retained. No
+Musixmatch ceiling was added; account access/cost terms remain unresolved. Hosting/subscriptions
+are separate. The guard will still stop fresh work when its conservative allowance is exhausted.
+
+New opt-in Android test HostedReflectionAccessProbeTest.kt provides a GET-only access diagnosis
+and a separately gated PAID verification. The latter used the latest finalized failed Sample's
+unchanged frozen evidence/private saved connection and returned written200 (non-test), run-voice200
+and reflection-voice200 in14.453s. Selected-song and snippet metadata were also present; this does
+not prove playback quality or renewed Musixmatch access. No audio played, no main APK was changed,
+and no Room/preference records were written. Temporary com.runstate.mobile.test was removed.
+Before/after private receipts retain all80 completed runs, two pairs, all12 table hashes and all
+five preference files; SQLite integrity OK/no foreign-key violations. Evidence:
+android/build/nov26-run-cloud-diagnosis/approved-cloud-repair-phone.log and moto receipts.
+
+The old Sample's History row intentionally remains FAILED until normal Retry reflection saves the
+server result through the app coordinator. Written replay excludes requestId but includes owner/run/
+evidence/mode; unchanged retries within24h can retrieve the cached result. Reflection audio retains
+seven-day replay. Run announcements are uncached. No live restart/replay or exact ledger/invoice cost
+measurement was performed here; existing CI tests cover same/new-ID written and spoken replay after
+server restart without another mocked provider call. Do not relabel these as live billing proof.
+
+Android design remains in codex/start-welcome-layout, with repair/check corrections also present
+there; no design-branch merge or new public-preview publication. Current release queue and combined
+later phone checks are in the private November roadmap; clean continuation handoff is
+docs/local/nov27-android-continuation-handoff.md. No new outdoor run is needed merely to diagnose
+server access. Core cloud writing and both voices are now verified restored; real music/voice
+listening and Musixmatch eligibility remain distinct follow-ups.
+
 ## November 26 longest-run finish announcement
 
 Manley asked to resume the planned PR review before an ordinary Android run, targeting 30–60 minutes,
