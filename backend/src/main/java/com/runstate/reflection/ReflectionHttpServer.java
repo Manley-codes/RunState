@@ -589,7 +589,7 @@ public final class ReflectionHttpServer implements AutoCloseable {
     }
 
     private String replayOwner(String principalId) {
-        return remoteAccess != null && remoteAccess.individualAccess ? "recipient:" + principalId : principalId;
+        return remoteAccess != null && remoteAccess.isIndividual(principalId) ? "recipient:" + principalId : principalId;
     }
 
     private EndpointResponse unsupportedRequest(ApiRequest request, SnippetCapabilities available) {
@@ -890,7 +890,7 @@ public final class ReflectionHttpServer implements AutoCloseable {
 
     /** A stable, non-secret provider handle; no caller can select another principal's namespace. */
     private String scopedPreparationId(String principalId, String clientId) {
-        if (clientId == null || remoteAccess == null || !remoteAccess.individualAccess) return clientId;
+        if (clientId == null || remoteAccess == null || !remoteAccess.isIndividual(principalId)) return clientId;
         try {
             byte[] digest = MessageDigest.getInstance("SHA-256").digest(
                     ("runstate-song-preparation-v1\u0000" + principalId + "\u0000" + clientId)
@@ -1085,21 +1085,32 @@ public final class ReflectionHttpServer implements AutoCloseable {
         private final String publicAuthority;
         private final BackendAccessPolicy accessPolicy;
         private final boolean individualAccess;
+        private final boolean preservesLegacyOwner;
 
         public RemoteAccess(String bindAddress, String publicAuthority, String demoToken) {
-            this(bindAddress, publicAuthority, BackendAccessPolicy.legacy(demoToken), false);
+            this(bindAddress, publicAuthority, BackendAccessPolicy.legacy(demoToken), false, false);
         }
 
         static RemoteAccess individual(String bindAddress, String publicAuthority, BackendAccessPolicy accessPolicy) {
-            return new RemoteAccess(bindAddress, publicAuthority, accessPolicy, true);
+            return new RemoteAccess(bindAddress, publicAuthority, accessPolicy, true, false);
+        }
+
+        static RemoteAccess ownerWithRecipients(String bindAddress, String publicAuthority,
+                                               String ownerToken, BackendAccessPolicy recipients) {
+            return new RemoteAccess(bindAddress, publicAuthority, recipients.withLegacyOwner(ownerToken), true, true);
         }
 
         private RemoteAccess(String bindAddress, String publicAuthority,
-                             BackendAccessPolicy accessPolicy, boolean individualAccess) {
+                             BackendAccessPolicy accessPolicy, boolean individualAccess, boolean preservesLegacyOwner) {
             this.bindAddress = numericIpv4(bindAddress);
             this.publicAuthority = publicAuthority(publicAuthority);
             this.accessPolicy = Objects.requireNonNull(accessPolicy, "accessPolicy");
             this.individualAccess = individualAccess;
+            this.preservesLegacyOwner = preservesLegacyOwner;
+        }
+
+        private boolean isIndividual(String principalId) {
+            return individualAccess && !(preservesLegacyOwner && BackendAccessPolicy.LEGACY_OWNER_ID.equals(principalId));
         }
 
         private Optional<BackendAccessPolicy.Principal> authenticate(HttpExchange exchange) {

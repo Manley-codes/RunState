@@ -50,6 +50,41 @@ class BackendAccessPolicyTest {
         }
     }
 
+    @Test void additiveRecipientsRetainOwnerAndUseTheirOwnExpiryAndRevocation() {
+        JsonObject recipient = entry("friend-one", SECOND);
+        BackendAccessPolicy combined = configured(recipient).withLegacyOwner(FIRST);
+        assertEquals("owner-demo", combined.authenticate(bearer(FIRST)).orElseThrow().id());
+        assertEquals("friend-one", combined.authenticate(bearer(SECOND)).orElseThrow().id());
+        assertEquals(BackendAccessPolicy.Tier.OWNER, combined.authenticate(bearer(SECOND)).orElseThrow().tier());
+        recipient.addProperty("enabled", false);
+        assertTrue(configured(recipient).withLegacyOwner(FIRST).authenticate(bearer(SECOND)).isEmpty());
+        recipient.addProperty("enabled", true);
+        recipient.addProperty("expiresAt", NOW.toString());
+        var expired = configured(recipient).withLegacyOwner(FIRST);
+        assertTrue(expired.authenticate(bearer(SECOND)).isEmpty());
+        assertTrue(expired.authenticate(bearer(FIRST)).isPresent());
+        assertTrue(configured().withLegacyOwner(FIRST).authenticate(bearer(SECOND)).isEmpty());
+    }
+
+    @Test void additiveRecipientsRejectOwnerIdentityOrTokenCollisionsAndRemainBounded() {
+        for (JsonObject collision : List.of(entry("friend-one", FIRST), entry("owner-demo", SECOND))) {
+            for (boolean enabled : List.of(true, false)) {
+                collision.addProperty("enabled", enabled);
+                var failure = assertThrows(IllegalArgumentException.class,
+                        () -> configured(collision).withLegacyOwner(FIRST));
+                assertEquals("Invalid backend access configuration.", failure.getMessage());
+                assertFalse(failure.toString().contains(FIRST));
+            }
+        }
+        JsonArray entries = new JsonArray();
+        for (int index = 0; index < 63; index++) entries.add(entry("runner-" + index, "z".repeat(43) + index));
+        assertNotNull(BackendAccessPolicy.fromJson(entries.toString(), FIXED).withLegacyOwner(FIRST));
+        entries.add(entry("runner-63", "z".repeat(43) + "63"));
+        assertThrows(IllegalArgumentException.class,
+                () -> BackendAccessPolicy.fromJson(entries.toString(), FIXED).withLegacyOwner(FIRST));
+        assertThrows(IllegalArgumentException.class, () -> configured().withLegacyOwner("weak"));
+    }
+
     @Test void expirationIsCheckedAgainOnEveryRequestIncludingExactBoundary() {
         AtomicReference<Instant> now = new AtomicReference<>(NOW);
         Clock clock = new Clock() {

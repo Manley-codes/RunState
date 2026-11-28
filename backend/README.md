@@ -19,21 +19,36 @@ not built into the APK. The Anthropic key belongs only in the backend environmen
 Java records are used as small immutable data holders. A record exposes its values through generated
 accessor methods and does not offer setters; its constructor can still reject invalid combinations.
 
-## Individual access foundation — November 7, local only
+## Individual access and additive private testers
 
 Remote mode now supports a small, server-managed list of individual access codes. This is a
 pilot foundation, not a public sign-up, subscription or spending-control system. It has not
 been activated on the hosted service. Android's existing encrypted connection-code entry
 already uses the same Bearer format; no APK credential or phone change is needed for this part.
 
-Configure **one** access mode behind the existing private HTTPS ingress:
+Configure access behind the existing private HTTPS ingress:
 
 - `RUNSTATE_DEMO_TOKEN`: existing owner-only behavior. Never share it with recipients.
-- `RUNSTATE_ACCESS_GRANTS_JSON`: a JSON array of individual grants. Do not also set the demo
-  variable; the launcher rejects both together instead of silently falling back. A malformed
-  list prevents startup, while `[]` deliberately denies all paid endpoints and retains health.
+- `RUNSTATE_ACCESS_GRANTS_JSON`: a JSON array of individual grants. Used alone, `[]` denies all
+  paid endpoints and retains health. A malformed list always prevents startup.
+- Both variables: explicitly retain owner access and add separately revocable recipients. The
+  existing owner's request, audio, song-handle and spending identities remain unchanged. Each
+  recipient keeps the same isolated namespace as individual-only mode. `[]` in this combined
+  mode removes recipient access while retaining the explicitly configured owner. It is not a
+  fallback for malformed grants: invalid/ambiguous configuration still prevents startup.
 
-Each grant requires the first four fields. Set the optional fifth field explicitly for new recipients.
+Combined mode rejects a recipient using the reserved `owner-demo` principal or the owner's token
+fingerprint, including disabled/expired entries. The total is bounded to 64 credentials (owner
+plus at most 63 recipient credentials). Never distribute the owner's code or reset spending/replay
+stores when adding a tester. Deploy this support before adding the second environment variable
+to an older server, which rejects both modes. Configuration changes require a restart/deployment;
+this source change does not itself configure a live recipient.
+
+Each grant requires the first four fields. Set the optional fifth field explicitly for ordinary
+trial/pilot recipients. For an explicitly approved private tester who needs the full owner feature
+set (including dynamic run announcements), omitting it retains the existing full-capability grant
+behavior under that tester's separate identity, expiry and monthly spending limits. This is not a
+new subscription tier or public entitlement.
 
 | Field | Meaning |
 | --- | --- |
