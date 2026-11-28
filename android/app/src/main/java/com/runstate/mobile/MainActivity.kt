@@ -2179,6 +2179,7 @@ internal fun RunJourneyRoot(
         !connectionDialogVisible) {
         RunSettingsDialog(
             ownerToolsEnabled = ownerToolsAvailable,
+            requestGreetingName = runPreferences?.musicSetupComplete == false,
             onOpenMap = {
                 runSettingsVisible = false
                 mapRunId = activeRunId ?: "foreground-gps-preview"

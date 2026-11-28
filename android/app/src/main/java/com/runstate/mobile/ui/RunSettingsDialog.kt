@@ -14,6 +14,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
@@ -78,6 +79,10 @@ internal const val SETTINGS_RUNNER_NAME_EDITOR_TAG = "runSettingsRunnerNameEdito
 internal const val SETTINGS_RUNNER_NAME_INPUT_TAG = "runSettingsRunnerNameInput"
 internal const val SETTINGS_RUNNER_NAME_SAVE_TAG = "runSettingsRunnerNameSave"
 internal const val SETTINGS_RUNNER_NAME_CANCEL_TAG = "runSettingsRunnerNameCancel"
+internal const val WELCOME_NAME_DIALOG_TAG = "welcomeNameDialog"
+internal const val WELCOME_NAME_INPUT_TAG = "welcomeNameInput"
+internal const val WELCOME_NAME_CONTINUE_TAG = "welcomeNameContinue"
+internal const val WELCOME_NAME_SKIP_TAG = "welcomeNameSkip"
 internal fun appearanceOptionTag(appearance: RunAppearance): String =
     "runSettingsAppearance${appearance.name}"
 internal fun musicPlayerOptionTag(layout: RunMusicPlayerLayout): String =
@@ -136,7 +141,8 @@ internal fun RunSettingsDialog(
     onSetStartBackground: (StartBackground) -> Unit = {},
     runnerName: String? = null,
     onSetRunnerName: (String) -> Unit = {},
-    onOpenMap: (() -> Unit)? = null
+    onOpenMap: (() -> Unit)? = null,
+    requestGreetingName: Boolean = false
 ) {
     val controlsEnabled = actionsEnabled && !settingsLoading
     val preferenceControlsEnabled = controlsEnabled && preferencesAvailable
@@ -145,6 +151,50 @@ internal fun RunSettingsDialog(
     var nameDraft by rememberSaveable { mutableStateOf("") }
     // Keep the settings position while the read-only summary replaces this dialog.
     val settingsScrollState = rememberScrollState()
+    // The existing null/empty distinction makes this a one-time, optional choice. Do not
+    // dismiss on a tap: only the parent's successful preference write advances to setup.
+    if (requestGreetingName && runnerName == null && preferencesAvailable) {
+        AlertDialog(
+            onDismissRequest = { if (preferenceControlsEnabled) onSetRunnerName("") },
+            modifier = Modifier.testTag(WELCOME_NAME_DIALOG_TAG),
+            containerColor = SettingsCream,
+            title = { Text("Welcome to RunState", color = SettingsInk) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text("What should we call you?", color = SettingsInk)
+                    OutlinedTextField(
+                        value = nameDraft,
+                        onValueChange = { raw ->
+                            val singleLine = raw.replace('\n', ' ').replace('\r', ' ')
+                            val end = singleLine.offsetByCodePoints(0,
+                                singleLine.codePointCount(0, singleLine.length).coerceAtMost(RUNNER_NAME_MAX_LENGTH))
+                            nameDraft = singleLine.substring(0, end)
+                        },
+                        enabled = preferenceControlsEnabled,
+                        singleLine = true,
+                        label = { Text("Your name") },
+                        supportingText = { Text("For your greeting. You can change it in Settings.") },
+                        modifier = Modifier.fillMaxWidth().testTag(WELCOME_NAME_INPUT_TAG)
+                    )
+                    if (settingsError != null) Text(settingsError, color = MaterialTheme.colorScheme.error)
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = { onSetRunnerName(normalizeRunnerName(nameDraft)) },
+                    enabled = preferenceControlsEnabled && normalizeRunnerName(nameDraft).isNotEmpty(),
+                    modifier = Modifier.heightIn(min = 48.dp).testTag(WELCOME_NAME_CONTINUE_TAG)
+                ) { Text(if (settingsLoading) "Saving…" else "Continue", color = SettingsInk) }
+            },
+            dismissButton = {
+                TextButton(onClick = { onSetRunnerName("") }, enabled = preferenceControlsEnabled,
+                    modifier = Modifier.heightIn(min = 48.dp).testTag(WELCOME_NAME_SKIP_TAG)) {
+                    Text("Skip for now", color = SettingsInk)
+                }
+            }
+        )
+        return
+    }
     if (nameEditorVisible) {
         AlertDialog(
             onDismissRequest = { if (controlsEnabled) nameEditorVisible = false },

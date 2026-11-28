@@ -5,6 +5,62 @@ metadata:
   type: project
 ---
 
+## November 28 private friend test and first-open name
+
+Manley asked for an independently prepared Android install for a friend to use on the next
+morning's run, with the full reflection/voice experience and a basic name prompt. First-open
+setup now asks for a preferred name (optional Skip); existing Settings remains the editor.
+It reuses the existing null/empty/name preference, preserves drafts/save failures, and yields
+to recovered runs. Existing completed setups are not reprompted. No birthday or unused
+personal fields, account service, database migration, or change to accepted run/music behavior.
+
+The release variant was signed with the existing Spotify-registered development identity
+for this **private pilot only**, versionCode 2 / versionName `1.0.0-pilot.1`. It excludes owner
+tools/private artwork/default Manley name, contains no credentials or saved runs, and passed
+signature/public-APK/native 16 KB checks. The upload-key working copy is unavailable; its
+OneDrive backup remains, but was not opened/replaced. Eventual Play signing/update migration
+is separate; do not imply this debug-certificate pilot is the final Play artifact.
+
+Backend PR [3](https://github.com/Manley-codes/RunState/pull/3) merged at
+`3c951c6344647b1cb61e85e2c511f93758bf94ba` after all four CI jobs passed. It permits individual
+expiring grants alongside the legacy owner token. Owner cache, spending and song-preparation
+identities remain exact; recipients are isolated. Malformed grants/identity collisions fail
+closed. Existing trial/pilot tiers are unchanged. The one private friend's grant intentionally
+has full voice capability; it is not a new public subscription offering or admin credential.
+The existing $10 global/runner monthly limits and all provider settings are unchanged.
+
+Render support deploy `dep-dc59g4vf3r2c73e1ncsg` went live, then a merge-only environment update
+added the hashed friend grant; configuration deploy `dep-dc59hgp7lnhs73b606eg` is live at the
+same SHA. Grant expires `2026-12-06T06:00:00Z` (midnight starting December 6 Central). Never put
+the bearer code in Git/the APK/public material or share the legacy owner code. It is in a
+restricted local operator file and separate private delivery note. To revoke the only friend,
+replace the grants JSON with `[]` while retaining the owner token; deploy that configuration.
+Inspect and preserve any later recipients before changing this setting.
+
+Validation: full Java 17 backend verify/JAR 333 tests, zero failures/errors, two Windows POSIX
+skips; 95 focused access/server checks and independent review. Both Android variants passed
+38 focused JVM tests each; builds/vital lint passed. All 32 distinct Settings emulator cases
+passed after updating one existing obsolete Map/Plan fixture to the current Shoes/Goal layout.
+Actual signed release in a temporary fresh emulator user saved a fictional name and retained
+the personalized greeting after reopening. Temporary user removed; original emulator five
+runs, all 12 table hashes and three preference files unchanged. Moto app/data were untouched.
+
+Fresh friend credentials passed hosted health/access GETs, then exactly one synthetic no-music
+writing request and the two original voice endpoints returned HTTP200. No real saved run/name
+was sent and no audio played. The one-shot receipt prevents automatic paid retries. This proves
+cloud writing/voice access, not friend Spotify authorization/Premium, outdoor tracking,
+headphones or real song/snippet behavior. Musixmatch's unpaid subscription remains unresolved.
+
+Private receipts, screenshots, setup guide and tester APK live in
+`docs/local/friend-test-2026-11-28/`. Final APK SHA256:
+`f3a1313f35a3335c3a85a0cecdb9663d788b5a8fac5985efdd66c6e5a5fce59a`.
+Google Drive APK staging timed out twice; a copy plus guide/separate code is in the personal
+OneDrive `RunState Private Test` folder. Windows OneDrive availability changed from Sync pending
+to Available on this device for all three files; no friend-specific sharing link was created
+because her email is unknown. Manley can download/send the APK with Quick Share or share it
+privately from OneDrive. No public preview or iPhone changes. Remaining owner review is one
+combined friend-phone permission/Spotify/real-run check, not another broad reflection retune.
+
 ## November 28 U.S. trails installed
 
 Completed Manley's approved trail overhaul after the logo acceptance. Start's Explore trails now

@@ -97,6 +97,91 @@ class RunSettingsScreenTest {
     private val fixtures = mutableListOf<Fixture>()
 
     @Test
+    fun firstNameChoicePersonalizesGreetingAndKeepsMusicConsentSeparate() {
+        val fixture = fixture()
+        val restoration = renderRoot(fixture)
+        waitForTag(WELCOME_NAME_DIALOG_TAG)
+        compose.onNodeWithTag(SETTINGS_DIALOG_TAG).assertDoesNotExist()
+        compose.onNodeWithTag(WELCOME_NAME_CONTINUE_TAG).assertIsNotEnabled()
+        compose.onNodeWithTag(WELCOME_NAME_INPUT_TAG).performTextReplacement("  Maya  Lee  ")
+        restoration.emulateSavedInstanceStateRestore()
+        waitForTag(WELCOME_NAME_DIALOG_TAG)
+        assertEquals("  Maya  Lee  ", compose.onNodeWithTag(WELCOME_NAME_INPUT_TAG)
+            .fetchSemanticsNode().config[SemanticsProperties.EditableText].text)
+        compose.onNodeWithTag(WELCOME_NAME_CONTINUE_TAG).performClick()
+        waitForTag(SETTINGS_DIALOG_TAG)
+        assertEquals(RunPreferences(runnerName = "Maya Lee"), fixture.loadPreferences())
+        compose.onNodeWithTag(WELCOME_NAME_DIALOG_TAG).assertDoesNotExist()
+        compose.onNodeWithTag(SETTINGS_MUSIC_OBSERVATION_TAG).performScrollTo().assertIsOff()
+        compose.onNodeWithTag(SETTINGS_DONE_TAG).performClick()
+        compose.waitUntil(5_000L) { fixture.preferenceWrites == 2 }
+        restoration.emulateSavedInstanceStateRestore()
+        waitForTag(START_RUN_SCREEN_TAG)
+        compose.onNodeWithTag(WELCOME_NAME_DIALOG_TAG).assertDoesNotExist()
+        val greeting = compose.onNodeWithTag(START_GREETING_TAG).fetchSemanticsNode()
+            .config[SemanticsProperties.Text].joinToString { it.text }
+        assertTrue(greeting.endsWith(", Maya Lee"))
+        assertEquals(RunPreferences(musicSetupComplete = true, runnerName = "Maya Lee"), fixture.loadPreferences())
+        assertEquals(0, fixture.preparedRuns)
+    }
+
+    @Test
+    fun failedFirstNameSaveKeepsDraftAndRetriesWithoutClaimingSetupComplete() {
+        val fixture = fixture()
+        fixture.failPreferenceWrites = true
+        renderRoot(fixture)
+        waitForTag(WELCOME_NAME_DIALOG_TAG)
+        compose.onNodeWithTag(WELCOME_NAME_INPUT_TAG).performTextReplacement("Maya")
+        compose.onNodeWithTag(WELCOME_NAME_CONTINUE_TAG).performClick()
+        compose.waitUntil(5_000L) {
+            compose.onAllNodesWithText("Preferences couldn't save. Try again before starting a run.")
+                .fetchSemanticsNodes().isNotEmpty()
+        }
+        compose.onNodeWithTag(WELCOME_NAME_DIALOG_TAG).assertIsDisplayed()
+        assertEquals(RunPreferences(), fixture.loadPreferences())
+        assertEquals(0, fixture.preferenceWrites)
+        compose.runOnIdle { fixture.failPreferenceWrites = false }
+        compose.onNodeWithTag(WELCOME_NAME_CONTINUE_TAG).performClick()
+        waitForTag(SETTINGS_DIALOG_TAG)
+        assertEquals(RunPreferences(runnerName = "Maya"), fixture.loadPreferences())
+    }
+
+    @Test
+    fun existingCompletedSetupWithoutNameIsNotPrompted() {
+        val fixture = fixture(RunPreferences(musicSetupComplete = true))
+        renderRoot(fixture)
+        waitForTag(START_RUN_SCREEN_TAG)
+        compose.onNodeWithTag(WELCOME_NAME_DIALOG_TAG).assertDoesNotExist()
+        compose.onNodeWithTag(START_RUN_SETTINGS_TAG).performClick()
+        waitForTag(SETTINGS_DIALOG_TAG)
+        compose.onNodeWithTag(WELCOME_NAME_DIALOG_TAG).assertDoesNotExist()
+        compose.onNodeWithTag(SETTINGS_RUNNER_NAME_TAG).performScrollTo().assertIsDisplayed()
+        assertEquals(0, fixture.preferenceWrites)
+    }
+
+    @Test
+    fun recoveredRunTakesPrecedenceOverUnsetFirstNameAndSetup() {
+        val fixture = fixture()
+        val paused = runBlocking {
+            fixture.coordinator.initialize()
+            fixture.coordinator.beginCountdown()
+            fixture.coordinator.requestStart().await()
+            fixture.time += 5_000L
+            fixture.coordinator.requestAction(RunActionKind.PAUSE).await()
+            fixture.database.runDao().findActiveRuns().single()
+        }
+        compose.mainClock.autoAdvance = false
+        renderRoot(fixture)
+        waitForDemoTag(ACTIVE_RUN_SCREEN_TAG)
+        compose.onNodeWithContentDescription("Resume run").assertIsDisplayed()
+        compose.onNodeWithTag(WELCOME_NAME_DIALOG_TAG).assertDoesNotExist()
+        compose.onNodeWithTag(SETTINGS_DIALOG_TAG).assertDoesNotExist()
+        assertEquals(RunPreferences(), fixture.loadPreferences())
+        assertEquals(0, fixture.preferenceWrites)
+        assertEquals(paused, runBlocking { fixture.database.runDao().findById(paused.runId) })
+    }
+
+    @Test
     fun runnerNameSaveCancelAndClearUpdateGreetingWithoutChangingRunPreferences() {
         val original = RunPreferences(musicSetupComplete = true, captureWeather = true,
             appearance = RunAppearance.DAY, runnerName = "Avery")
@@ -295,6 +380,7 @@ class RunSettingsScreenTest {
         var history = 0
         var settings = 0
         var maps = 0
+        var shoes = 0
         var energy by mutableStateOf<com.runstate.mobile.data.local.PreRunEnergy?>(null)
         // Keep the infinite decorative animation alive from its first composition.
         // Auto-advancing test clocks cancel it while trying to settle the screen.
@@ -313,6 +399,7 @@ class RunSettingsScreenTest {
                 musicAccessGranted = true,
                 onOpenRunSettings = { settings++ },
                 onOpenMap = { maps++ },
+                onOpenShoes = { shoes++ },
                 modifier = Modifier.systemBarsPadding()
             )
         }
@@ -327,7 +414,7 @@ class RunSettingsScreenTest {
         compose.onNodeWithText("Music observation on").assertDoesNotExist()
         compose.onNodeWithText("Map artwork").assertDoesNotExist()
         val choices = compose.onNodeWithTag(START_ENERGY_CHOICES_TAG).fetchSemanticsNode().boundsInRoot
-        for (tag in listOf("startExpandMap", START_RUN_PLAN_TAG, START_RUN_TAB_TAG,
+        for (tag in listOf(START_OPEN_SHOES_TAG, START_RUN_GOAL_TAG, START_RUN_TAB_TAG,
             START_RUN_SETTINGS_TAG, START_HISTORY_TAG)) {
             val control = compose.onNodeWithTag(tag).assertIsDisplayed().fetchSemanticsNode().boundsInRoot
             assertTrue("Navigation stays below Energy", control.top >= choices.bottom)
@@ -339,20 +426,24 @@ class RunSettingsScreenTest {
         compose.onNodeWithTag(START_MUSIC_TOGGLE_TAG).assertDoesNotExist()
         compose.onNodeWithTag(START_MUSIC_SHARING_TOGGLE_TAG).assertDoesNotExist()
         compose.onNodeWithTag(START_REFLECTION_SETUP_TAG).assertDoesNotExist()
+        // The accepted Start layout has Shoes here; live map is in Settings -> Location.
+        compose.onNodeWithTag("startExpandMap").assertDoesNotExist()
+        compose.onNodeWithTag(START_TRAILS_BROWSE_TAG).assertIsDisplayed()
         savePreview(START_RUN_SCREEN_TAG, "demo-start-clean.png")
         savePreview(START_ENERGY_CHOICES_TAG, "start-energy-clean.png")
         compose.mainClock.autoAdvance = true
         compose.onNodeWithTag(START_RUN_TAB_TAG).assertIsSelected().performClick()
         assertEquals("Run is the current screen, not the recording button", 0, starts)
         assertEquals(null, energy)
-        compose.onNodeWithTag("startExpandMap").performClick()
+        compose.onNodeWithTag(START_OPEN_SHOES_TAG).performClick()
         compose.onNodeWithTag(START_HISTORY_TAG).performClick()
         compose.onNodeWithTag(START_RUN_SETTINGS_TAG).performClick()
         compose.onNodeWithTag(START_ENERGY_HIGH_TAG).assertIsDisplayed().performClick()
         compose.onNodeWithTag(START_RUN_BUTTON_TAG).performClick()
         assertEquals(1, history)
         assertEquals(1, settings)
-        assertEquals(1, maps)
+        assertEquals(0, maps)
+        assertEquals(1, shoes)
         assertEquals(1, starts)
         assertEquals(com.runstate.mobile.data.local.PreRunEnergy.HIGH, energy)
     }
@@ -720,6 +811,8 @@ class RunSettingsScreenTest {
     fun firstReviewSavesDeclinedMusicOnceAndDoesNotRepeatAfterRestoration() {
         val fixture = fixture()
         val restoration = renderRoot(fixture)
+        waitForTag(WELCOME_NAME_DIALOG_TAG)
+        compose.onNodeWithTag(WELCOME_NAME_SKIP_TAG).performClick()
         waitForTag(SETTINGS_DIALOG_TAG)
         compose.onNodeWithTag(SETTINGS_MUSIC_OBSERVATION_TAG).performScrollTo().assertIsOff()
         compose.onNodeWithTag(SETTINGS_DONE_TAG).performClick()
@@ -727,14 +820,15 @@ class RunSettingsScreenTest {
         compose.waitUntil(5_000L) {
             compose.onAllNodesWithTag(SETTINGS_DIALOG_TAG).fetchSemanticsNodes().isEmpty()
         }
-        assertEquals(RunPreferences(musicSetupComplete = true), fixture.loadPreferences())
-        assertEquals(1, fixture.preferenceWrites)
+        assertEquals(RunPreferences(musicSetupComplete = true, runnerName = ""), fixture.loadPreferences())
+        assertEquals(2, fixture.preferenceWrites)
         restoration.emulateSavedInstanceStateRestore()
         waitForTag(START_RUN_SCREEN_TAG)
         compose.onNodeWithTag(SETTINGS_DIALOG_TAG).assertDoesNotExist()
+        compose.onNodeWithTag(WELCOME_NAME_DIALOG_TAG).assertDoesNotExist()
         assertEquals("Music observation off", compose.onNodeWithTag(START_RUN_SETTINGS_TAG)
             .fetchSemanticsNode().config[SemanticsProperties.StateDescription])
-        assertEquals(1, fixture.preferenceWrites)
+        assertEquals(2, fixture.preferenceWrites)
         assertEquals(0, runBlocking { fixture.database.runDao().countRuns() })
     }
 
@@ -1230,6 +1324,7 @@ class RunSettingsScreenTest {
                     reflectionConnection = ReflectionConnectionState.Local,
                     runPreferences = fixture.preferences,
                     onSaveRunPreferences = { next ->
+                        check(!fixture.failPreferenceWrites) { "Simulated preference storage failure" }
                         withContext(Dispatchers.IO) { fixture.store.save(next) }
                         fixture.preferences = next
                         fixture.preferenceWrites++
@@ -1402,6 +1497,7 @@ class RunSettingsScreenTest {
         var ownerToolsEnabled by mutableStateOf(true)
         var ownerToolsAfterDisposal: Boolean? = null
         var preferenceWrites = 0
+        var failPreferenceWrites = false
         var demoAudioCreations = 0
         val demoAudio = SilentDemoAudio()
         val demoAudioFactory: (Context) -> MusicReflectionDemoAudio = {
