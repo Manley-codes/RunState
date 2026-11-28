@@ -444,9 +444,11 @@ class RunStateScreenTest {
         composeTestRule.onNodeWithText("Explore trails").assertIsDisplayed()
         composeTestRule.onNodeWithTag(START_TRAILS_BROWSE_TAG).assertIsDisplayed().performClick()
         composeTestRule.onNodeWithTag(START_TRAILS_LIST_TAG).assertIsDisplayed()
-        for (id in listOf("memorial", "hermann", "buffalo_bayou", "terry_hershey")) {
-            composeTestRule.onNodeWithTag(START_TRAIL_LIST_ITEM_TAG_PREFIX + id)
-                .performScrollTo().assertIsDisplayed().assertIsEnabled()
+        composeTestRule.onNodeWithTag(TRAIL_SEARCH_TAG).assertIsDisplayed()
+        composeTestRule.onNodeWithTag("startExpandMap").assertDoesNotExist()
+        for ((id, name) in listOf("memorial" to "Memorial", "hermann" to "Hermann",
+            "buffalo_bayou" to "Buffalo Bayou", "terry_hershey" to "Terry Hershey")) {
+            findTrailInBrowser(id, name).assertIsDisplayed().assertIsEnabled()
         }
         composeTestRule.onNodeWithTag(START_TRAIL_LIST_ITEM_TAG_PREFIX + "terry_hershey").performClick()
         composeTestRule.onNodeWithTag(START_TRAIL_SHEET_TAG).assertIsDisplayed()
@@ -615,9 +617,9 @@ class RunStateScreenTest {
         }
         composeTestRule.onNodeWithTag(START_TRAILS_BROWSE_TAG).assertIsDisplayed().performClick()
         composeTestRule.onNodeWithTag(START_TRAILS_LIST_TAG).assertIsDisplayed()
-        for (id in listOf("memorial", "hermann", "buffalo_bayou", "terry_hershey")) {
-            composeTestRule.onNodeWithTag(START_TRAIL_LIST_ITEM_TAG_PREFIX + id)
-                .performScrollTo().assertIsDisplayed().assertIsEnabled()
+        for ((id, name) in listOf("memorial" to "Memorial", "hermann" to "Hermann",
+            "buffalo_bayou" to "Buffalo Bayou", "terry_hershey" to "Terry Hershey")) {
+            findTrailInBrowser(id, name).assertIsDisplayed().assertIsEnabled()
         }
         composeTestRule.onNodeWithTag(START_TRAIL_LIST_ITEM_TAG_PREFIX + "terry_hershey").performClick()
         composeTestRule.onNodeWithTag(START_TRAIL_SHEET_TAG).assertIsDisplayed()
@@ -641,8 +643,7 @@ class RunStateScreenTest {
         saveNativePreview(START_RUN_SCREEN_TAG, "start-explore-trails-card.png")
         composeTestRule.onNodeWithTag(START_TRAILS_BROWSE_TAG).performClick()
         composeTestRule.onNodeWithTag(START_TRAILS_LIST_TAG).assertIsDisplayed()
-        composeTestRule.onNodeWithTag(START_TRAIL_LIST_ITEM_TAG_PREFIX + "hermann")
-            .performScrollTo().performClick()
+        findTrailInBrowser("hermann", "Hermann").performClick()
         composeTestRule.onNodeWithTag(START_TRAIL_SHEET_TAG).assertIsDisplayed()
         composeTestRule.onNodeWithTag(START_TRAIL_USE_TAG).assertDoesNotExist()
         composeTestRule.onNodeWithText("Close").performClick()
@@ -682,8 +683,8 @@ class RunStateScreenTest {
             composeTestRule.onNodeWithTag(START_TRAILS_BROWSE_TAG).performScrollTo()
                 .assertIsDisplayed().assertIsEnabled().performClick()
             composeTestRule.onNodeWithTag(START_TRAILS_LIST_TAG).assertIsDisplayed()
-            composeTestRule.onNodeWithTag(START_TRAIL_LIST_ITEM_TAG_PREFIX + "terry_hershey")
-                .performScrollTo().assertIsDisplayed().assertIsEnabled().performClick()
+            findTrailInBrowser("terry_hershey", "Terry Hershey")
+                .assertIsDisplayed().assertIsEnabled().performClick()
             composeTestRule.onNodeWithTag(START_TRAIL_SHEET_TAG).assertIsDisplayed()
             composeTestRule.onNodeWithTag(START_TRAIL_USE_TAG).assertDoesNotExist()
             composeTestRule.onNodeWithText("Close").assertIsDisplayed().performClick()
@@ -1771,28 +1772,30 @@ class RunStateScreenTest {
     }
 
     @Test
-    fun gpsRootMapTogglesAndMapStartKeepTheSameWarmListener() {
+    fun gpsRootSettingsMapEntryRewarmsOneListenerAndMapStartKeepsIt() {
         GpsStartRootHarness().use { root ->
-            repeat(2) {
-                openStartMapFromTrails()
+            repeat(2) { index ->
+                openStartMapFromSettings()
+                awaitGpsRoot { root.source.activeListeners == 1 }
                 composeTestRule.mainClock.advanceTimeByFrame()
                 composeTestRule.onNodeWithTag(ACTIVE_RUN_MAP_DIALOG_TAG).assertIsDisplayed()
-                assertEquals(1, root.source.registrations)
+                assertEquals(index + 2, root.source.registrations)
                 assertEquals(1, root.source.activeListeners)
-                assertEquals(0, root.source.removals)
+                assertEquals(index + 1, root.source.removals)
                 composeTestRule.onNodeWithText("Close map").performClick()
                 composeTestRule.mainClock.advanceTimeByFrame()
                 composeTestRule.onNodeWithTag(START_RUN_BUTTON_TAG).assertIsDisplayed()
-                assertEquals(1, root.source.registrations)
+                assertEquals(index + 2, root.source.registrations)
                 assertEquals(1, root.source.activeListeners)
-                assertEquals(0, root.source.removals)
+                assertEquals(index + 1, root.source.removals)
                 root.assertUnstarted()
             }
-            openStartMapFromTrails()
+            openStartMapFromSettings()
+            awaitGpsRoot { root.source.activeListeners == 1 }
             composeTestRule.mainClock.advanceTimeByFrame()
             composeTestRule.onNodeWithTag(START_RUN_MAP_START_TAG).assertIsEnabled().performClick()
             root.awaitCountdown()
-            assertEquals(1, root.source.registrations)
+            assertEquals(4, root.source.registrations)
             assertEquals(1, root.source.activeListeners)
             composeTestRule.mainClock.advanceTimeBy(LONGER_THAN_COUNTDOWN_MILLIS)
             root.awaitSingleHandoff()
@@ -2197,13 +2200,24 @@ class RunStateScreenTest {
         composeTestRule.waitForIdle()
     }
 
-    private fun openStartMapFromTrails() {
-        composeTestRule.onNodeWithTag(START_TRAILS_BROWSE_TAG).performScrollTo()
-            .assertIsDisplayed().performClick()
-        composeTestRule.onNodeWithTag(START_TRAILS_LIST_TAG).assertIsDisplayed()
-        composeTestRule.onNodeWithTag("startExpandMap").performScrollTo()
+    private fun openStartMapFromSettings() {
+        composeTestRule.onNodeWithTag(START_RUN_SETTINGS_TAG).assertIsDisplayed().performClick()
+        composeTestRule.mainClock.advanceTimeByFrame()
+        composeTestRule.onNodeWithTag(SETTINGS_DIALOG_TAG).assertIsDisplayed()
+        composeTestRule.onNodeWithTag("runSettingsOpenMap").performScrollTo()
             .assertIsDisplayed().assertIsEnabled().performClick()
-        composeTestRule.onNodeWithTag(START_TRAILS_LIST_TAG).assertDoesNotExist()
+        composeTestRule.mainClock.advanceTimeByFrame()
+        composeTestRule.onNodeWithTag(SETTINGS_DIALOG_TAG).assertDoesNotExist()
+    }
+
+    private fun findTrailInBrowser(id: String, query: String): SemanticsNodeInteraction {
+        composeTestRule.onNodeWithTag(TRAIL_SEARCH_TAG).performTextReplacement(query)
+        composeTestRule.waitUntil(5_000) {
+            composeTestRule.onAllNodesWithTag(START_TRAIL_LIST_ITEM_TAG_PREFIX + id).fetchSemanticsNodes().isNotEmpty()
+        }
+        composeTestRule.onNodeWithTag(TRAIL_RESULTS_TAG)
+            .performScrollToNode(hasTestTag(START_TRAIL_LIST_ITEM_TAG_PREFIX + id))
+        return composeTestRule.onNodeWithTag(START_TRAIL_LIST_ITEM_TAG_PREFIX + id)
     }
 
     @Test
@@ -5737,10 +5751,12 @@ class RunStateScreenTest {
         composeTestRule.runOnIdle { assertEquals(0, opens) }
         composeTestRule.runOnIdle { loading = false }
         composeTestRule.onNodeWithTag(START_RUN_SETTINGS_TAG).performClick()
-        openStartMapFromTrails()
+        // This direct child fixture reports Settings to its parent; it does not own that dialog.
+        composeTestRule.onNodeWithTag(SETTINGS_DIALOG_TAG).assertDoesNotExist()
+        composeTestRule.onNodeWithTag("startExpandMap").assertDoesNotExist()
         composeTestRule.onNodeWithTag(START_HISTORY_TAG).performClick()
         composeTestRule.runOnIdle {
-            assertEquals(1, opens); assertEquals(1, maps); assertEquals(1, histories)
+            assertEquals(1, opens); assertEquals(0, maps); assertEquals(1, histories)
             actionsEnabled = false
         }
         for (tag in listOf(START_RUN_SETTINGS_TAG, START_TRAILS_BROWSE_TAG, START_OPEN_SHOES_TAG, START_HISTORY_TAG,
@@ -5749,7 +5765,7 @@ class RunStateScreenTest {
         }
         composeTestRule.onNodeWithTag(START_RUN_PLAN_SHEET_TAG).assertDoesNotExist()
         composeTestRule.onNodeWithTag(RUN_GOAL_SHEET_TAG).assertDoesNotExist()
-        composeTestRule.runOnIdle { assertEquals(1, opens); assertEquals(1, maps); assertEquals(1, histories) }
+        composeTestRule.runOnIdle { assertEquals(1, opens); assertEquals(0, maps); assertEquals(1, histories) }
     }
 
     @Test
@@ -6495,6 +6511,7 @@ class RunStateScreenTest {
     @Test
     fun optionalStartMapLocationAndCloseDoNotStartAndOnlyStartBeginsCountdown() {
         var locationRequests = 0
+        var settingsOpens = 0
         var starts = 0
         var open by mutableStateOf(false)
         var gpsSelected by mutableStateOf(true)
@@ -6509,6 +6526,7 @@ class RunStateScreenTest {
                 nativeMapsEnabled = true, loadStreetTiles = false,
                 previewMapStatus = "Enable precise location to show your position.",
                 onRequestMapLocation = { locationRequests++ },
+                onOpenRunSettings = { settingsOpens++ },
                 onOpenRunMap = { open = true }, mapExpanded = open,
                 onCloseRunMap = { open = false },
                 modifier = Modifier.fillMaxSize().systemBarsPadding()
@@ -6520,7 +6538,10 @@ class RunStateScreenTest {
         composeTestRule.onNodeWithText("© OpenStreetMap contributors").assertDoesNotExist()
         assertTrue(nativeMapViewsInActivity().isEmpty())
 
-        openStartMapFromTrails()
+        composeTestRule.onNodeWithTag(START_RUN_SETTINGS_TAG).performClick()
+        composeTestRule.runOnIdle { assertEquals(1, settingsOpens); assertFalse(open) }
+        // The parent Settings flow owns map selection; exercise the child's supplied map state.
+        composeTestRule.runOnIdle { open = true }
         composeTestRule.onNodeWithTag(ACTIVE_RUN_MAP_DIALOG_TAG).assertIsDisplayed()
         composeTestRule.onNodeWithText("Enable precise location to show your position.").assertIsDisplayed()
         composeTestRule.onNodeWithText("© OpenStreetMap contributors").assertIsDisplayed()
@@ -6540,9 +6561,9 @@ class RunStateScreenTest {
             assertEquals(0, starts)
             gpsSelected = false
         }
-        composeTestRule.onNodeWithTag(START_TRAILS_BROWSE_TAG).assertIsDisplayed().performClick()
-        composeTestRule.onNodeWithTag("startExpandMap").performScrollTo().assertIsDisplayed().assertIsNotEnabled()
-        composeTestRule.onNodeWithText("Close").performClick()
+        composeTestRule.onNodeWithTag(START_RUN_SETTINGS_TAG).performClick()
+        composeTestRule.runOnIdle { assertEquals(2, settingsOpens); open = true }
+        composeTestRule.onNodeWithTag(ACTIVE_RUN_MAP_DIALOG_TAG).assertDoesNotExist()
         assertTrue(nativeMapViewsInActivity().isEmpty())
         composeTestRule.runOnIdle { gpsSelected = true; open = true }
         composeTestRule.onNodeWithTag(START_RUN_MAP_START_TAG).assertIsDisplayed().performClick()
@@ -6573,6 +6594,7 @@ class RunStateScreenTest {
         var starts = 0
         var pauses = 0
         var resumes = 0
+        var settingsOpens = 0
         composeTestRule.setContent {
             RunStateScreen(
                 model = RunUiModel(state), countdownDigit = 3,
@@ -6595,6 +6617,7 @@ class RunStateScreenTest {
                 liveMapEnabled = true, mapEvidence = evidence, nativeMapsEnabled = true,
                 loadStreetTiles = false, previewMapStatus = "Current preview location",
                 onOpenRunMap = { expanded = true }, mapExpanded = expanded,
+                onOpenRunSettings = { settingsOpens++ },
                 onCloseRunMap = { expanded = false },
                 modifier = Modifier.fillMaxSize().systemBarsPadding().testTag("syntheticLiveMapJourney")
             )
@@ -6605,7 +6628,9 @@ class RunStateScreenTest {
         composeTestRule.onNodeWithText("© OpenStreetMap contributors").assertDoesNotExist()
         assertTrue(nativeMapViewsInActivity().isEmpty())
         if (capturePreviewImages) saveNativePreview("syntheticLiveMapJourney", "start-live-map-preview.png")
-        openStartMapFromTrails()
+        composeTestRule.onNodeWithTag(START_RUN_SETTINGS_TAG).performClick()
+        composeTestRule.runOnIdle { assertEquals(1, settingsOpens); assertFalse(expanded) }
+        composeTestRule.runOnIdle { expanded = true }
         composeTestRule.waitUntil(15_000L) { nativeMapViewsInActivity().size == 1 }
         val firstView = nativeMapViewsInActivity().single()
         val map = AtomicReference<MapLibreMap?>(null)
@@ -6661,15 +6686,25 @@ class RunStateScreenTest {
         composeTestRule.runOnIdle { assertEquals(1, starts) }
         assertTrue(nativeMapViewsInActivity().isEmpty())
 
+        // RunAssemblyScreen deliberately keeps a raw withFrameNanos drawing loop active while
+        // running. Auto-advancing time can never become idle there. Own this test's clock and
+        // advance actual frames after each transition; all native map assertions remain real.
+        composeTestRule.mainClock.autoAdvance = false
+        fun renderRunTransition(durationMillis: Long = 96L) {
+            composeTestRule.mainClock.advanceTimeBy(durationMillis)
+            composeTestRule.waitForIdle()
+        }
         composeTestRule.runOnIdle {
             state = RunUiState.ActiveRunning
             evidence = GpsMapEvidence("synthetic-running-owner", true)
         }
+        renderRunTransition(1_600L)
         composeTestRule.onNodeWithText(PAUSE).assertIsEnabled()
         composeTestRule.onNodeWithTag(ACTIVE_RUN_MAP_DIALOG_TAG).assertDoesNotExist()
         assertTrue(nativeMapViewsInActivity().isEmpty())
         if (capturePreviewImages) saveNativePreview("syntheticLiveMapJourney", "active-live-map-preview.png")
         composeTestRule.onNodeWithTag(ACTIVE_RUN_MAP_BUTTON_TAG).performScrollTo().performClick()
+        renderRunTransition()
         composeTestRule.onNodeWithTag(ACTIVE_RUN_MAP_DIALOG_TAG).assertIsDisplayed()
         composeTestRule.onNodeWithText(PAUSE).assertIsEnabled()
         // The old preview must not be recycled as this run's first location.
@@ -6680,6 +6715,7 @@ class RunStateScreenTest {
                 sections = listOf(listOf(runStart, runPoint)),
                 marker = GpsMapMarker(runPoint, 6.0, GpsMapMarkerState.CURRENT))
         }
+        renderRunTransition()
         composeTestRule.waitUntil(15_000L) { nativeMapViewsInActivity().size == 1 }
         val activeView = nativeMapViewsInActivity().single()
         assertFalse("Closing Start must dispose its renderer", firstView === activeView)
@@ -6689,21 +6725,26 @@ class RunStateScreenTest {
         assertInteractiveMap()
         composeTestRule.onNodeWithTag(RECORDED_RUN_MAP_RECENTER_TAG).assertIsDisplayed().performClick()
         composeTestRule.onNodeWithText(PAUSE).performClick()
+        renderRunTransition(500L)
         composeTestRule.onNodeWithText(RESUME).assertIsEnabled()
         composeTestRule.runOnIdle { assertEquals(1, pauses) }
 
         composeTestRule.activityRule.scenario.moveToState(Lifecycle.State.CREATED)
         composeTestRule.activityRule.scenario.moveToState(Lifecycle.State.RESUMED)
+        renderRunTransition()
         composeTestRule.onNodeWithText(RESUME).assertIsEnabled()
         assertSame(activeView, nativeMapViewsInActivity().single())
         assertInteractiveMap()
         awaitOverlay(runPoint, hasRoute = true)
         composeTestRule.onNodeWithText(RESUME).performClick()
+        renderRunTransition(500L)
         composeTestRule.onNodeWithText(PAUSE).assertIsEnabled()
         composeTestRule.runOnIdle { assertEquals(1, resumes) }
         composeTestRule.runOnIdle { evidence = null }
+        renderRunTransition()
         awaitOverlay(null, hasRoute = false)
         composeTestRule.onNodeWithText("Close map").performClick()
+        renderRunTransition()
         composeTestRule.onNodeWithTag(ACTIVE_RUN_MAP_DIALOG_TAG).assertDoesNotExist()
         composeTestRule.onNodeWithText(PAUSE).assertIsEnabled()
         composeTestRule.onNodeWithTag(ACTIVE_RUN_MAP_BUTTON_TAG).assertIsDisplayed()

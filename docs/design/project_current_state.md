@@ -5,6 +5,22 @@ metadata:
   type: project
 ---
 
+## November 28 U.S. trails installed
+
+Completed Manley's approved trail overhaul after the logo acceptance. Start's Explore trails now
+has nearby U.S. discovery, city/name search, difficulty/surface/elevation-gain filters, whole real
+photos with small rounded inset maps, retained Park information, accessible credits, and default
+maps directions. Live Open map moved to Settings → Location; More places around Houston removed.
+Bundled collection: 73 entries, 21 Houston-area records, 46 licensed photos; USGS supplies broader
+named path discovery, Census supplies offline city lookup. Unknown ratings/geometry/entrances are
+not guessed. Source/data limits and review queue: `design_trails.md`.
+
+23 focused JVM and 13 final emulator checks passed, including actual public USGS/map/photo loads;
+Debug/test builds and Release vital lint passed. In-place Moto update verified against tested APK
+hash; all 81 runs, two shoes, 12 table hashes and five preferences unchanged. User appearance,
+nearby results and maps-entrance review can wait. No music/reflection/schema/backend/public-preview
+change. Existing Android field/release tasks remain in the private November roadmap.
+
 ## November 27 launcher logo and trails
 
 Manley requested the attached RS/pastel Energy-bars launcher logo first, without its outer cream

@@ -391,6 +391,10 @@ internal fun RunStateScreen(
             modifier = Modifier,
             startBackground = startBackground,
             liveMapBackground = false,
+            trailLocation = mapEvidence?.marker?.takeIf {
+                it.state == com.runstate.mobile.location.GpsMapMarkerState.CURRENT
+            }?.coordinate?.let { com.runstate.mobile.trails.TrailCoordinate(it.latitude, it.longitude) },
+            onRequestMapLocation = onRequestMapLocation,
             onOpenMap = if (mapAvailable) onOpenRunMap else null
         )
         return@Box

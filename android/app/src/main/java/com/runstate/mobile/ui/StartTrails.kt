@@ -13,9 +13,7 @@ import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -23,7 +21,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.mutableFloatStateOf
@@ -47,7 +44,6 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -268,91 +264,6 @@ private fun StartTrailMap(trail: StartTrail, modifier: Modifier) {
                 scaleX = 1.07f; scaleY = 1.07f
             })
         Box(Modifier.fillMaxSize().background(Color.White.copy(alpha = .35f)))
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-internal fun StartTrailsSheet(
-    trail: StartTrail?,
-    enabled: Boolean,
-    onExplore: (StartTrail) -> Unit,
-    onUse: ((StartTrail) -> Unit)? = null,
-    onOpenMap: (() -> Unit)? = null,
-    mapNeedsLocation: Boolean = false,
-    mapStatus: String? = null,
-    onDismiss: () -> Unit
-) {
-    val uri = LocalUriHandler.current
-    ModalBottomSheet(onDismissRequest = onDismiss,
-        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-        containerColor = Color(0xFFF8FAF8),
-        modifier = Modifier.testTag(if (trail == null) START_TRAILS_LIST_TAG else START_TRAIL_SHEET_TAG)) {
-        Column(Modifier.fillMaxWidth()
-            .padding(start = 20.dp, end = 20.dp, bottom = 24.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Text(trail?.name ?: "Houston trails", fontSize = 24.sp, lineHeight = 29.sp,
-                    fontWeight = FontWeight.SemiBold, color = TrailInk, modifier = Modifier.weight(1f))
-                TextButton(onClick = onDismiss) { Text("Close", color = TrailInk) }
-            }
-            key(trail?.id) {
-            Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                OutlinedButton(onClick = { onOpenMap?.invoke() }, enabled = enabled && onOpenMap != null,
-                    modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
-                        .testTag(if (mapNeedsLocation) START_MAP_LOCATION_ACCESS_TAG else "startExpandMap")
-                        .semantics {
-                            contentDescription = if (mapNeedsLocation) "Enable location" else "Open live map"
-                            val status = if (mapNeedsLocation) "Location access needed" else mapStatus
-                            if (status != null) stateDescription = status
-                        }) {
-                    Text(if (mapNeedsLocation) "Enable location" else "Open map", color = TrailInk)
-                }
-            if (trail == null) {
-                HoustonStartTrails.forEach { place ->
-                    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
-                        .background(Color.White).clickable(enabled = enabled) { onExplore(place) }
-                        .testTag(START_TRAIL_LIST_ITEM_TAG_PREFIX + place.id).padding(10.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Image(painterResource(place.photo), null, contentScale = ContentScale.Crop,
-                            modifier = Modifier.size(64.dp).clip(RoundedCornerShape(8.dp)))
-                        Column(Modifier.weight(1f)) {
-                            Text(place.name, color = TrailInk, fontWeight = FontWeight.SemiBold)
-                            Text(place.description, color = TrailInk.copy(alpha = .75f), fontSize = 12.sp)
-                        }
-                    }
-                }
-                TextButton(onClick = { uri.openUri("https://www.visithoustontexas.com/blog/post/healthy-in-houston/") }) {
-                    Text("More places around Houston ↗", color = TrailInk)
-                }
-            } else {
-                Text(trail.description, color = TrailInk)
-                Image(painterResource(trail.photo), null, contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxWidth().height(170.dp).clip(RoundedCornerShape(12.dp)))
-                Image(painterResource(trail.map), "Area map of ${trail.name}", contentScale = ContentScale.Fit,
-                    modifier = Modifier.fillMaxWidth().aspectRatio(2f).clip(RoundedCornerShape(12.dp)))
-                Text("Area overview · not a guided route", color = TrailInk, fontSize = 12.sp)
-                if (onUse != null) Button(onClick = { onUse(trail) }, enabled = enabled,
-                    colors = ButtonDefaults.buttonColors(containerColor = TrailInk),
-                    modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag(START_TRAIL_USE_TAG)) {
-                    Text("Use trail name in plan")
-                }
-                TextButton(onClick = { uri.openUri(trail.website) }) { Text("Park information ↗", color = TrailInk) }
-                Text("Photo: ${trail.photoCredit} · ${trail.photoLicense}. Cropped to fit.",
-                    color = TrailInk.copy(alpha = .8f), fontSize = 11.sp, lineHeight = 15.sp)
-                Row {
-                    TextButton(onClick = { uri.openUri(trail.photoSource) }) { Text("Photo source", color = TrailInk) }
-                    TextButton(onClick = { uri.openUri(trail.licenseUrl) }) { Text("Photo license", color = TrailInk) }
-                }
-            }
-            TextButton(onClick = { uri.openUri("https://www.openstreetmap.org/copyright") }) {
-                Text("Map data © OpenStreetMap contributors", color = TrailInk, fontSize = 11.sp)
-            }
-            }
-            }
-        }
     }
 }
 

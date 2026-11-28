@@ -135,7 +135,8 @@ internal fun RunSettingsDialog(
     startBackground: StartBackground = StartBackground.HERMANN_PARK,
     onSetStartBackground: (StartBackground) -> Unit = {},
     runnerName: String? = null,
-    onSetRunnerName: (String) -> Unit = {}
+    onSetRunnerName: (String) -> Unit = {},
+    onOpenMap: (() -> Unit)? = null
 ) {
     val controlsEnabled = actionsEnabled && !settingsLoading
     val preferenceControlsEnabled = controlsEnabled && preferencesAvailable
@@ -286,6 +287,12 @@ internal fun RunSettingsDialog(
                     SettingsDescription("Start uses precise location to measure your run. " +
                         "If permission or phone location is off, we ask before starting.")
                     if (gpsMessage != null) SettingsDescription(gpsMessage)
+                    if (onOpenMap != null) {
+                        TextButton(onClick = onOpenMap, enabled = controlsEnabled,
+                            modifier = Modifier.heightIn(min = 48.dp).testTag("runSettingsOpenMap")) {
+                            Text("Open map", color = SettingsInk)
+                        }
+                    }
                     if (!gpsReady) {
                         TextButton(
                             onClick = onRequestLocationSetup,
@@ -521,6 +528,13 @@ private fun RunPrivacyDialog(onBack: () -> Unit) {
                     "Optional weather sends an approximate start location to Open-Meteo. Opening the live " +
                         "map requests the viewed area from OpenFreeMap. Both services can see your IP address. " +
                         "The static illustration and History route drawing do not request live map tiles.")
+                PrivacySection("Exploring trails",
+                    "Opening Trails uses your approximate location, rounded to about one kilometre, or a " +
+                        "chosen city to find public trail paths through USGS. Nearby results are cached on this " +
+                        "phone for seven days. Trail maps request tiles from OpenFreeMap; remote photos load " +
+                        "from Wikimedia Commons. These services see your IP address and requested area or photo. " +
+                        "City-name search stays on your phone. Directions opens your maps app with the chosen " +
+                        "trail or entrance; it does not send your saved runs or start recording.")
                 PrivacySection("Deleting a run",
                     "In Log History, open a saved run, choose its three-dot menu, then Delete run. " +
                         "This permanently removes that run and its related data from this phone. " +

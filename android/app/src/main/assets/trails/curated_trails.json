@@ -1,0 +1,2079 @@
+{
+  "version": 1,
+  "verifiedOn": "2026-11-27",
+  "trails": [
+    {
+      "id": "memorial",
+      "name": "Memorial Park · Seymour Lieberman Trail",
+      "subtitle": "Pedestrian loop",
+      "city": "Houston",
+      "state": "TX",
+      "center": {
+        "latitude": 29.765,
+        "longitude": -95.441
+      },
+      "trailhead": null,
+      "website": "https://www.memorialparkconservancy.org/visit/things_to_do/trails/",
+      "photo": {
+        "resourceName": "trail_memorial_photo",
+        "credit": "Beverly Moseley / USDA NRCS Texas",
+        "sourceUrl": "https://commons.wikimedia.org/wiki/File:Joggers_along_the_Seymour_Lieberman_Exer-Trail_at_Memorial_Park_in_Houston.NRCS_photo_by_Beverly_Moseley._(25116673655).jpg",
+        "license": "CC BY 2.0",
+        "licenseUrl": "https://creativecommons.org/licenses/by/2.0/"
+      },
+      "routeLines": [],
+      "lengthMeters": 4860.22,
+      "elevationGainMeters": null,
+      "difficulty": "MODERATE",
+      "surfaces": [
+        "GRAVEL"
+      ],
+      "sourceName": "Memorial Park Conservancy",
+      "sourceUrl": "https://www.memorialparkconservancy.org/visit/things_to_do/trails/",
+      "isSegment": false
+    },
+    {
+      "id": "memorial_coastal_prairie",
+      "name": "Memorial Park · Coastal Prairie Trail",
+      "subtitle": "Named park trail",
+      "city": "Houston",
+      "state": "TX",
+      "center": {
+        "latitude": 29.765,
+        "longitude": -95.441
+      },
+      "trailhead": null,
+      "website": "https://www.memorialparkconservancy.org/visit/things_to_do/trails/",
+      "photo": null,
+      "routeLines": [],
+      "lengthMeters": 2510.58,
+      "elevationGainMeters": null,
+      "difficulty": "EASY",
+      "surfaces": [
+        "GRAVEL"
+      ],
+      "sourceName": "Memorial Park Conservancy",
+      "sourceUrl": "https://www.memorialparkconservancy.org/visit/things_to_do/trails/",
+      "isSegment": false
+    },
+    {
+      "id": "memorial_hines_lake",
+      "name": "Memorial Park · Hines Lake Trail",
+      "subtitle": "Named park trail",
+      "city": "Houston",
+      "state": "TX",
+      "center": {
+        "latitude": 29.765,
+        "longitude": -95.441
+      },
+      "trailhead": null,
+      "website": "https://www.memorialparkconservancy.org/visit/things_to_do/trails/",
+      "photo": null,
+      "routeLines": [],
+      "lengthMeters": 708.11,
+      "elevationGainMeters": null,
+      "difficulty": "EASY",
+      "surfaces": [
+        "GRAVEL",
+        "BOARDWALK"
+      ],
+      "sourceName": "Memorial Park Conservancy",
+      "sourceUrl": "https://www.memorialparkconservancy.org/visit/things_to_do/trails/",
+      "isSegment": false
+    },
+    {
+      "id": "memorial_south_land_bridge",
+      "name": "Memorial Park · South Land Bridge Trail",
+      "subtitle": "Named park trail",
+      "city": "Houston",
+      "state": "TX",
+      "center": {
+        "latitude": 29.765,
+        "longitude": -95.441
+      },
+      "trailhead": null,
+      "website": "https://www.memorialparkconservancy.org/visit/things_to_do/trails/",
+      "photo": null,
+      "routeLines": [],
+      "lengthMeters": 917.33,
+      "elevationGainMeters": null,
+      "difficulty": "EASY",
+      "surfaces": [
+        "DIRT"
+      ],
+      "sourceName": "Memorial Park Conservancy",
+      "sourceUrl": "https://www.memorialparkconservancy.org/visit/things_to_do/trails/",
+      "isSegment": false
+    },
+    {
+      "id": "memorial_green",
+      "name": "Memorial Park · Green Trail",
+      "subtitle": "Named park trail",
+      "city": "Houston",
+      "state": "TX",
+      "center": {
+        "latitude": 29.765,
+        "longitude": -95.441
+      },
+      "trailhead": null,
+      "website": "https://www.memorialparkconservancy.org/visit/things_to_do/trails/",
+      "photo": null,
+      "routeLines": [],
+      "lengthMeters": 3299.16,
+      "elevationGainMeters": null,
+      "difficulty": "DIFFICULT",
+      "surfaces": [
+        "DIRT"
+      ],
+      "sourceName": "Memorial Park Conservancy",
+      "sourceUrl": "https://www.memorialparkconservancy.org/visit/things_to_do/trails/",
+      "isSegment": false
+    },
+    {
+      "id": "hermann",
+      "name": "Hermann Park · Marvin Taylor Trail",
+      "subtitle": "Park running trail",
+      "city": "Houston",
+      "state": "TX",
+      "center": {
+        "latitude": 29.721,
+        "longitude": -95.391
+      },
+      "trailhead": null,
+      "website": "https://hermannpark.org/place/marvin-taylor-trail/",
+      "photo": {
+        "resourceName": "trail_hermann_photo",
+        "credit": "WhisperToMe",
+        "sourceUrl": "https://commons.wikimedia.org/wiki/File:MarvinTaylorTrailHoustonTX.JPG",
+        "license": "Public domain",
+        "licenseUrl": "https://commons.wikimedia.org/wiki/File:MarvinTaylorTrailHoustonTX.JPG#Licensing"
+      },
+      "routeLines": [],
+      "lengthMeters": 3218.69,
+      "elevationGainMeters": null,
+      "difficulty": null,
+      "surfaces": [
+        "GRAVEL"
+      ],
+      "sourceName": "Hermann Park Conservancy",
+      "sourceUrl": "https://hermannpark.org/place/marvin-taylor-trail/",
+      "isSegment": false
+    },
+    {
+      "id": "buffalo_bayou",
+      "name": "Buffalo Bayou Park",
+      "subtitle": "Park paths and trails",
+      "city": "Houston",
+      "state": "TX",
+      "center": {
+        "latitude": 29.761,
+        "longitude": -95.384
+      },
+      "trailhead": null,
+      "website": "https://buffalobayou.org/location/buffalo-bayou-park/",
+      "photo": {
+        "resourceName": "trail_buffalo_bayou_photo",
+        "credit": "Michael Barera",
+        "sourceUrl": "https://commons.wikimedia.org/wiki/File:Houston_May_2022_13_(Buffalo_Bayou_Park_and_skyline).jpg",
+        "license": "CC BY-SA 4.0",
+        "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/"
+      },
+      "routeLines": [],
+      "lengthMeters": null,
+      "elevationGainMeters": null,
+      "difficulty": null,
+      "surfaces": [],
+      "sourceName": "buffalobayou.org",
+      "sourceUrl": "https://buffalobayou.org/location/buffalo-bayou-park/",
+      "isSegment": false
+    },
+    {
+      "id": "terry_hershey",
+      "name": "Terry Hershey Park",
+      "subtitle": "Park paths and trails",
+      "city": "Houston",
+      "state": "TX",
+      "center": {
+        "latitude": 29.767078,
+        "longitude": -95.618906
+      },
+      "trailhead": null,
+      "website": "https://cp4.harriscountytx.gov/Explore/Parks/Precinct-4-Parks/terry-hershey-park",
+      "photo": {
+        "resourceName": "trail_terry_hershey_photo",
+        "credit": "Scott Ehardt",
+        "sourceUrl": "https://commons.wikimedia.org/wiki/File:Terry_Hershey_Park_trail.jpg",
+        "license": "Public domain",
+        "licenseUrl": "https://commons.wikimedia.org/wiki/File:Terry_Hershey_Park_trail.jpg#Licensing"
+      },
+      "routeLines": [],
+      "lengthMeters": null,
+      "elevationGainMeters": null,
+      "difficulty": null,
+      "surfaces": [],
+      "sourceName": "cp4.harriscountytx.gov",
+      "sourceUrl": "https://cp4.harriscountytx.gov/Explore/Parks/Precinct-4-Parks/terry-hershey-park",
+      "isSegment": false
+    },
+    {
+      "id": "george_bush",
+      "name": "George Bush Park",
+      "subtitle": "Park paths and trails",
+      "city": "Houston",
+      "state": "TX",
+      "center": {
+        "latitude": 29.72481389,
+        "longitude": -95.6895
+      },
+      "trailhead": null,
+      "website": "https://cp4.harriscountytx.gov/Explore/Parks/Precinct-4-Parks/george-bush-park",
+      "photo": {
+        "resourceName": null,
+        "url": "https://upload.wikimedia.org/wikipedia/commons/3/38/George_Bush_Park_1.JPG",
+        "credit": "JuWiki at English Wikipedia",
+        "sourceUrl": "https://commons.wikimedia.org/wiki/File:George_Bush_Park_1.JPG",
+        "license": "Public domain",
+        "licenseUrl": "https://commons.wikimedia.org/wiki/File:George_Bush_Park_1.JPG#Licensing"
+      },
+      "routeLines": [],
+      "lengthMeters": null,
+      "elevationGainMeters": null,
+      "difficulty": null,
+      "surfaces": [],
+      "sourceName": "cp4.harriscountytx.gov",
+      "sourceUrl": "https://cp4.harriscountytx.gov/Explore/Parks/Precinct-4-Parks/george-bush-park",
+      "isSegment": false
+    },
+    {
+      "id": "bear_creek",
+      "name": "Bear Creek Pioneers Park",
+      "subtitle": "Park paths and trails",
+      "city": "Houston",
+      "state": "TX",
+      "center": {
+        "latitude": 29.824784,
+        "longitude": -95.6247
+      },
+      "trailhead": null,
+      "website": "https://cp4.harriscountytx.gov/Explore/Parks/Precinct-4-Parks/bear-creek-pioneers-park",
+      "photo": {
+        "resourceName": null,
+        "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/e/ed/BearCreekParkEntrance1.jpg/960px-BearCreekParkEntrance1.jpg",
+        "credit": "Pleonic",
+        "sourceUrl": "https://commons.wikimedia.org/wiki/File:BearCreekParkEntrance1.jpg",
+        "license": "CC BY-SA 3.0",
+        "licenseUrl": "https://creativecommons.org/licenses/by-sa/3.0"
+      },
+      "routeLines": [],
+      "lengthMeters": null,
+      "elevationGainMeters": null,
+      "difficulty": null,
+      "surfaces": [],
+      "sourceName": "cp4.harriscountytx.gov",
+      "sourceUrl": "https://cp4.harriscountytx.gov/Explore/Parks/Precinct-4-Parks/bear-creek-pioneers-park",
+      "isSegment": false
+    },
+    {
+      "id": "keith_wiess",
+      "name": "Keith-Wiess Park",
+      "subtitle": "Park paths and trails",
+      "city": "Houston",
+      "state": "TX",
+      "center": {
+        "latitude": 29.892769525285882,
+        "longitude": -95.34496146970156
+      },
+      "trailhead": null,
+      "website": "https://www.houstontx.gov/parks/trails.html",
+      "photo": null,
+      "routeLines": [],
+      "lengthMeters": null,
+      "elevationGainMeters": null,
+      "difficulty": null,
+      "surfaces": [],
+      "sourceName": "City of Houston",
+      "sourceUrl": "https://www.houstontx.gov/parks/trails.html",
+      "isSegment": false
+    },
+    {
+      "id": "lake_houston_wilderness",
+      "name": "Lake Houston Wilderness Park",
+      "subtitle": "Park paths and trails",
+      "city": "New Caney",
+      "state": "TX",
+      "center": {
+        "latitude": 30.121522,
+        "longitude": -95.158836
+      },
+      "trailhead": null,
+      "website": "https://www.houstontx.gov/parks/lakehoustonpark",
+      "photo": null,
+      "routeLines": [],
+      "lengthMeters": null,
+      "elevationGainMeters": null,
+      "difficulty": null,
+      "surfaces": [],
+      "sourceName": "houstontx.gov",
+      "sourceUrl": "https://www.houstontx.gov/parks/lakehoustonpark",
+      "isSegment": false
+    },
+    {
+      "id": "mason_park",
+      "name": "Mason Park",
+      "subtitle": "Park paths and trails",
+      "city": "Houston",
+      "state": "TX",
+      "center": {
+        "latitude": 29.725619732143066,
+        "longitude": -95.29338666025967
+      },
+      "trailhead": null,
+      "website": "https://www.houstontx.gov/parks/trails.html",
+      "photo": null,
+      "routeLines": [],
+      "lengthMeters": null,
+      "elevationGainMeters": null,
+      "difficulty": null,
+      "surfaces": [],
+      "sourceName": "City of Houston",
+      "sourceUrl": "https://www.houstontx.gov/parks/trails.html",
+      "isSegment": false
+    },
+    {
+      "id": "macgregor",
+      "name": "MacGregor Park",
+      "subtitle": "Park paths and trails",
+      "city": "Houston",
+      "state": "TX",
+      "center": {
+        "latitude": 29.708199,
+        "longitude": -95.341593
+      },
+      "trailhead": null,
+      "website": "https://cohips.houstontx.gov/parks/parksitesG-N.html",
+      "photo": {
+        "resourceName": null,
+        "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/7/7e/MacgregorPark0.jpg/960px-MacgregorPark0.jpg",
+        "credit": "WhisperToMe",
+        "sourceUrl": "https://commons.wikimedia.org/wiki/File:MacgregorPark0.jpg",
+        "license": "CC0",
+        "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/deed.en"
+      },
+      "routeLines": [],
+      "lengthMeters": null,
+      "elevationGainMeters": null,
+      "difficulty": null,
+      "surfaces": [],
+      "sourceName": "cohips.houstontx.gov",
+      "sourceUrl": "https://cohips.houstontx.gov/parks/parksitesG-N.html",
+      "isSegment": false
+    },
+    {
+      "id": "spotts",
+      "name": "Spotts Park",
+      "subtitle": "Park paths and trails",
+      "city": "Houston",
+      "state": "TX",
+      "center": {
+        "latitude": 29.765262039945615,
+        "longitude": -95.39578068896101
+      },
+      "trailhead": null,
+      "website": "https://www.houstontx.gov/parks/trails.html",
+      "photo": null,
+      "routeLines": [],
+      "lengthMeters": null,
+      "elevationGainMeters": null,
+      "difficulty": null,
+      "surfaces": [],
+      "sourceName": "City of Houston",
+      "sourceUrl": "https://www.houstontx.gov/parks/trails.html",
+      "isSegment": false
+    },
+    {
+      "id": "stude",
+      "name": "Stude Park",
+      "subtitle": "Park paths and trails",
+      "city": "Houston",
+      "state": "TX",
+      "center": {
+        "latitude": 29.778992808185077,
+        "longitude": -95.38433512616615
+      },
+      "trailhead": null,
+      "website": "https://www.houstontx.gov/parks/trails.html",
+      "photo": null,
+      "routeLines": [],
+      "lengthMeters": null,
+      "elevationGainMeters": null,
+      "difficulty": null,
+      "surfaces": [],
+      "sourceName": "City of Houston",
+      "sourceUrl": "https://www.houstontx.gov/parks/trails.html",
+      "isSegment": false
+    },
+    {
+      "id": "tc_jester",
+      "name": "T.C. Jester Park",
+      "subtitle": "Park paths and trails",
+      "city": "Houston",
+      "state": "TX",
+      "center": {
+        "latitude": 29.819057570849086,
+        "longitude": -95.44743448506242
+      },
+      "trailhead": null,
+      "website": "https://www.houstontx.gov/parks/trails.html",
+      "photo": null,
+      "routeLines": [],
+      "lengthMeters": null,
+      "elevationGainMeters": null,
+      "difficulty": null,
+      "surfaces": [],
+      "sourceName": "City of Houston",
+      "sourceUrl": "https://www.houstontx.gov/parks/trails.html",
+      "isSegment": false
+    },
+    {
+      "id": "willow_waterhole",
+      "name": "Willow Waterhole Greenway",
+      "subtitle": "Trail corridor",
+      "city": "Houston",
+      "state": "TX",
+      "center": {
+        "latitude": 29.65118937906448,
+        "longitude": -95.46813461460518
+      },
+      "trailhead": null,
+      "website": "https://www.houstontx.gov/parks/trails.html",
+      "photo": null,
+      "routeLines": [],
+      "lengthMeters": null,
+      "elevationGainMeters": null,
+      "difficulty": null,
+      "surfaces": [],
+      "sourceName": "City of Houston",
+      "sourceUrl": "https://www.houstontx.gov/parks/trails.html",
+      "isSegment": false
+    },
+    {
+      "id": "cullen_park",
+      "name": "Cullen Park",
+      "subtitle": "Park paths and trails",
+      "city": "Houston",
+      "state": "TX",
+      "center": {
+        "latitude": 29.79861111,
+        "longitude": -95.69333333
+      },
+      "trailhead": null,
+      "website": "https://www.houstontx.gov/parks/parksitesA-F.html",
+      "photo": null,
+      "routeLines": [],
+      "lengthMeters": null,
+      "elevationGainMeters": null,
+      "difficulty": null,
+      "surfaces": [],
+      "sourceName": "houstontx.gov",
+      "sourceUrl": "https://www.houstontx.gov/parks/parksitesA-F.html",
+      "isSegment": false
+    },
+    {
+      "id": "brazos_bend",
+      "name": "Brazos Bend State Park",
+      "subtitle": "Park paths and trails",
+      "city": "Needville",
+      "state": "TX",
+      "center": {
+        "latitude": 29.37888889,
+        "longitude": -95.595
+      },
+      "trailhead": null,
+      "website": "https://tpwd.texas.gov/state-parks/brazos-bend",
+      "photo": null,
+      "routeLines": [],
+      "lengthMeters": null,
+      "elevationGainMeters": null,
+      "difficulty": null,
+      "surfaces": [],
+      "sourceName": "tpwd.texas.gov",
+      "sourceUrl": "https://tpwd.texas.gov/state-parks/brazos-bend",
+      "isSegment": false
+    },
+    {
+      "id": "brazos_creekfield",
+      "name": "Brazos Bend · Creekfield Lake ADA Trail",
+      "subtitle": "Accessible lake loop",
+      "city": "Needville",
+      "state": "TX",
+      "center": {
+        "latitude": 29.3754,
+        "longitude": -95.5962
+      },
+      "trailhead": null,
+      "website": "https://tpwd.texas.gov/state-parks/brazos-bend/trails-info/",
+      "photo": null,
+      "routeLines": [],
+      "lengthMeters": 804.67,
+      "elevationGainMeters": null,
+      "difficulty": "EASY",
+      "surfaces": [
+        "PAVED"
+      ],
+      "sourceName": "Texas Parks and Wildlife Department",
+      "sourceUrl": "https://tpwd.texas.gov/state-parks/brazos-bend/trails-info/",
+      "isSegment": false
+    },
+    {
+      "id": "butler_trail",
+      "name": "Ann and Roy Butler Trail",
+      "subtitle": "Trail corridor",
+      "city": "Austin",
+      "state": "TX",
+      "center": {
+        "latitude": 30.25083333,
+        "longitude": -97.71361111
+      },
+      "trailhead": null,
+      "website": "https://thetrailconservancy.org/visit/",
+      "photo": {
+        "resourceName": null,
+        "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/0/09/AustinSkylineLouNeffPoint-Jun2010-a.JPG/960px-AustinSkylineLouNeffPoint-Jun2010-a.JPG",
+        "credit": "LoneStarMike",
+        "sourceUrl": "https://commons.wikimedia.org/wiki/File:AustinSkylineLouNeffPoint-Jun2010-a.JPG",
+        "license": "CC BY-SA 3.0",
+        "licenseUrl": "https://creativecommons.org/licenses/by-sa/3.0"
+      },
+      "routeLines": [],
+      "lengthMeters": null,
+      "elevationGainMeters": null,
+      "difficulty": null,
+      "surfaces": [],
+      "sourceName": "thetrailconservancy.org",
+      "sourceUrl": "https://thetrailconservancy.org/visit/",
+      "isSegment": false
+    },
+    {
+      "id": "white_rock_lake",
+      "name": "White Rock Lake Trail",
+      "subtitle": "Lakeside hike and bike trail",
+      "city": "Dallas",
+      "state": "TX",
+      "center": {
+        "latitude": 32.815,
+        "longitude": -96.72527778
+      },
+      "trailhead": null,
+      "website": "https://www.dallasparks.org/235/White-Rock-Lake",
+      "photo": null,
+      "routeLines": [],
+      "lengthMeters": 15015.18,
+      "elevationGainMeters": null,
+      "difficulty": null,
+      "surfaces": [],
+      "sourceName": "Dallas Park and Recreation",
+      "sourceUrl": "https://www.dallasparks.org/235/White-Rock-Lake",
+      "isSegment": false
+    },
+    {
+      "id": "brackenridge",
+      "name": "Brackenridge Park",
+      "subtitle": "Park paths and trails",
+      "city": "San Antonio",
+      "state": "TX",
+      "center": {
+        "latitude": 29.4557876,
+        "longitude": -98.473072
+      },
+      "trailhead": null,
+      "website": "https://brackenridgepark.org/",
+      "photo": {
+        "resourceName": null,
+        "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/9/97/Rodriquez_bridge_brackenridge_2011.jpg/960px-Rodriquez_bridge_brackenridge_2011.jpg",
+        "credit": "Larry D. Moore",
+        "sourceUrl": "https://commons.wikimedia.org/wiki/File:Rodriquez_bridge_brackenridge_2011.jpg",
+        "license": "CC BY 4.0",
+        "licenseUrl": "https://creativecommons.org/licenses/by/4.0"
+      },
+      "routeLines": [],
+      "lengthMeters": null,
+      "elevationGainMeters": null,
+      "difficulty": null,
+      "surfaces": [],
+      "sourceName": "brackenridgepark.org",
+      "sourceUrl": "https://brackenridgepark.org/",
+      "isSegment": false
+    },
+    {
+      "id": "central_park",
+      "name": "Central Park",
+      "subtitle": "Park paths and trails",
+      "city": "New York",
+      "state": "NY",
+      "center": {
+        "latitude": 40.78222222,
+        "longitude": -73.96527778
+      },
+      "trailhead": null,
+      "website": "https://www.centralparknyc.org/activities/guides/running",
+      "photo": null,
+      "routeLines": [],
+      "lengthMeters": null,
+      "elevationGainMeters": null,
+      "difficulty": null,
+      "surfaces": [],
+      "sourceName": "centralparknyc.org",
+      "sourceUrl": "https://www.centralparknyc.org/activities/guides/running",
+      "isSegment": false
+    },
+    {
+      "id": "prospect_park",
+      "name": "Prospect Park",
+      "subtitle": "Park paths and trails",
+      "city": "New York",
+      "state": "NY",
+      "center": {
+        "latitude": 40.66166667,
+        "longitude": -73.97083333
+      },
+      "trailhead": null,
+      "website": "https://www.prospectpark.org/",
+      "photo": {
+        "resourceName": null,
+        "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/3/3a/Prospect_Park_New_York_October_2015_003.jpg/960px-Prospect_Park_New_York_October_2015_003.jpg",
+        "credit": "King of Hearts",
+        "sourceUrl": "https://commons.wikimedia.org/wiki/File:Prospect_Park_New_York_October_2015_003.jpg",
+        "license": "CC BY-SA 4.0",
+        "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0"
+      },
+      "routeLines": [],
+      "lengthMeters": null,
+      "elevationGainMeters": null,
+      "difficulty": null,
+      "surfaces": [],
+      "sourceName": "prospectpark.org",
+      "sourceUrl": "https://www.prospectpark.org/",
+      "isSegment": false
+    },
+    {
+      "id": "van_cortlandt",
+      "name": "Van Cortlandt Park",
+      "subtitle": "Park paths and trails",
+      "city": "New York",
+      "state": "NY",
+      "center": {
+        "latitude": 40.89777778,
+        "longitude": -73.88388889
+      },
+      "trailhead": null,
+      "website": "https://www.nycgovparks.org/parks/VanCortlandtPark",
+      "photo": {
+        "resourceName": null,
+        "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/f/f7/Entrance_To_Van_Cortlandt_Park_2012.jpg/960px-Entrance_To_Van_Cortlandt_Park_2012.jpg",
+        "credit": "Anthony22 at English Wikipedia",
+        "sourceUrl": "https://commons.wikimedia.org/wiki/File:Entrance_To_Van_Cortlandt_Park_2012.jpg",
+        "license": "CC BY-SA 3.0",
+        "licenseUrl": "https://creativecommons.org/licenses/by-sa/3.0"
+      },
+      "routeLines": [],
+      "lengthMeters": null,
+      "elevationGainMeters": null,
+      "difficulty": null,
+      "surfaces": [],
+      "sourceName": "nycgovparks.org",
+      "sourceUrl": "https://www.nycgovparks.org/parks/VanCortlandtPark",
+      "isSegment": false
+    },
+    {
+      "id": "hudson_river_park",
+      "name": "Hudson River Park",
+      "subtitle": "Park paths and trails",
+      "city": "New York",
+      "state": "NY",
+      "center": {
+        "latitude": 40.735,
+        "longitude": -74.01055556
+      },
+      "trailhead": null,
+      "website": "https://hudsonriverpark.org/activities/running/",
+      "photo": {
+        "resourceName": null,
+        "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/5/5d/HRPKsep2021.png/960px-HRPKsep2021.png",
+        "credit": "Andymii",
+        "sourceUrl": "https://commons.wikimedia.org/wiki/File:HRPKsep2021.png",
+        "license": "CC BY-SA 4.0",
+        "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0"
+      },
+      "routeLines": [],
+      "lengthMeters": null,
+      "elevationGainMeters": null,
+      "difficulty": null,
+      "surfaces": [],
+      "sourceName": "hudsonriverpark.org",
+      "sourceUrl": "https://hudsonriverpark.org/activities/running/",
+      "isSegment": false
+    },
+    {
+      "id": "charles_esplanade",
+      "name": "Charles River Esplanade",
+      "subtitle": "Park paths and trails",
+      "city": "Boston",
+      "state": "MA",
+      "center": {
+        "latitude": 42.35622778,
+        "longitude": -71.07600556
+      },
+      "trailhead": null,
+      "website": "https://esplanade.org/",
+      "photo": {
+        "resourceName": null,
+        "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/0/05/Charles_River_Esplanade_-_IMG_3777.jpg/960px-Charles_River_Esplanade_-_IMG_3777.jpg",
+        "credit": "Daderot",
+        "sourceUrl": "https://commons.wikimedia.org/wiki/File:Charles_River_Esplanade_-_IMG_3777.jpg",
+        "license": "Public domain",
+        "licenseUrl": "https://commons.wikimedia.org/wiki/File:Charles_River_Esplanade_-_IMG_3777.jpg#Licensing"
+      },
+      "routeLines": [],
+      "lengthMeters": null,
+      "elevationGainMeters": null,
+      "difficulty": null,
+      "surfaces": [],
+      "sourceName": "esplanade.org",
+      "sourceUrl": "https://esplanade.org/",
+      "isSegment": false
+    },
+    {
+      "id": "franklin_park_boston",
+      "name": "Franklin Park",
+      "subtitle": "Park paths and trails",
+      "city": "Boston",
+      "state": "MA",
+      "center": {
+        "latitude": 42.30138889,
+        "longitude": -71.09444444
+      },
+      "trailhead": null,
+      "website": "https://www.boston.gov/parks/franklin-park",
+      "photo": {
+        "resourceName": null,
+        "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/e/e9/Path_and_tree_in_Franklin_Park%2C_October_2013.jpg/960px-Path_and_tree_in_Franklin_Park%2C_October_2013.jpg",
+        "credit": "Sarah Nichols from Boston, MA, USA",
+        "sourceUrl": "https://commons.wikimedia.org/wiki/File:Path_and_tree_in_Franklin_Park,_October_2013.jpg",
+        "license": "CC BY-SA 2.0",
+        "licenseUrl": "https://creativecommons.org/licenses/by-sa/2.0"
+      },
+      "routeLines": [],
+      "lengthMeters": null,
+      "elevationGainMeters": null,
+      "difficulty": null,
+      "surfaces": [],
+      "sourceName": "boston.gov",
+      "sourceUrl": "https://www.boston.gov/parks/franklin-park",
+      "isSegment": false
+    },
+    {
+      "id": "wissahickon",
+      "name": "Wissahickon Valley Park",
+      "subtitle": "Park paths and trails",
+      "city": "Philadelphia",
+      "state": "PA",
+      "center": {
+        "latitude": 40.05,
+        "longitude": -75.215
+      },
+      "trailhead": null,
+      "website": "https://fow.org/visit-the-park/",
+      "photo": {
+        "resourceName": null,
+        "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/6/63/Scenic_river_with_a_bridge_%28Unsplash%29.jpg/960px-Scenic_river_with_a_bridge_%28Unsplash%29.jpg",
+        "credit": "Sallie Michalsky salliemichalsky",
+        "sourceUrl": "https://commons.wikimedia.org/wiki/File:Scenic_river_with_a_bridge_(Unsplash).jpg",
+        "license": "CC0",
+        "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/deed.en"
+      },
+      "routeLines": [],
+      "lengthMeters": null,
+      "elevationGainMeters": null,
+      "difficulty": null,
+      "surfaces": [],
+      "sourceName": "fow.org",
+      "sourceUrl": "https://fow.org/visit-the-park/",
+      "isSegment": false
+    },
+    {
+      "id": "rock_creek",
+      "name": "Rock Creek Park",
+      "subtitle": "Park paths and trails",
+      "city": "Washington",
+      "state": "DC",
+      "center": {
+        "latitude": 38.9575,
+        "longitude": -77.045
+      },
+      "trailhead": null,
+      "website": "https://www.nps.gov/rocr/planyourvisit/hiking.htm",
+      "photo": {
+        "resourceName": null,
+        "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/5/57/Rock_Creek_Park_NPS_sign.jpg/960px-Rock_Creek_Park_NPS_sign.jpg",
+        "credit": "TrailVoice",
+        "sourceUrl": "https://commons.wikimedia.org/wiki/File:Rock_Creek_Park_NPS_sign.jpg",
+        "license": "CC BY-SA 2.0",
+        "licenseUrl": "https://creativecommons.org/licenses/by-sa/2.0"
+      },
+      "routeLines": [],
+      "lengthMeters": null,
+      "elevationGainMeters": null,
+      "difficulty": null,
+      "surfaces": [],
+      "sourceName": "nps.gov",
+      "sourceUrl": "https://www.nps.gov/rocr/planyourvisit/hiking.htm",
+      "isSegment": false
+    },
+    {
+      "id": "national_mall",
+      "name": "National Mall",
+      "subtitle": "Park paths and trails",
+      "city": "Washington",
+      "state": "DC",
+      "center": {
+        "latitude": 38.89,
+        "longitude": -77.02361111
+      },
+      "trailhead": null,
+      "website": "https://www.nps.gov/nama/index.htm",
+      "photo": null,
+      "routeLines": [],
+      "lengthMeters": null,
+      "elevationGainMeters": null,
+      "difficulty": null,
+      "surfaces": [],
+      "sourceName": "nps.gov",
+      "sourceUrl": "https://www.nps.gov/nama/index.htm",
+      "isSegment": false
+    },
+    {
+      "id": "chicago_lakefront",
+      "name": "Chicago Lakefront Trail",
+      "subtitle": "Trail corridor",
+      "city": "Chicago",
+      "state": "IL",
+      "center": {
+        "latitude": 41.88275,
+        "longitude": -87.61433
+      },
+      "trailhead": null,
+      "website": "https://www.chicagoparkdistrict.com/lakefront-trail",
+      "photo": {
+        "resourceName": null,
+        "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/5/54/Chicago_Lakefront_Trail_2023-09-09_%28cropped%29.jpg/960px-Chicago_Lakefront_Trail_2023-09-09_%28cropped%29.jpg",
+        "credit": "TheWxResearcher",
+        "sourceUrl": "https://commons.wikimedia.org/wiki/File:Chicago_Lakefront_Trail_2023-09-09_(cropped).jpg",
+        "license": "CC0",
+        "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/deed.en"
+      },
+      "routeLines": [],
+      "lengthMeters": null,
+      "elevationGainMeters": null,
+      "difficulty": null,
+      "surfaces": [],
+      "sourceName": "chicagoparkdistrict.com",
+      "sourceUrl": "https://www.chicagoparkdistrict.com/lakefront-trail",
+      "isSegment": false
+    },
+    {
+      "id": "bloomingdale",
+      "name": "Bloomingdale Trail / The 606",
+      "subtitle": "Trail corridor",
+      "city": "Chicago",
+      "state": "IL",
+      "center": {
+        "latitude": 41.9138,
+        "longitude": -87.702
+      },
+      "trailhead": null,
+      "website": "https://www.chicagoparkdistrict.com/parks-facilities/bloomingdale-trail-park",
+      "photo": {
+        "resourceName": null,
+        "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/b/bc/Bloomingdale_Trail%2C_the_606%2C_Chicago_2015-33.jpg/960px-Bloomingdale_Trail%2C_the_606%2C_Chicago_2015-33.jpg",
+        "credit": "Victor Grigas",
+        "sourceUrl": "https://commons.wikimedia.org/wiki/File:Bloomingdale_Trail,_the_606,_Chicago_2015-33.jpg",
+        "license": "CC BY-SA 4.0",
+        "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0"
+      },
+      "routeLines": [],
+      "lengthMeters": null,
+      "elevationGainMeters": null,
+      "difficulty": null,
+      "surfaces": [],
+      "sourceName": "chicagoparkdistrict.com",
+      "sourceUrl": "https://www.chicagoparkdistrict.com/parks-facilities/bloomingdale-trail-park",
+      "isSegment": false
+    },
+    {
+      "id": "lake_harriet",
+      "name": "Lake Harriet",
+      "subtitle": "Park paths and trails",
+      "city": "Minneapolis",
+      "state": "MN",
+      "center": {
+        "latitude": 44.92138889,
+        "longitude": -93.30527778
+      },
+      "trailhead": null,
+      "website": "https://www.minneapolisparks.org/parks-destinations/parks-lakes/lake_harriet_park/",
+      "photo": {
+        "resourceName": null,
+        "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/6/67/Hennepin_county_MN_Lake_Harriet_IMG_1768_from_east.JPG/960px-Hennepin_county_MN_Lake_Harriet_IMG_1768_from_east.JPG",
+        "credit": "Bjoertvedt",
+        "sourceUrl": "https://commons.wikimedia.org/wiki/File:Hennepin_county_MN_Lake_Harriet_IMG_1768_from_east.JPG",
+        "license": "CC BY-SA 3.0",
+        "licenseUrl": "https://creativecommons.org/licenses/by-sa/3.0"
+      },
+      "routeLines": [],
+      "lengthMeters": null,
+      "elevationGainMeters": null,
+      "difficulty": null,
+      "surfaces": [],
+      "sourceName": "minneapolisparks.org",
+      "sourceUrl": "https://www.minneapolisparks.org/parks-destinations/parks-lakes/lake_harriet_park/",
+      "isSegment": false
+    },
+    {
+      "id": "bde_maka_ska",
+      "name": "Bde Maka Ska",
+      "subtitle": "Park paths and trails",
+      "city": "Minneapolis",
+      "state": "MN",
+      "center": {
+        "latitude": 44.94166667,
+        "longitude": -93.3125
+      },
+      "trailhead": null,
+      "website": "https://www.minneapolisparks.org/parks-destinations/parks-lakes/bde_maka_ska_park/",
+      "photo": {
+        "resourceName": null,
+        "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/f/fe/BoatsLakeCalhounOct2017cropped.jpg/960px-BoatsLakeCalhounOct2017cropped.jpg",
+        "credit": "Thomson200",
+        "sourceUrl": "https://commons.wikimedia.org/wiki/File:BoatsLakeCalhounOct2017cropped.jpg",
+        "license": "CC0",
+        "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/deed.en"
+      },
+      "routeLines": [],
+      "lengthMeters": null,
+      "elevationGainMeters": null,
+      "difficulty": null,
+      "surfaces": [],
+      "sourceName": "minneapolisparks.org",
+      "sourceUrl": "https://www.minneapolisparks.org/parks-destinations/parks-lakes/bde_maka_ska_park/",
+      "isSegment": false
+    },
+    {
+      "id": "piedmont",
+      "name": "Piedmont Park",
+      "subtitle": "Park paths and trails",
+      "city": "Atlanta",
+      "state": "GA",
+      "center": {
+        "latitude": 33.78611111,
+        "longitude": -84.37333333
+      },
+      "trailhead": null,
+      "website": "https://piedmontpark.org/",
+      "photo": {
+        "resourceName": null,
+        "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/0/0d/Piedmont_Park%E2%80%99s_Lake_Clara_Meer_with_Midtown_Atlanta_skyline_%282024%29-104A8428.jpg/960px-Piedmont_Park%E2%80%99s_Lake_Clara_Meer_with_Midtown_Atlanta_skyline_%282024%29-104A8428.jpg",
+        "credit": "Frank Schulenburg",
+        "sourceUrl": "https://commons.wikimedia.org/wiki/File:Piedmont_Park%E2%80%99s_Lake_Clara_Meer_with_Midtown_Atlanta_skyline_(2024)-104A8428.jpg",
+        "license": "CC BY-SA 4.0",
+        "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0"
+      },
+      "routeLines": [],
+      "lengthMeters": null,
+      "elevationGainMeters": null,
+      "difficulty": null,
+      "surfaces": [],
+      "sourceName": "piedmontpark.org",
+      "sourceUrl": "https://piedmontpark.org/",
+      "isSegment": false
+    },
+    {
+      "id": "atlanta_beltline",
+      "name": "Atlanta BeltLine",
+      "subtitle": "Trail corridor",
+      "city": "Atlanta",
+      "state": "GA",
+      "center": {
+        "latitude": 33.75939,
+        "longitude": -84.42432
+      },
+      "trailhead": null,
+      "website": "https://beltline.org/visit/",
+      "photo": {
+        "resourceName": null,
+        "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/b/b5/Atlanta_BeltLine_Krog_Street.jpg/960px-Atlanta_BeltLine_Krog_Street.jpg",
+        "credit": "Yedaman54",
+        "sourceUrl": "https://commons.wikimedia.org/wiki/File:Atlanta_BeltLine_Krog_Street.jpg",
+        "license": "CC0",
+        "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/deed.en"
+      },
+      "routeLines": [],
+      "lengthMeters": null,
+      "elevationGainMeters": null,
+      "difficulty": null,
+      "surfaces": [],
+      "sourceName": "beltline.org",
+      "sourceUrl": "https://beltline.org/visit/",
+      "isSegment": false
+    },
+    {
+      "id": "little_sugar_creek",
+      "name": "Little Sugar Creek Greenway",
+      "subtitle": "Trail corridor",
+      "city": "Charlotte",
+      "state": "NC",
+      "center": {
+        "latitude": 35.2075,
+        "longitude": -80.8365
+      },
+      "trailhead": null,
+      "website": "https://parkandrec.mecknc.gov/",
+      "photo": {
+        "resourceName": null,
+        "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/b/bb/Little_Sugar_Creek_reflection_March_2026.jpg/960px-Little_Sugar_Creek_reflection_March_2026.jpg",
+        "credit": "Thudfinger",
+        "sourceUrl": "https://commons.wikimedia.org/wiki/File:Little_Sugar_Creek_reflection_March_2026.jpg",
+        "license": "CC BY-SA 4.0",
+        "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0"
+      },
+      "routeLines": [],
+      "lengthMeters": null,
+      "elevationGainMeters": null,
+      "difficulty": null,
+      "surfaces": [],
+      "sourceName": "parkandrec.mecknc.gov",
+      "sourceUrl": "https://parkandrec.mecknc.gov/",
+      "isSegment": false
+    },
+    {
+      "id": "umstead",
+      "name": "William B. Umstead State Park",
+      "subtitle": "Park paths and trails",
+      "city": "Raleigh",
+      "state": "NC",
+      "center": {
+        "latitude": 35.8905,
+        "longitude": -78.7502
+      },
+      "trailhead": null,
+      "website": "https://www.ncparks.gov/state-parks/william-b-umstead-state-park",
+      "photo": {
+        "resourceName": null,
+        "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/b/b8/Umstead.JPG/960px-Umstead.JPG",
+        "credit": "Zanter at English Wikipedia",
+        "sourceUrl": "https://commons.wikimedia.org/wiki/File:Umstead.JPG",
+        "license": "CC BY-SA 3.0",
+        "licenseUrl": "https://creativecommons.org/licenses/by-sa/3.0/"
+      },
+      "routeLines": [],
+      "lengthMeters": null,
+      "elevationGainMeters": null,
+      "difficulty": null,
+      "surfaces": [],
+      "sourceName": "ncparks.gov",
+      "sourceUrl": "https://www.ncparks.gov/state-parks/william-b-umstead-state-park",
+      "isSegment": false
+    },
+    {
+      "id": "american_tobacco",
+      "name": "American Tobacco Trail · Durham",
+      "subtitle": "Durham section",
+      "city": "Durham",
+      "state": "NC",
+      "center": {
+        "latitude": 35.990475,
+        "longitude": -78.90631944
+      },
+      "trailhead": null,
+      "website": "https://www.dprplaymore.org/596/American-Tobacco-Trail",
+      "photo": {
+        "resourceName": null,
+        "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/e/e8/2008-07-23_American_Tobacco_Trail_terminus_in_Durham.jpg/960px-2008-07-23_American_Tobacco_Trail_terminus_in_Durham.jpg",
+        "credit": "Ildar Sagdejev (Specious)",
+        "sourceUrl": "https://commons.wikimedia.org/wiki/File:2008-07-23_American_Tobacco_Trail_terminus_in_Durham.jpg",
+        "license": "CC BY-SA 4.0",
+        "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0"
+      },
+      "routeLines": [],
+      "lengthMeters": 17702.78,
+      "elevationGainMeters": null,
+      "difficulty": null,
+      "surfaces": [
+        "PAVED"
+      ],
+      "sourceName": "Durham Parks and Recreation",
+      "sourceUrl": "https://www.dprplaymore.org/596/American-Tobacco-Trail",
+      "isSegment": false
+    },
+    {
+      "id": "james_river",
+      "name": "James River Park System",
+      "subtitle": "Park paths and trails",
+      "city": "Richmond",
+      "state": "VA",
+      "center": {
+        "latitude": 37.53,
+        "longitude": -77.48
+      },
+      "trailhead": null,
+      "website": "https://jamesriverpark.org/",
+      "photo": {
+        "resourceName": null,
+        "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/e/e5/James_River_Park_Headquarters_sign.jpg/960px-James_River_Park_Headquarters_sign.jpg",
+        "credit": "MPS at English Wikipedia",
+        "sourceUrl": "https://commons.wikimedia.org/wiki/File:James_River_Park_Headquarters_sign.jpg",
+        "license": "CC BY-SA 3.0",
+        "licenseUrl": "https://creativecommons.org/licenses/by-sa/3.0"
+      },
+      "routeLines": [],
+      "lengthMeters": null,
+      "elevationGainMeters": null,
+      "difficulty": null,
+      "surfaces": [],
+      "sourceName": "jamesriverpark.org",
+      "sourceUrl": "https://jamesriverpark.org/",
+      "isSegment": false
+    },
+    {
+      "id": "cherokee_louisville",
+      "name": "Cherokee Park",
+      "subtitle": "Park paths and trails",
+      "city": "Louisville",
+      "state": "KY",
+      "center": {
+        "latitude": 38.2412,
+        "longitude": -85.6969
+      },
+      "trailhead": null,
+      "website": "https://www.olmstedparks.org/",
+      "photo": {
+        "resourceName": null,
+        "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/8/84/Cherokee_park.jpg/960px-Cherokee_park.jpg",
+        "credit": "The original uploader was Retired username at English Wikipedia.",
+        "sourceUrl": "https://commons.wikimedia.org/wiki/File:Cherokee_park.jpg",
+        "license": "CC BY 2.5",
+        "licenseUrl": "https://creativecommons.org/licenses/by/2.5"
+      },
+      "routeLines": [],
+      "lengthMeters": null,
+      "elevationGainMeters": null,
+      "difficulty": null,
+      "surfaces": [],
+      "sourceName": "olmstedparks.org",
+      "sourceUrl": "https://www.olmstedparks.org/",
+      "isSegment": false
+    },
+    {
+      "id": "mount_airy",
+      "name": "Mount Airy Forest",
+      "subtitle": "Park paths and trails",
+      "city": "Cincinnati",
+      "state": "OH",
+      "center": {
+        "latitude": 39.17968333,
+        "longitude": -84.56601111
+      },
+      "trailhead": null,
+      "website": "https://www.cincinnati-oh.gov/cincyparks/visit-a-park/find-a-parkfacility/mt-airy-forest/",
+      "photo": {
+        "resourceName": null,
+        "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/9/9a/MtAiryTreeHouse02.jpg/960px-MtAiryTreeHouse02.jpg",
+        "credit": "Greg Hume",
+        "sourceUrl": "https://commons.wikimedia.org/wiki/File:MtAiryTreeHouse02.jpg",
+        "license": "CC BY-SA 3.0",
+        "licenseUrl": "https://creativecommons.org/licenses/by-sa/3.0"
+      },
+      "routeLines": [],
+      "lengthMeters": null,
+      "elevationGainMeters": null,
+      "difficulty": null,
+      "surfaces": [],
+      "sourceName": "cincinnati-oh.gov",
+      "sourceUrl": "https://www.cincinnati-oh.gov/cincyparks/visit-a-park/find-a-parkfacility/mt-airy-forest/",
+      "isSegment": false
+    },
+    {
+      "id": "monon",
+      "name": "Monon Trail",
+      "subtitle": "Trail corridor",
+      "city": "Indianapolis",
+      "state": "IN",
+      "center": {
+        "latitude": 39.8789,
+        "longitude": -86.1408
+      },
+      "trailhead": null,
+      "website": "https://parks.indy.gov/facilities/monon-trail/",
+      "photo": null,
+      "routeLines": [],
+      "lengthMeters": null,
+      "elevationGainMeters": null,
+      "difficulty": null,
+      "surfaces": [],
+      "sourceName": "parks.indy.gov",
+      "sourceUrl": "https://parks.indy.gov/facilities/monon-trail/",
+      "isSegment": false
+    },
+    {
+      "id": "forest_park_st_louis",
+      "name": "Forest Park",
+      "subtitle": "Park paths and trails",
+      "city": "St. Louis",
+      "state": "MO",
+      "center": {
+        "latitude": 38.6389,
+        "longitude": -90.2846
+      },
+      "trailhead": null,
+      "website": "https://www.forestparkforever.org/",
+      "photo": null,
+      "routeLines": [],
+      "lengthMeters": null,
+      "elevationGainMeters": null,
+      "difficulty": null,
+      "surfaces": [],
+      "sourceName": "forestparkforever.org",
+      "sourceUrl": "https://www.forestparkforever.org/",
+      "isSegment": false
+    },
+    {
+      "id": "loose_park",
+      "name": "Loose Park",
+      "subtitle": "Park paths and trails",
+      "city": "Kansas City",
+      "state": "MO",
+      "center": {
+        "latitude": 39.0317,
+        "longitude": -94.5947
+      },
+      "trailhead": null,
+      "website": "https://kcparks.org/places/loose-park/",
+      "photo": {
+        "resourceName": null,
+        "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/6/65/Loose_Park_Duck_Pond.jpg/960px-Loose_Park_Duck_Pond.jpg",
+        "credit": "Brit By Birth",
+        "sourceUrl": "https://commons.wikimedia.org/wiki/File:Loose_Park_Duck_Pond.jpg",
+        "license": "CC BY-SA 4.0",
+        "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0"
+      },
+      "routeLines": [],
+      "lengthMeters": null,
+      "elevationGainMeters": null,
+      "difficulty": null,
+      "surfaces": [],
+      "sourceName": "kcparks.org",
+      "sourceUrl": "https://kcparks.org/places/loose-park/",
+      "isSegment": false
+    },
+    {
+      "id": "washington_park_denver",
+      "name": "Washington Park",
+      "subtitle": "Park paths and trails",
+      "city": "Denver",
+      "state": "CO",
+      "center": {
+        "latitude": 39.7,
+        "longitude": -104.97055556
+      },
+      "trailhead": null,
+      "website": "https://www.denvergov.org/parks",
+      "photo": {
+        "resourceName": null,
+        "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/4/4e/Washington_Park_Denver.JPG/960px-Washington_Park_Denver.JPG",
+        "credit": "Jeffrey Beall",
+        "sourceUrl": "https://commons.wikimedia.org/wiki/File:Washington_Park_Denver.JPG",
+        "license": "CC BY-SA 3.0",
+        "licenseUrl": "https://creativecommons.org/licenses/by-sa/3.0"
+      },
+      "routeLines": [],
+      "lengthMeters": null,
+      "elevationGainMeters": null,
+      "difficulty": null,
+      "surfaces": [],
+      "sourceName": "denvergov.org",
+      "sourceUrl": "https://www.denvergov.org/parks",
+      "isSegment": false
+    },
+    {
+      "id": "forest_park_portland",
+      "name": "Forest Park",
+      "subtitle": "Park paths and trails",
+      "city": "Portland",
+      "state": "OR",
+      "center": {
+        "latitude": 45.54527778,
+        "longitude": -122.73611111
+      },
+      "trailhead": null,
+      "website": "https://www.portland.gov/parks/forest-park",
+      "photo": {
+        "resourceName": null,
+        "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/6/6f/Forest_park_wildwood_trail_in_early_summer_P2860.jpeg/960px-Forest_park_wildwood_trail_in_early_summer_P2860.jpeg",
+        "credit": "EncMstr",
+        "sourceUrl": "https://commons.wikimedia.org/wiki/File:Forest_park_wildwood_trail_in_early_summer_P2860.jpeg",
+        "license": "CC BY-SA 3.0",
+        "licenseUrl": "https://creativecommons.org/licenses/by-sa/3.0"
+      },
+      "routeLines": [],
+      "lengthMeters": null,
+      "elevationGainMeters": null,
+      "difficulty": null,
+      "surfaces": [],
+      "sourceName": "portland.gov",
+      "sourceUrl": "https://www.portland.gov/parks/forest-park",
+      "isSegment": false
+    },
+    {
+      "id": "green_lake",
+      "name": "Green Lake Park · Inner Loop",
+      "subtitle": "Lakeside paved loop",
+      "city": "Seattle",
+      "state": "WA",
+      "center": {
+        "latitude": 47.678,
+        "longitude": -122.337
+      },
+      "trailhead": null,
+      "website": "https://www.seattle.gov/parks/parks/green-lake-park",
+      "photo": {
+        "resourceName": null,
+        "url": "https://upload.wikimedia.org/wikipedia/commons/7/7e/WoodlandPark-1.jpg",
+        "credit": "en:User:Shakespeare",
+        "sourceUrl": "https://commons.wikimedia.org/wiki/File:WoodlandPark-1.jpg",
+        "license": "CC BY-SA 3.0",
+        "licenseUrl": "https://creativecommons.org/licenses/by-sa/3.0/"
+      },
+      "routeLines": [],
+      "lengthMeters": 4506.16,
+      "elevationGainMeters": null,
+      "difficulty": null,
+      "surfaces": [
+        "PAVED"
+      ],
+      "sourceName": "Seattle Parks and Recreation",
+      "sourceUrl": "https://www.seattle.gov/parks/parks/green-lake-park",
+      "isSegment": false
+    },
+    {
+      "id": "discovery_park",
+      "name": "Discovery Park",
+      "subtitle": "Park paths and trails",
+      "city": "Seattle",
+      "state": "WA",
+      "center": {
+        "latitude": 47.65833333,
+        "longitude": -122.41888889
+      },
+      "trailhead": null,
+      "website": "https://www.seattle.gov/parks/parks/discovery-park",
+      "photo": {
+        "resourceName": null,
+        "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/8/8f/West_Point_Light%2C_May_2011.jpg/960px-West_Point_Light%2C_May_2011.jpg",
+        "credit": "Cody Logan",
+        "sourceUrl": "https://commons.wikimedia.org/wiki/File:West_Point_Light,_May_2011.jpg",
+        "license": "CC BY-SA 4.0",
+        "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0"
+      },
+      "routeLines": [],
+      "lengthMeters": null,
+      "elevationGainMeters": null,
+      "difficulty": null,
+      "surfaces": [],
+      "sourceName": "seattle.gov",
+      "sourceUrl": "https://www.seattle.gov/parks/parks/discovery-park",
+      "isSegment": false
+    },
+    {
+      "id": "golden_gate",
+      "name": "Golden Gate Park",
+      "subtitle": "Park paths and trails",
+      "city": "San Francisco",
+      "state": "CA",
+      "center": {
+        "latitude": 37.76972222,
+        "longitude": -122.47694444
+      },
+      "trailhead": null,
+      "website": "https://sfrecpark.org/770/Golden-Gate-Park",
+      "photo": {
+        "resourceName": null,
+        "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/6/66/California-06241_-_In_front_of_museum_%2820449897948%29.jpg/960px-California-06241_-_In_front_of_museum_%2820449897948%29.jpg",
+        "credit": "Dennis G. Jarvis",
+        "sourceUrl": "https://commons.wikimedia.org/wiki/File:California-06241_-_In_front_of_museum_(20449897948).jpg",
+        "license": "CC BY-SA 2.0",
+        "licenseUrl": "https://creativecommons.org/licenses/by-sa/2.0"
+      },
+      "routeLines": [],
+      "lengthMeters": null,
+      "elevationGainMeters": null,
+      "difficulty": null,
+      "surfaces": [],
+      "sourceName": "sfrecpark.org",
+      "sourceUrl": "https://sfrecpark.org/770/Golden-Gate-Park",
+      "isSegment": false
+    },
+    {
+      "id": "presidio",
+      "name": "Presidio of San Francisco",
+      "subtitle": "Park paths and trails",
+      "city": "San Francisco",
+      "state": "CA",
+      "center": {
+        "latitude": 37.79805556,
+        "longitude": -122.46583333
+      },
+      "trailhead": null,
+      "website": "https://presidio.gov/explore/trails",
+      "photo": {
+        "resourceName": null,
+        "url": "https://upload.wikimedia.org/wikipedia/commons/e/ef/Aerial_view_-_Presidio-whole.jpg",
+        "credit": "Robert Campbell",
+        "sourceUrl": "https://commons.wikimedia.org/wiki/File:Aerial_view_-_Presidio-whole.jpg",
+        "license": "CC BY-SA 3.0",
+        "licenseUrl": "https://creativecommons.org/licenses/by-sa/3.0"
+      },
+      "routeLines": [],
+      "lengthMeters": null,
+      "elevationGainMeters": null,
+      "difficulty": null,
+      "surfaces": [],
+      "sourceName": "presidio.gov",
+      "sourceUrl": "https://presidio.gov/explore/trails",
+      "isSegment": false
+    },
+    {
+      "id": "redwood_regional",
+      "name": "Reinhardt Redwood Regional Park",
+      "subtitle": "Park paths and trails",
+      "city": "Oakland",
+      "state": "CA",
+      "center": {
+        "latitude": 37.81355556,
+        "longitude": -122.16591667
+      },
+      "trailhead": null,
+      "website": "https://www.ebparks.org/parks/reinhardt-redwood",
+      "photo": {
+        "resourceName": null,
+        "url": "https://upload.wikimedia.org/wikipedia/commons/d/d5/RedwoodRegional.jpg",
+        "credit": "Binksternet (talk)",
+        "sourceUrl": "https://commons.wikimedia.org/wiki/File:RedwoodRegional.jpg",
+        "license": "Public domain",
+        "licenseUrl": "https://commons.wikimedia.org/wiki/File:RedwoodRegional.jpg#Licensing"
+      },
+      "routeLines": [],
+      "lengthMeters": null,
+      "elevationGainMeters": null,
+      "difficulty": null,
+      "surfaces": [],
+      "sourceName": "ebparks.org",
+      "sourceUrl": "https://www.ebparks.org/parks/reinhardt-redwood",
+      "isSegment": false
+    },
+    {
+      "id": "griffith",
+      "name": "Griffith Park",
+      "subtitle": "Park paths and trails",
+      "city": "Los Angeles",
+      "state": "CA",
+      "center": {
+        "latitude": 34.13333333,
+        "longitude": -118.3
+      },
+      "trailhead": null,
+      "website": "https://www.laparks.org/griffithpark",
+      "photo": {
+        "resourceName": null,
+        "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/1/1b/Ferndell_griffith_park.jpg/960px-Ferndell_griffith_park.jpg",
+        "credit": "Amatullah Guyot",
+        "sourceUrl": "https://commons.wikimedia.org/wiki/File:Ferndell_griffith_park.jpg",
+        "license": "CC BY 2.0",
+        "licenseUrl": "https://creativecommons.org/licenses/by/2.0"
+      },
+      "routeLines": [],
+      "lengthMeters": null,
+      "elevationGainMeters": null,
+      "difficulty": null,
+      "surfaces": [],
+      "sourceName": "laparks.org",
+      "sourceUrl": "https://www.laparks.org/griffithpark",
+      "isSegment": false
+    },
+    {
+      "id": "balboa",
+      "name": "Balboa Park",
+      "subtitle": "Park paths and trails",
+      "city": "San Diego",
+      "state": "CA",
+      "center": {
+        "latitude": 32.73138889,
+        "longitude": -117.14527778
+      },
+      "trailhead": null,
+      "website": "https://www.sandiego.gov/park-and-recreation/parks/regional/balboa",
+      "photo": {
+        "resourceName": null,
+        "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/5/59/El_Prado_Balboa_Park_2.jpg/960px-El_Prado_Balboa_Park_2.jpg",
+        "credit": "Rhododendrites",
+        "sourceUrl": "https://commons.wikimedia.org/wiki/File:El_Prado_Balboa_Park_2.jpg",
+        "license": "CC BY-SA 4.0",
+        "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0"
+      },
+      "routeLines": [],
+      "lengthMeters": null,
+      "elevationGainMeters": null,
+      "difficulty": null,
+      "surfaces": [],
+      "sourceName": "sandiego.gov",
+      "sourceUrl": "https://www.sandiego.gov/park-and-recreation/parks/regional/balboa",
+      "isSegment": false
+    },
+    {
+      "id": "mission_bay",
+      "name": "Mission Bay Park",
+      "subtitle": "Park paths and trails",
+      "city": "San Diego",
+      "state": "CA",
+      "center": {
+        "latitude": 32.77916667,
+        "longitude": -117.23416667
+      },
+      "trailhead": null,
+      "website": "https://www.sandiego.gov/park-and-recreation/parks/regional/missionbay",
+      "photo": null,
+      "routeLines": [],
+      "lengthMeters": null,
+      "elevationGainMeters": null,
+      "difficulty": null,
+      "surfaces": [],
+      "sourceName": "sandiego.gov",
+      "sourceUrl": "https://www.sandiego.gov/park-and-recreation/parks/regional/missionbay",
+      "isSegment": false
+    },
+    {
+      "id": "papago",
+      "name": "Papago Park",
+      "subtitle": "Park paths and trails",
+      "city": "Phoenix",
+      "state": "AZ",
+      "center": {
+        "latitude": 33.451889,
+        "longitude": -111.944361
+      },
+      "trailhead": null,
+      "website": "https://www.phoenix.gov/administration/departments/parks/activities-facilities/trails/papago-park.html",
+      "photo": {
+        "resourceName": null,
+        "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/6/66/2013%2C_Hole_in_the_Rock%2C_Papago_Park_-_panoramio.jpg/960px-2013%2C_Hole_in_the_Rock%2C_Papago_Park_-_panoramio.jpg",
+        "credit": "Chris English",
+        "sourceUrl": "https://commons.wikimedia.org/wiki/File:2013,_Hole_in_the_Rock,_Papago_Park_-_panoramio.jpg",
+        "license": "CC BY-SA 3.0",
+        "licenseUrl": "https://creativecommons.org/licenses/by-sa/3.0"
+      },
+      "routeLines": [],
+      "lengthMeters": null,
+      "elevationGainMeters": null,
+      "difficulty": null,
+      "surfaces": [],
+      "sourceName": "phoenix.gov",
+      "sourceUrl": "https://www.phoenix.gov/administration/departments/parks/activities-facilities/trails/papago-park.html",
+      "isSegment": false
+    },
+    {
+      "id": "south_mountain",
+      "name": "South Mountain Park",
+      "subtitle": "Park paths and trails",
+      "city": "Phoenix",
+      "state": "AZ",
+      "center": {
+        "latitude": 33.33611111,
+        "longitude": -112.06944444
+      },
+      "trailhead": null,
+      "website": "https://www.phoenix.gov/administration/departments/parks/activities-facilities/trails/south-mountain-parkpreserve.html",
+      "photo": null,
+      "routeLines": [],
+      "lengthMeters": null,
+      "elevationGainMeters": null,
+      "difficulty": null,
+      "surfaces": [],
+      "sourceName": "phoenix.gov",
+      "sourceUrl": "https://www.phoenix.gov/administration/departments/parks/activities-facilities/trails/south-mountain-parkpreserve.html",
+      "isSegment": false
+    },
+    {
+      "id": "tucson_loop",
+      "name": "The Loop",
+      "subtitle": "Trail corridor",
+      "city": "Tucson",
+      "state": "AZ",
+      "center": {
+        "latitude": 32.21666667,
+        "longitude": -110.93333333
+      },
+      "trailhead": null,
+      "website": "https://www.pima.gov/the-chuck-huckelberry-loop",
+      "photo": null,
+      "routeLines": [],
+      "lengthMeters": null,
+      "elevationGainMeters": null,
+      "difficulty": null,
+      "surfaces": [],
+      "sourceName": "pima.gov",
+      "sourceUrl": "https://www.pima.gov/the-chuck-huckelberry-loop",
+      "isSegment": false
+    },
+    {
+      "id": "paseo_bosque",
+      "name": "Paseo del Bosque Trail",
+      "subtitle": "Trail corridor",
+      "city": "Albuquerque",
+      "state": "NM",
+      "center": {
+        "latitude": 35.079,
+        "longitude": -106.67
+      },
+      "trailhead": null,
+      "website": "https://www.cabq.gov/parksandrecreation/recreation/bike/bike-map",
+      "photo": null,
+      "routeLines": [],
+      "lengthMeters": null,
+      "elevationGainMeters": null,
+      "difficulty": null,
+      "surfaces": [],
+      "sourceName": "cabq.gov",
+      "sourceUrl": "https://www.cabq.gov/parksandrecreation/recreation/bike/bike-map",
+      "isSegment": false
+    },
+    {
+      "id": "liberty_park",
+      "name": "Liberty Park",
+      "subtitle": "Park paths and trails",
+      "city": "Salt Lake City",
+      "state": "UT",
+      "center": {
+        "latitude": 40.74555556,
+        "longitude": -111.87388889
+      },
+      "trailhead": null,
+      "website": "https://www.slc.gov/parks/parks-division/liberty-park/",
+      "photo": {
+        "resourceName": null,
+        "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/e/e2/Chase_Mill_Salt_Lake_City_Utah.jpeg/960px-Chase_Mill_Salt_Lake_City_Utah.jpeg",
+        "credit": "Tricia Simpson",
+        "sourceUrl": "https://commons.wikimedia.org/wiki/File:Chase_Mill_Salt_Lake_City_Utah.jpeg",
+        "license": "CC BY-SA 3.0",
+        "licenseUrl": "https://creativecommons.org/licenses/by-sa/3.0"
+      },
+      "routeLines": [],
+      "lengthMeters": null,
+      "elevationGainMeters": null,
+      "difficulty": null,
+      "surfaces": [],
+      "sourceName": "slc.gov",
+      "sourceUrl": "https://www.slc.gov/parks/parks-division/liberty-park/",
+      "isSegment": false
+    },
+    {
+      "id": "bayshore",
+      "name": "Bayshore Boulevard",
+      "subtitle": "Waterfront sidewalk",
+      "city": "Tampa",
+      "state": "FL",
+      "center": {
+        "latitude": 27.92888889,
+        "longitude": -82.47722222
+      },
+      "trailhead": null,
+      "website": "https://www.tampa.gov/parks-and-recreation/programs/parks-and-facilities/greenways-and-trails/trail-maps/bayshore-trail",
+      "photo": {
+        "resourceName": null,
+        "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/8/81/Tampa_Bayshore_Blvd_looking_north01.jpg/960px-Tampa_Bayshore_Blvd_looking_north01.jpg",
+        "credit": "Ebyabe",
+        "sourceUrl": "https://commons.wikimedia.org/wiki/File:Tampa_Bayshore_Blvd_looking_north01.jpg",
+        "license": "CC BY 2.5",
+        "licenseUrl": "https://creativecommons.org/licenses/by/2.5"
+      },
+      "routeLines": [],
+      "lengthMeters": null,
+      "elevationGainMeters": null,
+      "difficulty": null,
+      "surfaces": [
+        "PAVED"
+      ],
+      "sourceName": "City of Tampa",
+      "sourceUrl": "https://www.tampa.gov/parks-and-recreation/programs/parks-and-facilities/greenways-and-trails/trail-maps/bayshore-trail",
+      "isSegment": false
+    },
+    {
+      "id": "jacksonville_baldwin",
+      "name": "Jacksonville-Baldwin Rail Trail",
+      "subtitle": "Main paved rail trail",
+      "city": "Jacksonville",
+      "state": "FL",
+      "center": {
+        "latitude": 30.345,
+        "longitude": -81.77416667
+      },
+      "trailhead": null,
+      "website": "https://www.jacksonville.gov/departments/parks-and-recreation/jaxparks/all-parks/jacksonville-baldwin-rail-trail",
+      "photo": {
+        "resourceName": null,
+        "url": "https://upload.wikimedia.org/wikipedia/commons/e/e4/BaldwinRail-Trail.jpg",
+        "credit": "Mgreason at English Wikipedia",
+        "sourceUrl": "https://commons.wikimedia.org/wiki/File:BaldwinRail-Trail.jpg",
+        "license": "Public domain",
+        "licenseUrl": "https://commons.wikimedia.org/wiki/File:BaldwinRail-Trail.jpg#Licensing"
+      },
+      "routeLines": [],
+      "lengthMeters": 23335.49,
+      "elevationGainMeters": null,
+      "difficulty": null,
+      "surfaces": [
+        "PAVED"
+      ],
+      "sourceName": "City of Jacksonville",
+      "sourceUrl": "https://www.jacksonville.gov/departments/parks-and-recreation/jaxparks/all-parks/jacksonville-baldwin-rail-trail",
+      "isSegment": false
+    },
+    {
+      "id": "battery_crosby",
+      "name": "Battery Crosby Trail",
+      "subtitle": "Presidio · round trip",
+      "city": "San Francisco",
+      "state": "CA",
+      "center": {
+        "latitude": 37.796817,
+        "longitude": -122.47944
+      },
+      "trailhead": {
+        "latitude": 37.796817,
+        "longitude": -122.47944
+      },
+      "website": "https://www.parksconservancy.org/trails/battery-crosby-trail",
+      "photo": null,
+      "routeLines": [
+        [
+          {
+            "latitude": 37.7968168,
+            "longitude": -122.4794396
+          },
+          {
+            "latitude": 37.7968665,
+            "longitude": -122.4794458
+          },
+          {
+            "latitude": 37.7969386,
+            "longitude": -122.4794292
+          },
+          {
+            "latitude": 37.797018,
+            "longitude": -122.479396
+          },
+          {
+            "latitude": 37.7970909,
+            "longitude": -122.4793662
+          },
+          {
+            "latitude": 37.79713,
+            "longitude": -122.4793501
+          },
+          {
+            "latitude": 37.7972002,
+            "longitude": -122.479338
+          },
+          {
+            "latitude": 37.7972798,
+            "longitude": -122.4793347
+          },
+          {
+            "latitude": 37.7973118,
+            "longitude": -122.4793345
+          },
+          {
+            "latitude": 37.7974125,
+            "longitude": -122.4793338
+          },
+          {
+            "latitude": 37.7974639,
+            "longitude": -122.4793676
+          },
+          {
+            "latitude": 37.7974924,
+            "longitude": -122.4794117
+          },
+          {
+            "latitude": 37.7975341,
+            "longitude": -122.4795439
+          },
+          {
+            "latitude": 37.7975392,
+            "longitude": -122.4795698
+          },
+          {
+            "latitude": 37.7975902,
+            "longitude": -122.4796897
+          },
+          {
+            "latitude": 37.7975982,
+            "longitude": -122.4797067
+          },
+          {
+            "latitude": 37.7976496,
+            "longitude": -122.479784
+          },
+          {
+            "latitude": 37.7977483,
+            "longitude": -122.4799139
+          },
+          {
+            "latitude": 37.7977708,
+            "longitude": -122.4799472
+          },
+          {
+            "latitude": 37.7978468,
+            "longitude": -122.4800741
+          },
+          {
+            "latitude": 37.7978574,
+            "longitude": -122.4800928
+          },
+          {
+            "latitude": 37.7979251,
+            "longitude": -122.480236
+          },
+          {
+            "latitude": 37.7979315,
+            "longitude": -122.4802508
+          },
+          {
+            "latitude": 37.7979838,
+            "longitude": -122.4803527
+          },
+          {
+            "latitude": 37.798046,
+            "longitude": -122.4803728
+          },
+          {
+            "latitude": 37.7980662,
+            "longitude": -122.480382
+          },
+          {
+            "latitude": 37.7981986,
+            "longitude": -122.4803572
+          },
+          {
+            "latitude": 37.798241,
+            "longitude": -122.4803391
+          }
+        ]
+      ],
+      "lengthMeters": 434.52,
+      "elevationGainMeters": 3.35,
+      "difficulty": "EASY",
+      "surfaces": [],
+      "sourceName": "Golden Gate National Parks Conservancy",
+      "sourceUrl": "https://www.parksconservancy.org/trails/battery-crosby-trail",
+      "isSegment": false
+    },
+    {
+      "id": "yosemite_lower_fall",
+      "name": "Lower Yosemite Fall Trail",
+      "subtitle": "Yosemite · paved loop",
+      "city": "Yosemite Valley",
+      "state": "CA",
+      "center": {
+        "latitude": 37.74634276688073,
+        "longitude": -119.59362954674805
+      },
+      "trailhead": null,
+      "website": "https://www.nps.gov/yose/planyourvisit/lowerfalltrail.htm",
+      "photo": {
+        "resourceName": null,
+        "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/3/38/Yosemite_falls_winter_2010.JPG/960px-Yosemite_falls_winter_2010.JPG",
+        "credit": "chensiyuan",
+        "sourceUrl": "https://commons.wikimedia.org/wiki/File:Yosemite_falls_winter_2010.JPG",
+        "license": "CC BY-SA 4.0",
+        "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0"
+      },
+      "routeLines": [],
+      "lengthMeters": 1609.34,
+      "elevationGainMeters": 15.24,
+      "difficulty": "EASY",
+      "surfaces": [
+        "PAVED"
+      ],
+      "sourceName": "National Park Service",
+      "sourceUrl": "https://www.nps.gov/yose/planyourvisit/lowerfalltrail.htm",
+      "isSegment": false
+    },
+    {
+      "id": "shenandoah_dark_hollow",
+      "name": "Dark Hollow Falls Trail",
+      "subtitle": "Waterfall · return by the same path",
+      "city": "Shenandoah National Park",
+      "state": "VA",
+      "center": {
+        "latitude": 38.51901389,
+        "longitude": -78.42333889
+      },
+      "trailhead": null,
+      "website": "https://www.nps.gov/places/000/dark-hollow-falls.htm",
+      "photo": {
+        "resourceName": null,
+        "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/f/f2/Dark_Hollow_Falls_I.jpg/960px-Dark_Hollow_Falls_I.jpg",
+        "credit": "Ned Hartley",
+        "sourceUrl": "https://commons.wikimedia.org/wiki/File:Dark_Hollow_Falls_I.jpg",
+        "license": "CC BY-SA 4.0",
+        "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0"
+      },
+      "routeLines": [],
+      "lengthMeters": 2253.08,
+      "elevationGainMeters": 134.11,
+      "difficulty": "MODERATE",
+      "surfaces": [],
+      "sourceName": "National Park Service",
+      "sourceUrl": "https://www.nps.gov/places/000/dark-hollow-falls.htm",
+      "isSegment": false
+    },
+    {
+      "id": "saguaro_mica_view",
+      "name": "Mica View Trail",
+      "subtitle": "Saguaro · one-way distance",
+      "city": "Tucson",
+      "state": "AZ",
+      "center": {
+        "latitude": 32.21624638834344,
+        "longitude": -110.72600896804995
+      },
+      "trailhead": null,
+      "website": "https://www.nps.gov/sagu/planyourvisit/rmd-trail-accessibility.htm",
+      "photo": null,
+      "routeLines": [],
+      "lengthMeters": 1126.54,
+      "elevationGainMeters": 16.76,
+      "difficulty": null,
+      "surfaces": [
+        "PAVED"
+      ],
+      "sourceName": "National Park Service",
+      "sourceUrl": "https://www.nps.gov/sagu/planyourvisit/rmd-trail-accessibility.htm",
+      "isSegment": false
+    },
+    {
+      "id": "saguaro_pink_hill",
+      "name": "Pink Hill Trail",
+      "subtitle": "Saguaro · one-way distance",
+      "city": "Tucson",
+      "state": "AZ",
+      "center": {
+        "latitude": 32.220232729045506,
+        "longitude": -110.71446128996982
+      },
+      "trailhead": null,
+      "website": "https://www.nps.gov/sagu/planyourvisit/rmd-trail-accessibility.htm",
+      "photo": null,
+      "routeLines": [],
+      "lengthMeters": 2414.02,
+      "elevationGainMeters": 65.99,
+      "difficulty": null,
+      "surfaces": [
+        "DIRT"
+      ],
+      "sourceName": "National Park Service",
+      "sourceUrl": "https://www.nps.gov/sagu/planyourvisit/rmd-trail-accessibility.htm",
+      "isSegment": false
+    },
+    {
+      "id": "denali_rock_creek",
+      "name": "Rock Creek Trail",
+      "subtitle": "Denali · one way, east to west",
+      "city": "Denali Park",
+      "state": "AK",
+      "center": {
+        "latitude": 63.73009305080866,
+        "longitude": -148.95277778018863
+      },
+      "trailhead": null,
+      "website": "https://www.nps.gov/dena/planyourvisit/rock.htm",
+      "photo": null,
+      "routeLines": [],
+      "lengthMeters": 3862.43,
+      "elevationGainMeters": 121.92,
+      "difficulty": null,
+      "surfaces": [],
+      "sourceName": "National Park Service",
+      "sourceUrl": "https://www.nps.gov/dena/planyourvisit/rock.htm",
+      "isSegment": false
+    },
+    {
+      "id": "rocky_mountain_bear_lake",
+      "name": "Bear Lake Loop Trail",
+      "subtitle": "Rocky Mountain National Park · lake loop",
+      "city": "Estes Park",
+      "state": "CO",
+      "center": {
+        "latitude": 40.3132,
+        "longitude": -105.648
+      },
+      "trailhead": null,
+      "website": "https://www.nps.gov/romo/planyourvisit/exploring-the-bear-lake-road-corridor.htm",
+      "photo": {
+        "resourceName": null,
+        "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/8/8c/Bear_Lake_%2850445704286%29.jpg/960px-Bear_Lake_%2850445704286%29.jpg",
+        "credit": "G. Lamar",
+        "sourceUrl": "https://commons.wikimedia.org/wiki/File:Bear_Lake_(50445704286).jpg",
+        "license": "CC BY 2.0",
+        "licenseUrl": "https://creativecommons.org/licenses/by/2.0"
+      },
+      "routeLines": [],
+      "lengthMeters": 965.61,
+      "elevationGainMeters": 21.64,
+      "difficulty": null,
+      "surfaces": [
+        "GRAVEL"
+      ],
+      "sourceName": "National Park Service",
+      "sourceUrl": "https://www.nps.gov/romo/planyourvisit/exploring-the-bear-lake-road-corridor.htm",
+      "isSegment": false
+    },
+    {
+      "id": "crater_lake_garfield_peak",
+      "name": "Garfield Peak Trail",
+      "subtitle": "Crater Lake · round trip",
+      "city": "Crater Lake",
+      "state": "OR",
+      "center": {
+        "latitude": 42.90598443876672,
+        "longitude": -122.12633865935337
+      },
+      "trailhead": null,
+      "website": "https://www.nps.gov/crla/planyourvisit/hiking.htm",
+      "photo": {
+        "resourceName": null,
+        "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/1/10/037_crater_lake_lodge.JPG/960px-037_crater_lake_lodge.JPG",
+        "credit": "Llywrch",
+        "sourceUrl": "https://commons.wikimedia.org/wiki/File:037_crater_lake_lodge.JPG",
+        "license": "CC BY-SA 2.5",
+        "licenseUrl": "https://creativecommons.org/licenses/by-sa/2.5"
+      },
+      "routeLines": [],
+      "lengthMeters": 5793.64,
+      "elevationGainMeters": 307.85,
+      "difficulty": null,
+      "surfaces": [],
+      "sourceName": "National Park Service",
+      "sourceUrl": "https://www.nps.gov/crla/planyourvisit/hiking.htm",
+      "isSegment": false
+    }
+  ]
+}

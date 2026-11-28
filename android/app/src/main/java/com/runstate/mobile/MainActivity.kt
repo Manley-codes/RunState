@@ -2179,6 +2179,10 @@ internal fun RunJourneyRoot(
         !connectionDialogVisible) {
         RunSettingsDialog(
             ownerToolsEnabled = ownerToolsAvailable,
+            onOpenMap = {
+                runSettingsVisible = false
+                mapRunId = activeRunId ?: "foreground-gps-preview"
+            },
             runnerName = runPreferences?.runnerName,
             onSetRunnerName = { name ->
                 runPreferences?.let { saved -> savePreferences(saved.copy(runnerName = name)) }

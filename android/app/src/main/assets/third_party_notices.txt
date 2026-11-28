@@ -25,6 +25,13 @@ Source: https://commons.wikimedia.org/wiki/File:Houston_May_2022_13_(Buffalo_Bay
 License: https://creativecommons.org/licenses/by-sa/4.0/
 Terry Hershey Park trail: Scott Ehardt, public domain.
 Source: https://commons.wikimedia.org/wiki/File:Terry_Hershey_Park_trail.jpg
+U.S. trail discovery: USGS National Digital Trails / USGS Trails dataset, public-domain federal geographic data.
+https://www.usgs.gov/national-digital-trails/how-access-or-view-usgs-trails-dataset
+U.S. city/place index: U.S. Census Bureau 2025 National Places Gazetteer, public-domain federal geographic data.
+https://www.census.gov/geographies/reference-files/time-series/geo/gazetteer-files.2025.html
+Additional curated trail photos and individual licenses: Trails > information button > Trail & photo credits.
+Source/author/license URLs are bundled in trails/curated_trails.json. Real photos are displayed without cropping.
+
 Static maps: original RunState cartography rendered from unmodified OpenStreetMap vector extracts, November 23, 2026.
 Map data copyright OpenStreetMap contributors, Open Database License 1.0: https://www.openstreetmap.org/copyright
 Fixed park-area overviews; not recorded routes or navigation. No hosted OpenStreetMap raster tiles are bundled.

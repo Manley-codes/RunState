@@ -245,7 +245,8 @@ internal fun StartRunScreen(
     startBackground: StartBackground = StartBackground.HERMANN_PARK,
     selectedRunGoal: RunGoal? = null,
     goalDistanceUnit: DistanceUnit = DistanceUnit.MILES,
-    onRunGoalChanged: (RunGoal?) -> Unit = {}
+    onRunGoalChanged: (RunGoal?) -> Unit = {},
+    trailLocation: com.runstate.mobile.trails.TrailCoordinate? = null
 ) {
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     val view = LocalView.current
@@ -492,16 +493,12 @@ internal fun StartRunScreen(
         }
     }
     if (trailsOpen && trailBrowserAvailable) {
-        StartTrailsSheet(
-            trail = HoustonStartTrails.firstOrNull { it.id == exploredTrailId },
+        TrailBrowserSheet(
+            initialTrailId = exploredTrailId,
+            location = trailLocation,
+            onRequestLocation = onRequestMapLocation,
+            distanceUnit = goalDistanceUnit,
             enabled = actionsEnabled && !setupLoading,
-            onExplore = { exploredTrailId = it.id },
-            onOpenMap = (if (liveMapBackground && onRequestMapLocation != null)
-                onRequestMapLocation else onOpenMap)?.let { openMap ->
-                { trailsOpen = false; openMap() }
-            },
-            mapNeedsLocation = liveMapBackground && onRequestMapLocation != null,
-            mapStatus = if (liveMapBackground) liveMapStatus else null,
             onDismiss = { trailsOpen = false }
         )
     }

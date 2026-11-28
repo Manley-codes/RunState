@@ -464,7 +464,7 @@ private class RecordedMapController(
     }
 
     init {
-        initializeMapNetwork(application)
+        initializeRecordedMapNetwork(application)
         val anchor = checkNotNull(recordedMapAnchor(initialEvidence))
         view = MapView(context, MapLibreMapOptions.createFromAttributes(context)
             .textureMode(true)
@@ -607,22 +607,24 @@ private class RecordedMapController(
         private const val ANCHOR_SOURCE = "runstate-anchors"
         private const val MARKER_SOURCE = "runstate-marker"
         private const val MARKER_LAYER = "runstate-position"
-        private var networkInitialized = false
-
-        private fun initializeMapNetwork(context: Context) {
-            if (networkInitialized) return
-            Logger.setVerbosity(Logger.NONE)
-            MapLibre.getInstance(context)
-            HttpRequestUtil.setLogEnabled(false)
-            HttpRequestUtil.setPrintRequestUrlOnFailure(false)
-            // Preserve normal cache headers and identify the app. No area download or prefetch.
-            HttpRequestUtil.setOkHttpClient(OkHttpClient.Builder()
-                .followRedirects(false).followSslRedirects(false).addInterceptor { chain ->
-                chain.proceed(recordedMapRequest(chain.request()))
-            }.build())
-            networkInitialized = true
-        }
     }
+}
+
+private var recordedMapNetworkInitialized = false
+
+/** Shared by live maps and bounded trail snapshots; call on Android's main thread. */
+internal fun initializeRecordedMapNetwork(context: Context) {
+    if (recordedMapNetworkInitialized) return
+    Logger.setVerbosity(Logger.NONE)
+    MapLibre.getInstance(context.applicationContext)
+    HttpRequestUtil.setLogEnabled(false)
+    HttpRequestUtil.setPrintRequestUrlOnFailure(false)
+    // Preserve normal cache headers and identify the app. No area download or prefetch.
+    HttpRequestUtil.setOkHttpClient(OkHttpClient.Builder()
+        .followRedirects(false).followSslRedirects(false).addInterceptor { chain ->
+        chain.proceed(recordedMapRequest(chain.request()))
+    }.build())
+    recordedMapNetworkInitialized = true
 }
 
 private fun emptyFeatures() = FeatureCollection.fromFeatures(emptyList())
