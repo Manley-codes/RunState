@@ -5,6 +5,30 @@ metadata:
   type: project
 ---
 
+## November 27 launcher logo and trails
+
+Manley requested the attached RS/pastel Energy-bars launcher logo first, without its outer cream
+background, then seven trail-discovery changes. The separate Continue Logo Design chat had already
+prepared the same launcher assets but failed to finish the connected-phone install. Reused and
+reviewed that work without regenerating/redesigning it: forest #022A16 adaptive background,
+transparent foreground and separate monochrome PNG, standard/round fallback icons in five densities.
+Foreground fits the 66dp adaptive safe circle; Android/launcher owns the final outer mask.
+Wordmark/header and public preview were not changed. Two new resource PNGs replace the old generic
+Android foreground XML. Debug build and release vital lint passed. In-place Moto install succeeded;
+before/after snapshots preserve81 completed runs/two shoes/all12 table hashes/no FK violations.
+Four preference files unchanged; opening_appearance.xml entrance counter advanced199→200 when the
+app reopened, with no user setting lost. Evidence: android/build/runstate-icon-import/.
+Manley saw the icon on the phone and accepted it: “i already see it, looks good. No need to show me”.
+
+Trail overhaul now approved: actual photo hero with small rounded map bottom-right and real route
+when supported; nearby U.S. results rather than Houston-only; broaden popular Houston/other-city
+catalog; remove More places around Houston; retain Park information but relocate required credits
+out of primary trail detail; search and difficulty/surface/elevation filters replace Open map;
+move live map access into Settings; default navigation-app handoff for the chosen trail.
+Do not fabricate routes, trailhead/parking access, ratings, elevation gain or missing photo identity.
+Required source/map attribution remains accessible even as nonessential main-screen text is removed.
+Keep current accepted Start/music/Goals and all recording/reflection behavior intact.
+
 ## November 27 cloud repair deployed and verified
 
 Manley confirmed both Render monthly caps were zero after an outdoor run and home-Wi-Fi Sample
