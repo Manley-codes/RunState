@@ -22,6 +22,7 @@ import java.util.regex.Pattern;
 
 /** Immutable server-owned access list. It stores credential fingerprints, never bearer codes. */
 final class BackendAccessPolicy {
+    static final String LEGACY_OWNER_ID = "owner-demo";
     private static final int MAX_CONFIG_CHARACTERS = 32_768;
     private static final int MAX_CREDENTIALS = 64;
     private static final Pattern TOKEN = Pattern.compile("[A-Za-z0-9_-]{43,128}");
@@ -40,8 +41,25 @@ final class BackendAccessPolicy {
     /** Compatibility for the existing owner-only deployment; never an implicit recipient fallback. */
     static BackendAccessPolicy legacy(String token) {
         if (token == null || !TOKEN.matcher(token).matches()) throw invalidConfiguration();
-        return new BackendAccessPolicy(List.of(new Credential(new Principal("owner-demo"),
+        return new BackendAccessPolicy(List.of(new Credential(new Principal(LEGACY_OWNER_ID),
                 digest(token), null, true)), Clock.systemUTC());
+    }
+
+    /** Add recipients without replacing the existing owner's credential or storage identity. */
+    BackendAccessPolicy withLegacyOwner(String token) {
+        Credential owner = legacy(token).credentials.get(0);
+        if (credentials.size() >= MAX_CREDENTIALS) throw invalidConfiguration();
+        for (Credential recipient : credentials) {
+            // Even disabled/expired duplicates are ambiguous and must fail configuration.
+            if (recipient.principal.id().equals(LEGACY_OWNER_ID)
+                    || MessageDigest.isEqual(recipient.fingerprint, owner.fingerprint)) {
+                throw invalidConfiguration();
+            }
+        }
+        List<Credential> combined = new ArrayList<>(credentials.size() + 1);
+        combined.add(owner);
+        combined.addAll(credentials);
+        return new BackendAccessPolicy(combined, clock);
     }
 
     static BackendAccessPolicy fromJson(String json) {
