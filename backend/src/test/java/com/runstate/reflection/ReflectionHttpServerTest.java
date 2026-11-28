@@ -2067,12 +2067,17 @@ class ReflectionHttpServerTest {
     }
 
     @Test
-    void individualConfigurationCannotSilentlyFallBackToTheSharedOwnerCredential() {
+    void additiveConfigurationMustExplicitlyContainBothValidModesWithoutMalformedFallback() {
         Map<String, String> bothModes = Map.of(
                 "RUNSTATE_REFLECTION_PUBLIC_HOST", DEMO_HOST,
                 "RUNSTATE_DEMO_TOKEN", DUMMY_DEMO_TOKEN,
                 "RUNSTATE_ACCESS_GRANTS_JSON", "[]");
-        assertThrows(IllegalArgumentException.class, () -> ReflectionBackendMain.configuredRemoteAccess(bothModes));
+        assertNotNull(ReflectionBackendMain.configuredRemoteAccess(bothModes));
+        for (String invalidGrants : List.of("", "[{}]", "null")) {
+            var invalid = new java.util.HashMap<>(bothModes);
+            invalid.put("RUNSTATE_ACCESS_GRANTS_JSON", invalidGrants);
+            assertThrows(IllegalArgumentException.class, () -> ReflectionBackendMain.configuredRemoteAccess(invalid));
+        }
         assertThrows(IllegalArgumentException.class, () -> ReflectionBackendMain.configuredRemoteAccess(Map.of(
                 "RUNSTATE_REFLECTION_PUBLIC_HOST", DEMO_HOST, "RUNSTATE_ACCESS_GRANTS_JSON", "")));
         assertThrows(IllegalArgumentException.class, () -> ReflectionBackendMain.configuredRemoteAccess(Map.of(
@@ -2080,6 +2085,125 @@ class ReflectionHttpServerTest {
         assertFalse(ReflectionBackendMain.configuredRemoteAccess(Map.of(
                 "RUNSTATE_REFLECTION_PUBLIC_HOST", DEMO_HOST, "RUNSTATE_ACCESS_GRANTS_JSON", "[]"))
                 .toString().contains("[]"));
+    }
+
+    @Test
+    void addingFriendPreservesOwnerReplaysAndSpendingAcrossRestarts(@TempDir Path directory) throws Exception {
+        String friendToken = "F".repeat(43);
+        String grants = "[" + accessGrant("friend-one", friendToken, "2099-01-01T00:00:00Z", true) + "]";
+        var legacy = new ReflectionHttpServer.RemoteAccess("127.0.0.1", DEMO_HOST, DUMMY_DEMO_TOKEN);
+        var combined = ReflectionBackendMain.configuredRemoteAccess(Map.of(
+                "RUNSTATE_REFLECTION_BIND_ADDRESS", "127.0.0.1",
+                "RUNSTATE_REFLECTION_PUBLIC_HOST", DEMO_HOST,
+                "RUNSTATE_DEMO_TOKEN", DUMMY_DEMO_TOKEN,
+                "RUNSTATE_ACCESS_GRANTS_JSON", grants));
+        var friendOnly = ReflectionHttpServer.RemoteAccess.individual("127.0.0.1", DEMO_HOST,
+                BackendAccessPolicy.fromJson(grants));
+        var writtenCalls = new AtomicInteger();
+        var voiceCalls = new AtomicInteger();
+        ReflectionProvider writer = evidence -> {
+            ProviderSpendScope.beforeSend(ProviderSpendBudget.Provider.ANTHROPIC);
+            writtenCalls.incrementAndGet();
+            return exactCandidates();
+        };
+        ReflectionHttpServer.SpeechProvider voice = text -> {
+            ProviderSpendScope.beforeSend(ProviderSpendBudget.Provider.ELEVENLABS);
+            return ("ID3-" + voiceCalls.incrementAndGet()).getBytes(StandardCharsets.US_ASCII);
+        };
+        var limits = new ProviderSpendBudget.Limits(40_000, 100_000, 20_000L, 10_000L, 10_000L);
+        String spoken = speechBody("Your saved reflection.");
+        String nextRun = validRequest().replace(RUN_ID, OTHER_RUN_ID).replace(REQUEST_ID, SECOND_REQUEST_ID);
+        RawHttpResponse ownerWritten, ownerAudio, friendWritten, friendAudio;
+        try (var server = startBudgeted(directory, legacy, writer, voice, limits)) {
+            ownerWritten = rawPost(server, remoteHeaders(), validRequest());
+            ownerAudio = rawRequest(server, "POST", ReflectionHttpServer.SPEECH_PATH, remoteHeaders(), spoken);
+            assertEquals(200, ownerWritten.status());
+            assertEquals(200, ownerAudio.status());
+            assertEquals(200, rawRequest(server, "POST", ReflectionHttpServer.RUN_VOICE_PATH,
+                    remoteHeaders(), speechBody("One mile.")).status());
+        }
+        try (var server = startBudgeted(directory, combined, writer, voice, limits)) {
+            assertEquals(ownerWritten, rawPost(server, remoteHeaders(), validRequest()));
+            assertEquals(ownerAudio, rawRequest(server, "POST", ReflectionHttpServer.SPEECH_PATH, remoteHeaders(), spoken));
+            assertError(rawPost(server, remoteHeaders(), nextRun), 429, "spend_limit_reached");
+            assertEquals(1, writtenCalls.get(), "Adding a recipient must not reset owner spending or regenerate cached writing.");
+            assertEquals(2, voiceCalls.get(), "Owner speech must retain its old storage namespace.");
+            friendWritten = rawPost(server, accessHeaders(friendToken), validRequest());
+            friendAudio = rawRequest(server, "POST", ReflectionHttpServer.SPEECH_PATH, accessHeaders(friendToken), spoken);
+            assertEquals(200, friendWritten.status());
+            assertEquals(200, friendAudio.status());
+            assertFalse(ownerAudio.equals(friendAudio), "The same text must not share recordings across principals.");
+            assertEquals(200, rawRequest(server, "POST", ReflectionHttpServer.RUN_VOICE_PATH,
+                    accessHeaders(friendToken), speechBody("One mile.")).status());
+            assertError(rawPost(server, accessHeaders(friendToken), nextRun), 429, "spend_limit_reached");
+        }
+        for (var access : List.of(combined, friendOnly)) {
+            try (var server = startBudgeted(directory, access, writer, voice, limits)) {
+                assertEquals(friendWritten, rawPost(server, accessHeaders(friendToken), validRequest()));
+                assertEquals(friendAudio, rawRequest(server, "POST", ReflectionHttpServer.SPEECH_PATH,
+                        accessHeaders(friendToken), spoken));
+                assertError(rawPost(server, accessHeaders(friendToken), nextRun), 429, "spend_limit_reached");
+            }
+        }
+        var ownerWithoutFriend = ReflectionHttpServer.RemoteAccess.ownerWithRecipients("127.0.0.1", DEMO_HOST,
+                DUMMY_DEMO_TOKEN, BackendAccessPolicy.fromJson("[]"));
+        try (var server = startBudgeted(directory, ownerWithoutFriend, writer, voice, limits)) {
+            assertEquals(ownerWritten, rawPost(server, remoteHeaders(), validRequest()));
+            for (String path : List.of(ReflectionHttpServer.CANDIDATES_PATH, ReflectionHttpServer.SPEECH_PATH,
+                    ReflectionHttpServer.RUN_VOICE_PATH, ReflectionHttpServer.SONG_PREPARATION_PATH)) {
+                assertError(rawRequest(server, "POST", path, accessHeaders(friendToken), "{"), 401, "unauthorized");
+            }
+        }
+        assertEquals(2, writtenCalls.get());
+        assertEquals(4, voiceCalls.get());
+    }
+
+    @Test
+    void combinedAccessRetainsLegacySongHandlesAndScopesRecipientHandles() throws Exception {
+        String friendToken = "F".repeat(43);
+        var policy = BackendAccessPolicy.fromJson("[" + accessGrant("friend-one", friendToken,
+                "2099-01-01T00:00:00Z", true) + "]");
+        var accesses = List.of(
+                ReflectionHttpServer.RemoteAccess.individual("127.0.0.1", DEMO_HOST, policy),
+                ReflectionHttpServer.RemoteAccess.ownerWithRecipients("127.0.0.1", DEMO_HOST, DUMMY_DEMO_TOKEN, policy));
+        var preparedHandle = new AtomicReference<String>();
+        var deliveredHandle = new AtomicReference<String>();
+        var provider = new ReflectionProvider() {
+            @Override public CandidateReflections generate(CompletedRunEvidence evidence) { return exactCandidates(); }
+            @Override public boolean supportsSongPreparation() { return true; }
+            @Override public SongPreparationState prepareSong(ReflectionContract.SongPreparationRequest request) {
+                preparedHandle.set(request.preparationId());
+                return SongPreparationState.READY;
+            }
+            @Override public GeneratedReflections generateForDelivery(CompletedRunEvidence evidence, String handle,
+                    List<ReflectionContract.SongCandidate> candidates, boolean snippets, boolean fallbacks) {
+                deliveredHandle.set(handle);
+                return new GeneratedReflections(exactCandidates(), null);
+            }
+        };
+        String friendHandle = null;
+        for (int mode = 0; mode < accesses.size(); mode++) {
+            try (var server = ReflectionHttpServer.createRemote(provider, 0, ReflectionHttpServer.GenerationMode.FAKE,
+                    accesses.get(mode), 2, 32)) {
+                server.start();
+                assertEquals(200, rawRequest(server, "POST", ReflectionHttpServer.SONG_PREPARATION_PATH,
+                        accessHeaders(friendToken), preparationBody(REQUEST_ID)).status());
+                if (friendHandle == null) friendHandle = preparedHandle.get();
+                assertEquals(friendHandle, preparedHandle.get());
+                assertFalse(REQUEST_ID.equals(friendHandle));
+                var request = JsonParser.parseString(validRequest()).getAsJsonObject();
+                request.addProperty("songPreparationId", REQUEST_ID);
+                assertEquals(200, rawPost(server, accessHeaders(friendToken), request.toString()).status());
+                assertEquals(friendHandle, deliveredHandle.get());
+                if (mode == 1) {
+                    assertEquals(200, rawRequest(server, "POST", ReflectionHttpServer.SONG_PREPARATION_PATH,
+                            remoteHeaders(), preparationBody(REQUEST_ID)).status());
+                    assertEquals(REQUEST_ID, preparedHandle.get());
+                    assertEquals(200, rawPost(server, remoteHeaders(), request.toString()).status());
+                    assertEquals(REQUEST_ID, deliveredHandle.get());
+                }
+            }
+        }
     }
 
     @Test

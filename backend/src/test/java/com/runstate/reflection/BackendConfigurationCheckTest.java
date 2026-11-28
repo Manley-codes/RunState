@@ -145,10 +145,24 @@ final class BackendConfigurationCheckTest {
             environment.put(invalid.getKey(), invalid.getValue());
             assertEquals(1, check(environment, "1").status(), invalid.getKey());
         }
-        var conflicting = settings(storage);
-        conflicting.put("RUNSTATE_ACCESS_GRANTS_JSON", "[]");
-        assertEquals(1, check(conflicting, "1").status());
+        var malformedRecipients = settings(storage);
+        malformedRecipients.put("RUNSTATE_ACCESS_GRANTS_JSON", "[{}]");
+        assertEquals(1, check(malformedRecipients, "1").status());
         assertFalse(Files.exists(storage));
+    }
+
+    @Test void combinedAccessPreflightKeepsOwnerStorageAndDoesNotExposeCredentials() throws Exception {
+        Path storage = directory.resolve("combined-access");
+        var environment = settings(storage);
+        assertEquals(0, check(environment, "1").status());
+        var speech = new SpeechReplayStore(storage);
+        speech.complete(speech.claim("owner-demo", "Existing owner speech", true), new byte[]{4, 5});
+        environment.put("RUNSTATE_ACCESS_GRANTS_JSON", "[]");
+        Check combined = check(environment, "1");
+        assertEquals(0, combined.status(), combined.output());
+        assertFalse(combined.output().contains(TOKEN));
+        assertArrayEquals(new byte[]{4, 5}, new SpeechReplayStore(storage)
+                .claim("owner-demo", "Existing owner speech", false).audio());
     }
 
     @Test void missingRelativeOrFileStorageIsRejected() throws Exception {
